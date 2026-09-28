@@ -35,7 +35,11 @@ built, kept because its reasoning still holds. What was decided and built:
   "hey Jarvis", which stops "...the computer was called Jarvis".
 - **§2's service**: `service/WakeWordService.kt`, its own foreground service
   of type `microphone` (the link keeps `specialUse`), with a notification and
-  a Stop action, never started at boot, `START_NOT_STICKY`.
+  a Stop action, never started at boot, `START_NOT_STICKY`. Since
+  2026-09-28 a restart (or an app update) leaves ONE quiet "tap to turn it
+  back on" notification if it was on; the tap opens the app, which starts
+  listening from there, after App lock (`data/WakeResume.kt`,
+  `docs/JARVIS-API.md` §81.1).
 - **§4's order**, all five: the separate service (1); a 2-second ring buffer
   so the clip holds the phrase (2); the spotter behind an interface
   (`WakeModels`), a model that fails to load being a named failure (3); the

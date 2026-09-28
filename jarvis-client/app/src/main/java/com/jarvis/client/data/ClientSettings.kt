@@ -123,6 +123,35 @@ class ClientSettings(context: Context) {
         _floatingAvatar.value = mode
     }
 
+    /**
+     * Whether the owner had "Listen on this phone" (Checks) on - set when it
+     * is started from the app, cleared when it is stopped on purpose (the
+     * switch, the notification's Stop, or the desktop's wake word going
+     * off). Read only at boot, to offer ONE "tap to turn it back on"
+     * notification ([WakeResume]); it never starts anything by itself.
+     */
+    var phoneListeningWanted: Boolean
+        get() = prefs.getBoolean(KEY_LISTEN_WANTED, false)
+        set(value) = prefs.edit { putBoolean(KEY_LISTEN_WANTED, value) }
+
+    private val _quickTiles = MutableStateFlow(
+        QuickTiles.slotsFrom { prefs.getString(KEY_TILE_PREFIX + it, null) },
+    )
+
+    /**
+     * What each Quick Settings tile slot does ([QuickTiles]), always
+     * [QuickTiles.SLOTS] long; null is "nothing chosen". On this phone only.
+     */
+    val quickTiles: StateFlow<List<TileAction?>> = _quickTiles.asStateFlow()
+
+    fun setQuickTile(slot: Int, action: TileAction?) {
+        if (slot !in 0 until QuickTiles.SLOTS) return
+        prefs.edit {
+            if (action == null) remove(KEY_TILE_PREFIX + slot) else putString(KEY_TILE_PREFIX + slot, action.wire)
+        }
+        _quickTiles.value = _quickTiles.value.toMutableList().also { it[slot] = action }
+    }
+
     private val _security = MutableStateFlow(SecurityRules.fromStored { prefs.getString(it, null) })
 
     /**
@@ -207,5 +236,8 @@ class ClientSettings(context: Context) {
         const val KEY_UPDATE_LAST_TRY = "update_last_try_ms"
         const val KEY_UPDATE_NEWER = "update_newer_line"
         const val KEY_UPDATE_PROBLEM = "update_problem"
+        const val KEY_LISTEN_WANTED = "phone_listening_wanted"
+        /** `quick_tile_0`, `quick_tile_1`, ... - one per tile slot. */
+        const val KEY_TILE_PREFIX = "quick_tile_"
     }
 }

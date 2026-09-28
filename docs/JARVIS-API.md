@@ -9576,3 +9576,117 @@ still asks, as always).
 - Kept in `lockdown.json` in the Jarvis settings folder: `{"on": bool,
   "changed": epoch}`. No file: off. A file that cannot be read, or says
   anything else: **on** (fails closed), and the page says why.
+
+## 81. Phone conveniences (phone, added 2026-09-28)
+
+The owner chose ideas 14 and 15 of `docs/RESEARCH-AUDIT-2026-09-28.md`
+section 3, and the two Android 17 rows of its section 10, as one group.
+**No new route and no new event.** Everything here is on the phone; the
+desktop reasons are in ARCHITECTURE §8 ("One-sided on purpose").
+
+### 81.1 "Hey Jarvis is off since the phone restarted - tap to turn it back on"
+
+"Listen on this phone" (`WakeWordService`, `docs/WAKE-WORD.md`) is never started at boot:
+Android does not let an app open the microphone from the background, and
+Jarvis opens it only from the owner's tap anyway. So after a restart it
+was silently off. Now (`data/WakeResume.kt`, `service/WakeResumeNotifier.kt`,
+`BootReceiver`): the phone remembers whether the owner had it on
+(`ClientSettings.phoneListeningWanted`: set when it is started from the app,
+cleared when it is stopped on purpose - the Checks switch, the
+notification's Stop, or the desktop's wake word going off). After
+`BOOT_COMPLETED` (or `MY_PACKAGE_REPLACED`, an app update, which also ends
+it), on a paired phone that had it on, **one quiet notification** on the
+wake-word channel (low importance: no sound): "\"Hey Jarvis\" is off since
+the phone restarted" / "... since Jarvis was updated", "Tap to turn it back
+on. Jarvis never opens the microphone by itself." No buttons.
+
+**The tap opens Jarvis; it does not start the microphone itself.** The app,
+in front, then starts listening exactly as the Checks switch does, with the
+same checks (the desktop's wake word on - read fresh, after waiting up to 8
+seconds for the link - the microphone and notification permissions). Home
+then says "Listening for \"hey Jarvis\" on this phone again."; if anything
+is missing, the app opens Checks with the reason under the switch.
+
+**App lock:** the tap opens Jarvis locked, and listening starts only after
+the owner unlocks it - and only within two minutes of the tap, so a tap
+left behind the lock does not open the microphone much later. A rotation or
+a reopen from Recents is not a new tap. Idea from Dicio (GPL): the idea
+only, no code.
+
+### 81.2 Quick Settings tiles you choose
+
+Android cannot add a tile while an app runs, so the app ships **three tile
+slots** ("Jarvis tile 1" to "3" in Android's tile editor;
+`service/QuickTileService.kt`) and the owner gives each one action in
+Settings -> Quick Settings tiles (`ui/screens/QuickTilesPlate.kt`,
+`data/QuickTiles.kt`). Saved on the phone only. The pattern (fixed tile
+services plus an assignment screen) is Home Assistant Android's (Apache);
+no code copied.
+
+| Action | What a tap does | Held on a stale link? | App lock on, phone locked |
+|---|---|---|---|
+| Focus session | `POST /api/focus/start` for 25 minutes (§31), like the Focus session plate's Start | yes | unlock the phone first |
+| 10-min timer | `POST /api/schedule/add {"kind": "timer", "seconds": 600}` (§21.2) - a plain timer, no card | yes | unlock the phone first |
+| Brief me | opens Jarvis on Brain's briefing (the same intent as the "Brief me" app-icon shortcut, §52); shows nothing itself | - | App lock asks, as for any opening |
+| Stop everything | `POST /api/stop_all` (§28), after stopping the phone's own speech | **never** (it only stops things) | runs straight away |
+| Play/pause PC | `GET /api/media` to see whether something is playing ("Playing: ..." -> pause, else play), then ONE `POST /api/media/control` (§74.2) | yes | unlock the phone first |
+
+The timer tile is the first time the phone adds a timer through
+`/api/schedule/add` (§21.2 said both apps add only to-do items and
+briefings there; timers were said or typed). Same route, same rules: a
+plain timer needs no card, and the PC's answer (`source: "app"`) is shown.
+
+**Never on a tile:** Approve or Deny, anything that clears a rush latch,
+anything that approves or acts on several things, anything that raises an
+approval card. `QuickTilesTest` holds the list to exactly these five and
+reads `QuickTileService.kt` for any call that decides a card.
+
+A tile that cannot act now is dimmed (`STATE_INACTIVE`) with a short second
+line - "Offline", "Catching up", "Not paired", "Tap to choose" - never
+`STATE_UNAVAILABLE`, which gets no taps (the same reason as the link tile).
+Offline, a tap starts the link and opens the app, like the link tile's.
+While the link is catching up, an acting tile sends nothing and says the
+plain "catching up" words (PlainErrors `link_stale`). The result is a short
+toast and the app's notice; with App lock on, or the phone locked, the
+focus session's and Stop everything's own sentences are replaced by fixed
+words ("Stop everything sent. Open Jarvis to see what stopped."), since the
+PC's sentence can say what was stopped. The existing link tile
+(`LinkTileService`, Mute) is unchanged; none of the five is Mute.
+
+**Why these App lock rules.** A Quick Settings tile works from the lock
+screen. Stop everything only makes Jarvis do less, so it always works, as
+the PC's hotkey does - the tile is the one way to reach it on the phone
+without passing App lock (Home's button stays behind it, §28). "Brief me" shows private words, so it only opens the
+app, which App lock guards. The other three change something small on the
+PC and show nothing private, so with App lock on they ask for the phone's
+own unlock first (Android's `unlockAndRun`), not Jarvis's fingerprint.
+With App lock off they run from the lock screen, as the link tile's Mute
+already does.
+
+### 81.3 Android 17's assistant volume
+
+The phone already plays Jarvis's spoken answers as assistant sound
+(`audio/Speaker.kt`, `USAGE_ASSISTANT`), which Android 17 gives its own
+volume slider. Settings -> Voice now says so, with its one exception: while
+"Listen on this phone" and "Interrupt Jarvis while it talks" are both on,
+an answer plays as a voice call so the echo canceller works, and the call
+volume sets it. **Not done, written down as a later step:** putting voice
+turns into Android 17's own "assistant conversation" audio mode so the
+volume keys control Jarvis. That needs Android 17's SDK (compileSdk 37); the
+app builds against 36 (`app/build.gradle.kts`), and hard-coding the new
+mode's number without the SDK to check it against is a guess this project
+does not ship. Revisit when the app moves to compileSdk 37 - the same move
+that brings Android 17's background-sound limits
+(`docs/RESEARCH-AUDIT-2026-09-28.md` section 10).
+
+### 81.4 Android 17 app bubbles
+
+Android 17 lets any app open as a bubble: touch and hold the app icon, then
+"Bubble". It needs `resizeableActivity="true"`, which `MainActivity` already
+has. Nothing in the app changed; Floating Jarvis's Bubble choice (§56) now
+has one help line telling the owner to try it. **To check on a real phone**
+(not done): that App lock's lock screen still comes first inside the
+bubble; that screenshot blocking (`FLAG_SECURE`, on while App lock or "Hide
+memory lists and chat history" is on) also covers the bubble's window; and
+that `launchMode="singleTask"` does not pull the full app out of the
+bubble.
