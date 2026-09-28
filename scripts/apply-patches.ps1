@@ -665,6 +665,15 @@ $PATCHES = @(
     # jarvis_photo_remind.py copied in; without it the banner says so and the
     # route is simply not there (404).
     'photo-reminder.patch'
+    # "Bring in chats from ChatGPT, Claude or Gemini" (the owner's choice,
+    # 2026-09-28; docs/JARVIS-API.md section 85): GET /api/memory/import_chats
+    # and POST /api/memory/import_chats/start (this PC only, no card - it
+    # only PROPOSES; every fact waits for the owner's yes) and /cancel. Its
+    # jarvis_hud.py context is photo-reminder.patch's own install block, so
+    # it goes after it - last, like every new patch. Needs
+    # jarvis_history_import.py and import_history.py copied in; without them
+    # the banner says so and the routes are simply not there (404).
+    'history-import.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -815,6 +824,9 @@ $SHIPPED = @(
     'jarvis_pc_help.py'          # "why is my PC slow?", "how full is my disk?" and three more, read-only, no model; GET /api/pc/help through jarvis_brain_reads.py
     # --- "Smarter answers" (2026-09-28, no patch of its own) ---
     'jarvis_claims.py'           # "I've done it" when nothing was done: one plain line at the end of the answer; jarvis_agent.py calls it
+    # --- "Bring in chats from ChatGPT, Claude or Gemini" (2026-09-28) ---
+    'import_history.py'          # the old-chats importer itself; still runs from this repository on the command line too
+    'jarvis_history_import.py'   # history-import.patch: the Brain's button runs import_history.run() in the background; every fact waits for a yes
 )
 
 # The settings file. Installed only where none exists; never overwritten.

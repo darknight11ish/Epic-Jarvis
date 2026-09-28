@@ -142,6 +142,7 @@ on a throwaway copy instead.
 | `rules-first-relay.patch` | `jarvis_hud.py` | **The Jarvis rules stay first on a turn with no tools enabled** (the owner's 2026-09-25 decision: the rules are never dropped). One hunk in the relay's `_open()`, right after `chat-history.patch`'s `_chat_client_fields_off` lines: for the local model only, `jarvis_agent.keep_rules_first()` - the same call the tool loop already makes. Last in the list. Needs nothing new copied in. See "The rules on a turn with no tools", at the very end. |
 | `brain-reads.patch` | `jarvis_hud.py` | **The Brain upgrades** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §71). One install()-shaped hunk at start-up - `jarvis_brain_reads.install(Handler, ...)` - whose context is `answer-sources.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/history/search?q=` ("search what was said": `jarvis_chat_log.ChatLog.search` opens each kept turn in memory for that one search - no index, nothing written) and `GET /api/memory/fact-history?id=` ("history of this fact": `jarvis_memory.fact_history_view`, an erased version never with its words). Reads for the apps only; nothing reaches the AI model. Needs `jarvis_brain_reads.py`; without it the banner says so and the two routes are not there. See "The Brain upgrades", at the very end. |
 | `photo-reminder.patch` | `jarvis_hud.py` | **Photo to reminder** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §83). One install()-shaped hunk at start-up - `jarvis_photo_remind.install(Handler, ...)` - whose context is `brain-reads.patch`'s own install block, so it goes after it, last like every new patch. It answers `POST /api/photo/scan`: the words in a picture read by Windows (`jarvis_ocr.py`), a date, time and title found by `jarvis_quick.py`'s own parser, and a PROPOSED reminder sent back - nothing set up, nothing kept, outside text. Needs `jarvis_photo_remind.py`; without it the banner says so and the route is not there. See "Photo to reminder", at the very end. |
+| `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude or Gemini** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
 
 ## Thirty-four of the thirty-six actually apply, and that is correct
 
@@ -3478,14 +3479,37 @@ Not patches - scripts you run once, on demand, that call the patched backend
 rather than change it. `grade-peers.py` and `jarvis_research.py` are the
 other two in this directory; this is the third.
 
-## `import_history.py` — feed an old Claude or Gemini export into the review queue
+## `import_history.py` — feed an old ChatGPT, Claude or Gemini export into the review queue
+
+**Easiest (2026-09-28): the button.** In Jarvis Desktop, open the Brain,
+Memory, and press **Bring in chats from ChatGPT, Claude or Gemini** (under
+Learning). Choose the `.zip` the service sent you. It runs in the
+background on this PC and shows "412 chats read, 37 possible facts waiting
+for your yes"; every fact is a card under "Waiting for you". **Stop**
+stops it after the chat being read; pressing the button again with the same
+file carries on. `jarvis_history_import.py` and `history-import.patch`
+(JARVIS-API.md section 85) - apply-patches.ps1 copies both files in.
+
+Or the command line, as before:
 
 ```powershell
-cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 "C:\Users\pcadmin\Epic-Jarvis\backend\import_history.py" --claude "C:\path\to\claude-export.zip" --gemini "C:\path\to\takeout.zip"
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 "C:\Users\pcadmin\Epic-Jarvis\backend\import_history.py" --chatgpt "C:\path\to\chatgpt-export.zip"
 ```
 
-(One or both of `--claude`/`--gemini`. Run it from the backend folder, or
-set `$env:JARVIS_BACKEND` first, the same as the test suites.)
+(Any of `--chatgpt`, `--claude`, `--gemini`, or `--auto` to have it
+work out which. Run it from the backend folder, or set
+`$env:JARVIS_BACKEND` first, the same as the test suites.)
+
+**Only your own words are read for facts** (2026-09-28, all three
+services): never the other assistant's replies, a tool's output, or a
+hidden message - the same rule as live learning. A game or role-play chat,
+a crisis message and a timer command are skipped, as in live learning.
+Before this, Claude and Gemini imports showed the model both sides.
+
+**ChatGPT's export format is not verified against a real file either.** It
+is written from the export's published shape (`conversations.json`: each
+chat a tree of messages; only the branch you last saw is read, so an
+edited-away message is not). Big files are read one chat at a time.
 
 This does not add anything to memory by itself. It calls the exact same
 `jarvis_extract.propose()` a live conversation triggers once it goes quiet -

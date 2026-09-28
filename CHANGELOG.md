@@ -169,6 +169,18 @@ number as the last part - `0.2.57` is a build of 0.2.
   docs/MODEL-TOPOLOGY.md has two engine settings to try, with how to measure
   and undo each.
 
+**New: bring in old chats from ChatGPT, Claude or Gemini**
+
+- **Brain -> Memory on the PC: "Bring in chats from ChatGPT, Claude or
+  Gemini".** Choose the export file; Jarvis reads it in the background and
+  every possible fact waits for your yes, one card at a time. Nothing is
+  saved by itself, and nothing leaves the PC.
+- **Changed: importing reads only your own messages,** never the other
+  assistant's replies - for all three services (Claude and Gemini imports
+  used to read both sides).
+- **Fixed:** a Google Takeout with Search activity in it no longer treats
+  searches as Gemini chats.
+
 **New: talk-to-type on the PC**
 
 - **Hold Alt+Shift+T, speak, let go** - Jarvis types what you said into the

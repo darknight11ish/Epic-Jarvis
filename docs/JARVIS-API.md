@@ -10500,3 +10500,122 @@ asking at once run it once), then dropped.
   the first formatted-counter sample reads 0 (hence the two samples), and
   whether the graphics-card memory counters exist on the owner's driver.
   Each fails to "could not read", never to a wrong number.
+
+## 85. Bring in chats from ChatGPT, Claude or Gemini (added 2026-09-28)
+
+The owner chose idea 13 of `docs/RESEARCH-AUDIT-2026-09-28.md` section 3:
+bring in an old chat history from ChatGPT (new), Claude or Gemini, from a
+button on the PC. `backend/import_history.py` already read Claude and Gemini
+exports from the command line; it now reads ChatGPT's too, and
+`backend/jarvis_history_import.py` (history-import.patch) runs the same
+`run()` in the background for the button. **It only proposes.** Every
+possible fact lands in the review queue (`/api/memory/pending`, "Waiting for
+you") as its own card, decided one at a time; an imported card is never
+saved automatically (`jarvis_auto_learn.check_source` refuses every
+`import:*` source), and there is no approve-all. Nothing leaves the PC: the
+file is read from disk and the only model asked is the one on this PC
+(refused otherwise), so Lockdown (§75) has nothing to stop.
+
+### 85.1 What is read
+
+Only the **owner's own messages** reach `jarvis_extract.propose()` - never
+the other assistant's replies, never a tool's output, never a hidden or
+system message - the same cut the live learner makes. Since 2026-09-28 this
+holds for Claude and Gemini imports too (before, both sides of those chats
+were handed to the model). Also left out, as the live learner leaves them
+out (`jarvis_intake.py`): a chat the owner turned into a game or role-play, a
+crisis message, and a timer or reminder command. Each card is tagged
+`import:chatgpt`, `import:claude` or `import:gemini`.
+
+ChatGPT's export (`conversations.json` inside the `.zip`) keeps every branch
+of a conversation - an edited message or a second answer starts a new one.
+Only the branch the owner last saw is read (from `current_node` up through
+each `parent`). Of each message: role `user` or `assistant` only; content
+`text` or `multimodal_text`, and of its parts only the plain text - images,
+files and voice clips are skipped; not hidden, not weight 0; for the
+assistant, only what it said to the owner (`recipient` `all`).
+
+Big exports: a list is read as a stream, one conversation at a time. One
+conversation over 64 MB of text is skipped and said so; a JSON file that is
+not a list is read whole only up to 256 MB. The imported chats are **not**
+added to the owner's chat History.
+
+Gemini (Google Takeout): only records whose `header` is Gemini's (or
+Bard's) are read, so a Takeout that also holds Search or YouTube activity
+does not turn searches into chats. Takeout's "My Activity" must be
+exported as JSON; its default, HTML, has nothing this can read (it finds 0
+chats and says so).
+
+### 85.2 The routes (this PC's own; the phone does not call them)
+
+All behind the pairing token and the origin check.
+
+```
+GET  /api/memory/import_chats
+200 {"ok": true, "available": true,
+     "state": "idle" | "running" | "stopping" | "finished",
+     "outcome": null | "done" | "queue_full" | "cancelled" | "empty"
+                | "not_export" | "failed",
+     "kind": null | "chatgpt" | "claude" | "gemini",
+     "source": null | "ChatGPT" | "Claude" | "Gemini",
+     "read": <chats found>, "before": <already read by an earlier run, skipped>,
+     "offered": <looked at this run>, "nothing": <of those, with no words of
+     the owner's left to read>, "waiting": <possible facts added this run>,
+     "started": <epoch> | null, "finished": <epoch> | null,
+     "words": "<one plain sentence>", "about": "<the note both show>",
+     "here": <true when asked from this PC>}
+
+POST /api/memory/import_chats/start   {"path": "<the .zip or .json on this PC>"}
+202 <the view above, "state": "running">, "started_now": true
+400 {"ok": false, "error": "Nothing was brought in: <why>."}   no file, not a
+    full path, not .zip/.json, missing, over 8 GB
+403 {"ok": false, "pc_only": true, "error": "Old chats are brought in on the
+    PC only: the export file is on the PC (Brain, Memory)."}
+409 {"ok": false, "error": "..."}   one is already running, or the learning
+    model is not on this PC
+503 {"available": false, "error": "..."}   jarvis_extract missing
+
+POST /api/memory/import_chats/cancel  {}
+200 <the view>, "cancelling": <true when a run was going>
+```
+
+Start is this PC only (`jarvis_owner_check.from_this_pc`) and raises **no
+card**: the owner picked the file on the PC, and a run only proposes. Which
+export it is, is worked out from the file. Cancel is allowed from either
+device: it only makes Jarvis do less, and it stops after the chat being
+read. The view holds **counts only** - never the file's name or path, never
+a word of a chat; the audit log gets `history_import` with the counts and
+the outcome. A full review queue pauses the run (`queue_full`); a chat
+already read is never read again (`import-history-progress.json` in the
+Jarvis settings folder, shared with the command line), so pressing the
+button again with the same file carries on.
+
+Real answers: `jarvis-desktop/tests/fixtures/history-import-cases.json`
+(`tools/gen_history_import_cases.py`).
+
+### 85.3 Where it shows
+
+- **Desktop:** Brain -> Memory, "Bring in old chats", right under Learning
+  (`history-import.js`, `brain/history_import.rs`, Brain window only). The
+  Windows "Open" dialog runs in Rust; the window gets no file access. Start
+  is held on a stale link (before and after the dialog); Stop never is.
+  While a run is going the page asks every 2 seconds, only while the Memory
+  tab shows, and re-reads "Waiting for you" when new cards appear.
+  "Hide memory lists and chat history": the card shows counts and the PC's
+  sentence only - never a fact or a chat - so it is not hidden; the cards
+  it makes are hidden with the other memory lists, as always.
+- **Phone:** no button (ARCHITECTURE.md section 8, "One-sided on
+  purpose"): the export is a file on the PC. The cards it makes show in the
+  phone's review queue like any other.
+- **Command line** (unchanged, plus two flags): `py -3 import_history.py
+  --chatgpt <file>` or `--auto <file>`.
+
+### 85.4 Not built, said plainly
+
+- The ChatGPT reader is written from the export's published shape and has
+  **not been run on a real export of the owner's**. If a future export
+  renames its fields, it finds 0 chats and says so, rather than guessing.
+- An imported card does not say which chat or which service it came from
+  on screen; the `import:*` source is on the card's record only.
+- Bringing in more than one file at a time, and projects or memories that
+  the other services export beside the chats, are not read.

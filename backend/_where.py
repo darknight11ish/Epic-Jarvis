@@ -231,6 +231,11 @@ SHIPPED = (
     # an answer; jarvis_agent.py calls it, and the tool test shares its
     # pattern - no patch
     "jarvis_claims.py",
+    # "Bring in chats from ChatGPT, Claude or Gemini" (2026-09-28,
+    # history-import.patch): the importer itself, and the Brain button's
+    # background run of it - every fact it finds waits for a yes
+    "import_history.py",
+    "jarvis_history_import.py",
 )
 
 
