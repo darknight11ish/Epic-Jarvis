@@ -71,6 +71,13 @@ cpal = "0.15"
 # Encodes the captured samples as the 16-bit PCM WAV `jarvis_speech._read_wav`
 # requires - confirmed against that function directly, not guessed.
 hound = "3.5"
+# Settings -> Devices (docs/PAIRING-DESIGN.md section 8.2): the pairing QR
+# code is drawn HERE, in Rust, as an SVG - so the secret text inside it never
+# reaches the settings page's scripts, and nothing is loaded from the
+# internet to draw it. Project Nayuki's QR Code generator: MIT licence
+# (checked on crates.io, 2026-09-28), no dependencies of its own. Pinned
+# exactly, like every crate that decides what a security code looks like.
+qrcodegen = "=1.8.0"
 
 # Build order step 4: killing the process TREE, not the process. On Windows
 # that is a Job Object; on Unix a process group. Both are a handful of calls,

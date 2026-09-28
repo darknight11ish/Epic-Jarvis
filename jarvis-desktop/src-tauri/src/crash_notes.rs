@@ -421,6 +421,50 @@ fn redact_windows_username(s: &str) -> String {
     out
 }
 
+/// Redacts a per-device key (docs/PAIRING-DESIGN.md 5.1, 8.6) wherever it
+/// appears, even with no header or name around it: `jdk1.`, `d` and 8
+/// lowercase hex characters, `.`, then 43 characters of `A-Z a-z 0-9 - _`,
+/// the design's `jdk1\.d[0-9a-f]{8}\.[A-Za-z0-9_-]{43}`, matched by plain
+/// scanning (no regex crate here, and nothing that can fail in a panic
+/// hook). The prefix is kept so a bug report still says a key was there.
+fn redact_device_keys(s: &str) -> String {
+    const PREFIX: &str = "jdk1.";
+    let key_char = |b: u8| b.is_ascii_alphanumeric() || b == b'-' || b == b'_';
+    let bytes = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
+    let mut i = 0usize;
+    while let Some(off) = s[i..].find(PREFIX) {
+        let start = i + off;
+        let id = start + PREFIX.len();
+        let secret = id + 10;
+        let end = secret + 43;
+        let shaped = bytes.len() >= end
+            && bytes[id] == b'd'
+            && bytes[id + 1..id + 9]
+                .iter()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(b))
+            && bytes[id + 9] == b'.'
+            && bytes[secret..end].iter().all(|b| key_char(*b));
+        out.push_str(&s[i..start]);
+        if shaped {
+            out.push_str("jdk1.[redacted: a device key]");
+            // A longer run of key characters (or a second key run straight
+            // on) is still part of the same blob; swallow it rather than
+            // leave a tail of a secret.
+            let mut j = end;
+            while j < bytes.len() && (key_char(bytes[j]) || bytes[j] == b'.') {
+                j += 1;
+            }
+            i = j;
+        } else {
+            out.push_str(PREFIX);
+            i = id;
+        }
+    }
+    out.push_str(&s[i..]);
+    out
+}
+
 /// Scrubs one piece of text before it is ever written to `crash-notes.json`
 /// or shown on screen. See the module doc comment for what this covers and
 /// why it is a lighter, Rust-side subset of `jarvis_scrub.py` rather than a
@@ -432,7 +476,8 @@ pub fn scrub(text: &str) -> String {
     // (a whole HTML page, a stack of causes); a crash note is a diagnostic
     // line, not a full log.
     let bounded: String = text.chars().take(2000).collect();
-    let s = redact_headers(&bounded);
+    let s = redact_device_keys(&bounded);
+    let s = redact_headers(&s);
     let s = redact_url_credentials(&s);
     let s = redact_named_secrets(&s);
     redact_windows_username(&s)
@@ -441,6 +486,27 @@ pub fn scrub(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn redacts_a_device_key_with_nothing_around_it() {
+        let key = format!("jdk1.d3f9a1c2e.{}", "Ab9_-".repeat(8) + "xyz");
+        assert_eq!(key.len(), 58);
+        let got = scrub(&format!("could not save {key} to the store"));
+        assert_eq!(
+            got,
+            "could not save jdk1.[redacted: a device key] to the store"
+        );
+        assert!(!got.contains("Ab9_-"));
+        // Not the shape: left as it is.
+        assert_eq!(scrub("jdk1.d3f9a1c2e.short"), "jdk1.d3f9a1c2e.short");
+        assert_eq!(scrub("jdk1.D3F9A1C2E.x"), "jdk1.D3F9A1C2E.x");
+        assert_eq!(scrub("ends with jdk1."), "ends with jdk1.");
+        // Two keys run together leave no tail of the second one.
+        assert_eq!(
+            scrub(&format!("{key}{key}")),
+            "jdk1.[redacted: a device key]"
+        );
+    }
 
     #[test]
     fn leaves_ordinary_text_alone() {
