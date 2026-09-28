@@ -516,6 +516,16 @@ Decided 2026-09-28, the owner's answers after the animal-face audits:
 - **A "Still" option for the animals** in both apps' face settings, off by
   default: the animal sits calmly and only breathes - no looking around,
   no gestures or idle events.
+- **Wake-up and falling-asleep animations** for every animal: short (about
+  2-3 s), calm, no yawn (the mouth moves only with Jarvis's voice); eyes
+  only when waking into an approval, under Still, calm motion or a crisis.
+- **A fourth animal: a cartoon monkey** (from the owner's picture), in the
+  same style as the others and with every improvement they have. It hangs
+  from a vine by one arm and swings gently; it sits on the vine to sleep,
+  tail curled round it. **The banana is its orb**: it glows in the state
+  colour, as the others' orbs do. A male voice, a touch energetic. It is
+  a little more lively than the other three - still smooth and never
+  sporadic.
 
 ## Every new feature gets its own audit, without being asked
 
