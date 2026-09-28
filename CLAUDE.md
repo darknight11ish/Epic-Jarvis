@@ -549,6 +549,11 @@ before acting on any outside review; its disproven findings stay closed):
   memory self-test (before milestone 5), and PrefEval's questions test "From
   now on..." preferences. Test data only (CC BY-NC 4.0), never shipped,
   credited when added.
+- **Built the same day:** milestones 7 (the prompt-cache share, shown in
+  Brain -> Model in both apps), 12 (the tie-breaker, OFF until the PC's
+  numbers improve) and 13 (`eval_memory.py --locomo`). On LoCoMo, words only,
+  the entity layer made every number worse - not looked into yet
+  (`docs/MEMORY-SCOREBOARD.md`).
 - **Copying the owner's own voice stays refused** (`jarvis_voices.py`): a
   Jarvis speaking in the owner's voice could pass its own voice check.
 

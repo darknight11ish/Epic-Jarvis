@@ -133,7 +133,7 @@ existing behaviour until it's switched on. Each gets the usual new-feature audit
   other settings. Failures count only when a step really ran and failed, not
   when the owner refused a card.
 
-### Milestone 7 - Measure the prompt cache (queued 2026-09-28)
+### Milestone 7 - Measure the prompt cache (queued 2026-09-28; BUILT the same day - the counts were already recorded since 2026-09-26, and Brain -> Model now shows the share in both apps)
 
 - **What.** Record, on every turn, how much of the prompt Ollama reused from
   its cache, and show it with the speed numbers
@@ -164,7 +164,7 @@ existing behaviour until it's switched on. Each gets the usual new-feature audit
   like "Folders Jarvis may look in" and treated as outside text. Downloaded
   once, by the owner. Most useful alongside the app builder.
 
-### Milestone 12 - "Said again" as a small tie-breaker in recall (queued 2026-09-28)
+### Milestone 12 - "Said again" as a small tie-breaker in recall (queued 2026-09-28; BUILT, switched OFF until the PC's numbers show it helps - `docs/MEMORY-SCOREBOARD.md`)
 
 - **What.** `fact_repeats` already records each time the owner repeats
   something Jarvis knows (`said_again`, `said_again_counts` in
@@ -184,7 +184,7 @@ research was checked again. Non-commercial licences were already treated as
 fine under rule 5, so very little changed. These two had been named in the
 research but never used:
 
-- **13. LoCoMo questions in the memory self-test** (snap-research/locomo,
+- **13. LoCoMo questions in the memory self-test (BUILT 2026-09-28: `eval_memory.py --locomo`, baseline on the scoreboard)** (snap-research/locomo,
   data CC BY-NC 4.0). Its long made-up chats include "link two facts"
   (multi-hop) questions, which `eval_memory.py` doesn't have today. Build
   this BEFORE milestone 5, so multi-hop memory has something to be measured
