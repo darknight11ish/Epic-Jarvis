@@ -607,6 +607,13 @@ fun BrainScreen(
                 HardwareSection(canAct = canAct, onOpenApprovals = onOpenApprovals)
             }
 
+            // "PC help" (docs/JARVIS-API.md section 84): five plain answers
+            // about the PC, read-only, asked only on "Check now"
+            // (PcHelpPlate.kt), so this is its only line.
+            item(key = "pc-help") {
+                PcHelpSection()
+            }
+
             // backend/second-card.patch. Right under Model, because a feature
             // whose model is missing is installed with the box above.
             item(key = "second-card") {

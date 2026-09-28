@@ -1217,6 +1217,13 @@ class JarvisApi(
     suspend fun hardware(): ApiResult<JsonObject> = probe(Hardware.PATH)
 
     /**
+     * `GET /api/pc/help` (section 84) - five plain answers about the PC
+     * ([PcHelp.parse]). Reads only. A 404 is an older backend, a 503 one
+     * whose jarvis_pc_help.py did not load.
+     */
+    suspend fun pcHelp(): ApiResult<JsonObject> = probe(PcHelp.PATH)
+
+    /**
      * One of the hardware POSTs: choosing a setup ([Hardware.APPLY_PATH]),
      * measuring ([Hardware.MEASURE_PATH]), or ONE step of the chosen setup -
      * a route read from the PC's own answer, one of [Hardware.STEP_ROUTES]

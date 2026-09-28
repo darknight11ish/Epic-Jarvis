@@ -866,6 +866,7 @@ pub fn run() {
             hardware::apply_hardware,
             hardware::hardware_step,
             hardware::measure_hardware,
+            hardware::get_pc_help,
             web_search::get_web_search,
             web_search::set_web_search,
             web_search::test_web_search,

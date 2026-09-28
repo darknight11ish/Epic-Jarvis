@@ -1182,6 +1182,25 @@
             keep their own switches, in the next section.
           </p>
         </div>
+
+        <!-- "PC help" (pc-help.js, GET /api/pc/help, JARVIS-API section 84):
+             five plain answers about this PC, read-only. Asked only when
+             "Check now" is pressed. Outside #hw-body, so it works even when
+             the cards could not be read. -->
+        <div id="pc-help">
+          <h3 class="subhead">PC help</h3>
+          <p class="note">
+            Why is your PC slow, how full are your drives, what is using the
+            graphics card, how hot it is, and when did the PC last restart.
+            Jarvis only reads; it changes nothing. You can also just ask
+            Jarvis, like "why is my PC slow?".
+          </p>
+          <div class="row">
+            <button class="btn ghost small" id="pc-help-check" type="button">Check now</button>
+            <span class="status" id="pc-help-status" role="status"></span>
+          </div>
+          <ul class="pc-help-list" id="pc-help-list"></ul>
+        </div>
       </section>
 
       <!-- ── Second graphics card ─────────────────────────────────────────
@@ -1782,6 +1801,7 @@
 
     <script type="module" src="settings.js"></script>
     <script type="module" src="hardware-panel.js"></script>
+    <script type="module" src="pc-help.js"></script>
     <script type="module" src="briefing-settings.js"></script>
     <script type="module" src="web-search-settings.js"></script>
     <script type="module" src="account-secrets-settings.js"></script>

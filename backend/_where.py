@@ -215,6 +215,10 @@ SHIPPED = (
     # "Better voice" (2026-09-28): the second "hey Jarvis" detector
     # (microWakeWord); jarvis_speech.py and jarvis_voice.py call it
     "jarvis_microwake.py",
+    # "PC help" (2026-09-28): why is my PC slow, how full is my disk, what is
+    # using the graphics card - read-only, answered without the model;
+    # jarvis_quick.py and jarvis_brain_reads.py (GET /api/pc/help) call it
+    "jarvis_pc_help.py",
 )
 
 

@@ -869,6 +869,14 @@ select:focus-visible {
 .hw-step[data-state="later"] .hw-step-title { color: var(--text-muted); }
 .hw-step[data-state="waiting"] .sc-line { color: var(--accent-text); font-weight: 600; }
 
+/* PC help (pc-help.js): five plain answers, the PC's own words. */
+.pc-help-list { margin: 8px 0 0; padding: 0; list-style: none; }
+.pc-help-item { padding: 6px 0; border-top: 1px solid var(--line-soft); }
+.pc-help-item:first-child { border-top: none; }
+.pc-help-title { font-size: var(--text-sm); color: var(--text); }
+.pc-help-words { margin: 2px 0 0; font-size: var(--text-sm); color: var(--text); }
+.pc-help-note { padding-top: 6px; }
+
 .hw-modelfile {
   margin: 4px 0;
   padding: 8px;

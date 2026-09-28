@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-pc-help"
+description = "Enables the get_pc_help command without any pre-configured scope."
+commands.allow = ["get_pc_help"]
+
+[[permission]]
+identifier = "deny-get-pc-help"
+description = "Denies the get_pc_help command without any pre-configured scope."
+commands.deny = ["get_pc_help"]

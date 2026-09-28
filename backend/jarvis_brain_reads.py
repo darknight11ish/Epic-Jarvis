@@ -23,7 +23,14 @@ The owner's choice of 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md section
         forgets nothing: each ticked fact is then forgotten through the
         ordinary Forget route, one at a time.
 
-All three are READS for the apps' Brain screens, behind the pairing token and
+    GET /api/pc/help
+        (2026-09-28; JARVIS-API section 84) "PC help": five plain answers
+        about this PC - why it is slow, how full the drives are, what is using
+        the graphics card, how hot it is, when it last restarted.
+        jarvis_pc_help.read() does the work, on this PC only; the program
+        names in it are never logged or kept. It changes nothing.
+
+All four are READS for the apps' Brain screens, behind the pairing token and
 the origin check like every memory and history read. Neither is a tool: no
 model and no chat turn can call them (jarvis_agent.py offers nothing that
 reaches here), so what they return never reaches the AI model. Neither
@@ -43,7 +50,8 @@ from urllib.parse import urlsplit
 SEARCH_PATH = "/api/history/search"
 FACT_HISTORY_PATH = "/api/memory/fact-history"
 CONVERSATION_FACTS_PATH = "/api/memory/conversation-facts"
-PATHS = (SEARCH_PATH, FACT_HISTORY_PATH, CONVERSATION_FACTS_PATH)
+PC_HELP_PATH = "/api/pc/help"
+PATHS = (SEARCH_PATH, FACT_HISTORY_PATH, CONVERSATION_FACTS_PATH, PC_HELP_PATH)
 
 UPDATE = ("This PC's Jarvis is missing part of this feature. Run apply-patches.ps1 on the PC "
           "to update it.")
@@ -87,6 +95,12 @@ def handle_get(path: str, query: str = "") -> tuple:
             return handler(query)
         except Exception as exc:
             return 500, {"error": type(exc).__name__}
+    if path == PC_HELP_PATH:
+        try:
+            import jarvis_pc_help
+        except Exception:
+            return 503, {"available": False, "error": UPDATE}
+        return jarvis_pc_help.handle_get(query)
     return 404, {"error": "no such route"}
 
 
@@ -96,7 +110,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
     to the original `do_GET`. `read_body` is taken only for the signature
     the other install() functions share (every route here is GET-only)."""
     if getattr(handler_cls.do_GET, "_jarvis_brain_reads", False):
-        return "  brain      Search old chats, fact history and a chat's facts (already on)"
+        return "  brain      Search old chats, fact history, a chat's facts and PC help (already on)"
     get0 = handler_cls.do_GET
 
     def _allowed(self) -> bool:
@@ -124,4 +138,4 @@ def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:
 
     do_GET._jarvis_brain_reads = True
     handler_cls.do_GET = do_GET
-    return "  brain      Search old chats, fact history and a chat's facts: on"
+    return "  brain      Search old chats, fact history, a chat's facts and PC help: on"

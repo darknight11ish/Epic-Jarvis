@@ -1732,6 +1732,14 @@ last card in the queue as read. The phone's home-screen widget has no
 Approve at all - "Review" opens the app - and sits where Approve sits
 elsewhere, on the right.
 
+**PC help is in both apps since 2026-09-28** (`docs/JARVIS-API.md` §84):
+the same five answers from `GET /api/pc/help`, and the same five questions
+answered in chat by `jarvis_quick.py`. One small difference, on purpose:
+the desktop shows it in Settings -> Hardware and models, the phone in Brain
+under Hardware - in each app, where the graphics cards already are. Changing
+Windows settings from it (Night light, dark mode, Do not disturb) is in
+neither: nothing safe to build it on exists yet (§10).
+
 ---
 
 ## 9. Where the backend lives
@@ -2078,6 +2086,13 @@ they landed):
   is published until the owner generates a signing key and adds it
   (`jarvis-desktop/README.md`, "Turning on updates"). Until then Settings
   says updates are not set up.
+- **Changing Windows settings from Jarvis** (Night light, dark mode, Focus
+  Assist / Do not disturb). "PC help" (`jarvis_pc_help.py`, JARVIS-API §84)
+  only reads. No safe way to change a Windows setting exists in this
+  codebase yet (`jarvis_ui_control.py` clicks inside other programs'
+  windows, which is not that), so none was built. When it is: one gate
+  action per setting, tier `ask`, one card each, listed on "What asks
+  first" and held by Lockdown.
 
 **Present, but only on the owner's PC** (not missing, and not in this
 repository either):

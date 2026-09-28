@@ -10152,3 +10152,110 @@ bubble; that screenshot blocking (`FLAG_SECURE`, on while App lock or "Hide
 memory lists and chat history" is on) also covers the bubble's window; and
 that `launchMode="singleTask"` does not pull the full app out of the
 bubble.
+
+## 84. PC help (added 2026-09-28)
+
+The owner chose idea 12 of `docs/RESEARCH-AUDIT-2026-09-28.md` section 3
+(after a phone maker's "Device help"): ask Jarvis about the PC in plain words
+and get a plain answer. **Read-only.** Nothing is changed, closed, freed or
+deleted, so there is no approval card and no gate action; nothing leaves the
+PC, so Lockdown (§75) has nothing to stop.
+
+### 84.1 The five questions, answered without the AI model
+
+Said or typed to Jarvis in either app, answered on the PC by
+`jarvis_quick.py` (-> `backend/jarvis_pc_help.py`, shipped whole, no patch):
+
+| Topic | Said like | The answer |
+|---|---|---|
+| `slow` | "why is my PC slow?", "my computer is really slow", "what's using all my memory?" | how busy the processor is, how full the memory (RAM) is, the top three programs for each, and the likely reason. Jarvis's own model shows as "Jarvis's AI model" (any Ollama process), this backend as "Jarvis itself". |
+| `disk` | "how full is my disk?", "how much space do I have left?", "is my C drive full?" | every fixed drive: GB free of GB, and % free; "nearly full" under 10%. |
+| `gpu` | "what's using my graphics card?", "how much VRAM is used?" | each NVIDIA card's memory in use and how busy it is, the models Ollama has loaded on it (from Ollama's own `/api/ps`), and the other programs using its memory. |
+| `heat` | "how hot is my graphics card?", "what's my GPU temperature?" | each NVIDIA card's temperature, and whether it is slowing itself down because it is hot (the same reading as Hardware and models, §20). |
+| `restart` | "when did my PC last restart?", "how long has my PC been on?" | when Windows last started, and - after two days - that with Fast Startup on, "Shut down" does not count as a restart. |
+
+Each pattern must be the whole sentence, so a longer question ("why is my
+PC slow to boot after the update, should I reinstall?") goes to the model as
+before. Only the owner's own words (`typed` or `voice`), like everything in
+the fast path. **Why no model:** a slow PC is the worst time to wait for a
+model, and the model is often what is using the card - asking it would make
+the answer slower and change what is being measured. There is **no model
+tool** for PC help.
+
+The reply's `X-Jarvis-Route` is the fast path's (`quick: "pc_help"`). An
+answer that **names programs** (`slow`, and `gpu` when other programs use
+the card) is `gate: "private"` - it stays on screen under the apps' private
+rule rather than being read aloud - and marks the turn as having read
+outside text (`pc_help_programs`), because a program chooses its own name:
+it is never learned from. Disk, heat and restart answers are neither.
+
+### 84.2 `GET /api/pc/help`
+
+The same five answers for the apps, routed by `jarvis_brain_reads.py`
+(behind the pairing token and the origin check, like every Brain read). No
+parameters. Asked only when the owner presses **Check now** - one reading
+takes the PC a couple of seconds - never on a timer.
+
+```
+200 {"ok": true, "at": <epoch>,
+     "sections": [{"id": "slow" | "disk" | "gpu" | "heat" | "restart",
+                   "title": "Why is my PC slow?",
+                   "words": "<the PC's own answer>",
+                   "programs": <true when it names programs>}, ... five, in that order],
+     "changes": "PC help only reads. Changing Windows settings from Jarvis (Night light, dark mode, Do not disturb) is not built yet.",
+     "private": "Program names stay on your PC: Jarvis does not save, log or learn from them."}
+503 {"available": false, "error": "<update sentence>"}   jarvis_pc_help.py missing
+404                                                     a backend without it
+```
+
+A reading that fails says so in its own `words` ("Jarvis could not read
+this on your PC just now."); the route itself never fails for it. Both apps
+show `title` and `words` as they are, then `private` and `changes`. Real
+answers: `jarvis-desktop/tests/fixtures/pc-help-cases.json` and the phone's
+byte-identical `contract/pc-help-cases.json` (`tools/gen_pc_help_cases.py`).
+
+- **Desktop:** Settings -> Hardware and models -> PC help (`pc-help.js`,
+  `hardware.rs get_pc_help`, settings window only).
+- **Phone:** Brain -> PC help, under Hardware (`PcHelpPlate.kt`,
+  `net/PcHelp.kt`). The answer is held by that screen only, never in the
+  app's shared state, and is gone when the screen closes.
+
+Neither is held on a stale link: it only reads.
+
+### 84.3 How the PC reads, and what it keeps
+
+Standard Windows means only; no new dependency (psutil is not used - it is
+not in `requirements.lock`):
+
+- programs: ONE Windows PowerShell 5.1 call, sent as `-EncodedCommand`,
+  reading Windows' own performance counters through CIM
+  (`Win32_PerfFormattedData_PerfProc_Process`,
+  `..._GPUPerformanceCounters_GPUProcessMemory`, `..._PerfOS_Processor`),
+  sampled twice a second apart. Windows' per-program processor figure
+  counts one core as 100%; it is divided by the number of cores.
+- memory, drives and the last start: `kernel32` through ctypes
+  (`GlobalMemoryStatusEx`, `GetLogicalDrives`/`GetDriveTypeW` with
+  `shutil.disk_usage`, `GetTickCount64`).
+- graphics cards: `nvidia-smi` through `jarvis_compute` and
+  `jarvis_hardware`'s health reading - the Hardware screen's own readings.
+
+Program names are **never logged, printed, audited or written to a file**;
+the PowerShell reading is held in memory for at most 5 seconds (so both apps
+asking at once run it once), then dropped.
+
+### 84.4 Not built, said plainly
+
+- **Changing Windows settings** (Night light, dark mode, Focus Assist / Do
+  not disturb). Nothing in this codebase changes a Windows setting safely
+  today (`jarvis_ui_control.py` clicks inside other programs' windows - a
+  different thing), so none was built. A later step: each as a new gate
+  action, tier `ask`, one card each, listed on "What asks first" and held by
+  Lockdown.
+- AMD and Intel graphics cards: only NVIDIA's `nvidia-smi` is read, as on
+  the Hardware screen.
+- Disk and network speed ("is it the disk or the internet?") are not
+  measured; the `slow` answer says so when nothing looks busy.
+- Untested on Windows: the PowerShell reading's JSON shape on 5.1, whether
+  the first formatted-counter sample reads 0 (hence the two samples), and
+  whether the graphics-card memory counters exist on the owner's driver.
+  Each fails to "could not read", never to a wrong number.
