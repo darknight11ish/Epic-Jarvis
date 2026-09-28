@@ -26,7 +26,8 @@
   // ONSET_S of each clip's playback. The lead means t = 0 already reads 50 ms
   // in, and Kokoro often starts sounding 10-50 ms into a clip: without this
   // the mouth jumped from shut to a quarter open (the owl's "Shall": the
-  // lips spread 0.9) in one frame at the start of a sentence.
+  // lips spread 0.9) in one frame at the start of a sentence. They also fade
+  // out over the track's last ONSET_S (see sample()).
   var ONSET_S = 0.05;
 
   function clamp01(x) { return x < 0 ? 0 : x > 1 ? 1 : x; }
@@ -163,11 +164,69 @@
     fricLo: 10, fricHi: 22, shA: 300, shB: 1500, shC: 2500, shD: 5000, shLo: 15, shHi: 25,
     nasLo: 2, nasHi: 8, openRange: 30, lmOpen: 8,
     openMs: 25, dipLo: 7.5, dipHi: 12, dipMix: 0.3, wide0: 7, wide1: 7, round0: 1, round1: 3.5,
-    round2: 6, lipFwdMs: 40, lipBackMs: 60, teeth: 0.45
+    round2: 6, lipFwdMs: 40, lipBackMs: 60, teeth: 0.45,
+    // A steady noise floor (see the gate below): the quietest noiseQ of the
+    // frames, +noiseAbove dB, never closer than noiseCap dB under the peaks.
+    noiseQ: 0.02, noiseAbove: 7, noiseCap: 18,
+    // The speaker's size (see pitchOf): the lip bands move by pitchAlpha x
+    // the voice's pitch in quarter octaves from pitchRef Hz, within
+    // pitchLo..pitchHi quarter octaves; a clip needs pitchN pitched frames.
+    pitchRef: 210, pitchAlpha: 0.6, pitchLo: -1.5, pitchHi: 0, pitchN: 5
   };
+
+  // The median pitch (Hz) of the vowel frames (vow > 0.5), or 0 when fewer
+  // than K.pitchN of them have a clear one. Every third vowel frame, a
+  // normalised autocorrelation of the clip averaged down to about 6 kHz, 32
+  // ms long, over pitches of 70-400 Hz; the shortest period whose peak is
+  // within 85 % of the best one (so not twice the period), refined between
+  // samples by a parabola. About 20 small correlations a second of speech.
+  function pitchOf(samples, sr, vow, n) {
+    if (!(sr >= 4000)) return 0; // below any rate fromWav accepts: no pitch, no move
+    var dec =Math.max(1, Math.floor(sr / 6000 + 0.5)), r = sr / dec,
+      len = Math.floor(samples.length / dec), k, t, l;
+    var y = new Float64Array(len);
+    for (k = 0; k < len; k++) {
+      var a = 0;
+      for (t = 0; t < dec; t++) a += samples[k * dec + t];
+      y[k] = a / dec;
+    }
+    var W = Math.floor(0.032 * r + 0.5), l0 = Math.floor(r / 400), l1 = Math.ceil(r / 70);
+    var rr = new Float64Array(l1 + 2), got = new Float64Array(n), m = 0, c = 0;
+    for (var i = 0; i < n; i++) {
+      if (!(vow[i] > 0.5) || (c++ % 3) !== 0) continue;
+      var st = Math.floor(i * sr / FPS / dec) - (W >> 1);
+      if (st < 0 || st + W + l1 + 1 > len) continue;
+      var e0 = 0, best = -1;
+      for (t = 0; t < W; t++) e0 += y[st + t] * y[st + t];
+      for (l = l0 - 1; l <= l1 + 1; l++) {
+        var xy = 0, ee = 0;
+        for (t = 0; t < W; t++) { var v = y[st + t + l]; xy += y[st + t] * v; ee += v * v; }
+        rr[l] = xy / Math.sqrt(e0 * ee + 1e-20);
+      }
+      for (l = l0; l <= l1; l++) if (rr[l] > best) best = rr[l];
+      if (best < 0.6) continue;
+      for (l = l0; l <= l1; l++) {
+        if (rr[l] >= 0.85 * best && rr[l] >= rr[l - 1] && rr[l] >= rr[l + 1]) {
+          var d2 = rr[l - 1] - 2 * rr[l] + rr[l + 1];
+          got[m++] = r / (l + (d2 < 0 ? 0.5 * (rr[l - 1] - rr[l + 1]) / d2 : 0));
+          break;
+        }
+      }
+    }
+    return m >= K.pitchN ? percentile(got, m, 0.5) : 0;
+  }
 
   function analyse(samples, sampleRate, debug) {
     if (!(sampleRate > 0) || !samples) samples = [];
+    // A sample that is not a number (NaN, Infinity) would make every frame
+    // near it NaN, and a NaN mouth reaches the faces' shaders. It counts as
+    // silence. (fromWav never makes one; this is for any other caller.)
+    for (var q = 0; q < samples.length; q++) {
+      if (!isFinite(samples[q])) {
+        samples = Float32Array.from(samples, function (v) { return isFinite(v) ? v : 0; });
+        break;
+      }
+    }
     var F = features(samples, sampleRate), n = F.n, B = F.bands, i, j;
     var level = new Float32Array(n), open = new Float32Array(n),
       wide = new Float32Array(n), round = new Float32Array(n);
@@ -180,6 +239,15 @@
     var ref = percentile(tmp, m, 0.95);
     var floor = percentile(tmp, m, 0.10);
     var gate = Math.min(ref - 30, Math.max(ref - 50, floor + 8));
+    // A steady noise floor - a custom voice cloned from a recording made in
+    // a noisy room, hiss, hum - fills the pauses at one level, which the
+    // 30 dB gate above can sit under: the mouth then kept moving in every
+    // pause. The quietest 2 % of the frames are that floor; the gate goes
+    // 7 dB above it, but never closer than 18 dB under the peaks. A clean
+    // clip's quietest frames are almost always 38 dB or more down, where
+    // this changes nothing (no clean test voice's numbers moved).
+    var noise = percentile(tmp, m, K.noiseQ);
+    gate = Math.min(ref - K.noiseCap, Math.max(gate, noise + K.noiseAbove));
 
     // ---- level: loudness 0..1, fast attack, slower release -------------
     var att = coef(20), rel = coef(75), env = 0;
@@ -203,21 +271,18 @@
     //     at 2.5-5 kHz, INSIDE the oral band, so dH alone misses them (the
     //     owl's "Shall" opened to 0.87 on the sh); a vowel, even "ee", is
     //     20 dB or more the other way.
+    // (lm and fb are worked out further down, once the voice's size is known.)
     var dO = new Float64Array(n), dH = new Float64Array(n), dL = new Float64Array(n),
       lm = new Float64Array(n), fb = new Float64Array(n), sh = new Float64Array(n);
     var x80 = bandPos(80), x300 = bandPos(300), x1000 = bandPos(1000),
       x4000 = bandPos(4000), x10k = bandPos(10000),
-      xS0 = bandPos(K.shA), xS1 = bandPos(K.shB), xS2 = bandPos(K.shC), xS3 = bandPos(K.shD),
-      xE = bandPos(K.lmA), xF = bandPos(K.lmB), xG = bandPos(K.lmC), xH = bandPos(K.lmD),
-      xA = bandPos(K.fbA), xB = bandPos(K.fbB), xC = bandPos(K.fbC), xD = bandPos(K.fbD);
+      xS0 = bandPos(K.shA), xS1 = bandPos(K.shB), xS2 = bandPos(K.shC), xS3 = bandPos(K.shD);
     for (i = 0; i < n; i++) {
       var o = i * NB;
       dO[i] = db(bandSum(B, o, x300, x4000));
       dH[i] = db(bandSum(B, o, x4000, x10k));
       dL[i] = db(bandSum(B, o, x80, x1000));
       sh[i] = db(bandSum(B, o, xS2, xS3)) - db(bandSum(B, o, xS0, xS1));
-      lm[i] = db(bandSum(B, o, xE, xF)) - db(bandSum(B, o, xG, xH));
-      fb[i] = db(bandSum(B, o, xC, xD)) - db(bandSum(B, o, xA, xB));
     }
     m = 0;
     for (i = 0; i < n; i++) if (F.all[i] > gate) tmp[m++] = dO[i];
@@ -238,6 +303,32 @@
         smooth01(K.shLo, K.shHi, sh[i])) : 0;
       nas[i] = speech[i] ? smooth01(K.nasLo, K.nasHi, lo[i]) : 0;
       vow[i] = smooth01(refO - 22, refO - 10, dO[i]) * (1 - fric[i]) * (1 - nas[i]);
+    }
+
+    // The voice's size. The lip cues are bands at fixed frequencies, but a
+    // deeper voice has every resonance lower: a deep voice's "ee" put its
+    // second formant just under fb's 2100 Hz edge, and read round, not
+    // spread (Kokoro's speaker 5, a man: "sheep" 0.30 round, 0.07 wide), and
+    // so did any voice set 3 semitones deeper (the animals' pitch setting),
+    // which lowers every frequency by 16 %. So the bands move down with the
+    // voice's pitch: by 0.6 of how far it is below 210 Hz (in octaves; a
+    // voice pitched down moves its formants by the whole amount, but one
+    // person's formants follow their pitch only partly, and intonation not at
+    // all), at most 3/8 of an octave. A higher voice already read right, and
+    // moving the bands up for one made the default voice's high-pitched
+    // questions less round, so they never move up. Pitch rather than the
+    // spectrum, because what is being said moves the spectrum (a sentence of
+    // "ee"s looks like a small voice) and barely moves the pitch.
+    var f0 = pitchOf(samples, sampleRate, vow, n);
+    var size = f0 > 0 ? Math.max(K.pitchLo, Math.min(K.pitchHi,
+      K.pitchAlpha * 4 * Math.log(f0 / K.pitchRef) / Math.LN2)) : 0;
+    var xE = bandPos(K.lmA) + size, xF = bandPos(K.lmB) + size, xG = bandPos(K.lmC) + size,
+      xH = bandPos(K.lmD) + size, xA = bandPos(K.fbA) + size, xB = bandPos(K.fbB) + size,
+      xC = bandPos(K.fbC) + size, xD = bandPos(K.fbD) + size;
+    for (i = 0; i < n; i++) {
+      o = i * NB;
+      lm[i] = db(bandSum(B, o, xE, xF)) - db(bandSum(B, o, xG, xH));
+      fb[i] = db(bandSum(B, o, xC, xD)) - db(bandSum(B, o, xA, xB));
     }
 
     // The voice's own colour: some voices (the breathy owl, the darker
@@ -350,7 +441,7 @@
     }
 
     if (debug) tr._debug = { all: F.all, dO: dO, dH: dH, dL: dL, lm: lm, fb: fb, ref: ref, refO: refO,
-      gate: gate, fbOff: fbOff, lmOff: lmOff, fric: fric, nas: nas, vow: vow, cl: cl, pm: pm };
+      gate: gate, f0: f0, size: size, fbOff: fbOff, lmOff: lmOff, fric: fric, nas: nas, vow: vow, cl: cl, pm: pm };
     return tr;
   }
 
@@ -364,6 +455,12 @@
     }
     var i = Math.floor(f), u = f - i, j = Math.min(i + 1, track.n - 1);
     var g = t >= ONSET_S ? 1 : t > 0 ? t / ONSET_S : 0;
+    // ...and fades out over the track's last ONSET_S: past the last frame
+    // the mouth is shut, and a clip whose sound runs (nearly) to its end -
+    // many voices other than Kokoro leave 40 ms or less - used to snap from
+    // wide open to shut in one frame there.
+    var e = (track.n - 1 - f) / (ONSET_S * track.fps);
+    if (e < g) g = e;
     out.level = track.level[i] + (track.level[j] - track.level[i]) * u;
     out.open = (track.open[i] + (track.open[j] - track.open[i]) * u) * g;
     out.wide = (track.wide[i] + (track.wide[j] - track.wide[i]) * u) * g;
@@ -444,6 +541,10 @@
       var id = String.fromCharCode(u8[p], u8[p + 1], u8[p + 2], u8[p + 3]);
       var size = dv.getUint32(p + 4, true);
       if (id === "fmt ") {
+        // A fmt chunk too short to hold the fields, or cut off by the end of
+        // the file: not a WAV this can read (it used to read past it, and
+        // throw a RangeError on a file cut short inside the header).
+        if (size < 16 || p + 24 > u8.length) { data = null; break; }
         ch = dv.getUint16(p + 10, true);
         rate = dv.getUint32(p + 12, true);
         bits = dv.getUint16(p + 22, true);
@@ -453,7 +554,12 @@
       }
       p += 8 + size + (size & 1);
     }
-    if (!data || bits !== 16 || ch < 1) return { samples: new Float32Array(0), sampleRate: rate };
+    // The same sample rates the phone accepts (Wav.rateOf): a nonsense rate
+    // (1 Hz: 100 mouth frames per sample) could keep analyse() busy for
+    // seconds.
+    if (!data || bits !== 16 || ch < 1 || !(rate >= 4000 && rate <= 192000)) {
+      return { samples: new Float32Array(0), sampleRate: rate };
+    }
     var frames = Math.floor(data[1] / (2 * ch));
     var out = new Float32Array(frames);
     for (var i = 0; i < frames; i++) {

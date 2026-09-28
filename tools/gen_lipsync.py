@@ -7,7 +7,10 @@ copy on the phone (`jarvis-client/.../audio/LipSync.kt`). This runs the
 JavaScript under node over the test clips in
 `jarvis-client/app/src/test/resources/lipsync/` (Jarvis's own Kokoro voice:
 the default voice and the animal voices - docs/LIPSYNC.md says how they were
-made) and saves every frame of every track, plus some sample() reads, in
+made; a few resampled to 8, 16, 22.05 and 44.1 kHz, and one cut off
+mid-word, so both copies are also held to the same numbers at every window
+size, at a frame hop that is not a whole number of samples, and at the end
+fade) and saves every frame of every track, plus some sample() reads, in
 `lipsync-golden.json`. The phone's `LipSyncTest` fails if the Kotlin copy
 disagrees by more than 1e-3, so the two cannot drift apart quietly.
 

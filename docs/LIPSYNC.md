@@ -367,13 +367,56 @@ once per sentence, before it plays, and not on the drawing thread.
 - **American "oo" is fronted** ("knew", "you"): its second formant sits
   between "ee" and "oh". Those vowels come out less round, which is roughly
   what the lips do too.
-- **Custom (recorded) voices were not measured** - only Kokoro. The
-  per-clip normalisation should carry over; it is untested.
+- **Custom voices are now measured** (2026-09-28): Piper (amy, lessac and
+  the male alan), ZipVoice (the backend's own cloning engine, from a clean
+  and from a noisy reference) and Pocket TTS - see "Deep and noisy voices"
+  below.
+- **A voice pitched 3 semitones down is only partly corrected** (the band
+  move is capped at 3/8 of an octave), and am_adam at -3 reads "oo" a
+  little less round than before (0.71 -> 0.59 of words rounder than
+  wide).
 - **Bluetooth delay** (see "Why 50 ms").
 - The phone's own fallback voice (Android's text-to-speech, used when the
   PC's voice is not available) never gives the app the whole clip, so it
   cannot use this analysis; `SpeechClock.kt` estimates the opening from
   loudness only.
+
+## Deep and noisy voices (2026-09-28)
+
+Two steps were added to the analysis after the corpus tests. Both are in
+`lipsync.js` and `LipSync.kt` (byte-identical output on 3,541 clips).
+
+- **The lip bands follow the voice's pitch.** A deep voice's formants sit
+  lower, so "ee" was read as round. `pitchOf()` estimates the median pitch
+  of the vowel frames (normalised autocorrelation on the clip averaged down
+  to ~6 kHz, every third vowel frame, with an octave guard), and both lip
+  band sets move down by `0.6 x 4 log2(F0 / 210)` quarter-octaves, only
+  down and at most 3/8 of an octave (`K.pitchRef 210, pitchAlpha 0.6,
+  pitchLo -1.5, pitchHi 0`). Below a 4 kHz sample rate it does nothing.
+  Moving the bands UP for high voices was tried and rejected (it broke
+  the default voice's high-pitched "oo").
+- **An adaptive noise floor.** The silence gate is raised to 7 dB above
+  the clip's quietest 2% of frames, never more than 18 dB under its
+  loudest (`gate = min(ref - 18, max(gate, p2 + 7))`). Clean clips' floor
+  sits 38-60 dB down, so no clean voice changed; on a noisy clip the gate
+  lands just above the noise.
+
+| voice | before | after |
+|---|---|---|
+| am_adam (deep), "ee" sentences read wide | 0 / 8 | **8 / 8** |
+| four voices at -3 semitones, "ee" wider than round | 0.28 | **0.72** |
+| am_michael, bm_george, bm_lewis, "ee" sentences | 0.38 | **1.00** |
+| Kokoro with noise 20 dB under it: mouth open in pauses | 0.16 | **0.01** |
+| ZipVoice cloned from a noisy recording: level in pauses | 0.24 | **0.14** |
+
+What it cost (kept because each is within a sentence or so of noise, and
+every margin stays the right way round): the default voice and the otter
+each read one of eight "oo" sentences less round (still rounder than
+wide); Piper alan the same; the owl pitched +4 "oo rounder" 0.68 -> 0.61
+(about 1.3 standard errors); breathy owl vowels under 20 dB of noise open
+past 0.2 a little less often (0.96 -> 0.89). About +0.5 ms per second of
+audio in node. Two new test clips: `kokoro-default-wide-deep.wav` (a
+"sheep" sentence at -3 semitones) and `kokoro-default-pauses-noisy.wav`.
 
 ## Tests
 
