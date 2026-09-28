@@ -48,8 +48,27 @@ the PC run above.
 | - | Ideas 1-4, real models | **the PC - not run yet** | - | - | - | - |
 | 2026-09-27 | The memory review's fixes (docs/MEMORY-REVIEW-2026-09-27.md: bugs B1-B15 and B17; improvements I1, I3-I7, I12, I13 kept, I2 not kept) | build machine, words only | **80.9%** (79.8-77.7% at 171-1,071 facts) | **7/10** | **10/10 (0 wrong)** - wrong now also counts a newer fact handed over unlabelled: 3 before the fixes | **80/80** (27 new cases; 60/80 before the fixes) |
 | 2026-09-27 | Re-run after the later learning and memory changes: "passing moods are not facts" in the learner's instructions (I154), crisis messages never learned (I151), "Between us" and the "From now on" / humour settings (docs/QUALITY-AUDIT-2026-09-27.md, section 8) | build machine, words only | 80.9% (unchanged) | 7/10 (unchanged) | 10/10, 0 wrong (unchanged) | 80/80 (unchanged) |
+| 2026-09-28 | Smarter memory dates: "true until" end dates (a label, never a hide), "Where did I put ...?" (a newer place replaces the older one; answered without the model), "put / placed / stored ..." read as a change by "true from", and the overnight tidy's "Which is true now?" finder (docs/JARVIS-API.md sections 77-79) | build machine, words only | 80.9% (unchanged; 79.8-77.7% at 171-1,071, unchanged) | 7/10 (unchanged) | 10/10, 0 wrong (unchanged) | 80/80 of the old cases (unchanged) **+10/10 "things that move" +12/12 "true until"** |
 
-The last row says only that nothing measurable here got worse. It **cannot**
+The 2026-09-28 row, in words: every number the self-test compares was the
+same before and after (the run with `--against` the one before: 110 numbers
+unchanged, none better, none worse). The new parts, measured for the first
+time:
+
+- **"Where did I put ...?"**: 13/13 questions answered right through the
+  real fast path, and 0 older places given (the passport moved, the glasses
+  moved, winter coats moved three times - one of them older news, which
+  stays history).
+- **"Which is true now?"** (the overnight tidy): with a stand-in model that
+  always answers right, precision **1.0** (20 of 20 pairs raised were real
+  conflicts) and recall **1.0** (20 of 20 found), 0 of 20 "both can be true"
+  pairs raised. The owner's bar was precision 0.8: met. This measures the
+  finder - which older facts it puts in front of the model, and whether it
+  reads the numbers back right - **not the model**. What the real 8B model
+  gets right comes only from the PC run with `--learner-model` (the same
+  line as always; it now runs the finder with the real model too).
+
+The last row before it says only that nothing measurable here got worse. It **cannot**
 say whether I154 helps: that change is to the words the real learner model
 reads, and on the build machine the learner is a stand-in that never reads
 them. Only the PC run with `--learner-model` measures it.

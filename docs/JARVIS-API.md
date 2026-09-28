@@ -1244,7 +1244,9 @@ the day's offer as made the moment it is called, so the route calls it only
 for a client that shows the card - the Brain window and the phone. Without
 the flag the field is `null`. (The HUD page reads this route often and never
 showed the card, and used to use up the day's offer that way.) The card says
-the feature is not built, and carries `"implemented": false`. Since
+what the overnight tidy does - since 2026-09-28 it is built, review cards
+only (§78) - and carries `"implemented": true` (before that: "not built",
+`false`). Since
 2026-09-25 it is also an offer under the back-off (section 22.6): it is not
 handed out within two minutes of a chat message or while three other offers
 wait (the day is not used up then - a later read that day gets it), and
@@ -1283,7 +1285,7 @@ neither app says it would.
 | `/api/memory/learning/sensitive` | POST | `{"enabled": bool}` | `brain_memory_learning_sensitive` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Also remember sensitive topics automatically" (off by default). The same shape, action `learning_sensitive_enable`. |
 | `/api/history/settings` | POST | `{"enabled": bool}` or `{"keep_days": 0 \| 30 \| 90 \| 365}` (one per request) | `brain_history_settings` (ON and every keep change held on a stale link) | `JarvisApi.setHistory` / `setHistoryKeepDays` (the same holds) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. The same shape as `/api/memory/learning`: **ON asks first** - **202** `{"waiting": true, ...}` and ONE approval card under the action `history_enable`; on only when it is approved. ON while already on: 200, no card. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, withdraws a waiting ON; what is kept stays. `keep_days`: 200 at once, the reply says how many conversations it deleted. Anything else: `400`. Every reply carries the `/api/history` status fields. |
 | `/api/history/delete` | POST | `{"id": "<conversation id>"}` | `brain_history_delete`, after a confirm; held on a stale link | `JarvisRuntime.deleteHistory`, after a confirm; held on a stale link | `chat-history.patch` - **§18**. One conversation per request, `200 {"ok": true}` or `404`. **There is no delete-all** - a list, or any other key, is `400`. |
-| `/api/memory/sleep_time` | POST | `{"enabled": bool}` and/or `{"remind": bool}`, or `{"not_now": true}` alone | `brain.rs` `brain_memory_sleep_time` | `JarvisApi.setSleepTime` | The overnight tidy is **not built**: `enabled` only records the wish, and nothing runs. "Not now" sends `{"not_now": true}` since 2026-09-25 (`briefing.patch`): the PC keeps the offer quiet for 1 day, then 7, then 30 (`jarvis_backoff.py`, section 22.6), and answers `{"ok", "said", "quiet_until"}`; it changes no setting and is not held on a stale link in either app (it only makes Jarvis quieter). An older PC answers 400 and the card simply returns tomorrow. `not_now` beside `enabled` or `remind` is ignored. |
+| `/api/memory/sleep_time` | POST | `{"enabled": bool}` and/or `{"remind": bool}`, or `{"not_now": true}` alone | `brain.rs` `brain_memory_sleep_time` | `JarvisApi.setSleepTime` | Since 2026-09-28 the overnight tidy is built, **review cards only** (§78): `enabled: true` puts its one daily look on the scheduler, `enabled: false` removes it at once - sent alone, it is not held on a stale link in either app ("Turn off overnight tidying"; it only makes Jarvis ask less). Before that, `enabled` only recorded the wish. "Not now" sends `{"not_now": true}` since 2026-09-25 (`briefing.patch`): the PC keeps the offer quiet for 1 day, then 7, then 30 (`jarvis_backoff.py`, section 22.6), and answers `{"ok", "said", "quiet_until"}`; it changes no setting and is not held on a stale link in either app (it only makes Jarvis quieter). An older PC answers 400 and the card simply returns tomorrow. `not_now` beside `enabled` or `remind` is ignored. |
 | `/api/attention/mute` | POST | `{}` | `attention.rs:119` | `JarvisApi.kt:469` | **Until tomorrow only.** There is no "mute forever". |
 | `/api/attention/unmute` | POST | `{}` | `attention.rs:121` | `JarvisApi.kt:471` | Response is `budget()`, not `status()`, so the desktop re-reads rather than applying half an update. |
 | `/api/digest/seen` | POST | `{}` = all, or `{"ids": [...]}` | `attention.rs:102` | `JarvisApi.kt:481` | **Marking read is not approving.** Both clients say so in the same words. |
@@ -3114,7 +3116,9 @@ model, or it did not finish." The PC does not say which of the two it was,
 so neither do the apps. A missing field (an older PC) is read as kept.
 Dates in History carry the weekday ("Tue 22 Sept 2026" on the desktop,
 "Tue 22 Sep 18:30" on the phone), and deleting a conversation says that it
-does not forget facts Jarvis learned from it.
+does not forget facts Jarvis learned from it - since 2026-09-28, unless the
+owner ticks them: Delete lists the facts the chat taught, none ticked, and
+forgets only the ticked ones, one Forget each (§79).
 
 `POST /api/history/delete {"id": "..."}` - `200 {"ok": true}` or `404`. One
 conversation per request. **There is no "delete all" route**: irreversible
@@ -3241,7 +3245,7 @@ and Saved automatically (`net/AutoLearn.kt`, `AutoLearnPlate.kt`); `ported`
 in `tools/check_parity.py`.
 Every route needs the pairing token and passes the origin check.
 
-Deleting a conversation from History does not forget facts learned from it - use Forget in Saved automatically.
+Deleting a conversation from History does not forget facts learned from it - use Forget in Saved automatically. (Since 2026-09-28 Delete offers them, none ticked - §79.)
 
 ### 19.1 The two settings
 
@@ -3387,6 +3391,14 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    replace, shown as "Would replace: ..." like any correction - and its
    reason is "it would change a fact you already have - accepting it
    replaces that one". Nothing is retired unless the owner keeps the card.
+   **One exception, the owner's choice of 2026-09-28 (§77): a thing that
+   moved.** A place for a thing Jarvis already keeps a place for ("the
+   passport is in the desk now", when it keeps "in the top drawer") is not
+   this card when every other check passes; once it is saved, the older
+   place is ended as history, and older news by the owner's own dates never
+   replaces newer. A person, a pet, an event, a date or where the owner
+   lives is never such a place, and a correction the model aimed at another
+   fact stays a card.
    **And never a fact the owner forgot** (2026-09-28, the research audit's
    gap A): a proposal with a forgotten fact's words - the same words, or,
    once the real meaning model is loaded, the same statement worded a
@@ -3723,7 +3735,9 @@ wait for your yes, even with this on."
   cards than strictly needed: "I love Radiohead, they are great" -> "Owner
   loves Radiohead" is a card (the "they").
 - **Deleting a conversation from History does not forget facts learned from
-  it** - use Forget in Saved automatically.
+  it** - use Forget in Saved automatically. Since 2026-09-28 Delete lists
+  them with a tick box each, none ticked, and forgets only the ticked ones
+  (§79).
 
 ---
 
@@ -9370,3 +9384,324 @@ is a hotkey like the others (Settings, Shortcuts): **Talk-to-type,
   with "say a little more".
 - **Not on the phone** (ARCHITECTURE section 8): it types into the PC's own
   programs, and a client must not do speech-to-text.
+
+---
+
+## 77. "Where did I put ...?" (added 2026-09-28)
+
+The owner chose this on 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md
+section 3, idea 4). From the owner's own words - "the passport is in the
+top drawer", "I put the spare key under the blue pot" - Jarvis keeps where a
+thing is, and "where is my passport?" / "where did I put the spare key?" is
+answered **without the AI model**, plainly, with when it was said:
+
+> You said on Tuesday: in the top drawer.
+
+One new shipped module, `backend/jarvis_places.py`, no patch and **no new
+route**: `jarvis_quick.py` (the fast path that answers without the model, section 21)
+asks it, and `jarvis_auto_learn.py` asks it about things that move.
+
+### 77.1 It is ordinary memory
+
+Nothing new saves anything. A place is a fact the learner proposed from the
+owner's own words, saved or left as a card by every check automatic
+learning already makes (section 19): the owner's own live words, grounded,
+nothing pasted - and **sensitive topics still wait for a yes**: "the spare
+key is under the flowerpot" names a hiding place for a house key, which the
+sensitive-topic check has always held back as home security. A saved place
+is listed under "Saved automatically" in both apps, with Forget and "Erase
+the words", like any fact.
+
+What IS new, in fixed rules (English only, no model):
+
+- **Reading a place** (`place_of`): "Owner's passport is in the top drawer",
+  "The spare key is under the blue pot", "Owner put the spare key under the
+  blue pot", "Owner keeps their glasses on the hall table", "Owner moved
+  the passport to the filing cabinet", "Owner's car keys are with Dave". A
+  time on the end ("... in January 2026", "... yesterday") is the fact's
+  "true from" date, not part of the place. **Not** a place: a person, a pet
+  or an event ("the wedding is in May"), a date or a time, where the owner
+  lives or works ("moved back to Leeds" stays a correction card, as ever),
+  and things that only look like one ("keeps fit by running", "on silent").
+- **A thing that moved is not a correction card** (the owner's choice:
+  things move, and asking each time the keys move would be a nag). When
+  a proposal is a place for a thing Jarvis already keeps a place for,
+  somewhere else, automatic learning skips ONLY the correction check -
+  every other check still runs - and, once the new place is saved, ends
+  the older one as history (`apply_move`, `MemoryStore.retire(old,
+  replaced_by=new)`): not a Forget, so "where was my passport last month?"
+  still finds it, labelled. Dates follow the "true from" rules every
+  correction follows (section 34): **older news never replaces newer** -
+  "I moved the passport to the desk in January", said after "... to the
+  safe in March", is filed as history and the safe stays the answer. A move
+  that stays a card for another reason (sensitive, pasted ...) names the
+  older place on the card, so accepting it replaces that one, like any
+  correction. A correction the learner's model aimed at a DIFFERENT fact
+  is never treated as a move.
+- **The question** (`where_question`): "where is / where's / where are my
+  X", "where did / do / have I put / leave / keep X", "do you know where my
+  X is", "remind me where I put my X" - the whole sentence, with "my", "the"
+  or "our" in front of the thing, so "where is Paris?" and "where is the
+  nearest pharmacy?" are never ours. A statement ("I put my passport in the
+  safe") is never ours either: it goes to the model and the learner learns
+  it.
+
+### 77.2 The answer
+
+`jarvis_places.lookup` reads the place facts **in use** - current, not
+erased, not forgotten - newest first; "where are my keys?" finds each key
+("You said: the car key, on the hook by the door (on Tuesday); the spare
+key, with Dave (on 3 September)."). When it was said is when Jarvis was
+told: "today", "yesterday", "on Tuesday" (the last six days), "on 12
+September", "on 12 September 2025".
+
+**Handed to the model instead, exactly as before**: no place saved for that
+thing, a temporary chat (it uses no memory - section 5 of ARCHITECTURE),
+`JARVIS_MEMORY_K=0` (memory off), a pasted or shared question (only the
+owner's typed or spoken words reach the fast path), or a PC without
+`jarvis_places.py`.
+
+`X-Jarvis-Route` for such an answer is the fast path's (`quick:
+"where_put"`, `lane: "no AI model"`) plus, like a model answer that used
+memory: `inject_memory: true`, `injected_facts`, `injected_ids` (`"mem:<fact
+id>"`) and `injected_sensitive`. So both apps show "Used 1 memory" with
+Forget under it, and **an answer that quotes a sensitive fact stays on
+screen** unless the owner allowed it to be read aloud (section 16), exactly
+as for any memory answer; under "Only trust the talk button" a hands-free
+question's memory answer stays on screen too.
+
+The question itself is a fast-path command (`jarvis_quick.is_command`), so
+the learner never reads "where is my passport?" as a fact.
+
+### 77.3 Measured
+
+`backend/eval/learner_cases.jsonl` has ten "moves" cases (the newer place
+replaces the older one; older news does not; a different thing, a date that
+is not a place, pasted text, a sensitive hiding place, the owner's own home
+and a correction aimed elsewhere stay as they were); `backend/eval/
+where_cases.jsonl` asks thirteen questions through the real fast path. The
+memory self-test runs both (`eval_tidy.py`); docs/MEMORY-SCOREBOARD.md has
+the numbers. `backend/test_places.py` proves the rest.
+
+**Not checked:** how the owner's real learner model words a place ("Owner's
+passport is in ...", "Owner keeps ..."). The parser reads the shapes above;
+a place worded some other way is simply an ordinary fact, and the question
+then goes to the model as before. The PC run (`--learner-model`) shows it.
+
+---
+
+## 78. Smarter memory dates: "true until", and the overnight tidy (added 2026-09-28)
+
+The owner chose this on 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md
+sections 8.5 ideas 4 and 5, 8.6 gaps B and C). Two things: an END date read
+from the owner's words, and the overnight tidy - which was only an offer
+card until now - built as the smallest runner the design allows. **Cards
+only: nothing in memory changes by itself.** One new shipped module,
+`backend/jarvis_tidy.py`, no patch and no new route.
+
+### 78.1 "True until" (gap B)
+
+`jarvis_memory.true_until()` reads "until / till / through / ends in /
+ending in / runs until <date>" with fixed rules, like `true_from` (section
+34): a day ("12 October 2026", "12 October"), a month ("December 2026",
+"June"), a year ("2024"), or the date the learner put in brackets after a
+relative one ("until next Friday (2026-10-02)"). Past or future. Not "not
+until March" (that says when something BEGINS), not "until 5pm", not two
+end dates, not "expires". A date with no year is the next one that has not
+ended, or - for words in the past tense ("lived in Leeds until March") - the
+most recent.
+
+`add()` keeps it **as a label**: `meta.true_until` (the first moment after
+the date said) and `meta.true_until_said` ("2026-10-12", "2026-12" or
+"2024"). **`valid_to` is not set from the words**, so the fact is never
+hidden on its own - not before the date, and not after it either: "a lease
+that ends in December" is current until then AND after, until the owner
+answers the "Still true?" card below. A rule that misread a sentence can
+therefore never make a fact vanish. `edit()` (Reword) reads it again from
+the new words. `true_from` ignores the END date ("started a contract in
+March 2026 that runs until September 2026" is true from March).
+
+Chat recall shows it while the date is ahead: "Owner is on holiday in
+Lisbon until 12 October 2026 (until 12 Oct)" (`jarvis_past.label_until`;
+the year is left out when it is this year). Once the date has passed there
+is no label - the tidy asks instead.
+
+### 78.2 The overnight tidy: what runs, and when
+
+**Off unless the owner switches it on** - the existing switch, the daily
+"Overnight memory tidying" offer's Enable (`[memory.sleep_time] enabled`,
+`POST /api/memory/sleep_time`). Until 2026-09-28 that switch only recorded
+a wish ("not built yet"); now it starts the tidy, and both apps say so. On,
+the tidy is ONE job on the one shared scheduler (kind `tidy`,
+`jarvis_schedule.KIND_MODULES`): not on the owner's "Coming up" list, rings
+no doorbell, and looks once an hour from the tidy hour
+(`[memory.sleep_time] window_start_hour`, 02:00 in the shipped settings) -
+running **at most once a day**,
+and only when the back-off (`jarvis_backoff.py`, offer kind `tidy_cards`)
+allows: not while the owner is chatting, not in Quiet or Standby, not
+while other offers wait. Off: the job is removed at once, and a look that
+finds the switch off does nothing.
+
+**Turning it off** is now in both apps: "Turn off overnight tidying" under
+the memory counts (desktop: Brain -> Faculties -> Memory; phone: "What
+Jarvis remembers"). One tap, at once, **not held on a stale link** - it only
+makes Jarvis ask less. `POST /api/memory/sleep_time {"enabled": false}`, the
+same route. The daily offer's own words now say what the tidy does:
+
+> Once a day, Jarvis can look over what it knows and ask you about facts
+> that may be out of date ... at most five a night - using the AI model on
+> this PC only. Nothing in memory changes by itself.
+
+`/api/memory/status`'s `sleep_time` row reads "on - once a day Jarvis may
+ask about facts that look out of date (review cards only)" or "off" in both
+apps (`contract/memory-words-cases.json`).
+
+### 78.3 What one night does
+
+At most **five cards a night**, and never more than five of its cards
+waiting at once:
+
+1. **"Still true?"** - a fact in use whose own end date has passed, and was
+   still ahead when it was saved ("lived in Leeds until 2024" was history
+   when said: no card). No model. Card text: "Still true? You said this
+   would be true until 12 Oct, and that date has passed. If it has ended,
+   stop using it - it stays in the history, true until then. If it is still
+   true, keep using it."
+2. **"Which is true now?"** (gap C) - for each fact learned since the last
+   look (at most 30, newest first), up to eight OLDER facts that may be
+   about the same thing (shared words, a shared person or thing from the
+   entity layer, or the same topic - work, home, pets, partner, car,
+   phone, study, food), numbered, go to the learner's **local** model with
+   the question "which of these cannot still be true if the new fact is
+   true?" - the pattern of Graphiti's `resolve_edge` prompt (getzep/
+   graphiti, Apache-2.0, `graphiti_core/prompts/dedupe_edges.py`: numbered
+   existing facts, the answer only index numbers; the prompt here is
+   written fresh, with three worked examples of its own). The facts are
+   data, numbered; only numbers come back, and a number outside the list,
+   or words, is nothing. Each number becomes ONE card about the OLDER fact
+   (by the owner's own dates when both have them, else by when Jarvis was
+   told). Card text: "Which is true now? Jarvis learned something newer
+   that may replace this: "Owner started a new job at Globex". If the newer
+   fact replaced it, stop using this one - it stays in the history. If both
+   are true, keep using it."
+   **On this PC's model only** (`jarvis_auto_learn.check_local_model`:
+   address AND name). No such model: this half does not run, and nothing
+   is sent anywhere. Between questions, the owner starting to chat stops it.
+
+### 78.4 The cards: the ones both apps already show
+
+Each is an ordinary "stop using this fact?" card in the review queue
+(`source: "feedback_retire"`, `replaces_id` the fact) - the card both apps
+already label "Stop using this fact" / "Keep using it" (section 6, and the
+phone's `MemoryCards`), shown only to a client that asks with
+`retire_cards=1`. One card, one fact, one decision; nothing is decided in
+bulk.
+
+- **Stop using this fact**: the owner's own `jarvis_extract._accept_retire`
+  calls `MemoryStore.retire(fact)`. For a tidy card, `retire()` sees the
+  card being accepted (`tidy_cards` joined to the proposal in state
+  `accepting`, the claim decide-once.patch makes) and ENDS the fact as
+  history instead of filing a Forget: "Still true?" ends it on the date its
+  words gave; "Which is true now?" marks it replaced by the newer fact
+  (`retired_by`), from the newer fact's own start date when it has one. A
+  Forget pressed on a list while the card only waits is still a Forget.
+- **Keep using it**: nothing changes, and that question is never asked
+  again (`tidy_cards.subject`).
+- A waiting card about a fact no longer in use (forgotten, erased,
+  corrected since), or that quotes a newer fact no longer in use, is
+  withdrawn at the next look. **Erasing the newer fact** wipes its words out
+  of any card that quoted them, and turns that card down, at once
+  (`_erase_copies`).
+
+`tidy_cards` (in `memory.db`): `proposal_id, kind ("until" | "conflict"),
+fact_id, other_id, ends, asked, subject` - ids and dates only. The last look
+is `meta.tidy_last`. The audit log gets ids and counts, never words.
+
+### 78.5 Measured, and not
+
+- `eval_learner.py` has twelve "true until" cases (and ten "moves" cases,
+  section 77). The gate, "said again" and "true from" cases are unchanged.
+- `eval_tidy.py` (run by `eval_memory.py`) seeds 20 real conflicts and 20
+  pairs that can both be true (`backend/eval/conflict_cases.jsonl`) in one
+  store and runs the tidy's own finder with a **stand-in model that always
+  answers right**: that measures the finder - are the right older facts
+  among the candidates, and are the numbers mapped back right - not the
+  model. The owner's bar: precision 0.8 or more. docs/MEMORY-SCOREBOARD.md
+  has the result.
+- **What the real model gets right is measured only on the PC**: the same
+  one-line self-test with `--learner-model` also runs the finder with the
+  real model and reports its precision and recall. Not run yet.
+- `backend/test_tidy.py` proves the rules above against real SQLite files:
+  the job follows the switch, a night held back does nothing, at most five,
+  never twice, the tidy changes no fact, accepting ends the fact as
+  history, a Forget stays a Forget, erasing wipes quoted words, no model on
+  this PC means no model is asked.
+
+---
+
+## 79. Deleting a chat offers to forget the facts it taught (added 2026-09-28)
+
+The owner chose this on 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md
+section 3, idea 9). The other direction already existed: "Erase the words"
+-> "Also delete the chat it came from" (section 6).
+
+| Route | Method | Answers |
+|---|---|---|
+| `GET /api/memory/conversation-facts?conversation_id=<id>` | GET | **200** `{"conversation_id", "facts": [{"id", "text", "created", "source"}], "count", "more"}`: the facts **still in use** - not forgotten, not erased, not corrected - whose own meta says they were learned in that conversation, newest first, at most 50. **400** `{"error"}` for anything but one conversation id (section 18.1's shape: 8-64 letters, digits, `-` or `_`). `501` from a `jarvis_memory.py` older than this section. Token + origin. |
+
+Answered by `jarvis_brain_reads.py` (its third route, beside section 71's
+two; `brain-reads.patch` already installs it, so no patch changes) and
+`jarvis_memory.conversation_facts_view()`. **A read**: it forgets nothing,
+and no meta or conversation id of a fact is sent. Only facts saved
+automatically (and "Remember:") record where they came from; a card the
+owner accepted by hand does not, and is not listed. Not a tool: nothing the
+model can call reaches it.
+
+**Both apps**, on History's Delete:
+
+1. The PC is asked which facts the chat taught. None, or a PC without this
+   route: Delete asks exactly as before ("Deleting a chat does not forget
+   facts Jarvis learned from it. Forget those one by one in the Brain.").
+2. Some: they are listed under the chat - desktop: below its row; phone:
+   in the open conversation - **each with a tick box, NONE ticked**:
+   "Jarvis learned 2 facts from this chat. They are kept unless you tick
+   them - each ticked fact is forgotten, like Forget in the Brain." The
+   button says what will happen: "Delete the chat", or "Delete the chat
+   and forget 1 fact".
+3. **The usual "are you sure?"** - naming the facts to be forgotten (the
+   desktop lists their words; the phone's confirm line is under the
+   ticked list itself).
+4. The chat is deleted (`POST /api/history/delete`, one conversation), then
+   **each ticked fact is forgotten through the ordinary Forget**,
+   `POST /api/memory/forget`, **one fact per call** - held on a stale link,
+   as every Forget is. There is no list form of Forget, and no new write
+   route. What happened is said in one line: "Deleted from this PC. Forgot 1
+   fact." - and a fact that could not be forgotten is named as such, to
+   Forget by hand.
+
+**Why none ticked.** Deleting a chat and forgetting what it taught are two
+decisions. Ticking every fact to start with would turn one tap on Delete
+into forgetting several facts the owner may not have read - the reverse of
+"one fact, one decision". So the list starts empty, and each fact the owner
+wants gone is one tick they chose.
+
+**Hidden like every memory list.** The words come back only where memory
+lists are shown: while "Windows Hello for memory lists and chat history"
+hides them, the desktop's Rust takes the facts out (`brain/
+conversation_facts.rs` `redact_conversation_facts`; how many stays) and
+Delete says "Jarvis learned 2 facts from this chat. Your memory lists are
+hidden, so they are kept. To forget any, show the memory lists first." On
+the phone, History - and so this - is hidden under "Hide memory lists and
+chat history".
+
+Desktop: `brain/conversation_facts.rs` `brain_conversation_facts` (in the
+Brain's `brain-memory` permission set), `history-view.js` (`readChatFacts`,
+`chatFactsIntro`, `deleteChatButton`, `deleteAndForgetQuestion`,
+`deleteDoneWords`), `brain.js` (`deleteConversation`, `deletingNode`,
+`finishDelete`). Phone: `net/ChatLog.kt` (`factsPath`, `taught`, the same
+words), `JarvisApi.conversationFacts`, `JarvisRuntime.chatFacts`,
+`HistoryScreen.kt`'s `Conversation`. `tests/history.mjs` holds the two
+apps' words together.
+
+**Not checked:** the phone half is not compiled here (CI compiles it);
+the desktop's Rust tests compile but run only on Windows.
