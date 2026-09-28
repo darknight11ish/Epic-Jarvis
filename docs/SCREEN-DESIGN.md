@@ -197,7 +197,15 @@ picture model can push the long-conversation model off the card unless
 9. The feature audit, `check_parity.py`, JARVIS-API §62, ARCHITECTURE §8
    and §10.
 
-## 9. Questions for the owner
+## The owner's answers (2026-09-28)
+
+- **Chat history:** the question and Jarvis's answer are kept like any
+  chat; the picture and the screen's words never are.
+- **Read aloud:** yes, unless a sensitive fact was used or the strict
+  hands-free setting says otherwise. `read_screen` joins the read-aloud list
+  (`private-aloud-cases.json`, both apps) as a named exception.
+
+## 9. Questions for the owner (answered above)
 
 1. **Should Jarvis's answers about the screen go into chat history?** (The
    picture and the screen's words never do.)

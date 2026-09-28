@@ -644,6 +644,12 @@ testers, scouts and integration scouts; `.claude/agents/`):
   reads the screen's text only. **Not** always-on watching with a history
   (Recall-style) - the owner declined it. Designed in
   `docs/SCREEN-DESIGN.md` before it is built.
+  Owner's answers to the design (2026-09-28): **the question and Jarvis's
+  answer about the screen are kept in chat history like any chat** (the
+  picture and the screen's words never are); **screen answers are read
+  aloud** unless a sensitive fact was used or the strict hands-free setting
+  says otherwise - a named exception to "a reading tool keeps the answer on
+  screen".
 - **Jarvis is built for one or two graphics cards.** Research and new
   features say which they need; a feature may need two if a one-card PC
   still works without it. Studio agents read `.claude/agents/JARVIS-TODAY.md`
