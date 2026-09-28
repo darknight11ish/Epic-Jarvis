@@ -656,7 +656,11 @@ def t_a_second_claim_counts_and_can_withdraw_the_card():
     held = []
     code, ans = D.claim(good, peer=MESH, gate=Gate(), spawn=held.append)
     check("the first good claim: 202", code == 202, ans)
-    for i in range(3):
+    code, ans = D.claim(good, peer=MESH, gate=Gate(), spawn=now_spawn)
+    check("a second claim says another device used the code",
+          code == 403 and ans.get("claimed") is True and ans["tries_left"] == 2
+          and ans["error"] == D.PHONE_WORDS["claimed"], ans)
+    for i in range(2):
         code, ans = D.claim(good, peer=MESH, gate=Gate(), spawn=now_spawn)
     check("claiming again counts as wrong, and three burn it",
           code == 403 and ans["tries_left"] == 0, ans)
@@ -1123,6 +1127,50 @@ def t_nothing_secret_is_printed():
     check("nothing printed, audited or published holds the key, the QR text or the code",
           all(x not in said for x in (token, token.split(".")[2], started["qr"],
                                        started["code"], started["qr"].split("/")[4])), said[:300])
+
+
+def t_a_deeply_nested_registry_is_broken_too():
+    # json raises RecursionError (not a ValueError) on a file this deep.
+    fresh()
+    with Clock():
+        dev, token, _ = pair()
+    D.registry_path().write_text("[" * 200000 + "]" * 200000, encoding="utf-8")
+    check("load() calls it unreadable", D.load()[1].startswith("unreadable"), D.load())
+    ok = D.wrap_token_ok(Original())
+    check("a device key is refused", ok(FakeHandler(token=token, peer=MESH)) is False)
+    check("the shared key is refused from another device",
+          ok(FakeHandler(token=SHARED, peer=MESH)) is False)
+    check("the shared key still works from this PC",
+          ok(FakeHandler(token=SHARED, peer="127.0.0.1")) is True)
+
+
+def t_an_error_inside_the_check_refuses_other_devices_only():
+    fresh()
+    ok = D.wrap_token_ok(Original())
+    real = D.load
+
+    def boom():
+        raise RuntimeError("simulated")
+    D.load = boom
+    try:
+        check("the shared key from another device is refused",
+              ok(FakeHandler(token=SHARED, peer=MESH)) is False)
+        check("the shared key from this PC still works",
+              ok(FakeHandler(token=SHARED, peer="127.0.0.1")) is True)
+    finally:
+        D.load = real
+
+
+def t_a_proof_that_is_not_ascii_is_just_wrong():
+    fresh()
+    _code, out = _start()
+    good, _k, _n = _claim_body(out)
+    code, ans = D.claim(dict(good, proof="é" * 43), peer=MESH, gate=Gate(), spawn=now_spawn)
+    check("claim: 403 wrong_proof, not a crash",
+          code == 403 and ans["reason"] == "wrong_proof" and not ans.get("claimed"), (code, ans))
+    code, ans = D.collect({"pair_id": out["pair_id"], "proof": "é"}, peer=MESH)
+    check("collect: 403 wrong_proof, not a crash", code == 403 and ans["reason"] == "wrong_proof",
+          (code, ans))
 
 
 def main() -> int:

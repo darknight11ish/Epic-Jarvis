@@ -126,7 +126,10 @@ END_STATES = ("done", "denied", "timed_out", "expired", "burnt", "cancelled", "r
 
 # ---------------------------------------------------------------------------
 # The words. Both apps show these; tools/gen_pairing_cases.py puts every one
-# in the shared cases file so the three cannot drift.
+# in the shared cases file, and the phone's PairWordsContractTest checks its
+# own sentences against it. Two are the PC's only: "this_pc" (the phone is
+# never the PC) and "collect_gone" (the phone says which of the two it was,
+# with its own TIMED_OUT / CANCELLED).
 # ---------------------------------------------------------------------------
 
 PC_ONLY = "This can only be done on the PC itself."
@@ -138,10 +141,13 @@ PHONE_WORDS = {
     "this_pc": "Pairing is for another device - this PC already has its own key.",
     "wrong_proof": "That code is not right. {n} tries left.",
     "wrong_proof_one": "That code is not right. 1 try left.",
-    "wrong_proof_none": "Three wrong tries - this code no longer works. Start again on your PC.",
+    "wrong_proof_none": ("That code is not right, and it no longer works. On your PC, press Pair "
+                         "a phone again."),
+    "claimed": ("Another device already used this code. On your PC, deny the card it raised, "
+                "then press Pair a phone again."),
     "gone": "This code no longer works. On your PC, press Pair a phone again.",
     "name": "Use a shorter name, with letters and numbers only.",
-    "bad_request": "That pairing request could not be read. Start again on your PC.",
+    "bad_request": "Your PC did not understand this phone's request. Start again on the PC.",
     "card": "Your PC could not show the approval card. Try again.",
     "words_differ": ("The PC answered with different words. Do not approve the card on "
                      "your PC."),
@@ -770,7 +776,7 @@ def load() -> tuple:
         else:
             try:
                 doc, why = _valid(json.loads(p.read_text(encoding="utf-8"))), ""
-            except (OSError, ValueError, Broken) as exc:
+            except Exception as exc:  # noqa: BLE001 - e.g. RecursionError on a deeply nested file
                 doc, why = _empty(), f"unreadable ({type(exc).__name__})"
         _CACHE.update(stamp=stamp, doc=doc, why=why)
         return doc, why
@@ -1032,7 +1038,15 @@ def wrap_token_ok(original: Callable) -> Callable:
             _say_why(handler, None)
             _guard(handler, None)
         except Exception:
-            pass
+            # Something above failed. The PC itself keeps today's rule (never
+            # a lockout); another device's shared key is refused, since a
+            # retired key must not start working again because of an error.
+            try:
+                peer, local = _peer_local(handler)
+                if not from_this_pc(peer, local):
+                    return False
+            except Exception:
+                pass
         return ok
 
     token_ok._jarvis_devices = True
@@ -1295,7 +1309,16 @@ def cancel(*, here: bool) -> tuple:
     return 200, {"ok": True, "was": was}
 
 
-def _wrong(s: Session, peer: str) -> tuple:
+def _same(given: str, expected: str) -> bool:
+    """Timing-safe equality for a proof sent by the phone. compare_digest
+    raises TypeError on a str that is not ASCII; such a proof is just wrong."""
+    try:
+        return hmac.compare_digest(given.encode("utf-8"), expected.encode("utf-8"))
+    except (AttributeError, TypeError):
+        return False
+
+
+def _wrong(s: Session, peer: str, *, claimed: bool = False) -> tuple:
     """Count one wrong try (under _LOCK). At none left the session is burnt,
     and a card still waiting is withdrawn."""
     s.tries_left = max(0, s.tries_left - 1)
@@ -1308,8 +1331,12 @@ def _wrong(s: Session, peer: str) -> tuple:
         words = PHONE_WORDS["wrong_proof_one"]
     else:
         words = PHONE_WORDS["wrong_proof"].replace("{n}", str(s.tries_left))
-    return 403, {"ok": False, "reason": "wrong_proof", "tries_left": s.tries_left,
-                 "error": words}
+    answer = {"ok": False, "reason": "wrong_proof", "tries_left": s.tries_left}
+    if claimed and s.tries_left > 0:
+        answer["claimed"] = True
+        words = PHONE_WORDS["claimed"]
+    answer["error"] = words
+    return 403, answer
 
 
 def _gone_state(s: Optional[Session], pair_id=None, *, for_collect=False) -> str:
@@ -1365,11 +1392,12 @@ def claim(body, *, peer, local=None, own=None, gate: Optional[Callable] = None,
         if not name_ok(name):
             return _bad("name")
         if s.state != "waiting_for_phone":
-            # Already claimed: a second claim counts as a wrong try.
-            return _wrong(s, peer)
+            # Already claimed: a second claim counts as a wrong try, and says
+            # plainly that another device got there first.
+            return _wrong(s, peer, claimed=True)
         k = s.key(method)
         t = transcript(method, s.ref(method), phone_nonce, name)
-        if not hmac.compare_digest(proof, claim_proof(k, t)):
+        if not _same(proof, claim_proof(k, t)):
             return _wrong(s, peer)
         s.method, s.phone_nonce, s.name = method, phone_nonce, name
         s.words = words_for(word_numbers(k, t, s.pc_nonce))
@@ -1437,7 +1465,7 @@ def collect(body, *, peer, local=None, own=None) -> tuple:
                          "error": PHONE_WORDS["collect_gone"]}
         if s.state == "waiting_for_phone":
             return _wrong(s, peer)
-        if not hmac.compare_digest(proof, collect_proof(s.key(), s.pair_id, s.phone_nonce)):
+        if not _same(proof, collect_proof(s.key(), s.pair_id, s.phone_nonce)):
             return _wrong(s, peer)
         if s.state == "waiting_for_card":
             return 202, {"state": "waiting_for_card", "expires_in": s.expires_in()}

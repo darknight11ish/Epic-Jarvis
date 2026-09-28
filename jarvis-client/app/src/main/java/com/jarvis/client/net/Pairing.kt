@@ -75,6 +75,8 @@ object Pairing {
     const val NO_ANSWER =
         "Could not reach your PC. Check that Tailscale or NordVPN Meshnet is on, on this phone and on your PC."
     const val WAITED_TOO_LONG = "No answer from your PC in time. Start again on the PC."
+    const val CLAIMED_ALREADY =
+        "Another device already used this code. On your PC, deny the card it raised, then press Pair a phone again."
     const val APPROVE_IF_SAME = "Approve the card on your PC if it shows these same words."
     const val CAMERA_WHY =
         "Jarvis uses the camera only to read the code on your PC. Nothing is recorded or sent."
@@ -371,7 +373,13 @@ object Pairing {
         403 -> when (body.str("reason")) {
             "wrong_proof" -> {
                 val left = body.int("tries_left")
-                Claimed.Refused(wrongCode(left), final = left != null && left <= 0)
+                val claimed = (body?.get("claimed") as? JsonPrimitive)?.takeIf { !it.isString }?.content == "true"
+                if (claimed && (left == null || left > 0)) {
+                    // Another device got there first: never "retype it".
+                    Claimed.Refused(CLAIMED_ALREADY, final = true)
+                } else {
+                    Claimed.Refused(wrongCode(left), final = left != null && left <= 0)
+                }
             }
             else -> Claimed.Refused(NOT_MESH)
         }
