@@ -14375,3 +14375,88 @@ readiness, a whole session.
 - **One card, local:** the rule "only the everyday model" comes from
   MODEL-TOPOLOGY's numbers (the 8 GB card is full at 16K), not from a
   measurement. The two-card swap time is not measured either.
+
+# Ask several and compare, `jarvis_chatbot_compare.py` (2026-09-28)
+
+Owner's decision (CLAUDE.md, "The chatbot driver becomes versatile", point
+4): "compare: ask several AIs the same question, one card listing every AI
+it will ask, one summary of agreements, disagreements and sources." Built on
+the backend and in both apps (`docs/JARVIS-API.md` 60.7; the design and the
+proposed numbers are in `docs/CHATBOT-DRIVER-DESIGN.md`, "Ask several and
+compare"). Like the rest of the chatbot driver, **not yet tried against the
+real sites**.
+
+## In plain words
+
+- Tick "Ask several and compare" in "Talk to a chatbot for me", pick two or
+  more chatbots and type the goal once. **One approval card** lists every
+  chatbot Jarvis would ask (name and address), the goal word for word, and
+  the limits for each chatbot and in all.
+- On a yes, Jarvis talks to each chatbot **one after another**, each in its
+  own ordinary conversation - the same rules as a single conversation:
+  every message checked just before it is sent, your never-send words,
+  nothing private ever in the conversation, and no chatbot ever sees
+  another's answers.
+- If one chatbot cannot go on (an error, a captcha, a sign-in page, a
+  question about you), Jarvis **leaves that one out** and carries on with
+  the others. It never solves or skips a captcha.
+- At the end, Jarvis's own model on the PC writes **one summary**: where they
+  agree, where they disagree and who said what, the sources each gave (not
+  checked by Jarvis), what is still open, and who dropped out and why. It is
+  outside text: never learned from, never read aloud.
+- Pause, Resume and Stop act on the whole comparison. Stop everything stops
+  it too.
+- **How many chatbots (proposed - you can change them):** 2 to 3 with one
+  graphics card, 2 to 4 with two.
+
+## What to do on the PC
+
+Run `apply-patches.ps1` as usual - it copies the new file. There is no new
+patch: `chatbot-routes.patch` already installs the routes, and
+`jarvis_chatbot.py` loads the new file. Every chatbot you want to compare
+must already be set up on its own (signed in, or its key saved - the
+sections above).
+
+## What changed
+
+- `backend/jarvis_chatbot_compare.py` (new): plan, the one card, the loop
+  (one ordinary `jarvis_chatbot.run()` per chatbot), leaving out a chatbot
+  that cannot go on, Pause/Resume as ONE task (`chatbot_compare`), Stop and
+  Stop everything, the one summary, the view both apps read.
+- `backend/jarvis_chatbot.py` (the core) - small changes, listed exactly:
+  `Session.compare` (the comparison a conversation belongs to); such a
+  conversation writes no summary of its own; `view()`'s "latest
+  conversation" is never one of a comparison's; `OTHER_BUSY` (a single
+  conversation cannot start while a comparison is going); the new file is
+  loaded at the end.
+- `backend/jarvis_chatbot_routes.py`: `POST /api/chatbot/compare/start` and
+  `/compare/stop`; `GET /api/chatbot/status` carries `compare` (and
+  `?compare=`) and `tier.compare_min` / `compare_max`; `/api/chatbot/stop`
+  with one of a comparison's conversations stops the whole comparison;
+  `WORDS` gains the compare sentences both apps show.
+- `backend/_where.py`, `scripts/apply-patches.ps1`: the new file shipped.
+- `tools/gen_chatbot_cases.py`: `compare_*` cases in both apps' contract
+  file.
+
+## Test it
+
+```
+python3 backend/test_chatbot_compare.py
+python3 tools/gen_chatbot_cases.py --check
+```
+
+With stand-in chatbots, a stand-in model and a stand-in card: the numbers
+per version; the one card lists every chatbot and the goal word for word; a
+"no" opens nothing; each driver sees only its own chatbot's words; the last
+check and the never-send words on every chatbot; one failing (an error, a
+captcha, a question about you) leaves the others going; Stop, the task
+Stop, Stop everything and a conversation's own Stop all stop everything;
+Pause and Resume (one card) of the whole; the summary names who disagrees
+and drops names that were not asked; the routes.
+
+## Not checked, said plainly
+
+- **Not tried against any real chatbot**, and the summary's quality with the
+  real local model on real answers is not measured.
+- The numbers (3 on one card, 4 on two) are a first proposal, not measured.
+- A comparison is kept in memory only: a backend restart loses it.

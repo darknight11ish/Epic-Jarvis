@@ -226,6 +226,10 @@ SHIPPED = (
     # of their own: jarvis_chatbot.py loads both.
     "jarvis_chatbot_api.py",
     "jarvis_chatbot_local.py",
+    # "Ask several and compare": several of the conversations above, ONE
+    # card, ONE summary. No patch of its own: jarvis_chatbot.py loads it and
+    # chatbot-routes.patch already installs the routes that reach it.
+    "jarvis_chatbot_compare.py",
 )
 
 

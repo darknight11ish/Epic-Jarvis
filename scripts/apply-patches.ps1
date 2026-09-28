@@ -807,6 +807,7 @@ $SHIPPED = @(
     'jarvis_chatbot_metaai.py'   # Meta AI (www.meta.ai): a thin site file
     'jarvis_chatbot_api.py'      # the API adapters (OpenAI, DeepSeek, Mistral, xAI, OpenRouter, Groq): a key from Credential Manager, sent to that one host only; no key, no conversation
     'jarvis_chatbot_local.py'    # "a second AI on this PC": another Ollama model, loopback only, never a cloud model; one card allows only the everyday model, two cards any model on the second card
+    'jarvis_chatbot_compare.py'  # "Ask several and compare": 2 or more chatbots, ONE card listing every one, one after another, ONE summary; routes in jarvis_chatbot_routes.py
 )
 
 # The settings file. Installed only where none exists; never overwritten.
