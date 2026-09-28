@@ -306,6 +306,20 @@ call against its schema before anything is prepared, and asks once more when
 Ollama cannot read one (`backend/README.md`, "Outside text in the tool
 loop"). Read at Ollama `5f4b01e`, 2026-09-24, not run.
 
+**The start every question shares is read ahead (2026-09-28).** Ollama
+reuses the part of the last prompt a new one starts with, and every local
+question starts with the Jarvis rules and the tool list (roughly 550 tokens
+with only web search on, roughly 3,000 with every tool). Loading the model,
+and on one card the background learner, threw that away. Now the warm-up
+on waking and after each learning pass sends exactly that start with one
+word of question and one of answer (`jarvis_agent.warm_prefix`;
+`backend/README.md`, "Warm-up with words"). Not measured on the PC. One
+thing could shrink it, not checked: Ollama gathers every system message
+into one block (`template/template.go`, `collate()`), so if the model's
+template prints that block before the tools, a spoken question or one with
+recalled facts differs before the tool list and reuses only the rules. The
+speed record's `cached_tokens` shows which.
+
 **Keep the embedder on the CPU.** bge-small is ~130 MB through fastembed/ONNX.
 On the GPU it would cost ~0.2 GiB *and* contend for the same SMs mid-utterance.
 It is on the 3900X's 12 cores today; that is correct, and it is written down

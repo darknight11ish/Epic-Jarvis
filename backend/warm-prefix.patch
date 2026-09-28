@@ -1,0 +1,29 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -903,7 +903,25 @@
+                     break
+             if self._stop.is_set():
+                 return
+-            if self._pass() and self._stop.wait(EXTRACT_MIN_GAP):
++            # warm-prefix.patch: on a one-card PC this pass ran on the chat's
++            # own model, and Ollama keeps only one conversation's worth of
++            # what it has read - so the pass pushed out the start every
++            # question shares (Jarvis's rules and tool list), and the next
++            # question would read it all again. jarvis_agent reads it back
++            # in, on its own thread, only when the learner used the chat's
++            # model at the chat's address (never with the second card doing
++            # the learning), never after a temporary chat, never while a
++            # question is being answered, and it stops the moment one
++            # arrives. It sends no words from any conversation. If
++            # jarvis_agent cannot be loaded, nothing changes.
++            _asked = self._pass()
++            if _asked:
++                try:
++                    import jarvis_agent
++                    jarvis_agent.warm_after_learning()
++                except Exception:
++                    pass
++            if _asked and self._stop.wait(EXTRACT_MIN_GAP):
+                 return
+ 
+     def _pass(self) -> bool:

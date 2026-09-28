@@ -85,8 +85,11 @@ def _patched():
 
 def t_its_place_in_the_stack():
     order = _stack.order()
-    check(f"{PATCH} is in apply-patches.ps1's list, last",
-          PATCH in order and order[-1] == PATCH, order[-3:])
+    # Only patches that touch other lines may follow it: warm-prefix.patch
+    # (the learner thread, far from the relay's _open()).
+    check(f"{PATCH} is in apply-patches.ps1's list, last but for patches elsewhere",
+          PATCH in order and set(order[order.index(PATCH) + 1:]) <= {"warm-prefix.patch"},
+          order[-3:])
     for earlier in ("ollama-direct.patch", "chat-history.patch", "cloud-one-turn.patch",
                     "memory-prefix.patch"):
         check(f"after {earlier}", earlier in order and order.index(earlier) < order.index(PATCH))

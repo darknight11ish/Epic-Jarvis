@@ -16,6 +16,10 @@
 # be set on the MODEL, which is this file, or in the environment.
 # (jarvis_agent does ask Ollama what the loaded model has, and trims the
 # history to fit - that avoids silent cutting; it cannot make room.)
+# The warm-up with words (jarvis_agent.warm_prefix, 2026-09-28) builds its
+# request with the same function and sends the same fields - still no
+# num_ctx, options or keep_alive - so it never makes Ollama reload the model
+# at another size either.
 #
 # Left alone, Ollama picks. server/sched.go:
 #

@@ -4466,6 +4466,451 @@ def keep_rules_first(msgs: list) -> list:
     return list(msgs)
 
 
+# --------------------------------------------------------------------------
+#   The start of every local turn, built in one place - and the warm-up that
+#   sends exactly that start ahead of time (speed fix, 2026-09-28)
+# --------------------------------------------------------------------------
+#
+# WHY. Ollama keeps what it has already read of the last prompt, and reuses
+# it while the next prompt starts the same way (PROMPT_USAGE counts it).
+# Every local turn starts with the same few thousand tokens: the Jarvis
+# rules and the tool list (3,000-4,000 tokens with every tool on - "about
+# 3-4 s at 8K on this card", the short-list section above). Two things
+# throw that away:
+#
+#   * loading the model. The warm-up on waking (jarvis_power_switch.warm_up)
+#     loaded it with no words at all, so the first question still read the
+#     whole start from nothing;
+#   * the background learner, on a one-card PC. It runs on the same model
+#     with a different prompt 45 s after the owner stops talking, and Ollama
+#     keeps one conversation's worth (one slot), so the next question read
+#     everything again. With the second card doing the learning
+#     (jarvis_second_card's "learning" lane) this does not happen.
+#
+# WHAT. warm_prefix() sends what a real first question sends - the same
+# model, the same address (/v1/chat/completions), the same system messages
+# (dress_messages: the manner line, the focus line, keep_rules_first), the
+# same tools in the same order (_allowed_tools, _new_offer, _fill_offer:
+# the owner's enabled tools and short-list setting) and the same other
+# fields (chat_body: stream, stream_options, reasoning_effort) - with the
+# one word WARM_WORD as the question and max_tokens 1. The one word of
+# answer is read and thrown away. run_local_turn builds its requests with
+# the SAME functions, so the two cannot drift apart (test_warm_prefix.py
+# compares the bytes sent to a fake Ollama).
+#
+# WHAT IT NEVER DOES. It carries no words from any conversation: the only
+# user text in it is WARM_WORD. It is not a chat turn: nothing is written to
+# the chat history, no speed row (jarvis_speed only records a request thread
+# that jarvis_hud.py started timing, and this runs on its own thread), no
+# step events, nothing offered to the learner. It never loads a model: it
+# runs only when Ollama says the model is ALREADY loaded (_model_waking), so
+# it cannot take the graphics card on standby, or make Ollama load another
+# model. It sends no `options`, no num_ctx and no keep_alive - neither does
+# a real turn - so Ollama has no reason to reload the model at another size.
+# Only to a model on this PC (local_model_refusal: never a cloud model or
+# another machine). Never while a question is being answered, a task is
+# running or Jarvis is on standby, and never after a temporary chat.
+#
+# A QUESTION ARRIVING MEANWHILE DOES NOT WAIT FOR IT. run_local_turn cuts
+# the warm-up's connection the moment it starts (_turn_begins), and Ollama
+# stops a request whose caller has gone. So a question waits, at worst, for
+# the step Ollama is in the middle of - not for the whole warm-up.
+#
+# WHAT IT CANNOT DO. It warms only the start every question shares. A
+# conversation's own earlier messages, recalled facts and the spoken-answer
+# note come later in the messages, and are read as before. NOT VERIFIED on a
+# real Ollama: Ollama gathers every system message into one block
+# (template.go collate()); if the model's chat template prints that block
+# before the tool list, then a question with recalled facts, or a spoken
+# one, starts differently from the warm-up before the tools, and on those
+# questions only the rules are saved. The speed record's "reused" number
+# shows which (backend/README.md, "Warm-up with words", has the one line).
+#
+# OFF SWITCH. `warm_prefix = false` under `[power]` in jarvis-framework.toml
+# turns both warm-ups off (the one on waking then only loads the model, as
+# before). On unless set to a real `false`.
+
+#: The whole question the warm-up asks. Short, and never a real question.
+WARM_WORD = "hi"
+#: One word of answer, thrown away.
+WARM_MAX_TOKENS = 1
+#: Seconds before a warm-up that has had no answer gives up.
+WARM_TIMEOUT = 120.0
+#: On unless `[power] warm_prefix = false`.
+WARM_PREFIX_DEFAULT = True
+
+
+def warm_prefix_on() -> bool:
+    """`[power] warm_prefix` in jarvis-framework.toml; WARM_PREFIX_DEFAULT
+    when it is not set or cannot be read. Only a real `false` turns it off."""
+    try:
+        import jarvis_framework
+        power = (jarvis_framework.load_framework() or {}).get("power") or {}
+        if "warm_prefix" in power:
+            return power.get("warm_prefix") is not False
+    except Exception:
+        pass
+    return WARM_PREFIX_DEFAULT
+
+
+def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
+                   spoken: bool = False, cut_off: str = "", crisis: bool = False) -> list:
+    """The notes a local turn adds to its (already trimmed) messages, in
+    their order - manner, focus, spoken, cut-off, crisis, each just before
+    the newest user message - and then keep_rules_first, last, so the rules
+    stay first. A new list; `msgs` is not changed. run_local_turn and the
+    warm-up both call this."""
+    # The owner's manner (warm or plain): wording only, never first, and
+    # before the spoken note so that one is nearer the question.
+    out = with_manner_note(msgs, manner)
+    if focus:
+        # I144: additive on top of manner, never instead of it - nearer
+        # the question than manner, further than spoken/cut-off/crisis.
+        out = with_focus_note(out)
+    if spoken:
+        # After trimming, so trimming can never leave the note first.
+        out = with_spoken_note(out)
+    if cut_off:
+        # The owner cut the last spoken answer off: said, never first.
+        out = with_cut_off_note(out, cut_off)
+    if crisis:
+        # The crisis help line (jarvis_wellbeing.py): nearest the question
+        # of every note here, never first.
+        out = with_crisis_note(out, True)
+    # Last, after trimming and every note above: the rules stay first.
+    return keep_rules_first(out)
+
+
+def chat_body(model: str, messages: list, opts: dict, tools=None) -> dict:
+    """One request to Ollama's /v1/chat/completions, in the order its fields
+    have always been sent: model, messages, stream, stream_options, the
+    app's temperature/top_p and max_tokens (`opts`), reasoning_effort
+    (unless this Ollama refused it once), tools. No `options`, no num_ctx,
+    no keep_alive: the model's own settings decide those
+    (jarvis-primary.Modelfile says why)."""
+    body = {"model": model, "messages": messages, "stream": True, **PROMPT_USAGE, **opts}
+    if not _reasoning_field_refused:
+        body.update(REASONING_OFF)
+    if tools:
+        body["tools"] = tools
+    return body
+
+
+def _allowed_tools(enabled_tools, url: str, model: str, *, none: bool = False) -> tuple:
+    """(the tool names a turn may use, whether the model itself said it can
+    use none). `none`: this turn offers no tools at all (a picture on the
+    second card, a crisis turn)."""
+    names = [] if none else offered_tools(enabled_tools)
+    if names and _model_can_use_tools(url, model) is False:
+        return [], True
+    return names, False
+
+
+def _new_offer(names: list, opened=()) -> dict:
+    """What a turn SHOWS the model, before the first round (see the short
+    tool list above). Filled by _fill_offer."""
+    return {"short": bool(names) and short_list_on(),
+            "plugins": bool(names) and _plugins_configured(),
+            "opened": set(opened), "extra": {}, "shown": [], "groups": [], "schemas": []}
+
+
+def _fill_offer(offer: dict, names: list) -> None:
+    offer["groups"] = more_tools_groups(names, short=offer["short"],
+                                        plugins=offer["plugins"])
+    offer["shown"] = tool_offer(names, offer["opened"], short=offer["short"],
+                                plugins=offer["plugins"])
+    offer["schemas"] = _schemas_for(offer["shown"], offer["groups"], offer["extra"])
+
+
+def chat_prefix(enabled_tools, *, ollama_url: str, model: str, manner="auto") -> tuple:
+    """(messages_head, tools): the system messages a new conversation's
+    first question is sent with on the main card - everything before the
+    question itself - and its tool list, for these enabled tools and the
+    owner's settings now. `manner` "auto" reads the PC's saved setting, as a
+    real turn does for a conversation that has no override of its own."""
+    if manner == "auto":
+        manner = _manner_now(None)
+    names, _ = _allowed_tools(enabled_tools, ollama_url, model)
+    offer = _new_offer(names)
+    _fill_offer(offer, names)
+    msgs = dress_messages([{"role": "user", "content": WARM_WORD}], manner=manner,
+                          focus=_focus_active_now())
+    return msgs[:-1], list(offer["schemas"])
+
+
+# -- which turns are running, and the warm-up that is --------------------------
+
+class _WarmCall:
+    """One warm-up request on the wire: its socket once connected, and
+    whether a turn has asked it to stop."""
+
+    def __init__(self) -> None:
+        self.cancelled = False
+        self.sock = None
+
+
+_LIVE_LOCK = threading.Lock()
+_LIVE: dict = {"turns": 0, "warm": None}
+#: The last local turn's own settings - never its words: the address, the
+#: model, the enabled tools, and whether it was a temporary chat.
+_LAST_TURN: dict = {}
+#: How the last warm-up went (for the tests, and for anyone asking): state
+#: "warmed" | "cancelled" | "skipped" | "failed" | "off", and why.
+WARM_LAST: dict = {}
+_WARM_LAST_LOCK = threading.Lock()
+
+
+def _looks_temporary(request) -> bool:
+    """jarvis_hud._temporary_chat's test: `temporary: true`, or a game or
+    role-play (jarvis_intake.game_or_roleplay, on the owner's own words)."""
+    if not isinstance(request, dict):
+        return False
+    if request.get("temporary") is True:
+        return True
+    try:
+        import jarvis_intake
+        return bool(jarvis_intake.game_or_roleplay(request.get("messages") or []))
+    except Exception:
+        return False
+
+
+def _turn_begins(url, model, enabled_tools, request, lane_choice=None) -> None:
+    """A local turn starts: count it, remember its settings (no words), and
+    cut off a warm-up that is on the wire so the question does not queue
+    behind it. Never raises: everything that could is worked out before the
+    count goes up, so a turn is always counted exactly once."""
+    try:
+        temporary = bool(_looks_temporary(request))
+    except Exception:
+        temporary = True           # cannot tell: treated as temporary (no warm-up)
+    try:
+        tools = None if enabled_tools is None else frozenset(enabled_tools)
+    except Exception:
+        tools = frozenset()
+    # "One bigger model on both cards" answers every question elsewhere, so
+    # the everyday model's start is not what the next question will need.
+    combined = getattr(lane_choice, "feature", None) == "combined"
+    with _LIVE_LOCK:
+        _LIVE["turns"] += 1
+        _LAST_TURN.clear()
+        _LAST_TURN.update(url=str(url or ""), model=str(model or ""), tools=tools,
+                          temporary=temporary, combined=combined)
+        call = _LIVE["warm"]
+        sock = None
+        if call is not None:
+            call.cancelled = True
+            sock = call.sock
+    if sock is not None:
+        try:
+            # Wakes the warm-up's read, and tells Ollama its caller has gone.
+            # The warm-up's own thread closes the socket.
+            sock.shutdown(socket.SHUT_RDWR)
+        except Exception:
+            pass
+
+
+def _turn_ends() -> None:
+    with _LIVE_LOCK:
+        _LIVE["turns"] = max(0, _LIVE["turns"] - 1)
+
+
+def turns_running() -> int:
+    """How many local chat turns are being answered right now."""
+    with _LIVE_LOCK:
+        return _LIVE["turns"]
+
+
+def _counted_turn(fn):
+    """run_local_turn, counted while it runs (see _turn_begins)."""
+    import functools
+
+    @functools.wraps(fn)
+    def turn(*args, **kw):
+        model = args[1] if len(args) > 1 else kw.get("model")
+        _turn_begins(kw.get("ollama_url"), model, kw.get("enabled_tools"),
+                     kw.get("request"), kw.get("lane_choice"))
+        try:
+            return fn(*args, **kw)
+        finally:
+            _turn_ends()
+    return turn
+
+
+def _power_is_standby() -> bool:
+    try:
+        import jarvis_power
+        return str(jarvis_power.current()) == "standby"
+    except Exception:
+        return False
+
+
+def _tasks_running() -> bool:
+    try:
+        import jarvis_task_control
+        return bool(jarvis_task_control.running())
+    except Exception:
+        return False
+
+
+def _send_warm(url: str, body: dict, call: _WarmCall) -> None:
+    """POST `body` to `url` on this PC and read the answer to the end,
+    keeping nothing. Straight to the address - http.client uses no proxy
+    (jarvis_local_http says why that matters). The socket is handed to
+    `call` once connected, so a turn starting can cut it (_turn_begins)."""
+    import urllib.parse
+    parts = urllib.parse.urlsplit(url)
+    conn = http.client.HTTPConnection(parts.hostname, parts.port or 80, timeout=WARM_TIMEOUT)
+    try:
+        conn.connect()
+        with _LIVE_LOCK:
+            if call.cancelled:
+                return
+            call.sock = conn.sock
+        conn.request("POST", parts.path or "/", body=json.dumps(body).encode("utf-8"),
+                     headers={"Content-Type": "application/json"})
+        resp = conn.getresponse()
+        if resp.status != 200:
+            resp.read()
+            raise UpstreamError(f"Ollama answered HTTP {resp.status}")
+        while resp.read(65536):
+            pass
+    finally:
+        conn.close()
+
+
+def _same_model(a, b) -> bool:
+    def bare(x) -> str:
+        x = str(x or "").strip()
+        return x[:-7] if x.endswith(":latest") else x
+    return bool(bare(a)) and bare(a) == bare(b)
+
+
+def _same_place(a, b) -> bool:
+    def norm(u) -> str:
+        return str(u or "").strip().rstrip("/").replace("://localhost", "://127.0.0.1")
+    return bool(norm(a)) and norm(a) == norm(b)
+
+
+def warm_prefix(model: str, *, ollama_url: str, enabled_tools, why: str = "",
+                manner="auto", send: Optional[Callable] = None,
+                model_waking: Optional[Callable[[str, str], Optional[bool]]] = None) -> dict:
+    """Send the start of a local turn (chat_prefix) with WARM_WORD as the
+    question and max_tokens WARM_MAX_TOKENS, and throw the answer away - so
+    the next real question finds it already read. See the section above for
+    everything it never does. Returns (and keeps in WARM_LAST) how it went.
+    Never raises. `send(url, body, call)` is for the tests."""
+    def done(state: str, note: str = "") -> dict:
+        out = {"state": state, "why": note, "model": str(model or ""), "after": why,
+               "at": time.time()}
+        with _WARM_LAST_LOCK:
+            WARM_LAST.clear()
+            WARM_LAST.update(out)
+        return dict(out)
+
+    call = _WarmCall()
+    try:
+        if not warm_prefix_on():
+            return done("off", "[power] warm_prefix is false in jarvis-framework.toml")
+        if not model or local_model_refusal(ollama_url, model):
+            return done("skipped", "not a model on this PC")
+        if _power_is_standby():
+            return done("skipped", "Jarvis is on standby")
+        if _tasks_running():
+            return done("skipped", "a task is running")
+        if turns_running():
+            return done("skipped", "a question is being answered")
+        loaded = (model_waking or _model_waking)(ollama_url, model) is False
+        if not loaded:
+            return done("skipped", "the model is not loaded, and a warm-up never loads one")
+        head, tools = chat_prefix(enabled_tools, ollama_url=ollama_url, model=model,
+                                  manner=manner)
+        body = chat_body(model, head + [{"role": "user", "content": WARM_WORD}],
+                         {"max_tokens": WARM_MAX_TOKENS}, tools)
+        with _LIVE_LOCK:
+            if _LIVE["turns"]:
+                return done("skipped", "a question is being answered")
+            if _LIVE["warm"] is not None:
+                return done("skipped", "another warm-up is running")
+            _LIVE["warm"] = call
+        try:
+            (send or _send_warm)(f"{str(ollama_url).rstrip('/')}/v1/chat/completions",
+                                 body, call)
+        finally:
+            with _LIVE_LOCK:
+                if _LIVE["warm"] is call:
+                    _LIVE["warm"] = None
+        if call.cancelled:
+            return done("cancelled", "a question came in, so it stopped")
+        return done("warmed")
+    except Exception as exc:
+        if call.cancelled:
+            return done("cancelled", "a question came in, so it stopped")
+        return done("failed", type(exc).__name__)
+
+
+def _last_turn() -> dict:
+    with _LIVE_LOCK:
+        return dict(_LAST_TURN)
+
+
+def warm_after_waking(model: str, ollama_url: str, **kw) -> dict:
+    """jarvis_power_switch.warm_up, once the model is loaded again: warm the
+    start of a turn, with the settings the last local turn used (the tools
+    the chat handler really passed). Nothing to go on - no turn since the
+    backend started, or the last one used another model or address - means
+    nothing is sent. Runs on the caller's thread."""
+    last = _last_turn()
+    if not last:
+        return {"state": "skipped", "why": "no question has been answered since Jarvis started"}
+    if last.get("combined"):
+        return {"state": "skipped", "why": "questions go to the bigger model on both cards"}
+    if not (_same_model(last.get("model"), model) and _same_place(last.get("url"), ollama_url)):
+        return {"state": "skipped", "why": "the last question used another model or address"}
+    return warm_prefix(last["model"], ollama_url=last["url"], enabled_tools=last.get("tools"),
+                       why="waking", **kw)
+
+
+def _learner_place() -> tuple:
+    try:
+        import jarvis_sensitive
+        return jarvis_sensitive.learner_model()
+    except Exception:
+        return None, None
+
+
+def _spawn(fn: Callable[[], object]) -> None:
+    threading.Thread(target=fn, name="jarvis-warm-prefix", daemon=True).start()
+
+
+def warm_after_learning(*, learner: Optional[Callable[[], tuple]] = None,
+                        spawn: Optional[Callable[[Callable[[], object]], None]] = None,
+                        **kw) -> dict:
+    """The learner has just finished a pass (warm-prefix.patch calls this
+    from jarvis_hud.py's learner thread). When that pass ran on the chat's
+    own model at the chat's own address - one graphics card - it has pushed
+    the start of the chat out of Ollama's memory, so warm it again, on its
+    own thread. A learner on the second card, a temporary chat last, or no
+    local turn at all: nothing. Returns what it decided. Never raises."""
+    try:
+        last = _last_turn()
+        if not last:
+            return {"state": "skipped", "why": "no local question yet"}
+        if last.get("temporary"):
+            return {"state": "skipped", "why": "the last question was in a temporary chat"}
+        if last.get("combined"):
+            return {"state": "skipped", "why": "questions go to the bigger model on both cards"}
+        url, model = (learner or _learner_place)()
+        if not (_same_model(model, last.get("model")) and _same_place(url, last.get("url"))):
+            return {"state": "skipped", "why": "the learner uses its own model or card"}
+        (spawn or _spawn)(lambda: warm_prefix(last["model"], ollama_url=last["url"],
+                                              enabled_tools=last.get("tools"),
+                                              why="learning", **kw))
+        return {"state": "started"}
+    except Exception as exc:
+        return {"state": "failed", "why": type(exc).__name__}
+
+
+@_counted_turn
 def run_local_turn(messages: list, model: str, *, ollama_url: str,
                    stream_out: Callable[[bytes], None],
                    enabled_tools: Optional[set] = None,
@@ -4603,9 +5048,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # No tools offered on a crisis turn: the owner's decision that nothing
     # act, and the report's own worry made concrete - a web search for "the
     # tallest bridges near me" is not a turn Jarvis should let itself take.
-    names = [] if (cur["feature"] == "vision" or watch.crisis) else offered_tools(enabled_tools)
-    if names and _model_can_use_tools(cur["url"], cur["model"]) is False:
-        names = []
+    names, model_said_no = _allowed_tools(enabled_tools, cur["url"], cur["model"],
+                                          none=cur["feature"] == "vision" or watch.crisis)
+    if model_said_no:
         if announce is not None:
             try:
                 announce(NO_TOOLS_NOTE)
@@ -4632,17 +5077,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     if (not watch.crisis and watch.newest_own_words
             and looks_like_correction(watch.newest_own_words)):
         note_correction(conv_id)
-    offer: dict = {"short": bool(names) and short_list_on(),
-                   "plugins": bool(names) and _plugins_configured(),
-                   "opened": set(opened_groups(conv_id)), "extra": {}, "shown": [],
-                   "groups": [], "schemas": []}
+    offer: dict = _new_offer(names, opened_groups(conv_id))
 
     def reoffer() -> None:
-        offer["groups"] = more_tools_groups(names, short=offer["short"],
-                                            plugins=offer["plugins"])
-        offer["shown"] = tool_offer(names, offer["opened"], short=offer["short"],
-                                    plugins=offer["plugins"])
-        offer["schemas"] = _schemas_for(offer["shown"], offer["groups"], offer["extra"])
+        _fill_offer(offer, names)
 
     if offer["plugins"] and PLUGINS in offer["opened"]:
         # Opened earlier in this chat: the plug-in tools of programs still
@@ -4725,32 +5163,14 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             crisis_msg = crisis_message()
             if crisis_msg is not None:
                 room -= estimate_tokens(crisis_msg)
-        body = {"model": cur["model"], "messages": fit_messages(msgs, room),
-                "stream": True, **PROMPT_USAGE, **opts}
-        if manner_msg is not None:
-            # The owner's manner (warm or plain): wording only, never first,
-            # and before the spoken note so that one is nearer the question.
-            body["messages"] = with_manner_note(body["messages"], manner)
-        if focus_brief:
-            # I144: additive on top of manner, never instead of it - nearer
-            # the question than manner, further than spoken/cut-off/crisis.
-            body["messages"] = with_focus_note(body["messages"])
-        if watch.spoken:
-            # After trimming, so trimming can never leave the note first.
-            body["messages"] = with_spoken_note(body["messages"])
-        if watch.cut_off:
-            # The owner cut the last spoken answer off: said, never first.
-            body["messages"] = with_cut_off_note(body["messages"], watch.cut_off)
-        if watch.crisis:
-            # The crisis help line (jarvis_wellbeing.py): nearest the
-            # question of every note here, never first.
-            body["messages"] = with_crisis_note(body["messages"], True)
-        # Last, after trimming and every note above: the rules stay first.
-        body["messages"] = keep_rules_first(body["messages"])
-        if not _reasoning_field_refused:
-            body.update(REASONING_OFF)
-        if offer_tools and offer["schemas"]:
-            body["tools"] = offer["schemas"]
+        # The notes and the rules, after trimming (dress_messages), and the
+        # body's shape (chat_body): the SAME two functions the warm-up uses
+        # (warm_prefix), so what it sends cannot drift from this.
+        body = chat_body(cur["model"],
+                         dress_messages(fit_messages(msgs, room), manner=manner,
+                                        focus=focus_brief, spoken=watch.spoken,
+                                        cut_off=watch.cut_off, crisis=watch.crisis),
+                         opts, offer["schemas"] if offer_tools else None)
         stripper = _ThinkStripper()
         first = {"text": True}
 
