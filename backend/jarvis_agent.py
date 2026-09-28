@@ -3438,9 +3438,52 @@ def note_struggle(conversation_id, n: int = 1) -> int:
         return 0
 
 
+# Crisis turns, by turn id, so a "wrong" mark on a crisis answer is never
+# counted (the owner, 2026-09-28: "Crisis messages are never learned from and
+# never counted" covers the thumbs-down too). The mark only ever names a
+# turn id; whether that turn was a crisis turn is known only where the chat
+# route gives the turn its id - so jarvis_hud.py tells this module then
+# (second-card-suggest.patch), and note_correction checks here. In memory
+# only, like the counters above: ids, never words, bounded, gone on restart
+# (a mark on a turn from before a restart is then counted - the counters it
+# would add to are gone too, so it starts from zero either way).
+_CRISIS_TURNS_MAX = 500
+_CRISIS_TURNS: "dict[str, None]" = {}          # turn_id -> None, oldest first
+_TURN_ID_OK = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+
+
+def note_crisis_turn(turn_id) -> bool:
+    """Remember that `turn_id` was a crisis turn, so a later "wrong" mark on
+    it is not counted (note_correction). True if it was remembered; never
+    raises, and ignores anything that is not a plausible id."""
+    if not isinstance(turn_id, str) or not _TURN_ID_OK.match(turn_id):
+        return False
+    try:
+        with _SUGGEST_LOCK:
+            _CRISIS_TURNS.pop(turn_id, None)
+            _CRISIS_TURNS[turn_id] = None
+            while len(_CRISIS_TURNS) > _CRISIS_TURNS_MAX:
+                _CRISIS_TURNS.pop(next(iter(_CRISIS_TURNS)))
+        return True
+    except Exception:
+        return False
+
+
+def is_crisis_turn(turn_id) -> bool:
+    """True if note_crisis_turn was told about this turn id. Read-only."""
+    if not isinstance(turn_id, str):
+        return False
+    with _SUGGEST_LOCK:
+        return turn_id in _CRISIS_TURNS
+
+
 def note_correction(conversation_id, n: int = 1, turn_id=None) -> int:
     """One more sign the owner corrected an answer in this conversation.
     Returns the new count; never raises.
+
+    A `turn_id` that note_crisis_turn was told about is never counted: the
+    count is returned unchanged (a crisis answer marked "wrong" must not
+    lead to a "try the bigger model?" card - the owner, 2026-09-28).
 
     `turn_id`, when given, dedupes: the SAME turn only ever adds one
     correction, no matter how many times it is marked. Without this, the
@@ -3461,6 +3504,10 @@ def note_correction(conversation_id, n: int = 1, turn_id=None) -> int:
         return 0
     try:
         with _SUGGEST_LOCK:
+            if turn_id is not None and turn_id in _CRISIS_TURNS:
+                # A crisis answer marked wrong: never counted, and no row is
+                # made for it (which could push another conversation out).
+                return int((_SUGGEST.get(conversation_id) or {}).get("correction", 0))
             row = _SUGGEST.get(conversation_id)
             if row is None:
                 _SUGGEST.pop(conversation_id, None)

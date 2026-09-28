@@ -246,6 +246,52 @@ def t_correction_turn_id_dedupes_a_remarked_turn():
     AG.reset_suggest_counts(cid)
 
 
+def t_a_crisis_turn_marked_wrong_is_not_counted():
+    # The owner, 2026-09-28: a thumbs-down on a crisis answer must not count
+    # toward "suggest the bigger model" (CLAUDE.md's Opus 5.5 re-check note
+    # of 2026-09-27 wrote this gap down). jarvis_hud.py tells jarvis_agent a
+    # crisis turn's id where it gives the turn its id (second-card-suggest
+    # .patch, checked in t_the_patch); the wrong-mark route then calls
+    # note_correction with that id, exactly as below.
+    cid = "conv-suggest-test-crisis-mark"
+    AG.reset_suggest_counts(cid)
+    crisis_turn, ordinary_turn = "c" * 32, "d" * 32
+    check("a crisis turn's id is remembered", AG.note_crisis_turn(crisis_turn) is True)
+    check("...and reads back as one", AG.is_crisis_turn(crisis_turn))
+    check("CONTROL: an ordinary turn is not a crisis turn", not AG.is_crisis_turn(ordinary_turn))
+    check("a 'wrong' mark on the crisis turn is not counted",
+          AG.note_correction(cid, turn_id=crisis_turn) == 0)
+    check("...not even when it is marked again",
+          AG.note_correction(cid, turn_id=crisis_turn) == 0)
+    check("...and it made no counter row for the conversation (none to push "
+          "another conversation out of the bounded map)",
+          cid not in AG._SUGGEST, AG._SUGGEST.get(cid))
+    check("CONTROL: a 'wrong' mark on an ordinary turn in the same conversation "
+          "still counts", AG.note_correction(cid, turn_id=ordinary_turn) == 1)
+    check("CONTROL: a later mark on the crisis turn returns the count unchanged",
+          AG.note_correction(cid, turn_id=crisis_turn) == 1)
+    check("suggest_counts agrees: one correction, from the ordinary turn",
+          AG.suggest_counts(cid) == (0, 1), AG.suggest_counts(cid))
+    AG.reset_suggest_counts(cid)
+    check("a reset of the counters does not forget the crisis turn",
+          AG.note_correction(cid, turn_id=crisis_turn) == 0)
+    for bad in (None, "", 123, "a" * 500, "has space", "../x"):
+        check(f"note_crisis_turn({bad!r:.20}) is refused, never raises",
+              AG.note_crisis_turn(bad) is False)
+    AG.reset_suggest_counts(cid)
+
+
+def t_crisis_turns_are_bounded():
+    first = "e" * 31 + "0"
+    AG.note_crisis_turn(first)
+    for i in range(AG._CRISIS_TURNS_MAX):
+        AG.note_crisis_turn(f"crisis-bound-{i}")
+    check("the crisis-turn memory never grows past its cap",
+          len(AG._CRISIS_TURNS) <= AG._CRISIS_TURNS_MAX, len(AG._CRISIS_TURNS))
+    check("the oldest id is the one let go", not AG.is_crisis_turn(first))
+    check("the newest is kept", AG.is_crisis_turn(f"crisis-bound-{AG._CRISIS_TURNS_MAX - 1}"))
+
+
 def t_counters_ignore_bad_conversation_id():
     for bad in (None, "", 123, "a" * 5000):
         label = bad if not isinstance(bad, str) or len(bad) <= 20 else f"'a'*{len(bad)}"
@@ -639,6 +685,36 @@ def t_the_patch():
     check("POST /api/second-card/suggest checks origin and token, and hands the body over",
           "_origin_ok(self)" in w and "_token_ok(self)" in w
           and "jarvis_second_card.handle_suggest_post(body)" in w, w)
+    # The owner, 2026-09-28: a crisis turn's id is handed to jarvis_agent
+    # where the id is made, so a "wrong" mark on it is not counted. Checked
+    # in the reconstructed file: after the id exists, guarded by
+    # wellbeing.patch's flag, and before the answer's header goes out on
+    # either branch (so no mark can come first); and again after the turn,
+    # from jarvis_agent's own crisis check.
+    tid_at = after.index('route_header["turn_id"] = jarvis_feedback.record_turn(')
+    flag_at = after.index('if route_header.get("wellbeing") == "crisis":', tid_at)
+    note_at = after.index('jarvis_agent.note_crisis_turn(route_header.get("turn_id"))', flag_at)
+    check("a crisis turn's id is noted right after it is made, only on wellbeing's flag, "
+          "before either branch sends its header",
+          note_at - flag_at < 200
+          and note_at < after.index("if use_tools:", tid_at)
+          and note_at < after.index('self.send_header("X-Jarvis-Route"', tid_at),
+          after[tid_at:tid_at + 1400])
+    check("the flag it reads is set earlier in the file, by wellbeing.patch",
+          0 <= after.find('route_header["wellbeing"] = "crisis"') < tid_at)
+    turn_at = after.index("_turn = jarvis_agent.run_local_turn(")
+    agent_flag_at = after.index('if _turn.get("crisis"):', turn_at)
+    check("...and again after the turn, on jarvis_agent's own crisis check",
+          0 < after.index('jarvis_agent.note_crisis_turn(route_header.get("turn_id"))',
+                          agent_flag_at) - agent_flag_at < 200
+          and agent_flag_at < after.index("except (BrokenPipeError", turn_at))
+    for at in (note_at, after.index("jarvis_agent.note_crisis_turn(", agent_flag_at)):
+        tail = after[at:at + 200]
+        check("that note can never be the reason an answer fails (inside try/except)",
+              "except Exception:" in tail and "pass" in tail
+              and after.rfind("try:", 0, at) > at - 120, tail)
+    check("jarvis_agent really has what the patch calls",
+          callable(getattr(AG, "note_crisis_turn", None)))
     import _where
     check("no new module to ship: jarvis_agent.py and jarvis_second_card.py are already "
           "in _where.SHIPPED",

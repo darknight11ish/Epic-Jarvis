@@ -507,6 +507,68 @@ def t_the_patch_flags_a_crisis_message_not_an_older_one():
     check("no messages at all: no crash, nothing flagged", run([]) is None)
 
 
+# The owner, 2026-09-28: a thumbs-down ("wrong" mark) on a crisis answer
+# must not count toward "suggest the bigger model" either. The crisis flag
+# is known in the chat route, the mark arrives later by turn id on another
+# route, and second-card-suggest.patch joins the two. This runs the REAL
+# lines of all three places, lifted out of the reconstructed jarvis_hud.py,
+# around a real run_local_turn - so it proves the join, not a copy of it.
+def _lines_between(hud, start, end):
+    a = hud.index(start)
+    return textwrap.dedent(hud[a:hud.index(end, a)])
+
+
+def _mark_chain(text, cid, turn_id):
+    hud = _stack.stand_in("jarvis_hud.py")[0]
+    route_header = {}
+    exec(_wb_header_snippet(), {"jarvis_wellbeing": WB, "messages": [
+        {"role": "user", "content": text}], "route_header": route_header})
+    route_header["turn_id"] = turn_id          # feedback.patch's record_turn
+    exec(_lines_between(hud, '            if route_header.get("wellbeing") == "crisis":\n',
+                        "            # auto-learn.patch"),
+         {"route_header": route_header})
+    opener, _ = scripted_stream("I'm here.")
+    with NoRealIO():
+        turn = AG.run_local_turn(
+            [{"role": "user", "content": text, "provenance": "typed"}],
+            "jarvis-primary", ollama_url="http://127.0.0.1:11434",
+            stream_out=lambda b: None, open_stream=opener, gate_check=lambda *a, **k: None,
+            request={"conversation_id": cid}, keepalive_seconds=60, status_delay=60,
+            model_waking=lambda url, model: False)
+    exec(_lines_between(hud, '                    if _turn.get("crisis"):\n',
+                        "                    if (_speed is not None"),
+         {"_turn": turn or {}, "route_header": route_header, "jarvis_agent": AG})
+    # The wrong-mark route, as the mark module answers a real change.
+    exec(_lines_between(hud, '            cid = body.get("conversation_id")\n',
+                        "            return self._send(code, out)"),
+         {"body": {"turn_id": turn_id, "mark": "wrong", "conversation_id": cid},
+          "out": {"ok": True, "mark": "wrong", "changed": True, "turn_id": turn_id}})
+    return route_header, turn or {}
+
+
+def t_a_crisis_answer_marked_wrong_is_not_counted():
+    cid, tid = "conv-wellbeing-crisis-mark-test", "f" * 32
+    AG.reset_suggest_counts(cid)
+    route_header, turn = _mark_chain("i want to kill myself", cid, tid)
+    check("CONTROL: the chat route flagged it and the turn was a crisis turn",
+          route_header.get("wellbeing") == "crisis" and turn.get("crisis") is True,
+          (route_header, turn.get("crisis")))
+    check("a 'wrong' mark on a crisis answer is not counted toward the bigger model",
+          AG.suggest_counts(cid) == (0, 0), AG.suggest_counts(cid))
+    AG.reset_suggest_counts(cid)
+
+
+def t_an_ordinary_answer_marked_wrong_is_still_counted():
+    cid, tid = "conv-wellbeing-ordinary-mark-test", "0" * 32
+    AG.reset_suggest_counts(cid)
+    route_header, turn = _mark_chain("what is the capital of peru?", cid, tid)
+    check("CONTROL: an ordinary turn is not flagged",
+          "wellbeing" not in route_header and not turn.get("crisis"))
+    check("CONTROL: a 'wrong' mark on an ordinary answer still counts once",
+          AG.suggest_counts(cid) == (0, 1), AG.suggest_counts(cid))
+    AG.reset_suggest_counts(cid)
+
+
 if __name__ == "__main__":
     for fn in (t_crisis_phrases_match,
                t_false_alarms_do_not_fire,
@@ -528,7 +590,9 @@ if __name__ == "__main__":
                t_an_ordinary_correction_is_still_counted_as_a_control,
                t_wellbeing_skip_matches_crisis_exactly,
                t_the_module_writes_nothing_and_logs_nothing,
-               t_the_patch_flags_a_crisis_message_not_an_older_one):
+               t_the_patch_flags_a_crisis_message_not_an_older_one,
+               t_a_crisis_answer_marked_wrong_is_not_counted,
+               t_an_ordinary_answer_marked_wrong_is_still_counted):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

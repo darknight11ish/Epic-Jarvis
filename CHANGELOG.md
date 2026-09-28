@@ -6,6 +6,11 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Fixed: marking a crisis answer "wrong" counted toward "suggest the
+  bigger model".** Crisis messages are never learned from and never
+  counted; the thumbs-down on a crisis answer was the one place that still
+  counted. It no longer does. A thumbs-down on any other answer counts as
+  before.
 - **Fixed (phone): "Use" on a model that cannot chat.** Brain › Model on the
   phone offered "Use" on memory-search models such as nomic-embed-text,
   which would leave Jarvis unable to answer. Like the desktop, their row now
