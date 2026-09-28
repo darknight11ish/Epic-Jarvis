@@ -72,6 +72,28 @@ object CustomVoices {
     const val OFFER_USE_LABEL = "Use it"
     const val OFFER_KEEP_LABEL = "Keep my voice"
 
+    /** Words on an animal's row for changing the one-time answer later (owner, 2026-09-28). */
+    const val CHANGE_TO_USE_LABEL = "Use its own voice"
+    const val CHANGE_TO_KEEP_LABEL = "Keep my voice"
+
+    /**
+     * The small button on an animal's row: "keep" was answered, so offer
+     * [CHANGE_TO_USE_LABEL]; "use" was answered, so offer
+     * [CHANGE_TO_KEEP_LABEL]; not answered (or an older PC) offers nothing.
+     */
+    fun changeMindLabel(answer: String?): String? = when (answer) {
+        OFFER_KEEP -> CHANGE_TO_USE_LABEL
+        OFFER_USE -> CHANGE_TO_KEEP_LABEL
+        else -> null
+    }
+
+    /** What pressing that button answers: true is "use", false is "keep"; null: no button. */
+    fun changeMindUse(answer: String?): Boolean? = when (answer) {
+        OFFER_KEEP -> true
+        OFFER_USE -> false
+        else -> null
+    }
+
     /** The speed plate's heading when the PC sends none - the desktop's words. */
     const val SPEED_TITLE = "How fast Jarvis speaks"
 
@@ -189,6 +211,8 @@ object CustomVoices {
         val pace: String,
         val changed: Boolean = false,
         val line: String = "",
+        /** The owner's one-time answer for this animal: "use", "keep", or null (not answered, or an older PC). */
+        val answer: String? = null,
     )
 
     /** What each animal may be given: the PC's own lists and pitch range. */
@@ -422,6 +446,7 @@ object CustomVoices {
                 pace = a.str("pace").ifBlank { return@mapNotNull null },
                 changed = a.flag("changed"),
                 line = a.str("line"),
+                answer = a.str("answer").takeIf { it == OFFER_USE || it == OFFER_KEEP },
             )
         }
         // Without the lists there is nothing to choose from: no rows at all.
