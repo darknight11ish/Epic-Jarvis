@@ -31,7 +31,9 @@ import {
   countdown,
   removeQuestion,
   sessionLine,
+  sharedSignedLine,
   sharedView,
+  signedLine,
   wordsLine,
 } from "../src/devices-words.js";
 import * as K from "./uikit.mjs";
@@ -109,6 +111,23 @@ await check("a device key is taken out of an error's Details (design 8.6)", asyn
   assert.ok(out.includes("100.101.2.3"), "an address stays - a bug report needs it");
 });
 
+await check("signed approvals: the words for on, waiting, off and absent; nothing on the PC row or an older backend", async () => {
+  assert.equal(signedLine({ kind: "phone", approval_key: true }, true), "Signed approvals: on");
+  assert.equal(signedLine({ kind: "phone", approval_key: "waiting" }, true),
+    "Signed approvals: waiting for your yes (approve the card)");
+  const off = "Signed approvals: off - risky approvals from this phone are refused until it turns them on";
+  assert.equal(signedLine({ kind: "phone", approval_key: false }, true), off);
+  assert.equal(signedLine({ kind: "phone" }, true), off, "absent counts as off");
+  assert.equal(signedLine({ kind: "pc" }, true), "");
+  assert.equal(signedLine({ kind: "phone", approval_key: true }, false), "");
+  const seen = { retired: false, last_other_seen: NOW - 60 };
+  assert.equal(sharedSignedLine(seen, true),
+    "Risky approvals from this device are not yet signed - pair it and turn on signed approvals.");
+  assert.equal(sharedSignedLine(seen, false), "");
+  assert.equal(sharedSignedLine({ retired: true, last_other_seen: NOW }, true), "");
+  assert.equal(sharedSignedLine({ retired: false, last_other_seen: null }, true), "");
+});
+
 /* ── The page ─────────────────────────────────────────────────────────── */
 
 const { base, close } = await K.serve();
@@ -149,6 +168,36 @@ await check("the list: This PC cannot be removed, a phone can, with its dates", 
   assert.match(rows[1], /last used 2 minutes ago/);
   assert.equal(removes, 1, "only the phone has Remove");
   assert.ok(!/jdk1\.|token_sha256/.test(html), "no key on the page");
+});
+
+await check("Devices page: each phone's signed-approvals state, the shared-key sentence, and nothing on an older backend", async () => {
+  const extra = [
+    { id: "aaa111111", name: "Tablet", kind: "phone", created: 1790000000, last_seen: NOW - 60,
+      removable: true, approval_key: true },
+    { id: "bbb222222", name: "Fold", kind: "phone", created: 1790000000, last_seen: NOW - 60,
+      removable: true, approval_key: "waiting" },
+  ];
+  const seen = { last_other_seen: NOW - 7200, last_other_address: "100.101.2.3" };
+  const page = await open({ devices: { list: { ...list({ extra, shared: seen }), signed_approvals: true } } });
+  await page.waitForTimeout(400);
+  const rows = await page.locator("#dv-list li").allInnerTexts();
+  const shared = await page.locator("#dv-shared-signed").innerText();
+  const sharedShown = await page.locator("#dv-shared-signed").isVisible();
+  await page.close();
+  assert.ok(!/Signed approvals/.test(rows[0]), "the PC's own row says nothing");
+  assert.match(rows[1], /Signed approvals: off - risky approvals from this phone are refused until it turns them on/);
+  assert.match(rows[2], /Signed approvals: on/);
+  assert.match(rows[3], /Signed approvals: waiting for your yes \(approve the card\)/);
+  assert.ok(sharedShown);
+  assert.equal(shared, "Risky approvals from this device are not yet signed - pair it and turn on signed approvals.");
+
+  const older = await open({ devices: { list: list({ extra, shared: seen }) } });
+  await older.waitForTimeout(400);
+  const oldRows = await older.locator("#dv-list li").allInnerTexts();
+  const oldShared = await older.locator("#dv-shared-signed").isVisible();
+  await older.close();
+  assert.ok(oldRows.every((r) => !/Signed approvals/.test(r)), "an older backend shows nothing extra");
+  assert.equal(oldShared, false);
 });
 
 await check("Remove asks the design's question first; No changes nothing, Yes removes one", async () => {
