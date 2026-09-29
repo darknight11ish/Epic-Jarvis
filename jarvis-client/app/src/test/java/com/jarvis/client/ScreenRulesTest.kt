@@ -107,6 +107,15 @@ class ScreenRulesTest {
     }
 
     @Test
+    fun `the phone sends the PC one thing - stop - to the PC's own route`() {
+        assertEquals("/api/screen", ScreenRules.PATH)
+        assertEquals("screen_watch", ScreenRules.EVENT)
+        val body = JarvisJson.parseToJsonElement(ScreenRules.STOP_BODY) as JsonObject
+        assertEquals(setOf("do"), body.keys)
+        assertEquals("stop", body["do"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun `a status is only ever read for its fixed keys`() {
         val keys = table["words"]!!.jsonObject["status_keys"]!!.jsonArray.map { it.jsonPrimitive.content }.toSet()
         for ((name, st) in statuses) assertEquals(name, keys, (st as JsonObject).keys)

@@ -439,6 +439,19 @@ data class HomeState(
      * itself is not in this state - only its size, in words.
      */
     val sharedLine: String? = null,
+    /**
+     * The chip for a look at this phone's screen, waiting to go with the next
+     * question ("Looked at: Chrome screen · words only"), or null. Only the
+     * app's name and how it was read - never the words themselves. See
+     * [com.jarvis.client.net.ScreenLook].
+     */
+    val lookLine: String? = null,
+    /**
+     * The sign for "Watch with me" on the PC ("Jarvis is watching", paused, or
+     * how long is left), or null while it is off. Words only - never anything
+     * from the screen. See [com.jarvis.client.net.ScreenRules.sign].
+     */
+    val watchSign: com.jarvis.client.net.ScreenRules.Sign? = null,
     /** True while a picked photo is being made small enough to send. */
     val pictureBusy: Boolean = false,
     /**
@@ -637,6 +650,10 @@ data class HomeActions(
     val onFindDateInPicture: () -> Unit = {},
     /** Drop the shared text without sending it. */
     val onDropShared: () -> Unit = {},
+    /** "Forget it": throw the held look at the screen away without asking anything. */
+    val onForgetLook: () -> Unit = {},
+    /** End the PC's "Watch with me". Never held on a stale link, never a card. */
+    val onStopWatching: suspend () -> Unit = {},
     /** Open the release page in the browser. Downloads nothing itself. */
     val onOpenUpdate: () -> Unit = {},
     /**
@@ -1129,6 +1146,11 @@ private fun ConversationList(
         // off is the PC's alone, so there is no button here.
         if (state.lockdown) {
             item(key = "lockdown") { LockdownPlate() }
+        }
+        // "Jarvis is watching" (owner, 2026-09-28): the PC's Watch with me,
+        // said here too, with Stop. Stop is never held on a stale link.
+        if (state.watchSign != null) {
+            item(key = "pc-watching") { PcWatchingPlate(state.watchSign, actions) }
         }
         // AUTONOMY-PROPOSALS.md §3d. Shown only while the server itself
         // reports a task running or paused - never while merely thinking
@@ -2031,6 +2053,50 @@ private fun LockdownPlate() {
 }
 
 /**
+ * "Jarvis is watching" - the PC's Watch with me, shown on this phone too
+ * (the owner's decision of 2026-09-28: a visible sign the whole time). The
+ * words come from [com.jarvis.client.net.ScreenRules.sign], the same table
+ * the PC's own sign is held to. Stop ends the PC's watching; it is offered
+ * whatever the link says (stopping only ever makes Jarvis look at less) and
+ * raises no card. Starting is the PC's alone: a request to start from a
+ * phone is refused by the PC itself.
+ */
+@Composable
+private fun PcWatchingPlate(sign: com.jarvis.client.net.ScreenRules.Sign, actions: HomeActions) {
+    val chrome = LocalChrome.current
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    Plate(outline = chrome.warnInk.copy(alpha = 0.35f)) {
+        Kicker(sign.title, color = chrome.warnInk)
+        if (sign.detail.isNotEmpty()) {
+            Gap(6)
+            Text(
+                sign.detail,
+                style = MaterialTheme.typography.bodyMedium,
+                color = chrome.textMid,
+                modifier = Modifier.liveStatus(),
+            )
+        }
+        if (sign.on && sign.stop.isNotEmpty()) {
+            Quiet(
+                sign.stop,
+                color = chrome.badInk,
+                enabled = !busy,
+                onClick = {
+                    if (!busy) {
+                        busy = true
+                        scope.launch {
+                            actions.onStopWatching()
+                            busy = false
+                        }
+                    }
+                },
+            )
+        }
+    }
+}
+
+/**
  * "Playing on your PC" (2026-09-28; [com.jarvis.client.net.PcMedia]): what is
  * playing, in the PC's own sentence - read when Home shows it, and again
  * after each button - and four buttons, ONE action per tap. Greyed while the
@@ -2857,6 +2923,12 @@ private fun Composer(
     // typed, never mixed into it. Dismiss drops it.
     if (state.sharedLine != null) {
         VoiceStrip(state.sharedLine, tone = chrome.textMid, onDismiss = actions.onDropShared)
+    }
+    // A look at this phone's screen ("Look at this", the assistant gesture):
+    // held in memory for two minutes of questions; the words are labelled
+    // outside text on the PC. Dismiss forgets it.
+    if (state.lookLine != null) {
+        VoiceStrip(state.lookLine, tone = chrome.textMid, onDismiss = actions.onForgetLook)
     }
     // A `#log` / `#obs` / `#joplin` line is filed, not asked - said while it
     // is typed, as the desktop's chip beside its prompt does.

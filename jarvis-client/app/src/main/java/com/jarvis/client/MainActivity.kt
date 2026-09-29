@@ -186,6 +186,13 @@ class MainActivity : FragmentActivity() {
     private val openBriefingRequested = mutableStateOf(false)
 
     /**
+     * The assistant gesture just looked at the screen (or said why it did not):
+     * go Home, and start the look's two minutes once the app is unlocked
+     * ([readLookIntent], [ScreenLook.shown]). Consumed once.
+     */
+    private val openLookRequested = mutableStateOf(false)
+
+    /**
      * The sentence an app-icon shortcut asks ("Brief me now." or "What did I
      * miss?" - [AppShortcuts]), waiting to be sent from Home. See
      * [readShortcutQuestionIntent]. Consumed once.
@@ -408,6 +415,9 @@ class MainActivity : FragmentActivity() {
         readHandoffIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
+        // Only on a fresh start: a rotation hands back the SAME launch intent,
+        // and must not start a look's two minutes again.
+        if (savedInstanceState == null) readLookIntent(intent)
         // Only on a fresh start. A rotation (or a restore after Android
         // reclaimed the process) builds this activity again from the SAME
         // launch intent, and the other readers above only navigate, so
@@ -446,9 +456,25 @@ class MainActivity : FragmentActivity() {
         readHandoffIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
+        readLookIntent(intent)
         readShortcutQuestionIntent(intent)
         readResumeListeningIntent(intent)
         readTileSettingsIntent(intent)
+    }
+
+    /**
+     * The assistant gesture's hand-off ([com.jarvis.client.assistant.
+     * JarvisVoiceInteractionSession]): the look (or the reason for none) is
+     * already in [ScreenLook] / the notice line; this only takes the owner to
+     * Home, where the chip is. `singleTask`, so the `onNewIntent` half is
+     * needed too.
+     */
+    private fun readLookIntent(intent: Intent?) {
+        if (intent?.action != ACTION_OPEN_LOOK) return
+        // Reopened from Recents, Android replays the intent that first opened
+        // the task: that is not a new look.
+        if ((intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return
+        openLookRequested.value = true
     }
 
     /**
@@ -1002,6 +1028,21 @@ class MainActivity : FragmentActivity() {
         // "`offer` in `X-Jarvis-Route`") - the lane named on the answer on
         // screen's route, or null.
         val cloudOffer by chat.cloudOffer.collectAsState()
+        // The chip for a look at this phone's screen, held for the next
+        // question ("Looked at: Chrome screen · words only"), or null. Only
+        // the app's name and how it was read - never the words themselves.
+        val lookLine by com.jarvis.client.net.ScreenLook.line.collectAsState()
+        // The PC's "Watch with me", said on this phone too. "Watching ended"
+        // is not shown here (endedAgo is past its display time): it is a
+        // notice for the screen being watched, and the sign just goes away.
+        val screenWatch by JarvisRuntime.screenWatch.collectAsState()
+        val watchSign = remember(screenWatch, link) {
+            com.jarvis.client.net.ScreenRules.sign(
+                screenWatch,
+                stale = link != LinkState.CONNECTED,
+                endedAgo = com.jarvis.client.net.ScreenRules.ENDED_SHOW_S,
+            ).takeIf { it.show }
+        }
         // "Open <a settings section>" by voice or chat
         // (jarvis_settings_registry.py, docs/JARVIS-API.md section 58.1):
         // jump to Settings, at the section the answer named. Pure
@@ -1345,6 +1386,20 @@ class MainActivity : FragmentActivity() {
             openBriefingRequested.value = false
             nav.resetTo(Screen.HOME)
             nav.go(Screen.BRAIN)
+        }
+
+        // "Look at this" from the assistant gesture: Home, where the chip
+        // ("Looked at: Chrome screen · words only") is - and the look's two
+        // minutes of follow-up questions start only once the app is unlocked
+        // (keyed on `locked`, like focusApproval): behind App lock the chip is
+        // not shown, and a look nobody unlocked for is dropped after a minute
+        // by ScreenLook itself. Nothing is sent from here.
+        LaunchedEffect(openLookRequested.value, locked) {
+            if (!openLookRequested.value) return@LaunchedEffect
+            nav.resetTo(Screen.HOME)
+            if (locked) return@LaunchedEffect
+            openLookRequested.value = false
+            com.jarvis.client.net.ScreenLook.shown()
         }
 
         // The "Brief me now" and "What did I miss?" app-icon shortcuts
@@ -2495,6 +2550,8 @@ class MainActivity : FragmentActivity() {
                                 ChatPicture.attachedLine(it, wordsOnly = !SecondCard.visionAvailable(secondCard))
                             },
                             sharedLine = sharedHeld?.let { Provenance.sharedLine(it) },
+                            lookLine = lookLine,
+                            watchSign = watchSign,
                             pictureBusy = pictureBusy.value,
                             photoFinding = photoFinding.value,
                             noteTargets = noteTargets,
@@ -2536,6 +2593,8 @@ class MainActivity : FragmentActivity() {
                                     draft = it
                                 },
                                 onDropShared = { sharedHeld = null },
+                                onForgetLook = { com.jarvis.client.net.ScreenLook.drop() },
+                                onStopWatching = { JarvisRuntime.stopScreenWatch() },
                                 onSend = {
                                     val text = draft
                                     val pic = picture.value
@@ -3135,6 +3194,9 @@ class MainActivity : FragmentActivity() {
 
         /** Fired by the Jarvis Live notification ([com.jarvis.client.service.LiveService]). */
         const val ACTION_OPEN_LIVE = "com.jarvis.client.action.OPEN_LIVE"
+
+        /** The assistant gesture looked at the screen: open Home. See [readLookIntent]. */
+        const val ACTION_OPEN_LOOK = "com.jarvis.client.action.OPEN_LOOK"
 
         /**
          * The "\"Hey Jarvis\" is off since the phone restarted" notification's

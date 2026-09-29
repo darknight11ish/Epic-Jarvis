@@ -658,6 +658,20 @@ class JarvisApi(
     suspend fun phoneNotificationsSettings(): ApiResult<JsonObject> = probe(PhoneNotifications.PATH)
 
     /**
+     * Whether the PC is watching its own screen ("Watch with me",
+     * docs/JARVIS-API.md section 62): `{on, state, left_s, ...}` and never a
+     * word from the screen. Read to show the sign on this phone too.
+     */
+    suspend fun screenWatch(): ApiResult<JsonObject> = probe(ScreenRules.PATH)
+
+    /**
+     * Ends the PC's watching. The one thing the phone may send to that route:
+     * a stop is accepted from anywhere, while starting or asking is refused
+     * unless the request comes from the PC itself. Never a card.
+     */
+    suspend fun stopScreenWatch(): ApiResult<Unit> = postJson(ScreenRules.PATH, ScreenRules.STOP_BODY)
+
+    /**
      * The switch. ON answers 202 waiting while its approval card is up; OFF
      * is immediate, and withdraws an ON card still waiting.
      */

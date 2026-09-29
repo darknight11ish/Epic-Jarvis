@@ -37,6 +37,13 @@ object ScreenRules {
     /** The mark a question carries so the PC adds the held look's words. */
     const val MARK = "look"
 
+    /** The PC's route for its own Watch with me (JARVIS-API section 62), and its event. */
+    const val PATH = "/api/screen"
+    const val EVENT = "screen_watch"
+
+    /** The body of the one thing this phone ever sends there: end the PC's watching. */
+    const val STOP_BODY = """{"do":"stop"}"""
+
     /** The message field a Watch-with-me picture is marked with, and its value. */
     const val SCREEN_FIELD = "screen"
     const val SCREEN_PHONE = "phone"
