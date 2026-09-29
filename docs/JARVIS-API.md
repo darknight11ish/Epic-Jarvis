@@ -13332,14 +13332,16 @@ pairing by QR code, with a short typed code as the backup, confirmed by an
 approval card on the PC before any key is handed over", built together with
 a key per device, "listed in both apps with its own Remove". The design,
 with every reason, is `docs/PAIRING-DESIGN.md` - phase 1 (this section).
-Phase 2, a fingerprint-signed yes for risky cards from the phone, is not
-built.
+Phase 2, a fingerprint-signed yes for risky cards from the phone, is
+section 91 (backend half built 2026-09-29).
 
 `backend/jarvis_devices.py`, shipped whole; `devices.patch` adds one block to
 `jarvis_hud.py` BEFORE every module is handed `_token_ok` (so the device-key
 check reaches every route), and the two cards' lines to `jarvis_gate.py`.
-`GET /api/version` says `capabilities.pairing: {"version": 1}` once it is
-running (absent or `false` on an older PC); both apps show pairing and
+`GET /api/version` says `capabilities.pairing: {"version": 1,
+"signed_approvals": true}` once it is running (`signed_approvals` is phase 2,
+section 91, and additive - `version` stays 1; absent or `false` on an older
+PC); both apps show pairing and
 Devices only then. A PC without `jarvis_devices.py` answers 404 on every
 route below.
 
@@ -13509,3 +13511,119 @@ shared cases file); without `key`, today's words.
   every phone then pairs again).
 - Retire never touches this PC, and cannot be pressed by the device that
   still depends on the shared key.
+
+---
+
+## 91. Signed approvals: a fingerprint-signed yes from the phone (added 2026-09-29)
+
+Phase 2 of pairing (`docs/PAIRING-DESIGN.md` section 11; the owner's
+go-ahead and choice of 2026-09-29: the phone offers "Turn on signed
+approvals" the first time a risky approval is tried; a paired phone without
+it cannot approve risky cards until then; an unpaired phone on the old shared
+key keeps working as today until that key is retired). Backend:
+`jarvis_devices.py` (the key, the challenge, the check) and
+`jarvis_owner_check.approve_check`; one new card and no new file. Needs the
+`cryptography` package on the PC. `GET /api/version`:
+`capabilities.pairing.signed_approvals: true`. The shared cases file both
+apps' tests read is `tools/gen_approval_sign_cases.py`
+(`approval-sign-cases.json`).
+
+Every route needs a **device key** (section 90.1), never the old shared key
+and never the PC's: `403 {"ok": false, "reason": "device_key_needed",
+"error": ...}` otherwise.
+
+### 91.1 Turning it on: `POST /api/devices/approval-key`
+
+Body `{"public_key": "<SPKI DER of an EC P-256 key, base64url, no padding>"}`
+and nothing else. The phone makes the key in its Keystore (a fresh
+fingerprint or PIN for every use) and sends only the public half.
+
+| Answer | Means |
+|---|---|
+| `202 {"waiting": true}` | ONE `register_approval_key` card is up on the PC (tier `ask`, in `PC_ONLY_ACTIONS`: approved on the PC only, always with Windows Hello). Its title is the shared fixed phrase ("Jarvis wants to let a phone approve risky actions with its fingerprint or PIN"); the phone's name and what approving does are in its text. Never the key. |
+| `400 {"reason": "bad_key" \| "bad_request"}` | not an EC P-256 public key (an RSA or P-384 key, junk, padding, too long), or a body with anything else in it - plain words in the cases file. No card. |
+| `403 device_key_needed` | the shared key, the PC's key, or a removed device. |
+| `503` | `cryptography` is missing ("Risky approvals from the phone need the cryptography package on your PC."), the tier is not `ask`, the PC is not checking approvals itself, or the device list cannot be read. |
+
+The key is stored in that device's registry row (`approval_key`, the SPKI,
+base64url) **only after the card is approved**. Denied, timed out, or
+withdrawn (a newer request replaced this one, or the device was removed
+while the card waited): nothing is stored. A new request while one waits
+replaces it - the old card, if approved later, stores nothing. Removing the
+device drops its key. The key is kept out of every audit line, event and
+error (an audit line `devices.approval_key` carries the device id and a
+state only). `GET /api/devices` rows (the caller's own included) read
+`"approval_key": false | "waiting" | true`.
+
+### 91.2 The challenge: `POST /api/approve/challenge`
+
+Body `{"id": "<card id>"}` (a number is read as its text).
+
+`200 {"nonce": "<22 chars>", "words_sha256": "<64 hex>", "expires_in": 120}`.
+The nonce is 16 random bytes, base64url, kept **in the backend's memory only**,
+tied to that card and that device, single use, valid 120 s; a device keeps at
+most 6 outstanding (the oldest is dropped). `404 {"reason": "no_such_card"}`
+when no such card is waiting; `403 {"owner_check": "no_approval_key"}` for a
+device that has not turned signed approvals on; `400` for a malformed body;
+`503` when the approval queue cannot be read.
+
+**The words hash** is how the phone and the PC agree on what was shown:
+lowercase hex SHA-256 (UTF-8) of `id`, `action`, `title` and `text` joined by
+the byte `0x1F`. `title` is the title the apps display: `notice.title` of the
+pending row, else the shared fallback (`jarvis_card_words.title_for(action)`,
+the phone's `CardWords.fallbackTitle`). `text` is `detail.text` when `detail`
+is an object with a `text` string, `detail` itself when it is plain text,
+else `""`. The phone works it out from what it **showed** and refuses if it
+differs from `words_sha256` ("The card changed on your PC. Look at it
+again."); the PC works it out again from the card it holds **now**, when the
+approval arrives. The frozen test vectors:
+
+| id, action, title, text | SHA-256 |
+|---|---|
+| `a1`, `send_email`, `Jarvis wants to send an email`, `To: sam@example.com\nSubject: Lunch\n\nSee you at noon.` | `9f37085786f66802d4749c0d8ee5d12416ef264ac438efb4c071c3b25a907145` |
+| `b2`, `lockdown_off`, `Jarvis wants to turn Lockdown off`, `` (empty) | `b6def5b9c7862ccb21bd2989ede743136284ef9147e1c14abbe21434e63e758c` |
+
+### 91.3 The signed approval: `POST /api/approve` with `signature`
+
+```json
+{"id": "a1", "signature": {"device": "d3f9a1c2e", "nonce": "AAECAwQFBgcICQoLDA0ODw", "sig": "<DER, base64url>"}}
+```
+
+`sig` is an ECDSA-SHA256 signature (DER, base64url, no padding) over the bytes
+`"jarvis-approve-v1"`, `0x00`, `id`, `0x00`, `action`, `0x00`, `nonce`,
+`0x00`, `words_sha256` (ASCII hex), made with the key registered in 91.1.
+
+What `jarvis_owner_check.approve_check` now requires, for a **risky** card
+(`is_risky`, the one rule) approved **not from this PC**:
+
+- a request made with a **device key that has an approval key**: a valid
+  signature over that card, `signature.device` equal to the request's own
+  device, a nonce that is this device's, for this card, unused and under 120 s
+  old, and the words hash re-worked on the PC now (so a card changed after the
+  challenge fails). Otherwise `403 {"ok": false, "owner_check": "no_signature"
+  | "bad_signature", "error": <plain words>}`. **A used nonce is burnt whether
+  the signature was good or not.**
+- a request made with a **device key that has no approval key**: `403
+  {"ok": false, "owner_check": "no_approval_key", "error": "Turn on signed
+  approvals for this phone first."}` - the phone offers the button.
+- a request made with the **old shared key** from another device: as today
+  (allowed until the owner retires it, section 90.5).
+- `503 {"owner_check": "cannot_check"}` if the signature cannot be checked
+  (`cryptography` gone) - refused, never waved through.
+
+Unchanged: Deny; a card that is not risky; an approval from this PC (Windows
+Hello, no signature); a PC-only card from another device (`pc_only`). Failing
+safe never locks out the PC itself: the shared key from this PC keeps working.
+
+### 91.4 Said plainly
+
+- It closes "a stolen device key used from another device approves a risky
+  card". It does not stop someone holding the phone who also knows its screen
+  lock, or a program on the PC (ARCHITECTURE section 3).
+- The card's title cannot carry the phone's name (a title is built from the
+  action's name only, never the payload), so the name is in the card text.
+- The words hash is worked out from the row `jarvis_gate.pending()` returns;
+  the owner's `/api/pending` must show the phone the same `notice.title` and
+  `detail` - one real card should be checked on the PC (`backend/README.md`).
+- Registering an approval key is a PC-only, Windows Hello card, like pairing:
+  on a PC without Windows Hello it is refused until that is set up.

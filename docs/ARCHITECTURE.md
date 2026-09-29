@@ -428,7 +428,19 @@ What is **still open**, said plainly:
   owner retires the old shared key it works on this PC only, so a copy of
   it is useless on another device. A stolen *device* key still works from
   another device until that device is removed - phase 2 (a fingerprint-
-  signed yes per risky approval) is what closes that, and is not built.
+  signed yes per risky approval) is what closes that. **Built 2026-09-29
+  (backend half; JARVIS-API section 91):** a paired phone that has turned
+  on signed approvals (one `register_approval_key` card, PC only, Windows
+  Hello) must sign every RISKY approval with a key locked in its security
+  chip, made fresh by a fingerprint or PIN each time; the backend checks
+  the signature (`jarvis_owner_check.approve_check`, a one-use 120-second
+  challenge, the card's words re-hashed at that moment). A phone without
+  it is refused risky cards ("Turn on signed approvals for this phone
+  first") and an unpaired phone on the old shared key still works until
+  the owner retires that key. A program that steals a device key alone can
+  no longer approve a risky card from another device; a program that has
+  the PHONE, or the phone's screen lock, still can - and a program on the
+  PC is where it was (below).
   Pairing does NOT change the rest of this section: a program already on
   the PC can still read this PC's key and edit the device list (it cannot
   pass the pairing card's Windows Hello).
@@ -1778,6 +1790,7 @@ backend routes, in both directions; the rest are listed here only.
 | "Finished, or only paused?" (`/api/voice/turn`) | The phone runs the same Smart Turn model itself (`voice/SmartTurn.kt`), so its audio never leaves it just to ask. The desktop asks its own PC over loopback. |
 | Looking at the screen: the Alt+Shift+S "Look at this" key, the optional Alt+Shift+V "Watch with me" key, and the always-on-top "Jarvis is watching" badge (**rewritten 2026-09-28**) | **The old row is replaced.** It said (2026-09-24) that the phone should not capture the screen live, because Android's photo picker already offered its screenshots. The owner's decision of 2026-09-28 (`CLAUDE.md`, "Jarvis may look at the owner's screen, on the PC and the phone") replaces that: **both apps get both halves** (`docs/SCREEN-DESIGN.md` §6) - on the phone, "Look at this" through the assistant gesture and "Watch with me" through Android's own screen sharing, with Android's consent dialog every session, the phone's own "Never look at" list of apps, and the pictures sent only to the PC over Tailscale/Meshnet, never streamed. What stays on the desktop alone is the **keys and the badge**: keyboard shortcuts are PC things (like the hotkeys below), and the phone's sign is its persistent "Jarvis is watching · Stop" notification and Android's own status-bar icon instead of a floating window. Built so far: the backend's rules only (`jarvis_screen.py`, JARVIS-API §62) - neither app has either half yet. |
 | Starting a pairing, the QR code and the typed code, and watching or cancelling it (`/api/pair/start`, `/session`, `/cancel`; QR-code pairing, 2026-09-28, `docs/PAIRING-DESIGN.md` section 12) | The code is shown on the PC and the `pair_device` card is approved there with Windows Hello; the backend refuses these routes from any other device (403 `pc_only`). The phone is the device being paired, so it scans or types the code instead (the phone table below). |
+| Turning on signed approvals and the signing challenge (`/api/devices/approval-key`, `/api/approve/challenge`; pairing phase 2, 2026-09-29, `docs/PAIRING-DESIGN.md` section 11) | The signing key lives in a phone's Keystore and the fingerprint or PIN is asked on the phone; the desktop IS the PC and its risky approvals are checked by Windows Hello on the PC itself, so it has no key to register and never signs. It only reads the result: the device list's `approval_key` (`false`, `"waiting"` or `true`) beside each phone. `tools/check_parity.py` lists both routes as phone-only. |
 | "Bring it back" for the old shared key (`/api/devices/shared` with `{"retired": false}`) | A loosening: PC only, one `unretire_shared_key` card with Windows Hello, refused under Lockdown - the same rule as loosening "What asks first". The phone offers Retire (stricter, immediate), never Bring back; the backend refuses Bring back from any other device. |
 | Global hotkeys (`hotkeys.rs`) | Keyboard shortcuts for a PC. A phone has no equivalent. |
 | The "Stop everything" hotkey (Alt+Shift+X, `hotkeys.rs`) | Written with the feature, 2026-09-25. A key on a PC's keyboard; a phone has no global keys. The phone has the same control as a button - Home's "Stop everything", shown whenever Jarvis is busy - calling the same route (`/api/stop_all`, `ported` in `tools/check_parity.py`) with the same words. Each app stops only its OWN speech: pressing it on the phone does not silence the PC, or the other way round (JARVIS-API §28). |

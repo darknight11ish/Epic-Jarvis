@@ -3,7 +3,8 @@
 > Written 2026-09-28, after the owner said "build QR-code pairing now"
 > (CLAUDE.md, commit `dfff89ce`). Checked against the code at that commit.
 > Every claim about existing code names the file and line it was read at.
-> This is a design: **nothing here is built yet.**
+> Phase 1 (sections 1-10) is built; phase 2 (section 11), backend half, is
+> built 2026-09-29 (status line under its heading).
 >
 > Two phases, in one document, so the first can ship alone:
 > - **Phase 1 - pairing and a key per device** (feasibility I102). Sections 1-10.
@@ -870,6 +871,22 @@ real; each step fails safe if wrong):
    (so "mesh only" lets it in and "from this PC" does not).
 
 ## 11. Phase 2: a fingerprint-signed yes from the phone
+
+> **Status (2026-09-29): the backend half is built** - `backend/jarvis_devices.py`
+> (the approval key, the challenge, the signature check),
+> `jarvis_owner_check.approve_check`, the `register_approval_key` card, and
+> `tools/gen_approval_sign_cases.py`'s shared cases file; the routes are
+> `docs/JARVIS-API.md` section 91. The phone's half (Keystore key, the
+> "Turn on signed approvals" button, the signing prompt) and the desktop's
+> (it only reads `approval_key` in the device list) are built beside it
+> against the same frozen API. The owner's choice of 2026-09-29 replaces the
+> last bullet of 11.4's "switched on with the owner's go-ahead": the phone
+> offers the button the first time a risky approval is tried.
+> Two small readings of this section, both written in section 91: the
+> card's title is the shared, fixed phrase (a title is built from the
+> action's name only), so the phone's name is in the card's text; and the
+> pending row the words hash is worked out from is the row
+> `jarvis_gate.pending()` returns.
 
 Built after phase 1 ships. It closes the last open row of the approval-gap
 table: "Someone who stole the token uses it from another device on your
