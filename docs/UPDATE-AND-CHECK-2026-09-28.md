@@ -317,3 +317,30 @@ happen, write down which line and what you saw instead.
 4. **On the phone:** start Jarvis Live, turn the screen off, and keep
    talking for a minute. The audits could not tell whether newer Android
    stops it in the background.
+
+---
+
+## Later - better voices (Kokoro v1.0, "Hear it"): only once that pull request is merged
+
+Not on `main` yet (2026-09-29). When it is:
+
+1. **Update the backend and both apps** the usual way (steps above). Nothing
+   about how Jarvis sounds changes yet: the voice list now has a **Hear it**
+   button on every voice (desktop: Settings, "Jarvis's built-in voice"; phone:
+   the Voices screen), and a line under it says better voices are available.
+   Your choice carries over on its own - the first time the PC is asked, a
+   saved number becomes the voice's name (number 9 was George; it stays George).
+2. **Optional: the new voice pack** (350 MB, one line). It is in
+   `backend\README.md` under **"Upgrade the voice pack to Kokoro v1.0"**: copy
+   that one line, paste it into PowerShell, wait for "OK - the new voices are
+   in ...", then quit Jarvis from the tray and start it again. It checks the
+   download first and installs nothing if it is not the expected file; your old
+   pack stays beside it as `tts-old-...` so going back is a rename.
+3. **Check it** (five minutes): open the voice list, press **Hear it** on
+   three voices - Heart, Bella and George - and confirm each one plays and the
+   voice Jarvis uses does not change; press Hear it while Jarvis is talking (it
+   should say it is busy). Pick a British voice (Emma or George) and ask
+   Jarvis a question: it should sound British, not American - **nobody has
+   listened to this yet, so tell us if it does not**. With an animal face on,
+   the animals still sound like themselves; their mouths follow the sound
+   rather than Kokoro's own timing on v1.0.

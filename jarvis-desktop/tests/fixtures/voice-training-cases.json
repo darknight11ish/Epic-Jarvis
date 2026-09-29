@@ -11331,47 +11331,39 @@
             },
             "voices": [
               {
-                "id": "0",
+                "id": "af",
                 "label": "American (female)"
               },
               {
-                "id": "1",
+                "id": "af_bella",
                 "label": "American (female) - Bella"
               },
               {
-                "id": "2",
+                "id": "af_nicole",
                 "label": "American (female) - Nicole"
               },
               {
-                "id": "3",
+                "id": "af_sarah",
                 "label": "American (female) - Sarah"
               },
               {
-                "id": "4",
-                "label": "American (female) - Sky"
-              },
-              {
-                "id": "5",
-                "label": "American (male) - Adam"
-              },
-              {
-                "id": "6",
+                "id": "am_michael",
                 "label": "American (male) - Michael"
               },
               {
-                "id": "7",
+                "id": "bf_emma",
                 "label": "British (female) - Emma"
               },
               {
-                "id": "8",
+                "id": "bf_isabella",
                 "label": "British (female) - Isabella"
               },
               {
-                "id": "9",
+                "id": "bm_george",
                 "label": "British (male) - George"
               },
               {
-                "id": "10",
+                "id": "bm_lewis",
                 "label": "British (male) - Lewis"
               }
             ]
@@ -11386,11 +11378,11 @@
               "own": {
                 "pace": "normal",
                 "semitones": 2.0,
-                "speaker": "1"
+                "speaker": "af_bella"
               },
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1",
+              "speaker": "af_bella",
               "voice": "Bella"
             },
             {
@@ -11402,11 +11394,11 @@
               "own": {
                 "pace": "slower",
                 "semitones": 1.0,
-                "speaker": "2"
+                "speaker": "af_nicole"
               },
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2",
+              "speaker": "af_nicole",
               "voice": "Nicole"
             },
             {
@@ -11418,11 +11410,11 @@
               "own": {
                 "pace": "faster",
                 "semitones": 3.0,
-                "speaker": "3"
+                "speaker": "af_sarah"
               },
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3",
+              "speaker": "af_sarah",
               "voice": "Sarah"
             },
             {
@@ -11434,11 +11426,11 @@
               "own": {
                 "pace": "normal",
                 "semitones": 1.0,
-                "speaker": "6"
+                "speaker": "am_michael"
               },
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6",
+              "speaker": "am_michael",
               "voice": "Michael"
             }
           ],
@@ -11484,47 +11476,39 @@
             },
             "voices": [
               {
-                "id": "0",
+                "id": "af",
                 "label": "American (female)"
               },
               {
-                "id": "1",
+                "id": "af_bella",
                 "label": "American (female) - Bella"
               },
               {
-                "id": "2",
+                "id": "af_nicole",
                 "label": "American (female) - Nicole"
               },
               {
-                "id": "3",
+                "id": "af_sarah",
                 "label": "American (female) - Sarah"
               },
               {
-                "id": "4",
-                "label": "American (female) - Sky"
-              },
-              {
-                "id": "5",
-                "label": "American (male) - Adam"
-              },
-              {
-                "id": "6",
+                "id": "am_michael",
                 "label": "American (male) - Michael"
               },
               {
-                "id": "7",
+                "id": "bf_emma",
                 "label": "British (female) - Emma"
               },
               {
-                "id": "8",
+                "id": "bf_isabella",
                 "label": "British (female) - Isabella"
               },
               {
-                "id": "9",
+                "id": "bm_george",
                 "label": "British (male) - George"
               },
               {
-                "id": "10",
+                "id": "bm_lewis",
                 "label": "British (male) - Lewis"
               }
             ]
@@ -11539,11 +11523,11 @@
               "own": {
                 "pace": "normal",
                 "semitones": 2.0,
-                "speaker": "1"
+                "speaker": "af_bella"
               },
               "pace": "faster",
               "semitones": -1.5,
-              "speaker": "3",
+              "speaker": "af_sarah",
               "voice": "Sarah"
             },
             {
@@ -11555,11 +11539,11 @@
               "own": {
                 "pace": "slower",
                 "semitones": 1.0,
-                "speaker": "2"
+                "speaker": "af_nicole"
               },
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2",
+              "speaker": "af_nicole",
               "voice": "Nicole"
             },
             {
@@ -11571,11 +11555,11 @@
               "own": {
                 "pace": "faster",
                 "semitones": 3.0,
-                "speaker": "3"
+                "speaker": "af_sarah"
               },
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3",
+              "speaker": "af_sarah",
               "voice": "Sarah"
             },
             {
@@ -11587,11 +11571,11 @@
               "own": {
                 "pace": "normal",
                 "semitones": 1.0,
-                "speaker": "6"
+                "speaker": "am_michael"
               },
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6",
+              "speaker": "am_michael",
               "voice": "Michael"
             }
           ],
@@ -11755,47 +11739,39 @@
             },
             "voices": [
               {
-                "id": "0",
+                "id": "af",
                 "label": "American (female)"
               },
               {
-                "id": "1",
+                "id": "af_bella",
                 "label": "American (female) - Bella"
               },
               {
-                "id": "2",
+                "id": "af_nicole",
                 "label": "American (female) - Nicole"
               },
               {
-                "id": "3",
+                "id": "af_sarah",
                 "label": "American (female) - Sarah"
               },
               {
-                "id": "4",
-                "label": "American (female) - Sky"
-              },
-              {
-                "id": "5",
-                "label": "American (male) - Adam"
-              },
-              {
-                "id": "6",
+                "id": "am_michael",
                 "label": "American (male) - Michael"
               },
               {
-                "id": "7",
+                "id": "bf_emma",
                 "label": "British (female) - Emma"
               },
               {
-                "id": "8",
+                "id": "bf_isabella",
                 "label": "British (female) - Isabella"
               },
               {
-                "id": "9",
+                "id": "bm_george",
                 "label": "British (male) - George"
               },
               {
-                "id": "10",
+                "id": "bm_lewis",
                 "label": "British (male) - Lewis"
               }
             ]
@@ -11810,11 +11786,11 @@
               "own": {
                 "pace": "normal",
                 "semitones": 2.0,
-                "speaker": "1"
+                "speaker": "af_bella"
               },
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1",
+              "speaker": "af_bella",
               "voice": "Bella"
             },
             {
@@ -11826,11 +11802,11 @@
               "own": {
                 "pace": "slower",
                 "semitones": 1.0,
-                "speaker": "2"
+                "speaker": "af_nicole"
               },
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2",
+              "speaker": "af_nicole",
               "voice": "Nicole"
             },
             {
@@ -11842,11 +11818,11 @@
               "own": {
                 "pace": "faster",
                 "semitones": 3.0,
-                "speaker": "3"
+                "speaker": "af_sarah"
               },
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3",
+              "speaker": "af_sarah",
               "voice": "Sarah"
             },
             {
@@ -11858,11 +11834,11 @@
               "own": {
                 "pace": "normal",
                 "semitones": 1.0,
-                "speaker": "6"
+                "speaker": "am_michael"
               },
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6",
+              "speaker": "am_michael",
               "voice": "Michael"
             }
           ],
@@ -11915,47 +11891,39 @@
             },
             "voices": [
               {
-                "id": "0",
+                "id": "af",
                 "label": "American (female)"
               },
               {
-                "id": "1",
+                "id": "af_bella",
                 "label": "American (female) - Bella"
               },
               {
-                "id": "2",
+                "id": "af_nicole",
                 "label": "American (female) - Nicole"
               },
               {
-                "id": "3",
+                "id": "af_sarah",
                 "label": "American (female) - Sarah"
               },
               {
-                "id": "4",
-                "label": "American (female) - Sky"
-              },
-              {
-                "id": "5",
-                "label": "American (male) - Adam"
-              },
-              {
-                "id": "6",
+                "id": "am_michael",
                 "label": "American (male) - Michael"
               },
               {
-                "id": "7",
+                "id": "bf_emma",
                 "label": "British (female) - Emma"
               },
               {
-                "id": "8",
+                "id": "bf_isabella",
                 "label": "British (female) - Isabella"
               },
               {
-                "id": "9",
+                "id": "bm_george",
                 "label": "British (male) - George"
               },
               {
-                "id": "10",
+                "id": "bm_lewis",
                 "label": "British (male) - Lewis"
               }
             ]
@@ -11970,11 +11938,11 @@
               "own": {
                 "pace": "normal",
                 "semitones": 2.0,
-                "speaker": "1"
+                "speaker": "af_bella"
               },
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1",
+              "speaker": "af_bella",
               "voice": "Bella"
             },
             {
@@ -11986,11 +11954,11 @@
               "own": {
                 "pace": "slower",
                 "semitones": 1.0,
-                "speaker": "2"
+                "speaker": "af_nicole"
               },
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2",
+              "speaker": "af_nicole",
               "voice": "Nicole"
             },
             {
@@ -12002,11 +11970,11 @@
               "own": {
                 "pace": "faster",
                 "semitones": 3.0,
-                "speaker": "3"
+                "speaker": "af_sarah"
               },
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3",
+              "speaker": "af_sarah",
               "voice": "Sarah"
             },
             {
@@ -12018,11 +11986,11 @@
               "own": {
                 "pace": "normal",
                 "semitones": 1.0,
-                "speaker": "6"
+                "speaker": "am_michael"
               },
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6",
+              "speaker": "am_michael",
               "voice": "Michael"
             }
           ],
@@ -12068,47 +12036,39 @@
             },
             "voices": [
               {
-                "id": "0",
+                "id": "af",
                 "label": "American (female)"
               },
               {
-                "id": "1",
+                "id": "af_bella",
                 "label": "American (female) - Bella"
               },
               {
-                "id": "2",
+                "id": "af_nicole",
                 "label": "American (female) - Nicole"
               },
               {
-                "id": "3",
+                "id": "af_sarah",
                 "label": "American (female) - Sarah"
               },
               {
-                "id": "4",
-                "label": "American (female) - Sky"
-              },
-              {
-                "id": "5",
-                "label": "American (male) - Adam"
-              },
-              {
-                "id": "6",
+                "id": "am_michael",
                 "label": "American (male) - Michael"
               },
               {
-                "id": "7",
+                "id": "bf_emma",
                 "label": "British (female) - Emma"
               },
               {
-                "id": "8",
+                "id": "bf_isabella",
                 "label": "British (female) - Isabella"
               },
               {
-                "id": "9",
+                "id": "bm_george",
                 "label": "British (male) - George"
               },
               {
-                "id": "10",
+                "id": "bm_lewis",
                 "label": "British (male) - Lewis"
               }
             ]
@@ -12123,11 +12083,11 @@
               "own": {
                 "pace": "normal",
                 "semitones": 2.0,
-                "speaker": "1"
+                "speaker": "af_bella"
               },
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1",
+              "speaker": "af_bella",
               "voice": "Bella"
             },
             {
@@ -12139,11 +12099,11 @@
               "own": {
                 "pace": "slower",
                 "semitones": 1.0,
-                "speaker": "2"
+                "speaker": "af_nicole"
               },
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2",
+              "speaker": "af_nicole",
               "voice": "Nicole"
             },
             {
@@ -12155,11 +12115,11 @@
               "own": {
                 "pace": "faster",
                 "semitones": 3.0,
-                "speaker": "3"
+                "speaker": "af_sarah"
               },
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3",
+              "speaker": "af_sarah",
               "voice": "Sarah"
             },
             {
@@ -12171,11 +12131,11 @@
               "own": {
                 "pace": "normal",
                 "semitones": 1.0,
-                "speaker": "6"
+                "speaker": "am_michael"
               },
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6",
+              "speaker": "am_michael",
               "voice": "Michael"
             }
           ],
@@ -12221,47 +12181,39 @@
             },
             "voices": [
               {
-                "id": "0",
+                "id": "af",
                 "label": "American (female)"
               },
               {
-                "id": "1",
+                "id": "af_bella",
                 "label": "American (female) - Bella"
               },
               {
-                "id": "2",
+                "id": "af_nicole",
                 "label": "American (female) - Nicole"
               },
               {
-                "id": "3",
+                "id": "af_sarah",
                 "label": "American (female) - Sarah"
               },
               {
-                "id": "4",
-                "label": "American (female) - Sky"
-              },
-              {
-                "id": "5",
-                "label": "American (male) - Adam"
-              },
-              {
-                "id": "6",
+                "id": "am_michael",
                 "label": "American (male) - Michael"
               },
               {
-                "id": "7",
+                "id": "bf_emma",
                 "label": "British (female) - Emma"
               },
               {
-                "id": "8",
+                "id": "bf_isabella",
                 "label": "British (female) - Isabella"
               },
               {
-                "id": "9",
+                "id": "bm_george",
                 "label": "British (male) - George"
               },
               {
-                "id": "10",
+                "id": "bm_lewis",
                 "label": "British (male) - Lewis"
               }
             ]
@@ -12276,11 +12228,11 @@
               "own": {
                 "pace": "normal",
                 "semitones": 2.0,
-                "speaker": "1"
+                "speaker": "af_bella"
               },
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1",
+              "speaker": "af_bella",
               "voice": "Bella"
             },
             {
@@ -12292,11 +12244,11 @@
               "own": {
                 "pace": "slower",
                 "semitones": 1.0,
-                "speaker": "2"
+                "speaker": "af_nicole"
               },
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2",
+              "speaker": "af_nicole",
               "voice": "Nicole"
             },
             {
@@ -12308,11 +12260,11 @@
               "own": {
                 "pace": "faster",
                 "semitones": 3.0,
-                "speaker": "3"
+                "speaker": "af_sarah"
               },
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3",
+              "speaker": "af_sarah",
               "voice": "Sarah"
             },
             {
@@ -12324,11 +12276,11 @@
               "own": {
                 "pace": "normal",
                 "semitones": 1.0,
-                "speaker": "6"
+                "speaker": "am_michael"
               },
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6",
+              "speaker": "am_michael",
               "voice": "Michael"
             }
           ],
@@ -12349,66 +12301,92 @@
       },
       "code": 200
     },
-    "speaker_9": {
+    "pack_v1_heart": {
       "body": {
-        "message": "Jarvis's built-in voice is now British (male) - George.",
+        "message": "Jarvis's built-in voice is now American (female) - Heart.",
         "ok": true,
         "speaker": {
-          "choice": "9",
+          "choice": "af_heart",
           "choices": [
             {
-              "id": "0",
-              "label": "American (female)"
+              "id": "af_heart",
+              "label": "American (female) - Heart"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "am_fenrir",
+              "label": "American (male) - Fenrir"
+            },
+            {
+              "id": "am_puck",
+              "label": "American (male) - Puck"
+            },
+            {
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ],
-          "default": "0",
-          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+          "default": "af_heart",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
           "note": "",
+          "pack": {
+            "kind": "v1",
+            "name": "Kokoro v1.0",
+            "voices": 54
+          },
           "title": "Jarvis's built-in voice",
-          "value": 9
+          "value": 3
         }
       },
       "code": 200
+    },
+    "pack_v1_sky": {
+      "body": {
+        "error": "choose one of the listed voices",
+        "ok": false
+      },
+      "code": 400
+    },
+    "sample_bad": {
+      "body": {
+        "error": "choose one of the listed voices",
+        "ok": false
+      },
+      "code": 400
+    },
+    "sample_busy": {
+      "body": {
+        "error": "the PC is still making the sound for the last Hear it. Try again in a moment",
+        "ok": false
+      },
+      "code": 429
     },
     "speaker_bad": {
       "body": {
@@ -12416,6 +12394,64 @@
         "ok": false
       },
       "code": 400
+    },
+    "speaker_george": {
+      "body": {
+        "message": "Jarvis's built-in voice is now British (male) - George.",
+        "ok": true,
+        "speaker": {
+          "choice": "bm_george",
+          "choices": [
+            {
+              "id": "af",
+              "label": "American (female)"
+            },
+            {
+              "id": "af_bella",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "af_nicole",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "af_sarah",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "am_michael",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "bf_emma",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "bf_isabella",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "bm_george",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "bm_lewis",
+              "label": "British (male) - Lewis"
+            }
+          ],
+          "default": "af",
+          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+          "note": "",
+          "pack": {
+            "kind": "",
+            "name": "",
+            "voices": 0
+          },
+          "title": "Jarvis's built-in voice",
+          "value": 9
+        }
+      },
+      "code": 200
     },
     "speed_bad": {
       "body": {
@@ -12531,47 +12567,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -12586,11 +12614,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -12602,11 +12630,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -12618,11 +12646,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -12634,11 +12662,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -12679,56 +12707,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "0",
+        "choice": "af",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 0
       },
@@ -12850,47 +12875,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -12905,11 +12922,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "faster",
             "semitones": -1.5,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -12921,11 +12938,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -12937,11 +12954,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -12953,11 +12970,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -12998,56 +13015,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "9",
+        "choice": "bm_george",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "While the Red Panda face is showing, its own voice speaks instead (\"Voice follows the face\" is on); this choice is used the rest of the time.",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 9
       },
@@ -13169,47 +13183,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -13224,11 +13230,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -13240,11 +13246,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -13256,11 +13262,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -13272,11 +13278,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -13311,56 +13317,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "0",
+        "choice": "af",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 0
       },
@@ -13461,47 +13464,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -13516,11 +13511,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -13532,11 +13527,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -13548,11 +13543,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -13564,11 +13559,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -13603,56 +13598,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "0",
+        "choice": "af",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 0
       },
@@ -13749,47 +13741,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -13804,11 +13788,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -13820,11 +13804,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -13836,11 +13820,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -13852,11 +13836,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -13891,56 +13875,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "0",
+        "choice": "af",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 0
       },
@@ -14037,47 +14018,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -14092,11 +14065,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -14108,11 +14081,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -14124,11 +14097,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -14140,11 +14113,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -14179,58 +14152,332 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "0",
+        "choice": "af",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 0
+      },
+      "speaking_with": "kokoro",
+      "speed": {
+        "choice": "normal",
+        "choices": [
+          {
+            "id": "slower",
+            "label": "Slower"
+          },
+          {
+            "id": "normal",
+            "label": "Normal"
+          },
+          {
+            "id": "faster",
+            "label": "Faster"
+          }
+        ],
+        "default": "normal",
+        "detail": "Every voice made on your PC speaks at this speed. It changes nothing else, so it never asks first.",
+        "note": "",
+        "title": "How fast Jarvis speaks",
+        "value": 1.0
+      },
+      "timings": [],
+      "voices": [
+        {
+          "builtin": true,
+          "id": "builtin",
+          "name": "Built-in voice",
+          "ready": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        }
+      ]
+    },
+    "carried_over": {
+      "active": "builtin",
+      "active_name": "Built-in voice",
+      "available": true,
+      "better_voice": {
+        "can_turn_on": false,
+        "card": null,
+        "enabled": false,
+        "files": false,
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "idle_minutes": 10,
+        "last": null,
+        "load_seconds": null,
+        "need_mb": 3072,
+        "need_mb_measured": false,
+        "pending": false,
+        "state": "off",
+        "state_why": "not running - it starts when Jarvis speaks in a custom voice",
+        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+      },
+      "engines": {
+        "f5": {
+          "available": false,
+          "where": "the second graphics card",
+          "why": "not running - it starts when Jarvis speaks in a custom voice"
+        },
+        "kokoro": {
+          "available": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        },
+        "zipvoice": {
+          "available": false,
+          "where": "this PC's processor",
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+        }
+      },
+      "face_voice": {
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "af",
+              "label": "American (female)"
+            },
+            {
+              "id": "af_bella",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "af_nicole",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "af_sarah",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "am_michael",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "bf_emma",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "bf_isabella",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "bm_george",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "bm_lewis",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "af_bella"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "af_bella",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "af_nicole"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "af_nicole",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "af_sarah"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "af_sarah",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": true,
+            "face": "monkey",
+            "line": "Emma, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "am_michael"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "bf_emma",
+            "voice": "Emma"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
+        "face": "",
+        "line": "Off: the built-in voice stays the same whatever the face.",
+        "name": "",
+        "offer": null,
+        "speaking": false,
+        "title": "Voice follows the face"
+      },
+      "fallback": "",
+      "last": null,
+      "limits": {
+        "max_clip_bytes": 2900000,
+        "max_name_chars": 40,
+        "max_seconds": 10.0,
+        "max_transcript_chars": 300,
+        "max_voices": 20,
+        "min_seconds": 3.0
+      },
+      "pending": null,
+      "sentences": [
+        "Good morning. I checked your calendar, and you have two meetings this afternoon.",
+        "The quick brown fox jumps over the lazy dog, then runs back home for dinner.",
+        "It is a bright, cool day, with a gentle breeze coming in from the sea.",
+        "Your parcel arrived at noon, and I left a reminder to open it this evening.",
+        "Would you like me to read that again, a little more slowly this time?"
+      ],
+      "speaker": {
+        "choice": "bm_george",
+        "choices": [
+          {
+            "id": "af",
+            "label": "American (female)"
+          },
+          {
+            "id": "af_bella",
+            "label": "American (female) - Bella"
+          },
+          {
+            "id": "af_nicole",
+            "label": "American (female) - Nicole"
+          },
+          {
+            "id": "af_sarah",
+            "label": "American (female) - Sarah"
+          },
+          {
+            "id": "am_michael",
+            "label": "American (male) - Michael"
+          },
+          {
+            "id": "bf_emma",
+            "label": "British (female) - Emma"
+          },
+          {
+            "id": "bf_isabella",
+            "label": "British (female) - Isabella"
+          },
+          {
+            "id": "bm_george",
+            "label": "British (male) - George"
+          },
+          {
+            "id": "bm_lewis",
+            "label": "British (male) - Lewis"
+          }
+        ],
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "note": "Better voices are available: Kokoro v1.0 has more, better-rated voices and a real British accent (a 350 MB download). To get them, run the one line under \"Upgrade the voice pack to Kokoro v1.0\" in backend\\README.md on your PC, then restart Jarvis. Your choice carries over.",
+        "pack": {
+          "kind": "v019",
+          "name": "Kokoro v0.19",
+          "voices": 11
+        },
+        "title": "Jarvis's built-in voice",
+        "value": 9
       },
       "speaking_with": "kokoro",
       "speed": {
@@ -14325,47 +14572,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -14380,11 +14619,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -14396,11 +14635,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -14412,11 +14651,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -14428,11 +14667,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -14473,56 +14712,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "0",
+        "choice": "af",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 0
       },
@@ -14619,47 +14855,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -14674,11 +14902,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -14690,11 +14918,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -14706,11 +14934,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -14722,11 +14950,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -14772,56 +15000,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "9",
+        "choice": "bm_george",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 9
       },
@@ -14943,47 +15168,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -14998,11 +15215,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -15014,11 +15231,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -15030,11 +15247,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -15046,11 +15263,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -15085,56 +15302,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "0",
+        "choice": "af",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 0
       },
@@ -15231,47 +15445,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -15286,11 +15492,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -15302,11 +15508,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -15318,11 +15524,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -15334,11 +15540,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -15373,56 +15579,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "0",
+        "choice": "af",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 0
       },
@@ -15519,47 +15722,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -15574,11 +15769,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -15590,11 +15785,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -15606,11 +15801,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -15622,11 +15817,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -15666,56 +15861,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "0",
+        "choice": "af",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 0
       },
@@ -15812,47 +16004,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -15867,11 +16051,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -15883,11 +16067,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -15899,11 +16083,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -15915,11 +16099,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -15954,56 +16138,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "0",
+        "choice": "af",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "While the Pygmy Owl face is showing, its own voice speaks instead (\"Voice follows the face\" is on); this choice is used the rest of the time.",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 0
       },
@@ -16100,47 +16281,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -16155,11 +16328,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -16171,11 +16344,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -16187,11 +16360,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -16203,11 +16376,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -16248,56 +16421,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "9",
+        "choice": "bm_george",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "While the Red Panda face is showing, its own voice speaks instead (\"Voice follows the face\" is on); this choice is used the rest of the time.",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 9
       },
@@ -16419,47 +16589,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -16474,11 +16636,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -16490,11 +16652,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -16506,11 +16668,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -16522,11 +16684,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -16566,56 +16728,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "0",
+        "choice": "af",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 0
       },
@@ -16712,47 +16871,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -16767,11 +16918,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -16783,11 +16934,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -16799,11 +16950,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -16815,11 +16966,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -16860,56 +17011,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "9",
+        "choice": "bm_george",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 9
       },
@@ -17031,47 +17179,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -17086,11 +17226,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -17102,11 +17242,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -17118,11 +17258,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -17134,11 +17274,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -17179,56 +17319,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "0",
+        "choice": "af",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 0
       },
@@ -17286,6 +17423,869 @@
           "seconds": 5.0,
           "transcript": "The quick brown fox jumps over the lazy dog then runs back home",
           "why": ""
+        }
+      ]
+    },
+    "pack_old": {
+      "active": "builtin",
+      "active_name": "Built-in voice",
+      "available": true,
+      "better_voice": {
+        "can_turn_on": false,
+        "card": null,
+        "enabled": false,
+        "files": false,
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "idle_minutes": 10,
+        "last": null,
+        "load_seconds": null,
+        "need_mb": 3072,
+        "need_mb_measured": false,
+        "pending": false,
+        "state": "off",
+        "state_why": "not running - it starts when Jarvis speaks in a custom voice",
+        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+      },
+      "engines": {
+        "f5": {
+          "available": false,
+          "where": "the second graphics card",
+          "why": "not running - it starts when Jarvis speaks in a custom voice"
+        },
+        "kokoro": {
+          "available": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        },
+        "zipvoice": {
+          "available": false,
+          "where": "this PC's processor",
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+        }
+      },
+      "face_voice": {
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "af",
+              "label": "American (female)"
+            },
+            {
+              "id": "af_bella",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "af_nicole",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "af_sarah",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "am_michael",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "bf_emma",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "bf_isabella",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "bm_george",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "bm_lewis",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "af_bella"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "af_bella",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "af_nicole"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "af_nicole",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "af_sarah"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "af_sarah",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "am_michael"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "am_michael",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
+        "face": "",
+        "line": "Off: the built-in voice stays the same whatever the face.",
+        "name": "",
+        "offer": null,
+        "speaking": false,
+        "title": "Voice follows the face"
+      },
+      "fallback": "",
+      "last": null,
+      "limits": {
+        "max_clip_bytes": 2900000,
+        "max_name_chars": 40,
+        "max_seconds": 10.0,
+        "max_transcript_chars": 300,
+        "max_voices": 20,
+        "min_seconds": 3.0
+      },
+      "pending": null,
+      "sentences": [
+        "Good morning. I checked your calendar, and you have two meetings this afternoon.",
+        "The quick brown fox jumps over the lazy dog, then runs back home for dinner.",
+        "It is a bright, cool day, with a gentle breeze coming in from the sea.",
+        "Your parcel arrived at noon, and I left a reminder to open it this evening.",
+        "Would you like me to read that again, a little more slowly this time?"
+      ],
+      "speaker": {
+        "choice": "af",
+        "choices": [
+          {
+            "id": "af",
+            "label": "American (female)"
+          },
+          {
+            "id": "af_bella",
+            "label": "American (female) - Bella"
+          },
+          {
+            "id": "af_nicole",
+            "label": "American (female) - Nicole"
+          },
+          {
+            "id": "af_sarah",
+            "label": "American (female) - Sarah"
+          },
+          {
+            "id": "am_michael",
+            "label": "American (male) - Michael"
+          },
+          {
+            "id": "bf_emma",
+            "label": "British (female) - Emma"
+          },
+          {
+            "id": "bf_isabella",
+            "label": "British (female) - Isabella"
+          },
+          {
+            "id": "bm_george",
+            "label": "British (male) - George"
+          },
+          {
+            "id": "bm_lewis",
+            "label": "British (male) - Lewis"
+          }
+        ],
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "note": "Better voices are available: Kokoro v1.0 has more, better-rated voices and a real British accent (a 350 MB download). To get them, run the one line under \"Upgrade the voice pack to Kokoro v1.0\" in backend\\README.md on your PC, then restart Jarvis. Your choice carries over.",
+        "pack": {
+          "kind": "v019",
+          "name": "Kokoro v0.19",
+          "voices": 11
+        },
+        "title": "Jarvis's built-in voice",
+        "value": 0
+      },
+      "speaking_with": "kokoro",
+      "speed": {
+        "choice": "normal",
+        "choices": [
+          {
+            "id": "slower",
+            "label": "Slower"
+          },
+          {
+            "id": "normal",
+            "label": "Normal"
+          },
+          {
+            "id": "faster",
+            "label": "Faster"
+          }
+        ],
+        "default": "normal",
+        "detail": "Every voice made on your PC speaks at this speed. It changes nothing else, so it never asks first.",
+        "note": "",
+        "title": "How fast Jarvis speaks",
+        "value": 1.0
+      },
+      "timings": [],
+      "voices": [
+        {
+          "builtin": true,
+          "id": "builtin",
+          "name": "Built-in voice",
+          "ready": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        }
+      ]
+    },
+    "pack_v1": {
+      "active": "builtin",
+      "active_name": "Built-in voice",
+      "available": true,
+      "better_voice": {
+        "can_turn_on": false,
+        "card": null,
+        "enabled": false,
+        "files": false,
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "idle_minutes": 10,
+        "last": null,
+        "load_seconds": null,
+        "need_mb": 3072,
+        "need_mb_measured": false,
+        "pending": false,
+        "state": "off",
+        "state_why": "not running - it starts when Jarvis speaks in a custom voice",
+        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+      },
+      "engines": {
+        "f5": {
+          "available": false,
+          "where": "the second graphics card",
+          "why": "not running - it starts when Jarvis speaks in a custom voice"
+        },
+        "kokoro": {
+          "available": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        },
+        "zipvoice": {
+          "available": false,
+          "where": "this PC's processor",
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+        }
+      },
+      "face_voice": {
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "af_heart",
+              "label": "American (female) - Heart"
+            },
+            {
+              "id": "af_bella",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "af_nicole",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "af_sarah",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "am_michael",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "am_fenrir",
+              "label": "American (male) - Fenrir"
+            },
+            {
+              "id": "am_puck",
+              "label": "American (male) - Puck"
+            },
+            {
+              "id": "bf_emma",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "bf_isabella",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "bm_george",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "bm_lewis",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "af_bella"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "af_bella",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "af_nicole"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "af_nicole",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "af_sarah"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "af_sarah",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "am_michael"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "am_michael",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
+        "face": "",
+        "line": "Off: the built-in voice stays the same whatever the face.",
+        "name": "",
+        "offer": null,
+        "speaking": false,
+        "title": "Voice follows the face"
+      },
+      "fallback": "",
+      "last": null,
+      "limits": {
+        "max_clip_bytes": 2900000,
+        "max_name_chars": 40,
+        "max_seconds": 10.0,
+        "max_transcript_chars": 300,
+        "max_voices": 20,
+        "min_seconds": 3.0
+      },
+      "pending": null,
+      "sentences": [
+        "Good morning. I checked your calendar, and you have two meetings this afternoon.",
+        "The quick brown fox jumps over the lazy dog, then runs back home for dinner.",
+        "It is a bright, cool day, with a gentle breeze coming in from the sea.",
+        "Your parcel arrived at noon, and I left a reminder to open it this evening.",
+        "Would you like me to read that again, a little more slowly this time?"
+      ],
+      "speaker": {
+        "choice": "af_heart",
+        "choices": [
+          {
+            "id": "af_heart",
+            "label": "American (female) - Heart"
+          },
+          {
+            "id": "af_bella",
+            "label": "American (female) - Bella"
+          },
+          {
+            "id": "af_nicole",
+            "label": "American (female) - Nicole"
+          },
+          {
+            "id": "af_sarah",
+            "label": "American (female) - Sarah"
+          },
+          {
+            "id": "am_michael",
+            "label": "American (male) - Michael"
+          },
+          {
+            "id": "am_fenrir",
+            "label": "American (male) - Fenrir"
+          },
+          {
+            "id": "am_puck",
+            "label": "American (male) - Puck"
+          },
+          {
+            "id": "bf_emma",
+            "label": "British (female) - Emma"
+          },
+          {
+            "id": "bf_isabella",
+            "label": "British (female) - Isabella"
+          },
+          {
+            "id": "bm_george",
+            "label": "British (male) - George"
+          },
+          {
+            "id": "bm_lewis",
+            "label": "British (male) - Lewis"
+          }
+        ],
+        "default": "af_heart",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "note": "",
+        "pack": {
+          "kind": "v1",
+          "name": "Kokoro v1.0",
+          "voices": 54
+        },
+        "title": "Jarvis's built-in voice",
+        "value": 3
+      },
+      "speaking_with": "kokoro",
+      "speed": {
+        "choice": "normal",
+        "choices": [
+          {
+            "id": "slower",
+            "label": "Slower"
+          },
+          {
+            "id": "normal",
+            "label": "Normal"
+          },
+          {
+            "id": "faster",
+            "label": "Faster"
+          }
+        ],
+        "default": "normal",
+        "detail": "Every voice made on your PC speaks at this speed. It changes nothing else, so it never asks first.",
+        "note": "",
+        "title": "How fast Jarvis speaks",
+        "value": 1.0
+      },
+      "timings": [],
+      "voices": [
+        {
+          "builtin": true,
+          "id": "builtin",
+          "name": "Built-in voice",
+          "ready": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        }
+      ]
+    },
+    "pack_v1_chosen": {
+      "active": "builtin",
+      "active_name": "Built-in voice",
+      "available": true,
+      "better_voice": {
+        "can_turn_on": false,
+        "card": null,
+        "enabled": false,
+        "files": false,
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "idle_minutes": 10,
+        "last": null,
+        "load_seconds": null,
+        "need_mb": 3072,
+        "need_mb_measured": false,
+        "pending": false,
+        "state": "off",
+        "state_why": "not running - it starts when Jarvis speaks in a custom voice",
+        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+      },
+      "engines": {
+        "f5": {
+          "available": false,
+          "where": "the second graphics card",
+          "why": "not running - it starts when Jarvis speaks in a custom voice"
+        },
+        "kokoro": {
+          "available": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        },
+        "zipvoice": {
+          "available": false,
+          "where": "this PC's processor",
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+        }
+      },
+      "face_voice": {
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "af_heart",
+              "label": "American (female) - Heart"
+            },
+            {
+              "id": "af_bella",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "af_nicole",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "af_sarah",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "am_michael",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "am_fenrir",
+              "label": "American (male) - Fenrir"
+            },
+            {
+              "id": "am_puck",
+              "label": "American (male) - Puck"
+            },
+            {
+              "id": "bf_emma",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "bf_isabella",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "bm_george",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "bm_lewis",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "af_bella"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "af_bella",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "af_nicole"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "af_nicole",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "af_sarah"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "af_sarah",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "am_michael"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "am_michael",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
+        "face": "",
+        "line": "Off: the built-in voice stays the same whatever the face.",
+        "name": "",
+        "offer": null,
+        "speaking": false,
+        "title": "Voice follows the face"
+      },
+      "fallback": "",
+      "last": null,
+      "limits": {
+        "max_clip_bytes": 2900000,
+        "max_name_chars": 40,
+        "max_seconds": 10.0,
+        "max_transcript_chars": 300,
+        "max_voices": 20,
+        "min_seconds": 3.0
+      },
+      "pending": null,
+      "sentences": [
+        "Good morning. I checked your calendar, and you have two meetings this afternoon.",
+        "The quick brown fox jumps over the lazy dog, then runs back home for dinner.",
+        "It is a bright, cool day, with a gentle breeze coming in from the sea.",
+        "Your parcel arrived at noon, and I left a reminder to open it this evening.",
+        "Would you like me to read that again, a little more slowly this time?"
+      ],
+      "speaker": {
+        "choice": "af_heart",
+        "choices": [
+          {
+            "id": "af_heart",
+            "label": "American (female) - Heart"
+          },
+          {
+            "id": "af_bella",
+            "label": "American (female) - Bella"
+          },
+          {
+            "id": "af_nicole",
+            "label": "American (female) - Nicole"
+          },
+          {
+            "id": "af_sarah",
+            "label": "American (female) - Sarah"
+          },
+          {
+            "id": "am_michael",
+            "label": "American (male) - Michael"
+          },
+          {
+            "id": "am_fenrir",
+            "label": "American (male) - Fenrir"
+          },
+          {
+            "id": "am_puck",
+            "label": "American (male) - Puck"
+          },
+          {
+            "id": "bf_emma",
+            "label": "British (female) - Emma"
+          },
+          {
+            "id": "bf_isabella",
+            "label": "British (female) - Isabella"
+          },
+          {
+            "id": "bm_george",
+            "label": "British (male) - George"
+          },
+          {
+            "id": "bm_lewis",
+            "label": "British (male) - Lewis"
+          }
+        ],
+        "default": "af_heart",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "note": "",
+        "pack": {
+          "kind": "v1",
+          "name": "Kokoro v1.0",
+          "voices": 54
+        },
+        "title": "Jarvis's built-in voice",
+        "value": 3
+      },
+      "speaking_with": "kokoro",
+      "speed": {
+        "choice": "normal",
+        "choices": [
+          {
+            "id": "slower",
+            "label": "Slower"
+          },
+          {
+            "id": "normal",
+            "label": "Normal"
+          },
+          {
+            "id": "faster",
+            "label": "Faster"
+          }
+        ],
+        "default": "normal",
+        "detail": "Every voice made on your PC speaks at this speed. It changes nothing else, so it never asks first.",
+        "note": "",
+        "title": "How fast Jarvis speaks",
+        "value": 1.0
+      },
+      "timings": [],
+      "voices": [
+        {
+          "builtin": true,
+          "id": "builtin",
+          "name": "Built-in voice",
+          "ready": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
         }
       ]
     },
@@ -17348,47 +18348,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -17403,11 +18395,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -17419,11 +18411,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -17435,11 +18427,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -17451,11 +18443,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -17496,56 +18488,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "9",
+        "choice": "bm_george",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 9
       },
@@ -17667,47 +18656,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -17722,11 +18703,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -17738,11 +18719,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -17754,11 +18735,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -17770,11 +18751,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -17815,56 +18796,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "0",
+        "choice": "af",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 0
       },
@@ -17996,47 +18974,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -18051,11 +19021,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -18067,11 +19037,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -18083,11 +19053,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -18099,11 +19069,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -18144,56 +19114,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "0",
+        "choice": "af",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 0
       },
@@ -18315,47 +19282,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -18370,11 +19329,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -18386,11 +19345,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -18402,11 +19361,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -18418,11 +19377,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -18468,56 +19427,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "0",
+        "choice": "af",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 0
       },
@@ -18624,47 +19580,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -18679,11 +19627,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -18695,11 +19643,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -18711,11 +19659,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -18727,11 +19675,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -18772,56 +19720,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "0",
+        "choice": "af",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 0
       },
@@ -18928,47 +19873,39 @@
           },
           "voices": [
             {
-              "id": "0",
+              "id": "af",
               "label": "American (female)"
             },
             {
-              "id": "1",
+              "id": "af_bella",
               "label": "American (female) - Bella"
             },
             {
-              "id": "2",
+              "id": "af_nicole",
               "label": "American (female) - Nicole"
             },
             {
-              "id": "3",
+              "id": "af_sarah",
               "label": "American (female) - Sarah"
             },
             {
-              "id": "4",
-              "label": "American (female) - Sky"
-            },
-            {
-              "id": "5",
-              "label": "American (male) - Adam"
-            },
-            {
-              "id": "6",
+              "id": "am_michael",
               "label": "American (male) - Michael"
             },
             {
-              "id": "7",
+              "id": "bf_emma",
               "label": "British (female) - Emma"
             },
             {
-              "id": "8",
+              "id": "bf_isabella",
               "label": "British (female) - Isabella"
             },
             {
-              "id": "9",
+              "id": "bm_george",
               "label": "British (male) - George"
             },
             {
-              "id": "10",
+              "id": "bm_lewis",
               "label": "British (male) - Lewis"
             }
           ]
@@ -18983,11 +19920,11 @@
             "own": {
               "pace": "normal",
               "semitones": 2.0,
-              "speaker": "1"
+              "speaker": "af_bella"
             },
             "pace": "normal",
             "semitones": 2.0,
-            "speaker": "1",
+            "speaker": "af_bella",
             "voice": "Bella"
           },
           {
@@ -18999,11 +19936,11 @@
             "own": {
               "pace": "slower",
               "semitones": 1.0,
-              "speaker": "2"
+              "speaker": "af_nicole"
             },
             "pace": "slower",
             "semitones": 1.0,
-            "speaker": "2",
+            "speaker": "af_nicole",
             "voice": "Nicole"
           },
           {
@@ -19015,11 +19952,11 @@
             "own": {
               "pace": "faster",
               "semitones": 3.0,
-              "speaker": "3"
+              "speaker": "af_sarah"
             },
             "pace": "faster",
             "semitones": 3.0,
-            "speaker": "3",
+            "speaker": "af_sarah",
             "voice": "Sarah"
           },
           {
@@ -19031,11 +19968,11 @@
             "own": {
               "pace": "normal",
               "semitones": 1.0,
-              "speaker": "6"
+              "speaker": "am_michael"
             },
             "pace": "normal",
             "semitones": 1.0,
-            "speaker": "6",
+            "speaker": "am_michael",
             "voice": "Michael"
           }
         ],
@@ -19076,56 +20013,53 @@
         "Would you like me to read that again, a little more slowly this time?"
       ],
       "speaker": {
-        "choice": "0",
+        "choice": "af",
         "choices": [
           {
-            "id": "0",
+            "id": "af",
             "label": "American (female)"
           },
           {
-            "id": "1",
+            "id": "af_bella",
             "label": "American (female) - Bella"
           },
           {
-            "id": "2",
+            "id": "af_nicole",
             "label": "American (female) - Nicole"
           },
           {
-            "id": "3",
+            "id": "af_sarah",
             "label": "American (female) - Sarah"
           },
           {
-            "id": "4",
-            "label": "American (female) - Sky"
-          },
-          {
-            "id": "5",
-            "label": "American (male) - Adam"
-          },
-          {
-            "id": "6",
+            "id": "am_michael",
             "label": "American (male) - Michael"
           },
           {
-            "id": "7",
+            "id": "bf_emma",
             "label": "British (female) - Emma"
           },
           {
-            "id": "8",
+            "id": "bf_isabella",
             "label": "British (female) - Isabella"
           },
           {
-            "id": "9",
+            "id": "bm_george",
             "label": "British (male) - George"
           },
           {
-            "id": "10",
+            "id": "bm_lewis",
             "label": "British (male) - Lewis"
           }
         ],
-        "default": "0",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "default": "af",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
         "note": "",
+        "pack": {
+          "kind": "",
+          "name": "",
+          "voices": 0
+        },
         "title": "Jarvis's built-in voice",
         "value": 0
       },

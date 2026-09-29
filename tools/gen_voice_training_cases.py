@@ -61,6 +61,7 @@ import jarvis_speech as S  # noqa: E402
 import jarvis_turn as T  # noqa: E402
 import jarvis_voice as V  # noqa: E402
 import jarvis_voice_enroll as E  # noqa: E402
+import jarvis_kokoro as K  # noqa: E402
 import jarvis_voices as VO  # noqa: E402
 import jarvis_wakeword as W  # noqa: E402
 import gen_second_card_cases as SCG  # noqa: E402
@@ -526,9 +527,18 @@ def voices_cases():
         keep(w, "speed_bad", post("/api/voice/voices/speed", {"speed": "warp"}), posts)
         # Which of Kokoro's own voices speaks: the same shape, at once, no
         # card either way (ease-of-use audit row 13).
-        keep(w, "speaker_9", post("/api/voice/voices/speaker", {"speaker": "9"}), posts)
+        # By NAME since 2026-09-29 (Kokoro v1.0): a number is refused now.
+        keep(w, "speaker_george", post("/api/voice/voices/speaker", {"speaker": "bm_george"}),
+             posts)
         keep(w, "speaker_chosen", VO.status(), statuses)
-        keep(w, "speaker_bad", post("/api/voice/voices/speaker", {"speaker": "99"}), posts)
+        keep(w, "speaker_bad", post("/api/voice/voices/speaker", {"speaker": "9"}), posts)
+        # "Hear it": a voice's sample. Its WAV answer is bytes, so only the
+        # refusals are kept: a name that is not offered, and a second one
+        # while the first is still being made.
+        keep(w, "sample_bad", post("/api/voice/voices/sample", {"voice": "af_sky"}), posts)
+        with VO._TRY_LOCK:
+            keep(w, "sample_busy", post("/api/voice/voices/sample", {"voice": "af_bella"}),
+                 posts)
         # The voice follows the face: an on/off switch, at once, no card
         # either way. With the red panda showing (appearance.json, the one
         # place both apps keep the face), its own voice stands in.
@@ -553,13 +563,13 @@ def voices_cases():
         # "Try it" for a face that is not an animal (its WAV answer is
         # bytes, not JSON, so only its refusal is kept here).
         keep(w, "animal_set", post("/api/voice/voices/face_animal",
-                                   {"face": "redpanda", "speaker": "3", "semitones": -1.5,
+                                   {"face": "redpanda", "speaker": "af_sarah", "semitones": -1.5,
                                     "pace": "faster"}), posts)
         keep(w, "animal_changed", VO.status(), statuses)
         keep(w, "animal_reset", post("/api/voice/voices/face_animal",
                                      {"face": "redpanda", "reset": True}), posts)
         keep(w, "animal_bad", post("/api/voice/voices/face_animal",
-                                   {"face": "redpanda", "speaker": "3", "semitones": 9,
+                                   {"face": "redpanda", "speaker": "af_sarah", "semitones": 9,
                                     "pace": "normal"}), posts)
         keep(w, "animal_try_bad", post("/api/voice/voices/face_animal/try", {"face": "orbit"}),
              posts)
@@ -593,6 +603,36 @@ def voices_cases():
         (w.dir / "appearance.json").write_text(json.dumps({"face": "monkey"}),
                                                encoding="utf-8")
         keep(w, "face_unanswered_on", VO.status(), statuses)
+
+    # The voice pack (Kokoro v1.0, 2026-09-29): the names each pack offers, the
+    # upgrade line while the old pack is installed, and the one-time carry-over
+    # of an old saved NUMBER to the name it meant (a stand-in voices.bin of each
+    # pack's real size is all the PC looks at - no model is loaded).
+    def install_pack(w, kind):
+        tts = w.dir / "voice-models" / "tts"
+        tts.mkdir(parents=True, exist_ok=True)
+        with open(tts / "voices.bin", "wb") as f:
+            f.truncate(K.voices_file_size(kind))
+
+    with World("both") as w:
+        install_pack(w, "v019")
+        keep(w, "pack_old", VO.status(), statuses)
+    with World("both") as w:
+        install_pack(w, "v1")
+        keep(w, "pack_v1", VO.status(), statuses)
+        keep(w, "pack_v1_heart", post("/api/voice/voices/speaker", {"speaker": "af_heart"}),
+             posts)
+        keep(w, "pack_v1_chosen", VO.status(), statuses)
+        keep(w, "pack_v1_sky", post("/api/voice/voices/speaker", {"speaker": "af_sky"}), posts)
+    with World("both") as w:
+        install_pack(w, "v019")
+        VO._state_path().parent.mkdir(parents=True, exist_ok=True)
+        VO._state_path().write_text(json.dumps({
+            "active": "builtin", "speaker": "9",
+            "face_animals": {"seaotter": {"speaker": "4", "semitones": 3.0, "pace": "normal"},
+                             "monkey": {"speaker": "7", "semitones": 1.0, "pace": "normal"}}}),
+            encoding="utf-8")
+        keep(w, "carried_over", VO.status(), statuses)
 
     # A custom voice chosen, but ZipVoice's files are not on this PC: the
     # built-in voice speaks, and says why.

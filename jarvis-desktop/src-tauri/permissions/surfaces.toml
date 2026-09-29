@@ -551,6 +551,10 @@ permissions = [
   "allow-set-voice-animal",
   "allow-reset-voice-animal",
   "allow-try-voice-animal",
+  # "Hear it" for one built-in voice (the owner, 2026-09-28: Kokoro v1.0): the PC
+  # says one fixed line in it, by name, and changes no setting - the same
+  # shape as "Try it", so no card and never held on a stale link.
+  "allow-hear-voice-sample",
   # The one-time "The Red Panda has its own voice. Use it?" question
   # (the owner, 2026-09-28): the answer, under "Voice follows the face".
   # No card either way, held on a stale link like the switch.

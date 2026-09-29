@@ -1064,12 +1064,15 @@ function paintSpeed() {
 /** "Jarvis's built-in voice": the PC's choices, as radios - the same row
  * as speed, right next to it. */
 function paintSpeaker() {
-  paintChoiceRow(CV.speakerView(cv.status), "cv-speaker", setSpeaker);
+  paintChoiceRow(CV.speakerView(cv.status), "cv-speaker", setSpeaker, hearVoice);
 }
 
 /** The row both speed and the built-in-voice choice use: a title, a
- * detail line, radios for the PC's own choices, and an optional note. */
-function paintChoiceRow(view, prefix, onChoose) {
+ * detail line, radios for the PC's own choices, and an optional note.
+ * `onHear(id, label, button)`: every choice also gets a "Hear it" button
+ * (the built-in voices' samples) - a button beside the radio, not inside
+ * it, so pressing it never changes the choice. */
+function paintChoiceRow(view, prefix, onChoose, onHear = null) {
   $(prefix).hidden = !view.show;
   if (!view.show) return;
   $(`${prefix}-title`).textContent = view.title;
@@ -1096,7 +1099,14 @@ function paintChoiceRow(view, prefix, onChoose) {
     const tick = node("span", "theme-check", "✓");
     tick.setAttribute("aria-hidden", "true");
     row.append(radio, text, tick);
-    return row;
+    if (!onHear) return row;
+    const wrap = node("div", "cv-choice");
+    const hear = button(CV.HEAR_LABEL, () => onHear(c.id, c.label, hear), { ghost: true });
+    hear.classList.add("small");
+    hear.setAttribute("aria-label", `Hear ${c.label}`);
+    hear.dataset.hear = c.id;
+    wrap.append(row, hear);
+    return wrap;
   }));
 }
 
@@ -1362,37 +1372,76 @@ function stopTry(why = "") {
 async function tryAnimal(face) {
   const r = animals.rows.get(face);
   if (!r) return;
+  await playFromPc({
+    command: "try_voice_animal",
+    args: { face },
+    statusEl: r.status,
+    button: r.tryIt,
+    busyWords: CV.TRY_BUSY,
+    playingWords: CV.tryPlaying(r.name),
+    doneWords: CV.tryDone(r.name),
+    // A change still on its way is heard, not the one before it.
+    beforeAsk: async () => {
+      for (let i = 0; i < 100 && (animals.sending || animals.want.size); i += 1) {
+        await new Promise((ok) => setTimeout(ok, 50));
+      }
+    },
+  });
+}
+
+/**
+ * "Hear it" (2026-09-29): the PC says one fixed line in one built-in voice,
+ * by name, and the voice Jarvis uses does not change. The same play-it-here
+ * rules as "Try it": never over Jarvis, stopped the moment a question or an
+ * answer starts, nothing held on a stale link (it changes nothing).
+ */
+async function hearVoice(voice, label, hearButton) {
+  await playFromPc({
+    command: "hear_voice_sample",
+    args: { voice },
+    statusEl: $("cv-speaker-status"),
+    button: hearButton,
+    busyWords: CV.HEAR_BUSY,
+    playingWords: CV.hearPlaying(label),
+    doneWords: CV.hearDone(label),
+  });
+}
+
+/**
+ * Asks the PC for one short sound (`command` returns it as a data URI) and
+ * plays it in this window - "Try it" and "Hear it" both. One at a time: what
+ * was playing stops first. `busyWords` are said instead when Jarvis is talking
+ * or listening, before asking and again after the PC answered.
+ */
+async function playFromPc({ command, args, statusEl, button: askButton, busyWords, playingWords, doneWords, beforeAsk }) {
   stopTry();
   if (jarvisBusy()) {
-    say(r.status, CV.TRY_BUSY, "bad");
+    say(statusEl, busyWords, "bad");
     return;
   }
-  r.tryIt.disabled = true;
-  say(r.status, CV.TRY_ASKING);
+  askButton.disabled = true;
+  say(statusEl, CV.TRY_ASKING);
   try {
-    // A change still on its way is heard, not the one before it.
-    for (let i = 0; i < 100 && (animals.sending || animals.want.size); i += 1) {
-      await new Promise((ok) => setTimeout(ok, 50));
-    }
-    const reply = await invoke("try_voice_animal", { face });
+    if (beforeAsk) await beforeAsk();
+    const reply = await invoke(command, args);
     if (!reply || typeof reply.audio !== "string" || !reply.audio.startsWith("data:audio/")) {
       const words = CV.voiceReply(reply, APPROVE_WHERE);
-      say(r.status, words.tone === "bad" ? words.text : "The PC sent no sound.", "bad");
+      say(statusEl, words.tone === "bad" ? words.text : "The PC sent no sound.", "bad");
       return;
     }
     // Asked again: the PC took a moment, and a question may have begun.
     if (jarvisBusy()) {
-      say(r.status, CV.TRY_BUSY, "bad");
+      say(statusEl, busyWords, "bad");
       return;
     }
     const audio = new Audio(reply.audio);
     const mine = () => animals.playing && animals.playing.audio === audio;
-    animals.playing = { audio, row: r };
-    say(r.status, CV.tryPlaying(r.name), "ok");
+    animals.playing = { audio, row: { status: statusEl } };
+    say(statusEl, playingWords, "ok");
     audio.addEventListener("ended", () => {
       if (!mine()) return;
       animals.playing = null;
-      say(r.status, CV.tryDone(r.name), "ok");
+      say(statusEl, doneWords, "ok");
     });
     try {
       await audio.play();
@@ -1401,9 +1450,9 @@ async function tryAnimal(face) {
       throw error;
     }
   } catch (error) {
-    say(r.status, problemWords(error), "bad");
+    say(statusEl, problemWords(error), "bad");
   } finally {
-    r.tryIt.disabled = false;
+    askButton.disabled = false;
   }
 }
 

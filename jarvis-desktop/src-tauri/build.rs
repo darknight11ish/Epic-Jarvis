@@ -335,6 +335,7 @@ fn main() {
             "set_voice_animal",
             "reset_voice_animal",
             "try_voice_animal",
+            "hear_voice_sample",
             "get_face_voice_offer",
             "answer_face_voice_offer",
             // Widget geometry and capture

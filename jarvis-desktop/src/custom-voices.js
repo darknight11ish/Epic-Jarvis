@@ -227,6 +227,28 @@ export const tryPlaying = (name) => `Playing the ${name}'s voice.`;
 /** Once it has played to the end. */
 export const tryDone = (name) => `That was the ${name}'s voice.`;
 
+/*
+ * "Hear it" for one built-in voice (2026-09-29): a button on every voice in
+ * "Jarvis's built-in voice". The PC says one fixed line in that voice, by
+ * name, and the voice Jarvis uses does not change. It plays the way "Try it"
+ * does - here, never over Jarvis, stopped when a question or answer starts -
+ * and says the same words as "Try it" while it asks (`TRY_ASKING`) and when a
+ * question cuts it short (`TRY_STOPPED`). The phone says exactly the same
+ * (CustomVoices.kt `HEAR_*`, held together by tests/custom-voices.mjs).
+ */
+/** The button on each voice. */
+export const HEAR_LABEL = "Hear it";
+/** Refused: Jarvis is talking, or listening to the owner, or Jarvis Live has the microphone. */
+export const HEAR_BUSY = "Jarvis is busy talking or listening. Try again in a moment.";
+/** Refused: App lock would ask again (the button is out of reach then; belt and braces). */
+export const HEAR_LOCKED = "Jarvis is locked right now. Unlock it, then try again.";
+/** A PC whose backend has no sample route yet (said by the Rust, voice_training.rs). */
+export const HEAR_UPDATE = "Your PC cannot play voice samples yet. Run the patch script on the PC first.";
+/** While it plays: the voice's own label ("American (female) - Bella"). */
+export const hearPlaying = (label) => `Playing ${label}.`;
+/** Once it has played to the end. */
+export const hearDone = (label) => `That was ${label}.`;
+
 /** Which voice Jarvis speaks in, and what makes the next sentence. */
 export function speakingLine(status) {
   const st = obj(status);

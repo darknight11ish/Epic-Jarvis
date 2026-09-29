@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-hear-voice-sample"
+description = "Enables the hear_voice_sample command without any pre-configured scope."
+commands.allow = ["hear_voice_sample"]
+
+[[permission]]
+identifier = "deny-hear-voice-sample"
+description = "Denies the hear_voice_sample command without any pre-configured scope."
+commands.deny = ["hear_voice_sample"]

@@ -334,15 +334,19 @@ class CustomVoicesTest {
     @Test
     fun `Jarvis's built-in voice - the PC's choices and words, no card`() {
         val sk = requireNotNull(status("empty").speaker) { "no speaker block" }
-        assertEquals((0..10).map { it.toString() }, sk.choices.map { it.id })
+        // By NAME since 2026-09-29 (Kokoro v1.0); no pack installed = the old list.
+        assertEquals(
+            listOf("af", "af_bella", "af_nicole", "af_sarah", "am_michael", "bf_emma", "bf_isabella", "bm_george", "bm_lewis"),
+            sk.choices.map { it.id },
+        )
         assertEquals("American (female)", sk.choices[0].label)
-        assertEquals("British (male) - George", sk.choices[9].label)
-        assertEquals("0", sk.choice)
+        assertEquals("British (male) - George", sk.choices[7].label)
+        assertEquals("af", sk.choice)
         assertEquals(CustomVoices.SPEAKER_TITLE, sk.title)
         assertEquals("", sk.note)
-        assertEquals("9", status("speaker_9").speaker?.choice)
-        assertEquals("{\"speaker\":\"9\"}", CustomVoices.speakerBody("9"))
-        val a = answer("speaker_9")
+        assertEquals("bm_george", status("speaker_george").speaker?.choice)
+        assertEquals("{\"speaker\":\"bm_george\"}", CustomVoices.speakerBody("bm_george"))
+        val a = answer("speaker_george")
         assertTrue(a.accepted)
         assertFalse("no card for the built-in voice choice", a.pending)
         assertEquals("Jarvis's built-in voice is now British (male) - George.", CustomVoices.answerLine(a))
@@ -416,7 +420,8 @@ class CustomVoicesTest {
         for (case in voices["status"]!!.jsonObject.keys) {
             val fv = requireNotNull(status(case).faceVoice) { "$case: no face_voice" }
             assertEquals(case, listOf("redpanda", "pygmyowl", "seaotter", "monkey"), fv.animals.map { it.face })
-            assertEquals(case, 11, fv.choices.voices.size)
+            assertTrue("$case: ${fv.choices.voices.size} voices", fv.choices.voices.size >= 9)
+            assertTrue(case, fv.choices.voices.none { it.id == "af_sky" || it.id == "am_adam" })
             assertEquals(case, listOf("slower", "normal", "faster"), fv.choices.paces.map { it.id })
             assertEquals(case, -3.0, fv.choices.pitchMin, 0.0)
             assertEquals(case, 4.0, fv.choices.pitchMax, 0.0)
@@ -425,13 +430,18 @@ class CustomVoicesTest {
         }
         val own = requireNotNull(status("face_showing").faceVoice).animals
         assertEquals(
-            listOf(Triple("1", 2.0, "normal"), Triple("2", 1.0, "slower"), Triple("3", 3.0, "faster"), Triple("6", 1.0, "normal")),
+            listOf(
+                Triple("af_bella", 2.0, "normal"),
+                Triple("af_nicole", 1.0, "slower"),
+                Triple("af_sarah", 3.0, "faster"),
+                Triple("am_michael", 1.0, "normal"),
+            ),
             own.map { Triple(it.speaker, it.semitones, it.pace) },
         )
         assertFalse(own.any { it.changed })
         assertEquals("Bella, 2 steps higher, at normal pace.", own[0].line)
         val panda = requireNotNull(status("animal_changed").faceVoice).animals[0]
-        assertEquals("3", panda.speaker)
+        assertEquals("af_sarah", panda.speaker)
         assertEquals(-1.5, panda.semitones, 0.0)
         assertEquals("faster", panda.pace)
         assertTrue(panda.changed)
@@ -464,8 +474,8 @@ class CustomVoicesTest {
     @Test
     fun `each animal's voice - what is sent, and the pitch in words`() {
         assertEquals(
-            "{\"face\":\"redpanda\",\"speaker\":\"3\",\"semitones\":-1.5,\"pace\":\"faster\"}",
-            CustomVoices.animalBody("redpanda", "3", -1.5, "faster"),
+            "{\"face\":\"redpanda\",\"speaker\":\"af_sarah\",\"semitones\":-1.5,\"pace\":\"faster\"}",
+            CustomVoices.animalBody("redpanda", "af_sarah", -1.5, "faster"),
         )
         assertEquals("2.0", CustomVoices.halfSteps(2.0))
         assertEquals("0.5", CustomVoices.halfSteps(0.4999))
@@ -502,6 +512,74 @@ class CustomVoicesTest {
         assertEquals(429, busy.code)
         assertEquals(
             "The PC is still making the sound for the last Try it. Try it again in a moment.",
+            CustomVoices.sentence(busy.error),
+        )
+    }
+
+    @Test
+    fun `the voice pack - by name, two packs, and the choice that carried over`() {
+        // The old pack offers nine and says where the new one is; Kokoro v1.0
+        // offers eleven, Heart first (the best rated), and says nothing.
+        val old = requireNotNull(status("pack_old").speaker)
+        assertEquals(9, old.choices.size)
+        assertTrue(old.note, old.note.startsWith("Better voices are available: Kokoro v1.0 "))
+        val v1 = requireNotNull(status("pack_v1").speaker)
+        assertEquals(
+            listOf(
+                "af_heart", "af_bella", "af_nicole", "af_sarah", "am_michael", "am_fenrir", "am_puck",
+                "bf_emma", "bf_isabella", "bm_george", "bm_lewis",
+            ),
+            v1.choices.map { it.id },
+        )
+        assertEquals("af_heart", v1.choice)
+        assertEquals("", v1.note)
+        assertEquals("American (female) - Heart", v1.choices[0].label)
+        assertEquals("af_heart", status("pack_v1_chosen").speaker?.choice)
+        assertEquals(
+            "Jarvis's built-in voice is now American (female) - Heart.",
+            CustomVoices.answerLine(answer("pack_v1_heart")),
+        )
+        // Sky is not offered, so it cannot be chosen.
+        assertEquals("Choose one of the listed voices.", CustomVoices.answerLine(answer("pack_v1_sky")))
+        // The owner's old saved 9 is still George; the otter's saved Sky went
+        // back to its own voice, and the monkey's own pick (7) is Emma now.
+        assertEquals("bm_george", status("carried_over").speaker?.choice)
+        val animals = requireNotNull(status("carried_over").faceVoice).animals.associateBy { it.face }
+        assertEquals("af_sarah", animals.getValue("seaotter").speaker)
+        assertFalse(animals.getValue("seaotter").changed)
+        assertEquals("bf_emma", animals.getValue("monkey").speaker)
+        assertTrue(animals.getValue("monkey").changed)
+        // Every id the PC sends is a voice's name, never a number.
+        for (case in voices["status"]!!.jsonObject.keys) {
+            val sk = status(case).speaker ?: continue
+            assertTrue(case, sk.choices.all { Regex("^[a-z]{2}(_[a-z]+)?$").matches(it.id) })
+        }
+    }
+
+    @Test
+    fun `Hear it - the desktop's words, no card, and one at a time on the PC`() {
+        // The same sentences as custom-voices.js (the desktop's
+        // tests/custom-voices.mjs reads this file and holds the two together).
+        assertEquals("Hear it", CustomVoices.HEAR_LABEL)
+        assertEquals("Jarvis is busy talking or listening. Try again in a moment.", CustomVoices.HEAR_BUSY)
+        assertEquals("Jarvis is locked right now. Unlock it, then try again.", CustomVoices.HEAR_LOCKED)
+        assertEquals(
+            "Your PC cannot play voice samples yet. Run the patch script on the PC first.",
+            CustomVoices.HEAR_UPDATE,
+        )
+        assertEquals("Playing American (female) - Bella.", CustomVoices.hearPlaying("American (female) - Bella"))
+        assertEquals("That was American (female) - Bella.", CustomVoices.hearDone("American (female) - Bella"))
+        // Only the voice's name is sent, never any words.
+        assertEquals("{\"voice\":\"bm_george\"}", CustomVoices.sampleBody("bm_george"))
+        assertEquals("/api/voice/voices/sample", CustomVoices.SAMPLE_PATH)
+        // The PC's own refusals, as it says them.
+        val bad = answer("sample_bad")
+        assertEquals(400, bad.code)
+        assertEquals("Choose one of the listed voices.", CustomVoices.sentence(bad.error))
+        val busy = answer("sample_busy")
+        assertEquals(429, busy.code)
+        assertEquals(
+            "The PC is still making the sound for the last Hear it. Try again in a moment.",
             CustomVoices.sentence(busy.error),
         )
     }

@@ -730,10 +730,36 @@ The monkey (2026-09-28) was the fourth, added by this list:
   `critterFace({...})` with its flat drawing and a `<script>` tag in
   `faces.html`, one `object ... : CritterFace` in `CritterFaces.kt`, listed
   in `Faces.all` and `warmCritterShaders()`.
-- **Voice:** a row in `backend/jarvis_voices.py` `FACE_VOICES` and
-  `voice_training.rs` `ANIMALS`, then `gen_voice_training_cases.py` and
-  `gen_phone_voice_cases.py`.
+- **Voice:** a row in `backend/jarvis_voices.py` `FACE_VOICES` (the Kokoro
+  voice's NAME, e.g. `"af_bella"`, never a number) and `voice_training.rs`
+  `ANIMALS`, then `gen_voice_training_cases.py` and
+  `gen_phone_voice_cases.py`. Never `af_sky` or `am_adam`
+  (`jarvis_kokoro.NEVER_FOR_ANIMALS`).
 - **Measure:** `python3 tools/shader_size.py`, and render it.
+
+### The animals' voices on Kokoro v1.0 (2026-09-29)
+
+The built-in voice pack can now be Kokoro v1.0 (`docs/JARVIS-API.md` section
+91), and the voices are saved by NAME. The four animals keep their four
+voices - the same names exist in both packs:
+
+| Animal | Voice | Middle pitch, one sentence (v0.19, then v1.0) | Length of the sentence |
+|---|---|---|---|
+| Red Panda | `af_bella` | 207 Hz, 198 Hz | 3.93 s, 4.15 s |
+| Pygmy Owl | `af_nicole` | 160 Hz, 156 Hz | 4.75 s, 5.12 s |
+| Sea Otter | `af_sarah` | 205 Hz, 197 Hz | 4.24 s, 4.07 s |
+| Monkey | `am_michael` | 126 Hz, 121 Hz | 4.36 s, 4.33 s |
+
+**MEASURED, not listened to**: both packs were run in sherpa-onnx 1.13.8 on
+the sentence "Hello, it's Jarvis. This is how I sound today, and I hope you
+like it." (an autocorrelation estimate of the middle pitch of the voiced
+frames, 70-400 Hz). Each voice keeps its pitch within 5% and its pace within
+8%, so no animal needed another voice for the upgrade, and the animals' own
+pitch and pace rows did not move. **The sea otter is never `af_sky`** (the
+owner's 2026-09-28 rule): Sky and `am_adam` are not offered to anyone, and an
+animal choice saved as either goes back to the animal's own voice
+(`jarvis_kokoro.NEVER_FOR_ANIMALS`). British voices (`bf_*`, `bm_*`) are asked
+for British English on v1.0 only.
 
 ### On a PC without a working graphics card
 
