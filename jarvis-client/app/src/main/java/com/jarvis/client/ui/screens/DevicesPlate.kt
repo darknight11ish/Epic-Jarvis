@@ -20,6 +20,7 @@ import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Devices
+import com.jarvis.client.net.SignedApproval
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
@@ -28,6 +29,7 @@ import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.theme.LocalChrome
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -56,8 +58,23 @@ internal fun DevicesSection() {
     var askingRetire by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
+    var local by remember { mutableStateOf(SignedApproval.Local.NONE) }
+
+    // Signed approvals (design §11): waiting for the owner's yes on the PC
+    // is re-read every few seconds until the PC says it is on.
+    val signedState = view?.let { v ->
+        SignedApproval.stateOf(v.usesOwnKey, v.devices.firstOrNull { it.thisDevice }?.approvalKey, local)
+    }
+    val signedWaiting = signedState == SignedApproval.State.WAITING
+    LaunchedEffect(reads, signedWaiting) {
+        if (signedWaiting) {
+            delay(3_000)
+            reads += 1
+        }
+    }
 
     LaunchedEffect(reads) {
+        local = JarvisRuntime.approvalKeyLocal()
         when (val r = JarvisRuntime.devices()) {
             is ApiResult.Ok -> {
                 view = Devices.parse(r.value)
@@ -139,6 +156,53 @@ internal fun DevicesSection() {
                                         asking = null
                                         reads += 1
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (signedState != null &&
+                    signedState != SignedApproval.State.UNSUPPORTED &&
+                    signedState != SignedApproval.State.NOT_PAIRED
+                ) {
+                    Gap(14)
+                    Text("Signed approvals", style = MaterialTheme.typography.labelLarge, color = chrome.textHi)
+                    Text(signedState.line, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                    Gap(4)
+                    Text(
+                        "Risky approvals from this phone are signed with your fingerprint or PIN, and your " +
+                            "PC checks the signature. Without it, this phone cannot approve risky cards.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = chrome.textMid,
+                    )
+                    Gap(6)
+                    val turnOnLabel =
+                        if (signedState == SignedApproval.State.AGAIN) "Turn on signed approvals again" else SignedApproval.TURN_ON
+                    if (signedState == SignedApproval.State.OFF || signedState == SignedApproval.State.AGAIN) {
+                        Secondary(turnOnLabel, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
+                            busy = true
+                            scope.launch {
+                                try {
+                                    said = JarvisRuntime.turnOnSignedApprovals()
+                                } finally {
+                                    busy = false
+                                    reads += 1
+                                }
+                            }
+                        }
+                    }
+                    if (signedState == SignedApproval.State.ON || signedState == SignedApproval.State.WAITING ||
+                        (signedState == SignedApproval.State.AGAIN && local != SignedApproval.Local.NONE)
+                    ) {
+                        Quiet(SignedApproval.TURN_OFF, color = chrome.textMid, enabled = !busy) {
+                            busy = true
+                            scope.launch {
+                                try {
+                                    said = JarvisRuntime.turnOffSignedApprovals()
+                                } finally {
+                                    busy = false
+                                    reads += 1
                                 }
                             }
                         }

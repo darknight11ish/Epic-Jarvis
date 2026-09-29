@@ -493,6 +493,15 @@ private fun HomeNotice(state: HomeState, actions: HomeActions) {
         )
         return
     }
+    if (problem == null && com.jarvis.client.net.SignedApproval.offersTurnOn(text)) {
+        Notice(
+            text,
+            actions.onDismissNotice,
+            actionLabel = com.jarvis.client.net.SignedApproval.TURN_ON,
+            onAction = actions.onTurnOnSignedApprovals,
+        )
+        return
+    }
     Notice(
         text,
         actions.onDismissNotice,
@@ -612,6 +621,12 @@ data class HomeActions(
      * risky approval", 2026-09-25).
      */
     val onOpenLockSettings: () -> Unit = {},
+    /**
+     * The one button beside the notice "Risky approvals from this phone need
+     * to be signed...": makes the approval key and asks the PC for its card
+     * ([com.jarvis.client.net.SignedApproval.offersTurnOn]).
+     */
+    val onTurnOnSignedApprovals: () -> Unit = {},
     /**
      * Start or end a temporary chat - a new conversation either way
      * ([com.jarvis.client.JarvisRuntime.setTemporaryChat]).
