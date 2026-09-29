@@ -137,7 +137,7 @@ def _audit(event: str, detail: dict) -> None:
 # --------------------------------------------------------------------------
 
 _A_LOCK = threading.Lock()
-_A_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}}
+_A_STATE: dict = {"pending": {}, "withdrawn": set(), "silent": set(), "last": {}}
 #: Held while a card's yes is written (the merge itself) and while a task is
 #: discarded or a project deleted, so the two never interleave.
 _A_SWITCH = threading.RLock()
@@ -162,6 +162,10 @@ def withdraw_card(app: str, *, forget_last: bool = True) -> None:
         p = _A_STATE["pending"].pop(app, None)
         if p:
             _A_STATE["withdrawn"].add(p["token"])
+            if forget_last:
+                # Its late yes must not write an outcome for an app that has
+                # no project any more (it would greet the next owner of it).
+                _A_STATE["silent"].add(p["token"])
         if forget_last:
             _A_STATE["last"].pop(app, None)
 
@@ -175,6 +179,9 @@ def _finish(app: str, token: str, task: str, outcome: str, why: str = "") -> Non
         if p and p.get("token") == token:
             _A_STATE["pending"].pop(app, None)
         _A_STATE["withdrawn"].discard(token)
+        if token in _A_STATE["silent"]:
+            _A_STATE["silent"].discard(token)
+            return
         _A_STATE["last"][app] = {"task": task, "outcome": outcome, "message": message,
                                  "at": time.time()}
     _audit("apps.merge.card", {"outcome": outcome})
@@ -636,5 +643,6 @@ def _reset_for_tests() -> None:
     with _A_LOCK:
         _A_STATE["pending"].clear()
         _A_STATE["withdrawn"].clear()
+        _A_STATE["silent"].clear()
         _A_STATE["last"].clear()
     _ARMED = False
