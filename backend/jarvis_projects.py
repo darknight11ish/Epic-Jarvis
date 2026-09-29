@@ -23,6 +23,12 @@ WHAT IS BUILT HERE, AND WHAT IS NOT (build steps 1 and 2 only)
     text is kept, marked "not runnable yet". Nothing in this file runs a
     command, opens a socket, calls a model or writes a file outside
     projects.db.
+  * APPS (2026-09-29, docs/APPS-IN-PROJECTS-DESIGN.md): a coding project
+    may be a Jarvis-built app - `app` names its folder under
+    `<settings folder>/apps/` (jarvis_app_workspace.py), never together with
+    a `folder`. Its tasks, the merge card and the routes are in
+    jarvis_apps.py; this file keeps the link (the `app` column), makes or
+    adopts the folder when the project is made, and never deletes it.
   * Not built: running benchmarks (the fence, build step 6), Jarvis
     changing code (`project_edit`, build steps 5 and 7 - after the 12 GB
     card is installed and measured, the owner's answer of 2026-09-28), the
@@ -145,6 +151,19 @@ SHARE_WAITING = "Waiting for your yes on the approval card."
 KEEP_ON_SCREEN = "Health or money: kept on screen, never read aloud or sent anywhere."
 
 _ID = re.compile(r"[0-9a-f]{32}")
+APP_ONLY_WORDS = "This project's files are its app."
+APP_CHOSEN_WORDS = "An app is chosen when the project is made."
+APP_AND_FOLDER_WORDS = "A project has a folder or an app, not both."
+
+
+class NoSuchApp(LookupError):
+    """An app folder that does not exist (a 404 with its own sentence)."""
+
+
+class Unavailable(Exception):
+    """git is missing or stuck: a 503 with the sentence (nothing typed was wrong)."""
+
+
 _GOAL_ID = re.compile(r"[A-Za-z0-9_-]{1,64}")
 
 # --------------------------------------------------------------------------
@@ -413,7 +432,8 @@ CREATE TABLE IF NOT EXISTS projects (
     work_list TEXT,
     goals TEXT NOT NULL DEFAULT '[]',
     created REAL NOT NULL,
-    changed REAL NOT NULL
+    changed REAL NOT NULL,
+    app TEXT
 );
 CREATE TABLE IF NOT EXISTS benchmarks (
     id TEXT PRIMARY KEY,
@@ -468,6 +488,21 @@ def _with_unit(v: float, unit: str) -> str:
     return f"{n} {unit}"
 
 
+def _workspace():
+    import jarvis_app_workspace
+    return jarvis_app_workspace
+
+
+def _app_view(app: str, *, full: bool) -> dict:
+    """The `app` object of a project view (jarvis_apps builds it: the list
+    gets the short form, one project the whole)."""
+    try:
+        import jarvis_apps
+        return jarvis_apps.full(app) if full else jarvis_apps.summary(app)
+    except Exception:
+        return {"name": app, "type": "", "tasks": 0, "merge_waiting": False}
+
+
 class Projects:
     def __init__(self, path: Optional[Path] = None, *, clock: Callable[[], float] = time.time):
         self.path = Path(path) if path is not None else db_path()
@@ -488,6 +523,14 @@ class Projects:
                 # A projects.db from build steps 1 and 2, before an automatic
                 # mark could be taken off.
                 c.execute("ALTER TABLE benchmarks ADD COLUMN auto_cleared TEXT")
+            pcols = {r[1] for r in c.execute("PRAGMA table_info(projects)").fetchall()}
+            if "app" not in pcols:
+                # A projects.db from before apps joined Projects (2026-09-29).
+                c.execute("ALTER TABLE projects ADD COLUMN app TEXT")
+            # One project per app folder. After the column exists, so an old
+            # file gets the column first.
+            c.execute("CREATE UNIQUE INDEX IF NOT EXISTS projects_by_app ON projects (app) "
+                      "WHERE app IS NOT NULL")
             c.commit()
             self._ready = True
         return c
@@ -597,6 +640,7 @@ class Projects:
             "goals": json.loads(r["goals"] or "[]"),
             "benchmarks": len(benches),
             "created": r["created"], "changed": r["changed"],
+            "app": _app_view(r["app"], full=full) if r["app"] else None,
         }
         if full:
             v["instructions"] = r["instructions"]
@@ -605,6 +649,23 @@ class Projects:
             v["max"] = {"instructions": MAX_INSTRUCTIONS, "notes": MAX_NOTES,
                         "note": MAX_NOTE, "benchmarks": MAX_BENCHMARKS}
         return v
+
+    def unlinked_apps(self) -> list:
+        """App folders in Jarvis's apps folder that no project uses: an offer
+        inside Projects (adopt one with POST /api/projects {"app": {"adopt":
+        ...}}). There is no separate list of apps."""
+        try:
+            import jarvis_app_workspace as W
+            found = W.list_projects()
+        except Exception:
+            return []
+        linked = set()
+        if self.exists():
+            with self._lock, self._db() as c:
+                linked = {r[0] for r in c.execute(
+                    "SELECT app FROM projects WHERE app IS NOT NULL").fetchall()}
+        return [{"name": a["name"], "type": a["kind"], "title": a["title"]}
+                for a in found if a["name"] not in linked]
 
     def list(self) -> list:
         if not self.exists():
@@ -617,15 +678,46 @@ class Projects:
         with self._lock, self._db() as c:
             return self._view(c, self._project_row(c, pid), full=True)
 
+    def app_of(self, pid: str) -> dict:
+        """{"name": the project's name, "app": its app folder name or None} -
+        a light read for jarvis_apps (no git, no benchmarks)."""
+        with self._lock, self._db() as c:
+            r = self._project_row(c, pid)
+            return {"name": r["name"], "app": r["app"]}
+
     # ---- projects -----------------------------------------------------------------
 
     def create(self, body: dict, *, here: bool) -> dict:
         if not isinstance(body, dict):
             raise ValueError('need {"name": ..., "kind": "coding" or "life"}')
-        name = _one_line(body.get("name"), MAX_NAME, "a project's name", required=True)
         kind = body.get("kind")
         if kind not in KINDS:
             raise ValueError('a project is "coding" or "life"')
+        app_type, adopt = None, None
+        if body.get("app") is not None:
+            # An app Jarvis builds: new (`type`) or an existing folder with no
+            # project (`adopt`). Coding only, and never with a folder.
+            req = body.get("app")
+            if not isinstance(req, dict):
+                raise ValueError('"app" is {"type": "web"} or {"adopt": "<folder name>"}')
+            if kind != "coding":
+                raise ValueError("only a coding project can be an app")
+            if body.get("folder") not in (None, ""):
+                raise ValueError(APP_AND_FOLDER_WORDS)
+            if req.get("adopt") is not None:
+                adopt = req.get("adopt")
+                if not isinstance(adopt, str):
+                    raise ValueError("the app to add is named by its folder name")
+            else:
+                app_type = req.get("type")
+                if app_type not in ("web", "android"):
+                    raise ValueError('an app is "web" or "android"')
+        if adopt is not None and body.get("name") in (None, ""):
+            found = {a["name"]: a for a in _workspace().list_projects()}
+            name = _one_line((found.get(adopt) or {}).get("title") or adopt, MAX_NAME,
+                             "a project's name", required=True)
+        else:
+            name = _one_line(body.get("name"), MAX_NAME, "a project's name", required=True)
         instructions = _text(body.get("instructions"), MAX_INSTRUCTIONS, "the instructions")
         notes = clean_notes(body.get("notes"))
         goals = clean_goals(body.get("goals"))
@@ -654,13 +746,61 @@ class Projects:
                          (name,)).fetchone():
                 raise OverflowError("there is already a project with that name")
             self._list_free(c, work_list, None)
-            c.execute("INSERT INTO projects (id, name, kind, instructions, notes, folder, "
-                      "shareable, work_list, goals, created, changed) "
-                      "VALUES (?,?,?,?,?,?,0,?,?,?,?)",
-                      (pid, name, kind, instructions, json.dumps(notes), folder, work_list,
-                       json.dumps(goals), now, now))
-        _audit("projects.create", {"id": pid, "kind": kind})
+            app, made = None, False
+            if adopt is not None:
+                app = self._check_adopt(c, adopt)
+            elif app_type is not None:
+                app = self._make_app(c, name, app_type)
+                made = True
+            try:
+                c.execute("INSERT INTO projects (id, name, kind, instructions, notes, folder, "
+                          "shareable, work_list, goals, created, changed, app) "
+                          "VALUES (?,?,?,?,?,?,0,?,?,?,?,?)",
+                          (pid, name, kind, instructions, json.dumps(notes), folder, work_list,
+                           json.dumps(goals), now, now, app))
+            except Exception as exc:
+                if made:
+                    # Only the folder THIS call just made: never another.
+                    _workspace().remove_new_project(app)
+                if isinstance(exc, sqlite3.IntegrityError) and app:
+                    raise OverflowError("that app already has a project") from exc
+                raise
+        _audit("projects.create", {"id": pid, "kind": kind, "app": bool(app)})
         return self.get(pid)
+
+    def _check_adopt(self, c, adopt: str) -> str:
+        W = _workspace()
+        try:
+            W.check_name(adopt)
+        except W.WorkspaceError as exc:
+            raise ValueError(str(exc)) from exc
+        if adopt not in {a["name"] for a in W.list_projects()}:
+            raise NoSuchApp("There is no app folder with that name.")
+        if c.execute("SELECT 1 FROM projects WHERE app = ?", (adopt,)).fetchone():
+            raise OverflowError("that app already has a project")
+        return adopt
+
+    def _make_app(self, c, name: str, app_type: str) -> str:
+        """A new, empty app folder for this project (no card: an empty folder
+        in Jarvis's own folder, nothing runs)."""
+        W = _workspace()
+        import jarvis_apps
+        taken = {a["name"] for a in W.list_projects()}
+        taken |= {r[0] for r in c.execute("SELECT app FROM projects WHERE app IS NOT NULL")}
+        try:
+            root = W.root()
+            if root.is_dir():
+                taken |= {d.name for d in root.iterdir()}
+        except OSError:
+            pass
+        slug = jarvis_apps.slug(name, taken)
+        try:
+            W.create_project(slug, app_type, name)
+        except W.GitUnavailable as exc:
+            raise Unavailable(str(exc)) from exc
+        except W.WorkspaceError as exc:
+            raise ValueError(str(exc)) from exc
+        return slug
 
     def _list_free(self, c, work_list: Optional[str], pid: Optional[str]) -> None:
         if not work_list:
@@ -696,6 +836,10 @@ class Projects:
                 args.append(name)
             if "kind" in body and body.get("kind") != r["kind"]:
                 raise ValueError("a project's kind cannot change - make a new project")
+            if "app" in body:
+                raise ValueError(APP_CHOSEN_WORDS)
+            if r["app"] and body.get("folder") not in (None, ""):
+                raise ValueError(APP_ONLY_WORDS)
             if "instructions" in body:
                 sets.append("instructions = ?")
                 args.append(_text(body.get("instructions"), MAX_INSTRUCTIONS,
@@ -743,12 +887,19 @@ class Projects:
         return self.get(pid)
 
     def delete(self, pid: str) -> bool:
+        self.delete_full(pid)
+        return True
+
+    def delete_full(self, pid: str) -> dict:
+        """Deletes the project; answers {"app": <folder name or None>}. An app
+        project's FOLDER is never deleted - only the record and its
+        benchmarks - and a merge card waiting for it is withdrawn."""
         with _P_SWITCH:
             return self._delete(pid)
 
-    def _delete(self, pid: str) -> bool:
+    def _delete(self, pid: str) -> dict:
         with self._lock, self._db() as c:
-            self._project_row(c, pid)
+            app = self._project_row(c, pid)["app"]
             benches = [b["id"] for b in c.execute("SELECT id FROM benchmarks WHERE project = ?",
                                                   (pid,)).fetchall()]
             for bid in benches:
@@ -758,8 +909,14 @@ class Projects:
         _withdraw_share(pid)
         for bid in benches:
             _withdraw_unmark(bid)
-        _audit("projects.delete", {"id": pid, "benchmarks": len(benches)})
-        return True
+        if app:
+            try:
+                import jarvis_apps
+                jarvis_apps.withdraw_card(app)
+            except ImportError:
+                pass
+        _audit("projects.delete", {"id": pid, "benchmarks": len(benches), "app": bool(app)})
+        return {"app": app}
 
     def set_shareable_on(self, pid: str) -> None:
         with self._lock, self._db() as c:
@@ -1691,6 +1848,10 @@ def parse_route(route: str) -> Optional[tuple]:
 def _err(exc) -> tuple:
     """(status, body) for the plain exceptions the store raises - never a
     stack trace reaching an app."""
+    if isinstance(exc, NoSuchApp):
+        return 404, {"ok": False, "error": _sentence(exc)}
+    if isinstance(exc, Unavailable):
+        return 503, {"ok": False, "error": _sentence(exc)}
     if isinstance(exc, KeyError):
         return 404, {"ok": False, "error": "no such project, benchmark or number"}
     if isinstance(exc, PermissionError):
@@ -1717,7 +1878,8 @@ def handle_get(route: str, query: str = "", *, store: Optional[Projects] = None)
         if hit[0] == "list":
             items = store.list()
             return 200, {"ok": True, "available": True, "title": TITLE, "projects": items,
-                         "empty": EMPTY if not items else "", "max": MAX_PROJECTS}
+                         "empty": EMPTY if not items else "", "max": MAX_PROJECTS,
+                         "unlinked_apps": store.unlinked_apps()}
         if hit[0] == "project":
             return 200, {"ok": True, "project": store.get(hit[1])}
         if hit[0] == "bench":
@@ -1744,8 +1906,11 @@ def handle_post(route: str, body, *, here: bool = False,
         if kind == "project":
             return 200, {"ok": True, "project": store.update(hit[1], body, here=here)}
         if kind == "project_delete":
-            store.delete(hit[1])
-            return 200, {"ok": True, "deleted": True}
+            gone = store.delete_full(hit[1])
+            out = {"ok": True, "deleted": True}
+            if gone.get("app"):
+                out["app_kept"] = gone["app"]
+            return 200, out
         if kind == "shareable":
             return request_shareable(hit[1], body, store=store, **card)
         if kind == "benchmarks":

@@ -563,8 +563,10 @@ def plan_merge(name: str, task: str) -> MergePlan:
     if not plan.files:
         plan.refused = "this task has not changed anything yet"
     elif len(plan.diff) > MAX_CARD_DIFF_CHARS:
-        plan.refused = (f"this change is too big to show on one card ({len(plan.files)} "
-                        "files) - ask Jarvis to split it into smaller steps")
+        n = len(plan.files)
+        plan.refused = (f"this change is too big to show on one card ({n} "
+                        f"file{'s' if n != 1 else ''}) - ask Jarvis to split it into "
+                        "smaller steps")
     return plan
 
 
