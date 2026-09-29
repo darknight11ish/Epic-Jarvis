@@ -60,7 +60,7 @@ object ScreenNever {
         PASSWORD_MANAGER("password_manager", "a password manager"),
         BANKING("banking", "an app that looks like a bank or payment app"),
         OWNER("never_look", "an app on your Never look at list"),
-        UNKNOWN_APP("unknown_app", "a screen Jarvis cannot tell the app of"),
+        UNKNOWN_APP("unknown_app", "a screen Jarvis cannot tell which app it belongs to"),
     }
 
     /**
@@ -86,11 +86,12 @@ object ScreenNever {
         "Off by default. When on, pressing and holding Home (or your phone's assistant " +
             "gesture) lets Jarvis read the WORDS on the screen in front, for your next " +
             "question - this works only when Jarvis is set as your phone's assistant app. " +
+            "Set this in Android Settings, Default apps, Digital assistant app. " +
             "It also lets you start \"Watch this phone with me\" on Home, where Jarvis " +
             "takes one picture only when you ask a question. Nothing is saved, and the " +
             "words or picture go only to your PC, over your private link. Turning it on " +
             "asks for your fingerprint or PIN."
-    const val LIST_TITLE = "Never look at these apps"
+    const val LIST_TITLE = "Never look at list"
     const val LIST_DETAIL =
         "Jarvis never looks at itself, at a password manager, or at an app that looks like " +
             "a bank or payment app. That last check is a guess from the app's name and " +

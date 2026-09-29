@@ -52,11 +52,11 @@ object ScreenRules {
         "hint" to "Press the Look at this key, then ask - Jarvis reads the words on the window in " +
             "front, once, and keeps nothing.",
         "held" to "Jarvis is holding what it read for your follow-up questions. It is thrown away " +
-            "when it is two minutes old or the bar closes.",
+            "when it is two minutes old or the Jarvis bar closes.",
         "held_short" to "Answered using what Jarvis read from your screen (words only).",
         "watching_note" to "Ask about your screen and Jarvis looks when you start. A picture is " +
             "never saved.",
-        "link" to "The link to Jarvis is catching up - Stop still works",
+        "link" to "Reconnecting to Jarvis. Stop still works.",
         "left_under_a_minute" to "under a minute left",
         "title" to TITLE,
         "paused_title" to PAUSED_TITLE,
@@ -153,7 +153,10 @@ object ScreenRules {
             return Line(p.str("note").ifEmpty { "Looked at your screen." }, "ok")
         }
         return Line(
-            p?.str("said").orEmpty().ifEmpty { "Jarvis could not look at your screen just now." },
+            p?.str("said").orEmpty().ifEmpty {
+                "Jarvis could not look at your screen just now. Try again. If it keeps " +
+                    "happening, check Settings, Look at this and Watch with me."
+            },
             "warn",
         )
     }

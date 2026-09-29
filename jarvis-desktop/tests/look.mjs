@@ -197,6 +197,36 @@ await check("the badge: the sign, Stop, and 20 more minutes only near the end", 
   await page.close();
 });
 
+await check("the badge on a stale link: short words, and the Stop button is always inside the window", async () => {
+  const page = await K.open(browser, base, "watch-badge.html", { chatReplies: [], screen: { status: STATUS.off, never: NEVER } });
+  await page.setViewportSize({ width: 400, height: 88 });
+  await emit(page, "screen-status", { status: WATCHING, stale: true });
+  await page.waitForTimeout(80);
+  assert.match(await page.textContent("#detail"), /Reconnecting to Jarvis\. Stop still works\./);
+  const box = await page.locator("#stop").boundingBox();
+  assert.ok(box && box.x >= 0 && box.y >= 0 && box.x + box.width <= 400 && box.y + box.height <= 88, `Stop is outside the window: ${JSON.stringify(box)}`);
+  // Bigger text pushes the buttons onto their own line, never out of the window.
+  await page.setViewportSize({ width: 200, height: 88 });
+  await page.waitForTimeout(60);
+  const narrow = await page.locator("#stop").boundingBox();
+  assert.ok(narrow && narrow.x >= 0 && narrow.x + narrow.width <= 200, `Stop is cut off when narrow: ${JSON.stringify(narrow)}`);
+  await page.close();
+});
+
+await check("Settings: the list says what asks first, an empty Add says what to type", async () => {
+  const page = await K.open(browser, base, "settings.html", {
+    chatReplies: [], screen: { status: STATUS.off, never: JSON.parse(JSON.stringify(NEVER)) } });
+  await page.waitForTimeout(200);
+  const rows = await page.$$eval("#sl-list li", (n) => n.map((x) => x.textContent));
+  assert.ok(rows.length > 0 && rows.every((t) => t.includes("asks first") && !t.includes("Take off")), rows.join(" | "));
+  assert.equal(await page.textContent("#sl-never-title"), "Never look at list");
+  assert.equal((await page.$$eval("#sl-list button", (b) => b.map((x) => x.textContent)))[0], "Remove from the list");
+  await page.fill("#sl-value", "");
+  await page.click("#sl-add");
+  assert.equal((await page.textContent("#sl-status")).trim(), "Type a program (like MyBank.exe) or website first.");
+  await page.close();
+});
+
 await check("Settings: the list, adding at once, taking one off asks for a card and keeps the entry", async () => {
   const page = await K.open(browser, base, "settings.html", {
     chatReplies: [], screen: { status: STATUS.off, never: JSON.parse(JSON.stringify(NEVER)) } });
@@ -227,6 +257,9 @@ await check("Settings on a PC that cannot look: the PC's own reason, no surprise
   await page.waitForTimeout(200);
   assert.equal(await page.isHidden("#sl-state"), false);
   assert.equal((await page.textContent("#sl-state")).trim(), why);
+  // Picture mode needs "Look at this": greyed, with a plain line saying why.
+  assert.equal(await page.isDisabled("#sp-switch"), true);
+  assert.match(await page.textContent("#sp-line"), /Picture mode needs Look at this/);
   await page.close();
 });
 

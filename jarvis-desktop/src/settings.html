@@ -73,7 +73,7 @@
           <a href="#big-model">Big model (slow)</a>
           <a href="#folders">Folders Jarvis may look in</a>
           <a href="#screen-look">Look at this and Watch with me</a>
-          <a href="#browser-engine">Headless browser</a>
+          <a href="#browser-engine">Browser without a window</a>
           <a href="#backup">Backups</a>
           <a href="#updates">Updates</a>
           <a href="#tool-updates">Check for tool updates</a>
@@ -1676,7 +1676,7 @@
         <p class="note" id="sl-detail"></p>
         <p class="state" id="sl-state" role="status">Asking Jarvis…</p>
         <div id="sl-body" hidden>
-          <h3 class="subhead" id="sl-never-title">Never look at</h3>
+          <h3 class="subhead" id="sl-never-title">Never look at list</h3>
           <p class="note" id="sl-never-detail"></p>
           <ul class="sc-cards" id="sl-list"></ul>
           <p class="note" id="sl-empty" hidden></p>
@@ -1697,11 +1697,11 @@
              PC gives the words, the measured seconds per look (never a guess) and
              the one PowerShell line that installs and measures the model. -->
         <div id="sp-body" hidden>
-          <h3 class="subhead" id="sp-title">Read pictures of my screen (slow, on the processor)</h3>
+          <h3 class="subhead" id="sp-title">Picture mode</h3>
           <p class="note" id="sp-detail"></p>
           <label class="toggle">
             <input id="sp-switch" type="checkbox" />
-            <span id="sp-switch-label">Let Jarvis look at pictures of my screen (slow)</span>
+            <span id="sp-switch-label">Turn on Picture mode (slow)</span>
           </label>
           <p class="sc-line" id="sp-line" role="status"></p>
           <p class="note" id="sp-measured" hidden></p>
@@ -1716,7 +1716,7 @@
         </div>
       </section>
 
-      <!-- ── The headless browser (Obscura) ────────────────────────────────
+      <!-- ── The windowless browser (Obscura) ────────────────────────────────
            The owner's decision of 2026-09-29 (browser-engine.js,
            browser-engine-rules.js; browser_engine.rs browser_engine; backend
            jarvis_browser_engine.py and jarvis_obscura.py; JARVIS-API section
@@ -1726,28 +1726,35 @@
            Jarvis uses by default. There is NO proxy field and no address
            field here, and none can be added. The PC gives every word. -->
       <section class="card" id="browser-engine">
-        <h2 id="be-title">Headless browser (Obscura)</h2>
+        <h2 id="be-title">Browser without a window (Obscura)</h2>
         <div id="be-body" hidden>
+          <p class="note" id="be-subtitle">a browser Jarvis uses without opening a window</p>
           <p class="note" id="be-detail"></p>
           <label class="toggle">
             <input id="be-switch" type="checkbox" />
-            <span id="be-switch-label">Let Jarvis use the headless browser (Obscura)</span>
+            <span id="be-switch-label">Let Jarvis use the windowless browser (Obscura)</span>
           </label>
+          <p class="note" id="be-link-note" hidden></p>
           <p class="sc-line" id="be-line" role="status"></p>
           <p class="note" id="be-state-line" hidden></p>
+          <!-- The install steps, only while Obscura is not installed (or its file changed). -->
+          <div id="be-install" hidden>
+            <p class="note" id="be-steps-title"></p>
+            <textarea id="be-line-text" rows="6" wrap="soft" readonly spellcheck="false"
+                      autocomplete="off"
+                      aria-label="The PowerShell line to install and check the windowless browser" hidden></textarea>
+            <div class="row">
+              <button class="btn small" id="be-copy" type="button" hidden>Copy the line</button>
+            </div>
+            <p class="note" id="be-steps-note" hidden></p>
+          </div>
           <p class="note" id="be-stealth"></p>
           <div class="row">
             <label for="be-mode" id="be-mode-title">Which browser Jarvis uses</label>
             <select id="be-mode"></select>
           </div>
+          <p class="note" id="be-mode-note" hidden></p>
           <p class="note" id="be-mode-help"></p>
-          <p class="note" id="be-steps-title" hidden></p>
-          <div class="row sc-command">
-            <input id="be-line-text" type="text" readonly spellcheck="false" autocomplete="off"
-                   aria-label="The PowerShell line to install and check the headless browser" hidden />
-            <button class="btn small" id="be-copy" type="button" hidden>Copy the line</button>
-          </div>
-          <p class="note" id="be-steps-note" hidden></p>
           <span class="status" id="be-status" role="status"></span>
         </div>
       </section>

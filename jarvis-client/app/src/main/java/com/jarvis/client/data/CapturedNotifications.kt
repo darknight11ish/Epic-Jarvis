@@ -7,6 +7,8 @@ import android.util.Base64
 import android.util.Log
 import androidx.core.content.edit
 import java.security.KeyStore
+import android.security.keystore.KeyPermanentlyInvalidatedException
+import javax.crypto.AEADBadTagException
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -70,13 +72,17 @@ class CapturedNotifications(context: Context) {
     init {
         // One-time move of rows an older build stored as plain text.
         synchronized(LOCK) {
-            if (prefs.contains(KEY_ITEMS)) save(load())
+            if (prefs.contains(KEY_ITEMS) && !prefs.contains(KEY_ENC)) loadOrNull()?.let { save(it) }
         }
     }
 
     /** Adds one, already-redacted notification, then trims to the caps. */
     fun add(n: CapturedNotification) = synchronized(LOCK) {
-        save(CapturedRows.added(load(), n, System.currentTimeMillis(), MAX_AGE_MS, MAX_KEPT))
+        // When the saved list cannot be opened right now (before the first unlock
+        // after a reboot, say) this row is dropped rather than written over it:
+        // the old rows are still there once the phone can open them again.
+        val current = loadOrNull() ?: return@synchronized
+        save(CapturedRows.added(current, n, System.currentTimeMillis(), MAX_AGE_MS, MAX_KEPT))
     }
 
     /** Newest first, already capped by [add]. */
@@ -95,7 +101,7 @@ class CapturedNotifications(context: Context) {
 
     /** Deletes what was captured from one app - when it leaves the allow list. */
     fun removeApp(packageName: String) = synchronized(LOCK) {
-        val all = load()
+        val all = loadOrNull() ?: return@synchronized
         val kept = CapturedRows.withoutApp(all, packageName)
         if (kept.size != all.size) save(kept)
     }
@@ -137,14 +143,29 @@ class CapturedNotifications(context: Context) {
         }
     }
 
-    private fun load(): List<CapturedNotification> {
+    private fun load(): List<CapturedNotification> = loadOrNull() ?: emptyList()
+
+    /**
+     * The saved rows; empty when there are none; null when they exist but
+     * cannot be opened RIGHT NOW (writers must not overwrite them then). A blob
+     * that can never be opened again (its key is gone) is deleted and reads as
+     * empty, like TokenStore's rule for the token.
+     */
+    private fun loadOrNull(): List<CapturedNotification>? {
         val enc = prefs.getString(KEY_ENC, null)
         val raw = if (enc != null) {
-            runCatching { decrypt(enc) }.getOrElse {
-                // Cannot be opened right now (e.g. before the first unlock
-                // after a reboot): show nothing, keep the blob where it is.
-                Log.w(TAG, "captured notifications unreadable for now", it)
-                return emptyList()
+            try {
+                decrypt(enc)
+            } catch (t: Throwable) {
+                if (t is AEADBadTagException || t is KeyPermanentlyInvalidatedException ||
+                    t is IllegalArgumentException
+                ) {
+                    Log.w(TAG, "captured notifications unreadable for good; clearing", t)
+                    prefs.edit { remove(KEY_ENC) }
+                    return emptyList()
+                }
+                Log.w(TAG, "captured notifications unreadable for now", t)
+                return null
             }
         } else {
             // Rows written by an older build, before they were encrypted.

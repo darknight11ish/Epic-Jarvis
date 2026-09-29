@@ -9,10 +9,10 @@
       "more": "20 more minutes",
       "drop": "Forget this look",
       "hint": "Press the Look at this key, then ask - Jarvis reads the words on the window in front, once, and keeps nothing.",
-      "held": "Jarvis is holding what it read for your follow-up questions. It is thrown away when it is two minutes old or the bar closes.",
+      "held": "Jarvis is holding what it read for your follow-up questions. It is thrown away when it is two minutes old or the Jarvis bar closes.",
       "held_short": "Answered using what Jarvis read from your screen (words only).",
       "watching_note": "Ask about your screen and Jarvis looks when you start. A picture is never saved.",
-      "link": "The link to Jarvis is catching up - Stop still works",
+      "link": "Reconnecting to Jarvis. Stop still works.",
       "left_under_a_minute": "under a minute left"
     },
     "dot": " · ",
@@ -25,21 +25,21 @@
       "private_window": "a private browser window",
       "jarvis": "one of Jarvis's own windows",
       "lock_screen": "the lock screen",
-      "admin_prompt": "an admin prompt",
+      "admin_prompt": "a Windows permission window",
       "unknown_site": "a web page whose site I can't read",
       "cannot_read": "a window I can't read",
-      "cannot_check": "a window I can't check for password boxes or capture protection",
+      "cannot_check": "a window I can't check for password boxes",
       "list_unreadable": "your Never look at list could not be read",
       "window_changed": "a different window came to the front while I looked",
-      "not_built": "looking at the screen is not built on this PC yet",
+      "not_built": "looking at the screen is not set up on this PC yet",
       "capture_failed": "the picture could not be taken"
     },
     "end_words": {
       "owner": "you stopped it",
       "time": "the time was up",
-      "locked": "Windows locked",
+      "locked": "Windows was locked",
       "slept": "the PC slept",
-      "stop_all": "Stop everything"
+      "stop_all": "you pressed Stop everything"
     },
     "marks": [
       "look",
@@ -67,31 +67,31 @@
   },
   "picture": {
     "words": {
-      "title": "Read pictures of my screen (slow, on the processor)",
-      "detail": "With one graphics card Jarvis reads only the WORDS on your screen. This lets a small picture model also look at the picture itself, so it can tell what a chart, a button or a photo shows. It runs on this PC's processor, not on your graphics card, so your everyday chat model is not disturbed - but it is SLOW, and how slow depends on your PC. Anything that looks like a key, a card number or a password is blacked out first, and if that part is missing no picture is used. Nothing leaves this PC and nothing is saved. Off by default. Turning it on asks first, because a model has to be downloaded.",
-      "switch": "Let Jarvis look at pictures of my screen (slow)",
-      "off_line": "Off. Jarvis reads the words on your screen only.",
+      "title": "Picture mode",
+      "detail": "By default Jarvis reads only the words on your screen. Picture mode also lets a small picture reader look at the picture itself, so it can tell what a chart, a button or a photo shows. It runs on your PC's main chip (the CPU), not your graphics card, so your chat model is not slowed down - but it is SLOW, and how slow depends on your PC. Anything that looks like a key, a card number or a password is blacked out first, and if that part is missing no picture is used. Nothing leaves this PC and nothing is saved. Off by default. Turning it on asks first, because a model has to be downloaded.",
+      "switch": "Turn on Picture mode (slow)",
+      "off_line": "Picture mode is off. Jarvis reads the words on your screen only.",
       "waiting_line": "Waiting for your yes on the card. Nothing has changed yet.",
       "unread": "Could not read this setting.",
-      "missing": "This PC's Jarvis does not have picture mode yet. Run scripts\\apply-patches.ps1 on the PC to add it.",
+      "missing": "This PC's Jarvis is missing this feature. In PowerShell on the PC, in the Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.",
       "steps_title": "To set it up, paste this one line into PowerShell on your PC:",
-      "steps_note": "It downloads the picture model from Ollama (ollama.com; how big it is has not been checked), then measures how many seconds one look takes on your PC and saves the number. Jarvis never downloads the model by itself."
+      "steps_note": "It downloads the picture model from Ollama (ollama.com). We have not checked how big the download is, so expect a wait. Then it times one look on your PC and saves the number. Jarvis never downloads the model by itself."
     },
     "why_words": {
-      "not_installed": "The picture model ({model}) is not installed on this PC yet.",
+      "not_installed": "The picture model ({model}) is not installed on this PC yet. Run the set-up line in Settings, Picture mode.",
       "unknown_install": "Jarvis could not tell whether the picture model is installed (is Ollama running?).",
       "no_ollama": "Ollama was not found on this PC, so the picture reader could not start.",
       "start_failed": "The picture reader could not start.",
-      "no_cleaner": "The part of Jarvis that blacks out secrets in a picture is not installed, so no picture was used.",
+      "no_cleaner": "The part of Jarvis that blacks out secrets in a picture is not installed, so no picture was used. Run .\\scripts\\apply-patches.ps1 in the Jarvis folder, then restart Jarvis.",
       "clean_failed": "Blacking out secrets in the picture did not work, so no picture was used.",
       "slow": "The picture reader took longer than {n} seconds.",
       "error": "The picture reader ran into an error.",
       "empty": "The picture reader had nothing to say about it.",
       "on_graphics_card": "The picture reader ended up on the graphics card, which is not what you switched on, so Jarvis stopped it.",
-      "changed": "The picture model's file has changed since it was measured, so Jarvis will not use it until it is measured again.",
-      "cloud": "The picture model's name looks like a cloud model, which would send your screen off this PC, so nothing was sent.",
+      "changed": "The picture model changed since you last timed it, so Jarvis will not use it. Run the set-up line in Settings again to time it.",
+      "cloud": "The picture model's name looks like a cloud model, which would send your screen off this PC, so nothing was sent. Pick a model that runs on this PC.",
       "switched_off": "Picture reading was turned off.",
-      "superseded": "A newer look replaced this one.",
+      "superseded": "You asked something newer, so this picture was skipped.",
       "cancelled": "The look was thrown away before the picture was read."
     },
     "short_words": {
@@ -117,7 +117,7 @@
         "payload": {
           "enabled": false,
           "waiting": false,
-          "line": "Off. Jarvis reads the words on your screen only.",
+          "line": "Picture mode is off. Jarvis reads the words on your screen only.",
           "measured_words": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
           "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         },
@@ -126,7 +126,7 @@
           "enabled": false,
           "waiting": false,
           "checked": false,
-          "line": "Off. Jarvis reads the words on your screen only.",
+          "line": "Picture mode is off. Jarvis reads the words on your screen only.",
           "measured": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
           "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         }
@@ -155,7 +155,7 @@
         "payload": {
           "enabled": true,
           "waiting": false,
-          "line": "On, but not working yet: The picture model (minicpm-v:4.6) is not installed on this PC yet. Jarvis reads the words only until then.",
+          "line": "On, but not working yet: The picture model (minicpm-v:4.6) is not installed on this PC yet. Run the set-up line in Settings, Picture mode. Jarvis reads the words only until then.",
           "measured_words": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
           "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         },
@@ -164,7 +164,7 @@
           "enabled": true,
           "waiting": false,
           "checked": true,
-          "line": "On, but not working yet: The picture model (minicpm-v:4.6) is not installed on this PC yet. Jarvis reads the words only until then.",
+          "line": "On, but not working yet: The picture model (minicpm-v:4.6) is not installed on this PC yet. Run the set-up line in Settings, Picture mode. Jarvis reads the words only until then.",
           "measured": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
           "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         }
@@ -174,7 +174,7 @@
         "payload": {
           "enabled": true,
           "waiting": false,
-          "line": "On. When you ask Jarvis to look, the picture model also looks at the picture.",
+          "line": "On. When you ask Jarvis to look, the picture reader also looks at the picture.",
           "measured_words": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
           "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         },
@@ -183,7 +183,7 @@
           "enabled": true,
           "waiting": false,
           "checked": true,
-          "line": "On. When you ask Jarvis to look, the picture model also looks at the picture.",
+          "line": "On. When you ask Jarvis to look, the picture reader also looks at the picture.",
           "measured": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
           "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         }
@@ -193,7 +193,7 @@
         "payload": {
           "enabled": true,
           "waiting": false,
-          "line": "On. When you ask Jarvis to look, the picture model also looks at the picture. Your last look took 41 seconds.",
+          "line": "On. When you ask Jarvis to look, the picture reader also looks at the picture. Your last look took 41 seconds.",
           "measured_words": "Measured on 29 Sep 2026: about 41 seconds for one look (a made-up test picture - a busy real screen may take longer).",
           "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         },
@@ -202,7 +202,7 @@
           "enabled": true,
           "waiting": false,
           "checked": true,
-          "line": "On. When you ask Jarvis to look, the picture model also looks at the picture. Your last look took 41 seconds.",
+          "line": "On. When you ask Jarvis to look, the picture reader also looks at the picture. Your last look took 41 seconds.",
           "measured": "Measured on 29 Sep 2026: about 41 seconds for one look (a made-up test picture - a busy real screen may take longer).",
           "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
         }
@@ -236,7 +236,7 @@
           "enabled": false,
           "waiting": false,
           "checked": false,
-          "line": "Off. Jarvis reads the words on your screen only.",
+          "line": "Picture mode is off. Jarvis reads the words on your screen only.",
           "measured": "",
           "install_line": ""
         }
@@ -503,7 +503,7 @@
         "show": true,
         "on": true,
         "title": "Jarvis is watching",
-        "detail": "24 min left · The link to Jarvis is catching up - Stop still works",
+        "detail": "24 min left · Reconnecting to Jarvis. Stop still works.",
         "stop": "Stop watching",
         "more": "",
         "tone": "watching"
@@ -518,7 +518,7 @@
         "show": true,
         "on": true,
         "title": "Jarvis is watching - paused",
-        "detail": "Paused: a password box · 20 min left · The link to Jarvis is catching up - Stop still works",
+        "detail": "Paused: a password box · 20 min left · Reconnecting to Jarvis. Stop still works.",
         "stop": "Stop watching",
         "more": "",
         "tone": "paused"
@@ -669,7 +669,7 @@
         "ok": false
       },
       "want": {
-        "text": "Jarvis could not look at your screen just now.",
+        "text": "Jarvis could not look at your screen just now. Try again. If it keeps happening, check Settings, Look at this and Watch with me.",
         "tone": "warn"
       }
     },
@@ -680,7 +680,7 @@
         "part": "Snorvelquist balance owed"
       },
       "want": {
-        "text": "Jarvis could not look at your screen just now.",
+        "text": "Jarvis could not look at your screen just now. Try again. If it keeps happening, check Settings, Look at this and Watch with me.",
         "tone": "warn"
       }
     },
@@ -688,7 +688,7 @@
       "name": "not an object",
       "payload": null,
       "want": {
-        "text": "Jarvis could not look at your screen just now.",
+        "text": "Jarvis could not look at your screen just now. Try again. If it keeps happening, check Settings, Look at this and Watch with me.",
         "tone": "warn"
       }
     }

@@ -73,7 +73,7 @@ export const SWITCHABLE = Object.freeze([
  */
 export const TOOLS_SWITCHABLE = Object.freeze(["calendar_read", "email_read", "notes_search",
   "home_read"]);
-export const TOOLS_LABEL = "Offer this to the AI model";
+export const TOOLS_LABEL = "Let the AI use this";
 export const TOOLS_PC_ONLY =
   "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks " +
   "first). It takes an approval card and Windows Hello.";
@@ -168,7 +168,7 @@ function readLockdown(k) {
   };
 }
 
-/** `view.tools` - the "Offer this to the AI model" switches, desktop only. */
+/** `view.tools` - the "Let the AI use this" switches, desktop only. */
 function readTools(t) {
   if (!t || typeof t !== "object" || !Array.isArray(t.items)) {
     return { canEnable: false, items: [] };
@@ -278,7 +278,7 @@ export function switchView(row, view, live) {
 }
 
 /**
- * One "Offer this to the AI model" switch, on the four reading tools only:
+ * One "Let the AI use this" switch, on the four reading tools only:
  * {checked, disabled, lines}. Checked while offered, and while a card to
  * offer it waits. Unchecking it (OFF) is never held. Checking it (ON) needs
  * the PC to say this app may enable, a live link, and no other tool's card

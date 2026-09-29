@@ -621,6 +621,11 @@ def t_follow_up_window():
     check("after 2 minutes: nothing, and the look is dropped",
           e.follow_up() is None and e.status()["look_held"] is False)
     e.look_at_this()
+    w.clock.t += SC.FOLLOW_UP_S + 1
+    e.tick()
+    check("the 1-second check drops a look whose 2 minutes are up, nobody asking",
+          e.status()["look_held"] is False)
+    e.look_at_this()
     check("the bar closes: dropped at once", e.drop_look() is True
           and e.follow_up() is None and e.drop_look() is False)
     first = e.look_at_this()
@@ -793,6 +798,99 @@ def t_shipped():
           ps1.index("'jarvis_front.py'") < ps1.index("'jarvis_focus.py'"))
     check("the front reader is the one focus uses",
           FR.windows_probe.__module__ == "jarvis_front")
+
+
+def t_stop_does_not_wait_for_a_slow_windows_read():
+    import threading, time
+    w = World()
+    e = w.engine
+    e.start(25)
+    gate = threading.Event()
+    real = e._snapshot
+
+    def slow():
+        gate.wait(5)
+        return real()
+    e._snapshot = slow
+    w.clock.t += 1
+    th = threading.Thread(target=e.tick)
+    th.start()
+    time.sleep(0.2)
+    t0 = time.monotonic()
+    st = e.status()
+    e.stop()
+    took = time.monotonic() - t0
+    gate.set()
+    th.join(6)
+    check("status and Stop answer while the once-a-second read is stuck", took < 1.0, took)
+    check("...and the session stays ended when the stuck read finishes",
+          e.status()["on"] is False)
+
+
+def t_picture_reader_words_make_the_turn_a_screen_read():
+    msgs = [{"role": "user", "content": [{"type": "text", "text": "what is this?"},
+                                         {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}]}]
+    keep = (SC._image_bytes, SC.clean_picture, SC._phone_picture_start, SC._phone_picture_lines,
+            SC._phone_picture_said)
+    SC._image_bytes = lambda p: b"PNG"
+    SC.clean_picture = lambda image, ocr=None, **k: {"ok": True, "text": "", "left_out": 0,
+                                                     "hidden": 0, "kinds": [], "png": None}
+    SC._phone_picture_start = lambda image: object()
+    SC._phone_picture_lines = lambda jobs: "[picture reader: a login form]"
+    SC._phone_picture_said = lambda jobs: ""
+    try:
+        out, info = SC.with_screen(msgs, "phone", read=lambda b: [])
+    finally:
+        (SC._image_bytes, SC.clean_picture, SC._phone_picture_start, SC._phone_picture_lines,
+         SC._phone_picture_said) = keep
+    check("OCR read no words but the picture reader did: the turn IS a screen read (outside text)",
+          info["read"] is True and "login form" in info["text"], info)
+
+
+def t_a_look_mark_counts_only_from_this_pc():
+    def body():
+        return {"messages": [{"role": "user", "content": "hi", "screen": "look"},
+                             {"role": "user", "content": "and this", "screen": "phone"}]}
+    b = body()
+    check("from this PC (loopback) the look mark stays", SC.drop_remote_look_marks(b, "127.0.0.1") == 0
+          and b["messages"][0]["screen"] == "look")
+    b = body()
+    n = SC.drop_remote_look_marks(b, "100.64.1.2", "100.64.1.9")
+    check("from another device the look mark comes off, in place", n == 1
+          and "screen" not in b["messages"][0], b)
+    check("...and the phone's own mark is left alone", b["messages"][1]["screen"] == "phone")
+    b = body()
+    check("an address that cannot be read is NOT this PC (fails the safe way)",
+          SC.drop_remote_look_marks(b, "", None) == 1 and "screen" not in b["messages"][0])
+    check("a body that is not a dict never raises", SC.drop_remote_look_marks(None, "1.2.3.4") == 0)
+
+
+def t_a_never_look_list_that_could_not_be_read_is_read_again():
+    w = World()
+    p = w.never.path
+    p.write_text("{not json", encoding="utf-8")
+    w.never.load()
+    check("an unreadable list refuses looks", w.never.broken is True)
+    p.write_text('{"added": [], "removed": []}', encoding="utf-8")
+    out = w.engine.look_at_this()
+    check("once it can be read again, the next look reads it and works",
+          w.never.broken is False and out.get("ok") is True, out)
+
+
+def t_a_failed_phone_read_drops_the_screen_parts():
+    msgs = [{"role": "user", "content": [{"type": "text", "text": "hi"},
+                                         {"type": "screen_text", "text": "secret words"}]}]
+    boom = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("x"))
+    orig = SC.label_phone_text
+    SC.label_phone_text = boom
+    try:
+        out, info = SC.with_screen(msgs, "")
+    finally:
+        SC.label_phone_text = orig
+    flat = json.dumps(out)
+    check("a failing screen read passes on NO screen_text part", "secret words" not in flat
+          and "screen_text" not in flat, flat)
+    check("...and the turn is not marked read", info["read"] is False)
 
 
 if __name__ == "__main__":

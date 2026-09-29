@@ -397,7 +397,9 @@ input:focus-visible, textarea:focus-visible {
 
 /* A voice's "Hear it" button beside its row (voice-panel.js paintChoiceRow):
    outside the label, so pressing it never changes the choice. */
-.cv-choice { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.cv-choice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.cv-hear-status { flex-basis: 100%; }
+.cv-hear-status:empty { display: none; }
 .cv-choice .theme-row { flex: 1; margin-top: 0; min-width: 0; }
 .cv-choice .btn.small { margin-left: 0; flex: none; }
 
@@ -786,6 +788,9 @@ select:focus-visible {
 
 .sc-gpu-name { font-size: var(--text-sm); color: var(--text); }
 .sc-gpu-role { font-size: var(--text-xs); color: var(--text-muted); }
+/* Lockdown: the state line, each note and the button sit on their own lines. */
+.af-lockdown > strong, .af-lockdown > .sc-gpu-role { display: block; margin-top: 4px; }
+.af-lockdown > .btn { margin-top: 8px; }
 
 .sc-blocked {
   margin: 0 0 12px;
@@ -839,6 +844,14 @@ select:focus-visible {
 .sc-command { flex-wrap: nowrap; }
 .sc-command input { flex: 1; min-width: 0; }
 .sc-command .btn.small { margin-left: 0; flex: none; }
+/* The windowless browser's install line: the whole line, wrapped. */
+#be-line-text {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: monospace;
+  overflow-wrap: anywhere;
+  resize: vertical;
+}
 
 /* --------------------------------------------------------------------------
    Hardware and models. The second graphics card's pieces again (`.sc-gpu`,

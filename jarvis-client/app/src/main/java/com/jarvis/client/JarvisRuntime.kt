@@ -1590,9 +1590,12 @@ object JarvisRuntime {
      * ending it only ever makes Jarvis look at less. The status is read
      * again afterwards, so the sign follows the PC's own answer.
      */
-    suspend fun stopScreenWatch() {
-        api.stopScreenWatch()
+    suspend fun stopScreenWatch(): String? {
+        val result = api.stopScreenWatch()
         refreshScreenWatch()
+        // A failed stop says so (the sign stays as the PC last said it), and a
+        // success says nothing. The words are ScreenPlateText.STOP_FAILED.
+        return if (result is ApiResult.Failed) com.jarvis.client.net.ScreenPlateText.STOP_FAILED else null
     }
 
     /**

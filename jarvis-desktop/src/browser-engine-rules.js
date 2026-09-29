@@ -1,5 +1,5 @@
 /**
- * The words and the rules of Settings -> "Headless browser (Obscura)" (the
+ * The words and the rules of Settings -> "Browser without a window (Obscura)" (the
  * owner's decision of 2026-09-29; backend/jarvis_browser_engine.py; JARVIS-API
  * section 97). Pure: no page, no Tauri, so tests/browser-engine.mjs can run it.
  *
@@ -11,52 +11,45 @@
  */
 
 export const BROWSER = Object.freeze({
-  title: "Headless browser (Obscura)",
+  title: "Browser without a window (Obscura)",
+  subtitle: "a browser Jarvis uses without opening a window",
   detail:
-    "Jarvis normally works a web page in a browser window you can see. This adds a second way: Obscura, a small " +
-    "browser with no window, for plain reading and quick lookups. Jarvis chooses per task - the visible window when " +
-    "you might need to sign in or take over, the headless browser for simple reading. Every page it opens and every " +
-    "step it takes is still listed on an approval card first. What it reads is outside text: it never becomes a fact " +
-    "Jarvis remembers. It cannot reach your own network (this PC, your home network, Tailscale), uses no proxy, keeps " +
-    "no cookies and saves no files. Off by default. Turning it on asks first, because it is a new program on your PC " +
-    "that reaches the web.",
-  switch: "Let Jarvis use the headless browser (Obscura)",
+    "Jarvis normally works a web page in a browser window you can see. This adds a second way: Obscura, a small browser with no window, for plain reading and quick lookups. Jarvis chooses for each task. It uses the visible browser when you might need to sign in or take over, and the windowless browser for simple reading. Every page it opens and every step it takes is still listed on an approval card first. What it reads is outside text: Jarvis reads it but never follows instructions in it, and never remembers it as a fact. It cannot reach your own network (this PC, your home network, Tailscale), uses no proxy, keeps no cookies and saves no files. It is off until you turn it on. Turning it on asks first, because it is a new program on your PC that reaches the web.",
+  switch: "Let Jarvis use the windowless browser (Obscura)",
   modeTitle: "Which browser Jarvis uses",
   modes: Object.freeze({
     auto: "Automatic (recommended)",
     visible: "Always the visible browser",
-    headless: "The headless browser when it can run",
+    headless: "The windowless browser when it can run",
   }),
   modeHelp: Object.freeze({
-    auto: "Jarvis picks per task: the visible window whenever you might need to sign in or take over, the headless browser for plain reading.",
-    visible: "Jarvis always opens the browser window you can see and take over.",
+    auto: "Jarvis picks for each task: the visible browser whenever you might need to sign in or take over, the windowless browser for plain reading.",
+    visible:
+      "Jarvis always opens the browser window you can see and take over.",
     headless:
-      "Jarvis uses the headless browser whenever it can run, except when the task looks like a sign-in, a payment or " +
-      "a captcha. If it cannot run, Jarvis says so and uses the visible browser.",
+      "Jarvis uses the windowless browser whenever it can run, except when the task looks like a sign-in, a payment or a captcha. If it cannot run, Jarvis says so and uses the visible browser.",
   }),
   stealth:
-    "Stealth is always on for the headless browser. It makes the browser look like an ordinary Chrome. It " +
-    "does not solve captchas, and sites can still block or ban it. Signing in to a real account with it " +
-    "could get that account closed under a site's terms, so Jarvis never types a password with it and " +
-    "never solves a captcha: when it sees a captcha or a sign-in page it stops and hands the job to the " +
-    "visible browser. A sign-in that starts with only a username or email box may not be recognised.",
-  offLine: "Off. Jarvis uses the visible browser window only.",
+    "This browser pretends to be an ordinary Chrome so fewer sites turn it away. That does not stop a site from blocking it, or from closing an account you sign in to. So Jarvis never types a password with it and never solves a captcha. When it reaches a captcha or sign-in page it stops and hands the job to the browser window you can see. A sign-in that starts with only a username or email box may not be spotted.",
+  offLine: "Off. Jarvis uses the visible browser only.",
   waitingLine: "Waiting for your yes on the card. Nothing has changed yet.",
   unread: "Could not read this setting.",
-  missing: "This PC's Jarvis does not have the headless browser yet. Run scripts\\apply-patches.ps1 on the PC to add it.",
-  stepsTitle: "To install it, paste this one line into PowerShell on your PC:",
+  missing:
+    "This PC's Jarvis is missing this feature. In PowerShell on the PC, in the Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.",
+  waitingLink: "Waiting for the connection to your PC.",
+  modeNote: "This does nothing until the switch above is on.",
+  couldNotTurnOn: "Could not turn it on: ",
+  stepsTitle:
+    "To install it, paste this one line into PowerShell (the Windows command window) on your PC:",
   stepsNote:
-    "It downloads one named release of Obscura's Windows program from its GitHub releases " +
-    "(github.com/h4ckf0r0day/obscura, Apache-2.0), unpacks it into Jarvis's own folder and prints its " +
-    "checksums for you to compare with the release page. It does not run the program. The line then " +
-    "prints a second command that checks it: version, stealth on, and that it refuses to visit your own " +
-    "network. Jarvis never downloads it by itself.",
+    "It downloads one named release of Obscura's Windows program from its GitHub releases (github.com/h4ckf0r0day/obscura, Apache-2.0), unpacks it into Jarvis's own folder and prints its checksums (long codes that fingerprint the file) for you to compare with the release page. It does not run the program. The line then prints a second command that checks it: version, stealth on, and that it refuses to visit your own network. Jarvis never downloads it by itself.",
   copy: "Copy the line",
   copied: "Copied. Paste it into PowerShell.",
   asking: "Asking...",
   turningOff: "Turning it off...",
-  askedCard: "A card is waiting for your yes in the Jarvis bar. The headless browser stays off until you say yes.",
-  off: "The headless browser is off. Jarvis uses the visible browser only.",
+  askedCard:
+    "A card is waiting for your yes in the Jarvis bar. The windowless browser stays off until you say yes.",
+  off: "The windowless browser is off. Jarvis uses the visible browser only.",
   modeSaved: "Saved.",
 });
 
@@ -96,7 +89,9 @@ export function browserView(out) {
     waiting,
     checked: on || waiting,
     mode: MODE_IDS.includes(o.mode) ? o.mode : "auto",
-    line: words(o.line) || (waiting ? BROWSER.waitingLine : !on ? BROWSER.offLine : ""),
+    line:
+      words(o.line) ||
+      (waiting ? BROWSER.waitingLine : !on ? BROWSER.offLine : ""),
     status: words(o.status_line),
     installLine: words(o.install_line),
   };

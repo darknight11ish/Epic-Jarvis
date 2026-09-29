@@ -256,12 +256,12 @@ MIX_IDS = tuple(MIX)
 BLENDS_NEED_V1 = ("Ashby and Clara, two voices made for Jarvis, need the newer voice pack "
                   "(Kokoro v1.0).")
 BLENDS_TO_MAKE = ("Ashby and Clara, two voices made for Jarvis, are not made yet. To make "
-                  "them, run the one line under \"Make Ashby and Clara\" in backend\\README.md "
-                  "on your PC, then restart Jarvis.")
+                  "them, run the one line under \"Make Ashby and Clara\" in "
+                  "the README.md file inside the backend folder of your Jarvis folder. Then restart Jarvis.")
 BLENDS_RESTART = "Ashby and Clara are made. Restart Jarvis to hear them."
 BLENDS_BAD = ("The file that holds Ashby and Clara is not the one expected, so they are not "
-              "offered. Run the one line under \"Make Ashby and Clara\" in backend\\README.md "
-              "again, then restart Jarvis.")
+              "offered. Run the one line under \"Make Ashby and Clara\" in "
+              "the README.md file inside the backend folder of your Jarvis folder again, then restart Jarvis.")
 
 _PICK = {V019: V019_PICK, V1: V1_PICK, V1MIX: MIX_IDS + V1_PICK, "": V019_PICK}
 
@@ -281,7 +281,7 @@ BRITISH_LANG = "en-gb-x-rp"
 
 
 def label_of(name: str) -> str:
-    """"American (female) - Bella" for "af_bella"; "American (female)" for
+    """"American (female) - Bella" for "af_bella"; "American (female) - Default" for
     v0.19's own default "af"; the name itself for a voice that is not one of
     the four English groups; "Ashby (made for Jarvis)" for a blended voice."""
     if not isinstance(name, str) or len(name) < 2:
@@ -291,8 +291,8 @@ def label_of(name: str) -> str:
     head = f"{_ACCENT.get(name[0], '')} ({_SEX.get(name[1], '')})".strip()
     if name[0] not in _ACCENT or name[1] not in _SEX or name[2:3] not in ("", "_"):
         return f"Voice {name}"
-    who = name[3:].replace("_", " ").title()
-    return f"{head} - {who}" if who else head
+    who = name[3:].replace("_", " ").title() or "Default"
+    return f"{head} - {who}"
 
 
 def known(name) -> bool:
@@ -551,7 +551,7 @@ def install_line() -> str:
 UPGRADE_NOTE = ("Better voices are available: Kokoro v1.0 has more, better-rated voices and "
                 "a real British accent (a {mb} MB download). To get them, run the "
                 "one line under \"Upgrade the voice pack to Kokoro v1.0\" in "
-                "backend\\README.md on your PC, then restart Jarvis. Your choice carries over.")
+                "the README.md file inside the backend folder of your Jarvis folder. Then restart Jarvis. Your choice carries over.")
 
 
 def upgrade_note() -> str:
@@ -625,7 +625,8 @@ def build_blends(pack_dir: Optional[str] = None) -> tuple:
     if not os.path.isfile(src):
         return False, (f"There is no voices.bin in {d}. Ashby and Clara are made from the "
                        f"Kokoro v1.0 voice pack: install it first (the one line under "
-                       f"\"Upgrade the voice pack to Kokoro v1.0\" in backend\\README.md).")
+                       f"\"Upgrade the voice pack to Kokoro v1.0\" in "
+                       f"the README.md file inside the backend folder of your Jarvis folder).")
     if kind_of_file(src) != V1:
         return False, (f"The voice pack in {d} is not Kokoro v1.0, so nothing was made. "
                        f"Ashby and Clara need the newer voice pack.")
@@ -648,8 +649,8 @@ def build_blends(pack_dir: Optional[str] = None) -> tuple:
             return False, ("The blended voices did not come out as expected, so nothing was "
                            "kept. Nothing else was changed.")
         os.replace(tmp, out)
-    except OSError as exc:
-        return False, f"Could not make the file ({type(exc).__name__}). Nothing else was changed."
+    except OSError:
+        return False, "Could not make the file. Nothing else was changed."
     return True, (f"OK - Ashby and Clara are in {out} (28 MB, next to your voice pack, which was "
                   f"not touched). Restart Jarvis to hear them.")
 

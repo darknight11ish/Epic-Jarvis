@@ -1,5 +1,5 @@
 /**
- * Settings -> "Headless browser (Obscura)" (the owner's decision of 2026-09-29;
+ * Settings -> "Browser without a window (Obscura)" (the owner's decision of 2026-09-29;
  * backend/jarvis_browser_engine.py and jarvis_obscura.py; JARVIS-API section 97).
  *
  * One Rust command (src-tauri/src/browser_engine.rs `browser_engine`), Settings
@@ -18,7 +18,12 @@
  */
 
 import { currentLink, linkWords, onLink } from "./jarvis-link.js";
-import { BROWSER, MODE_IDS, browserView, words } from "./browser-engine-rules.js";
+import {
+  BROWSER,
+  MODE_IDS,
+  browserView,
+  words,
+} from "./browser-engine-rules.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -27,6 +32,10 @@ const $ = (id) => document.getElementById(id);
 const el = {
   body: $("be-body"),
   title: $("be-title"),
+  subtitle: $("be-subtitle"),
+  linkNote: $("be-link-note"),
+  install: $("be-install"),
+  modeNote: $("be-mode-note"),
   detail: $("be-detail"),
   sw: $("be-switch"),
   swLabel: $("be-switch-label"),
@@ -58,14 +67,34 @@ function say(text, tone) {
   else delete el.say.dataset.tone;
 }
 
+// The reason in plain words: never a raw "HTTP 404" or a piece of JSON.
 function refusedWords(error) {
-  const text = typeof error === "string" ? error : error && error.message ? String(error.message) : "";
-  return text.trim() || BROWSER.unread;
+  let text =
+    typeof error === "string"
+      ? error
+      : error && error.message
+        ? String(error.message)
+        : "";
+  text = text.trim();
+  if (/^HTTP 404\b/i.test(text)) return BROWSER.missing;
+  const start = text.indexOf("{");
+  if (start >= 0) {
+    try {
+      const parsed = JSON.parse(text.slice(start));
+      const said = parsed && (parsed.error || parsed.message);
+      text = typeof said === "string" ? said.trim() : "";
+    } catch {
+      text = "";
+    }
+  }
+  if (/^HTTP \d+/i.test(text)) text = "";
+  return text || BROWSER.unread;
 }
 
 function paint() {
   if (!el.body || !view) return;
   el.title.textContent = BROWSER.title;
+  el.subtitle.textContent = BROWSER.subtitle;
   el.detail.textContent = BROWSER.detail;
   el.swLabel.textContent = BROWSER.switch;
   el.stealth.textContent = BROWSER.stealth;
@@ -79,21 +108,34 @@ function paint() {
   // waits (rule 4 only holds what loosens). While a card waits the switch stays
   // usable, so it can be turned back off (which takes the card back).
   el.sw.disabled = busy || (!view.checked && !live());
-  el.sw.title = !view.checked && !live() ? linkWords(currentLink()).text : "";
+  const held = !view.checked && !live();
+  el.sw.title = held ? linkWords(currentLink()).text : "";
+  // The reason is on the screen, not only in a tooltip.
+  el.linkNote.textContent = held ? BROWSER.waitingLink : "";
+  el.linkNote.hidden = !held;
   el.line.textContent = view.line;
   el.status.textContent = view.status;
   el.status.hidden = !view.status;
   // The mode list: text set with textContent (the words are fixed, never markup).
   if (el.mode.options.length !== MODE_IDS.length) {
     el.mode.replaceChildren(
-      ...MODE_IDS.map((id) => Object.assign(document.createElement("option"), { value: id, textContent: BROWSER.modes[id] })),
+      ...MODE_IDS.map((id) =>
+        Object.assign(document.createElement("option"), {
+          value: id,
+          textContent: BROWSER.modes[id],
+        }),
+      ),
     );
   }
   el.mode.value = view.mode;
   el.mode.disabled = busy;
   el.modeHelp.textContent = BROWSER.modeHelp[view.mode] || "";
+  el.modeNote.textContent = BROWSER.modeNote;
+  el.modeNote.hidden = view.checked;
   el.lineText.value = view.installLine;
-  const has = Boolean(view.installLine);
+  // The install steps sit under the switch and show only while it is not installed (or its file changed and it must be put back).
+  const has = Boolean(view.installLine) && view.needsInstall;
+  el.install.hidden = !has;
   el.lineText.hidden = !has;
   el.copy.hidden = !has;
   el.stepsTitle.hidden = !has;
@@ -103,7 +145,11 @@ function paint() {
 async function load() {
   if (!el.body || !IS_TAURI) return;
   try {
-    view = browserView(await TAURI.core.invoke("browser_engine", { action: "read" }));
+    const raw = await TAURI.core.invoke("browser_engine", { action: "read" });
+    view = browserView(raw);
+    // Not part of the shared table: only whether the file is on this PC.
+    view.needsInstall =
+      !(raw && raw.installed === true) || (raw && raw.problem === "changed");
   } catch (error) {
     // Either an older backend has no headless browser, or this read failed while
     // it may well be ON: say so in the PC's own words and do NOT show the switch
@@ -112,6 +158,10 @@ async function load() {
     view = null;
     el.body.hidden = false;
     el.detail.textContent = "";
+    el.subtitle.textContent = "";
+    el.linkNote.hidden = true;
+    el.install.hidden = true;
+    el.modeNote.hidden = true;
     el.line.textContent = refusedWords(error);
     el.status.hidden = true;
     el.sw.indeterminate = true;
@@ -132,10 +182,18 @@ async function setSwitch(on) {
   say(on ? BROWSER.asking : BROWSER.turningOff);
   paint();
   try {
-    const out = await TAURI.core.invoke("browser_engine", { action: on ? "on" : "off" });
-    say(on ? BROWSER.askedCard : words(out && out.message) || BROWSER.off, "ok");
+    const out = await TAURI.core.invoke("browser_engine", {
+      action: on ? "on" : "off",
+    });
+    say(
+      on ? BROWSER.askedCard : words(out && out.message) || BROWSER.off,
+      "ok",
+    );
   } catch (error) {
-    say(refusedWords(error), "warn");
+    say(
+      on ? BROWSER.couldNotTurnOn + refusedWords(error) : refusedWords(error),
+      "warn",
+    );
   } finally {
     busy = false;
   }

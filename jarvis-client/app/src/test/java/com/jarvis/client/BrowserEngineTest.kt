@@ -49,6 +49,10 @@ class BrowserEngineTest {
         assertEquals(w("waiting_line"), BrowserEngine.WAITING_LINE)
         assertEquals(w("unread"), BrowserEngine.UNREAD)
         assertEquals(w("missing"), BrowserEngine.MISSING)
+        assertEquals(w("subtitle"), BrowserEngine.SUBTITLE)
+        assertEquals(w("waiting_link"), BrowserEngine.WAITING_LINK)
+        assertEquals(w("mode_note"), BrowserEngine.MODE_NOTE)
+        assertEquals(w("could_not_turn_on"), BrowserEngine.COULD_NOT_TURN_ON)
         assertEquals(w("steps_title"), BrowserEngine.STEPS_TITLE)
         assertEquals(w("steps_note"), BrowserEngine.STEPS_NOTE)
         val modes = table["modes"]!!.jsonArray.map { it.jsonPrimitive.content }
@@ -146,9 +150,10 @@ class BrowserEngineTest {
             "${BrowserEngine.WAITING_LINE} ${Approvals.WHERE}",
             BrowserEngine.waitingLine(),
         )
-        assertEquals("Not changed. no", BrowserEngine.said(true, DesktopWrite.Outcome.Refused("no")))
+        assertEquals("Could not turn it on: no", BrowserEngine.said(true, DesktopWrite.Outcome.Refused("no")))
+        assertEquals("Not changed. no", BrowserEngine.said(false, DesktopWrite.Outcome.Refused("no")))
         assertEquals(
-            "The headless browser is off. Jarvis uses the visible browser only.",
+            "The windowless browser is off. Jarvis uses the visible browser only.",
             BrowserEngine.said(false, DesktopWrite.Outcome.Done(null)),
         )
         assertEquals("Turned off.", BrowserEngine.said(false, DesktopWrite.Outcome.Done("Turned off.")))
@@ -159,17 +164,16 @@ class BrowserEngineTest {
     @Test
     fun `the words are honest about stealth and never offer a proxy`() {
         val s = BrowserEngine.STEALTH
-        assertTrue(s.contains("always on"))
         assertTrue(s.contains("ordinary Chrome"))
-        assertTrue(s.contains("does not solve captchas"))
-        assertTrue(s.contains("block or ban"))
-        assertTrue(s.contains("account closed"))
+        assertTrue(s.contains("does not stop a site from blocking it"))
+        assertTrue(s.contains("closing an account you sign in to"))
         assertTrue(s.contains("never types a password"))
+        assertTrue(s.contains("never solves a captcha"))
         assertFalse(s.contains("never signs in"))
-        assertTrue(s.contains("may not be recognised"))
+        assertTrue(s.contains("may not be spotted"))
         assertTrue(BrowserEngine.STEPS_NOTE.contains("does not run the program"))
         assertTrue(BrowserEngine.DETAIL.contains("uses no proxy"))
-        assertTrue(BrowserEngine.DETAIL.contains("Off by default"))
+        assertTrue(BrowserEngine.DETAIL.contains("off until you turn it on"))
         assertTrue(BrowserEngine.STEPS_NOTE.contains("never downloads it by itself"))
         val all = listOf(
             BrowserEngine.TITLE, BrowserEngine.SWITCH, BrowserEngine.MODE_TITLE, BrowserEngine.OFF_LINE,

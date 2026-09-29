@@ -192,7 +192,7 @@
     },
     {
       "action": "obscura_enable",
-      "title": "Jarvis wants to use a headless browser (Obscura) for plain web reading"
+      "title": "Jarvis wants to read web pages with a browser that has no window (Obscura)"
     },
     {
       "action": "open_public_tunnel",
@@ -264,7 +264,7 @@
     },
     {
       "action": "screen_picture_enable",
-      "title": "Jarvis wants to let it look at pictures of your screen, slowly, on the processor"
+      "title": "Jarvis wants to let it read pictures of your screen (slow, uses your main chip)"
     },
     {
       "action": "search_the_web",

@@ -50,6 +50,9 @@
       .row {
         display: flex;
         align-items: center;
+        /* At big text the buttons drop to their own line instead of being
+           pushed out of the window: Stop is always on screen. */
+        flex-wrap: wrap;
         gap: 6px;
         min-width: 0;
       }
@@ -66,7 +69,7 @@
       }
       .words {
         flex: 1;
-        min-width: 0;
+        min-width: 9em;
         margin: 0;
         padding: 0;
         color: inherit;

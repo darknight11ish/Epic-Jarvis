@@ -73,6 +73,10 @@ class ScreenTextTest {
             Node(text = "k", hint = "CVV"),
             Node(text = "l", hint = "Your PIN"),
             Node(text = "m", hint = "One-time code"),
+            // Underscored view ids: \b treats "_" as a letter, so these were missed.
+            Node(text = "n", idName = "pin_code"),
+            Node(text = "o", idName = "card_cvv"),
+            Node(text = "p", idName = "one_time_code"),
         )
         for ((i, k) in kinds.withIndex()) {
             assertTrue("kind $i is not dropped", ScreenText.isSecretField(k))

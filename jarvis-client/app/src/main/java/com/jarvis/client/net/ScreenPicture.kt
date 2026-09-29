@@ -37,27 +37,27 @@ object ScreenPicture {
     /** The approval action the PC raises the ON card under. */
     const val ACTION = "screen_picture_enable"
 
-    const val TITLE = "Read pictures of my screen (slow, on the processor)"
+    const val TITLE = "Picture mode"
     const val DETAIL =
-        "With one graphics card Jarvis reads only the WORDS on your screen. This lets a small " +
-            "picture model also look at the picture itself, so it can tell what a chart, a button " +
-            "or a photo shows. It runs on this PC's processor, not on your graphics card, so your " +
-            "everyday chat model is not disturbed - but it is SLOW, and how slow depends on your " +
-            "PC. Anything that looks like a key, a card number or a password is blacked out first, " +
+        "By default Jarvis reads only the words on your screen. Picture mode also lets a small " +
+            "picture reader look at the picture itself, so it can tell what a chart, a button " +
+            "or a photo shows. It runs on your PC's main chip (the CPU), not your graphics card, " +
+            "so your chat model is not slowed down - but it is SLOW, and how slow depends on " +
+            "your PC. Anything that looks like a key, a card number or a password is blacked out first, " +
             "and if that part is missing no picture is used. Nothing leaves this PC and nothing " +
             "is saved. Off by default. Turning it on asks first, because a model has to be " +
             "downloaded."
-    const val SWITCH = "Let Jarvis look at pictures of my screen (slow)"
-    const val OFF_LINE = "Off. Jarvis reads the words on your screen only."
+    const val SWITCH = "Turn on Picture mode (slow)"
+    const val OFF_LINE = "Picture mode is off. Jarvis reads the words on your screen only."
     const val WAITING_LINE = "Waiting for your yes on the card. Nothing has changed yet."
     const val UNREAD = "Could not read this setting."
     const val MISSING =
-        "This PC's Jarvis does not have picture mode yet. Run scripts\\apply-patches.ps1 on the " +
-            "PC to add it."
+        "This PC's Jarvis is missing this feature. In PowerShell on the PC, in the Jarvis " +
+            "folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis."
     const val STEPS_TITLE = "To set it up, paste this one line into PowerShell on your PC:"
     const val STEPS_NOTE =
-        "It downloads the picture model from Ollama (ollama.com; how big it is has not been " +
-            "checked), then measures how many seconds one look takes on your PC and saves the " +
+        "It downloads the picture model from Ollama (ollama.com). We have not checked how big " +
+            "the download is, so expect a wait. Then it times one look on your PC and saves the " +
             "number. Jarvis never downloads the model by itself."
     const val COPY = "Copy the line"
 

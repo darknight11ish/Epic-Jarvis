@@ -112,8 +112,8 @@ TITLES = {
     "second_card_browser_enable": "turn on browser control, which works real web pages",
     "second_card_combined_enable": "run one bigger model across both graphics cards",
     "second_card_third_assign": "move a second-card feature onto a third graphics card",
-    "screen_picture_enable": "let it look at pictures of your screen, slowly, on the processor",
-    "obscura_enable": "use a headless browser (Obscura) for plain web reading",
+    "screen_picture_enable": "let it read pictures of your screen (slow, uses your main chip)",
+    "obscura_enable": "read web pages with a browser that has no window (Obscura)",
     "big_model_enable": "start the big model for background jobs",
     # --- its own settings and code
     "change_own_config": "change one of its settings",

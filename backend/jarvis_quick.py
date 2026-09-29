@@ -1875,8 +1875,8 @@ def _run_find_phone(intent: Intent) -> Result:
     return Result(str(out.get("said") or ""), n)
 
 
-SCREEN_MISSING = ("Your PC's Jarvis cannot look at the screen yet - run apply-patches.ps1 on "
-                  "the PC.")
+SCREEN_MISSING = ("This PC's Jarvis is missing this feature. In PowerShell on the PC, in the "
+                  "Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.")
 SCREEN_PC_ONLY = ("Watch with me looks at this PC's screen, so it can only be started, extended "
                   "or asked about from this PC.")
 

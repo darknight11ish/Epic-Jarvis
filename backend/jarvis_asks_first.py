@@ -184,7 +184,7 @@ SAYS = {
     "auto": "Does it without asking",
     "notify": "Does it, then tells you",
     "ask": "Asks you first, every time",
-    "never": "Never - your settings file switches it off",
+    "never": "Never allowed: switched off in your PC's settings file.",
 }
 #: An action that only ever runs on a person's yes, set looser in the file.
 SAYS_REFUSED = "Refused - it only runs on your yes, so its line must say \"ask\""
@@ -193,7 +193,8 @@ SAYS_NO_CARD = "Does it without asking"
 
 #: The notes under a row.
 NOTE_ALWAYS = "Always asks. This cannot be changed from an app."
-NOTE_FILE = "Only your settings file (jarvis-framework.toml) changes this one."
+NOTE_FILE = ("This can only be changed in your PC's settings file (jarvis-framework.toml), "
+             "not in the app.")
 NOTE_WIKI = ("Always asks: the wiki is written only on your yes (security audit), so it "
              "cannot be loosened - a looser line would switch \"Add to wiki\" off.")
 #: "Check for tool updates" (2026-09-27, the owner's own request): a card
@@ -357,7 +358,7 @@ GROUPS = (
     # Jarvis Live (the owner's decision of 2026-09-28; jarvis_live.py): the
     # page promises every action, and starting Live is one (the review of
     # 2026-09-28). Decided in the code: no card, ever.
-    ("Talking with Jarvis", ["fixed:live"]),
+    ("Talking with Jarvis", ["fixed:live", "fixed:screen"]),
     ("Jarvis's own settings, memory and voice", [
         "change_own_config", "stop_asking_before_every_web_search", "learning_enable",
         "learning_auto_enable", "learning_sensitive_enable", "history_enable",
@@ -411,6 +412,17 @@ FIXED = {
                    "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still "
                    "checked for your voice, and a card that comes up during Live still waits "
                    "for your tap. How far Live is trusted is a Voice setting."),
+    # "Look at this" and "Watch with me" (the owner's decision of 2026-09-28;
+    # jarvis_screen.py): the page promises every action. Decided in the code: no
+    # card - only the owner's own act on this PC, with a sign on screen. Removing
+    # an app from the "Never look at" list is a card (change_own_config).
+    "fixed:screen": ("Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")",
+                     SAYS_NO_CARD,
+                     "Your own key or words, on this PC only. \"Watch with me\" shows a "
+                     "\"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps "
+                     "you exclude, and Stop or \"stop everything\" ends it at once. What it reads "
+                     "counts as outside text and is never saved. Taking an app off the \"Never look "
+                     "at\" list asks with a card."),
     # "Solve it here" (the owner's decision of 2026-09-28; jarvis_handoff.py):
     # the page promises every action. Decided in the code: no card - only
     # the owner's own taps and typing pass, only while Jarvis is paused there.
@@ -418,7 +430,8 @@ FIXED = {
                       SAYS_NO_CARD,
                       "Your own taps and typing, passed to that one browser window on the PC "
                       "only while Jarvis is paused at the page. Jarvis never solves it, and "
-                      "the picture is never saved. Resume still asks with a card."),
+                      "the picture is never saved. After you solve it, the paused job "
+                      "only carries on after you approve a card."),
     "fixed:plugin_use": ("Use a tool from a plug-in program on this PC (MCP)",
                          "Asks you first, every time",
                          "Always asks, whatever your settings file says: it is someone "
@@ -472,11 +485,18 @@ def _file_tiers() -> dict:
         return {}
 
 
+#: A row whose card words are too short for a page that lists every action side by
+#: side: it says what the action really is here (only these kinds still ask).
+ROW_TITLES = {
+    "schedule_repeat": "set up the morning briefing or a \"tell me when\" alert",
+}
+
+
 def _title(action: str) -> str:
     """The approval card's own words, as a row title: "Read your calendar"."""
     try:
         import jarvis_card_words as W
-        phrase = W.TITLES.get(action)
+        phrase = ROW_TITLES.get(action) or W.TITLES.get(action)
     except Exception:
         phrase = None
     if not phrase:
@@ -974,7 +994,7 @@ def _here(here: Optional[bool], peer, local) -> bool:
 # offered at all - one line of [tools].enabled, never [autonomy.tiers].
 # ---------------------------------------------------------------------------
 
-TOOLS_LABEL = "Offer this to the AI model"
+TOOLS_LABEL = "Let the AI use this"
 TOOLS_DETAIL = ("Whether the AI model is offered each reading tool at all - a separate thing "
                "from whether it asks you first, above. Turning one on shows an approval card "
                "and asks Windows Hello, on this PC; turning it off is instant, from either "
@@ -1308,7 +1328,7 @@ LIGHTS_DETAIL = ("When you name a light, plug or fan yourself - \"turn off the k
                  "and garage doors always ask, each with a card of its own, and so does "
                  "everything after Jarvis has read outside text in the chat. Turning this on "
                  "shows you an approval card first; turning it off happens at once.")
-LIGHTS_NOTE = "Off by default. The switch is below."
+LIGHTS_NOTE = "Asks first unless you turn on the switch below (off by default)."
 LIGHTS_WAITING = "Waiting for your yes on the approval card, on your PC or phone."
 
 LIGHTS_CARD = "\n".join([

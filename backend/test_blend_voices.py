@@ -427,8 +427,11 @@ def t_the_picker_says_where_each_case_stands():
           and view["pack"] == {"kind": "v1", "name": "Kokoro v1.0", "voices": 54}
           and view["choice"] == "af_heart" and view["default"] == "af_heart", view)
     check("GET /api/voice/voices carries it", V.status()["speaker"] == V.speaker_view())
+    check("made: no line to copy", view["make_line"] == "", view)
     reset("v1", "none")
     view = V.speaker_view()
+    check("not made yet: the one PowerShell line rides along for the phone's Copy button",
+          view["make_line"] == K.MAKE_LINE, view)
     check("the new pack, not made yet: not listed, and the note says how",
           [c["id"] for c in view["choices"]] == list(K.V1_PICK)
           and view["note"] == K.BLENDS_TO_MAKE
@@ -486,14 +489,16 @@ def t_a_voice_that_sounds_like_the_owner_is_never_used():
     c, o = choose("mix_ashby")
     check("refused in plain words about a built-in voice (not the recording wording), and "
           "nothing was saved",
-          c == 400 and o["error"] == "Ashby sounds too much like your own voice, so Jarvis "
-          "will not use it." and not V._state_path().exists(), (c, o))
+          c == 400 and o["error"] == ("Ashby sounds too close to your own voice, and a voice that "
+                                      "sounds like you could pass Jarvis's own voice check. "
+                                      "Jarvis will not use it, so the normal voice speaks.")
+          and not V._state_path().exists(), (c, o))
     view = V.speaker_view()
     check("it is not listed any more, and the note says why",
           not any(r["id"] == "mix_ashby" for r in view["choices"])
           and any(r["id"] == "mix_clara" for r in view["choices"])
-          and "Ashby sounds too much like your own voice, so Jarvis will not use it."
-          in view["note"],
+          and "Ashby sounds too close to your own voice" in view["note"]
+          and "the normal voice speaks" in view["note"],
           view)
     c, o = V.sample_voice({"voice": "mix_ashby"})
     check("Hear it refuses it like any unlisted voice", c == 400
@@ -507,9 +512,9 @@ def t_a_voice_that_sounds_like_the_owner_is_never_used():
     OWNER["ok"] = False
     view = V.speaker_view()
     check("new prints: the saved voice is re-checked in the background, once, not on the GET "
-          "itself - until then it still speaks",
-          len(SPAWNED) == 1 and not CHECKED and V.speaker() == 44
-          and view["choice"] == "mix_clara")
+          "itself - until then the pack's default speaks (not checked is not fine)",
+          len(SPAWNED) == 1 and not CHECKED and V.speaker() == 3
+          and view["choice"] == "af_heart" and "being checked" in view["note"], view)
     V.speaker_view()
     check("asking again while it is queued does not queue another", len(SPAWNED) == 1)
     SPAWNED.pop()()
@@ -518,8 +523,8 @@ def t_a_voice_that_sounds_like_the_owner_is_never_used():
     check("it failed: the pack's default speaks instead, the choice shows that, and the note "
           "says so in words",
           V.speaker() == 3 and V.speaker_name() == "af_heart" and view["choice"] == "af_heart"
-          and view["note"].startswith("Clara sounds too much like your own voice, so Jarvis "
-                                      "will not use it. American (female) - Heart speaks instead.")
+          and view["note"].startswith("Clara sounds too close to your own voice")
+          and view["note"].endswith("Right now American (female) - Heart speaks.")
           and not any(r["id"] == "mix_clara" for r in view["choices"]), view)
     check("the saved choice itself is kept as the owner made it (a new print may pass it again)",
           json.loads(V._state_path().read_text())["speaker"] == "mix_clara")
@@ -545,7 +550,8 @@ def t_not_being_able_to_check_is_not_a_pass():
     V.owner_check = boom
     c, o = choose("mix_ashby")
     check("the check itself failing: 503, the exception's name and never its message",
-          c == 503 and "RuntimeError" in o["error"] and "secret" not in o["error"]
+          c == 503 and "RuntimeError" not in o["error"] and "secret" not in o["error"]
+          and "could not compare Ashby with your saved voice" in o["error"]
           and not V._state_path().exists(), (c, o))
     reset("v1", "ready")
     V.owner_check = lambda samples, margin=None: {
@@ -553,8 +559,10 @@ def t_not_being_able_to_check_is_not_a_pass():
         "why": "the voice check (jarvis_voice.py) is not installed on this PC"}
     c, o = choose("mix_clara")
     check("no voice check to compare with: refused, in words about the blend - not a pass",
-          c == 400 and o["error"] == "Clara could not be checked against your voice print, "
-          "so Jarvis will not use it yet." and not V._state_path().exists(), (c, o))
+          c == 400 and o["error"] == ("Jarvis could not compare Clara with your saved voice, so it "
+                                      "will not use it yet. Try again, or retrain your voice "
+                                      "under Voice, Your voice.")
+          and not V._state_path().exists(), (c, o))
     reset("v1", "ready")
     with V._TRY_LOCK:
         c, o = choose("mix_ashby")
@@ -687,7 +695,10 @@ def t_a_saved_choice_that_cannot_be_spoken_is_never_a_wrong_voice():
           V.speaker() == 0 and "needs the newer voice pack" in view["note"], view)
     reset("v1", "ready")
     V._write_state(speaker="mix_ashby")
-    check("made and loaded: it is Ashby, and the saved name is the one in the file",
+    check("made and loaded but NOT checked yet (a restart): the default speaks, and the check is queued",
+          V.speaker() == 3 and V.speaker_name() == "af_heart")
+    V._BLEND_CHECKS[V._blend_key("mix_ashby")] = {"ok": True}
+    check("made, loaded and checked: it is Ashby, and the saved name is the one in the file",
           V.speaker() == 53 and json.loads(V._state_path().read_text())["speaker"] == "mix_ashby")
     reset("v1", "ready")
     V._write_state(speaker="em_santa")

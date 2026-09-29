@@ -501,7 +501,12 @@ class ChatSession(
         // before, never streamed (ScreenWatch). Not in Live.
         if (!live) ScreenWatch.beforeQuestion()
         val look = if (live) null else ScreenLook.forQuestion()
+        // A picture the owner attached themselves is THEIR photo, not the screen:
+        // the held Watch picture is not sent beside it, and the message is not
+        // marked as a screen picture (the PC would read only its words and keep
+        // it off the picture reader).
         val screen = look?.let { ScreenLook.attach(it) }
+            ?.let { if (picture != null) it.copy(pictureIsScreen = false) else it }
         val sentPicture = picture ?: look?.picture
         val asking = ChatHistory.asking(message, provenance, shared, picture = sentPicture != null)
         // The owner cut the last spoken answer off (VoiceSession): where,

@@ -209,7 +209,9 @@ def _gitleaks_spans(text: str, deadline: float) -> list:
 # --------------------------------------------------------------------------
 
 _CARD = re.compile(
-    r"\b(?!1\d{12}(?!\d))((4\d{3})|(5[0-5]\d{2})|(6\d{3})|(1\d{3})|(3\d{3}))"
+    # 2221-2720 are Mastercard's 2-series; 56-58 are Maestro.
+    r"\b(?!1\d{12}(?!\d))((4\d{3})|(5[0-8]\d{2})|(2(?:2[2-9]\d|[3-6]\d\d|7[01]\d|720))"
+    r"|(6\d{3})|(1\d{3})|(3\d{3}))"
     r"[- ]?(\d{3,4})[- ]?(\d{3,4})[- ]?(\d{3,5})\b")
 _CRYPTO = re.compile(r"(bc1|[13])[a-zA-HJ-NP-Z0-9]{25,59}")
 _IBAN = re.compile(r"(?<![A-Z0-9])([A-Z]{2}[0-9]{2}(?:[ -]?[A-Z0-9]{4}){2,6})"
@@ -353,7 +355,16 @@ def _pii_spans(text: str, kinds: Iterable[str]) -> list:
 #: a colon or equals sign: "Password: hunter2", "PIN = 4821". gitleaks's broad
 #: rule needs 10 characters or more; a real password is often shorter.
 _LABELLED = re.compile(
-    r"\b(?:pass(?:word|wd|code|phrase)?|pwd|pin|secret)\b[ \t]*[:=][ \t]*([^\s]{3,64})", re.I)
+    # The value may sit on the next line (a form's label above its box), after
+    # "is" ("your password is ..."), and a passphrase runs on for a few words.
+    r"\b(?:pass(?:word|wd|code|phrase)?|pwd|pin|secret)\b[ \t]*(?:[:=]|\bis\b)\s{0,3}"
+    r"([^\s]{3,64}(?:[ \t]+[^\s]{1,64}){0,5})", re.I)
+#: Codes: "PIN 4821", "CVV: 123", "Your verification code is 482913", a code
+#: on the line under its label. Digits only, so ordinary words are not caught.
+_CODE = re.compile(
+    r"\b(?:cvv2?|cvc2?|otp|pin|(?:verification|security|confirmation|one[- ]time|login|"
+    r"auth(?:entication)?|access)[ \t]+(?:code|pin))\b[ \t]*(?:[:=]|\bis\b)?\s{0,3}"
+    r"(\d(?:[ -]?\d){2,7})(?!\d)", re.I)
 #: What is not a password after such a label: dots or stars (the box shows
 #: nothing readable), or the plain words a form puts there.
 _MASK = re.compile(r"^[●•·*xX.\-_]+$")
@@ -372,9 +383,12 @@ def _own_spans(text: str) -> list:
     out = []
     for m in _LABELLED.finditer(text):
         v = m.group(1)
-        if _MASK.match(v) or v.lower().strip(".,;") in _NOT_A_VALUE:
+        first = v.split()[0]
+        if _MASK.match(first) or first.lower().strip(".,;") in _NOT_A_VALUE:
             continue
         out.append((m.start(1), m.end(1), "labelled-password"))
+    for m in _CODE.finditer(text):
+        out.append((m.start(1), m.end(1), "labelled-code"))
     for m in _PEM_OPEN.finditer(text):
         out.append((m.start(), m.end(), "private-key-open"))
     return out
@@ -450,9 +464,17 @@ def _layout(lines: list, joiner: str) -> tuple:
     return "".join(parts), spans
 
 
+_LONG_RUN = re.compile(r"\S{8000,}")
+
+
 def _find(text: str, kinds: Iterable[str], deadline: float) -> list:
     if len(text) > MAX_SCAN_CHARS:
         raise Unchecked("there is too much small text in the picture to check")
+    if _LONG_RUN.search(text):
+        # A blob with no spaces (a base64 or hex dump, a minified line): the
+        # secret patterns take seconds on it, so it is "cannot check" at once.
+        raise Unchecked("there is a very long run of characters with no spaces in it, "
+                        "which cannot be checked quickly")
     return _gitleaks_spans(text, deadline) + _pii_spans(text, kinds) + _own_spans(text)
 
 

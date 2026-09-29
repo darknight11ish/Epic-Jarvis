@@ -182,8 +182,9 @@ CARD_ACTION = "change_own_config"
 
 TITLE = "Watch with me"
 LOOK_TITLE = "Look at this"
-NOT_BUILT = ("Looking at the screen is not built on this PC yet: the rules are in, but the "
-             "Windows readers it needs are the next step.")
+NOT_BUILT = ("Looking at the screen is not set up on this PC yet. This PC's Jarvis is missing "
+             "this feature. In PowerShell on the PC, in the Jarvis folder, run: "
+             ".\\scripts\\apply-patches.ps1 . Then restart Jarvis.")
 
 # --------------------------------------------------------------------------
 #   The label the model sees (JARVIS-API section 36's words, for the screen)
@@ -219,13 +220,13 @@ PAUSE_WORDS = {
     "private_window": "a private browser window",
     "jarvis": "one of Jarvis's own windows",
     "lock_screen": "the lock screen",
-    "admin_prompt": "an admin prompt",
+    "admin_prompt": "a Windows permission window",
     "unknown_site": "a web page whose site I can't read",
     "cannot_read": "a window I can't read",
-    "cannot_check": "a window I can't check for password boxes or capture protection",
+    "cannot_check": "a window I can't check for password boxes",
     "list_unreadable": "your Never look at list could not be read",
     "window_changed": "a different window came to the front while I looked",
-    "not_built": "looking at the screen is not built on this PC yet",
+    "not_built": "looking at the screen is not set up on this PC yet",
     "capture_failed": "the picture could not be taken",
 }
 #: What Jarvis says when a pause stops a look, where the design gives words.
@@ -234,13 +235,24 @@ PAUSE_SAID = {
     "password_box": "There's a password box in front, so I'm not looking.",
     "private_window": "That's a private browser window, so I'm not looking.",
     "never_look": "That's on your Never look at list, so I'm not looking.",
+    "protected": "That window asks not to be captured, so I'm not looking.",
+    "jarvis": "That's one of Jarvis's own windows, so I'm not looking.",
+    "lock_screen": "That's the lock screen, so I'm not looking.",
+    "admin_prompt": "That's a Windows permission window, so I'm not looking.",
+    "cannot_read": "I can't read that window, so I'm not looking.",
+    "cannot_check": "I can't tell whether this window has a password box, so I'm not looking.",
+    "list_unreadable": ("I can't read your Never look at list, so I'm not looking. Open "
+                        "Settings, Look at this and Watch with me, to see why."),
+    "window_changed": "A different window came to the front while I looked, so I'm not looking.",
+    "not_built": "Looking at the screen is not set up on this PC yet.",
+    "capture_failed": "I couldn't take the picture. Try again.",
 }
 END_WORDS = {
     "owner": "you stopped it",
     "time": "the time was up",
-    "locked": "Windows locked",
+    "locked": "Windows was locked",
     "slept": "the PC slept",
-    "stop_all": "Stop everything",
+    "stop_all": "you pressed Stop everything",
 }
 
 #: The words BOTH apps show for the sign (the desktop's badge and strip, the
@@ -258,10 +270,10 @@ SEEN = {
     "hint": ("Press the Look at this key, then ask - Jarvis reads the words on the window in "
              "front, once, and keeps nothing."),
     "held": ("Jarvis is holding what it read for your follow-up questions. It is thrown away "
-             "when it is two minutes old or the bar closes."),
+             "when it is two minutes old or the Jarvis bar closes."),
     "held_short": "Answered using what Jarvis read from your screen (words only).",
     "watching_note": "Ask about your screen and Jarvis looks when you start. A picture is never saved.",
-    "link": "The link to Jarvis is catching up - Stop still works",
+    "link": "Reconnecting to Jarvis. Stop still works.",
     "left_under_a_minute": "under a minute left",
 }
 SIGN_DOT = " · "
@@ -385,6 +397,14 @@ class NeverLook:
                 return
             self._added = [e for e in added if e]
             self._removed = [e for e in removed if e]
+
+    def retry_if_broken(self) -> None:
+        """One transient read error (an antivirus lock, a file being written)
+        must not refuse every look until Jarvis restarts: a broken list is read
+        again when it is next needed, and stays broken (looks refused, the safe
+        direction) only while it really cannot be read."""
+        if self.broken:
+            self.load()
 
     @staticmethod
     def _entry(e) -> Optional[tuple]:
@@ -1009,7 +1029,7 @@ def _newest_user(messages):
     return None
 
 
-def screen_mark(messages) -> str:
+def mark_of_messages(messages) -> str:
     """The `screen` mark on the newest user message, or "" - read off the
     request as the app sent it (the field is stripped before the model)."""
     i = _newest_user(messages)
@@ -1128,11 +1148,22 @@ def with_screen(messages: list, mark: str = "", *, engine=None,
                               "text": SCREEN_TEXT_SLOW if got.get("slow") else SCREEN_TEXT_EXPIRED})
         extra = _phone_picture_lines(pic_jobs)     # picture mode, when the owner turned it on
         if extra:
+            # The picture reader's words come from the screen too: the turn is a
+            # screen read (outside text) even when OCR found no words of its own.
+            info["read"] = True
             info["text"] = (info["text"] + "\n\n" + extra).strip()
             added.append({"type": "text", "text": extra})
             info["picture_said"] = _phone_picture_said(pic_jobs)
     except Exception:
-        return list(messages or []), {"read": False, "text": "", "note": "", "mode": ""}
+        # Fail closed: the screen's own parts (the phone's screen_text, and the
+        # pictures of a phone screen read) are dropped, never passed on raw.
+        safe = [p for p in parts
+                if not (isinstance(p, dict) and p.get("type") == "screen_text")
+                and not (mark == "phone" and _is_image(p))]
+        out = list(messages or [])
+        if idx < len(out):
+            out[idx] = dict(out[idx], content=safe)
+        return out, {"read": False, "text": "", "note": "", "mode": ""}
     msgs[idx] = dict(msgs[idx], content=kept + added)
     return msgs, info
 
@@ -1286,8 +1317,16 @@ class Screen:
         slept (its own checks stopped for SLEEP_GAP_S), so only it ends a
         session for that."""
         changed = False
+        need_snap = False
         with self._lock:
+            # A held look is dropped when its time is up, whether or not anyone asks
+            # (the words are not kept in memory, or shown as held, past FOLLOW_UP_S).
+            if self._look is not None and self.clock() - self._look.at > FOLLOW_UP_S:
+                self._look = None
+                changed = True
             if self.state not in (WATCHING, PAUSED):
+                if changed:
+                    self._emit()
                 return
             now = self.clock()
             if loop and self.last_tick and now - self.last_tick > SLEEP_GAP_S:
@@ -1298,19 +1337,31 @@ class Screen:
                 changed = True
             else:
                 self.last_tick = now
-                snap = self._snapshot()
-                why = pause_reason(snap, self.never)
-                if why == "lock_screen":
-                    self._end("locked")
-                    changed = True
-                else:
-                    new_state = PAUSED if why else WATCHING
-                    if new_state != self.state or why != self.pause:
-                        self.state, self.pause = new_state, why
+                need_snap = True
+            never = self.never
+        never.retry_if_broken()
+        why = None
+        if need_snap:
+            # Reading Windows (UI Automation, a browser's address box) can take
+            # seconds, or hang on a frozen program: it is done OUTSIDE the lock,
+            # so Stop and the status never wait behind it.
+            snap = self._snapshot()
+            why = pause_reason(snap, never)
+            with self._lock:
+                if self.state in (WATCHING, PAUSED):     # not stopped while reading
+                    now = self.clock()
+                    if why == "lock_screen":
+                        self._end("locked")
                         changed = True
-                    if not self.warned and self.ends_at - now <= WARN_BEFORE_S:
-                        self.warned = True
-                        changed = True
+                    else:
+                        new_state = PAUSED if why else WATCHING
+                        if new_state != self.state or why != self.pause:
+                            self.state, self.pause = new_state, why
+                            changed = True
+                        if not self.warned and self.ends_at - now <= WARN_BEFORE_S:
+                            self.warned = True
+                            changed = True
+        with self._lock:
             ended = self.state == ENDED
         if changed:
             if ended:
@@ -1325,6 +1376,7 @@ class Screen:
         if not self.built():
             return None, "not_built"
         before = self._snapshot()
+        self.never.retry_if_broken()
         why = pause_reason(before, self.never)
         if why:
             return None, why
@@ -1614,7 +1666,9 @@ def look_line(payload) -> dict:
         return {"text": str(p.get("note") or "").strip() or "Looked at your screen.",
                 "tone": "ok"}
     return {"text": str(p.get("said") or "").strip()
-            or "Jarvis could not look at your screen just now.", "tone": "warn"}
+            or ("Jarvis could not look at your screen just now. Try again. If it keeps "
+                "happening, check Settings, Look at this and Watch with me."),
+            "tone": "warn"}
 
 
 def screen_mark(status) -> str:
@@ -1665,12 +1719,15 @@ def not_built_words() -> str:
         import jarvis_screen_win as win
         why = win.unavailable_why()
     except Exception:
-        why = "Jarvis's Windows screen reader (jarvis_screen_win.py) is not in the backend folder."
+        why = ("This PC's Jarvis is missing its Windows screen reader (jarvis_screen_win.py). "
+               "In PowerShell on the PC, in the Jarvis folder, run: "
+               ".\\scripts\\apply-patches.ps1 . Then restart Jarvis.")
     if why:
         return "Looking at the screen is off on this PC. " + why
     if _default_ocr() is None:
-        return ("Looking at the screen is off on this PC: the part of Jarvis that reads words "
-                "(jarvis_ocr.py) is not in the backend folder.")
+        return ("Looking at the screen is off on this PC. This PC's Jarvis is missing the part "
+                "that reads words (jarvis_ocr.py). In PowerShell on the PC, in the Jarvis "
+                "folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.")
     return NOT_BUILT
 
 
@@ -1701,14 +1758,15 @@ ROUTE_NEVER = "/api/screen/never-look"
 #: GET from any paired device; POST {"enabled": bool} - ON is ONE card, OFF at once.
 ROUTE_PICTURE = "/api/screen/picture"
 PICTURE_MISSING = ("This PC's Jarvis does not have picture mode: jarvis_screen_picture.py is not "
-                   "in the backend folder. Run apply-patches.ps1 again.")
+                   "in the backend folder. In PowerShell on the PC, in the Jarvis folder, run: "
+                   ".\\scripts\\apply-patches.ps1 . Then restart Jarvis.")
 #: The verbs POST /api/screen takes. "look", "ask", "start" and "extend" can
 #: only come from THIS PC; "stop" (and "drop") from anywhere, because they
 #: only ever make Jarvis look LESS.
 LOCAL_DOS = ("look", "ask", "start", "extend")
 ANY_DOS = ("stop", "drop")
 LOCAL_ONLY_SAYS = ("Jarvis can only look at the screen of the PC it runs on, and only when it "
-                   "is asked from that PC.")
+                   "is asked from that PC. Press the Look at this key on the PC.")
 _LOOPBACK = ("127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost")
 
 
@@ -1734,6 +1792,27 @@ def is_local(peer, local=None) -> bool:
         return bool(oc.from_this_pc(text, str(local or "").strip() or None))
     except Exception:
         return False
+
+
+def drop_remote_look_marks(body, peer, local=None) -> int:
+    """A `screen: "look"` mark on a chat message uses up the look THIS PC holds,
+    so it counts only from this PC (looking is PC-only, LOCAL_DOS). From any
+    other device the mark is taken off the request's messages in place, before
+    the turn reads it, and the turn goes on as an ordinary one. The phone's own
+    marks ("phone", and its screen_text part) are not touched. Returns how many
+    marks were removed; never raises."""
+    try:
+        if is_local(peer, local):
+            return 0
+        n = 0
+        msgs = body.get("messages") if isinstance(body, dict) else None
+        for m in (msgs if isinstance(msgs, list) else []):
+            if isinstance(m, dict) and m.get("screen") == "look":
+                m.pop("screen", None)
+                n += 1
+        return n
+    except Exception:
+        return 0
 
 
 def _flat(extra: Optional[dict] = None) -> dict:

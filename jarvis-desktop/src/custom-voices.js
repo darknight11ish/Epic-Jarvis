@@ -224,7 +224,7 @@ export const TRY_BUSY = "Jarvis is busy talking or listening. Try it again in a 
 /** Cut short: a question or an answer started while it played. */
 export const TRY_STOPPED = "Stopped, because Jarvis is talking or listening now.";
 /** A PC whose backend has no "Try it" route yet (said by the Rust, voice_training.rs). */
-export const TRY_UPDATE = "Your PC cannot play an animal's voice yet. Run the patch script on the PC first.";
+export const TRY_UPDATE = "Your PC cannot play an animal's voice yet. In PowerShell on the PC, in the Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.";
 /** While it plays. */
 export const tryPlaying = (name) => `Playing the ${name}'s voice.`;
 /** Once it has played to the end. */
@@ -246,7 +246,11 @@ export const HEAR_BUSY = "Jarvis is busy talking or listening. Try again in a mo
 /** Refused: App lock would ask again (the button is out of reach then; belt and braces). */
 export const HEAR_LOCKED = "Jarvis is locked right now. Unlock it, then try again.";
 /** A PC whose backend has no sample route yet (said by the Rust, voice_training.rs). */
-export const HEAR_UPDATE = "Your PC cannot play voice samples yet. Run the patch script on the PC first.";
+export const HEAR_UPDATE = "Your PC cannot play voice samples yet. In PowerShell on the PC, in the Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.";
+/** The button's words while a sample plays (pressing it again stops the sample). */
+export const HEAR_STOP = "Stop";
+/** Said next to the voice when the owner stops a sample. */
+export const HEAR_STOPPED = "Stopped.";
 /** While it plays: the voice's own label ("American (female) - Bella"). */
 export const hearPlaying = (label) => `Playing ${label}.`;
 /** Once it has played to the end. */

@@ -15,15 +15,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.data.NotificationAllowListStore
 import com.jarvis.client.data.ScreenNever
 import com.jarvis.client.data.Security
+import com.jarvis.client.net.ScreenPlateText
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.Section
+import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.theme.LocalChrome
 
 /**
@@ -46,7 +50,7 @@ internal fun LookSection(
     onChange: (Security) -> Unit,
 ) {
     val chrome = LocalChrome.current
-    Section("Looking at your screen") {
+    Section("Look at this and Watch with me") {
         Plate {
             SwitchRow(
                 title = ScreenNever.SETTING_TITLE,
@@ -55,6 +59,8 @@ internal fun LookSection(
                 enabled = !busy,
                 onChange = { onChange(security.copy(screenRead = it)) },
             )
+            Gap(6)
+            Text(ScreenPlateText.LOOK_POINTER, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
             Gap(12)
             Text(ScreenNever.LIST_TITLE, style = MaterialTheme.typography.labelLarge, color = chrome.textHi)
             Gap(4)
@@ -71,6 +77,7 @@ private fun NeverList(security: Security, busy: Boolean, onChange: (Security) ->
     val context = LocalContext.current
     val store = remember { NotificationAllowListStore(context) }
     var picking by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
     val listed = security.neverApps.sorted()
 
     if (listed.isEmpty()) {
@@ -86,9 +93,14 @@ private fun NeverList(security: Security, busy: Boolean, onChange: (Security) ->
                 )
                 // A loosening: SecurityRules.loosens sees an app leave the list,
                 // and the caller asks for the fingerprint or PIN first.
-                Quiet("Remove", enabled = !busy, onClick = {
-                    onChange(security.copy(neverApps = security.neverApps - pkg))
-                })
+                Quiet(
+                    "Remove from the list",
+                    modifier = Modifier.semantics { contentDescription = ScreenPlateText.removeLabel(labelOf(context, pkg)) },
+                    enabled = !busy,
+                    onClick = {
+                        onChange(security.copy(neverApps = security.neverApps - pkg))
+                    },
+                )
             }
         }
     }
@@ -97,7 +109,7 @@ private fun NeverList(security: Security, busy: Boolean, onChange: (Security) ->
         if (picking) "Close the list" else "Add an app",
         modifier = Modifier.fillMaxWidth(),
         enabled = !busy,
-        onClick = { picking = !picking },
+        onClick = { picking = !picking; query = "" },
     )
     if (picking) {
         Gap(8)
@@ -117,8 +129,14 @@ private fun NeverList(security: Security, busy: Boolean, onChange: (Security) ->
         } else if (candidates.isEmpty()) {
             Text("No other apps found to add.", style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
         } else {
+            TextInput(value = query, onValueChange = { query = it }, placeholder = "Search apps")
+            Gap(8)
+            val shown = ScreenPlateText.filterApps(candidates, query, { it.label }, { it.packageName })
+            if (shown.isEmpty()) {
+                Text("No app matches that.", style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+            }
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
-                items(candidates, key = { it.packageName }) { app ->
+                items(shown, key = { it.packageName }) { app ->
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = 48.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -130,10 +148,15 @@ private fun NeverList(security: Security, busy: Boolean, onChange: (Security) ->
                             modifier = Modifier.weight(1f),
                         )
                         // Adding is stricter, so it is instant.
-                        Quiet("Add", enabled = !busy, onClick = {
-                            onChange(security.copy(neverApps = security.neverApps + app.packageName))
-                            picking = false
-                        })
+                        Quiet(
+                            "Add",
+                            modifier = Modifier.semantics { contentDescription = ScreenPlateText.addLabel(app.label) },
+                            enabled = !busy,
+                            onClick = {
+                                onChange(security.copy(neverApps = security.neverApps + app.packageName))
+                                picking = false
+                            },
+                        )
                     }
                 }
             }
@@ -142,7 +165,7 @@ private fun NeverList(security: Security, busy: Boolean, onChange: (Security) ->
 }
 
 /** The app's name as the owner knows it, or its package name when Android will not say. */
-private fun labelOf(context: android.content.Context, pkg: String): String = runCatching {
+internal fun labelOf(context: android.content.Context, pkg: String): String = runCatching {
     val pm = context.packageManager
     pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString()
 }.getOrNull()?.takeIf { it.isNotBlank() } ?: pkg

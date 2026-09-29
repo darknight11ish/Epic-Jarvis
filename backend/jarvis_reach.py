@@ -729,17 +729,17 @@ def _browser(ctx: Ctx) -> dict:
     if not lane_on and not headless_on:
         return _row("browser", name, "off", "", ASK_NA,
                     "Off: it needs the second graphics card's \"Browser control\" switch (a "
-                    "browser window you can see), or the headless browser (Obscura, no window), "
+                    "browser window you can see), or a browser with no window (Obscura), "
                     "and both are off.")
     tier, words = asks("browser_control", ctx)
     if tier == "never":
         return _row("browser", name, "blocked", "websites", words,
                     "Switched on, but your settings say never, so it never runs.")
     if lane_on and headless_on:
-        how = ("in a browser window you can see or in the headless browser (Obscura, no "
-               "window, stealth on). Jarvis picks per task and names which on the card")
+        how = ("in a browser window you can see or in a browser with no window (Obscura). "
+               "Jarvis picks for each task and names which on the card")
     elif headless_on:
-        how = ("in the headless browser (Obscura, no window, stealth on), for plain reading "
+        how = ("in a browser with no window (Obscura), for plain reading "
                "only. A task that needs you to sign in or take over needs the visible browser, "
                "which needs the second graphics card")
     else:
@@ -810,20 +810,21 @@ def _screen_picture(ctx: Ctx) -> dict:
     Ollama on this PC, that also looks at the picture of the screen. Not a way
     out of the PC - like the second card and the big model, it is listed so the
     page is honest about every model Jarvis runs."""
-    name = "Picture mode for the screen (slow)"
+    name = "Picture mode"
     st = ctx.screen_picture if ctx.screen_picture is not None else _screen_picture_status()
     if st.get("missing"):
         return _row("screen_picture", name, "not_set_up", "", ASK_NA,
-                    "Not set up: this PC's Jarvis has no picture mode yet.")
+                    "Not set up: this PC's Jarvis is missing this feature. In PowerShell on the PC, in the "
+                    "Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.")
     if not st.get("enabled"):
         return _row("screen_picture", name, "off", "", ASK_NA,
-                    "Off: with one graphics card Jarvis reads only the words on your screen. "
+                    "Off: Jarvis reads only the words on your screen. "
                     "Switching it on asks you with an approval card.")
-    return _row("screen_picture", name, "on", "this PC (a separate copy of Ollama, on the "
-                                              "processor)", ASK_NA,
-                "Switched on: when you ask Jarvis to look at your screen, a small picture model "
+    return _row("screen_picture", name, "on", "this PC (its own copy of Ollama, on your main "
+                                              "chip, the CPU)", ASK_NA,
+                "Switched on: when you ask Jarvis to look at your screen, a small picture reader "
                 "also looks at the picture, slowly. Secrets in it are blacked out first, it runs "
-                "on the processor and nothing leaves the PC or is saved.")
+                "on your main chip (the CPU) and nothing leaves the PC or is saved.")
 
 
 def _plugin_status() -> dict:

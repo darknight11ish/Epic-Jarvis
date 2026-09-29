@@ -38,7 +38,7 @@ const el = {
   value: $("sl-value"),
   add: $("sl-add"),
   status: $("sl-status"),
-  // Picture mode (a slow picture model on the processor; the owner's decision
+  // Picture mode (a slow picture reader on the main chip; the owner's decision
   // of 2026-09-29).
   pBody: $("sp-body"),
   pTitle: $("sp-title"),
@@ -55,6 +55,8 @@ const el = {
 };
 
 let view = null;
+// True when this PC's Jarvis has no "Look at this" yet: Picture mode is greyed.
+let lookMissing = false;
 let busy = false;
 let poll = null;
 let pView = null;
@@ -97,9 +99,12 @@ function paint() {
     const li = node("li", "sc-gpu");
     li.append(node("span", "sc-gpu-name", row.name));
     li.append(node("span", "sc-gpu-role", `${row.kind} - ${row.tag}`));
+    li.append(node("span", "sc-gpu-role", SETTINGS.takeAsks));
     const rm = node("button", "btn small", SETTINGS.take);
     rm.type = "button";
     rm.disabled = busy || !live();
+    // A greyed button always says why.
+    rm.title = live() ? "" : SETTINGS.waitingLink;
     rm.addEventListener("click", () => remove(row));
     li.append(rm);
     return li;
@@ -128,9 +133,10 @@ async function load() {
     return;
   }
   const s = (status && status.status) || {};
+  lookMissing = s.available === false;
   if (s.available === false) {
     // Not on this PC yet: the PC says why, in its own words.
-    el.state.textContent = String(s.unavailable_why || "Looking at the screen is not on this PC.");
+    el.state.textContent = String(s.unavailable_why || "Looking at the screen is not set up on this PC yet.");
     el.state.hidden = false;
   } else {
     el.state.hidden = true;
@@ -145,6 +151,7 @@ async function load() {
   }
   el.body.hidden = false;
   paint();
+  pPaint();
   // While a card waits, look again now and then so the list follows the answer.
   clearTimeout(poll);
   if (view.pending) poll = setTimeout(load, 3000);
@@ -168,7 +175,7 @@ async function run(action, kind, value, working) {
 async function add() {
   const value = (el.value.value || "").trim();
   if (!value) {
-    say(el.kind.value === "site" ? SETTINGS.kindSite : SETTINGS.kindProgram, "warn");
+    say(SETTINGS.emptyAdd, "warn");
     return;
   }
   const out = await run("add", el.kind.value, value, "Adding...");
@@ -207,9 +214,13 @@ function pPaint() {
   // Turning it ON needs a live link (a card is raised); turning it OFF never
   // waits (rule 4 only holds what loosens). While a card waits the switch stays
   // usable, so it can be turned back off (which takes the card back).
-  el.pSwitch.disabled = pBusy || (!pView.checked && !live());
-  el.pSwitch.title = !pView.checked && !live() ? linkWords(currentLink()).text : "";
-  el.pLine.textContent = pView.line;
+  el.pSwitch.disabled = pBusy || lookMissing || (!pView.checked && !live());
+  el.pSwitch.title = lookMissing
+    ? SETTINGS.pictureNeedsLook
+    : !pView.checked && !live()
+      ? linkWords(currentLink()).text
+      : "";
+  el.pLine.textContent = lookMissing ? SETTINGS.pictureNeedsLook : pView.line;
   el.pMeasured.textContent = pView.measured;
   el.pMeasured.hidden = !pView.measured;
   el.pLineText.value = pView.installLine;

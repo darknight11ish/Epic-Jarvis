@@ -19,6 +19,7 @@ import androidx.compose.ui.text.AnnotatedString
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.ScreenPicture
+import com.jarvis.client.net.ScreenPlateText
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
@@ -78,7 +79,7 @@ internal fun ScreenPictureSection(canAct: Boolean = false) {
         }
     }
 
-    Section("Looking at your screen: pictures", trailing = { Quiet("Refresh", onClick = { reads += 1 }) }) {
+    Section("Picture mode", trailing = { Quiet("Refresh", onClick = { reads += 1 }) }) {
         Plate {
             if (unsupported) {
                 Text(
@@ -156,6 +157,17 @@ private fun PictureBody(
         style = MaterialTheme.typography.bodySmall,
         color = if (cardWaiting) chrome.warnInk else chrome.textMid,
     )
+    // A greyed switch says why: the link to the PC is stale or not read yet.
+    if (!canAct && !cardWaiting && !busy && panel?.enabled != true) {
+        Text(
+            ScreenPlateText.WAITING_LINK,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo,
+            modifier = Modifier.liveStatus(),
+        )
+    }
+    Gap(4)
+    Text(ScreenPlateText.PICTURE_POINTER, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
     readError?.let {
         Text(
             "Couldn't read this switch: $it",

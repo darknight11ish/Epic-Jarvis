@@ -167,8 +167,9 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
   assistant gesture (words only, off by default, Security switch "Let Jarvis
   read this phone's screen"), "Watch this phone with me" (Android screen
   sharing, one picture per question, needs Usage access) and the PC's
-  watching shown on Home with Stop. Words only on one graphics card - no model
-  is shown a picture. The Windows readers and the phone's Android parts have
+  watching shown on Home with Stop. Words only by default; "picture mode"
+  (built, off by default, one approval card, runs on the processor) lets a
+  small picture reader look at a cleaned picture. The Windows readers and the phone's Android parts have
   not run on a real machine yet. The voice setting "Answers about your screen
   after "Hey Jarvis"" (`hands_free_screen`) is in both apps. **Screen safety**
   (2026-09-29, API §62.13; `jarvis_secrets.py`, `jarvis_secret_rules.py`,

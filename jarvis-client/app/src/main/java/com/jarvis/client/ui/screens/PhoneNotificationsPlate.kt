@@ -20,6 +20,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.data.CapturedNotifications
@@ -28,11 +30,13 @@ import com.jarvis.client.data.NotificationAllowListStore
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.PhoneNotifications
+import com.jarvis.client.net.ScreenPlateText
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.Section
+import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.theme.LocalChrome
 import kotlinx.coroutines.Dispatchers
@@ -197,6 +201,7 @@ private fun AllowedAppsList() {
     var version by remember { mutableIntStateOf(0) }
     var allowed by remember { mutableStateOf<List<String>>(emptyList()) }
     var picking by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
     var message by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(version) { allowed = store.packages().sorted() }
@@ -216,18 +221,24 @@ private fun AllowedAppsList() {
     } else {
         allowed.forEach { pkg ->
             Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                // The app's own name (the package name only when Android will not say).
+                val appName = remember(pkg) { labelOf(context, pkg) }
                 Text(
-                    pkg,
+                    appName,
                     style = MaterialTheme.typography.bodyMedium,
                     color = chrome.textHi,
                     modifier = Modifier.weight(1f),
                 )
                 // What was already captured from it goes too (audit A3).
-                Quiet("Remove", onClick = {
-                    store.remove(pkg)
-                    CapturedNotifications(context).removeApp(pkg)
-                    version += 1
-                })
+                Quiet(
+                    "Remove",
+                    modifier = Modifier.semantics { contentDescription = ScreenPlateText.removeLabel(appName) },
+                    onClick = {
+                        store.remove(pkg)
+                        CapturedNotifications(context).removeApp(pkg)
+                        version += 1
+                    },
+                )
             }
         }
     }
@@ -235,7 +246,7 @@ private fun AllowedAppsList() {
     Secondary(
         if (picking) "Close the list" else "Add an app",
         modifier = Modifier.fillMaxWidth(),
-        onClick = { picking = !picking; message = null },
+        onClick = { picking = !picking; message = null; query = "" },
     )
     message?.let {
         Gap(6)
@@ -263,8 +274,14 @@ private fun AllowedAppsList() {
                 color = chrome.textLo,
             )
         } else {
+            TextInput(value = query, onValueChange = { query = it }, placeholder = "Search apps")
+            Gap(8)
+            val shown = ScreenPlateText.filterApps(candidates, query, { it.label }, { it.packageName })
+            if (shown.isEmpty()) {
+                Text("No app matches that.", style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+            }
             LazyColumn(Modifier.fillMaxWidth().heightIn(max = 240.dp)) {
-                items(candidates, key = { it.packageName }) { app ->
+                items(shown, key = { it.packageName }) { app ->
                     Row(
                         Modifier.fillMaxWidth().heightIn(min = 48.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -277,6 +294,7 @@ private fun AllowedAppsList() {
                         )
                         Quiet(
                             "Add",
+                            modifier = Modifier.semantics { contentDescription = ScreenPlateText.addLabel(app.label) },
                             onClick = {
                                 message = when (store.add(app.packageName)) {
                                     is NotificationAllowList.AddResult.Added -> {
