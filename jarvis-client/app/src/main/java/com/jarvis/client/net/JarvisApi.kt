@@ -2073,11 +2073,23 @@ class JarvisApi(
      * own sentence; a 404 is a PC too old to have it. Nothing is logged.
      */
     suspend fun voiceAnimalTry(face: String): ApiResult<CustomVoices.Tried> =
+        voiceSound(CustomVoices.ANIMAL_TRY_PATH, CustomVoices.animalTryBody(face))
+
+    /**
+     * "Hear it" for one built-in voice ([CustomVoices.SAMPLE_PATH]): the PC
+     * says one fixed line of its own in that voice, by name, and sends the
+     * WAV - exactly like [voiceAnimalTry], and it changes nothing on the PC.
+     */
+    suspend fun voiceSample(voice: String): ApiResult<CustomVoices.Tried> =
+        voiceSound(CustomVoices.SAMPLE_PATH, CustomVoices.sampleBody(voice))
+
+    /** The one request "Try it" and "Hear it" both make: a POST that answers a WAV or the PC's sentence. */
+    private suspend fun voiceSound(path: String, json: String): ApiResult<CustomVoices.Tried> =
         withContext(Dispatchers.IO) {
-            val target = url(CustomVoices.ANIMAL_TRY_PATH) ?: return@withContext ApiResult.Failed(
+            val target = url(path) ?: return@withContext ApiResult.Failed(
                 noAddress(),
             )
-            val body = CustomVoices.animalTryBody(face).toRequestBody("application/json".toMediaType())
+            val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed()
                 .header("Accept", "audio/wav")
                 .build()

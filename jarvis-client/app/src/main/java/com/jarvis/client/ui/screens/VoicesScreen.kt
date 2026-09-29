@@ -92,6 +92,12 @@ fun VoicesScreen(
      * to show as it starts playing, and returns the words to show after.
      */
     tryAnimal: suspend (face: String, name: String, playing: (String) -> Unit) -> String,
+    /**
+     * "Hear it" on a built-in voice: plays the PC's fixed line in that voice
+     * (by its id) and changes nothing; told the words to show as it starts
+     * playing, and returns the words to show after (CustomVoices `HEAR_*`).
+     */
+    hearVoice: suspend (id: String, label: String, playing: (String) -> Unit) -> String,
     onPickFile: () -> Unit,
     onClearPicked: () -> Unit,
     onRefresh: suspend () -> Unit,
@@ -204,7 +210,13 @@ fun VoicesScreen(
                         SpeedPlate(sp, busy, linkBlocker, onSet = { id -> act { setSpeed(id) } })
                     }
                     s.speaker?.let { sk ->
-                        SpeakerPlate(sk, busy, linkBlocker, onSet = { id -> act { setSpeaker(id) } })
+                        SpeakerPlate(
+                            sk,
+                            busy,
+                            linkBlocker,
+                            onSet = { id -> act { setSpeaker(id) } },
+                            onHear = hearVoice,
+                        )
                     }
                     s.faceVoice?.let { fv ->
                         // The one-time question, right above the switch it turns on.
@@ -542,8 +554,12 @@ private fun SpeedPlate(
 
 /**
  * "Jarvis's built-in voice": which of Kokoro's own voices - the PC's own
- * choices and words, the exact same plate as [SpeedPlate] right next to it.
- * No card either way; held on a stale link, like every change sent to the PC.
+ * choices (by name) and words, the same title, detail, choice and note as
+ * [SpeedPlate] right next to it, but one ROW per voice: the choice chip and a
+ * "Hear it" button beside it (2026-09-29). No card either way; held on a stale
+ * link, like every change sent to the PC. "Hear it" changes nothing, so it is
+ * not held on a stale link; it plays the PC's sample and says what it is doing
+ * in the desktop's words (`CustomVoices.HEAR_*`).
  */
 @Composable
 private fun SpeakerPlate(
@@ -551,17 +567,62 @@ private fun SpeakerPlate(
     busy: Boolean,
     linkBlocker: String?,
     onSet: (String) -> Unit,
+    onHear: suspend (id: String, label: String, playing: (String) -> Unit) -> String,
 ) {
-    ChoicePlate(
-        title = sk.title,
-        detail = sk.detail,
-        note = sk.note,
-        choices = sk.choices.map { it.id to it.label },
-        choice = sk.choice,
-        busy = busy,
-        linkBlocker = linkBlocker,
-        onSet = onSet,
-    )
+    val chrome = LocalChrome.current
+    val scope = rememberCoroutineScope()
+    // Which voice is being heard, and the words under the list.
+    var hearing by remember { mutableStateOf<String?>(null) }
+    var said by remember { mutableStateOf("") }
+    Plate {
+        Text(sk.title, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+        if (sk.detail.isNotBlank()) {
+            Gap(4)
+            Text(sk.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        }
+        Gap(8)
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            for (c in sk.choices) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    OptionChip(
+                        c.label,
+                        modifier = Modifier.weight(1f),
+                        isSelected = c.id == sk.choice,
+                        enabled = !busy && linkBlocker == null,
+                        onClick = { if (c.id != sk.choice) onSet(c.id) },
+                    )
+                    Quiet(
+                        CustomVoices.HEAR_LABEL,
+                        modifier = Modifier.semantics { contentDescription = "Hear ${c.label}" },
+                        enabled = hearing == null,
+                        onClick = {
+                            hearing = c.id
+                            said = CustomVoices.TRY_ASKING
+                            scope.launch {
+                                try {
+                                    said = onHear(c.id, c.label) { words -> said = words }
+                                } finally {
+                                    hearing = null
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+        }
+        if (said.isNotBlank()) {
+            Gap(6)
+            Text(said, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        }
+        if (sk.note.isNotBlank()) {
+            Gap(6)
+            Text(sk.note, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        }
+        if (linkBlocker != null) {
+            Gap(4)
+            Text(linkBlocker, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
+        }
+    }
 }
 
 /**

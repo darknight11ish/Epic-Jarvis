@@ -2467,6 +2467,21 @@ object JarvisRuntime {
     }
 
     /**
+     * "Hear it" for one built-in voice (2026-09-29): the PC says one fixed
+     * line in the voice named [id] and it plays here ([VoiceSession.hearVoiceSample]).
+     * It changes nothing - the voice Jarvis uses stays as it is - so it is not
+     * held on a stale link ("Try it"'s rule). Refused while App lock would ask
+     * again, and (in [VoiceSession]) while a question, an answer or Jarvis
+     * Live has the microphone or the speaker. Returns the words to show.
+     */
+    suspend fun hearVoice(id: String, label: String, playing: (String) -> Unit): String {
+        if (appLockWouldLock(SystemClock.elapsedRealtime(), settings.security.value)) {
+            return CustomVoices.HEAR_LOCKED
+        }
+        return voice.hearVoiceSample(id, label, playing)
+    }
+
+    /**
      * "Voice follows the face": with an animal face showing, the built-in
      * voice becomes that animal's. Same shape as [setVoiceSpeaker]: no card
      * either way, but held on a stale link like every change sent to the PC

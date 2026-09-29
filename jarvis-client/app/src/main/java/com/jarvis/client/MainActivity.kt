@@ -1920,6 +1920,9 @@ class MainActivity : FragmentActivity() {
                             tryAnimal = { face, name, playing ->
                                 JarvisRuntime.voice.tryAnimalVoice(face, name, playing)
                             },
+                            hearVoice = { id, label, playing ->
+                                JarvisRuntime.hearVoice(id, label, playing)
+                            },
                             // Any audio type: the file is checked for being a WAV
                             // once read, and says so plainly when it is not.
                             onPickFile = { pickVoiceFile.launch(arrayOf("audio/*")) },
