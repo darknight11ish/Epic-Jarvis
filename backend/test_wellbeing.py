@@ -848,6 +848,58 @@ def t_barge_in_knows_the_plain_voice_while_it_lasts():
     _serious_reset()
 
 
+# --------------------------------------------------------------------------
+#   7. A thumbs-down on a crisis answer is not counted (owner, 2026-09-29)
+# --------------------------------------------------------------------------
+
+def _clear_crisis_turns():
+    with AG._CRISIS_TURNS_LOCK:
+        AG._CRISIS_TURNS.clear()
+
+
+def t_a_crisis_turn_then_a_thumbs_down_end_to_end():
+    """The real chain: a crisis turn runs through run_local_turn, its result
+    says crisis, the patch's hand-over runs, and the later thumbs-down (the
+    mark route's note_correction call) is not counted. Then the same chain
+    for an ordinary turn, which is."""
+    hud = _stack.stand_in("jarvis_hud.py")[0]
+    start = hud.index('                    try:\n                        if _turn.get("crisis"):')
+    result_hook = textwrap.dedent(hud[start:hud.index("                    if (_speed is not None", start)])
+
+    def one_turn(text, cid, tid):
+        sent = []
+        opener, _ = scripted_stream("Here you go.")
+        with NoRealIO():
+            turn = AG.run_local_turn(
+                [{"role": "user", "content": text, "provenance": "typed"}],
+                "jarvis-primary", ollama_url="http://127.0.0.1:11434",
+                stream_out=sent.append, open_stream=opener, gate_check=lambda *a, **k: None,
+                request={"conversation_id": cid}, keepalive_seconds=60, status_delay=60,
+                model_waking=lambda url, model: False)
+        exec(result_hook, {"_turn": turn or {}, "route_header": {"turn_id": tid},
+                           "jarvis_agent": AG})
+        return turn
+
+    _clear_crisis_turns()
+    cid, tid = "conv-crisis-e2e-test", "7" * 32
+    AG.reset_suggest_counts(cid)
+    turn = one_turn("I want to kill myself", cid, tid)
+    check("the crisis turn's own result carries the crisis flag", turn.get("crisis") is True)
+    check("then the thumbs-down on it (as the mark route calls it) is not counted",
+          AG.note_correction(cid, turn_id=tid) == 0 and AG.suggest_counts(cid) == (0, 0),
+          AG.suggest_counts(cid))
+    AG.reset_suggest_counts(cid)
+    cid2, tid2 = "conv-normal-e2e-test", "8" * 32
+    AG.reset_suggest_counts(cid2)
+    turn = one_turn("what is the capital of Australia?", cid2, tid2)
+    check("CONTROL: the ordinary turn has no crisis flag", not turn.get("crisis"))
+    check("CONTROL: its thumbs-down is counted",
+          AG.note_correction(cid2, turn_id=tid2) == 1 and AG.suggest_counts(cid2) == (0, 1),
+          AG.suggest_counts(cid2))
+    AG.reset_suggest_counts(cid2)
+    _clear_crisis_turns()
+
+
 if __name__ == "__main__":
     for fn in (t_crisis_phrases_match,
                t_false_alarms_do_not_fire,
@@ -880,7 +932,8 @@ if __name__ == "__main__":
                t_the_moment_holds_even_when_the_model_fails,
                t_say_speaks_a_crisis_answer_in_the_plain_voice,
                t_plain_voice_now_never_breaks_speech,
-               t_barge_in_knows_the_plain_voice_while_it_lasts):
+               t_barge_in_knows_the_plain_voice_while_it_lasts,
+               t_a_crisis_turn_then_a_thumbs_down_end_to_end):
         print(f"\n--- {fn.__name__} ---")
         try:
             fn()

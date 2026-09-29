@@ -478,14 +478,15 @@ here rather than patched blind:
   checked the fixture against the app, never the app against the fixture -
   a phrase added straight to the phone's list, in neither direction, would
   have passed silently.
-- **Written down, not fixed:** marking a crisis answer "wrong" (the thumbs-
-  down button) still counts toward "suggest the bigger model" - the crisis
-  exclusion above only covers the live phrase-based signal and the
-  struggle count. Fixing it needs the turn's crisis flag and its id joined
-  across two separate patches (`chat-stream.patch`, which has the flag, and
-  `second-card-suggest.patch`, which has the id) - mechanical, but not done
-  without the owner's go-ahead given how carefully this project already
-  treats crisis handling.
+- **Written down, then fixed (owner's go-ahead, 2026-09-29):** marking a
+  crisis answer "wrong" (the thumbs-down button) used to count toward
+  "suggest the bigger model". Now `jarvis_agent.py` keeps a small,
+  in-memory, bounded list of crisis turn ids (handed over by
+  `second-card-suggest.patch`, where the turn's id and its crisis flag are
+  both known), and a thumbs-down on one is not counted. The list holds only
+  random ids - no words, nothing on disk or in a log. The thumbs-down itself
+  is still saved in `feedback.db` (an id and a mark), as before. Nothing else
+  about crisis handling changed.
 
 Decided 2026-09-27, when the owner asked for a 3D animal face (with
 Gemini's notes as input, not instructions):
@@ -591,6 +592,34 @@ Decided 2026-09-28, the owner's answers after the animal-face audits:
   never plays twice running - all within the existing comfort limits
   (small, slow, eased, never busy). Still, calm and serious quieten them
   as before; approval and error stay attentive and still.
+
+Decided 2026-09-29, the owner's answers on the small animal leftovers:
+- **Tighter drawing boundaries for the five faces**, for about 20-30% less
+  graphics work, provided nothing is cut off: every pose is compared
+  pixel for pixel with the old drawing before it is kept.
+- **A 60-frame cap while the AI model shares the graphics card waits for a
+  measurement from the owner's PC** (a one-line PowerShell check of the
+  graphics card while Jarvis talks, with and without a face showing). No cap
+  is built until those numbers are in.
+- **The owl's beak opens wider on quiet-to-normal speech**; loud words stay
+  about where they were, and it must stay cute, never a wide gape.
+- **A thumbs-down on a crisis-help answer is no longer counted** toward
+  "suggest the bigger model" - the owner's go-ahead for that one gap in the
+  2026-09-27 "written down, not fixed" note. Nothing else about crisis
+  handling changes; no crisis content is stored, counted or logged.
+
+Decided 2026-09-29, after the skeptical review of all five faces (the
+owner kept the ray-marched drawing; the review found expression, motion and
+one state bug to fix, not a new approach):
+- **An error gets a still mark on every face:** a thin ring with a gap at
+  the bottom, drawn by the apps over the face, never moving. It must not be
+  mistaken for the waiting-on-you clock or the not-connected ring.
+- **Fewer small idle moves when Jarvis is not being used:** breathing and
+  looking around stay; the small happenings (a tail flick, an ear turn, a
+  stretch) drop to about a quarter unless the owner has talked to Jarvis
+  lately or their pointer is on the face.
+- **A focus session no longer shows a sleeping animal:** the focus buddy
+  shows, not standby (a manual Quiet stays asleep).
 
 ## Every new feature gets its own audit, without being asked
 

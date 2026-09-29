@@ -1910,7 +1910,10 @@ they landed):
   offer, and (added 2026-09-27) the second card's "would the bigger model
   help here?" suggestion - the one offer whose "yes" IS an existing
   approval card's "yes" (`second_card_combined_enable`), not a card of its
-  own. It never approves or acts, and nothing the owner asks for consults
+  own. Its counters never count a crisis turn (2026-09-27), and since
+  2026-09-29 that includes a thumbs-down on a crisis-help answer: a bounded,
+  in-memory list of crisis turn ids (ids only, never written anywhere) is
+  what `note_correction` checks. It never approves or acts, and nothing the owner asks for consults
   it. JARVIS-API §22.6, §12.1.
 
 - **Web search, with a choice of five providers** (added 2026-09-25, the
