@@ -168,7 +168,8 @@ object SignedApproval {
     /** The sentence for a refusal word, or null for none of the three. */
     fun refusalWords(word: String?): String? = when (word) {
         REFUSAL_NO_APPROVAL_KEY -> OFFER_WORDS
-        REFUSAL_NO_SIGNATURE, REFUSAL_BAD_SIGNATURE -> NOT_ACCEPTED
+        REFUSAL_NO_SIGNATURE -> NOT_ACCEPTED
+        REFUSAL_BAD_SIGNATURE -> OFFER_BAD_WORDS
         else -> null
     }
 
@@ -253,6 +254,17 @@ object SignedApproval {
         "Nothing was approved. This phone's approval key stopped working (a fingerprint was " +
             "added or the screen lock changed), so signed approvals need turning on again."
 
+    /**
+     * The PC refused this phone's signature. The usual cause is a key the PC
+     * no longer holds the other half of (a re-registration the owner denied on
+     * the PC, or one that never got through), so the one button makes a fresh
+     * key and asks the PC once more.
+     */
+    const val OFFER_BAD_WORDS =
+        "Nothing was approved. The PC did not accept this phone's signature - it may hold a " +
+            "different key than this phone does. Turn signed approvals on again to make a fresh " +
+            "key; your PC asks you once more."
+
     const val WAITING_WORDS =
         "Nothing was approved. Signed approvals are waiting for your yes on the PC. Approve the " +
             "card there, then try again."
@@ -284,7 +296,8 @@ object SignedApproval {
             "held until you turn it on again."
 
     /** True when [text] is a notice that carries the one button [TURN_ON]. */
-    fun offersTurnOn(text: String?): Boolean = text == OFFER_WORDS || text == OFFER_AGAIN_WORDS
+    fun offersTurnOn(text: String?): Boolean =
+        text == OFFER_WORDS || text == OFFER_AGAIN_WORDS || text == OFFER_BAD_WORDS
 
     /** The notice for an approval that took a path other than SIGNED or PLAIN. */
     fun noticeFor(path: Path): String? = when (path) {

@@ -222,7 +222,9 @@ class SignedApprovalTest {
 
         assertEquals(SignedApproval.OFFER_WORDS, SignedApproval.refusalWords("no_approval_key"))
         assertEquals(SignedApproval.NOT_ACCEPTED, SignedApproval.refusalWords("no_signature"))
-        assertEquals(SignedApproval.NOT_ACCEPTED, SignedApproval.refusalWords("bad_signature"))
+        // A refused signature gets the one button: the usual cause is a key the PC does not hold.
+        assertEquals(SignedApproval.OFFER_BAD_WORDS, SignedApproval.refusalWords("bad_signature"))
+        assertTrue(SignedApproval.offersTurnOn(SignedApproval.OFFER_BAD_WORDS))
         assertNull(SignedApproval.refusalWords(null))
         assertTrue(SignedApproval.NOT_ACCEPTED.contains("turn signed approvals off and on again in Settings -> Devices"))
     }
