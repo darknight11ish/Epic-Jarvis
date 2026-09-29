@@ -140,12 +140,12 @@ const SETTING_NAMES = {
   memory: "answers that use what Jarvis remembers",
   sensitive_memory: "answers that use sensitive saved facts",
   hands_free: "how far \"Hey Jarvis\" is trusted",
-  talk_to_type: "talk-to-type",
-  wake_confirm: "the second \"hey Jarvis\" check",
-  voice_id_model: "the voice-ID model",
   hands_free_screen: "answers about your screen or the camera after \"Hey Jarvis\"",
   hands_free_live: "how far Jarvis Live is trusted",
   live_end: "when Jarvis Live ends on this PC",
+  talk_to_type: "talk-to-type",
+  wake_confirm: "the second \"hey Jarvis\" check",
+  voice_id_model: "the voice-ID model",
 };
 
 /**

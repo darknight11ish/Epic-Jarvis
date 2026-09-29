@@ -2126,6 +2126,28 @@ def pf_credentials(live: Live) -> list:
                    "there)")]
 
 
+@preflight_check("screen", "Can Jarvis look at your screen when you ask?")
+def pf_screen(live: Live) -> list:
+    """"Look at this" and "Watch with me" (the owner's decision of
+    2026-09-28, docs/SCREEN-DESIGN.md). Build steps 1 and 2 are in
+    (jarvis_screen.py: the session rules, the pause rules, the Never look at
+    list); the Windows readers it needs - is the focused box a password box,
+    is the window protected from capture, the window's own text - are step 3,
+    and no route or app screen reaches it yet. So this says so, plainly, as
+    a skip: nothing is broken and there is nothing for the owner to fix.
+    When the readers land, this check asks the running Jarvis instead."""
+    try:
+        import jarvis_screen  # noqa: F401
+        have = True
+    except Exception:
+        have = False
+    return [(SKIP, "looking at the screen (\"Look at this\", \"Watch with me\"), because it "
+                   "is not built on this PC yet",
+             ("Its rules are in jarvis_screen.py; " if have else
+              "jarvis_screen.py is not in the backend folder yet (apply-patches.ps1 copies it "
+              "in); ") + "the Windows readers it needs are the next step. Nothing to fix.")]
+
+
 def llama_config_files(env) -> list:
     """[(where, Path)] for the llama.cpp settings files that exist. The
     research audit (docs/RESEARCH-AUDIT-2026-09-28.md section 6, read in
@@ -2178,28 +2200,6 @@ def pf_engine_config(live: Live) -> list:
                      "rename it with one line in PowerShell, then quit and restart Ollama: "
                      f"Rename-Item -Path \"{path}\" -NewName 'config.ini.off'"))
     return rows
-
-
-@preflight_check("screen", "Can Jarvis look at your screen when you ask?")
-def pf_screen(live: Live) -> list:
-    """"Look at this" and "Watch with me" (the owner's decision of
-    2026-09-28, docs/SCREEN-DESIGN.md). Build steps 1 and 2 are in
-    (jarvis_screen.py: the session rules, the pause rules, the Never look at
-    list); the Windows readers it needs - is the focused box a password box,
-    is the window protected from capture, the window's own text - are step 3,
-    and no route or app screen reaches it yet. So this says so, plainly, as
-    a skip: nothing is broken and there is nothing for the owner to fix.
-    When the readers land, this check asks the running Jarvis instead."""
-    try:
-        import jarvis_screen  # noqa: F401
-        have = True
-    except Exception:
-        have = False
-    return [(SKIP, "looking at the screen (\"Look at this\", \"Watch with me\"), because it "
-                   "is not built on this PC yet",
-             ("Its rules are in jarvis_screen.py; " if have else
-              "jarvis_screen.py is not in the backend folder yet (apply-patches.ps1 copies it "
-              "in); ") + "the Windows readers it needs are the next step. Nothing to fix.")]
 
 
 # ---------------------------------------------------------------- running

@@ -226,11 +226,17 @@ await check("the days, the ticked list, unticking, and ONE forget with only the 
     (els) => els.map((e) => [e.dataset.key, e.checked]));
   const label0 = await page.locator("#forget-range-go").innerText();
   await page.locator("#forget-range .fr-item", { hasText: "Leeds" }).locator("input").uncheck();
+  // The chat with messages from outside the days starts unticked; ticking it
+  // is the owner's own choice, and is kept too (finding 10, 2026-09-28).
+  await page.locator("#forget-range .fr-item", { hasText: "poem" }).locator("input").check();
   // Reading the list again keeps what was unticked.
   await showList(page);
   const stillOff = await page.locator("#forget-range .fr-item", { hasText: "Leeds" })
     .locator("input").isChecked();
+  const poemOn = await page.locator("#forget-range .fr-item", { hasText: "poem" })
+    .locator("input").isChecked();
   assert.equal(stillOff, false, "reading the list again ticked an unticked fact");
+  assert.equal(poemOn, true, "reading the list again unticked what the owner ticked");
   const label1 = await page.locator("#forget-range-go").innerText();
   await page.locator("#forget-range-go").click();
   await page.waitForTimeout(500);
@@ -249,9 +255,10 @@ await check("the days, the ticked list, unticking, and ONE forget with only the 
   assert.match(text, /Help me write a poem/);
   assert.ok(text.includes(WORDS.spills), "a chat that spills outside the days is not marked");
   assert.ok(text.includes(WORDS.erase_note));
-  assert.ok(boxes.every(([, on]) => on), "not everything starts ticked");
+  assert.deepEqual(boxes.filter(([, on]) => !on).map(([k]) => k), ["chat:conv-poem-00002"],
+    "only the chat that spills outside the days starts unticked");
   assert.equal(boxes.length, 4);
-  assert.equal(label0, "Forget these (4)");
+  assert.equal(label0, "Forget these (3)");
   assert.equal(label1, "Forget these (3)");
   const leeds = C.preview.body.facts[0].id;
   const jazz = C.preview.body.facts[1].id;

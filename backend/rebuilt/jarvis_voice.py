@@ -782,6 +782,11 @@ LIVE_END_WINDOWS_LOCK = "live_end_windows_lock"
 LIVE_END = (LIVE_END_APP_LOCK, LIVE_END_WINDOWS_LOCK)
 #: The one source the talk button sends (jarvis_speech.hear's `source`).
 PUSH_TO_TALK = "push_to_talk"
+#: The source a Jarvis Live clip is sent with (jarvis_speech.SOURCE_LIVE),
+#: and what it is trusted as when the session was started with a button;
+#: LIVE_VOICE_STARTED when it was started by voice (jarvis_live.trust_source).
+LIVE = "live"
+LIVE_VOICE_STARTED = "live_voice"
 #: Talk-to-type on the PC (the owner's decision, 2026-09-27: "one approval
 #: card to switch it on, then no card each time"): hold a key on the PC,
 #: speak, and the desktop app types the words into the program in front.
@@ -819,11 +824,6 @@ WAKE_CONFIRM = (WAKE_ONE, WAKE_BOTH)
 MODEL_TITANET = "titanet"
 MODEL_RESNET = "resnet221"
 VOICE_ID_MODEL = (MODEL_TITANET, MODEL_RESNET)
-#: The source a Jarvis Live clip is sent with (jarvis_speech.SOURCE_LIVE),
-#: and what it is trusted as when the session was started with a button;
-#: LIVE_VOICE_STARTED when it was started by voice (jarvis_live.trust_source).
-LIVE = "live"
-LIVE_VOICE_STARTED = "live_voice"
 #: The default of each setting. For strictness, privacy, sensitive_memory
 #: and hands_free_screen it is the strict value, also used for a missing,
 #: unreadable or unknown one. For memory, hands_free and hands_free_live the
@@ -833,23 +833,23 @@ LIVE_VOICE_STARTED = "live_voice"
 #: voice_id_model's is the measured model, which is the stricter one.
 DEFAULTS = {"strictness": VERY_STRICT, "privacy": PRIVATE_ON_SCREEN,
             "memory": MEMORY_ALOUD, "sensitive_memory": SENSITIVE_ON_SCREEN,
-            "hands_free": SAME_AS_BUTTON, "talk_to_type": TALK_TYPE_OFF,
-            "wake_confirm": WAKE_ONE, "voice_id_model": MODEL_TITANET,
-            "hands_free_screen": SCREEN_ON_SCREEN,
-            "hands_free_live": LIVE_TRUST_FULLY, "live_end": LIVE_END_APP_LOCK}
+            "hands_free": SAME_AS_BUTTON, "hands_free_screen": SCREEN_ON_SCREEN,
+            "hands_free_live": LIVE_TRUST_FULLY, "live_end": LIVE_END_APP_LOCK,
+            "talk_to_type": TALK_TYPE_OFF,
+            "wake_confirm": WAKE_ONE, "voice_id_model": MODEL_TITANET}
 _CHOICES = {"strictness": STRICTNESS, "privacy": PRIVACY, "memory": MEMORY,
             "sensitive_memory": SENSITIVE_MEMORY, "hands_free": HANDS_FREE,
-            "talk_to_type": TALK_TO_TYPE, "wake_confirm": WAKE_CONFIRM,
-            "voice_id_model": VOICE_ID_MODEL,
             "hands_free_screen": HANDS_FREE_SCREEN, "hands_free_live": HANDS_FREE_LIVE,
-            "live_end": LIVE_END}
+            "live_end": LIVE_END,
+            "talk_to_type": TALK_TO_TYPE, "wake_confirm": WAKE_CONFIRM,
+            "voice_id_model": VOICE_ID_MODEL}
 #: The LOOSER value of each: choosing it needs an approval card.
 LOOSER = {"strictness": BALANCED, "privacy": VOICE_IS_ENOUGH, "memory": MEMORY_ALOUD,
           "sensitive_memory": SENSITIVE_ALOUD, "hands_free": SAME_AS_BUTTON,
-          "talk_to_type": TALK_TYPE_ON, "wake_confirm": WAKE_ONE,
-          "voice_id_model": MODEL_RESNET,
           "hands_free_screen": SCREEN_ALOUD, "hands_free_live": LIVE_TRUST_FULLY,
-          "live_end": LIVE_END_WINDOWS_LOCK}
+          "live_end": LIVE_END_WINDOWS_LOCK,
+          "talk_to_type": TALK_TYPE_ON, "wake_confirm": WAKE_ONE,
+          "voice_id_model": MODEL_RESNET}
 #: Settings with MORE than two choices, strictest first: choosing a value
 #: further along than the current one loosens it (a card); nearer the
 #: start tightens it (at once). LOOSER above names the loosest.
@@ -858,7 +858,7 @@ _ORDER = {"hands_free_live": (LIVE_LIKE_WAKE, LIVE_BUTTON_START_ONLY, LIVE_TRUST
 #: falls back to when the file is unreadable or holds a value that is not
 #: one of its choices. Only a file that never had the key gets the default.
 _STRICT_WHEN_DAMAGED = {"memory": MEMORY_ON_SCREEN, "hands_free": BUTTON_ONLY,
-                        "wake_confirm": WAKE_BOTH, "hands_free_live": LIVE_LIKE_WAKE}
+                        "hands_free_live": LIVE_LIKE_WAKE, "wake_confirm": WAKE_BOTH}
 _SETTINGS_LOCK = threading.Lock()
 
 #: The least speech a COMMAND must have, in seconds (the VAD's span, which
@@ -878,13 +878,13 @@ def settings_path() -> Path:
 
 def settings() -> dict:
     """{"strictness", "privacy", "memory", "sensitive_memory", "hands_free",
-    "talk_to_type", "wake_confirm", "voice_id_model", "hands_free_screen",
-    "hands_free_live", "live_end", "changed"}. The strict value for anything
-    missing, unreadable or unknown - except that a file with no "memory",
-    "hands_free", "wake_confirm" or "hands_free_live" in it (every file
-    written before those settings, and no file at all) gets the owner's
-    default for it: MEMORY_ALOUD, SAME_AS_BUTTON, WAKE_ONE, LIVE_TRUST_FULLY.
-    The one rule
+    "hands_free_screen", "hands_free_live", "live_end", "talk_to_type",
+    "wake_confirm", "voice_id_model", "changed"}. The strict value for
+    anything missing, unreadable or unknown - except that a file with no
+    "memory", "hands_free", "hands_free_live" or "wake_confirm" in it (every
+    file written before those settings, and no file at all) gets the
+    owner's default for it: MEMORY_ALOUD, SAME_AS_BUTTON, LIVE_TRUST_FULLY,
+    WAKE_ONE. The one rule
     applied on every read as well as every write: private answers may be
     read aloud only while the check is very strict."""
     out = {**DEFAULTS, "changed": 0.0}
@@ -2408,13 +2408,6 @@ def status() -> dict:
         "memory": s["memory"],
         "sensitive_memory": s["sensitive_memory"],
         "hands_free": s["hands_free"],
-        # Talk-to-type on the PC (2026-09-28): "off" (the default) or "on".
-        "talk_to_type": s["talk_to_type"],
-        # "Better voice" (2026-09-28): the second "hey Jarvis" detector
-        # ("one" / "both") and the stronger voice-ID model ("titanet" /
-        # "resnet221"). docs/JARVIS-API.md section 80.
-        "wake_confirm": s["wake_confirm"],
-        "voice_id_model": s["voice_id_model"],
         # Since 2026-09-28: answers about the screen after "hey Jarvis",
         # under "only trust the talk button".
         "hands_free_screen": s["hands_free_screen"],
@@ -2423,14 +2416,21 @@ def status() -> dict:
         "hands_free_live": s["hands_free_live"],
         # Since 2026-09-28: when App lock ends Jarvis Live on the PC.
         "live_end": s["live_end"],
+        # Talk-to-type on the PC (2026-09-28): "off" (the default) or "on".
+        "talk_to_type": s["talk_to_type"],
+        # "Better voice" (2026-09-28): the second "hey Jarvis" detector
+        # ("one" / "both") and the stronger voice-ID model ("titanet" /
+        # "resnet221"). docs/JARVIS-API.md section 80.
+        "wake_confirm": s["wake_confirm"],
+        "voice_id_model": s["voice_id_model"],
         "settings": {
             "strictness": s["strictness"], "privacy": s["privacy"],
             "memory": s["memory"], "sensitive_memory": s["sensitive_memory"],
-            "hands_free": s["hands_free"], "talk_to_type": s["talk_to_type"],
-            "wake_confirm": s["wake_confirm"], "voice_id_model": s["voice_id_model"],
+            "hands_free": s["hands_free"],
             "hands_free_screen": s["hands_free_screen"],
             "hands_free_live": s["hands_free_live"],
-            "live_end": s["live_end"],
+            "live_end": s["live_end"], "talk_to_type": s["talk_to_type"],
+            "wake_confirm": s["wake_confirm"], "voice_id_model": s["voice_id_model"],
             "changed": s["changed"],
             "voice_is_enough_allowed": very,
             "min_command_seconds": MIN_COMMAND_SECONDS[s["strictness"]],

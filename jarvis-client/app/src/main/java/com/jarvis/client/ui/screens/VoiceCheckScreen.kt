@@ -342,32 +342,6 @@ private fun CheckPlates(
                         onPick = onPick,
                     )
                 }
-                // "Better voice" (2026-09-28) - only when the PC reports them.
-                // A choice the PC cannot make yet is greyed out with its own
-                // words (StrictVoice.blockedWhy); the looser one of each asks
-                // first and is held on a stale link (StrictVoice.blocker).
-                if (strict.wakeConfirm.isNotBlank()) {
-                    SettingPlate(
-                        title = StrictVoice.WAKE_CONFIRM_TITLE,
-                        setting = VoiceStrict.WAKE_CONFIRM,
-                        choices = StrictVoice.WAKE_CONFIRM,
-                        strict = strict,
-                        busy = busy,
-                        note = note?.takeIf { it.first == VoiceStrict.WAKE_CONFIRM }?.second,
-                        onPick = onPick,
-                    )
-                }
-                if (strict.voiceIdModel.isNotBlank()) {
-                    SettingPlate(
-                        title = StrictVoice.VOICE_ID_MODEL_TITLE,
-                        setting = VoiceStrict.VOICE_ID_MODEL,
-                        choices = StrictVoice.VOICE_ID_MODEL,
-                        strict = strict,
-                        busy = busy,
-                        note = note?.takeIf { it.first == VoiceStrict.VOICE_ID_MODEL }?.second,
-                        onPick = onPick,
-                    )
-                }
                 // Answers about your screen after "Hey Jarvis" (the owner's
                 // decision, 2026-09-28) - only when the PC reports the setting.
                 // It matters only under "Only trust the talk button", and its
@@ -404,6 +378,32 @@ private fun CheckPlates(
                 // on Platform checks, beside the other listening switches -
                 // not here, above a footnote about cards that does not apply
                 // to it (the review of 2026-09-28).
+                // "Better voice" (2026-09-28) - only when the PC reports them.
+                // A choice the PC cannot make yet is greyed out with its own
+                // words (StrictVoice.blockedWhy); the looser one of each asks
+                // first and is held on a stale link (StrictVoice.blocker).
+                if (strict.wakeConfirm.isNotBlank()) {
+                    SettingPlate(
+                        title = StrictVoice.WAKE_CONFIRM_TITLE,
+                        setting = VoiceStrict.WAKE_CONFIRM,
+                        choices = StrictVoice.WAKE_CONFIRM,
+                        strict = strict,
+                        busy = busy,
+                        note = note?.takeIf { it.first == VoiceStrict.WAKE_CONFIRM }?.second,
+                        onPick = onPick,
+                    )
+                }
+                if (strict.voiceIdModel.isNotBlank()) {
+                    SettingPlate(
+                        title = StrictVoice.VOICE_ID_MODEL_TITLE,
+                        setting = VoiceStrict.VOICE_ID_MODEL,
+                        choices = StrictVoice.VOICE_ID_MODEL,
+                        strict = strict,
+                        busy = busy,
+                        note = note?.takeIf { it.first == VoiceStrict.VOICE_ID_MODEL }?.second,
+                        onPick = onPick,
+                    )
+                }
                 Text(
                     "Making it stricter applies at once. Making it looser asks first: an approval " +
                         "card on your PC or this phone's Home screen, and nothing changes until you " +

@@ -385,12 +385,12 @@ const SETTING_NAMES = {
   memory: "answers that use what Jarvis remembers",
   sensitive_memory: "answers that use sensitive saved facts",
   hands_free: "how far \"Hey Jarvis\" is trusted",
-  talk_to_type: "talk-to-type",
-  wake_confirm: "the second \"hey Jarvis\" check",
-  voice_id_model: "the voice-ID model",
   hands_free_screen: "answers about your screen or the camera after \"Hey Jarvis\"",
   hands_free_live: "how far Jarvis Live is trusted",
   live_end: "when Jarvis Live ends on this PC",
+  talk_to_type: "talk-to-type",
+  wake_confirm: "the second \"hey Jarvis\" check",
+  voice_id_model: "the voice-ID model",
 };
 
 /** The choices, in the order they are shown, with plain words for each. */
@@ -477,68 +477,6 @@ export const HANDS_FREE = Object.freeze([
     id: "button_only",
     label: "Only trust the talk button",
     detail: "Hey Jarvis still works, but it cannot teach Jarvis facts without a card, and memory or private answers stay on screen. Safer if a recording of your voice could be played near the microphone.",
-  },
-]);
-
-/**
- * Talk-to-type on this PC (the owner's decision, 2026-09-27; talk_type.rs;
- * docs/JARVIS-API.md section 72). Off by default. On is the looser choice:
- * one approval card, then no card each time. Off is at once.
- */
-export const TALK_TO_TYPE = Object.freeze([
-  {
-    id: "off",
-    label: "Off",
-    isDefault: true,
-    detail: "Nothing listens for the talk-to-type key.",
-  },
-  {
-    id: "on",
-    label: "On",
-    detail: "Hold the talk-to-type key (Alt+Shift+T unless you changed it under Shortcuts) and speak, then let go: Jarvis types what you said into the program in front. A quick tap keeps it listening until you tap again. Your voice is checked first and the words are made on this PC; they are not kept in chat history. It never types into a password box, or while Jarvis is locked.",
-  },
-]);
-
-/**
- * "Better voice" (the owner's group, 2026-09-28; docs/JARVIS-API.md section
- * 80). A second "hey Jarvis" detector that must agree with the first. One
- * detector is the default (today's behaviour); two is the stricter choice
- * and applies at once; going back to one is the voice card. Two cannot be
- * chosen while the PC does not have the second detector (the PC's words
- * say why: `gate.settings.blocked.wake_confirm`).
- */
-export const WAKE_CONFIRM = Object.freeze([
-  {
-    id: "one",
-    label: "One detector",
-    isDefault: true,
-    detail: "One detector listens for \"hey Jarvis\", as before. Your voice is still checked every time before anything is written down or done.",
-  },
-  {
-    id: "both",
-    label: "Two detectors must agree",
-    detail: "A second, differently built detector (microWakeWord) must also hear \"hey Jarvis\" within a second. Fewer false wake-ups; it may miss you a little more often. Measure it on your PC first (the backend README, \"Better voice\").",
-  },
-]);
-
-/**
- * Which stronger voice-ID model tells the owner's voice from other people's
- * (the same day). The measured one is the default and applies at once; the
- * newer, unmeasured one is the voice card, and cannot be chosen until its
- * file is on the PC (`gate.settings.blocked.voice_id_model`). Nothing
- * switches by itself.
- */
-export const VOICE_ID_MODEL = Object.freeze([
-  {
-    id: "titanet",
-    label: "The stronger one (measured)",
-    recommended: true,
-    detail: "NVIDIA's TitaNet. Its bars were measured on real voices. It tells your voice from other people's. It cannot tell your voice from a recording or a copy of it.",
-  },
-  {
-    id: "resnet221",
-    label: "The newer one (not measured yet)",
-    detail: "WeSpeaker's ResNet221. Not measured on real voices here, so Jarvis cannot say how well it keeps other people out; on computer-made voices it let in far more of them. It is slower, too. It cannot tell your voice from a recording or a copy of it either.",
   },
 ]);
 
@@ -639,13 +577,75 @@ export function screenCovered(view) {
   return Boolean(view && view.handsFree === "same_as_button");
 }
 
+/**
+ * Talk-to-type on this PC (the owner's decision, 2026-09-27; talk_type.rs;
+ * docs/JARVIS-API.md section 72). Off by default. On is the looser choice:
+ * one approval card, then no card each time. Off is at once.
+ */
+export const TALK_TO_TYPE = Object.freeze([
+  {
+    id: "off",
+    label: "Off",
+    isDefault: true,
+    detail: "Nothing listens for the talk-to-type key.",
+  },
+  {
+    id: "on",
+    label: "On",
+    detail: "Hold the talk-to-type key (Alt+Shift+T unless you changed it under Shortcuts) and speak, then let go: Jarvis types what you said into the program in front. A quick tap keeps it listening until you tap again. Your voice is checked first and the words are made on this PC; they are not kept in chat history. It never types into a password box, or while Jarvis is locked.",
+  },
+]);
+
+/**
+ * "Better voice" (the owner's group, 2026-09-28; docs/JARVIS-API.md section
+ * 80). A second "hey Jarvis" detector that must agree with the first. One
+ * detector is the default (today's behaviour); two is the stricter choice
+ * and applies at once; going back to one is the voice card. Two cannot be
+ * chosen while the PC does not have the second detector (the PC's words
+ * say why: `gate.settings.blocked.wake_confirm`).
+ */
+export const WAKE_CONFIRM = Object.freeze([
+  {
+    id: "one",
+    label: "One detector",
+    isDefault: true,
+    detail: "One detector listens for \"hey Jarvis\", as before. Your voice is still checked every time before anything is written down or done.",
+  },
+  {
+    id: "both",
+    label: "Two detectors must agree",
+    detail: "A second, differently built detector (microWakeWord) must also hear \"hey Jarvis\" within a second. Fewer false wake-ups; it may miss you a little more often. Measure it on your PC first (the backend README, \"Better voice\").",
+  },
+]);
+
+/**
+ * Which stronger voice-ID model tells the owner's voice from other people's
+ * (the same day). The measured one is the default and applies at once; the
+ * newer, unmeasured one is the voice card, and cannot be chosen until its
+ * file is on the PC (`gate.settings.blocked.voice_id_model`). Nothing
+ * switches by itself.
+ */
+export const VOICE_ID_MODEL = Object.freeze([
+  {
+    id: "titanet",
+    label: "The stronger one (measured)",
+    recommended: true,
+    detail: "NVIDIA's TitaNet. Its bars were measured on real voices. It tells your voice from other people's. It cannot tell your voice from a recording or a copy of it.",
+  },
+  {
+    id: "resnet221",
+    label: "The newer one (not measured yet)",
+    detail: "WeSpeaker's ResNet221. Not measured on real voices here, so Jarvis cannot say how well it keeps other people out; on computer-made voices it let in far more of them. It is slower, too. It cannot tell your voice from a recording or a copy of it either.",
+  },
+]);
+
 function choiceWords(setting, value) {
   const list = setting === "strictness" ? STRICTNESS : setting === "privacy" ? PRIVACY
     : setting === "memory" ? MEMORY : setting === "sensitive_memory" ? SENSITIVE_MEMORY
-      : setting === "hands_free" ? HANDS_FREE : setting === "talk_to_type" ? TALK_TO_TYPE
-        : setting === "wake_confirm" ? WAKE_CONFIRM : setting === "voice_id_model" ? VOICE_ID_MODEL
-          : setting === "hands_free_screen" ? HANDS_FREE_SCREEN
-            : setting === "hands_free_live" ? HANDS_FREE_LIVE : setting === "live_end" ? LIVE_END : [];
+      : setting === "hands_free" ? HANDS_FREE : setting === "hands_free_screen" ? HANDS_FREE_SCREEN
+        : setting === "hands_free_live" ? HANDS_FREE_LIVE : setting === "live_end" ? LIVE_END
+          : setting === "talk_to_type" ? TALK_TO_TYPE : setting === "wake_confirm" ? WAKE_CONFIRM
+            : setting === "voice_id_model" ? VOICE_ID_MODEL : [];
   return list.find((c) => c.id === value) || null;
 }
 
@@ -696,11 +696,13 @@ export function currentSetting(status, setting) {
   if (!view) return "";
   return setting === "strictness" ? view.strictness : setting === "privacy" ? view.privacy
     : setting === "memory" ? view.memory : setting === "sensitive_memory" ? view.sensitiveMemory
-      : setting === "hands_free" ? view.handsFree : setting === "talk_to_type" ? view.talkToType
-        : setting === "wake_confirm" ? view.wakeConfirm : setting === "voice_id_model" ? view.voiceIdModel
-          : setting === "hands_free_screen" ? view.handsFreeScreen
-            : setting === "hands_free_live" ? view.handsFreeLive
-              : setting === "live_end" ? view.liveEnd : "";
+      : setting === "hands_free" ? view.handsFree
+        : setting === "hands_free_screen" ? view.handsFreeScreen
+          : setting === "hands_free_live" ? view.handsFreeLive
+            : setting === "live_end" ? view.liveEnd
+              : setting === "talk_to_type" ? view.talkToType
+                : setting === "wake_confirm" ? view.wakeConfirm
+                  : setting === "voice_id_model" ? view.voiceIdModel : "";
 }
 
 /** Whether choosing `value` for `setting` loosens it (a card), by the server's rule.
@@ -767,18 +769,6 @@ export function settingsView(status) {
   // (or `gate.hands_free`). "" from a PC that does not have it - not offered.
   const rawHandsFree = s.hands_free !== undefined ? s.hands_free : gate.hands_free;
   const handsFree = rawHandsFree === "same_as_button" || rawHandsFree === "button_only" ? rawHandsFree : "";
-  // Talk-to-type (2026-09-28): `gate.settings.talk_to_type` (or
-  // `gate.talk_to_type`). "" from a PC that does not have it - not offered.
-  const rawTalk = s.talk_to_type !== undefined ? s.talk_to_type : gate.talk_to_type;
-  const talkToType = rawTalk === "off" || rawTalk === "on" ? rawTalk : "";
-  // "Better voice" (2026-09-28): "" from a PC that does not have them - not
-  // offered. Any other value is read as the strict one, never the looser.
-  const rawConfirm = s.wake_confirm !== undefined ? s.wake_confirm : gate.wake_confirm;
-  const wakeConfirm = rawConfirm === undefined || rawConfirm === null || rawConfirm === ""
-    ? "" : rawConfirm === "one" ? "one" : "both";
-  const rawModel = s.voice_id_model !== undefined ? s.voice_id_model : gate.voice_id_model;
-  const voiceIdModel = rawModel === undefined || rawModel === null || rawModel === ""
-    ? "" : rawModel === "resnet221" ? "resnet221" : "titanet";
   // The sixth, answers about the screen after "Hey Jarvis" (the owner's
   // decision of 2026-09-28): `gate.settings.hands_free_screen` (or
   // `gate.hands_free_screen`). "" from a PC that does not have it - not
@@ -795,6 +785,18 @@ export function settingsView(status) {
   // "" from a PC that does not have it - not offered.
   const rawEnd = s.live_end !== undefined ? s.live_end : gate.live_end;
   const liveEnd = LIVE_END.some((c) => c.id === rawEnd) ? rawEnd : "";
+  // Talk-to-type (2026-09-28): `gate.settings.talk_to_type` (or
+  // `gate.talk_to_type`). "" from a PC that does not have it - not offered.
+  const rawTalk = s.talk_to_type !== undefined ? s.talk_to_type : gate.talk_to_type;
+  const talkToType = rawTalk === "off" || rawTalk === "on" ? rawTalk : "";
+  // "Better voice" (2026-09-28): "" from a PC that does not have them - not
+  // offered. Any other value is read as the strict one, never the looser.
+  const rawConfirm = s.wake_confirm !== undefined ? s.wake_confirm : gate.wake_confirm;
+  const wakeConfirm = rawConfirm === undefined || rawConfirm === null || rawConfirm === ""
+    ? "" : rawConfirm === "one" ? "one" : "both";
+  const rawModel = s.voice_id_model !== undefined ? s.voice_id_model : gate.voice_id_model;
+  const voiceIdModel = rawModel === undefined || rawModel === null || rawModel === ""
+    ? "" : rawModel === "resnet221" ? "resnet221" : "titanet";
   return {
     wakeConfirm,
     voiceIdModel,
@@ -803,10 +805,10 @@ export function settingsView(status) {
     memory,
     sensitiveMemory,
     handsFree,
-    talkToType,
     handsFreeScreen,
     handsFreeLive,
     liveEnd,
+    talkToType,
     voiceIsEnoughAllowed: yes(s.voice_is_enough_allowed) && strictness === "very_strict",
     minSeconds: min,
     waiting: waiting && waiting.name ? { setting: String(waiting.name), value: String(waiting.value || "") } : null,

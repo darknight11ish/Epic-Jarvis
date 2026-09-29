@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import com.jarvis.client.data.ApprovalCheck
 import com.jarvis.client.data.CheckAvailability
 import com.jarvis.client.data.CheckMethod
+import com.jarvis.client.data.LiveEnd
 import com.jarvis.client.data.RelockAfter
 import com.jarvis.client.data.Security
 import com.jarvis.client.data.SecurityRules
@@ -119,6 +120,29 @@ fun SecurityScreen(
                                 onPick = { onChange(security.copy(relockAfter = it)) },
                             )
                         }
+                    }
+                }
+            }
+
+            // "End Live when" (the owner's decision of 2026-09-28): the same
+            // setting as the PC's. The looser choice asks for the fingerprint
+            // or PIN (SecurityRules.loosens), like everything else here.
+            item(key = "live-end") {
+                Section(SecurityRules.LIVE_END_TITLE) {
+                    Plate {
+                        Choices(
+                            options = LiveEnd.entries,
+                            isSelected = { it == security.liveEnd },
+                            label = { it.label },
+                            enabled = !busy,
+                            onPick = { onChange(security.copy(liveEnd = it)) },
+                        )
+                        Gap(6)
+                        Text(
+                            SecurityRules.LIVE_END_DETAIL,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = chrome.textLo,
+                        )
                     }
                 }
             }

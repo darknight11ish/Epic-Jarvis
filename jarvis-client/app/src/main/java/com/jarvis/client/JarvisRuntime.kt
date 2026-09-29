@@ -1332,6 +1332,11 @@ object JarvisRuntime {
                 if (com.jarvis.client.net.Chatbot.isChatbotActivity(_activityDetail.value)) {
                     watchChatbot()
                 }
+                // A customer-support chat's progress rides on the same line
+                // ("Chat with Groupon: message 2 of 15.").
+                if (com.jarvis.client.net.Support.isSupportActivity(_activityDetail.value)) {
+                    watchSupport()
+                }
                 refreshStatus()
             }
             "power", "persona" -> refreshStatus()
@@ -2597,6 +2602,12 @@ object JarvisRuntime {
             is ApiResult.Ok -> {
                 val items = read.value.items
                 _pending.value = items
+                // A "Forget a time frame" card of this phone's may have been
+                // decided (here, or on the PC): the PC's own status says how,
+                // and Home leaves a chat that went (the chat audit, 2026-09-28).
+                if (forgetRangeChats.isNotEmpty()) {
+                    scope.launch { forgetRangeRead(com.jarvis.client.net.ForgetRange.PATH) }
+                }
                 // A row this phone could not read is still a decision waiting
                 // on the desktop. Say so, rather than show a shorter list as
                 // if it were the whole queue. The rows it COULD read stay
@@ -3888,13 +3899,34 @@ object JarvisRuntime {
      * @return whether the words are gone now (so the row leaves the list),
      * and the sentence to show.
      */
-    suspend fun eraseAutoFact(id: Long, alsoDeleteConversation: Boolean = false): Pair<Boolean, String> {
+    suspend fun eraseAutoFact(
+        id: Long,
+        alsoDeleteConversation: Boolean = false,
+        /** The chat named in the confirm (the chat audit, 2026-09-28): Home
+         *  starts a new conversation if it was in that chat and it went. */
+        chatId: String? = null,
+        /** The PC said no chat is on record for this fact: said so after. */
+        noChatOnRecord: Boolean = false,
+    ): Pair<Boolean, String> {
         actionBlocker()?.let { return false to it }
         return when (val r = api.eraseFact(id, alsoDeleteConversation)) {
-            is ApiResult.Ok -> com.jarvis.client.net.MemoryErase.said(r.value).also { (gone, _) ->
-                // An erased fact leaves "Always keep in mind" too.
-                if (gone) _profileTick.update { it + 1 }
-            }
+            is ApiResult.Ok -> com.jarvis.client.net.MemoryErase
+                .said(r.value, askedChat = alsoDeleteConversation || noChatOnRecord)
+                .also { (gone, _) ->
+                    // An erased fact leaves "Always keep in mind" too.
+                    if (gone) _profileTick.update { it + 1 }
+                    if (com.jarvis.client.net.MemoryErase.chatDeleted(r.value)) {
+                        if (chatId != null) {
+                            chatsGone(listOf(chatId))
+                        } else {
+                            // The phone did not know which chat the PC would delete
+                            // (the lookup was slow or an older PC could not say): ask
+                            // whether Home's own chat is still there (the second chat
+                            // audit, phone B6).
+                            homeChatGoneIfMissing()
+                        }
+                    }
+                }
             is ApiResult.Failed -> false to ("Not erased. " + describe(r.error))
         }
     }
@@ -4393,40 +4425,6 @@ object JarvisRuntime {
         }
     }
 
-    /**
-     * A "tell me when" cannot look (backend jarvis_tellme.py, 2026-09-28):
-     * read its `broken` notice by id and show it - an ordinary notification,
-     * never ringing, an urgent watch included (only a real match rings).
-     * While App lock or "Hide memory lists and chat history" is on, only the
-     * generic words. Once per telling, even when a reconnect replays the event.
-     */
-    private fun onTellMeBroken(id: String, eventId: String? = null) {
-        val context = appContext ?: return
-        val kind = com.jarvis.client.net.Schedule.TELLME
-        flushResumePoint()
-        val arrived = System.currentTimeMillis()
-        scope.launch {
-            val job = when (val r = api.scheduleJob(id)) {
-                is ApiResult.Ok -> com.jarvis.client.net.Schedule.parseOne(r.value)
-                is ApiResult.Failed -> null
-            }
-            val key = com.jarvis.client.net.Schedule.shownKey(id, job?.brokenAt, eventId, arrived, "#broken@")
-            val fresh = synchronized(scheduleShown) {
-                if (scheduleShown.size > 500) scheduleShown.clear()
-                scheduleShown.add(key)
-            }
-            if (!fresh) return@launch
-            val security = settings.security.value
-            val locked = security.appLock || security.privateLists
-            val (title, text) = com.jarvis.client.net.Schedule.brokenNotification(job, locked)
-            com.jarvis.client.service.ScheduleNotifier.post(
-                context, id, kind, title, text, com.jarvis.client.net.Schedule.TELLME_BROKEN_LOCK_SCREEN,
-                ring = false,
-                key = key,
-            )
-        }
-    }
-
     // ------------------------------------------------- Jarvis Live ----
     // The owner's decision and answers of 2026-09-28 (docs/LIVE-DESIGN.md):
     // a back-and-forth voice conversation the owner starts and stops. The
@@ -4453,6 +4451,19 @@ object JarvisRuntime {
     val liveFlash: StateFlow<LiveFlash> = _liveFlash.asStateFlow()
 
     private val _liveMove = MutableStateFlow("")
+
+    private val _liveMic = MutableStateFlow<String?>(null)
+
+    /**
+     * Which microphone Live listens through on this phone ("Microphone: your
+     * Bluetooth headset (Buds)"), set by LiveService each time it opens one;
+     * null while Live is not listening here (the Jarvis Live extras).
+     */
+    val liveMic: StateFlow<String?> = _liveMic.asStateFlow()
+
+    fun liveMicWords(words: String?) {
+        _liveMic.value = words
+    }
 
     /** "Live is on your PC - move it here?": the other device's name ("desktop"), or "". */
     val liveMove: StateFlow<String> = _liveMove.asStateFlow()
@@ -4548,16 +4559,40 @@ object JarvisRuntime {
      * "Move it here" - the same chat carries on; otherwise a new Live session
      * is a new chat (docs/LIVE-DESIGN.md section 3.7; the review's C4).
      */
-    suspend fun liveStart(resume: Boolean = false): String? {
+    suspend fun liveStart(resume: Boolean = false, move: Boolean = false): String? {
         actionBlocker()?.let { return it }
         liveNotice(null)
-        return when (val r = api.liveWrite(com.jarvis.client.voice.LiveRules.startBody())) {
+        // Which chat the session's words go in (the chat audit, 2026-09-28):
+        // "Move it here" carries on the OTHER device's chat - the PC's Live
+        // status names it - so the same conversation goes on here (it used
+        // to carry on whatever chat Home happened to be in); "Resume Live"
+        // this phone's own; a new session a new chat. The id goes with Start.
+        val rules = com.jarvis.client.voice.LiveRules
+        val theirs = if (move) {
+            rules.sessionChat((_liveStatus.value?.get("conversation_id") as? JsonPrimitive)?.takeIf { it.isString }?.content)
+        } else {
+            null
+        }
+        val cid = when {
+            theirs != null -> theirs
+            resume && !move -> chat.conversationIdNow()
+            else -> com.jarvis.client.net.ChatHistory.newConversationId()
+        }
+        return when (val r = api.liveWrite(rules.startBody(cid))) {
             is ApiResult.Ok -> {
                 val (code, body) = r.value
                 if (code !in 200..299 || body?.get("ok")?.let { (it as? JsonPrimitive)?.content } != "true") {
                     liveError(body, code).also { liveNotice(it) }
                 } else {
-                    if (!resume) chat.newConversation()
+                    when {
+                        theirs != null -> carryOnMoved(theirs)
+                        // Home's chat goes when a new Live session starts: say where it went.
+                        !(resume && !move) -> chat.continueFrom(
+                            cid,
+                            emptyList(),
+                            if (chat.hasKeptChat()) com.jarvis.client.net.ChatHistory.LIVE_STARTED_NOTE else null,
+                        )
+                    }
                     (body["status"] as? JsonObject)?.let { takeLiveStatus(it) }
                     clearLiveMove()
                     // The start line only once the microphone service is in
@@ -4578,6 +4613,34 @@ object JarvisRuntime {
         }
     }
 
+    /** "Hide memory lists and chat history" is hiding them now - set by MainActivity, read here. */
+    @Volatile var privateListsHidden: Boolean = false
+
+    /**
+     * "Move it here": Home takes over the other device's Live chat - its
+     * kept messages read back from History when there are any (history on,
+     * an answer kept), else just its id, so what follows is filed with it.
+     */
+    private suspend fun carryOnMoved(id: String) {
+        // Lists hidden: nothing is read back (the id alone carries on, as with history off).
+        val t = if (privateListsHidden) {
+            null
+        } else {
+            (api.historyConversation(id) as? ApiResult.Ok)?.let { com.jarvis.client.net.ChatLog.transcript(it.value) }
+        }
+        val window = if (t != null && t.continuable) {
+            com.jarvis.client.net.ChatHistory.continueWindow(t.turns).window
+        } else {
+            emptyList()
+        }
+        chat.continueFrom(
+            id,
+            window,
+            com.jarvis.client.net.ChatHistory.MOVED_HERE,
+            readOutside = t != null && t.continuable && t.tainted,
+        )
+    }
+
     /**
      * End Jarvis Live. Never held, never a card. The microphone closes here
      * first, and the phone shows Live as ended at once; if the PC cannot be
@@ -4588,7 +4651,12 @@ object JarvisRuntime {
     suspend fun liveStop(why: String = "owner"): String? {
         endLiveHere()
         voice.endLiveTurn()
-        if (liveOnHere()) takeLiveStatus(endedLocally(why))
+        val wasHere = liveOnHere()
+        if (wasHere) {
+            takeLiveStatus(endedLocally(why))
+            // Home says where the session went (the second chat audit).
+            chat.noteLiveEnded()
+        }
         val body = com.jarvis.client.voice.LiveRules.stopBody(why)
         return when (val r = api.liveWrite(body)) {
             is ApiResult.Ok -> {
@@ -4610,6 +4678,17 @@ object JarvisRuntime {
                 "Live has ended on this phone. " + liveFailed(r.error)
             }
         }
+    }
+
+    /**
+     * Start Live from the Quick Settings tile or "Live ended - Resume"
+     * (MainActivity, once the app is unlocked): [liveStart], in the
+     * runtime's own scope so a screen change cannot cut it off. Its own
+     * rules hold (held on a stale link; the PC refuses it until the owner's
+     * voice is trained), and a refusal shows on the Live screen.
+     */
+    fun liveStartSoon(resume: Boolean = false) {
+        scope.launch { liveStart(resume) }
     }
 
     /** End Live from anywhere that must not wait (the notification, the End Live button): the runtime's own scope. */
@@ -4763,14 +4842,20 @@ object JarvisRuntime {
         val now = SystemClock.elapsedRealtime()
         when (reply.action) {
             com.jarvis.client.voice.LiveRules.Action.START -> {
-                // "Hey Jarvis, let's talk" while App lock would lock the app:
-                // ended again at once, and nothing is said.
-                if (appLockWouldLock(now, settings.security.value)) {
-                    scope.launch { api.liveWrite(rules.stopBody("app_lock")) }
+                // "Hey Jarvis, let's talk" while App lock would lock the app
+                // (or, under "End Live when: Only when the phone's screen
+                // locks", while the screen is locked): ended again at once,
+                // and nothing is said.
+                liveLockEnd(now)?.let { why ->
+                    scope.launch { api.liveWrite(rules.stopBody(why)) }
                     return
                 }
                 scope.launch {
-                    chat.newConversation()
+                    chat.startLiveConversation()
+                    // Started by voice: the session has no chat yet - this
+                    // phone names its fresh one, once, so "Move it here" on
+                    // the PC carries it on (the chat audit, 2026-09-28).
+                    api.liveWrite(rules.activeBody(chat.conversationIdNow()))
                     liveRead()
                     if (beginLiveHere() && awaitLiveListening()) {
                         voice.sayLine(reply.say)
@@ -4820,15 +4905,22 @@ object JarvisRuntime {
         liveType(words)
     }
 
-    /** The Live screen's text box: a typed question, with a typed answer's rules. It keeps Live open. */
-    fun liveType(words: String) {
+    /**
+     * The Live screen's text box: a typed question, with a typed answer's
+     * rules. It keeps Live open. [shared]: text handed over with "Talk about
+     * this in Live" (the Share sheet) - sent as its own message, tagged
+     * "shared", right before the typed words (or alone): outside text, like
+     * any shared item, so the PC treats the chat as having read it.
+     */
+    fun liveType(words: String, shared: String? = null) {
         val text = words.trim()
-        if (text.isEmpty()) return
+        val held = shared?.takeIf { it.isNotBlank() }
+        if (text.isEmpty() && held == null) return
         scope.launch {
             // The conversation goes on: the PC's quiet clock starts again
             // (the review's B4 - 90 s of typing used to end Live).
             if (liveOnHere()) api.liveWrite(com.jarvis.client.voice.LiveRules.ACTIVE_BODY)
-            chat.send(text, provenance = com.jarvis.client.net.Provenance.TYPED)
+            chat.send(text, provenance = com.jarvis.client.net.Provenance.TYPED, shared = held)
         }
     }
 
@@ -4914,21 +5006,47 @@ object JarvisRuntime {
                 if (!here && failures == 0) {
                     val line = com.jarvis.client.voice.LiveRules.transition(before, now)
                     endLiveHere(cancelWatch = false)
+                    // "Live ended - Resume" (the Jarvis Live extras): after an
+                    // end here the PC can resume, for the rest of its 10 minutes.
+                    com.jarvis.client.voice.LiveExtras.resumeFor(now)?.let { ms ->
+                        val words = (now?.get("ended_words") as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
+                        appContext?.let { com.jarvis.client.service.LiveService.showResume(it, words, ms) }
+                    }
                     if (line.isNotEmpty()) voice.sayLine(line)
                     break
                 }
                 if (here) {
                     val line = com.jarvis.client.voice.LiveRules.transition(before, now)
                     if (line.isNotEmpty()) sayLiveLine(line)
-                    if (appLockWouldLock(SystemClock.elapsedRealtime(), settings.security.value)) {
+                    val lockEnd = liveLockEnd(SystemClock.elapsedRealtime())
+                    if (lockEnd != null) {
                         // In its own job: liveStop ends this watcher.
-                        scope.launch { liveStop("app_lock") }
+                        scope.launch { liveStop(lockEnd) }
                         break
                     }
                 }
             }
         }
     }
+
+    /**
+     * Does a lock end Live on this phone now - "app_lock", "screen_lock" or
+     * null ([com.jarvis.client.data.SecurityRules.liveEndsNow], the Security
+     * screen's "End Live when"; the owner's decision of 2026-09-28).
+     */
+    private fun liveLockEnd(nowMs: Long): String? {
+        val security = settings.security.value
+        return com.jarvis.client.data.SecurityRules.liveEndsNow(
+            security,
+            appLockWouldLock = appLockWouldLock(nowMs, security),
+            screenLocked = screenLocked(),
+        )
+    }
+
+    /** The phone's own screen lock is on (a PIN, pattern or password is needed to get in). */
+    private fun screenLocked(): Boolean =
+        (appContext?.getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager)
+            ?.isDeviceLocked == true
 
     /**
      * A fixed line while Live runs. "Two minutes left..." used to be skipped
@@ -4967,6 +5085,40 @@ object JarvisRuntime {
     private const val LIVE_STOP_RETRY_MS = 5000L
     private const val LIVE_LINE_RETRIES = 60
     private const val LIVE_LISTEN_WAIT_MS = 4000L
+
+    /**
+     * A "tell me when" cannot look (backend jarvis_tellme.py, 2026-09-28):
+     * read its `broken` notice by id and show it - an ordinary notification,
+     * never ringing, an urgent watch included (only a real match rings).
+     * While App lock or "Hide memory lists and chat history" is on, only the
+     * generic words. Once per telling, even when a reconnect replays the event.
+     */
+    private fun onTellMeBroken(id: String, eventId: String? = null) {
+        val context = appContext ?: return
+        val kind = com.jarvis.client.net.Schedule.TELLME
+        flushResumePoint()
+        val arrived = System.currentTimeMillis()
+        scope.launch {
+            val job = when (val r = api.scheduleJob(id)) {
+                is ApiResult.Ok -> com.jarvis.client.net.Schedule.parseOne(r.value)
+                is ApiResult.Failed -> null
+            }
+            val key = com.jarvis.client.net.Schedule.shownKey(id, job?.brokenAt, eventId, arrived, "#broken@")
+            val fresh = synchronized(scheduleShown) {
+                if (scheduleShown.size > 500) scheduleShown.clear()
+                scheduleShown.add(key)
+            }
+            if (!fresh) return@launch
+            val security = settings.security.value
+            val locked = security.appLock || security.privateLists
+            val (title, text) = com.jarvis.client.net.Schedule.brokenNotification(job, locked)
+            com.jarvis.client.service.ScheduleNotifier.post(
+                context, id, kind, title, text, com.jarvis.client.net.Schedule.TELLME_BROKEN_LOCK_SCREEN,
+                ring = false,
+                key = key,
+            )
+        }
+    }
 
     // ------------------------------------------------- Focus sessions ----
     // The owner's decision of 2026-09-25 - see [com.jarvis.client.net.Focus]
@@ -5043,7 +5195,8 @@ object JarvisRuntime {
     private var chatbotWatcher: kotlinx.coroutines.Job? = null
 
     /** `GET /api/chatbot/status` - the one [id] names, or the latest still going. A read. */
-    suspend fun chatbotStatus(id: String?): ApiResult<JsonObject> = api.chatbotStatus(id)
+    suspend fun chatbotStatus(id: String?): ApiResult<JsonObject> =
+        api.chatbotStatus(id).onOk { noteHandoff(it) }
 
     /** `GET /api/chatbot/status?compare=` - the comparison [id] names. A read. */
     suspend fun chatbotCompareStatus(id: String): ApiResult<JsonObject> = api.chatbotStatus(null, id)
@@ -5176,6 +5329,8 @@ object JarvisRuntime {
                 val ctx = appContext
                 if (r is ApiResult.Ok) {
                     misses = 0
+                    // "Solve it here": a page waiting for the owner.
+                    noteHandoff(r.value)
                     val v = com.jarvis.client.net.Chatbot.parse(r.value)
                     val s = v?.session
                     val c = v?.compare
@@ -5202,6 +5357,249 @@ object JarvisRuntime {
                 kotlinx.coroutines.delay(com.jarvis.client.net.Chatbot.POLL_MS)
             }
         }
+    }
+
+    // ------------------------------- Chat with customer support for me ----
+    // The owner's decisions of 2026-09-28 - see [com.jarvis.client.net.Support]
+    // and ui/screens/SupportPlate.kt. Jarvis chats with a company's customer
+    // support in the owner's name, on the PC; ONE card lists every detail it
+    // may give, and every offer gets its own card. This phone starts one,
+    // shows it, takes over, resumes (the task's own card) and stops it, and
+    // answers a waiting offer with Decline or "Say something else" - never
+    // Accept (that is only ever the offer's card). It keeps an ongoing
+    // notification while one is going (service/ChatbotNotifier.postSupport).
+
+    private val _supportTick = MutableStateFlow(0)
+
+    /** Goes up while a support chat is going, and after every change from this phone. */
+    val supportTick: StateFlow<Int> = _supportTick.asStateFlow()
+
+    /** The last support chat this phone showed or started, so its end stays on screen. */
+    @Volatile var supportLastId: String? = null
+
+    private var supportWatcher: kotlinx.coroutines.Job? = null
+
+    /** `GET /api/chatbot/status?support=` - the one [id] names, or the latest going. A read. */
+    suspend fun supportStatus(id: String?): ApiResult<JsonObject> =
+        api.supportStatus(id).onOk { noteHandoff(it) }
+
+    /** Ask the PC for a support chat: ONE approval card. Held on a stale link (rule 4). */
+    suspend fun supportStart(
+        company: String,
+        address: String?,
+        goal: String,
+        rows: List<com.jarvis.client.net.Support.Detail>,
+        maxMessages: Int?,
+        maxMinutes: Int?,
+        maxQueueMinutes: Int?,
+    ): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Support.startBody(company, address, goal, rows, maxMessages,
+            maxMinutes, maxQueueMinutes)
+            ?: return false to "That cannot be sent: check the company, the goal and the details."
+        return when (val r = api.supportWrite(com.jarvis.client.net.Support.START_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Support.said(r.value).also { (ok, _) ->
+                if (ok) {
+                    val id = (r.value.body?.get("support") as? kotlinx.serialization.json.JsonPrimitive)
+                        ?.takeIf { it.isString }?.content
+                    if (id != null) supportLastId = id
+                    watchSupport()
+                }
+                _supportTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not started. " + describe(r.error))
+        }
+    }
+
+    /** Stop a support chat. Never held, never a card: it only makes Jarvis do less. */
+    suspend fun supportStop(id: String): Pair<Boolean, String> {
+        val body = com.jarvis.client.net.Support.idBody(id)
+            ?: return false to "That is not a support chat this phone knows."
+        return supportPost(com.jarvis.client.net.Support.STOP_PATH, body)
+    }
+
+    /** Take over: Jarvis stops sending. Never held, never a card. */
+    suspend fun supportTakeover(id: String): Pair<Boolean, String> {
+        val body = com.jarvis.client.net.Support.idBody(id)
+            ?: return false to "That is not a support chat this phone knows."
+        return supportPost(com.jarvis.client.net.Support.TAKEOVER_PATH, body)
+    }
+
+    /**
+     * Decline or "Say something else" (both send words: held on a stale link)
+     * or Take over (not held) about the waiting offer. Never accept.
+     */
+    suspend fun supportAnswer(id: String, offer: Int, choice: String, text: String?): Pair<Boolean, String> {
+        if (choice != "takeover") actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.Support.answerBody(id, offer, choice, text)
+            ?: return false to "That cannot be sent."
+        return supportPost(com.jarvis.client.net.Support.ANSWER_PATH, body)
+    }
+
+    private suspend fun supportPost(path: String, body: String): Pair<Boolean, String> =
+        when (val r = api.supportWrite(path, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Support.said(r.value).also {
+                _supportTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> false to ("Not changed. " + describe(r.error))
+        }
+
+    /**
+     * While a support chat is going: read it every [Support.POLL_MS], keep the
+     * ongoing notification ("Chat with Groupon: offer waiting" with Stop) in
+     * step, and tick [supportTick]. Ends - and takes the notification away -
+     * once nothing is going, or after five failed reads. One watcher at a time.
+     */
+    fun watchSupport() {
+        if (supportWatcher?.isActive == true) return
+        supportWatcher = scope.launch {
+            var misses = 0
+            while (true) {
+                val r = api.supportStatus(null)
+                val ctx = appContext
+                if (r is ApiResult.Ok) {
+                    misses = 0
+                    noteHandoff(r.value)
+                    val c = com.jarvis.client.net.Support.parse(r.value)?.chat
+                    if (c != null && c.live) {
+                        supportLastId = c.id
+                        if (ctx != null) com.jarvis.client.service.ChatbotNotifier.postSupport(ctx, c)
+                    } else {
+                        if (ctx != null) com.jarvis.client.service.ChatbotNotifier.cancelSupport(ctx)
+                        _supportTick.update { n -> n + 1 }
+                        break
+                    }
+                } else {
+                    misses += 1
+                    if (misses >= 5) {
+                        if (ctx != null) com.jarvis.client.service.ChatbotNotifier.cancelSupport(ctx)
+                        break
+                    }
+                }
+                _supportTick.update { n -> n + 1 }
+                kotlinx.coroutines.delay(com.jarvis.client.net.Support.POLL_MS)
+            }
+        }
+    }
+
+    // ----------------------------------------------------- Solve it here ----
+    // The owner's decision of 2026-09-28 - see [com.jarvis.client.net.Handoff],
+    // service/HandoffNotifier.kt and ui/screens/HandoffScreen.kt. A chatbot
+    // website or a support chat paused at a captcha, a sign-in page or an
+    // "unusual activity" page: an alert (site and reason only; generic under
+    // App lock), and "Solve it here" - a live picture of that one browser
+    // window and the owner's own taps and typing to it, only while Jarvis is
+    // paused there (the PC checks that on every picture and every input).
+
+    private val _handoffOffer = MutableStateFlow<com.jarvis.client.net.Handoff.Offer?>(null)
+
+    /** The page waiting for the owner, as last read with a chatbot or support status. */
+    val handoffOffer: StateFlow<com.jarvis.client.net.Handoff.Offer?> = _handoffOffer.asStateFlow()
+
+    /** The alert already raised, so one pause alerts once. */
+    @Volatile private var handoffAlerted: String? = null
+
+    private val _handoffOpen = MutableStateFlow(false)
+
+    /**
+     * True when a Brain plate's "Solve it here" was tapped and the screen is
+     * not open yet: MainActivity opens it and calls [handoffOpened].
+     */
+    val handoffOpen: StateFlow<Boolean> = _handoffOpen.asStateFlow()
+
+    fun openHandoff() {
+        _handoffOpen.value = true
+    }
+
+    fun handoffOpened() {
+        _handoffOpen.value = false
+    }
+
+    /** The hand-off this phone started and has not ended, so a rotation keeps it. */
+    @Volatile var handoffActive: String? = null
+        private set
+
+    /**
+     * A chatbot or support status was read: alert once for a page newly
+     * waiting for the owner, take the alert away once nothing waits.
+     */
+    private fun noteHandoff(status: JsonObject?) {
+        val o = com.jarvis.client.net.Handoff.offer(status)
+        _handoffOffer.value = o
+        val ctx = appContext ?: return
+        if (o == null) {
+            if (handoffAlerted != null) com.jarvis.client.service.HandoffNotifier.cancel(ctx)
+            handoffAlerted = null
+            return
+        }
+        if (handoffAlerted == o.key) return
+        handoffAlerted = o.key
+        val security = settings.security.value
+        com.jarvis.client.service.HandoffNotifier.post(ctx, o, locked = security.appLock || security.privateLists)
+    }
+
+    /**
+     * "Solve it here": start passing that one window on. No card - nothing
+     * leaves the owner's own devices - but not on a stale link: the picture
+     * would be old and every input held anyway. The hand-off id, or why not.
+     */
+    suspend fun handoffStart(o: com.jarvis.client.net.Handoff.Offer): Pair<String?, String?> {
+        actionBlocker()?.let { return null to it }
+        val body = com.jarvis.client.net.Handoff.startBody(o)
+            ?: return null to "That is not a page this phone knows."
+        return when (val r = api.handoffWrite(com.jarvis.client.net.Handoff.START_PATH, body)) {
+            is ApiResult.Ok -> {
+                val h = (r.value.body?.get("handoff") as? JsonPrimitive)?.takeIf { it.isString }?.content
+                if (r.value.code in 200..299 && com.jarvis.client.net.Handoff.validHid(h)) {
+                    handoffActive = h
+                    h to null
+                } else {
+                    null to ((r.value.body?.get("error") as? JsonPrimitive)?.content
+                        ?: "Your PC did not start it. Try again.")
+                }
+            }
+            is ApiResult.Failed -> null to describe(r.error)
+        }
+    }
+
+    /** One picture of that window, kept by the screen that asked only. A read: never held. */
+    suspend fun handoffFrame(h: String): com.jarvis.client.net.Handoff.Answer =
+        when (val r = api.handoffFrame(h)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Handoff.answer(r.value.code, r.value.body).also {
+                if (it is com.jarvis.client.net.Handoff.Answer.Ended && handoffActive == h) handoffActive = null
+            }
+            is ApiResult.Failed -> com.jarvis.client.net.Handoff.Answer.Failed(describe(r.error))
+        }
+
+    /**
+     * One input from the owner (a body made by [com.jarvis.client.net.Handoff]).
+     * Held on a stale link (rule 4). Null when it reached the page; else the
+     * answer the screen shows.
+     */
+    suspend fun handoffInput(body: String?): com.jarvis.client.net.Handoff.Answer? {
+        com.jarvis.client.net.Handoff.inputHeld(_stale.value || _link.value != LinkState.CONNECTED)?.let {
+            return com.jarvis.client.net.Handoff.Answer.Failed(it)
+        }
+        if (body == null) return com.jarvis.client.net.Handoff.Answer.Failed("That cannot be passed on.")
+        return when (val r = api.handoffWrite(com.jarvis.client.net.Handoff.INPUT_PATH, body)) {
+            is ApiResult.Ok ->
+                if (r.value.code in 200..299) {
+                    null
+                } else {
+                    com.jarvis.client.net.Handoff.answer(r.value.code, r.value.body)
+                }
+            is ApiResult.Failed -> com.jarvis.client.net.Handoff.Answer.Failed(describe(r.error))
+        }
+    }
+
+    /**
+     * End the hand-off. Never held, never a card; in the runtime's own scope
+     * so leaving the screen cannot lose it.
+     */
+    fun handoffEnd(h: String) {
+        if (handoffActive == h) handoffActive = null
+        val body = com.jarvis.client.net.Handoff.endBody(h) ?: return
+        scope.launch { api.handoffWrite(com.jarvis.client.net.Handoff.END_PATH, body) }
     }
 
     // ------------------------------------------------ Morning briefing ----
@@ -5485,9 +5883,36 @@ object JarvisRuntime {
     /** Goes up by one after "Forget these" or Undo from this phone, so the plate reads itself again. */
     val forgetRangeTick: StateFlow<Int> = _forgetRangeTick.asStateFlow()
 
-    /** A read: the status, or the list for some days. Never held. */
+    /** A read: the status, or the list for some days. Never held. Each read
+     *  of the status also tells Home when a card of this phone's was
+     *  approved ([forgetRangeSaw]). */
     suspend fun forgetRangeRead(path: String): ApiResult<com.jarvis.client.net.ForgetRange.Reply> =
-        api.forgetRangeCall(path, null)
+        api.forgetRangeCall(path, null).also { r ->
+            if (r is ApiResult.Ok) forgetRangeSaw(r.value)
+        }
+
+    /** The chats on the last card this phone raised, until it is decided. */
+    @Volatile private var forgetRangeChats: List<String> = emptyList()
+
+    /** When the PC last ended a "forget" before this card was raised: an ending
+     *  no newer than this is not this card's answer. */
+    @Volatile private var forgetRangeBase: Double = 0.0
+
+    /**
+     * "Forget a time frame" approved: the chats it deleted are gone, and if
+     * Home was in one of them its words must stop going to the model (the
+     * chat audit, 2026-09-28, phone B2). Read from the PC's own status -
+     * `last.outcome` "done" - never guessed from the card leaving the queue.
+     */
+    private fun forgetRangeSaw(reply: com.jarvis.client.net.ForgetRange.Reply) {
+        val pending = forgetRangeChats
+        if (pending.isEmpty()) return
+        // Null while the card still waits (or this was a list, not a
+        // status); once it is decided, only "done" removed anything.
+        val outcome = com.jarvis.client.net.ForgetRange.decided(reply, forgetRangeBase) ?: return
+        forgetRangeChats = emptyList()
+        if (outcome == "done") chatsGone(pending)
+    }
 
     /**
      * "Forget these" (`action` "forget": the PC raises ONE approval card
@@ -5505,9 +5930,17 @@ object JarvisRuntime {
             actionBlocker()?.let { return com.jarvis.client.net.ForgetRange.Outcome(false, false, it) }
         }
         val path = if (action == "undo") fr.UNDO_PATH else fr.PATH
+        // Read before the card is raised, so an older ending cannot be mistaken for its answer.
+        val before = if (action == "undo") 0.0 else (api.forgetRangeCall(fr.PATH, null) as? ApiResult.Ok)?.let { fr.lastEndedAt(it.value) } ?: 0.0
         return when (val r = api.forgetRangeCall(path, json)) {
             is ApiResult.Ok -> fr.said(r.value, if (action == "undo") "Put back." else fr.w("waiting")).also {
                 if (it.waiting) refreshPending()
+                // The chats on the card, for Home once it is approved (the
+                // chat audit, 2026-09-28): see [forgetRangeSaw].
+                if (action != "undo" && it.waiting) {
+                    forgetRangeChats = fr.chatsIn(json)
+                    forgetRangeBase = before
+                }
                 _forgetRangeTick.update { n -> n + 1 }
                 // Undo put facts back: "Always keep in mind" reads itself again.
                 if (action == "undo" && it.done) _profileTick.update { n -> n + 1 }
@@ -5521,8 +5954,92 @@ object JarvisRuntime {
     // [com.jarvis.client.net.ChatLog] and ui/screens/HistoryScreen.kt. The
     // phone reads all of it from the PC and keeps none of it.
 
-    /** `GET /api/history`, one page, newest first. A read: never held. */
-    suspend fun history(before: Long? = null): ApiResult<JsonObject> = api.history(before)
+    /** `GET /api/history`, one page, newest first. A read: never held. [kind]:
+     *  one kind of conversation ("Live only" and the other filters), or all. */
+    suspend fun history(before: Long? = null, kind: String? = null): ApiResult<JsonObject> =
+        api.history(before, kind)
+
+    /** The chat Home is in, when it was kept on the PC (so History can say "this is the one you are in"). */
+    fun homeKeptChatId(): String? = if (chat.hasKeptChat()) chat.conversationIdNow() else null
+
+    /** Home's quiet line about the chat itself ([com.jarvis.client.net.ChatSession.chatNote]). */
+    val chatNote: StateFlow<String?> get() = chat.chatNote
+
+    /**
+     * "Continue this chat" from History (the owner's decision, 2026-09-28):
+     * Home carries the conversation on - the same conversation id, the
+     * newest kept messages that fit today's re-send limit, its "read outside
+     * text" mark carried over by the PC. Null when it was carried on (Home
+     * says so), or why not in words. A support record, a chat with another
+     * AI or a comparison is never carried on; a temporary chat is never in
+     * History to begin with, and turning to a kept chat turns Temporary off.
+     */
+    suspend fun continueChat(id: String): String? {
+        val words = com.jarvis.client.net.ChatHistory
+        if (chat.streaming.value) return words.CONTINUE_BUSY
+        // A Live session files its words in its own chat: another one cannot be
+        // carried on under it.
+        if (liveOnHere()) return words.CONTINUE_LIVE
+        if (!words.validConversationId(id)) return words.CONTINUE_INVALID
+        val t = when (val r = api.historyConversation(id)) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.transcript(r.value)
+                ?: return "Your PC sent something this app could not read."
+            is ApiResult.Failed -> return com.jarvis.client.net.ChatLog.failure(r.error) ?: noticeFor(r.error)
+        }
+        if (!t.continuable) return t.continueWhy ?: com.jarvis.client.net.ChatLog.CONTINUE_WHY.getValue("support")
+        val got = words.continueWindow(t.turns)
+        val window = got.window
+        val lines = mutableListOf(words.continuedLine(t.title))
+        if (window.isEmpty()) lines += words.CONTINUED_NOTHING
+        if (got.skipped > 0 && window.isNotEmpty()) lines += words.continuedSkipped(got.skipped)
+        if (got.trimmed) lines += words.continuedTrimmed(got.trimmedCount)
+        if (t.tainted) lines += words.CONTINUED_TAINTED
+        if (chat.temporary.value) {
+            chat.setTemporary(false)
+            lines += words.CONTINUED_TEMPORARY_OFF
+        }
+        // History off (or unable to keep anything): the chat carries on, but
+        // what is said now is not kept (the owner, 2026-09-29).
+        words.continuedHistoryLine(t.keeping)?.let { lines += it }
+        return if (chat.continueFrom(id, window, lines.joinToString(" "), readOutside = t.tainted)) null else words.CHAT_GONE
+    }
+
+    /**
+     * Chats deleted from this phone (Delete in History, "Erase the words"
+     * with its chat, "Forget a time frame" approved): if Home is in one of
+     * them, a new conversation starts and Home says so (the chat audit,
+     * 2026-09-28, phone B2).
+     */
+    fun chatsGone(ids: Collection<String>) {
+        if (ids.isNotEmpty()) chat.chatsGone(ids)
+    }
+
+    /**
+     * After something deleted chats the phone could not name (a shorter
+     * "keep for" limit, an erase whose chat the phone did not know): if the
+     * chat Home is in was kept and the PC no longer has it, Home starts a new
+     * conversation and says so. A read; anything but a clear "not found" leaves Home alone.
+     */
+    private suspend fun homeChatGoneIfMissing() {
+        if (!chat.hasKeptChat()) return
+        val cid = chat.conversationIdNow()
+        val again = api.historyConversation(cid)
+        if (again is ApiResult.Failed && again.error == ApiError.NotFound) chatsGone(listOf(cid))
+    }
+
+    /**
+     * Which chat a fact came from (`GET /api/memory/fact-chat`), for "Also
+     * delete the chat it came from": [Pair.first] false from a PC that
+     * cannot say (the checkbox then asks as before, without naming one);
+     * [Pair.second] the chat, or null when none is on record.
+     */
+    suspend fun factChat(id: Long): Pair<Boolean, com.jarvis.client.net.ChatLog.FactChat?> {
+        val path = com.jarvis.client.net.ChatLog.factChatPath(id) ?: return false to null
+        return when (val r = api.factChat(path)) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.factChat(r.value)
+            is ApiResult.Failed -> false to null
+        }
+    }
 
     /** `GET /api/history/conversation` - one conversation, read-only. */
     suspend fun historyConversation(id: String): ApiResult<JsonObject> = api.historyConversation(id)
@@ -5533,8 +6050,8 @@ object JarvisRuntime {
      * not here, not there. Null when there is nothing worth sending (fewer
      * than two letters, or too long): the screen then filters titles.
      */
-    suspend fun historySearch(query: String): ApiResult<JsonObject>? {
-        val path = com.jarvis.client.net.ChatLog.searchPath(query) ?: return null
+    suspend fun historySearch(query: String, kind: String? = null): ApiResult<JsonObject>? {
+        val path = com.jarvis.client.net.ChatLog.searchPath(query, kind = kind) ?: return null
         return api.historySearch(path)
     }
 
@@ -5563,19 +6080,18 @@ object JarvisRuntime {
         val body = com.jarvis.client.net.ChatLog.keepDaysBody(days)
             ?: return "Not changed. Pick Never, 30 days, 90 days or 1 year."
         return when (val r = api.setHistoryKeepDays(body)) {
-            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.keepSaid(days, r.value)
+            is ApiResult.Ok -> {
+                // A shorter limit deletes at once: if Home's chat was one of them,
+                // its words must stop going to the model (the second chat audit).
+                val deleted = (r.value["deleted"] as? JsonPrimitive)?.content?.toLongOrNull() ?: 0L
+                if (deleted > 0) homeChatGoneIfMissing()
+                com.jarvis.client.net.ChatLog.keepSaid(days, r.value)
+            }
             is ApiResult.Failed -> "Not changed. " +
                 (com.jarvis.client.net.ChatLog.failure(r.error) ?: describe(r.error))
         }
     }
 
-    /**
-     * Deletes ONE conversation from the PC, after the History screen's
-     * confirm. Held on a stale link (rule 4), the same as the desktop's
-     * History and its Forget: it cannot be undone, and it acts on a list read
-     * over a link that cannot be confirmed live. One already gone counts as
-     * deleted. @return whether it is gone now, and the sentence to show.
-     */
     /**
      * "Facts this chat taught" (docs/JARVIS-API.md section 79): a read, never
      * held - it changes nothing. History, and so this, is not shown while
@@ -5593,10 +6109,20 @@ object JarvisRuntime {
         }
     }
 
+    /**
+     * Deletes ONE conversation from the PC, after the History screen's
+     * confirm. Held on a stale link (rule 4), the same as the desktop's
+     * History and its Forget: it cannot be undone, and it acts on a list read
+     * over a link that cannot be confirmed live. One already gone counts as
+     * deleted. @return whether it is gone now, and the sentence to show.
+     */
     suspend fun deleteHistory(id: String): Pair<Boolean, String> {
         actionBlocker()?.let { return false to it }
         return when (val r = api.deleteHistory(id)) {
-            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.deleteSaid(r.value)
+            // The chat Home is in, deleted: a new conversation, said on Home.
+            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.deleteSaid(r.value).also { (gone, _) ->
+                if (gone) chatsGone(listOf(id))
+            }
             is ApiResult.Failed -> if (r.error == ApiError.NotFound) {
                 true to com.jarvis.client.net.ChatLog.ALREADY_GONE
             } else {
@@ -5790,9 +6316,10 @@ object JarvisRuntime {
         // Turning the overnight tidy OFF only makes Jarvis ask less (no more
         // nightly cards), so, like "Not now", it is not held on a stale link
         // (2026-09-28; the desktop's brain_memory_sleep_time agrees). It
-        // still needs the PC to be reachable at all.
+        // still needs the PC to be connected at all.
         val offOnly = enabled == false && remind == null
-        (if (offOnly) null else LinkWords.decisionBlocked(_link.value, _stale.value))?.let { blocker ->
+        (if (offOnly && _link.value == LinkState.CONNECTED) null
+        else LinkWords.decisionBlocked(_link.value, _stale.value))?.let { blocker ->
             _notice.value = blocker
             return ApiResult.Failed(ApiError.Unreachable(blocker))
         }

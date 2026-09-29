@@ -343,12 +343,12 @@ class ChatLogTest {
         // The desktop asks the same sentence (one wording for both apps).
         assertEquals(
             "Delete every conversation older than 30 days from your PC now, and from then on? " +
-                "This cannot be undone.",
+                "This cannot be undone. Facts Jarvis learned stay. Copies in older backups stay until they age out.",
             ChatLog.keepConfirm(30),
         )
         assertEquals(
             "Delete every conversation older than 1 year from your PC now, and from then on? " +
-                "This cannot be undone.",
+                "This cannot be undone. Facts Jarvis learned stay. Copies in older backups stay until they age out.",
             ChatLog.keepConfirm(365),
         )
     }
@@ -455,7 +455,10 @@ class ChatLogTest {
             ChatLog.chatFactsIntro(2)
                 .startsWith("Jarvis learned 2 facts from this chat. They are kept unless you tick them"),
         )
-        assertTrue(ChatLog.deleteAndForgetConfirm(0).endsWith("The facts it taught are kept."))
+        assertTrue(
+            ChatLog.deleteAndForgetConfirm(0)
+                .endsWith("Facts Jarvis learned stay. Copies in older backups stay until they age out."),
+        )
         assertTrue(ChatLog.deleteAndForgetConfirm(2).startsWith("Delete this conversation and forget 2 facts?"))
         assertTrue(ChatLog.chatFactsHiddenLine(2).contains("Your memory lists are hidden, so they are kept."))
         assertEquals("Deleted from your PC.", ChatLog.deleteDoneWords("Deleted from your PC.", 0, 0))
@@ -463,5 +466,19 @@ class ChatLogTest {
             "Deleted from your PC. Forgot 2 facts. 1 fact could not be forgotten - try Forget on it in the Brain.",
             ChatLog.deleteDoneWords("Deleted from your PC.", 2, 1),
         )
+    }
+
+    @Test
+    fun `read outside text marks the answer that read it, and a record says whose words`() {
+        fun turn(role: String, out: Boolean = false) = ChatLog.Turn(role, "x", null, null, out)
+        val turns = listOf(turn("user"), turn("assistant"), turn("user", true), turn("assistant"), turn("user", true))
+        // The second question read outside text: its answer is marked; the last has none, so itself.
+        assertEquals(setOf(3, 4), ChatLog.outsideMarks(turns))
+        assertEquals(emptySet<Int>(), ChatLog.outsideMarks(emptyList()))
+        assertEquals(ChatLog.TAINT_SUPPORT, ChatLog.taintNote("support"))
+        assertEquals(ChatLog.TAINT_CHATBOT, ChatLog.taintNote("chatbot"))
+        assertEquals(ChatLog.TAINT_CHATBOT, ChatLog.taintNote("compare"))
+        assertEquals(ChatLog.TAINT_LINE, ChatLog.taintNote("chat"))
+        assertEquals(ChatLog.TAINT_LINE, ChatLog.taintNote("live"))
     }
 }

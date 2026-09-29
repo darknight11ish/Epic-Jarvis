@@ -208,6 +208,10 @@ NOTE_TOOL_UPDATES = ("Checking is read-only - it only reports, never installs an
 NOTE_FORGET_RANGE = ("Always asks, with ONE card listing every fact and chat - approved by "
                      "tapping, never by voice. For 10 minutes afterwards, Undo puts it all back. "
                      "This cannot be changed from an app.")
+NOTE_SUPPORT = ("Always asks: one card lists every detail Jarvis may give in that chat. "
+                "This cannot be changed from an app.")
+NOTE_SUPPORT_OFFER = ("Always asks, one card per offer, showing the exact reply - nothing is "
+                      "accepted without it. This cannot be changed from an app.")
 NOTE_READ = ("Asking first also leaves it out of the morning briefing and \"tell me when\", "
              "which cannot stop to ask.")
 NOTE_NOTE = "After Jarvis has read outside text in a chat, a note still waits for your yes."
@@ -293,6 +297,7 @@ HARD_LIMITS = frozenset({
     "app_merge_change",
     "run_plan", "phone_notifications_read",
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
+    "support_chat", "support_offer",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -309,6 +314,7 @@ MUST_ASK = frozenset({
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
     "restore_backup", "check_tool_updates", "run_plan", "phone_notifications_read",
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
+    "support_chat", "support_offer",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -331,7 +337,8 @@ GROUPS = (
                             "delete_calendar_event"]),
     ("The internet", ["search_the_web", "web_research", "research_authenticated",
                       "control_browser", "post_to_external_service", "open_public_tunnel",
-                      "news_read", "page_read", "github_read", "chatbot_session"]),
+                      "news_read", "page_read", "github_read", "chatbot_session",
+                      "support_chat", "support_offer", "fixed:handoff"]),
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
                                 "run_plan", "fixed:plugin_start", "fixed:plugin_use",
                                 "delete_file", "spend_money", "power_manage",
@@ -382,6 +389,14 @@ FIXED = {
                    "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still "
                    "checked for your voice, and a card that comes up during Live still waits "
                    "for your tap. How far Live is trusted is a Voice setting."),
+    # "Solve it here" (the owner's decision of 2026-09-28; jarvis_handoff.py):
+    # the page promises every action. Decided in the code: no card - only
+    # the owner's own taps and typing pass, only while Jarvis is paused there.
+    "fixed:handoff": ("Solve a captcha or sign-in page from your phone (\"Solve it here\")",
+                      SAYS_NO_CARD,
+                      "Your own taps and typing, passed to that one browser window on the PC "
+                      "only while Jarvis is paused at the page. Jarvis never solves it, and "
+                      "the picture is never saved. Resume still asks with a card."),
     "fixed:plugin_use": ("Use a tool from a plug-in program on this PC (MCP)",
                          "Asks you first, every time",
                          "Always asks, whatever your settings file says: it is someone "
@@ -525,6 +540,10 @@ def _row(action: str, *, here: bool) -> dict:
             row["note"] = NOTE_TOOL_UPDATES
         elif action == "memory_forget_range":
             row["note"] = NOTE_FORGET_RANGE
+        elif action == "support_chat":
+            row["note"] = NOTE_SUPPORT
+        elif action == "support_offer":
+            row["note"] = NOTE_SUPPORT_OFFER
         else:
             row["note"] = NOTE_ALWAYS
         return row

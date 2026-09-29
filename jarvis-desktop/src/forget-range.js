@@ -31,15 +31,20 @@ export const WORDS = Object.freeze({
   forget: "Forget these",
   from: "From",
   kind_chats: "Chats",
+  kind_chatbot: "Chat with an AI",
+  kind_compare: "Comparison",
   kind_facts: "What Jarvis learned",
+  kind_live: "Live",
+  kind_support: "Support chat",
   kinds: "What to look for",
   locked: "Unlock Jarvis to see this list.",
   missing: "Your PC's Jarvis cannot forget a time frame yet - run apply-patches.ps1 on the PC.",
   none_ticked: "Tick at least one thing to forget.",
   pinned: "Always kept in mind",
   show: "Show the list",
-  spills: "Also has messages from outside these days - the whole chat is deleted.",
+  spills: "Also has messages from outside these days. Tick it only if the whole chat should go.",
   stale: "The connection to Jarvis is catching up, so nothing can be sent until it does.",
+  support: "A customer-support chat record - kept unless you tick it.",
   title: "Forget a time frame",
   to: "To",
   under: "Choose some days. Jarvis lists what it learned and your chats from then - untick " +
@@ -55,6 +60,12 @@ export const WORDS = Object.freeze({
 export const BRAIN_PLACE_KEY = "jarvis.brain.place";
 /** The one place it can name. */
 export const PLACE = "forget-range";
+/** "Earlier chats" in the Jarvis bar (the chat audit, 2026-09-28): the
+ *  History tab itself, left under the same key. */
+export const HISTORY_PLACE = "history";
+/** Said on the page (a window event) when chats were removed or put back -
+ *  a card approved, an Undo - so History's list is read again at once. */
+export const HISTORY_CHANGED = "jarvis-history-changed";
 
 /** The PC's quick choices, in its order, when it has not said them yet. */
 export const PRESETS = Object.freeze([
@@ -130,7 +141,14 @@ export function readPreview(v) {
     }));
   const chats = (Array.isArray(v.chats) ? v.chats : [])
     .filter((x) => x && typeof x.id === "string")
-    .map((x) => ({ id: x.id, title: text(x.title), label: text(x.label), spills: x.spills === true }));
+    .map((x) => ({
+      id: x.id, title: text(x.title), label: text(x.label), spills: x.spills === true,
+      // The chat audit (2026-09-28): what kind of chat it is, and whether it
+      // starts ticked - a customer-support record does not (the owner:
+      // "Forget a time frame" asks before removing a support chat).
+      kind: ["chat", "live", "support", "chatbot", "compare"].includes(x.kind) ? x.kind : "chat",
+      ticked: x.ticked !== false && x.kind !== "support" && x.spills !== true,
+    }));
   const counts = v.counts && typeof v.counts === "object" ? v.counts : {};
   return {
     available: true,
@@ -162,12 +180,18 @@ export function forgetBody(preview, ticked) {
   };
 }
 
-/** Every item ticked - how a fresh list starts. */
+/** Every item ticked - how a fresh list starts - except a customer-support
+ *  chat's record, which goes only when the owner ticks it. */
 export function allTicked(preview) {
   return new Set([
     ...preview.facts.map((x) => `fact:${x.id}`),
-    ...preview.chats.map((x) => `chat:${x.id}`),
+    ...preview.chats.filter((x) => x.ticked !== false).map((x) => `chat:${x.id}`),
   ]);
+}
+
+/** The tag beside a chat of a kind that is not an ordinary chat. */
+export function chatKindTag(kind) {
+  return kind && kind !== "chat" ? WORDS[`kind_${kind}`] || "" : "";
 }
 
 /** "Forget these (3)". */

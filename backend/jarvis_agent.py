@@ -5248,7 +5248,7 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
                    next_time: str = "", spoken: bool = False, live: bool = False,
                    cut_off: str = "", crisis: bool = False) -> list:
     """The notes a local turn adds to its (already trimmed) messages, in
-    their order - manner, focus, next-time, spoken, cut-off, crisis, each just before
+    their order - manner, focus, next-time, spoken, live, cut-off, crisis, each just before
     the newest user message - and then keep_rules_first, last, so the rules
     stay first. A new list; `msgs` is not changed. run_local_turn and the
     warm-up both call this."""
@@ -5269,9 +5269,9 @@ def dress_messages(msgs: list, *, manner: Optional[str], focus: bool = False,
         # After trimming, so trimming can never leave the note first.
         out = with_spoken_note(out)
     if live:
-        # Jarvis Live: no yes/no question to end on, and side talk
-        # answered with the marker alone. Never first; the relay never
-        # sees it (the same placing as the spoken note).
+        # Jarvis Live: no yes/no question to end on, and side talk answered
+        # with the marker alone. Never first; the relay never sees it (the
+        # same placing as the spoken note).
         out = with_live_note(out)
     if cut_off:
         # The owner cut the last spoken answer off: said, never first.
@@ -5372,7 +5372,8 @@ def _looks_temporary(request) -> bool:
         return True
     try:
         import jarvis_intake
-        return bool(jarvis_intake.game_or_roleplay(request.get("messages") or []))
+        return bool(jarvis_intake.game_or_roleplay(request.get("messages") or [],
+                                                   request.get("conversation_id")))
     except Exception:
         return False
 
@@ -6191,10 +6192,6 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # crisis answer would be its own bad moment, never mind what it
         # counts (the owner's decision, 2026-09-27, extending "never
         # counted" to this signal).
-        # A reminder for next time counts as brought up only when the model
-        # really answered this turn (jarvis_next_time.brought_up).
-        if next_time["ids"] and "".join(answer).strip() and not watch.crisis:
-            _next_time_brought_up(next_time["ids"])
         # Side talk in Jarvis Live (the owner's answer of 2026-09-28): the
         # model said the words were not for it. Never counted, never learned
         # from (jarvis_live.note_side_talk keeps a hash for the learner to
@@ -6202,6 +6199,12 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         side_talk = watch.live and _is_side_talk("".join(answer))
         if side_talk:
             _note_side_talk(watch.newest_raw)
+        # A reminder for next time counts as brought up only when the model
+        # really answered this turn (jarvis_next_time.brought_up) - side
+        # talk, answered with the marker alone, is not an answer.
+        if (next_time["ids"] and "".join(answer).strip() and not watch.crisis
+                and not side_talk):
+            _next_time_brought_up(next_time["ids"])
         if not watch.crisis and not side_talk:
             broken_this_turn = sum(watch.bad.values())
             if broken_this_turn:
@@ -6228,8 +6231,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             "tools_ran": ran,
             "outside_flags": sorted(watch.flags),
             "crisis": watch.crisis,
-            "claimed_undone": claimed_undone,
             "side_talk": bool(watch.live and _is_side_talk(final_answer)),
+            "claimed_undone": claimed_undone,
             "tool_sources": watch.sources,
             "unverified_quotes": unverified,
             "prompt_tokens": prompt_use["prompt"], "cached_tokens": prompt_use["cached"]}

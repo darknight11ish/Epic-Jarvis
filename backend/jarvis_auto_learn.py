@@ -953,9 +953,15 @@ CHANGES_A_FACT = ("it would change a fact you already have - accepting it replac
 #   1. Same conversation, words the learner had already read before the
 #      Forget or Erase: the proposal is dropped (a Forget's is turned down,
 #      an Erase's row is deleted, so the erased words are not kept again).
-#      In memory only, like the live-turn registry it leans on: automatic
-#      saving needs that registry's entry for every turn, and the registry
-#      is empty after a restart - so the gap it closes cannot outlive it.
+#      In memory while the backend runs. It used to end with a restart,
+#      because the registry it leans on is empty after one and old turns
+#      could not come back. "Continue this chat" made them come back (the
+#      second chat audit, 2026-09-28), so forgotten_in() also keeps, in the
+#      chat's own record (jarvis_chat_log.note_hush - numbers, never words),
+#      how many of its messages were already learned from; when the PC puts
+#      the chat's own typed and spoken messages back in the registry
+#      (ChatLog._rehydrate) those are hushed again, whichever way the fact
+#      left - Forgotten or Erased.
 #   2. A proposal that matches a FORGOTTEN (not erased) fact's words, from
 #      any conversation, later: a card, never an automatic save. The words
 #      are the ones Forget keeps as history anyway. An erased fact has no
@@ -1007,12 +1013,18 @@ def forgotten_in(conversation_id, *, erased: bool = False) -> None:
     try:
         if not (isinstance(conversation_id, str) and _CID.fullmatch(conversation_id)):
             return
+        _note_hush_in_record(conversation_id, erased)
         with _HUSH_LOCK:
             upto = _READ_UPTO.get(conversation_id)
             if upto is None:
                 # No pass has read this conversation since the backend
-                # started, so none of its turns can be saved automatically
-                # (they are not in the live registry): nothing to hush.
+                # started. Turns the PC put back in the registry from the
+                # chat's own record (ChatLog._rehydrate) may be waiting
+                # there unread: they were said before this Forget, so they
+                # are hushed too. Nothing in the registry: nothing to hush
+                # in memory (the record below still remembers).
+                upto = _registry_upto(conversation_id)
+            if upto is None:
                 return
             prev = _HUSH.get(conversation_id) or {}
             _bounded_put(_HUSH, conversation_id,
@@ -1020,6 +1032,30 @@ def forgotten_in(conversation_id, *, erased: bool = False) -> None:
                           "erased": bool(erased or prev.get("erased"))})
     except Exception:
         pass
+
+
+def _registry_upto(conversation_id) -> Optional[int]:
+    try:
+        import jarvis_chat_log
+        return jarvis_chat_log.live_upto(conversation_id)
+    except Exception:
+        return None
+
+
+def _note_hush_in_record(conversation_id, erased: bool) -> None:
+    try:
+        import jarvis_chat_log
+        jarvis_chat_log.note_hush(conversation_id, erased)
+    except Exception:
+        pass
+
+
+def _record_floor(conversation_id) -> Optional[dict]:
+    try:
+        import jarvis_chat_log
+        return jarvis_chat_log.hush_floor(conversation_id)
+    except Exception:
+        return None
 
 
 def hushed(conversation_id, source_texts) -> str:
@@ -1030,6 +1066,12 @@ def hushed(conversation_id, source_texts) -> str:
         return ""
     with _HUSH_LOCK:
         h = _HUSH.get(conversation_id)
+    floor = _record_floor(conversation_id)
+    if floor:
+        # Turns put back from the chat's own record after a restart that
+        # were already learned from before a Forget or Erase (see above).
+        h = {"seq": max(int((h or {}).get("seq") or 0), int(floor["seq"])),
+             "erased": bool(floor.get("erased") or (h or {}).get("erased"))}
     if not h:
         return ""
     for text in source_texts:
@@ -1608,21 +1650,30 @@ def _store():
 def _init_notes(c) -> None:
     c.execute("CREATE TABLE IF NOT EXISTS auto_learn_notes ("
               " proposal_id INTEGER PRIMARY KEY, reason TEXT, provenance TEXT, at REAL,"
-              " sensitive TEXT)")
+              " sensitive TEXT, conversation_id TEXT)")
     # `sensitive` (the memory review, B13): the topic a card was held back
     # for - a label ("health"), never words. A table from before it gets
     # the column.
     cols = [r[1] for r in c.execute("PRAGMA table_info(auto_learn_notes)")]
     if "sensitive" not in cols:
         c.execute("ALTER TABLE auto_learn_notes ADD COLUMN sensitive TEXT")
+    # `conversation_id` (the second chat audit, 2026-09-28, finding 3): the
+    # chat a card came from, so a card accepted BY HAND keeps the link to its
+    # chat like an automatically saved fact does (jarvis_extract._fact_meta
+    # copies it into the fact). Without it "Erase the words" said "no chat
+    # was on record" for exactly the sensitive facts that wait for a card.
+    if "conversation_id" not in cols:
+        c.execute("ALTER TABLE auto_learn_notes ADD COLUMN conversation_id TEXT")
 
 
 def _note_card(c, pid: int, reason: str, provenance: Optional[str] = None,
-               sensitive: Optional[str] = None) -> None:
+               sensitive: Optional[str] = None, conversation_id=None) -> None:
     _init_notes(c)
+    cid = conversation_id if (isinstance(conversation_id, str)
+                              and _CID.fullmatch(conversation_id)) else None
     c.execute("INSERT OR REPLACE INTO auto_learn_notes (proposal_id, reason, provenance, at,"
-              " sensitive) VALUES (?,?,?,?,?)",
-              (int(pid), reason, provenance, time.time(), sensitive or None))
+              " sensitive, conversation_id) VALUES (?,?,?,?,?,?)",
+              (int(pid), reason, provenance, time.time(), sensitive or None, cid))
 
 
 def card_notes(ids) -> dict:
@@ -1805,10 +1856,12 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                     _card_names(c, pid, moves.pop(pid))
                 decisions[pid] = why
                 topics[pid] = sens
-                if why and not off:
+                if why:
                     # No reason is noted while automatic learning is off:
-                    # then every proposal is a card, as it always was.
-                    _note_card(c, pid, why, sensitive=sens)
+                    # then every proposal is a card, as it always was - but
+                    # the chat it came from is noted either way (finding 3).
+                    _note_card(c, pid, "" if off else why, sensitive=sens,
+                               conversation_id=conversation_id)
         for pid, why in decisions.items():
             if why:
                 result["cards"][pid] = why
@@ -1825,7 +1878,7 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                 with closing(st._connect()) as c:
                     if pid in moves:
                         _card_names(c, pid, moves[pid])
-                    _note_card(c, pid, result["cards"][pid])
+                    _note_card(c, pid, result["cards"][pid], conversation_id=conversation_id)
             else:
                 result["saved"].append(fid)
                 if pid in moves:
@@ -1955,7 +2008,7 @@ def after_remember(res, messages, *, conversation_id=None, learning_on: bool = T
             # The provenance goes with the card either way: annotate() shows
             # "in your own words" only for words typed or said to this PC
             # (GUARDS L3). No reason is noted while automatic learning is off.
-            _note_card(c, pid, "" if off else why, prov)
+            _note_card(c, pid, "" if off else why, prov, conversation_id=conversation_id)
         if why:
             result["cards"][pid] = why
             return result
@@ -1966,7 +2019,7 @@ def after_remember(res, messages, *, conversation_id=None, learning_on: bool = T
         if fid is None:
             result["cards"][pid] = "could not be saved automatically"
             with closing(st._connect()) as c:
-                _note_card(c, pid, result["cards"][pid], prov)
+                _note_card(c, pid, result["cards"][pid], prov, conversation_id=conversation_id)
             return result
         result["saved"].append(fid)
         try:

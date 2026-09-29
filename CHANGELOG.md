@@ -6,6 +6,82 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Chats: carry one on, see the whole thing, find it again.** Open any chat
+  or Jarvis Live session in History and press **Continue this chat**: the
+  Jarvis bar (PC) or Home (phone) picks it up where it stopped - the same
+  chat, its newest kept messages, and its "read outside text" mark. The chat
+  you are in now shows every earlier question and answer in a scrolling
+  "Earlier in this chat" list, not just the last one. **Earlier chats** on
+  Home and in the Jarvis bar (and "Chat history…" in the PC's tray) opens
+  History. After 30 quiet minutes the next question starts a new chat, and a
+  line says so. History marks each chat's kind - a Live session shows its
+  length ("Live · 12 min · Today 14:05"), and "Show" can list Live sessions
+  only, support chats, chats with other AIs or comparisons. **Chats Jarvis
+  had with other AIs, and comparisons, are now kept in History** (encrypted,
+  marked as outside text, never learned from or read aloud). A chat with a
+  crisis moment is kept under the title "A difficult moment". Support chat
+  records are never removed by "Delete conversations older than", start
+  unticked in "Forget a time frame", and Delete asks once more. History: the
+  list first (phone), dates with times and Today / Yesterday in both apps,
+  answers without stray `**` and `#`, Copy on old answers, and "Forget a
+  time frame…" at the top. The HUD window's own chat box now opens the
+  Jarvis bar, so the PC has one chat box. Not yet tried on a real phone.
+
+- **Fixed: chats that were not what they seemed** (the chat audit). Game and
+  role-play chats were being kept in History although they are temporary -
+  they are not any more, and both apps now say "This looks like a game or
+  role-play, so it's a temporary chat". Deleting the chat you were in (from
+  History, "Erase the words" with its chat, or "Forget a time frame") left
+  its words going to Jarvis and brought it back under a new title - now a
+  new chat starts and says why. "Move it here" in Jarvis Live on the phone
+  carried on the wrong chat. "Erase the words" now names the chat it would
+  also delete, and says plainly when there was none. Projects no longer
+  promise that Jarvis reads a project's instructions in chats (it does not
+  yet). The Brain's History and Projects status line no longer sits on
+  "reading…". The phone's "Forget a time frame" and chatbot forms keep what
+  you typed when you scroll or turn the phone; the phone now says when a
+  temporary chat starts or ends, and "New conversation".
+
+- **Solve it here: a captcha handed to your phone.** When a chatbot website
+  or a customer-support chat that Jarvis is using stops at a captcha, a
+  sign-in page or an "unusual activity" page, your phone now says so ("Gemini
+  needs you") and offers **Solve it here**: a live picture of that one
+  browser window on your PC, and your taps and typing passed back to it -
+  only while Jarvis is paused there, never saved on either side. Jarvis never
+  solves it for you. Some captchas refuse taps passed on this way; "Solve it
+  on the PC instead" is always there, and the PC's Brain shows the same
+  alert. Press Resume when it is done (Resume asks with a card, as always).
+  Not yet tried against a real captcha.
+
+- **Jarvis Live extras.** On the PC: a key to start or end Live, off until
+  you pick one in Settings -> Shortcuts (Alt+Shift+L is free for it). On the
+  phone: a Quick Settings tile (with the minutes left), the headset button
+  (press to stop Jarvis talking, hold to turn the microphone off or on - it
+  never approves anything), a "Live ended - Resume" notification for ten
+  minutes, a Bluetooth headset's microphone used while one is connected (the
+  Live screen says which microphone), "Talk about this in Live" in the Share
+  sheet (the shared text is outside text and goes when you tap Send), and
+  "End Live when" on the Security screen, like the PC's: when App lock would
+  ask again (the default), or only when the phone's screen locks (asks for
+  your fingerprint or PIN). Not yet tried on a real phone.
+
+- **Chat with customer support for me.** Jarvis can chat with a company's
+  customer support for you - Groupon first - in your name, in a browser
+  window you can see on the PC. Fill in the company, what you want done and
+  the details Jarvis may give (each one exactly as written) on either app's
+  Brain; ONE approval card shows all of it and the company's terms risk
+  (your real account could be closed). You open the chat on the help page
+  yourself; Jarvis writes from there. **Every offer - a refund, a credit, a
+  cancellation - gets its own card**, and nothing is accepted before you
+  approve it; the app offers Decline, Say something else and Take over,
+  never Accept. "Are you a bot?", identity checks (card digits, security
+  questions, codes) and a detail not on the card are handed to you - Jarvis
+  never claims to be a person and never sends a password, card number or ID
+  number. The chat is kept in your encrypted chat history; Export on the PC
+  saves a plain text copy. Not yet tried on Groupon's real site: run the
+  read-only check first (backend/README.md, "Chat with customer support for
+  me").
+
 - **Forget a time frame.** Say or type "forget what you learned last
   week" or "delete my chats from 1 to 15 September", or open it yourself:
   the desktop's Brain -> History, or the phone's Brain. Jarvis lists every

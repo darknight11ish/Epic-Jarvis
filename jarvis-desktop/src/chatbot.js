@@ -34,6 +34,8 @@
  * @module chatbot
  */
 
+import { readHandoff } from "./handoff.js";
+
 /** The sentences both apps show, word for word (jarvis_chatbot_routes.WORDS). */
 export const WORDS = {
   title: "Talk to a chatbot for me",
@@ -59,7 +61,12 @@ export const WORDS = {
   outside_note:
     "The chatbot's words are outside text: shown here, never learned from, never read aloud.",
   summary_title: "What Jarvis found",
-  summary_note: "Written on this PC from the chatbot's words, so it is outside text too.",
+  summary_note:
+    "Written on this PC from the chatbot's words, so it is outside text too.",
+  history_kept: "Kept in your encrypted chat history on the PC.",
+  history_not_kept: "Not kept in your chat history: {why}",
+  history_open: "Open in History",
+  history_open_title: "Read it, or delete it, in History.",
   claim_sourced: "it gave a source (not checked by Jarvis)",
   claim_unsourced: "no source given",
   open_title: "Still open",
@@ -72,7 +79,7 @@ export const WORDS = {
     "Signing in to the chatbot's account happens on the PC only, in the browser window Jarvis uses.",
   missing: "Your PC's Jarvis cannot talk to chatbots yet - run apply-patches.ps1 on the PC.",
   gone:
-    "That conversation is gone: Jarvis on the PC restarted, and conversations are kept in memory only.",
+    "That conversation is no longer in memory: Jarvis on the PC restarted. If chat history is on, a conversation that finished is in History.",
   hidden: "The goal and the conversation are hidden until you confirm it is you.",
   version: "Version",
   notify_running: "Talking to {name}, {used} of {max}",
@@ -101,7 +108,7 @@ export const WORDS = {
   compare_not_enough:
     "Fewer than two chatbots can be reached from this PC, so there is nothing to compare yet.",
   compare_gone:
-    "That comparison is gone: Jarvis on the PC restarted, and comparisons are kept in memory only.",
+    "That comparison is no longer in memory: Jarvis on the PC restarted. If chat history is on, a comparison that finished is in History.",
   notify_compare_running: "Comparing {count} chatbots: asking {name}, {at} of {count}",
   notify_compare_waiting: "Waiting for your yes to ask {count} chatbots",
   notify_compare_paused: "Paused: comparing {count} chatbots",
@@ -231,6 +238,22 @@ function readSummary(s) {
   };
 }
 
+/** What the PC said about keeping a finished conversation in History
+ *  (`history: {kept, why}`), or null before it ended or from an older PC. */
+export function readHistoryAnswer(h) {
+  const o = obj(h);
+  if (!o || typeof o.kept !== "boolean") return null;
+  return { kept: o.kept, why: text(o.why) };
+}
+
+/** The line under a finished conversation: kept in History, or why not. Empty
+ *  when the PC did not say (still going, or an older PC): nothing is promised. */
+export function historyLine(h) {
+  if (!h) return "";
+  return h.kept ? WORDS.history_kept
+    : WORDS.history_not_kept.replace("{why}", h.why.replace(/[.\s]+$/, "") + ".");
+}
+
 /** One conversation as the PC described it, or null. */
 export function readSession(s) {
   const o = obj(s);
@@ -255,6 +278,7 @@ export function readSession(s) {
     question: text(o.question),
     problem: text(o.problem),
     summary: readSummary(o.summary),
+    history: readHistoryAnswer(o.history),
     transcript: Array.isArray(o.transcript) ? o.transcript.map(readTurn).filter(Boolean) : [],
     usage: readUsage(o.usage),
     hidden: o.hidden === true,
@@ -311,6 +335,8 @@ export function readChatbot(body) {
     session: readSession(o.session),
     compare: readCompare(o.compare),
     limits: { waiting: lim.waiting === true, said: text(lim.said) },
+    // "Solve it here": a page waiting for the owner (handoff.js), or null.
+    handoff: readHandoff(o.handoff),
   };
 }
 
@@ -364,6 +390,7 @@ export function readCompare(c) {
     ended: text(o.ended),
     problem: text(o.problem),
     summary: readCompareSummary(o.summary),
+    history: readHistoryAnswer(o.history),
     members: Array.isArray(o.members) ? o.members.map(readSession).filter(Boolean) : [],
     hidden: o.hidden === true,
   };

@@ -131,6 +131,27 @@ class ChatbotTest {
     }
 
     @Test
+    fun `a finished conversation says whether it was kept in History, and promises nothing else`() {
+        assertEquals("", Chatbot.historyLine(null))
+        assertEquals(Chatbot.HISTORY_KEPT, Chatbot.historyLine(Chatbot.HistoryAnswer(true, "")))
+        assertEquals(
+            "Not kept in your chat history: chat history is off.",
+            Chatbot.historyLine(Chatbot.HistoryAnswer(false, "chat history is off")),
+        )
+        assertEquals(
+            "a full stop is not doubled",
+            "Not kept in your chat history: chat history is off.",
+            Chatbot.historyLine(Chatbot.HistoryAnswer(false, "chat history is off.")),
+        )
+        val kept = Chatbot.parseHistory(JarvisJson.parseToJsonElement("{\"kept\":true,\"why\":\"\"}") as JsonObject)
+        assertEquals(Chatbot.HistoryAnswer(true, ""), kept)
+        assertNull(Chatbot.parseHistory(JarvisJson.parseToJsonElement("{\"kept\":\"yes\"}") as JsonObject))
+        assertNull(Chatbot.parseHistory(null))
+        assertFalse(Chatbot.SUMMARY_NOTE.contains("kept in History"))
+        assertFalse(Chatbot.COMPARE_SUMMARY_NOTE.contains("kept in History"))
+    }
+
+    @Test
     fun `stop and limits answers`() {
         assertEquals(true, Chatbot.said(reply("stop_paused")).first)
         assertEquals(false to "That conversation has already ended.", Chatbot.said(reply("stop_ended")))

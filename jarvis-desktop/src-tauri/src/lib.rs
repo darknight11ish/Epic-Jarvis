@@ -892,6 +892,12 @@ pub fn run() {
             brain::chatbot::chatbot_resume,
             brain::chatbot::chatbot_compare_start,
             brain::chatbot::chatbot_compare_stop,
+            brain::support::support_status,
+            brain::support::support_start,
+            brain::support::support_stop,
+            brain::support::support_takeover,
+            brain::support::support_answer,
+            brain::support::support_export,
             brain::briefing::brain_briefing,
             brain::briefing::brain_briefing_now,
             brain::briefing::get_briefing_setup,
@@ -903,6 +909,10 @@ pub fn run() {
             brain::history::brain_history_list,
             brain::history::brain_history_open,
             brain::history::brain_history_search,
+            brain::history::brain_continue_chat,
+            brain::history::brain_fact_chat,
+            brain::history::chat_continue_open,
+            brain::history::chat_thread_hidden,
             brain::fact_history::brain_fact_history,
             brain::conversation_facts::brain_conversation_facts,
             brain::history::brain_history_delete,
@@ -1040,6 +1050,7 @@ pub fn run() {
             voice_flow::get_voice_flow,
             voice_flow::get_voice_moment,
             voice::summon_push_to_talk,
+            voice::hud_open_bar,
             // Lip-sync: the Jarvis bar's clip, for the faces in every window.
             voice::face_voice,
             voice::get_voice_status,
@@ -1138,6 +1149,11 @@ pub fn run() {
                         // not by a waiting card. Stopping only makes Jarvis
                         // do less (backend/jarvis_stop_all.py).
                         "stop_everything" => commands::stop_everything_now(app),
+                        // Jarvis Live's own key, OFF until the owner picks
+                        // one (the owner's decision of 2026-09-28). Start is
+                        // held on a stale link and under App lock, exactly
+                        // as the tray's row; End never is.
+                        "toggle_live" => crate::live::toggle(app, "hotkey"),
                         other => eprintln!("[jarvis] no handler for hotkey action `{other}`"),
                     }
                 })

@@ -52,6 +52,7 @@ mod routes;
 pub mod schedule;
 pub mod shared;
 pub mod sources;
+pub mod support;
 pub mod used;
 pub mod widgets;
 use routes::{first_line, route_for};
@@ -613,11 +614,28 @@ fn export_file_name(unix_seconds: u64) -> String {
     format!("jarvis-memory-{y:04}-{m:02}-{d:02}.json")
 }
 
+/// What a "Save as" dialog offers: its file type, extension and title.
+pub(crate) struct SaveAs {
+    pub name: &'static str,
+    pub spec: &'static str,
+    pub ext: &'static str,
+    pub title: &'static str,
+}
+
+/// The memory export's dialog.
+pub(crate) const JSON_FILE: SaveAs = SaveAs {
+    name: "JSON file",
+    spec: "*.json",
+    ext: "json",
+    title: "Save everything Jarvis remembers",
+};
+
 /// The Windows "Save as" dialog, and nothing else.
 #[cfg(windows)]
-mod save_dialog {
+pub(crate) mod save_dialog {
+    use super::SaveAs;
     use std::path::PathBuf;
-    use windows::core::{w, HSTRING};
+    use windows::core::{HSTRING, PCWSTR};
     use windows::Win32::Foundation::ERROR_CANCELLED;
     use windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_INPROC_SERVER,
@@ -629,8 +647,21 @@ mod save_dialog {
         SIGDN_FILESYSPATH,
     };
 
+    /// A support chat's transcript ("Export transcript", brain/support.rs).
+    pub(crate) const TEXT_FILE: SaveAs = SaveAs {
+        name: "Text file",
+        spec: "*.txt",
+        ext: "txt",
+        title: "Save the support chat's transcript",
+    };
+
     /// `Ok(None)` when the owner cancelled.
     pub fn pick(suggested: &str) -> Result<Option<PathBuf>, String> {
+        pick_as(suggested, &super::JSON_FILE)
+    }
+
+    /// The dialog for `kind`. `Ok(None)` when the owner cancelled.
+    pub fn pick_as(suggested: &str, kind: &SaveAs) -> Result<Option<PathBuf>, String> {
         // SAFETY: plain COM calls on this thread, which is ours alone and is
         // initialised as a single-threaded apartment first. Every pointer
         // handed out by COM is released: the interfaces by their Drop, the
@@ -640,25 +671,29 @@ mod save_dialog {
             if init.is_err() {
                 return Err(format!("could not open the save dialog: {init:?}"));
             }
-            let out = show(suggested);
+            let out = show(suggested, kind);
             CoUninitialize();
             out
         }
     }
 
-    unsafe fn show(suggested: &str) -> Result<Option<PathBuf>, String> {
+    unsafe fn show(suggested: &str, kind: &SaveAs) -> Result<Option<PathBuf>, String> {
         let fail = |e: windows::core::Error| format!("the save dialog failed: {e}");
         let dialog: IFileSaveDialog =
             CoCreateInstance(&FileSaveDialog, None, CLSCTX_INPROC_SERVER).map_err(fail)?;
+        // Kept alive until the dialog has read them: the filter holds bare
+        // pointers into these two strings.
+        let name = HSTRING::from(kind.name);
+        let spec = HSTRING::from(kind.spec);
         let types = [COMDLG_FILTERSPEC {
-            pszName: w!("JSON file"),
-            pszSpec: w!("*.json"),
+            pszName: PCWSTR(name.as_ptr()),
+            pszSpec: PCWSTR(spec.as_ptr()),
         }];
         dialog.SetFileTypes(&types).map_err(fail)?;
-        dialog.SetDefaultExtension(w!("json")).map_err(fail)?;
         dialog
-            .SetTitle(w!("Save everything Jarvis remembers"))
+            .SetDefaultExtension(&HSTRING::from(kind.ext))
             .map_err(fail)?;
+        dialog.SetTitle(&HSTRING::from(kind.title)).map_err(fail)?;
         dialog
             .SetFileName(&HSTRING::from(suggested))
             .map_err(fail)?;
@@ -683,9 +718,22 @@ mod save_dialog {
 
 /// Not Windows: this app is only built for Windows; say so rather than guess.
 #[cfg(not(windows))]
-mod save_dialog {
+pub(crate) mod save_dialog {
+    use super::SaveAs;
+
+    pub(crate) const TEXT_FILE: SaveAs = SaveAs {
+        name: "Text file",
+        spec: "*.txt",
+        ext: "txt",
+        title: "Save the support chat's transcript",
+    };
+
     pub fn pick(_suggested: &str) -> Result<Option<std::path::PathBuf>, String> {
         Err("saving the memory export needs the Windows save dialog".to_string())
+    }
+
+    pub fn pick_as(_suggested: &str, _kind: &SaveAs) -> Result<Option<std::path::PathBuf>, String> {
+        Err("saving a file needs the Windows save dialog".to_string())
     }
 }
 

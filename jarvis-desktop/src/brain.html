@@ -470,6 +470,10 @@
                    more: the PC searches the kept chats' words, in memory,
                    keeping no index (brain_history_search). One letter, or an
                    older PC: the loaded list, by title. -->
+              <!-- "Show" (every kind, or Live only, support chats, chats with
+                   other AIs, comparisons) and "Forget a time frame…", drawn
+                   by brain.js (paintHistoryTools; the chat audit, 2026-09-28). -->
+              <div class="history-tools row-actions" id="history-tools" hidden></div>
               <input class="field search history-filter" id="history-filter" type="search"
                      placeholder="Search what was said…" spellcheck="false" autocomplete="off"
                      aria-label="Search what was said in your chats" />
@@ -506,44 +510,6 @@
               </form>
               <p class="note">Or say "focus for 30 minutes". While one runs: "lock on this", "snooze", "I'm doing research", "I need a minute", "pause", "how am I doing?".</p>
               <div id="focus-report"></div>
-            </div>
-            <div class="card card-wide" id="today-card">
-              <h2>Today</h2>
-              <p class="note">Your own cards, shown at the times and on the days you choose, and the parts of your latest briefing. Kept on your PC; nothing new is read for this page, and adding a card needs no approval card.</p>
-              <div id="today"></div>
-              <h3 class="subhead">Add a card</h3>
-              <form id="today-form" class="todo-form today-form" autocomplete="off">
-                <input id="today-text" class="field todo-text" type="text" maxlength="80"
-                       placeholder="What the card says, like Gym bag" aria-label="What the card says">
-                <label class="standby-time">From
-                  <input id="today-at" class="field" type="time" value="07:00" required>
-                </label>
-                <fieldset id="today-days" class="today-days">
-                  <legend>On</legend>
-                  <label><input type="checkbox" value="0" checked> Mon</label>
-                  <label><input type="checkbox" value="1" checked> Tue</label>
-                  <label><input type="checkbox" value="2" checked> Wed</label>
-                  <label><input type="checkbox" value="3" checked> Thu</label>
-                  <label><input type="checkbox" value="4" checked> Fri</label>
-                  <label><input type="checkbox" value="5"> Sat</label>
-                  <label><input type="checkbox" value="6"> Sun</label>
-                </fieldset>
-                <button id="today-add" class="btn small" type="submit">Add</button>
-              </form>
-              <p class="note" id="today-hint">Or say "show gym bag on my Today page on Mondays and Wednesdays at 7". Delete removes a card at once; it is also under Coming up, where Pause skips it.</p>
-            </div>
-            <div class="card card-wide" id="widgets-card">
-              <h2>Widgets</h2>
-              <p class="note" id="widgets-detail">Describe a small widget and Jarvis makes a preview: a heading, numbers, short lists, a bar and up to four buttons, from a fixed menu. You see the preview first, and nothing is added until you tap Add. Delete removes one at once.</p>
-              <div id="widgets"></div>
-              <h3 class="subhead">Describe a widget</h3>
-              <form id="widgets-form" class="todo-form" autocomplete="off">
-                <input id="widgets-words" class="field todo-text" type="text" maxlength="300"
-                       placeholder="What it should show, like my next 3 reminders and a timer button"
-                       aria-label="What the widget should show">
-                <button id="widgets-make" class="btn small" type="submit">Make a preview</button>
-              </form>
-              <p class="note" id="widgets-hint">For example: "my next 3 reminders, my to-do count and a 10-minute timer button". You can also say "make me a widget showing ..." to Jarvis. Show one on your desktop from the widget window's "Your widget" list, or on your phone's home screen as a Jarvis widget.</p>
             </div>
             <div class="card card-wide" id="chatbot-card">
               <h2>Talk to a chatbot for me</h2>
@@ -594,6 +560,90 @@
                 <p class="note">Nothing is sent until you approve the card.</p>
                 <p class="note">Signing in to the chatbot's account happens on the PC only, in the browser window Jarvis uses.</p>
               </form>
+            </div>
+            <!-- "Chat with customer support for me" (support.js, brain/support.rs;
+                 JARVIS-API section 65). The details rows are painted by brain.js
+                 (paintSupportRows); the live chat, its offer and its transcript by
+                 paintSupport. -->
+            <div class="card card-wide" id="support-card">
+              <h2>Chat with customer support for me</h2>
+              <p class="note">Jarvis chats with a company's customer support for you (Groupon first), in your name, in a browser window on the PC. One approval card lists exactly which of your details it may give. Every offer - a refund, a credit, a cancellation - gets its own card, and nothing is accepted before you approve it.</p>
+              <p class="note" id="support-version"></p>
+              <div id="support"></div>
+              <div id="support-log"></div>
+              <form id="support-form" class="support-form" autocomplete="off" novalidate hidden>
+                <label class="lbl">Company
+                  <select id="support-company" class="field"></select>
+                </label>
+                <p class="note support-terms" id="support-terms"></p>
+                <label class="lbl" id="support-address-label" hidden>The company's help page (https://...)
+                  <input id="support-address" class="field" type="url" maxlength="500" spellcheck="false">
+                </label>
+                <label class="lbl">What should Jarvis get done?
+                  <textarea id="support-goal" class="field chatbot-goal" rows="3" maxlength="1000" spellcheck="true"></textarea>
+                </label>
+                <p class="note">Jarvis writes its own messages from these words, in your name.</p>
+                <fieldset id="support-details" class="support-details">
+                  <legend class="lbl">Details Jarvis may give (one per row: a name and its exact value)</legend>
+                  <div id="support-rows"></div>
+                  <button id="support-add" class="btn small ghost" type="button">Add a detail</button>
+                  <p class="note">Never a password, PIN, security answer, card number or ID number: those are refused, and if the agent asks, Jarvis hands it to you.</p>
+                </fieldset>
+                <div class="row">
+                  <label class="lbl">Most messages
+                    <input id="support-messages" class="field" type="number" min="1" max="40" required>
+                  </label>
+                  <label class="lbl">Most minutes of chat
+                    <input id="support-minutes" class="field" type="number" min="1" max="60" required>
+                  </label>
+                  <label class="lbl">Most minutes in the queue
+                    <input id="support-queue" class="field" type="number" min="1" max="120" required>
+                  </label>
+                </div>
+                <div class="row">
+                  <button id="support-start" class="btn small" type="submit">Start</button>
+                </div>
+                <p class="note">Nothing is sent until you approve the card.</p>
+                <p class="note">You sign in to your own account by hand in the window on the PC, and open the company's chat there yourself (its Chat or Help button). Jarvis never types, sees or keeps a password.</p>
+              </form>
+            </div>
+            <div class="card card-wide" id="today-card">
+              <h2>Today</h2>
+              <p class="note">Your own cards, shown at the times and on the days you choose, and the parts of your latest briefing. Kept on your PC; nothing new is read for this page, and adding a card needs no approval card.</p>
+              <div id="today"></div>
+              <h3 class="subhead">Add a card</h3>
+              <form id="today-form" class="todo-form today-form" autocomplete="off">
+                <input id="today-text" class="field todo-text" type="text" maxlength="80"
+                       placeholder="What the card says, like Gym bag" aria-label="What the card says">
+                <label class="standby-time">From
+                  <input id="today-at" class="field" type="time" value="07:00" required>
+                </label>
+                <fieldset id="today-days" class="today-days">
+                  <legend>On</legend>
+                  <label><input type="checkbox" value="0" checked> Mon</label>
+                  <label><input type="checkbox" value="1" checked> Tue</label>
+                  <label><input type="checkbox" value="2" checked> Wed</label>
+                  <label><input type="checkbox" value="3" checked> Thu</label>
+                  <label><input type="checkbox" value="4" checked> Fri</label>
+                  <label><input type="checkbox" value="5"> Sat</label>
+                  <label><input type="checkbox" value="6"> Sun</label>
+                </fieldset>
+                <button id="today-add" class="btn small" type="submit">Add</button>
+              </form>
+              <p class="note" id="today-hint">Or say "show gym bag on my Today page on Mondays and Wednesdays at 7". Delete removes a card at once; it is also under Coming up, where Pause skips it.</p>
+            </div>
+            <div class="card card-wide" id="widgets-card">
+              <h2>Widgets</h2>
+              <p class="note" id="widgets-detail">Describe a small widget and Jarvis makes a preview: a heading, numbers, short lists, a bar and up to four buttons, from a fixed menu. You see the preview first, and nothing is added until you tap Add. Delete removes one at once.</p>
+              <div id="widgets"></div>
+              <h3 class="subhead">Describe a widget</h3>
+              <form id="widgets-form" class="todo-form" autocomplete="off">
+                <input id="widgets-words" class="field todo-text" type="text" maxlength="300"
+                       placeholder="What it should show, like my next 3 reminders and a timer button"
+                       aria-label="What the widget should show">
+                <button id="widgets-make" class="btn small" type="submit">Make a preview</button>
+              </form>
+              <p class="note" id="widgets-hint">For example: "my next 3 reminders, my to-do count and a 10-minute timer button". You can also say "make me a widget showing ..." to Jarvis. Show one on your desktop from the widget window's "Your widget" list, or on your phone's home screen as a Jarvis widget.</p>
             </div>
             <div class="card card-wide" id="coming-up-card">
               <h2>Coming up</h2>

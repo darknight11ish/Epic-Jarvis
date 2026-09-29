@@ -1140,13 +1140,6 @@ def _strict_state(voice: dict) -> dict:
         # The fifth (how far "hey Jarvis" is trusted, the owner's decision of
         # 2026-09-24): "" from an older jarvis_voice.py - not offered.
         "hands_free": str(voice.get("hands_free") or ""),
-        # Talk-to-type on the PC (2026-09-28): "off" or "on"; "" from an
-        # older jarvis_voice.py - the desktop then does not offer it.
-        "talk_to_type": str(voice.get("talk_to_type") or ""),
-        # "Better voice" (2026-09-28): "one"/"both" and "titanet"/"resnet221";
-        # "" from an older jarvis_voice.py - the apps then do not offer them.
-        "wake_confirm": str(voice.get("wake_confirm") or ""),
-        "voice_id_model": str(voice.get("voice_id_model") or ""),
         # The sixth (answers about the screen after "hey Jarvis", under
         # "only trust the talk button" - the owner's decision of
         # 2026-09-28): "" from an older jarvis_voice.py - not offered.
@@ -1159,6 +1152,13 @@ def _strict_state(voice: dict) -> dict:
         # decision of 2026-09-28): "" from an older jarvis_voice.py - the
         # desktop then does not offer it.
         "live_end": str(voice.get("live_end") or ""),
+        # Talk-to-type on the PC (2026-09-28): "off" or "on"; "" from an
+        # older jarvis_voice.py - the desktop then does not offer it.
+        "talk_to_type": str(voice.get("talk_to_type") or ""),
+        # "Better voice" (2026-09-28): "one"/"both" and "titanet"/"resnet221";
+        # "" from an older jarvis_voice.py - the apps then do not offer them.
+        "wake_confirm": str(voice.get("wake_confirm") or ""),
+        "voice_id_model": str(voice.get("voice_id_model") or ""),
         "settings": st or {"strictness": strict, "privacy": "private_on_screen",
                            "voice_is_enough_allowed": strict == "very_strict",
                            "min_command_seconds": 0.0},
@@ -1507,6 +1507,9 @@ def status() -> dict:
 # --------------------------------------------------------------------------
 
 SOURCE_WAKE_WORD = "wake_word"
+#: A Jarvis Live clip (jarvis_live.py): no "hey Jarvis" needed while that
+#: device's session is on; refused, unchecked, otherwise.
+SOURCE_LIVE = "live"
 #: Talk-to-type on the PC (the owner's decision, 2026-09-27; docs/JARVIS-API.md
 #: section 72): the desktop app holds a key, records, and TYPES the words
 #: into the program in front instead of sending them to the chat. The same
@@ -1662,9 +1665,6 @@ def clean_dictation(text: str) -> str:
         out = _remove_filler_matches(out, pattern)
     out = _collapse_stutters(out)
     return _MULTI_SPACE.sub(" ", out).strip()
-#: A Jarvis Live clip (jarvis_live.py): no "hey Jarvis" needed while that
-#: device's session is on; refused, unchecked, otherwise.
-SOURCE_LIVE = "live"
 
 #: A clip longer than this (the VAD's speech span, which keeps 0.3 s either
 #: side - so about 1.4 s of words) is never a stop: "Hey Jarvis, stop the
@@ -2148,11 +2148,6 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         return Heard(False, source=source, available=bool(b.get("available")),
                      stop=bool(b.get("stop")), reason=str(b.get("reason") or ""),
                      seconds=float(b.get("seconds") or 0.0))
-    talk_type = source == SOURCE_TALK_TYPE
-    if talk_type and not _talk_type_on():
-        # Before the WAV is even read: with the owner's switch off, a
-        # talk-to-type clip is not checked, not transcribed, not kept.
-        return Heard(False, source=source, available=False, reason=TALK_TYPE_OFF_REASON)
     live = source == SOURCE_LIVE
     check_only = False
     if live:
@@ -2163,6 +2158,11 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         refused, check_only = _live_refusal(mic, source)
         if refused is not None:
             return refused
+    talk_type = source == SOURCE_TALK_TYPE
+    if talk_type and not _talk_type_on():
+        # Before the WAV is even read: with the owner's switch off, a
+        # talk-to-type clip is not checked, not transcribed, not kept.
+        return Heard(False, source=source, available=False, reason=TALK_TYPE_OFF_REASON)
     t_in = time.monotonic()
     steps = {}
     cold = _stt_cache is _UNSET
@@ -2472,7 +2472,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         # words go back to the desktop app once, in this reply, and are not
         # kept here.
         quiet = {**common, "private_aloud": False, "memory_aloud": False,
-                 "sensitive_aloud": False}
+                 "sensitive_aloud": False, "screen_aloud": False}
         return Heard(True, text=clean_dictation(text), engine=engine, **quiet)
 
     if not wake or via_window:

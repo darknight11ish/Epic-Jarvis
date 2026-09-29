@@ -150,7 +150,9 @@ await check("a second turn folds the first one into scrollback, closed by defaul
   await page.close();
   assert.ok(!hidden, "the previous turn was not folded in");
   assert.equal(open_, null, "the strip opened itself instead of starting closed");
-  assert.match(summary, /first question/);
+  // Since the chat audit (2026-09-28) the fold holds the whole conversation
+  // so far: "Earlier in this chat · 1 question", its questions inside.
+  assert.equal(summary, "Earlier in this chat · 1 question");
 });
 
 await check("opening the strip shows the first turn's actual answer, not the second's", async () => {
@@ -162,6 +164,7 @@ await check("opening the strip shows the first turn's actual answer, not the sec
   const current = await page.locator("#answer").innerText();
   await page.close();
   assert.match(body, /the first real answer/);
+  assert.match(body, /first question/, "the earlier question is in the thread too");
   assert.doesNotMatch(body, /the second real answer/,
     "scrollback showed the current answer instead of the previous one");
   assert.match(current, /the second real answer/);

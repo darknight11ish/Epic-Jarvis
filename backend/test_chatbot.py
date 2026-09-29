@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import ast
 import json
+import re
 import socket
 import sys
 import tempfile
@@ -707,8 +708,16 @@ def t_clean_context():
     reads = {"jarvis_email", "jarvis_notes", "jarvis_calendar", "jarvis_chat_log",
              "jarvis_documents", "jarvis_intake", "jarvis_extract", "jarvis_recall",
              "jarvis_agent", "jarvis_home"}
-    check("the module imports no email, notes, calendar, documents or history module",
-          not (imported & reads), sorted(imported & reads))
+    check("the module imports no email, notes, calendar, documents or learning module",
+          not (imported & (reads - {"jarvis_chat_log"})), sorted(imported & reads))
+    # The one exception (the chat audit, 2026-09-28): a FINISHED conversation
+    # is WRITTEN to the encrypted chat history - never read from it. Only the
+    # write, in one place.
+    check("jarvis_chat_log is imported only by keep_history's writer, and only to write",
+          src.count("import jarvis_chat_log") == 1
+          and "def _default_keep_history" in src.split("import jarvis_chat_log")[0][-900:]
+          and set(re.findall(r"jarvis_chat_log\.(\w+)", src)) == {"record_chatbot"},
+          sorted(set(re.findall(r"jarvis_chat_log\.(\w+)", src))))
     check("jarvis_memory is imported only by the last check's own fact reader",
           src.count("import jarvis_memory") == 1
           and "def _default_saved_facts" in src.split("import jarvis_memory")[0][-400:])
@@ -1241,6 +1250,38 @@ def t_outside_text():
     check("nothing leaves for the audit log but ids and counts",
           all(GOAL not in json.dumps(d_) and REPLIES[0] not in json.dumps(d_)
               for _, d_ in AUDIT), AUDIT[:3])
+
+
+def t_the_view_says_whether_it_was_kept_in_history():
+    """The second chat audit (2026-09-28), phone B4: both apps promised
+    "kept in History" whatever happened. The view now carries the PC's own
+    answer: kept, or not and why."""
+    import dataclasses
+    clean()
+    kept = []
+    d = dataclasses.replace(deps(), keep_history=lambda cid, title, rows, kind:
+                            kept.append((cid, title, kind)) or {"recorded": True, "rows": len(rows)})
+    s, d, *_ = go(FakeBot(), d, max_turns=2)
+    v = CB.session_view(s)
+    check("kept: the view says so, with no reason", v["history"] == {"kept": True, "why": ""}, v["history"])
+    check("...and it really went to History as a chatbot conversation",
+          kept and kept[0][0] == s.id and kept[0][2] == "chatbot", kept)
+    clean()
+    d = dataclasses.replace(deps(), keep_history=lambda cid, title, rows, kind:
+                            {"recorded": False, "why": "chat history is off"})
+    s, d, *_ = go(FakeBot(), d, max_turns=2)
+    v = CB.session_view(s)
+    check("not kept: the PC's own reason, in its words",
+          v["history"] == {"kept": False, "why": "chat history is off"}, v["history"])
+    clean()
+    d = dataclasses.replace(deps(), keep_history=lambda *a: (_ for _ in ()).throw(RuntimeError("x")))
+    s, d, *_ = go(FakeBot(), d, max_turns=2)
+    check("a writer that breaks is 'not kept', never 'kept'",
+          CB.session_view(s)["history"]["kept"] is False, CB.session_view(s)["history"])
+    s2, _ = session(FakeBot())
+    check("a conversation that has not ended says nothing yet", CB.session_view(s2)["history"] is None)
+    check("history_answer: nothing at all is 'not kept', with a plain why",
+          CB.history_answer(None) == {"kept": False, "why": "the PC did not say why"})
 
 
 def t_shipped_and_listed():

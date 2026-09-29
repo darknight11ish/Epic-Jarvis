@@ -508,7 +508,9 @@ testers, scouts and integration scouts; `.claude/agents/`):
   card each time. Hold a key, speak, and Jarvis types what was said into the
   program in front - speech-to-text on the PC only, as always. Switching it
   off is immediate. Not on the phone (a client must not do speech-to-text).
-  Not built yet.
+  Built on GitHub's `main` (JARVIS-API §72), merged into the research branch
+  2026-09-28; while Jarvis Live is on, talk-to-type waits, like the talk
+  button.
 - **Answers that used web search, weather or home status are read aloud**
   when read-aloud would otherwise apply. Answers that used email, calendar,
   notes, documents, memory, or any tool not on that short list stay on
@@ -671,6 +673,53 @@ testers, scouts and integration scouts; `.claude/agents/`):
   be closed); **identity checks** (last digits of a card, security
   questions, codes) **are always handed to the owner** in the window, never
   answered by Jarvis.
+- **A captcha can be handed to the owner's phone** (owner, 2026-09-28):
+  when a chatbot or support site shows a captcha or sign-in page, the phone
+  gets an alert, and offers **"Solve it here"** - a live picture of that one
+  browser window only, sent PC to phone over Tailscale/Meshnet, never
+  saved, and the owner's taps and typing passed to that window only while
+  Jarvis is paused there. Solving it on the PC still works. Jarvis itself
+  never solves a captcha. The app says plainly that some captchas may
+  reject taps passed on this way. Queued after customer-support chats.
+- **The build queue, set by the owner (2026-09-28)**, in this order:
+  1. customer-support chats; 2. the captcha hand-off to the phone;
+  3. **one pull request to `main`** with everything so far (the owner
+  merges); 4. the voice upgrade (Kokoro v1.0, "Hear it" samples);
+  5. finishing the screen feature ("Look at this" and "Watch with me"
+  working on the PC and phone); 6. inbox tidy by voice, **Undo for 10
+  minutes**; 7. talk-to-type on the PC, **held Right Ctrl** by default
+  (changeable in Settings); 8. QR pairing with per-device keys; 9. the
+  sneaky-instruction detector test.
+  **Jarvis Live extras, all yes:** a phone Quick Settings tile (start/end);
+  a headset button (press = stop talking, long press = mic off, never
+  approves); a 10-minute "Live ended - Resume" notification; a PC hotkey to
+  start/end Live, off until the owner picks one (Alt+Shift+L suggested);
+  preferring a Bluetooth headset microphone in Live; "Talk about this in
+  Live" from the phone's Share (the shared item is outside text). **The
+  phone gets the same "End Live when" setting as the PC** (default strict;
+  the looser choice asks for the fingerprint or PIN). These extras are
+  built alongside the queue where they fit, the phone ones with item 2.
+  **History marks Live sessions** (owner, 2026-09-28): each Live session
+  is already its own chat (words and times kept, encrypted; never the
+  audio, pictures or side remarks); History shows it with a "Live" label
+  and its length ("Live · 12 min · 28 Sep, 14:05") in both apps, and can
+  be filtered to Live sessions only. Built with item 2.
+- **Chats, after the chat audit** (owner, 2026-09-28;
+  `docs/studio-2026-09-28/chat-audit-*.md`): **"Continue this chat"** from
+  History in both apps (reuses the conversation, its "read outside text"
+  mark carried over), an **"Earlier chats"** link on the phone's Home and in
+  the Jarvis bar, and **the whole current conversation as a scrollable
+  thread**, not just the last answer. **Chats with other AIs and comparisons
+  are kept in History**, encrypted, marked as outside text, never learned
+  from, never read aloud. **A new conversation starts after 30 quiet
+  minutes** (the old one stays in History, and Continue brings it back).
+  **Crisis chats are kept but titled "A difficult moment"**, never with the
+  owner's words. **Support chats: export stays** (the owner's own record -
+  a named exception to "no plain-text path", saying plainly the file is not
+  encrypted), and **auto-delete and "Forget a time frame" ask before
+  removing a support chat**. **The desktop HUD's own chat box opens the
+  Jarvis bar instead**, so the PC has one chat box. History rows carry a
+  kind (chat, Live, support, chatbot, comparison).
 - **Jarvis may look at the owner's screen, on the PC and the phone**
   (owner, 2026-09-28), two ways: **"Look at this"** - one look when the
   owner asks (a key on the PC; the assistant gesture on the phone), nothing
@@ -741,6 +790,27 @@ testers, scouts and integration scouts; `.claude/agents/`):
   alike; **side remarks are not kept in chat history at all**) so it is
   not confused with
   Jarvis Live.
+- **After the second chat audit** (owner, 2026-09-28;
+  `docs/studio-2026-09-28/chat-audit2-*.md`): **the PC re-registers a
+  continued chat's own typed and spoken messages from its encrypted record**,
+  so facts learned after "Continue this chat" or a restart save on their own
+  again instead of waiting as cards for about 10 questions. This loosens the
+  "only messages seen arriving live count" rule for the owner's own typed or
+  spoken words in a chat the PC already holds - never for shared, pasted,
+  chatbot, support or outside text, and the outside-text mark still decides.
+  **The scrollable thread hides under "Hide memory lists and chat history"**
+  on both apps, like the "Used" list. Not yet decided by the owner, built
+  the careful way meanwhile: the delete dialogs say facts stay and backups
+  keep copies; the thread shows a "Jarvis reads from here" line; a chat that
+  spills over the days in "Forget a time frame" starts unticked; the bigger
+  re-send caps for two cards wait until the second card is measured.
+  **The owner then answered the two open items (2026-09-29):** **a crisis
+  question and its answer do not stay in the scrollable thread** (the help
+  answer shows once; the chat is still kept in History as "A difficult
+  moment"); and **two short warnings are built**: "Continue this chat" says
+  when chat history is off that new messages will not be kept, and the
+  phone's Live screen says when Temporary is on that the session will not be
+  kept.
 - **"Forget a time frame"** (owner, 2026-09-28): the owner may ask, by
   voice or typing, to forget what Jarvis learned or said in a time frame
   ("forget what you learned last week", "delete my chats from 1 to 15

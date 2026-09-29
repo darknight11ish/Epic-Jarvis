@@ -81,7 +81,10 @@ await check("the words are both apps' words, word for word", async () => {
 await check("the route and the PC's answer are read, and nothing else counts", async () => {
   assert.deepEqual(usedIds({ memory_ids: [12, 7, 12, -1, 1.5, "3", 0] }), [12, 7]);
   assert.deepEqual(usedIds(null), []);
-  assert.equal(temporaryOutcome(false, { temporary: true }), "");
+  // The PC made it temporary although the app did not ask: a game or role-play
+  // (games-temporary.patch) - said so, both apps (the chat audit, 2026-09-28).
+  assert.equal(temporaryOutcome(false, { temporary: true }), "game");
+  assert.equal(temporaryOutcome(false, {}), "");
   assert.equal(temporaryOutcome(true, { temporary: true }), "confirmed");
   assert.equal(temporaryOutcome(true, { temporary: "true" }), "unconfirmed");
   assert.equal(temporaryOutcome(true, null), "unconfirmed");
@@ -154,7 +157,10 @@ await check("on: a marker for the whole chat, the one line while it is empty, an
   assert.equal(pressed, "true");
   assert.equal(marked, "true");
   assert.match(empty, new RegExp(`^${TEMPORARY_LABEL}`));
-  assert.ok(empty.includes(TEMPORARY_LINE), empty);
+  // The label beside the line already says "Temporary chat", so the strip
+  // does not say it twice (the second chat audit, desktop C8).
+  assert.ok(empty.includes(TEMPORARY_LINE.replace(/^Temporary chat:\s*/, "")), empty);
+  assert.ok(!empty.includes("Temporary chat: "), empty);
   assert.equal(strip.trim(), TEMPORARY_LABEL, "the marker went, or the empty-chat line stayed");
   assert.deepEqual(sent.map((s) => s.temporary), [true, true]);
   assert.equal(sent[1].conversationId, sent[0].conversationId);
@@ -381,7 +387,11 @@ await check("CONTROL: stream_chat sends temporary only to a PC that has it; memo
   assert.ok(caps.includes('"memory-used"'));
   const sets = read("src-tauri/permissions/surfaces.toml");
   const set = sets.slice(sets.indexOf('identifier = "memory-used"'));
-  assert.match(set.slice(0, 900), /"allow-memory-used",\s*"allow-brain-memory-forget",\s*"allow-brain-memory-erase",\s*\]/);
+  // And (the chat audit, 2026-09-28) which chat a fact came from, a read, so
+  // "Erase the words" can name it: nothing else.
+  const perms = set.slice(set.indexOf("permissions = ["), set.indexOf("]") + 1).match(/allow-[a-z-]+/g);
+  assert.deepEqual(perms, ["allow-memory-used", "allow-brain-memory-forget", "allow-brain-memory-erase",
+    "allow-brain-fact-chat"]);
 });
 
 if (fails.length) {

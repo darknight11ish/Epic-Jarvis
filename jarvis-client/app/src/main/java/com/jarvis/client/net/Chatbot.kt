@@ -78,6 +78,10 @@ object Chatbot {
             "never read aloud."
     const val SUMMARY_TITLE = "What Jarvis found"
     const val SUMMARY_NOTE = "Written on this PC from the chatbot's words, so it is outside text too."
+    const val HISTORY_KEPT = "Kept in your encrypted chat history on the PC."
+    const val HISTORY_NOT_KEPT = "Not kept in your chat history: {why}"
+    const val HISTORY_OPEN = "Open in History"
+    const val HISTORY_OPEN_TITLE = "Read it, or delete it, in History."
     const val CLAIM_SOURCED = "it gave a source (not checked by Jarvis)"
     const val CLAIM_UNSOURCED = "no source given"
     const val OPEN_TITLE = "Still open"
@@ -95,8 +99,8 @@ object Chatbot {
         "Your PC's Jarvis cannot talk to chatbots yet - run apply-patches.ps1 on " +
             "the PC."
     const val GONE =
-        "That conversation is gone: Jarvis on the PC restarted, and conversations are " +
-            "kept in memory only."
+        "That conversation is no longer in memory: Jarvis on the PC restarted. If chat history " +
+            "is on, a conversation that finished is in History."
     const val HIDDEN = "The goal and the conversation are hidden until you confirm it is you."
     const val VERSION = "Version"
     const val NOTIFY_RUNNING = "Talking to {name}, {used} of {max}"
@@ -113,8 +117,7 @@ object Chatbot {
     const val COMPARE_LIMITS_NOTE = "Most messages and most minutes apply to each chatbot on its own."
     const val COMPARE_TITLE = "Comparing chatbots"
     const val COMPARE_SUMMARY_TITLE = "Where they agree and disagree"
-    const val COMPARE_SUMMARY_NOTE =
-        "Written on this PC from the chatbots' words, so it is outside text too."
+    const val COMPARE_SUMMARY_NOTE = "Written on this PC from the chatbots' words, so it is outside text too."
     const val AGREE_TITLE = "They agree"
     const val DISAGREE_TITLE = "They disagree"
     const val SOURCES_TITLE = "Sources each gave (not checked by Jarvis)"
@@ -125,8 +128,8 @@ object Chatbot {
     const val COMPARE_NOT_ENOUGH =
         "Fewer than two chatbots can be reached from this PC, so there is nothing to compare yet."
     const val COMPARE_GONE =
-        "That comparison is gone: Jarvis on the PC restarted, and comparisons are kept in " +
-            "memory only."
+        "That comparison is no longer in memory: Jarvis on the PC restarted. If chat history " +
+            "is on, a comparison that finished is in History."
     const val NOTIFY_COMPARE_RUNNING = "Comparing {count} chatbots: asking {name}, {at} of {count}"
     const val NOTIFY_COMPARE_WAITING = "Waiting for your yes to ask {count} chatbots"
     const val NOTIFY_COMPARE_PAUSED = "Paused: comparing {count} chatbots"
@@ -156,6 +159,8 @@ object Chatbot {
         "change_limits" to CHANGE_LIMITS, "limits_note" to LIMITS_NOTE,
         "transcript_title" to TRANSCRIPT_TITLE, "outside_note" to OUTSIDE_NOTE,
         "summary_title" to SUMMARY_TITLE, "summary_note" to SUMMARY_NOTE,
+        "history_kept" to HISTORY_KEPT, "history_not_kept" to HISTORY_NOT_KEPT,
+        "history_open" to HISTORY_OPEN, "history_open_title" to HISTORY_OPEN_TITLE,
         "claim_sourced" to CLAIM_SOURCED, "claim_unsourced" to CLAIM_UNSOURCED,
         "open_title" to OPEN_TITLE, "question_title" to QUESTION_TITLE,
         "question_note" to QUESTION_NOTE, "none_built" to NONE_BUILT, "sign_in_pc" to SIGN_IN_PC,
@@ -279,11 +284,16 @@ object Chatbot {
         val summary: Summary?,
         val transcript: List<Turn>,
         val usage: Usage? = null,
+        /** Whether the finished conversation was kept in History, as the PC said; null before it ends. */
+        val history: HistoryAnswer? = null,
     ) {
         val live: Boolean get() = state in Chatbot.LIVE
     }
 
     data class LimitsNote(val waiting: Boolean, val said: String)
+
+    /** `history: {kept, why}`: whether a finished conversation went to History (the second chat audit). */
+    data class HistoryAnswer(val kept: Boolean, val why: String)
 
     /** One chatbot's view on a point the chatbots disagree about. */
     data class Opinion(val who: String, val said: String)
@@ -325,6 +335,7 @@ object Chatbot {
         val ended: String,
         val summary: CompareSummary?,
         val members: List<Session>,
+        val history: HistoryAnswer? = null,
     ) {
         val live: Boolean get() = state in Chatbot.LIVE
     }
@@ -436,6 +447,7 @@ object Chatbot {
             ended = o.text("ended") ?: "",
             summary = sum,
             members = o.objects("members").mapNotNull { parseSession(it) },
+            history = parseHistory(o["history"] as? JsonObject),
         )
     }
 
@@ -487,7 +499,26 @@ object Chatbot {
             summary = sum,
             transcript = turns,
             usage = parseUsage(o["usage"] as? JsonObject),
+            history = parseHistory(o["history"] as? JsonObject),
         )
+    }
+
+    /** `history` on a session or comparison, or null when the PC did not say. */
+    fun parseHistory(o: JsonObject?): HistoryAnswer? {
+        if (o == null) return null
+        val kept = o.flag("kept") ?: return null
+        return HistoryAnswer(kept, o.text("why") ?: "")
+    }
+
+    /**
+     * The line under a finished conversation: kept in History, or why not.
+     * Empty when the PC did not say (still going, or an older PC): nothing is
+     * promised. The desktop's `historyLine` says the same.
+     */
+    fun historyLine(h: HistoryAnswer?): String = when {
+        h == null -> ""
+        h.kept -> HISTORY_KEPT
+        else -> HISTORY_NOT_KEPT.replace("{why}", h.why.trimEnd('.', ' ', '\n', '\t') + ".")
     }
 
     /** `usage` on a session, or null when it has none (a website conversation). */

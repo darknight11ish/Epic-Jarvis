@@ -993,4 +993,67 @@
   } else {
     relabelBrainTab();
   }
+
+  /* ---------------------------------------------------------------- *
+   * One chat box on the PC (the owner's decision of 2026-09-28, "Chats,
+   * after the chat audit"). The HUD's own box chatted on its own: no New
+   * conversation, no Temporary chat, no "Used in this answer", no crisis
+   * panel - but it was recorded in History all the same. So the box and
+   * its Send are hidden, and in their place one button opens the Jarvis
+   * bar ready to type (`hud_open_bar`, voice.rs - it shows a window and
+   * sends nothing). The mic button stays: it already opens the bar.
+   *
+   * Only with the shell (window.__TAURI__): the page served on its own, in
+   * a plain browser, has no Jarvis bar to open, and keeps its box.
+   * ---------------------------------------------------------------- */
+  var OPEN_BAR = "Open the Jarvis bar";
+  var OPEN_BAR_SAID = "Chat with Jarvis in the Jarvis bar - it opens now.";
+
+  function openBarFromHud() {
+    var tauri = window.__TAURI__;
+    var invoke = tauri && tauri.core && tauri.core.invoke;
+    if (typeof invoke !== "function") return;
+    Promise.resolve()
+      .then(function () {
+        return invoke("hud_open_bar");
+      })
+      .catch(function (err) {
+        hudMicNote(
+          "Could not open the Jarvis bar: " +
+            String((err && err.message) || err) +
+            ". Open it with its shortcut (Alt+Space unless you changed it)."
+        );
+      });
+  }
+  window.__jarvisOpenBar = openBarFromHud;
+
+  function oneChatBox() {
+    var tauri = window.__TAURI__;
+    if (!(tauri && tauri.core && typeof tauri.core.invoke === "function")) return;
+    var input = document.getElementById("input");
+    var send = document.getElementById("send");
+    if (!input || !send || document.getElementById("hud-open-bar")) return;
+    input.hidden = true;
+    input.setAttribute("aria-hidden", "true");
+    input.tabIndex = -1;
+    send.hidden = true;
+    send.tabIndex = -1;
+    var open = document.createElement("button");
+    open.type = "button";
+    open.id = "hud-open-bar";
+    open.className = "act primary hud-open-bar";
+    open.textContent = OPEN_BAR;
+    // The page's `.act` is a square icon button; this one carries words.
+    open.style.width = "auto";
+    open.style.flex = "1";
+    open.style.padding = "0 14px";
+    open.title = OPEN_BAR_SAID;
+    open.addEventListener("click", openBarFromHud);
+    input.parentNode.insertBefore(open, input);
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", oneChatBox, { once: true });
+  } else {
+    oneChatBox();
+  }
 })();

@@ -121,16 +121,18 @@
                      LEARNER.offer(body.get("messages") or [], origin="owner",
                                    conversation_id=body.get("conversation_id"))
              except Exception:
-@@ -3400,7 +3462,7 @@
+@@ -3400,7 +3462,9 @@
  # request the relay sends. `origin` is not touched: it has always gone to
  # the model, and the learner reads it. The request body itself is left as
  # it arrived, because the learner and the history record read it.
 -_CHAT_CLIENT_FIELDS = ("provenance", "conversation_id", "device", "interrupted")
-+_CHAT_CLIENT_FIELDS = ("provenance", "conversation_id", "device", "interrupted", "temporary")
++# temporary-chat.patch adds "temporary"; "live" (Jarvis Live's mark on a
++# spoken message, JARVIS-API section 63) comes off too (chat audit, 2026-09-28).
++_CHAT_CLIENT_FIELDS = ("provenance", "conversation_id", "device", "interrupted", "temporary", "live")
  
  _NO_CHAT_LOG = {
      "available": False,
-@@ -3420,6 +3482,46 @@
+@@ -3420,6 +3484,46 @@
          return messages
      return [{k: v for k, v in m.items() if k not in _CHAT_CLIENT_FIELDS}
              if isinstance(m, dict) else m for m in messages]

@@ -36,6 +36,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -45,6 +47,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -347,6 +350,33 @@ data class HomeState(
      */
     val conversationTurns: Int = 0,
     /**
+     * The finished questions and answers of this conversation above the one
+     * on screen, oldest first (the owner's decision, 2026-09-28: the whole
+     * conversation as a scrollable thread) - see
+     * [com.jarvis.client.net.ChatSession.thread]. Memory only.
+     */
+    val thread: List<com.jarvis.client.net.ChatHistory.Exchange> = emptyList(),
+    /**
+     * One quiet line about the chat itself, or null - a new conversation
+     * after 30 quiet minutes, a chat carried on, the chat deleted elsewhere,
+     * a temporary chat started or ended, "New conversation" - read out by
+     * TalkBack ([com.jarvis.client.net.ChatSession.chatNote]).
+     */
+    val chatNote: String? = null,
+    /**
+     * This conversation read outside text (a chat carried on that did, or one
+     * that read a page or an email since): a line under the reply says so for
+     * as long as the conversation lasts, not only until the next question
+     * (the second chat audit, phone C4).
+     */
+    val readOutside: Boolean = false,
+    /**
+     * Set once the chat has gone quiet for 30 minutes: "your next question
+     * starts a new conversation", instead of "follows on from the last 3"
+     * (the second chat audit, phone C1).
+     */
+    val idleNextLine: String? = null,
+    /**
      * What the answer on its way is waiting on, in words - "Waiting for your
      * approval…" while a card is up on the desktop - or null. Shown in place
      * of "…". See [com.jarvis.client.net.ChatSession.waiting].
@@ -464,6 +494,8 @@ data class HomeState(
      * notice is anything else.
      */
     val noticeProblem: com.jarvis.client.net.PlainErrors.Shown? = null,
+    /** Security's "Swipe to approve or deny" (on by default). */
+    val swipeDecides: Boolean = true,
     /**
      * Lockdown is on (backend jarvis_asks_first.py, 2026-09-28): every way
      * out of the PC asks first, or has stopped. Home says so at the top -
@@ -471,8 +503,6 @@ data class HomeState(
      * [com.jarvis.client.JarvisRuntime.lockdown].
      */
     val lockdown: Boolean = false,
-    /** Security's "Swipe to approve or deny" (on by default). */
-    val swipeDecides: Boolean = true,
 )
 
 /**
@@ -566,6 +596,10 @@ data class HomeActions(
      * screen. Touches nothing the desktop has learned.
      */
     val onNewConversation: () -> Unit = {},
+    /** "Earlier chats": History, where "Continue this chat" carries one on here. */
+    val onEarlierChats: () -> Unit = {},
+    /** The line about the chat itself, dismissed. */
+    val onDismissChatNote: () -> Unit = {},
     /**
      * File the owner's own words in Logseq ("logseq"), Joplin ("joplin") or
      * Obsidian ("obsidian") through the desktop -
@@ -633,6 +667,10 @@ data class HomeActions(
     val onShowPrivate: () -> Unit = {},
     /** "Try again" under a failed question: ask the same question again. */
     val onRetryQuestion: () -> Unit = {},
+    /** The offer's "Keep link alive": Android's own battery dialog. */
+    val onKeepLinkAlive: () -> Unit = {},
+    /** The offer's "Not now". */
+    val onDismissKeepAlive: () -> Unit = {},
     /**
      * "Playing on your PC" (2026-09-28): what is playing, in the PC's own
      * sentence, or null ([com.jarvis.client.JarvisRuntime.pcMedia]). A read.
@@ -644,10 +682,6 @@ data class HomeActions(
      * a stale link. @return the sentence to show.
      */
     val onPcMediaControl: suspend (String) -> String = { "" },
-    /** The offer's "Keep link alive": Android's own battery dialog. */
-    val onKeepLinkAlive: () -> Unit = {},
-    /** The offer's "Not now". */
-    val onDismissKeepAlive: () -> Unit = {},
 )
 
 /**
@@ -906,6 +940,16 @@ fun HomeScreen(
         // Driven by the list's own layout rather than by the reply text: the
         // layout is what says how far the reply's bottom edge overhangs, and
         // reading the text here would recompose this whole screen per token.
+        // "Continue this chat" lands on the reply plate, where the carried-on
+        // chat and its note are (the second chat audit, phone C7); nothing is
+        // scrolled when a notification has sent the owner to a card.
+        val carriedOn = state.thread.isNotEmpty() && state.lastUserText == null
+        LaunchedEffect(carriedOn, state.chatNote) {
+            if (carriedOn && state.focusApproval == null) {
+                listState.animateScrollToItem((listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
+            }
+        }
+
         LaunchedEffect(state.streaming, state.followReply, state.focusApproval) {
             if (!state.streaming || !state.followReply || state.focusApproval != null) {
                 return@LaunchedEffect
@@ -1195,6 +1239,11 @@ private fun ConversationList(
                 onMark = actions.onMarkAnswer,
                 conversationTurns = state.conversationTurns,
                 onNewConversation = actions.onNewConversation,
+                // Hidden while "Hide memory lists and chat history" hides the lists:
+                // the thread is the chat's own words (the owner, 2026-09-28).
+                thread = if (state.memoryHidden) emptyList() else state.thread,
+                readOutside = state.readOutside,
+                idleNextLine = state.idleNextLine,
                 waiting = state.chatWaiting,
                 note = state.answerNote,
                 crisis = state.crisisAnswer,
@@ -2259,6 +2308,9 @@ private fun Reply(
     onMark: (turnId: String, tapped: AnswerMark) -> Unit = { _, _ -> },
     conversationTurns: Int = 0,
     onNewConversation: () -> Unit = {},
+    thread: List<com.jarvis.client.net.ChatHistory.Exchange> = emptyList(),
+    readOutside: Boolean = false,
+    idleNextLine: String? = null,
     waiting: String? = null,
     note: String? = null,
     used: UsedAnswer? = null,
@@ -2285,11 +2337,20 @@ private fun Reply(
     val context = LocalContext.current
     val text = reply()
     AnimatedVisibility(
-        visible = text.isNotBlank() || streaming || question != null,
+        visible = text.isNotBlank() || streaming || question != null || thread.isNotEmpty(),
         enter = fadeIn(motion.enter()),
         exit = fadeOut(motion.micro()),
     ) {
         Plate {
+            // The conversation so far, above the question on screen (the
+            // owner's decision, 2026-09-28): folded, and scrolling inside
+            // itself so a long chat never pushes the answer off Home. Open
+            // at once for a chat carried on from History, where nothing new
+            // has been asked yet. Shown only - never read aloud, never kept.
+            if (thread.isNotEmpty()) {
+                ThreadFold(thread, startOpen = question == null)
+                if (question != null || streaming || text.isNotBlank()) Gap(12)
+            }
             if (question != null) {
                 Kicker("You")
                 Gap(4)
@@ -2485,7 +2546,9 @@ private fun Reply(
             if (!streaming && conversationTurns > 0) {
                 Gap(4)
                 Text(
-                    if (conversationTurns == 1) {
+                    // After 30 quiet minutes the next question is a new conversation
+                    // and the line says so (the second chat audit, phone C1).
+                    idleNextLine ?: if (conversationTurns == 1) {
                         "Your next question follows on from this one."
                     } else {
                         "Your next question follows on from the last $conversationTurns."
@@ -2493,11 +2556,92 @@ private fun Reply(
                     style = MaterialTheme.typography.labelSmall,
                     color = chrome.textLo,
                 )
+                if (readOutside) {
+                    Text(
+                        com.jarvis.client.net.ChatHistory.CONTINUED_TAINTED,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.warnInk,
+                    )
+                }
                 Quiet("New conversation", color = chrome.textMid, onClick = onNewConversation)
             }
         }
     }
 }
+
+/**
+ * "Earlier in this chat · 3 questions": every finished question and answer
+ * of this conversation above the one on screen, oldest first (the chat
+ * audit, 2026-09-28 - Home used to show only the last exchange). The
+ * desktop's Jarvis bar folds the same thread under the same words
+ * ([com.jarvis.client.net.ChatHistory.threadSummary]).
+ */
+@Composable
+private fun ThreadFold(thread: List<com.jarvis.client.net.ChatHistory.Exchange>, startOpen: Boolean) {
+    val chrome = LocalChrome.current
+    val words = com.jarvis.client.net.ChatHistory
+    // Kept over a rotation (the second chat audit, phone accessibility).
+    var open by rememberSaveable { mutableStateOf(startOpen) }
+    var showAll by rememberSaveable { mutableStateOf(false) }
+    Quiet(
+        words.threadSummary(thread.size),
+        color = chrome.textMid,
+        modifier = Modifier.semantics {
+            // Whether it is open, said in words.
+            stateDescription = if (open) "Expanded" else "Collapsed"
+        },
+        onClick = { open = !open },
+    )
+    if (!open) return
+    // The newest 20 pairs, with "Show older" for the rest: a long chat used
+    // to compose up to 100 answers at once (phone worst-three #3).
+    val shown = if (showAll || thread.size <= THREAD_NEWEST) thread else thread.takeLast(THREAD_NEWEST)
+    val skipped = thread.size - shown.size
+    if (skipped > 0) {
+        Quiet("Show $skipped older", color = chrome.textMid, onClick = { showAll = true })
+    }
+    // The line where what Jarvis reads back begins: only the newest pairs go
+    // to the model (the same numbers Jarvis itself uses), so the owner is not
+    // left thinking it read the whole thread.
+    val above = words.pairsAboveReadLine(thread.size, words.MAX_EXCHANGES)
+    val listState = rememberLazyListState()
+    // Lands on the newest pair, not the oldest (phone worst-three #3).
+    LaunchedEffect(shown.size, open) {
+        if (shown.isNotEmpty()) listState.scrollToItem(shown.lastIndex)
+    }
+    LazyColumn(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(max = 360.dp),
+        state = listState,
+    ) {
+        itemsIndexed(shown) { local, pair ->
+            val index = skipped + local
+            if (index > 0) Gap(12)
+            if (above > 0 && index == above) {
+                Text(
+                    words.THREAD_READS_FROM,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textMid,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+            Kicker("You")
+            Gap(2)
+            Text(pair.question, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+            Gap(6)
+            Kicker("Jarvis")
+            Gap(2)
+            pair.answer.split(PARAGRAPH_BREAK).forEachIndexed { i, paragraph ->
+                if (i > 0) Gap(6)
+                FormattedAnswer(paragraph, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+            }
+        }
+    }
+}
+
+/** How many pairs the thread draws before "Show older". */
+private const val THREAD_NEWEST = 20
 
 /** What "Used 2 memories" under the answer needs - see [UsedFactsList]. */
 @Immutable
@@ -2657,12 +2801,40 @@ private fun Composer(
             .background(chrome.surface1)
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-    // A temporary chat: the marker for the whole chat, and the way in and out.
+    // The one quiet line about the chat itself (the chat audit, 2026-09-28):
+    // read out by TalkBack as it appears, dismissed by a tap.
+    state.chatNote?.let { line ->
+        // Two lines, then "More": a long note used to crowd Home out at large text.
+        var more by remember(line) { mutableStateOf(false) }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                line,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+                maxLines = if (more) Int.MAX_VALUE else 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).liveStatus(),
+            )
+            if (line.length > 110) {
+                Quiet(if (more) "Less" else "More", color = chrome.textLo, onClick = { more = !more })
+            }
+            Quiet(
+                "Dismiss",
+                color = chrome.textLo,
+                modifier = Modifier.semantics { contentDescription = "Dismiss this note about the chat" },
+                onClick = actions.onDismissChatNote,
+            )
+        }
+    }
+    // A temporary chat: the marker for the whole chat, and the way in and
+    // out - and "Earlier chats", the way to History (the owner's decision,
+    // 2026-09-28).
     TemporaryChatStrip(
         on = state.temporary,
         empty = state.lastUserText == null && state.conversationTurns == 0,
         enabled = !state.streaming,
         onToggle = actions.onToggleTemporary,
+        onEarlierChats = actions.onEarlierChats,
     )
     VoiceStrips(state, actions)
     // A picture waiting to go with the next question. Dismiss drops it.

@@ -26,7 +26,7 @@ import java.util.Locale
  *
  * THE PHONE STORES NO HISTORY. Everything on the History screen is read from
  * the PC when it is opened and dropped when it is left, like every other
- * list on Mind. Nothing here is written to the phone's disk.
+ * list on Brain. Nothing here is written to the phone's disk.
  *
  * The routes, all with the pairing token like every other:
  * - `GET /api/history?limit=30&before=<updated>` - the switch, why nothing is
@@ -65,9 +65,11 @@ object ChatLog {
     const val WAITING = "Waiting for your approval to turn chat history on. ${Approvals.WHERE}"
     const val EMPTY = "No conversations are kept on your PC."
     /** Under Delete, in both apps: deleting a chat is not forgetting (ease-of-use audit #7) -
-     *  said when there is nothing to offer (section 79, below). */
+     *  said when there is nothing to offer (section 79, below). Since the chat audit
+     *  (2026-09-28) it points to "Forget a time frame", not to forgetting one by one. */
     const val DELETE_KEEPS_FACTS =
-        "Deleting a chat does not forget facts Jarvis learned from it. Forget those one by one in the Brain."
+        "Deleting a chat does not forget facts Jarvis learned from it. To forget what Jarvis learned " +
+            "over some days, use Forget a time frame. Copies in older backups stay until they age out."
     const val DELETE_CONFIRM = "Delete this conversation from your PC? This cannot be undone. $DELETE_KEEPS_FACTS"
     /**
      * The search box (the owner's answer of 2026-09-27: "shown on screen
@@ -78,7 +80,12 @@ object ChatLog {
      * desktop says the same (history-view.js).
      */
     const val SEARCH_PLACEHOLDER = "Search what was said…"
+    /** The box's name for TalkBack (the chat audit, 2026-09-28: it had none) - the desktop's aria-label. */
+    const val SEARCH_LABEL = "Search what was said in your chats"
     const val NO_MATCH = "No conversations match that search."
+    /** Titles only, with older pages not loaded yet - the desktop's words. */
+    const val NO_MATCH_MORE =
+        "No loaded conversations match that search. \"Load older\" may bring in more to search."
     const val SEARCH_NOTE =
         "Searched on your PC, in your kept chats only. Nothing is saved and nothing is sent to the AI."
     const val SEARCHING = "Searching…"
@@ -97,9 +104,14 @@ object ChatLog {
 
     // ----------------------------------------------------------- paths ---
 
-    /** One page, newest first. [before] is the `updated` time of the oldest row already shown. */
-    fun listPath(before: Long? = null, limit: Int = PAGE): String =
-        "$LIST_PATH?limit=${limit.coerceIn(1, 100)}" + (before?.let { "&before=$it" } ?: "")
+    /**
+     * One page, newest first. [before] is the `updated` time of the oldest row
+     * already shown; [kind], one of [KINDS] ("Live only" and the other
+     * filters, the chat audit 2026-09-28) - anything else is not sent.
+     */
+    fun listPath(before: Long? = null, limit: Int = PAGE, kind: String? = null): String =
+        "$LIST_PATH?limit=${limit.coerceIn(1, 100)}" + (before?.let { "&before=$it" } ?: "") +
+            (kind?.takeIf { it in KINDS }?.let { "&kind=$it" } ?: "")
 
     fun conversationPath(id: String): String = "$CONVERSATION_PATH?id=${URLEncoder.encode(id, "UTF-8")}"
 
@@ -111,10 +123,13 @@ object ChatLog {
      * or more than [SEARCH_MAX_CHARS] once the spaces are tidied. The words
      * are URL-encoded, so nothing typed can add a second parameter.
      */
-    fun searchPath(query: String, limit: Int = 20): String? {
+    fun searchPath(query: String, limit: Int = 20, kind: String? = null): String? {
         val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
         if (words.length < SEARCH_MIN || words.length > SEARCH_MAX_CHARS) return null
-        return "$SEARCH_PATH?q=${URLEncoder.encode(words, "UTF-8")}&limit=${limit.coerceIn(1, 50)}"
+        // The kind chosen in "Show" narrows the search too, so "Live only" and
+        // a typed search combine (the second chat audit, 2026-09-28, finding 8).
+        return "$SEARCH_PATH?q=${URLEncoder.encode(words, "UTF-8")}&limit=${limit.coerceIn(1, 50)}" +
+            (kind?.takeIf { it in KINDS }?.let { "&kind=$it" } ?: "")
     }
 
     fun deleteBody(id: String): String = buildJsonObject { put("id", id) }.toString()
@@ -147,6 +162,8 @@ object ChatLog {
         val hasVoice: Boolean,
         /** A turn in it read text from outside (a tool ran): from that turn on. */
         val tainted: Boolean,
+        /** What kind of conversation it is ([KINDS]); an older PC's rows are "chat". */
+        val kind: String = "chat",
     )
 
     /** One page: the settings, its rows, and whether there may be older ones. */
@@ -163,7 +180,27 @@ object ChatLog {
         val answerKept: Boolean = true,
     )
 
-    data class Transcript(val id: String, val title: String, val tainted: Boolean, val turns: List<Turn>)
+    data class Transcript(
+        val id: String,
+        val title: String,
+        val tainted: Boolean,
+        val turns: List<Turn>,
+        /** What kind of conversation it is ([KINDS]). */
+        val kind: String = "chat",
+        /** Whether "Continue this chat" may carry it on ([CONTINUABLE]), and why not. */
+        val continuable: Boolean = true,
+        val continueWhy: String? = null,
+        /**
+         * Whether the PC is keeping NEW messages right now (`history` on the
+         * conversation: `enabled` / `recording`, the same words the list uses),
+         * or null from a PC that does not say - "Continue this chat" warns
+         * from it ([ChatHistory.continuedHistoryLine], the owner, 2026-09-29).
+         */
+        val keeping: Keeping? = null,
+    )
+
+    /** `history.enabled` / `history.recording` on a conversation; each null when not clearly a yes or a no. */
+    data class Keeping(val enabled: Boolean?, val recording: Boolean?)
 
     private fun JsonObject.prim(key: String): JsonPrimitive? = this[key] as? JsonPrimitive
 
@@ -201,6 +238,7 @@ object ChatLog {
                 device = o.str("device"),
                 hasVoice = o.flag("has_voice") == true,
                 tainted = o.flag("tainted") == true,
+                kind = kindOf(o.str("kind")),
             )
         }
         val raw = (body["conversations"] as? JsonArray)?.size ?: 0
@@ -232,7 +270,19 @@ object ChatLog {
                 answerKept = o.flag("answer_kept") != false,
             )
         }
-        return Transcript(id, body.str("title") ?: UNTITLED, body.flag("tainted") == true, turns)
+        val kind = kindOf(body.str("kind"))
+        // An older PC sends no `continuable`: what it kept is a chat, unless a
+        // row says it is a support or chatbot record.
+        val others = turns.any { it.role == "support" || it.role == "chatbot" }
+        val continuable = body.flag("continuable") ?: (kind in CONTINUABLE && !others)
+        return Transcript(
+            id, body.str("title") ?: UNTITLED, body.flag("tainted") == true, turns,
+            kind = kind,
+            continuable = continuable,
+            continueWhy = if (continuable) null else body.str("continue_why") ?: CONTINUE_WHY[kind]
+                ?: CONTINUE_WHY.getValue("support"),
+            keeping = (body["history"] as? JsonObject)?.let { Keeping(it.flag("enabled"), it.flag("recording")) },
+        )
     }
 
     const val UNTITLED = "Untitled conversation"
@@ -312,6 +362,7 @@ object ChatLog {
                     device = o.str("device"),
                     hasVoice = o.flag("has_voice") == true,
                     tainted = o.flag("tainted") == true,
+                    kind = kindOf(o.str("kind")),
                 ),
                 hits = o.whole("hits")?.toInt() ?: 0,
                 snippet = Snippet(
@@ -459,7 +510,7 @@ object ChatLog {
 
     fun keepConfirm(to: Int): String =
         "Delete every conversation older than ${keepLabel(to).lowercase(Locale.US)} from your PC now, " +
-            "and from then on? This cannot be undone."
+            "and from then on? This cannot be undone. $DELETE_STAYS"
 
     /**
      * What to say after a `keep_days` change. The PC's own sentence first;
@@ -503,12 +554,216 @@ object ChatLog {
         }
     }
 
-    /** The small line under a row's title: when, where, and its marks, in words. */
+    /** The small line under a row's title: when, where, and its marks, in words - a
+     *  Live session's length and start first ("Live · 12 min · Today 14:05"). */
     fun rowLine(row: Summary, zone: ZoneId, today: LocalDate): String = listOfNotNull(
-        whenLine(row.updated ?: row.started, zone, today),
+        if (row.kind == "live") {
+            liveLine(row.started, row.updated, zone, today)
+        } else {
+            whenLine(row.updated ?: row.started, zone, today)
+        },
         deviceWord(row.device),
-        row.turns?.let { if (it == 1) "1 message" else "$it messages" },
+        row.turns?.let { messagesWords(it) },
     ).joinToString(" · ")
+
+    // ------------------------------------------- the chat audit (2026-09-28) ---
+    //
+    // The owner's decisions "History marks Live sessions" and "Chats, after
+    // the chat audit" (CLAUDE.md). The words are the desktop's
+    // (history-view.js, chat-history.js), word for word: both apps' tests
+    // read tools/gen_history_cases.py's contract/history-cases.json.
+
+    /** The kinds of conversation the PC keeps (`jarvis_chat_log.KINDS`). */
+    val KINDS = listOf("chat", "live", "support", "chatbot", "compare")
+
+    /** The kinds "Continue this chat" may carry on (`jarvis_chat_log.CONTINUABLE`). */
+    val CONTINUABLE = listOf("chat", "live")
+
+    fun kindOf(raw: String?): String = if (raw in KINDS) raw!! else "chat"
+
+    /** The tag on a row of a kind that is not an ordinary chat. A Live session's is its line. */
+    val KIND_TAG = mapOf(
+        "chat" to "", "live" to "Live", "support" to "Support chat",
+        "chatbot" to "Chat with an AI", "compare" to "Comparison",
+    )
+
+    val KIND_TITLE = mapOf(
+        "chat" to "",
+        "live" to "A Jarvis Live session: its words and times, never the sound.",
+        "support" to "The record of a customer-support chat Jarvis had for you. Read-only.",
+        "chatbot" to "A conversation Jarvis had with another AI for you. Its replies are outside text: " +
+            "never learned from, never read aloud. Read-only.",
+        "compare" to "Several AIs asked the same question, and the summary. Their replies are outside " +
+            "text: never learned from, never read aloud. Read-only.",
+    )
+
+    const val FILTER_LABEL = "Show"
+
+    /** "Show": "" is every kind. */
+    val FILTERS = listOf(
+        "" to "All chats", "chat" to "Just chats", "live" to "Live only",
+        "support" to "Support chats", "chatbot" to "Chats with other AIs", "compare" to "Comparisons",
+    )
+
+    const val FILTER_NONE = "No conversations of that kind are kept."
+
+    /** Who wrote each line of a kept chatbot conversation or comparison (role "chatbot"). */
+    val CHATBOT_WHO = mapOf(
+        "chatbot_jarvis" to "Sent by Jarvis",
+        "chatbot_reply" to "The other AI (outside text)",
+        "chatbot_note" to "Note",
+        "chatbot_summary" to "Summary (outside text)",
+    )
+
+    fun chatbotWho(provenance: String?): String =
+        CHATBOT_WHO[provenance] ?: CHATBOT_WHO.getValue("chatbot_note")
+
+    const val CONTINUE = "Continue this chat"
+    const val CONTINUE_TITLE = "Carry on this conversation on Home."
+
+    /** What every delete dialog says stays (the second chat audit, 2026-09-28) - the desktop's words. */
+    const val DELETE_STAYS = "Facts Jarvis learned stay. Copies in older backups stay until they age out."
+
+    /** The same, when the owner is also ticking facts to forget. */
+    const val DELETE_STAYS_TICKED =
+        "Facts you did not tick stay. Copies in older backups stay until they age out."
+
+    /** The note under an opened record of outside words, when it is not an ordinary chat. */
+    const val TAINT_SUPPORT =
+        "This record holds the company's words, which are outside text: Jarvis never learns from " +
+            "them or acts on them."
+    const val TAINT_CHATBOT =
+        "This record holds another AI's replies, which are outside text: Jarvis never learns from " +
+            "them or acts on them."
+    /**
+     * Said on an opened chat that is the one Home is in (the second chat
+     * audit, phone C5): Delete and Continue act on the chat on screen there.
+     */
+    const val HOME_CHAT_LINE =
+        "This is the chat you are in on Home. Deleting it starts a new conversation there."
+
+    /** The "History is on/off" line's button at the top: opens the settings at the bottom. */
+    const val STATUS_CHANGE = "Change"
+    const val STATUS_CHANGE_TITLE = "Change chat history settings."
+    const val SETTINGS_SHOW_TITLE = "Show chat history settings"
+    const val SETTINGS_HIDE_TITLE = "Hide chat history settings"
+
+    /** Which note goes above an opened record that read outside text, by its kind. */
+    fun taintNote(kind: String): String = when (kind) {
+        "support" -> TAINT_SUPPORT
+        "chatbot", "compare" -> TAINT_CHATBOT
+        else -> TAINT_LINE
+    }
+
+    /**
+     * Which turns carry "read outside text": the ANSWER that read it, not the
+     * owner's own question beside "You" (the second chat audit, the desktop's
+     * C1 - the same rule): each user turn that read outside text marks the
+     * answer after it, or itself when there is none.
+     */
+    fun outsideMarks(turns: List<Turn>): Set<Int> {
+        val out = mutableSetOf<Int>()
+        turns.forEachIndexed { i, t ->
+            if (t.role == "user" && t.readOutside) {
+                out += if (turns.getOrNull(i + 1)?.role == "assistant") i + 1 else i
+            }
+        }
+        return out
+    }
+
+    const val OPEN_IN_HISTORY = "Open in History"
+    const val OPEN_IN_HISTORY_TITLE = "Read it, or delete it, in History."
+
+    /** What an opened chat says about the facts it taught (section 79): read only. */
+    fun chatFactsTaught(n: Int): String = when {
+        n <= 0 -> "Jarvis is not using any fact it learned from this chat."
+        n == 1 -> "Jarvis learned 1 fact from this chat, and still uses it:"
+        else -> "Jarvis learned $n facts from this chat, and still uses them:"
+    }
+
+    fun chatFactsTaughtHidden(n: Int): String =
+        "Jarvis learned $n ${if (n == 1) "fact" else "facts"} from this chat. " +
+            "Your memory lists are hidden, so they are not shown here."
+
+    /** Why a kind cannot be continued - jarvis_chat_log.CONTINUE_WHY, for an older PC. */
+    val CONTINUE_WHY = mapOf(
+        "support" to "A customer-support record can't be continued: it is the company's words and " +
+            "what was sent in your name, kept as your record.",
+        "chatbot" to "A chat with another AI can't be continued here: its replies are outside text, " +
+            "not a conversation with Jarvis.",
+        "compare" to "A comparison can't be continued here: its replies are outside text, not a " +
+            "conversation with Jarvis.",
+    )
+
+    const val COPY = "Copy"
+    const val COPY_TITLE = "Copy this answer."
+    const val COPIED = "Copied."
+    const val FORGET_RANGE_LINK = "Forget a time frame…"
+    const val FORGET_RANGE_LINK_TITLE = "Forget what Jarvis learned, and delete chats, from some days."
+    const val DELETE_SUPPORT =
+        "This is the record of a customer-support chat - what the company said and what was sent in " +
+            "your name. Delete it anyway?"
+    const val KEEP_SUPPORT_NOTE =
+        "Customer-support chat records are not deleted by this - delete one yourself in History if " +
+            "you want it gone."
+    const val NO_TITLE = "(no title)"
+    const val HISTORY_SETTINGS = "History settings"
+    const val HISTORY_SETTINGS_TITLE = "Keep chat history on this PC, and how long."
+
+    /** "1 message", "12 messages" - never "turns". */
+    fun messagesWords(n: Int): String = if (n == 1) "1 message" else "${n.coerceAtLeast(0)} messages"
+
+    /** A Live session's line: "Live · 12 min · Today 14:05". */
+    fun liveLine(started: Long?, updated: Long?, zone: ZoneId, today: LocalDate): String {
+        val secs = if (started != null && updated != null) (updated - started).coerceAtLeast(0) else 0
+        val length = if (secs < 60) "under 1 min" else "${Math.round(secs / 60.0)} min"
+        return "Live · $length · ${whenLine(started ?: updated, zone, today)}"
+    }
+
+    private val HEADING = Regex("(?m)^\\s{0,3}#{1,6}\\s+")
+    private val BULLET = Regex("(?m)^(\\s*)[-*+]\\s+")
+    private val BOLD = Regex("\\*\\*(.+?)\\*\\*", RegexOption.DOT_MATCHES_ALL)
+    private val BOLD_U = Regex("__(.+?)__", RegexOption.DOT_MATCHES_ALL)
+    private val ITALIC = Regex("(?<![\\w*])\\*(?!\\s)(.+?)(?<!\\s)\\*(?![\\w*])")
+    private val CODE = Regex("`([^`\\n]+)`")
+    private val FENCE = Regex("(?m)^\\s*```[^\\n]*$\\n?")
+
+    /**
+     * An answer as plain text for History: headings, bold, italics, code
+     * marks and list markers taken off (a bullet becomes "• "), so an old
+     * answer does not show "**" and "#" (the chat audit, 2026-09-28). The
+     * desktop draws the same answer with its markdown renderer instead.
+     */
+    fun plainAnswer(text: String): String {
+        var out = text
+        out = HEADING.replace(out, "")
+        out = BULLET.replace(out) { m -> m.groupValues[1] + "• " }
+        out = BOLD.replace(out) { it.groupValues[1] }
+        out = BOLD_U.replace(out) { it.groupValues[1] }
+        out = ITALIC.replace(out) { it.groupValues[1] }
+        out = CODE.replace(out) { it.groupValues[1] }
+        out = FENCE.replace(out, "")
+        return out
+    }
+
+    // ------------------------------------- which chat a fact came from ---
+
+    const val FACT_CHAT_PATH = "/api/memory/fact-chat"
+
+    fun factChatPath(id: Long): String? = if (id > 0) "$FACT_CHAT_PATH?id=$id" else null
+
+    /** The chat a fact came from: its id, title, last change and kind. */
+    data class FactChat(val id: String, val title: String?, val updated: Long?, val kind: String = "chat")
+
+    /**
+     * `GET /api/memory/fact-chat`: [Pair.first] false from a PC that cannot
+     * say; [Pair.second] the chat, or null when none is on record.
+     */
+    fun factChat(body: JsonObject): Pair<Boolean, FactChat?> {
+        val c = body["conversation"] as? JsonObject ?: return true to null
+        val id = c.str("id") ?: return true to null
+        return true to FactChat(id, c.str("title"), c.whole("updated"), kindOf(c.str("kind")))
+    }
 
     /**
      * Which app a conversation was had in. The same words as the desktop's
@@ -530,6 +785,21 @@ object ChatLog {
      * from": never silence, because silence would read as "you typed it".
      * The same words as the desktop's History.
      */
+    /**
+     * Who wrote each line of a customer-support chat's record (role
+     * "support"; "Chat with customer support for me"). The desktop's words
+     * too (history-view.js SUPPORT_WHO).
+     */
+    val SUPPORT_WHO = mapOf(
+        "support_company" to "The company (outside text)",
+        "support_jarvis" to "Sent by Jarvis in your name",
+        "support_owner" to "You",
+        "support_note" to "Note",
+    )
+
+    fun supportWho(provenance: String?): String =
+        SUPPORT_WHO[provenance] ?: SUPPORT_WHO.getValue("support_note")
+
     fun provenanceMark(provenance: String?): String? = when (provenance) {
         Provenance.TYPED, Provenance.VOICE -> null
         Provenance.SHARED -> "shared from another app"
@@ -615,10 +885,11 @@ object ChatLog {
 
     /** The "are you sure?" line above Yes, with how many ticked facts go. */
     fun deleteAndForgetConfirm(n: Int): String = if (n <= 0) {
-        "Delete this conversation from your PC? This cannot be undone. The facts it taught are kept."
+        "Delete this conversation from your PC? This cannot be undone. $DELETE_STAYS"
     } else {
         "Delete this conversation and forget $n ${if (n == 1) "fact" else "facts"}? The chat cannot be " +
-            "brought back. A forgotten fact is not used again; it stays in Jarvis's history until you erase its words."
+            "brought back. A forgotten fact is not used again; it stays in Jarvis's history until you erase its words. " +
+            DELETE_STAYS_TICKED
     }
 
     /** What happened, in one sentence: [chatSaid] is the delete's own sentence. */

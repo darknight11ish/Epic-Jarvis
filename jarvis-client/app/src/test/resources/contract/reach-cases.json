@@ -160,6 +160,16 @@
     },
     {
      "asks": "-",
+     "id": "support_chat",
+     "line": "Not set up: Playwright (the program Jarvis uses to work a browser window) is not installed on this PC. To install it, run this one line in PowerShell in Jarvis's folder: py -3 -m pip install playwright; py -3 -m playwright install chromium",
+     "name": "Customer-support chats",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "phone_control",
      "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Phone control",
@@ -387,6 +397,16 @@
      "id": "chatbot_api",
      "line": "Not set up: no key is saved on this PC for ChatGPT (OpenAI API), DeepSeek (API), Mistral (API), Grok (xAI API), OpenRouter (API) and Groq (API). Keys are added on the PC only.",
      "name": "Chatbot conversations with a key (API)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "support_chat",
+     "line": "Not set up: Playwright (the program Jarvis uses to work a browser window) is not installed on this PC. To install it, run this one line in PowerShell in Jarvis's folder: py -3 -m pip install playwright; py -3 -m playwright install chromium",
+     "name": "Customer-support chats",
      "on": false,
      "state": "not_set_up",
      "state_words": "Not set up",
@@ -624,6 +644,16 @@
     },
     {
      "asks": "-",
+     "id": "support_chat",
+     "line": "Not set up: Playwright (the program Jarvis uses to work a browser window) is not installed on this PC. To install it, run this one line in PowerShell in Jarvis's folder: py -3 -m pip install playwright; py -3 -m playwright install chromium",
+     "name": "Customer-support chats",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "phone_control",
      "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Phone control",
@@ -724,7 +754,7 @@
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
    "everything_else": "Anything not on this list stays on this PC.",
-   "on": 20,
+   "on": 21,
    "rows": [
     {
      "asks": "Yes, every question",
@@ -875,6 +905,16 @@
      "state": "on",
      "state_words": "On",
      "where": "api.openai.com"
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "support_chat",
+     "line": "Chats with a company's customer support for you, in your name, on your own account there: one approval card per chat lists every detail Jarvis may give, and every offer (a refund, a credit, a cancellation) gets its own card - nothing is accepted without it. Identity checks and \"are you a bot?\" are handed to you. The company's words are outside text.",
+     "name": "Customer-support chats",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "the help page of the company on the card (Groupon, or one whose help page you type) and its chat window's own host (a browser window you can see)"
     },
     {
      "asks": "Yes, every time",
@@ -1204,6 +1244,16 @@
     },
     {
      "asks": "-",
+     "id": "support_chat",
+     "line": "Not set up: Playwright (the program Jarvis uses to work a browser window) is not installed on this PC. To install it, run this one line in PowerShell in Jarvis's folder: py -3 -m pip install playwright; py -3 -m playwright install chromium",
+     "name": "Customer-support chats",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "phone_control",
      "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
      "name": "Phone control",
@@ -1289,6 +1339,7 @@
   "browser",
   "chatbot",
   "chatbot_api",
+  "support_chat",
   "phone_control",
   "shell",
   "plugins",

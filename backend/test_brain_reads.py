@@ -167,6 +167,42 @@ def t_search_finds_words_inside_a_chat():
         w.done()
 
 
+def t_search_combines_with_the_kind_filter():
+    """The second chat audit (2026-09-28), finding 8: with "Live only" chosen
+    and a search typed, the results used to include every kind."""
+    w = seeded("kindfilter")
+    try:
+        w.clock.t += 60
+        live = {"messages": [{"role": "user", "content": "the dentist moved my appointment",
+                              "provenance": "voice", "live": True}],
+                "conversation_id": "conv-live-dentist", "device": "phone"}
+        w.log.record_turn(live, lane="local", turn={
+            "finish_reason": "stop", "client_gone": False, "rounds": 1,
+            "answer": "Noted, the dentist call is moved.", "tools_ran": []})
+        both = w.log.search("dentist")
+        check("without a kind: the chat and the Live session are both found",
+              {c["id"] for c in both["conversations"]} == {"conv-dentist-01", "conv-live-dentist"},
+              both["conversations"])
+        check("...and the answer says no kind was asked for", both["kind"] is None)
+        only = w.log.search("dentist", kind="live")
+        check("with kind live: only the Live session",
+              [c["id"] for c in only["conversations"]] == ["conv-live-dentist"]
+              and only["conversations"][0]["kind"] == "live" and only["kind"] == "live", only)
+        check("a kind nothing has finds nothing",
+              w.log.search("dentist", kind="support")["conversations"] == [])
+        check("a kind that is not one is ignored, as the list ignores it",
+              len(w.log.search("dentist", kind="imported")["conversations"]) == 2)
+        code, body = H.handle_get(H.SEARCH_PATH, "q=dentist&kind=live")
+        check("the route takes ?kind= too",
+              code == 200 and [c["id"] for c in body["conversations"]] == ["conv-live-dentist"],
+              body)
+        check("the module function does too",
+              [c["id"] for c in H.search("dentist", kind="chat")["conversations"]]
+              == ["conv-dentist-01"])
+    finally:
+        w.done()
+
+
 def t_search_writes_nothing_and_keeps_no_record():
     w = seeded("writes")
     audits = []
@@ -436,6 +472,42 @@ def t_conversation_facts():
     check("reading it changes nothing", [tuple(r) for r in _rows(st)] == before)
     code, out = B.handle_get(B.CONVERSATION_FACTS_PATH, f"conversation_id={cid}")
     check("jarvis_brain_reads answers it", code == 200 and out["count"] == 2, (code, out))
+
+
+def t_fact_chat():
+    """"Which chat did this fact come from?" (the chat audit, 2026-09-28):
+    "Erase the words" names the chat before offering to delete it too, and
+    says so when none is on record. A read."""
+    st = store("fact-chat")
+    w = World("fact-chat-log")
+    try:
+        w.say("My passport is in the top drawer", cid="conv-passport-1", answer="Noted.")
+        a = st.add("Owner's passport is in the top drawer", source="auto",
+                   meta={"auto": True, "conversation_id": "conv-passport-1"})
+        b = st.add("Owner likes green tea", source="extracted", meta={"proposal_id": 3})
+        c = st.add("Owner's bike is red", source="auto",
+                   meta={"auto": True, "conversation_id": "conv-deleted-2"})
+        code, out = B.handle_get(B.FACT_CHAT_PATH, f"id={a}")
+        conv = out.get("conversation") or {}
+        check("a fact learned in a kept chat names it: its title, kind and when",
+              code == 200 and conv.get("id") == "conv-passport-1"
+              and conv.get("title") == "My passport is in the top drawer"
+              and conv.get("kind") == "chat" and conv.get("updated", 0) > 0, (code, out))
+        code, out = B.handle_get(B.FACT_CHAT_PATH, f"id={b}")
+        check("a fact with no chat on record: conversation null",
+              code == 200 and out["conversation"] is None, out)
+        code, out = B.handle_get(B.FACT_CHAT_PATH, f"id={c}")
+        check("a chat no longer kept: conversation null too",
+              code == 200 and out["conversation"] is None, out)
+        code, out = B.handle_get(B.FACT_CHAT_PATH, "id=999999")
+        check("no such fact: 404", code == 404, (code, out))
+        for bad in ("", "id=", "id=x", "id=-1", "id=1.5", "id=1&id=2x"):
+            code, out = B.handle_get(B.FACT_CHAT_PATH, bad)
+            check(f"{bad!r}: 400 or the first id only", code in (400, 200), (code, out))
+        code, out = B.handle_get(B.FACT_CHAT_PATH, "id=x")
+        check("not a number: 400 in words", code == 400 and "fact id" in out["error"])
+    finally:
+        w.done()
 
 
 def _rows(st):

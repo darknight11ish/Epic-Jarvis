@@ -29,6 +29,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -159,11 +160,37 @@ class MainActivity : FragmentActivity() {
     /** The Jarvis Live notification was tapped: its screen. */
     private val openLiveRequested = mutableStateOf(false)
 
+    /**
+     * The Jarvis Live Quick Settings tile (start) or the "Live ended - Resume"
+     * notification (resume) asked to start Live here: null, "start" or
+     * "resume". Acted on only once the app is unlocked (App lock), then
+     * cleared.
+     */
+    private val startLiveRequested = mutableStateOf<String?>(null)
+
+    /**
+     * Text shared with "Talk about this in Live" (the Share sheet's second
+     * Jarvis entry, the activity-alias ShareToLive): held for the Live
+     * screen's box, sent only when the owner taps Send, tagged "shared" -
+     * outside text, like any shared item. Consumed once.
+     */
+    private val liveSharedText = mutableStateOf<String?>(null)
+
+    /** "Solve it here" - the "a website needs you" alert was tapped. */
+    private val openHandoffRequested = mutableStateOf(false)
+
     /** The quick-note field on Home is open - see [readQuickNoteIntent]. */
     private val quickNoteOpen = mutableStateOf(false)
 
     /** The briefing notification was tapped - see [readBriefingIntent]. Consumed once. */
     private val openBriefingRequested = mutableStateOf(false)
+
+    /**
+     * The sentence an app-icon shortcut asks ("Brief me now." or "What did I
+     * miss?" - [AppShortcuts]), waiting to be sent from Home. See
+     * [readShortcutQuestionIntent]. Consumed once.
+     */
+    private val shortcutQuestion = mutableStateOf<String?>(null)
 
     /**
      * When the restart notice was tapped (`SystemClock.elapsedRealtime`), or
@@ -177,13 +204,6 @@ class MainActivity : FragmentActivity() {
 
     /** An empty tile slot was tapped - see [readTileSettingsIntent]. Consumed once. */
     private val openTileSettingsRequested = mutableStateOf(false)
-
-    /**
-     * The sentence an app-icon shortcut asks ("Brief me now." or "What did I
-     * miss?" - [AppShortcuts]), waiting to be sent from Home. See
-     * [readShortcutQuestionIntent]. Consumed once.
-     */
-    private val shortcutQuestion = mutableStateOf<String?>(null)
 
     /** Set when the runtime itself failed to start. Shown instead of the app. */
     private val startupError = mutableStateOf<String?>(null)
@@ -379,22 +399,26 @@ class MainActivity : FragmentActivity() {
 
         lastCrash.value = CrashLog.read(this)
         readApprovalIntent(intent)
-        readShareIntent(intent)
+        // `fresh`: a rotation rebuilds this activity from the SAME launch
+        // intent - a Live start (the tile, "Resume") or a share into Live
+        // must not happen again then.
+        readShareIntent(intent, fresh = savedInstanceState == null)
         readVoiceIntent(intent)
-        readLiveIntent(intent)
+        readLiveIntent(intent, fresh = savedInstanceState == null)
+        readHandoffIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
-        // Only on a fresh start: a rotation (or Android rebuilding the app)
-        // hands the same intent back, and must not open the microphone again
-        // after the owner has switched listening off.
-        if (savedInstanceState == null) readResumeListeningIntent(intent)
-        readTileSettingsIntent(intent)
         // Only on a fresh start. A rotation (or a restore after Android
         // reclaimed the process) builds this activity again from the SAME
         // launch intent, and the other readers above only navigate, so
         // re-reading them is harmless - but this one sends a question, and
         // must not ask it again every time the phone turns.
         if (savedInstanceState == null) readShortcutQuestionIntent(intent)
+        // Only on a fresh start: a rotation (or Android rebuilding the app)
+        // hands the same intent back, and must not open the microphone again
+        // after the owner has switched listening off.
+        if (savedInstanceState == null) readResumeListeningIntent(intent)
+        readTileSettingsIntent(intent)
 
         setContent { App() }
 
@@ -419,11 +443,12 @@ class MainActivity : FragmentActivity() {
         readShareIntent(intent)
         readVoiceIntent(intent)
         readLiveIntent(intent)
+        readHandoffIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
+        readShortcutQuestionIntent(intent)
         readResumeListeningIntent(intent)
         readTileSettingsIntent(intent)
-        readShortcutQuestionIntent(intent)
     }
 
     /**
@@ -488,10 +513,23 @@ class MainActivity : FragmentActivity() {
         startVoiceRequested.value = true
     }
 
-    /** The Jarvis Live notification: its screen (behind the app lock, as ever). */
-    private fun readLiveIntent(intent: Intent?) {
-        if (intent?.action != ACTION_OPEN_LIVE) return
-        openLiveRequested.value = true
+    /**
+     * The Jarvis Live notification: its screen (behind the app lock, as
+     * ever). The Quick Settings tile and the "Resume" notification also
+     * start Live - the owner's own tap - once the app is unlocked.
+     */
+    private fun readLiveIntent(intent: Intent?, fresh: Boolean = true) {
+        when (intent?.action) {
+            ACTION_OPEN_LIVE -> openLiveRequested.value = true
+            ACTION_START_LIVE -> if (fresh) startLiveRequested.value = "start" else openLiveRequested.value = true
+            ACTION_RESUME_LIVE -> if (fresh) startLiveRequested.value = "resume" else openLiveRequested.value = true
+        }
+    }
+
+    /** The "a website needs you" alert: the Solve it here screen (behind the app lock, as ever). */
+    private fun readHandoffIntent(intent: Intent?) {
+        if (intent?.action != ACTION_OPEN_HANDOFF) return
+        openHandoffRequested.value = true
     }
 
     /**
@@ -499,8 +537,16 @@ class MainActivity : FragmentActivity() {
      * here rather than starting a new instance - same reason [readApprovalIntent]
      * needs the `onNewIntent` half too.
      */
-    private fun readShareIntent(intent: Intent?) {
+    private fun readShareIntent(intent: Intent?, fresh: Boolean = true) {
         if (intent?.action != Intent.ACTION_SEND) return
+        // "Talk about this in Live": the same share, through the second
+        // entry (activity-alias ShareToLive). Text only; held for the Live
+        // screen, never sent on its own.
+        if (intent.component?.className?.endsWith(SHARE_TO_LIVE) == true) {
+            val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
+            if (fresh && !text.isNullOrEmpty()) liveSharedText.value = text
+            return
+        }
         if (intent.type == "text/plain") {
             val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
             if (!text.isNullOrEmpty()) sharedText.value = text
@@ -735,6 +781,9 @@ class MainActivity : FragmentActivity() {
         val lockVersion = lockTick.intValue
         val locked = remember(lockVersion, security) { lockSession.locked(security) }
         val privateHidden = remember(lockVersion, security) { lockSession.privateHidden(security) }
+        // The runtime reads no chat history for "Move it here" while the lists are
+        // hidden (the second chat audit, phone C12): the desktop refuses in Rust.
+        SideEffect { JarvisRuntime.privateListsHidden = privateHidden }
         // While App lock or "Hide memory lists and chat history" is on, Jarvis
         // cannot be screenshotted, screen-recorded or cast, and its
         // recent-apps picture is blank rather than a snapshot of what the
@@ -745,8 +794,15 @@ class MainActivity : FragmentActivity() {
         // And while the pairing token is shown in plain letters on the
         // pairing screen ("Show token"): set by PairingScreen, and back to
         // false the moment it is hidden or the screen goes.
-        LaunchedEffect(security.appLock, security.privateLists, pairingKeyShown) {
-            val secure = SecurityRules.blockScreenCapture(security, keyShown = pairingKeyShown)
+        // And while "Solve it here" shows a picture of the PC's browser
+        // window (it is never saved, so it must not be screenshotted either).
+        val handoffShown = nav.current == Screen.HANDOFF
+        LaunchedEffect(security.appLock, security.privateLists, pairingKeyShown, handoffShown) {
+            val secure = SecurityRules.blockScreenCapture(
+                security,
+                keyShown = pairingKeyShown,
+                handoffShown = handoffShown,
+            )
             setRecentsScreenshotEnabled(!secure)
             if (secure) {
                 window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
@@ -910,6 +966,26 @@ class MainActivity : FragmentActivity() {
         // The conversation the next question carries (ChatHistory). Only its
         // size is shown; memory only, like the question itself.
         val conversation by chat.history.collectAsState()
+        // What Home shows of the conversation (the whole thread, the chat
+        // audit 2026-09-28), and its one quiet line. Memory only.
+        val thread by chat.thread.collectAsState()
+        val chatNote by chat.chatNote.collectAsState()
+        // Whether this conversation read outside text, and whether the chat is a
+        // game (the PC made it temporary) - both from the chat, memory only.
+        val readOutsideChat by chat.readOutside.collectAsState()
+        val gameChat by chat.game.collectAsState()
+        // The chat has gone quiet for 30 minutes: re-read every 30 seconds
+        // while there is a conversation, so the line under the reply is true
+        // without waiting for the next redraw (the second chat audit, phone C1).
+        val idleQuiet by produceState(false, conversation.size) {
+            while (true) {
+                value = chat.idleNow()
+                delay(30_000)
+            }
+        }
+        // Did the question on screen get an answer? Read as a boolean so a
+        // streamed word does not redraw the screen.
+        val answeredNow by remember { derivedStateOf { replyState.value.isNotBlank() } }
         // What a turn is waiting on ("Waiting for your approval…"), and the
         // one line under a finished answer (cut short / from a cloud model).
         val chatWaiting by chat.waiting.collectAsState()
@@ -1216,6 +1292,47 @@ class MainActivity : FragmentActivity() {
             nav.go(Screen.LIVE)
         }
 
+        // The Live tile, or "Live ended - Resume": the Live screen, and Live
+        // starts - the owner's own tap - but only once the app is unlocked
+        // (keyed on `locked`, like focusApproval): behind App lock nothing
+        // starts. Held on a stale link like the Live button (liveStart).
+        LaunchedEffect(startLiveRequested.value, locked) {
+            val how = startLiveRequested.value ?: return@LaunchedEffect
+            nav.go(Screen.LIVE)
+            if (locked) return@LaunchedEffect
+            startLiveRequested.value = null
+            // In the runtime's own scope: clearing the request above restarts
+            // this effect, which would cut a start off half-way.
+            if (!JarvisRuntime.liveOnHere()) JarvisRuntime.liveStartSoon(resume = how == "resume")
+        }
+
+        // "Talk about this in Live": the shared text waits on the Live
+        // screen as a "Shared text" chip, and Live starts (once unlocked).
+        // Nothing is sent until the owner taps Send there.
+        var liveSharedHeld by rememberSaveable { mutableStateOf<String?>(null) }
+        LaunchedEffect(liveSharedText.value) {
+            val text = liveSharedText.value ?: return@LaunchedEffect
+            liveSharedHeld = Provenance.joinShared(liveSharedHeld, text)
+            liveSharedText.value = null
+            if (!JarvisRuntime.liveOnHere()) startLiveRequested.value = "start"
+            nav.go(Screen.LIVE)
+        }
+
+        // "Solve it here" tapped on a Brain plate.
+        val handoffOpen by JarvisRuntime.handoffOpen.collectAsState()
+        LaunchedEffect(handoffOpen) {
+            if (!handoffOpen) return@LaunchedEffect
+            JarvisRuntime.handoffOpened()
+            nav.go(Screen.HANDOFF)
+        }
+
+        // "Solve it here": the alert was tapped.
+        LaunchedEffect(openHandoffRequested.value) {
+            if (!openHandoffRequested.value) return@LaunchedEffect
+            openHandoffRequested.value = false
+            nav.go(Screen.HANDOFF)
+        }
+
         // The widget's Note button: Home, with the quick-note field open.
         LaunchedEffect(quickNoteOpen.value) {
             if (quickNoteOpen.value) nav.resetTo(Screen.HOME)
@@ -1228,6 +1345,29 @@ class MainActivity : FragmentActivity() {
             openBriefingRequested.value = false
             nav.resetTo(Screen.HOME)
             nav.go(Screen.BRAIN)
+        }
+
+        // The "Brief me now" and "What did I miss?" app-icon shortcuts
+        // (AppShortcuts): Home, with the fixed sentence asked as a typed
+        // question through `chat.send` - the composer's own path, so the
+        // answer appears where every answer does. Both are read-only
+        // sentences the PC answers without the AI model.
+        //
+        // Behind the app lock nothing is sent until it is unlocked (keyed on
+        // `locked`, like focusApproval above): the answer is the owner's
+        // private briefing. A phone that is not paired, or is re-pairing,
+        // sends nothing - there is no desktop to ask yet, and the pairing
+        // screen is what Home shows. The send runs on `scope`, not in this
+        // effect: clearing `shortcutQuestion` changes this effect's key, and
+        // that would cancel a send made in here halfway through its answer.
+        LaunchedEffect(shortcutQuestion.value, locked) {
+            val question = shortcutQuestion.value ?: return@LaunchedEffect
+            if (locked) return@LaunchedEffect
+            shortcutQuestion.value = null
+            nav.resetTo(Screen.HOME)
+            if (paired && !repairing) {
+                scope.launch { chat.send(question, provenance = Provenance.TYPED) }
+            }
         }
 
         // The restart notice ("Hey Jarvis" is off since the phone restarted,
@@ -1262,29 +1402,6 @@ class MainActivity : FragmentActivity() {
                     nav.resetTo(Screen.HOME)
                     nav.go(Screen.CHECKS)
                 }
-            }
-        }
-
-        // The "Brief me now" and "What did I miss?" app-icon shortcuts
-        // (AppShortcuts): Home, with the fixed sentence asked as a typed
-        // question through `chat.send` - the composer's own path, so the
-        // answer appears where every answer does. Both are read-only
-        // sentences the PC answers without the AI model.
-        //
-        // Behind the app lock nothing is sent until it is unlocked (keyed on
-        // `locked`, like focusApproval above): the answer is the owner's
-        // private briefing. A phone that is not paired, or is re-pairing,
-        // sends nothing - there is no desktop to ask yet, and the pairing
-        // screen is what Home shows. The send runs on `scope`, not in this
-        // effect: clearing `shortcutQuestion` changes this effect's key, and
-        // that would cancel a send made in here halfway through its answer.
-        LaunchedEffect(shortcutQuestion.value, locked) {
-            val question = shortcutQuestion.value ?: return@LaunchedEffect
-            if (locked) return@LaunchedEffect
-            shortcutQuestion.value = null
-            nav.resetTo(Screen.HOME)
-            if (paired && !repairing) {
-                scope.launch { chat.send(question, provenance = Provenance.TYPED) }
             }
         }
 
@@ -2089,6 +2206,23 @@ class MainActivity : FragmentActivity() {
                         privateHidden = privateHidden,
                         onShowPrivate = ::showPrivateLists,
                         showPrivateBusy = ownerCheckBusy.value,
+                        // "Continue this chat" (the owner's decision,
+                        // 2026-09-28): Home carries it on, and says so.
+                        onContinue = { id ->
+                            JarvisRuntime.continueChat(id).also { why ->
+                                if (why == null) {
+                                    nav.resetTo(Screen.HOME)
+                                }
+                            }
+                        },
+                        // "Forget a time frame…" at the top of History: the
+                        // Brain's plate, as "forget what you learned last
+                        // week" opens it (OpenPlace).
+                        onOpenForgetRange = {
+                            pendingSection = "forget-range"
+                            pendingSectionScreen = Screen.BRAIN.name
+                            nav.go(Screen.BRAIN)
+                        },
                         modifier = root,
                     )
 
@@ -2100,6 +2234,14 @@ class MainActivity : FragmentActivity() {
                         // "Jarvis Live didn't start: it needs your voice
                         // trained first - Settings, then Train my voice."
                         onTrainVoice = { nav.go(Screen.VOICE) },
+                        // "Talk about this in Live": held here until Send.
+                        shared = liveSharedHeld,
+                        onDropShared = { liveSharedHeld = null },
+                        modifier = root,
+                    )
+
+                    Screen.HANDOFF -> com.jarvis.client.ui.screens.HandoffScreen(
+                        onBack = { nav.back() },
                         modifier = root,
                     )
 
@@ -2318,6 +2460,21 @@ class MainActivity : FragmentActivity() {
                             lastUserText = lastQuestion,
                             answerFeedback = Feedback.viewFor(answerTurnId, answerMark),
                             conversationTurns = conversation.size,
+                            // The pairs above the one on screen.
+                            thread = com.jarvis.client.net.ChatHistory.threadBefore(
+                                thread, lastQuestion, streaming, answered = answeredNow,
+                            ),
+                            chatNote = chatNote,
+                            readOutside = readOutsideChat,
+                            idleNextLine = if (idleQuiet && !streaming) {
+                                if (temporaryChat || gameChat) {
+                                    com.jarvis.client.net.ChatHistory.IDLE_NEXT_LINE_TEMPORARY
+                                } else {
+                                    com.jarvis.client.net.ChatHistory.IDLE_NEXT_LINE
+                                }
+                            } else {
+                                null
+                            },
                             chatWaiting = chatWaiting,
                             answerNote = answerNote,
                             quickNoteOpen = quickNoteOpen.value,
@@ -2447,7 +2604,10 @@ class MainActivity : FragmentActivity() {
                                 },
                                 onFindDateInPicture = ::findDateInPicture,
                                 onInterrupt = { chat.cancel() },
-                                onNewConversation = { chat.newConversation() },
+                                // Said on Home, and read out by TalkBack (the chat audit).
+                                onNewConversation = { chat.newConversationSaid() },
+                                onEarlierChats = { nav.go(Screen.HISTORY) },
+                                onDismissChatNote = { chat.dismissChatNote() },
                                 // A temporary chat: no card and no hold - it only
                                 // makes Jarvis stricter. A PC without it says so.
                                 onToggleTemporary = {
@@ -2973,6 +3133,9 @@ class MainActivity : FragmentActivity() {
         /** Fired by the "your morning briefing is ready" notification ([com.jarvis.client.service.ScheduleNotifier]). */
         const val ACTION_OPEN_BRIEFING = "com.jarvis.client.action.OPEN_BRIEFING"
 
+        /** Fired by the Jarvis Live notification ([com.jarvis.client.service.LiveService]). */
+        const val ACTION_OPEN_LIVE = "com.jarvis.client.action.OPEN_LIVE"
+
         /**
          * The "\"Hey Jarvis\" is off since the phone restarted" notification's
          * tap ([com.jarvis.client.service.WakeResumeNotifier]): start "Listen
@@ -2983,8 +3146,17 @@ class MainActivity : FragmentActivity() {
         /** An empty Quick Settings tile slot's tap: Settings, at "Quick Settings tiles". */
         const val ACTION_OPEN_TILE_SETTINGS = "com.jarvis.client.action.OPEN_TILE_SETTINGS"
 
-        /** Fired by the Jarvis Live notification ([com.jarvis.client.service.LiveService]). */
-        const val ACTION_OPEN_LIVE = "com.jarvis.client.action.OPEN_LIVE"
+        /** Fired by the Jarvis Live tile ([com.jarvis.client.service.LiveTileService]): start Live. */
+        const val ACTION_START_LIVE = "com.jarvis.client.action.START_LIVE"
+
+        /** Fired by "Live ended - Resume" ([com.jarvis.client.service.LiveService.showResume]). */
+        const val ACTION_RESUME_LIVE = "com.jarvis.client.action.RESUME_LIVE"
+
+        /** Fired by the "a website needs you" alert ([com.jarvis.client.service.HandoffNotifier]). */
+        const val ACTION_OPEN_HANDOFF = "com.jarvis.client.action.OPEN_HANDOFF"
+
+        /** The activity-alias the "Talk about this in Live" share entry opens this activity as. */
+        const val SHARE_TO_LIVE = ".ShareToLive"
     }
 }
 
@@ -3022,15 +3194,6 @@ private val pairingBusy = mutableStateOf(false)
  */
 private val lockSession = LockSession()
 
-/** How long the restart notice's tap waits for the link before asking the desktop anyway. */
-private const val RESUME_LINK_WAIT_MS = 8_000L
-
-/** How long after tapping the restart notice listening may still start (App lock in between). */
-private const val RESUME_REQUEST_FRESH_MS = 2 * 60 * 1000L
-
-/** SettingsScreen's key for "Quick Settings tiles" (its SETTINGS_ITEM_INDEX). */
-private const val QUICK_TILES_SECTION = "quick-tiles"
-
 /**
  * Would App lock lock Jarvis now? Jarvis Live on this phone ends then
  * (JarvisRuntime's Live watcher; docs/LIVE-DESIGN.md): the owner may talk
@@ -3039,6 +3202,15 @@ private const val QUICK_TILES_SECTION = "quick-tiles"
  */
 internal fun appLockWouldLock(nowMs: Long, security: com.jarvis.client.data.Security): Boolean =
     lockSession.wouldLock(nowMs, security)
+
+/** How long the restart notice's tap waits for the link before asking the desktop anyway. */
+private const val RESUME_LINK_WAIT_MS = 8_000L
+
+/** How long after tapping the restart notice listening may still start (App lock in between). */
+private const val RESUME_REQUEST_FRESH_MS = 2 * 60 * 1000L
+
+/** SettingsScreen's key for "Quick Settings tiles" (its SETTINGS_ITEM_INDEX). */
+private const val QUICK_TILES_SECTION = "quick-tiles"
 
 /** How often, while the app stays open, the once-a-day update check is looked at. */
 private const val UPDATE_RECHECK_MS = 60 * 60 * 1000L

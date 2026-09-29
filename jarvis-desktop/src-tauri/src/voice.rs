@@ -746,6 +746,19 @@ pub fn summon_push_to_talk(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// The HUD's chat box: bring up the Jarvis bar with its box ready to type in
+/// (the owner's decision of 2026-09-28, "Chats, after the chat audit": the PC
+/// has ONE chat box - the Jarvis bar, with New conversation, Temporary chat,
+/// "Used in this answer" and the crisis panel - so the HUD's own box opens it
+/// instead of chatting on its own). Sends nothing and records nothing: the
+/// worst a page can do with it is open a window, like the mic button.
+#[tauri::command]
+pub fn hud_open_bar(app: AppHandle) -> Result<(), String> {
+    crate::windows::show_quickbar(&app)?;
+    crate::emit_quickbar(&app, crate::events::FOCUS_INPUT, ());
+    Ok(())
+}
+
 /// The longest mouth track [`face_voice`] passes on, in characters: about
 /// ten minutes of speech at lipsync.js's 100 frames a second, far past any
 /// one sentence. The same limit as face-voice.js's `MAX_TRACK_CHARS`.
@@ -842,15 +855,15 @@ pub fn start_voice_capture(
     if training.recording() {
         return Err(crate::voice_training::MIC_IN_SETTINGS.to_string());
     }
-    // The same for talk-to-type (talk_type.rs), asked before this lock too.
-    if app.state::<crate::talk_type::TalkTypeState>().mic_busy() {
-        return Err(TALK_TYPE_HAS_MIC.to_string());
-    }
     // Jarvis Live has the microphone - even while it is closed for a pause:
     // the talk button does not open a second recorder beside it. The same
     // words as the phone's (the Live audit, fit 3).
     if LIVE_MODE.load(Ordering::SeqCst) {
         return Err(crate::live::BUSY_MIC.to_string());
+    }
+    // The same for talk-to-type (talk_type.rs), asked before this lock too.
+    if app.state::<crate::talk_type::TalkTypeState>().mic_busy() {
+        return Err(TALK_TYPE_HAS_MIC.to_string());
     }
     let mut guard = state.0.lock().map_err(poisoned)?;
     if guard.is_some() {

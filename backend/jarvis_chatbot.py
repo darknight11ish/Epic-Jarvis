@@ -109,9 +109,14 @@ WHAT THIS STEP DOES NOT DO, SAID PLAINLY
     60): they call start()/view()/stop()/change_limits() and add nothing to
     the rules here. view()'s own `routed` stays False; the route answers
     True.
-  * The transcript is kept in memory only, like jarvis_task_control's state:
-    a backend restart loses it. Storing it in the encrypted chat history,
-    tagged as outside text, comes with the routes.
+  * The transcript is kept in memory while the conversation runs, like
+    jarvis_task_control's state. When it ends, it is kept in the encrypted
+    chat history as a conversation of kind "chatbot" (keep_in_history ->
+    jarvis_chat_log.record_chatbot; the owner's decision of 2026-09-28,
+    "Chats with other AIs and comparisons are kept in History"): role
+    "chatbot", marked as outside text, never learned from, never read aloud,
+    read-only in both apps. A conversation inside a comparison is kept with
+    the comparison instead (jarvis_chatbot_compare).
   * No Playwright anywhere in this file: the Gemini adapter
     (jarvis_chatbot_gemini.py) holds all of it. Its "What Jarvis can reach"
     row is jarvis_reach._chatbot; the gate's `_RISK` line is chatbot.patch.
@@ -550,6 +555,11 @@ class Session:
     #: summary of its own - the comparison writes ONE for all of them - and
     #: is never "the latest conversation" in view().
     compare: str = ""
+    #: Whether the finished conversation was kept in chat history, and if
+    #: not why - the PC's own answer (keep_in_history), so both apps say what
+    #: is true instead of promising History (the second chat audit,
+    #: 2026-09-28, phone B4). {} until it ends.
+    history: dict = field(default_factory=dict)
     adapter: Any = field(default=None, repr=False, compare=False)
 
 
@@ -684,6 +694,21 @@ def _default_activity(state: str, detail: str = "") -> None:
         pass
 
 
+def _default_keep_history(cid: str, title: str, rows: list, kind: str) -> dict:
+    """Keep a finished conversation in the encrypted chat history
+    (jarvis_chat_log.record_chatbot). Without it, or with history off,
+    nothing is kept - and nothing else changes. While a test suite runs
+    (backend/_where.py sets JARVIS_SUITE_RUNNING) nothing is kept either, so
+    a suite run on the owner's PC never adds made-up chats to their History."""
+    if os.environ.get("JARVIS_SUITE_RUNNING"):
+        return {"recorded": False, "why": "a test suite is running"}
+    try:
+        import jarvis_chat_log
+        return jarvis_chat_log.record_chatbot(cid, title, rows, kind=kind)
+    except Exception as exc:
+        return {"recorded": False, "why": type(exc).__name__}
+
+
 def _default_audit(event: str, detail: dict) -> None:
     """Ids and counts only - never a word of the goal, a message or a reply."""
     try:
@@ -750,6 +775,8 @@ class Deps:
     #: None: the registry's factory. Tests hand in their own FakeChatbot.
     make_adapter: Optional[Callable[[str], Adapter]] = None
     allow_test_adapters: bool = False
+    #: Where a finished conversation is kept (the encrypted chat history).
+    keep_history: Callable[[str, str, list, str], dict] = _default_keep_history
     #: Lockdown (jarvis_asks_first.lockdown_on): a chatbot that is reached
     #: over the internet is not started, and one already talking stops.
     lockdown_on: Callable[[], bool] = _default_lockdown_on
@@ -1886,11 +1913,72 @@ def _end_now(s: Session, code: str, words: str, d: Deps) -> None:
         else:
             use_model = False
     s.summary = summarise(s, d, use_model=use_model)
+    if not s.compare:
+        s.history = history_answer(keep_in_history(s, d))
     d.audit("ended", {"session": s.id, "code": code, "n": s.turns_used})
     try:
         d.activity("idle", "")
     except Exception:
         pass
+
+
+def history_title(name: str, goal: str) -> str:
+    """History's title for a kept chatbot conversation: "Gemini: <goal>"."""
+    first = (str(goal or "").strip().splitlines() or [""])[0]
+    return f"{name}: {first}" if first else f"Chat with {name}"
+
+
+def history_rows(s: Session, *, name: str = "") -> list:
+    """A conversation's messages for the chat history, oldest first: every
+    message Jarvis sent and every reply (outside text). Only what the apps
+    already showed - nothing new is said."""
+    name = name or _name(s)
+    rows = []
+    for t in s.transcript:
+        if t.get("who") == "chatbot":
+            rows.append({"provenance": "chatbot_reply", "text": f"{name}: {t.get('text') or ''}",
+                         "at": t.get("at")})
+        elif t.get("who") == "jarvis":
+            rows.append({"provenance": "chatbot_jarvis",
+                         "text": f"Jarvis to {name}: {t.get('text') or ''}", "at": t.get("at")})
+    return rows
+
+
+def history_answer(got) -> dict:
+    """What the apps are told about History: {"kept": bool, "why": str} from
+    keep_in_history's answer - a plain sentence when it was not kept."""
+    got = got if isinstance(got, dict) else {}
+    if got.get("recorded") is True:
+        return {"kept": True, "why": ""}
+    why = str(got.get("why") or "").strip() or "the PC did not say why"
+    return {"kept": False, "why": why}
+
+
+def keep_in_history(s: Session, d: Optional[Deps] = None) -> dict:
+    """A finished conversation, kept in the encrypted chat history as kind
+    "chatbot" under its own id - once at least one message was sent. The
+    goal and how it ended are notes; the summary (outside text) is last.
+    Never raises; the answer says whether it was kept."""
+    d = d or DEPS
+    if not any(t.get("who") in ("jarvis", "chatbot") for t in s.transcript):
+        return {"recorded": False, "why": "nothing was said"}
+    name = _name(s)
+    at0 = s.created or s.transcript[0].get("at")
+    rows = [{"provenance": "chatbot_note", "text": f"Your goal for {name}: {s.goal}",
+             "at": at0}]
+    rows += history_rows(s, name=name)
+    end_at = s.transcript[-1].get("at") or at0
+    if s.ended_words:
+        rows.append({"provenance": "chatbot_note", "text": s.ended_words, "at": end_at})
+    answer = s.summary.get("answer") if isinstance(s.summary, dict) else ""
+    if answer:
+        rows.append({"provenance": "chatbot_summary",
+                     "text": f"Summary, written on your PC from {name}'s replies: {answer}",
+                     "at": end_at})
+    try:
+        return d.keep_history(s.id, history_title(name, s.goal), rows, "chatbot") or {}
+    except Exception as exc:
+        return {"recorded": False, "why": type(exc).__name__}
 
 
 def summarise(s: Session, deps: Optional[Deps] = None, *, use_model: bool = True) -> dict:
@@ -2155,7 +2243,8 @@ def session_view(s: Session, *, transcript: bool = True) -> dict:
            "max_minutes": s.limits.max_minutes, "never_send": list(s.limits.never_send),
            "paused": s.paused_why, "ended": s.ended_words, "question": s.question,
            "problem": s.problem, "summary": dict(s.summary) if s.summary else None,
-           "usage": dict(s.usage) if s.usage else None, "read_aloud": False}
+           "usage": dict(s.usage) if s.usage else None, "read_aloud": False,
+           "history": dict(s.history) if s.history else None}
     if s.compare:
         out["compare"] = s.compare
     if transcript:
@@ -2211,5 +2300,12 @@ except ImportError:  # pragma: no cover - shipped beside it on the PC
 # one summary. Loaded here so Stop everything reaches a comparison too.
 try:
     import jarvis_chatbot_compare  # noqa: F401,E402
+except ImportError:  # pragma: no cover - shipped beside it on the PC
+    pass
+# "Chat with customer support for me" (jarvis_support.py): a separate mode,
+# loaded here so Stop everything reaches a support chat too and a support
+# chat and a conversation never run at once.
+try:
+    import jarvis_support  # noqa: F401,E402
 except ImportError:  # pragma: no cover - shipped beside it on the PC
     pass

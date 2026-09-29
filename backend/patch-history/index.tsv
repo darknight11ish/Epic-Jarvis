@@ -8,6 +8,7 @@ approval-expiry.patch	approval-expiry/ba8799f.patch	ba8799f4c6df6486a22a93b38d07
 approval-notice.patch	approval-notice/d2db37e.patch	d2db37e80b413ab3f2e7911b410b644c3c2491cc	2026-09-15T17:29:34+00:00	Approval notifications you can act on, and fix the CRLF that broke all 20 patches
 asks-first.patch	asks-first/0088dd5.patch	0088dd526f1f34b64638a14d5281e8a08f6ddec5	2026-09-26T03:47:42+00:00	Gate notice for schedule_repeat: say that each run reads the owner's own servers
 asks-first.patch	asks-first/b8a2145.patch	b8a214597e0f2a6e71a6256dd3b8e2a3f61ca554	2026-09-26T02:38:37+00:00	Backend: repeats without a card, lights setting, "What asks first"
+auto-learn.patch	auto-learn/f3b3652.patch	f3b36529eb06a32c17a51a62d1993ca02863fd56	2026-09-26T07:10:08+00:00	Memory review, backend half: bugs B1-B15 and B17, improvements measured
 auto-learn.patch	auto-learn/1f2f70f.patch	1f2f70f6654c9f70f2851848f65b3791868a9f7c	2026-09-24T23:00:16+00:00	Say what always waits for a yes: birthdays, phone numbers and email addresses too
 auto-learn.patch	auto-learn/256b52c.patch	256b52c90c6c69159240333b876bf47847fa377b	2026-09-24T22:48:23+00:00	Notes after outside text wait for a yes; passwords, PINs, account and ID numbers always wait
 auto-learn.patch	auto-learn/6ad4a3c.patch	6ad4a3cfab9caeba68578c0f3bc1cb60b80542be	2026-09-24T21:28:10+00:00	Merge the rebuilt sensitive-topic check; "Remember:" no longer waits on the chat thread
@@ -34,6 +35,8 @@ feedback.patch	feedback/d58ce9f.patch	d58ce9f787c39d30721d65ffda9a006827b03afa	2
 feedback.patch	feedback/5d1cfa3.patch	5d1cfa36b3fc94807dae3597d00ffe0d54df5c77	2026-09-23T08:19:29+00:00	Backend: right/wrong mark per answer, helpful/harmful counts, retire card
 focus.patch	focus/3f467d9.patch	3f467d91283363030b92b0399a8f46354fb61406	2026-09-25T23:45:52+00:00	Focus sessions, backend: jarvis_focus.py, focus.patch, the fast-path commands
 forget-range.patch	forget-range/53863a2.patch	53863a253a7034e31809a4ff4e5bec677da8049f	2026-09-28T08:28:43+00:00	Forget a time frame, backend: a checked list, ONE card, 10 minutes to undo
+games-temporary.patch	games-temporary/5c7124b.patch	5c7124b19b248a28fc65797044f0ea352b9ce81f	2026-09-28T20:37:36+00:00	Games stay out of chat history; Live's mark never reaches a model
+games-temporary.patch	games-temporary/6ecb640.patch	6ecb6403b4174da1c363ea7561d4160271467c7f	2026-09-26T10:23:51+00:00	Games and role-play run in a temporary chat automatically
 gate-outcome.patch	gate-outcome/8f672ce.patch	8f672cef4d26b1b88abd13cf156202706c5b0fac	2026-09-27T00:39:10+00:00	Add "One bigger model on both cards": a third, off-by-default second-card mode
 gate-outcome.patch	gate-outcome/256b52c.patch	256b52c90c6c69159240333b876bf47847fa377b	2026-09-24T22:48:23+00:00	Notes after outside text wait for a yes; passwords, PINs, account and ID numbers always wait
 gate-outcome.patch	gate-outcome/e446323.patch	e4463232225ea27bdc9cb9c325692efbdd0bd62c	2026-09-24T19:52:44+00:00	Backend: Jarvis learns automatically, from the owner's own words only (auto-learn.patch)
@@ -75,6 +78,8 @@ second-card.patch	second-card/15a7f27.patch	15a7f27ebe5d5bb6bfad2f7cdd962f0c0aa1
 second-card.patch	second-card/a0f23da.patch	a0f23dad6d3e20eee783f05a77ab4921da96818a	2026-09-24T02:37:56+00:00	Second graphics card: the switches, the second Ollama, and /api/second-card
 skill-notes.patch	skill-notes/2c4f24c.patch	2c4f24cd99c3400a83e45efb2d743e8b0c4bdd0b	2026-09-15T00:20:02+00:00	Three sentences that were not true, and an ungated insight pool
 sky.patch	sky/2295491.patch	229549120176aec4a8b896feb698af7a2874e97e	2026-09-28T10:54:13+00:00	A fourth animal (the monkey), sun and moon and weather behind the animals, and two face fixes
+support-chat.patch	support-chat/d85b573.patch	d85b573f18b1bf34b3b4d966e8e9f8d9dd02db60	2026-09-28T17:46:12+00:00	Customer-support chats, backend: the details card, the support last check, offers, the window
+temporary-chat.patch	temporary-chat/de9a768.patch	de9a768a8035e8512472b988d4579074bc527e3c	2026-09-25T01:29:50+00:00	temporary-chat.patch: re-anchor on chat-history's field list, which now includes "interrupted"
 temporary-chat.patch	temporary-chat/6173f88.patch	6173f881992a70be94ca3e77a5039378a5264e50	2026-09-25T01:17:50+00:00	Temporary chat and "Used in this answer", in both apps and on the PC
 tool-calling-wiring.patch	tool-calling-wiring/a2f0c5b.patch	a2f0c5bc31b7cd68c57c649bfdfd62418fa14f44	2026-09-18T00:52:27+00:00	backend: fix the 6 findings from the tool-calling audit
 tool-calling-wiring.patch	tool-calling-wiring/f736850.patch	f736850c839e98752330182da3bab016aede1013	2026-09-18T00:27:47+00:00	backend: jarvis_agent.py - the model can finally use a tool, local lane only
