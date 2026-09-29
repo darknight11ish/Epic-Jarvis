@@ -277,20 +277,26 @@
 
   /**
    * The settings line under "Your town", the same words in both apps:
-   * "Sun rises 06:41, sets 19:02. Moon: waxing gibbous, 78% lit, rises
+   * "Sun rises 06:41, then sets 19:02. Moon: waxing gibbous, 78% lit, rises
    * 15:20." `fmt` turns milliseconds into the app's own clock time.
    */
   function todayWords(sm, fmt) {
-    const sun = [];
-    if (sm.sunrise !== null) sun.push(`rises ${fmt(sm.sunrise)}`);
-    if (sm.sunset !== null) sun.push(`sets ${fmt(sm.sunset)}`);
-    const first = sun.length ? `Sun ${sun.join(", ")}.`
+    // The next rise and set can fall on different days (at 15:00 the next
+    // sunrise is tomorrow's, the next sunset today's), so they are worded in
+    // the order they happen, with "then" - never as two times of one day.
+    const seq = (rise, set) => {
+      const ev = [];
+      if (rise !== null) ev.push([rise, `rises ${fmt(rise)}`]);
+      if (set !== null) ev.push([set, `sets ${fmt(set)}`]);
+      ev.sort((x, y) => x[0] - y[0]);
+      return ev.map((e) => e[1]).join(", then ");
+    };
+    const sun = seq(sm.sunrise, sm.sunset);
+    const first = sun ? `Sun ${sun}.`
       : sm.sunUp ? "The sun stays up all day." : "The sun stays down all day.";
-    const moon = [];
-    if (sm.moonrise !== null) moon.push(`rises ${fmt(sm.moonrise)}`);
-    if (sm.moonset !== null) moon.push(`sets ${fmt(sm.moonset)}`);
+    const moon = seq(sm.moonrise, sm.moonset);
     return `${first} Moon: ${sm.phaseName.toLowerCase()}, ${sm.percent}% lit`
-      + (moon.length ? `, ${moon.join(", ")}` : "") + ".";
+      + (moon ? `, ${moon}` : "") + ".";
   }
 
   // ---- The scene ---------------------------------------------------------------

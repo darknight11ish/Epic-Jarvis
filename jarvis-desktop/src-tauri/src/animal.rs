@@ -202,11 +202,18 @@ pub async fn migrate_animal_still(app: AppHandle) -> Result<String, String> {
 }
 
 /// Whether this computer's old "on" should still be sent: the PC answered,
-/// its Still is off, and no switch has been changed there yet.
+/// its Still is off, and Still itself has not been chosen there yet (another
+/// switch being changed does not count; an older PC without `still_changed`
+/// is judged by `changed`).
 pub(crate) fn still_move_needed(view: &serde_json::Value) -> bool {
     view.get("available").and_then(|a| a.as_bool()) != Some(false)
         && view["values"]["still"].as_bool() == Some(false)
-        && view.get("changed").and_then(|c| c.as_f64()).unwrap_or(0.0) <= 0.0
+        && view
+            .get("still_changed")
+            .or_else(|| view.get("changed"))
+            .and_then(|c| c.as_f64())
+            .unwrap_or(0.0)
+            <= 0.0
 }
 
 #[cfg(test)]
@@ -249,6 +256,16 @@ mod tests {
             &json!({"values": {"still": false}, "changed": 1759000000.0})
         ));
         assert!(!still_move_needed(&json!({"available": false})));
+    }
+
+    #[test]
+    fn another_switch_changing_does_not_stop_the_old_still() {
+        assert!(still_move_needed(
+            &json!({"values": {"still": false}, "changed": 1759000000.0, "still_changed": 0.0})
+        ));
+        assert!(!still_move_needed(
+            &json!({"values": {"still": false}, "changed": 1759000000.0, "still_changed": 1759000000.0})
+        ));
     }
 
     #[test]

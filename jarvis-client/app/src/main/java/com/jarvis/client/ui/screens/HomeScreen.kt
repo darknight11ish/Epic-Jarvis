@@ -1767,8 +1767,10 @@ private fun HandlePill() {
  * nothing: the face still draws its press ring, and a drag on the face -
  * which consumes the moves - cancels the tap here.
  *
- * [character]: the face is an animal or the robot, which a long press pets
- * (AnimalNow.pressOpensBrain says when a press still opens the Brain).
+ * [character]: the face is an animal or the robot AND is in a state where a
+ * long press pets it (awake and connected; see the caller) - a long press
+ * there is petting, so it does not open the Brain
+ * (AnimalNow.pressOpensBrain says when a press still opens it).
  */
 private fun Modifier.tapThrough(label: String, character: Boolean, onTap: () -> Unit): Modifier = this
     // Merged so TalkBack reads the face's own live description ("Jarvis is
@@ -1866,7 +1868,13 @@ private fun FaceBlock(
                             if (opensMind) {
                                 Modifier.tapThrough(
                                     label = "Open the Brain",
-                                    character = state.face is CritterFace,
+                                    // A long press pets only where the pose lets it:
+                                    // awake and connected. During an approval, an error,
+                                    // standby or offline the animal ignores petting, so
+                                    // the press must still open the Brain.
+                                    character = state.face is CritterFace &&
+                                        !state.faceOffline &&
+                                        com.jarvis.client.face.CritterPose.awake(state.faceState),
                                     onTap = actions.onOpenBrain,
                                 )
                             } else {

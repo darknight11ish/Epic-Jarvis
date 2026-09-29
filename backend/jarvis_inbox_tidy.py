@@ -570,6 +570,9 @@ def plan(action, *, sender="", subject="", words="", newsletters=False, since_da
                        "(There is no permanent delete: \"delete\" means trash.)")
     if st.problem:
         return refused(f"tidying the inbox is not set up on this PC: {st.problem}")
+    full = _undo_full_words(now_ts)
+    if full:
+        return refused(full)
     s_word, why = _plain_word(sender, "the sender")
     if why:
         return refused(why)
@@ -952,6 +955,22 @@ def _expire(now: float) -> None:
         _audit("email.tidy.kept", {})
 
 
+def _undo_full_words(now: float) -> str:
+    """Empty when there is room for one more tidy; else the plain sentence saying
+    why not. Up to MAX_UNDO tidies wait for Undo at once, and a sixth used to push
+    the oldest out without a word, so the owner lost an Undo they had been told
+    they had for 10 minutes (bug audit 2026-09-29; the owner chose to refuse the
+    new tidy instead)."""
+    _expire(now)
+    with _LOCK:
+        full = len(_STATE["undo"]) >= MAX_UNDO
+    if not full:
+        return ""
+    return (f"{MAX_UNDO} earlier tidies can still be undone, and Jarvis keeps at most "
+            f"{MAX_UNDO} so none is lost without a word. Wait for one to run out (each "
+            f"lasts {UNDO_SECONDS // 60} minutes) or undo one first")
+
+
 def _undo_view(u: dict, now: float, more: int) -> dict:
     left = max(0, int(u["until"] - now))
     n = len(u["items"])
@@ -1048,6 +1067,9 @@ def run(p: Plan, *, approved: bool = False, connect: Optional[Callable] = None,
                 "error": "nothing was changed: the account or the mail server settings "
                          "changed after the card was shown, so this is not what was "
                          "approved."}
+    full = _undo_full_words(_now() if now is None else now)
+    if full:
+        return {"ok": False, "done": 0, "error": f"nothing was changed: {full}."}
     timer = timer or _timer
     done: list = []
     skipped = 0
