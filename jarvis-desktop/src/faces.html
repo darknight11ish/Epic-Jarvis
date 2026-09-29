@@ -5063,31 +5063,99 @@ function drawStateOverlay(g, w, h, s, fx, col){
   }
 }
 
-/* JARVIS ISN'T CONNECTED. When the window cannot reach Jarvis, it shows the
- * standby state (jarvis-link.js faceSignal) with this hollow ring round it -
- * the same "nothing is coming through" shape the tray icon uses, one look for
- * every face. Static on purpose: no pulse, no fade in and out, nothing that
- * could read as a flash. Drawn outside the face's own transforms, so the
- * shake and the tap flinch never move it.
+/* THE TWO STILL RINGS ROUND A FACE: "Jarvis isn't connected" and "something
+ * went wrong". Both are drawn by the app OVER the face (not in the shader),
+ * outside its own transforms, so the shake and the tap flinch never move
+ * them; both are STATIC on purpose - no pulse, no fade, nothing that could
+ * read as a flash - so both are fine under Still, calm motion and a serious
+ * moment. Geometry and colour are shared with the phone (FaceView.kt
+ * drawOfflineRing / drawErrorRing, and face/FaceRings.kt, which the golden
+ * fixture tests/fixtures/ring-cases.json holds to the same colours).
  *
- * Geometry and colour, shared with the phone (FaceView.kt drawOfflineRing):
- * a full circle at 1.03 x the overlay radius (0.44 x the short side, so
- * 0.4532 of it - just outside the approval clock's 0.95 and the notches'
- * 0.93), a stroke of max(1.5 px, 0.008 x the short side), fully opaque, in
- * the colour bound to the state shown (standby's neutral grey unless the
- * owner bound another - boundTint), dimmed toward the ground by that state's
- * own `dim`. A FIXED colour: it used to be the pattern's second colour of
- * the moment at 60% opacity, which breathed with standby's pattern (so the
- * "static" ring pulsed) and measured about 1.1:1 against the ground - next
- * to invisible. This one is about 1.6:1: quiet, but there. */
-function drawOfflineRing(g, w, h, s, state){
+ * They are told apart by SHAPE, not colour alone (a colour-blind owner, or
+ * two colours the owner bound alike, must still tell them apart):
+ *   - not connected: a COMPLETE circle, the heavier of the two -
+ *     max(2.5 px, 0.012 x the short side) - in the standby state's colour;
+ *   - error: a THIN arc, max(1.5 px, 0.006 x the short side), with a GAP of
+ *     70 degrees centred at the BOTTOM (six o'clock), in the error colour.
+ * Neither is the waiting-on-you clock, which is drawn INSIDE them (0.95 x the
+ * overlay radius against their 1.03), starts at twelve o'clock, sweeps, and
+ * when it has closed is a complete circle in the approval colour with a faint
+ * track - and a face never shows that clock while it is not connected.
+ * Both are at 1.03 x the overlay radius (0.44 x the short side, so 0.4532 of
+ * it - just outside the clock's 0.95 and the notches' 0.93).
+ *
+ * Their colour is the colour bound to the state shown (boundTint), FIXED -
+ * never the pattern's colour of the moment - and made READABLE against the
+ * ground it sits on: ringTone() leaves it alone when it already measures
+ * 3.2..5.5 : 1 (WCAG) and otherwise moves it toward white or black, or back
+ * toward the ground, until it measures about 4 : 1 / 5 : 1. The not-connected
+ * ring was dimmed by standby's 0.6 and measured 1.65 : 1 - 'cannot hear me'
+ * and 'asleep' looked alike from across a room; it is now about 4 : 1. */
+const RING_TONE = { lo: 3.2, hi: 5.5, boost: 4.0, temper: 5.0 };
+function ringLum(c){
+  const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+}
+function ringContrast(a, b){
+  const la = ringLum(a), lb = ringLum(b);
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+/** [r,g,b] (0..255 whole numbers) for the ring colour `c` on the ground `bg`. */
+function ringTone(c, bg){
+  const k = ringContrast(c, bg);
+  const mixTo = (from, to, t) => from.map((v, i) => Math.round(v + (to[i] - v) * t));
+  if(k >= RING_TONE.lo && k <= RING_TONE.hi) return c.slice();
+  if(k > RING_TONE.hi){
+    // Too loud: back toward the ground, from the colour itself.
+    for(let i = 512; i >= 0; i--){
+      const m = mixTo(bg, c, i / 512);
+      if(ringContrast(m, bg) <= RING_TONE.temper) return m;
+    }
+    return c.slice();
+  }
+  // Too faint: toward whichever of white and black stands out more.
+  const far = ringLum(bg) > 0.179 ? [0, 0, 0] : [255, 255, 255];
+  for(let i = 0; i <= 512; i++){
+    const m = mixTo(c, far, i / 512);
+    if(ringContrast(m, bg) >= RING_TONE.boost) return m;
+  }
+  return far;
+}
+function ringCss(state, ground){
+  const [r, g, b] = ringTone(parseCol(boundTint(state)), parseCol(ground || BG));
+  return `rgb(${r},${g},${b})`;
+}
+
+/* JARVIS ISN'T CONNECTED. When the window cannot reach Jarvis, it shows the
+ * standby state (jarvis-link.js faceSignal) with a hollow ring round it - the
+ * same "nothing is coming through" shape the tray icon uses, one look for
+ * every face. See THE TWO STILL RINGS above for the shape and colour. */
+function drawOfflineRing(g, w, h, s, state, ground){
   if(!s.offline) return;
   const side = Math.min(w, h);
-  const fx = STATE_FX[state];
   g.save();
-  g.strokeStyle = mix(BG, boundTint(state), fx && fx.dim < 1 ? fx.dim : 1);
-  g.lineWidth = Math.max(1.5, side * 0.008);
+  g.strokeStyle = ringCss(state, ground);
+  g.lineWidth = Math.max(2.5, side * 0.012);
   g.beginPath(); g.arc(w / 2, h / 2, side * 0.44 * 1.03, 0, TAU); g.stroke();
+  g.restore();
+}
+
+/* SOMETHING WENT WRONG. On every character face (the four animals and the
+ * robot) an error also draws this: a thin still ring with a gap at the
+ * bottom, in the error colour (owner, 2026-09-29). It is the one thing that
+ * says "error" with no colour and no motion at all - the animals hold a
+ * still, concerned look, and the shake is not for them. */
+const ERROR_RING_GAP = 70 * Math.PI / 180;
+function drawErrorRing(g, w, h, s, state, ground){
+  if(state !== "error" || s.offline || !s.theme || s.theme.family !== "critter") return;
+  const side = Math.min(w, h);
+  const half = ERROR_RING_GAP / 2, down = Math.PI / 2;   // canvas angles grow clockwise: pi/2 is six o'clock
+  g.save();
+  g.strokeStyle = ringCss("error", ground);
+  g.lineWidth = Math.max(1.5, side * 0.006);
+  g.lineCap = "butt";
+  g.beginPath(); g.arc(w / 2, h / 2, side * 0.44 * 1.03, down + half, down - half + TAU); g.stroke();
   g.restore();
 }
 
@@ -5322,6 +5390,7 @@ function drawSurface(s, dt, state){
   if(glowNow && glowOnTop) drawGlow(g, w, h, colO.a, glowStrength * 0.55);
   drawStateOverlay(g, w, h, s, fx, colO);
   drawOfflineRing(g, w, h, s, state);
+  drawErrorRing(g, w, h, s, state);
   drawAck(g, w, h, s, colO, dt);
   SPEED = 1;
   if(GPUOK){

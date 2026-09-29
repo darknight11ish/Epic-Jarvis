@@ -1830,6 +1830,58 @@ mod tests {
         }
     }
 
+    /// The "not connected" icon is the hollow ring (`filled == false`), and
+    /// its edge must stand out on both taskbars too (owner, 2026-09-29: the
+    /// faces' not-connected ring was 1.65:1 against the ground and was raised
+    /// to about 4:1; the tray icon did not need it, and this is the proof).
+    /// The ring is the thick body of the icon, and the two-tone outline round
+    /// it (dark outside, light just inside) has contrast against whichever
+    /// taskbar it sits on, whatever the fill colour - standby's grey at
+    /// its dimmest included.
+    #[test]
+    fn the_hollow_not_connected_icon_has_an_edge_against_both_taskbars() {
+        const WHITE: Rgb = Rgb {
+            r: 243,
+            g: 243,
+            b: 243,
+        };
+        const BLACK: Rgb = Rgb {
+            r: 32,
+            g: 32,
+            b: 32,
+        };
+        let standby = shade(
+            Rgb {
+                r: 107,
+                g: 125,
+                b: 148,
+            },
+            0.6,
+        );
+        let buf = draw_pixels(standby, standby, false, None);
+        // The middle of the icon is EMPTY (hollow), not a disc.
+        let mid = ((ICON_SIZE / 2) * ICON_SIZE + ICON_SIZE / 2) as usize * 4;
+        assert_eq!(
+            buf[mid + 3],
+            0,
+            "the middle of the not-connected icon is filled"
+        );
+        for (bg, label) in [(WHITE, "a light taskbar"), (BLACK, "a dark one")] {
+            let mut best = 1.0f64;
+            for i in (0..buf.len()).step_by(4) {
+                let px = &buf[i..i + 4];
+                if px[3] == 0 {
+                    continue;
+                }
+                best = best.max(ratio(over(px, bg), bg));
+            }
+            assert!(
+                best >= 3.0,
+                "the hollow icon on {label}: the strongest edge measures {best:.2}:1, under 3:1"
+            );
+        }
+    }
+
     /// The notch ring is the count. It must not be swallowed by the outline it
     /// now overlaps — notches sit at 0.86-0.99 of the radius, the outline at
     /// 0.89-1.0 of it.

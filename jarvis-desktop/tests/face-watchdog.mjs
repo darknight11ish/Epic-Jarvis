@@ -464,6 +464,137 @@ await check("faceSignal and surfaceState: the rules in one place", async () => {
   assert.equal(L.surfaceState(live), "approval");
 });
 
+/* ── The two still rings: not connected, and error (owner, 2026-09-29) ───── */
+
+const RING_FIXTURE = JSON.parse(read("tests/fixtures/ring-cases.json"));
+const GROUND = [4, 7, 12];   // faces.html BG, #04070c
+
+/** Pixels of a face's surface, read at 3, 6, 9 and 12 o'clock (and the gap's edges)
+ *  of the ring radius. The face itself draws nothing, so only the rings are seen. */
+const RING_PROBE = ([SRC, id, state, offline, size]) => {
+  const s = (0, eval)(SRC)(id, true);
+  const cv = s.ctx.canvas;
+  cv.style.width = size + "px"; cv.style.height = size + "px";
+  sizeSurface(s);
+  s.offline = offline;
+  for (let i = 0; i < 6; i++) drawSurface(s, 1 / 30, state);
+  const w = s.w, h = s.h, side = Math.min(w, h), R = side * 0.44 * 1.03;
+  const px = (deg, r) => {
+    const a = deg * Math.PI / 180;
+    const d = s.ctx.getImageData(Math.round(w / 2 + Math.cos(a) * r), Math.round(h / 2 + Math.sin(a) * r), 1, 1).data;
+    return [d[0], d[1], d[2]];
+  };
+  // How many pixels across the ring is, along the 3 o'clock row.
+  let thick = 0;
+  for (let dx = -8; dx <= 8; dx++) {
+    const d = s.ctx.getImageData(Math.round(w / 2 + R) + dx, Math.round(h / 2), 1, 1).data;
+    if (Math.abs(d[0] - 4) + Math.abs(d[1] - 7) + Math.abs(d[2] - 12) > 40) thick++;
+  }
+  // Around the whole ring: which of 72 five-degree steps are lit.
+  const lit = [];
+  for (let k = 0; k < 72; k++) {
+    const c = px(k * 5, R);
+    lit.push(Math.abs(c[0] - 4) + Math.abs(c[1] - 7) + Math.abs(c[2] - 12) > 40 ? 1 : 0);
+  }
+  return { right: px(0, R), bottom: px(90, R), left: px(180, R), top: px(270, R),
+           bottomLeft: px(90 + 45, R), bottomRight: px(90 - 45, R), thick, lit, w };
+};
+const contrastOf = (rgb) => {
+  const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const L = (c) => 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+  const a = L(rgb), b = L(GROUND);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+};
+
+await check("the ring colours match the golden fixture both apps are held to, and stay 3.2:1 or more", async () => {
+  const page = await editor();
+  const got = await page.evaluate((cases) => cases.map((c) => ({ tone: ringTone(c.c, c.bg), k: ringContrast(ringTone(c.c, c.bg), c.bg) })),
+    RING_FIXTURE.cases);
+  await page.close();
+  RING_FIXTURE.cases.forEach((c, i) => {
+    assert.deepEqual(got[i].tone, c.tone, `${c.colour} on ${c.ground}`);
+    assert.ok(got[i].k >= 3.2 && got[i].k <= 5.6, `${c.colour} on ${c.ground} measures ${got[i].k.toFixed(2)}:1`);
+  });
+  assert.ok(RING_FIXTURE.cases.length >= 50);
+});
+
+await check("the not-connected ring is a complete circle that stands out from the ground (3:1 or more, it was 1.65:1)", async () => {
+  const page = await editor();
+  const got = await page.evaluate(RING_PROBE, [SURFACE.toString(), "redpanda", "standby", true, 300]);
+  await page.close();
+  for (const at of ["right", "bottom", "left", "top", "bottomLeft", "bottomRight"]) {
+    const k = contrastOf(got[at]);
+    assert.ok(k >= 3, `the ring at ${at} measures ${k.toFixed(2)}:1 against the ground (${got[at]})`);
+  }
+  assert.ok(got.lit.every((v) => v === 1), "the not-connected ring has a gap: " + got.lit.join(""));
+});
+
+await check("the error ring: a thin arc with a gap at the bottom, on every character face, and on nothing else", async () => {
+  const page = await editor();
+  const per = {};
+  for (const id of ["redpanda", "pygmyowl", "seaotter", "monkey", "robot"]) {
+    per[id] = await page.evaluate(RING_PROBE, [SURFACE.toString(), id, "error", false, 300]);
+  }
+  const notCharacter = await page.evaluate(RING_PROBE, [SURFACE.toString(), "arc", "error", false, 300]);
+  const idle = await page.evaluate(RING_PROBE, [SURFACE.toString(), "redpanda", "idle", false, 300]);
+  const waiting = await page.evaluate(RING_PROBE, [SURFACE.toString(), "redpanda", "approval", false, 300]);
+  const offline = await page.evaluate(RING_PROBE, [SURFACE.toString(), "redpanda", "standby", true, 300]);
+  await page.close();
+  for (const [id, r] of Object.entries(per)) {
+    for (const at of ["right", "left", "top", "bottomLeft", "bottomRight"]) {
+      assert.ok(contrastOf(r[at]) >= 3, `${id}: the error ring at ${at} measures ${contrastOf(r[at]).toFixed(2)}:1`);
+    }
+    // The gap is at the bottom: the ground shows at six o'clock...
+    assert.ok(contrastOf(r.bottom) < 1.3, `${id}: no gap at the bottom (${r.bottom})`);
+    // ...and it is 70 degrees wide (14 of the 72 five-degree steps, centred on step 18), not more, not less.
+    const dark = r.lit.map((v, i) => (v ? -1 : i)).filter((i) => i >= 0);
+    assert.ok(dark.length >= 12 && dark.length <= 16, `${id}: the gap is ${dark.length * 5} degrees wide`);
+    assert.ok(dark.every((i) => i >= 10 && i <= 26), `${id}: the gap is not at the bottom: ${dark}`);
+    // The colour is the error colour (rose), not the standby grey.
+    assert.ok(r.right[0] > r.right[2] + 30, `${id}: the error ring is not rose: ${r.right}`);
+  }
+  // Thin: clearly thinner than the not-connected ring, which is the heavy one.
+  assert.ok(per.redpanda.thick <= offline.thick - 1, `error ${per.redpanda.thick}px vs not-connected ${offline.thick}px`);
+  assert.ok(offline.thick >= 3, `the not-connected ring is ${offline.thick}px at 300`);
+  // Not a character face, not another state, not while not connected: no error ring.
+  assert.ok(notCharacter.lit.every((v) => v === 0), "the Arc face got an error ring");
+  assert.ok(idle.lit.every((v) => v === 0), "an idle face has a ring");
+  assert.ok(waiting.lit.slice(0, 72).filter((v) => v).length < 30, "the waiting clock was mistaken for a ring");
+  assert.ok(offline.lit.every((v) => v === 1), "the offline ring lost its closed shape");
+});
+
+await check("the error ring does not move: the same pixels a second later, and under Still", async () => {
+  const page = await editor();
+  const a = await page.evaluate(RING_PROBE, [SURFACE.toString(), "monkey", "error", false, 200]);
+  const b = await page.evaluate(([SRC, size]) => {
+    const s = (0, eval)(SRC)("monkey", true);
+    s.ctx.canvas.style.width = size + "px"; s.ctx.canvas.style.height = size + "px";
+    sizeSurface(s);
+    for (let i = 0; i < 90; i++) drawSurface(s, 1 / 30, "error");
+    const w = s.w, h = s.h, R = Math.min(w, h) * 0.44 * 1.03;
+    const first = [];
+    for (let k = 0; k < 72; k++) {
+      const an = k * 5 * Math.PI / 180;
+      first.push(Array.from(s.ctx.getImageData(Math.round(w / 2 + Math.cos(an) * R), Math.round(h / 2 + Math.sin(an) * R), 1, 1).data));
+    }
+    for (let i = 0; i < 90; i++) drawSurface(s, 1 / 30, "error");
+    let same = 0;
+    for (let k = 0; k < 72; k++) {
+      const an = k * 5 * Math.PI / 180;
+      const d = Array.from(s.ctx.getImageData(Math.round(w / 2 + Math.cos(an) * R), Math.round(h / 2 + Math.sin(an) * R), 1, 1).data);
+      if (d.join() === first[k].join()) same++;
+    }
+    return same;
+  }, [SURFACE.toString(), 200]);
+  await page.close();
+  assert.ok(a.lit.some((v) => v === 1));
+  assert.equal(b, 72, "the error ring changed between two moments: it pulses or moves");
+  // Static by construction: the source draws it with no clock and no alpha.
+  const src = read("src/faces.html");
+  const fn = src.slice(src.indexOf("function drawErrorRing("), src.indexOf("function drawSurface("));
+  assert.doesNotMatch(fn, /s\.clock|fxAge|performance\.now|globalAlpha|Math\.sin/, "the error ring reads a clock or fades");
+});
+
 /* ── A focus session is not a sleeping animal (owner, 2026-09-29) ────────── */
 
 await check("a focus session's Quiet shows the focus buddy (idle); a hand-set Quiet, or any standby, stays asleep", async () => {
