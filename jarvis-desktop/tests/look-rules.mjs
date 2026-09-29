@@ -171,7 +171,9 @@ await check("Look at this looks BEFORE the bar comes up, and is held on a stale 
 await check("stopping is never held; starting is; only this PC is looked at", () => {
   const run = lookRs.slice(lookRs.indexOf("pub(crate) async fn run_watch("), lookRs.indexOf("/// The Never look at list, for Settings"));
   assert.match(run, /"start" => \{[\s\S]*?is_loopback_base[\s\S]*?held\(app\)/);
-  assert.match(run, /"extend" => \{[\s\S]*?stale\(app\)/);
+  // "extend" is held on a stale link: either `"extend" => { if stale(app) ...` or the
+  // collapsed match guard `"extend" if stale(app) => ...` (clippy asks for the latter).
+  assert.match(run, /"extend"\s+if\s+stale\(app\)\s*=>|"extend"\s*=>\s*\{[\s\S]*?stale\(app\)/);
   // "stop" and "drop" fall through to the `_ => {}` arm: nothing holds them.
   assert.match(run, /_ => \{\}/);
   assert.ok(!/"stop"\s*=>/.test(run) && !/"drop"\s*=>/.test(run), "stop or drop has a hold");
