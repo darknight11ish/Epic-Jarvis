@@ -414,6 +414,31 @@ def t_each_action_does_exactly_what_the_card_said():
         check(f"{label}: no server complaint about how it was done", s.bugs == [], s.bugs)
 
 
+def t_a_sixth_tidy_is_refused_instead_of_dropping_an_undo():
+    """Bug audit 2026-09-29: up to MAX_UNDO (5) tidies wait for Undo, and a sixth
+    used to push the oldest out without a word. The owner chose: refuse the new
+    tidy, before any card, and say why."""
+    fresh()
+    s = mailbox()
+    early = plan(s, "archive", sender="shop")   # a card made while there was room
+    check("with room, a plan is ready", early.ready, early.problem)
+    T._STATE["undo"] = [{"token": f"t{i}", "until": NOW + 600, "action": "archive",
+                         "items": [], "mailbox": "INBOX", "uidvalidity": 1}
+                        for i in range(T.MAX_UNDO)]
+    p = plan(s, "archive", sender="shop")
+    check("five Undos waiting: a new plan is refused before any card",
+          not p.ready and "5 earlier tidies can still be undone" in p.problem, p.problem)
+    check("... and the words say what to do (wait, or undo one)",
+          "Wait for one to run out" in p.problem and "undo one first" in p.problem, p.problem)
+    out = run(s, early)
+    check("a card made earlier cannot run either, and nothing changed",
+          out["ok"] is False and out["done"] == 0 and "nothing was changed" in out["error"]
+          and not s.cmds("UID COPY") and not s.cmds("UID MOVE"), out)
+    check("none of the five Undos was dropped", len(T._STATE["undo"]) == T.MAX_UNDO)
+    later = plan(s, "archive", sender="shop", now=NOW + 601)
+    check("once they have run out (10 minutes), tidying works again", later.ready, later.problem)
+
+
 def t_a_server_that_refuses_a_flag_change_is_not_reported_as_done():
     """Bug audit 2026-09-29: imaplib raises only on BAD, so a NO to STORE (a
     read-only folder, a permission refusal) came back as a plain answer that
@@ -1314,6 +1339,7 @@ if __name__ == "__main__":
                    t_the_words_become_a_search, t_what_it_refuses_to_look_for,
                    t_too_many_to_show_whole, t_what_is_written_on_the_card_is_safe,
                    t_each_action_does_exactly_what_the_card_said,
+                   t_a_sixth_tidy_is_refused_instead_of_dropping_an_undo,
                    t_a_server_that_refuses_a_flag_change_is_not_reported_as_done,
                    t_a_server_that_answers_flags_after_the_header_is_read_right,
                    t_there_is_no_way_to_a_permanent_delete,
