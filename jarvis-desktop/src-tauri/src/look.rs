@@ -217,7 +217,7 @@ pub(crate) fn look_line(out: &serde_json::Value) -> String {
     said("said").unwrap_or(NO_LOOK).to_string()
 }
 
-async fn get(app: &AppHandle, path: &str) -> Result<serde_json::Value, String> {
+pub(crate) async fn get(app: &AppHandle, path: &str) -> Result<serde_json::Value, String> {
     let base = commands::jarvis_base(app);
     let response = commands::jarvis_client(Some(READ_TIMEOUT))?
         .get(format!("{base}{path}"))
@@ -230,7 +230,7 @@ async fn get(app: &AppHandle, path: &str) -> Result<serde_json::Value, String> {
     answer(status, &text)
 }
 
-async fn post(
+pub(crate) async fn post(
     app: &AppHandle,
     path: &str,
     body: serde_json::Value,
@@ -249,7 +249,7 @@ async fn post(
     answer(status, &text)
 }
 
-fn stale(app: &AppHandle) -> bool {
+pub(crate) fn stale(app: &AppHandle) -> bool {
     app.state::<crate::stream::StreamState>().link().stale
 }
 

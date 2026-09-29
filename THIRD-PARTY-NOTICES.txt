@@ -306,6 +306,30 @@ MiniCPM-V 4.6 (OpenBMB, https://github.com/OpenBMB/MiniCPM-V,
   copy of itself that only this PC can reach. Anything that looks like a key,
   a card number or a password is blacked out of a picture before it reaches it.
 
+THE HEADLESS BROWSER (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+Obscura (h4ckf0r0day), Apache-2.0 - https://github.com/h4ckf0r0day/obscura
+  A headless browser (no window) written in Rust. Used by
+  backend/jarvis_obscura.py and jarvis_browser_engine.py as the second browser
+  Jarvis may choose, for plain web reading, when the owner turns on "Headless
+  browser (Obscura)" in Settings. It is NOT distributed with Jarvis and none of
+  its code is copied or linked: the owner downloads its Windows release
+  archive themselves with one pasted PowerShell line (from Obscura's own
+  GitHub releases), and Jarvis starts it as a separate program on the PC and
+  talks to it over standard input and output. Its source, read on 2026-09-29
+  (a copy of the repository as of 2026-09-27), was only READ, to see which
+  tools its `obscura mcp` server offers, that its `--stealth` flag needs a
+  "-stealth" release archive, and that it refuses private addresses unless
+  told not to; nothing from it was run where this was written. Its LICENSE
+  file is the unmodified Apache License, Version 2.0 (the "Copyright [yyyy]
+  [name of copyright owner]" line at its end is not filled in) and the
+  repository carries no NOTICE file. The full Apache-2.0 text is given below,
+  under LICENCE TEXTS. Its stealth mode ("--stealth") makes it present an
+  ordinary Chrome's TLS fingerprint and browser profile; the owner chose that
+  on 2026-09-29, knowing a site may still block it and that signing in to an
+  account with any automated browser can get the account closed - which is why
+  Jarvis never signs in with it and never solves a captcha.
+
 WEB SEARCH (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 ddgs (deedy5), MIT - https://github.com/deedy5/ddgs

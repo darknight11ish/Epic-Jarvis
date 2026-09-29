@@ -6,6 +6,30 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **A second browser with no window: the headless browser, Obscura (2026-09-29,
+  both apps).** Jarvis's browser tool used to open only a browser window you
+  can watch. It can now also choose **Obscura**, a small open-source browser with
+  no window, for plain reading and quick lookups - per task: the visible window
+  whenever you might need to sign in, pay or take over, the headless browser
+  for simple reading (Settings, "Headless browser", picks which Jarvis prefers:
+  Automatic, Always visible, or Headless). **Stealth is on for everything it
+  runs** (your decision): it looks like an ordinary Chrome. That does **not**
+  solve captchas, a site can still block or ban it, and signing in to a real
+  account with any automated browser can get the account closed - so Jarvis
+  never signs in with it, never types a password, and at a captcha or a sign-in
+  page it stops and tells you to ask again with the visible browser. **Off to
+  start; turning it on is one approval card**; off is instant. Every page it
+  opens and every click and box it fills is still listed on the same approval
+  card as the visible browser's, and what it reads counts as outside text. It
+  cannot reach your own network, uses no proxy, keeps no cookies, saves no files
+  and opens no network port. You install it with **one PowerShell line** shown in
+  Settings (Jarvis never downloads it itself); its checksum is remembered and a
+  different file is refused. **A real Obscura has not been run yet** (nothing here
+  could run a Windows program): `py -3 tools\check_obscura.py` is the real check.
+  The chatbot driver and the support chats still use the visible browser, because
+  they must hand a captcha to you in a window. Needs the new backend files
+  (apply-patches.ps1 copies them) and the new desktop and phone builds.
+
 - **Secrets in pictures you attach to a chat are covered with black too
   (2026-09-29, both apps).** Until now only "Look at this" and "Watch with me"
   had anything that looks like a key, password, card number, IBAN, crypto

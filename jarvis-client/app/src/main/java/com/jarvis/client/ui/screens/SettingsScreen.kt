@@ -90,8 +90,9 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "watch-notify" to 11,
     "phone-notify" to 12,
     "screen-look" to 13,
-    "devices" to 14,
-    "quick-tiles" to 15,
+    "browser-engine" to 14,
+    "devices" to 15,
+    "quick-tiles" to 16,
 )
 
 /**
@@ -314,6 +315,10 @@ fun SettingsScreen(
             // Picture mode for "Look at this" and "Watch with me" (the owner's
             // decision of 2026-09-29): a slow picture model on the PC's processor.
             item(key = "screen-look") { ScreenPictureSection(canAct = canAct) }
+
+            // The headless browser, Obscura (the owner's decision of 2026-09-29):
+            // Jarvis may choose a browser with no window for plain reading.
+            item(key = "browser-engine") { BrowserEngineSection(canAct = canAct) }
 
             // Every device with its own key (docs/PAIRING-DESIGN.md section 7.2),
             // shown only when the PC reports pairing (section 5.5).

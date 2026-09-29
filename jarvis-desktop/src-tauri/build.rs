@@ -592,6 +592,10 @@ fn main() {
             // Picture mode's switch (look.rs): read it, turn it on (ONE card
             // on the PC) or off. Settings only.
             "screen_picture",
+            // The headless browser's switch and default browser (browser_engine.rs):
+            // read it, turn it on (ONE card on the PC) or off, pick the default.
+            // Settings only.
+            "browser_engine",
             // Interrupting by talking and "One moment." (voice_flow.rs):
             // ask for one utterance to be checked, read the status's `flow`
             // block, fetch the clip. Quickbar only; none records anything.

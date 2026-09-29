@@ -21,6 +21,7 @@
     "faces-open",
     "screen-never-look",
     "screen-picture",
+    "browser-engine",
     "core:webview:allow-set-webview-zoom"
   ]
 }

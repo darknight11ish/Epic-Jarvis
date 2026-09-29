@@ -69,6 +69,7 @@ choice function, picked because each already has a proven `handle_*`/
   * smartwatch_notifications - jarvis_watch_notify.request()
   * phone_notifications   - jarvis_phone_notifications.request() (2026-09-28)
   * screen_picture        - jarvis_screen_picture.request() (2026-09-29): ON is one card
+  * headless_browser      - jarvis_browser_engine.request() (2026-09-29): ON is one card
   * briefing_senders      - jarvis_briefing.handle_senders()
   * loosen_asks_first     - jarvis_asks_first.handle_tier()   (PC_ONLY_ACTIONS)
   * enable_reading_tool   - jarvis_asks_first.handle_tools()  (PC_ONLY_ACTIONS)
@@ -192,6 +193,11 @@ SECTIONS: tuple = (
     # its own Settings row for picture mode).
     Section("screen-look", ("look at this and watch with me", "looking at my screen",
                             "watch with me settings", "the screen settings")),
+    # The headless browser, Obscura (2026-09-29): its own card on the desktop
+    # and its own Settings row on the phone - the switch, which browser Jarvis
+    # uses, and the install line.
+    Section("browser-engine", ("headless browser settings", "which browser jarvis uses",
+                               "browser settings", "the browser settings")),
 )
 
 #: id -> Section, for a direct lookup once a name has matched.
@@ -332,6 +338,17 @@ def set_screen_picture(on: bool, *, peer=None, local=None) -> Outcome:
     except Exception:
         return _missing("picture mode for the screen")
     code, out = SP.request(bool(on), SP.set_enabled)
+    return _say(code, out)
+
+
+# --- the headless browser, Obscura (jarvis_browser_engine.py) --------------
+
+def set_browser_engine(on: bool, *, peer=None, local=None) -> Outcome:
+    try:
+        import jarvis_browser_engine as BE
+    except Exception:
+        return _missing("the headless browser")
+    code, out = BE.request(bool(on), BE.set_obscura)
     return _say(code, out)
 
 
@@ -506,6 +523,10 @@ BOOL_SETTINGS: tuple = (
                ("picture mode", "picture mode for my screen", "reading pictures of my screen",
                 "looking at pictures of my screen"),
                "screen-look", set_screen_picture),
+    BoolSetting("headless_browser",
+               ("the headless browser", "headless browser", "obscura", "the obscura browser",
+                "the browser with no window"),
+               "browser-engine", set_browser_engine),
     BoolSetting("briefing_senders",
                ("senders in my briefing", "showing senders in my briefing",
                 "email senders in the morning briefing"),

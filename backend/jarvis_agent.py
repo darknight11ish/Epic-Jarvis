@@ -419,20 +419,48 @@ def _run_control_phone(args: dict, plan_obj, *, announce=None, checkpoint=None) 
                  approved=True)
 
 
+class _NoBrowser:
+    """A browser plan that says why nothing can be done (the chosen engine cannot
+    run): `problem` is in plain words and _one_call tells the model, with no card."""
+
+    def __init__(self, problem: str) -> None:
+        self.problem = problem
+
+
 def _prepare_browser_control(args: dict):
     try:
         import jarvis_browser_control as B
     except Exception as exc:
         return None, f"Control a browser tab: {json.dumps(args, ensure_ascii=False)} " \
                       f"(unavailable: {exc})"
-    p = B.plan(str(args.get("goal", "")), str(args.get("session", "")),
-               args.get("requests") or [], allowed_domains=args.get("allowed_domains"))
+    # Which browser: the visible one (the default before 2026-09-29) or the
+    # headless one (Obscura, jarvis_browser_engine.py). The choice is a plain
+    # rule in code and is named on the first line of the card; it never changes
+    # who is asked (the same plan card, step by step, either way).
+    engine, why = "visible", ""
+    try:
+        import jarvis_browser_engine as E
+        pick = E.choose(args.get("mode"), goal=str(args.get("goal", "")),
+                        requests=args.get("requests") or [])
+        if pick["refused"]:
+            return _NoBrowser(pick["refused"]), "Control a browser tab: " + pick["refused"]
+        engine, why = pick["engine"], pick["why"]
+    except ImportError:
+        pass        # a PC without the engine module: the visible browser, as before
+    try:
+        p = B.plan(str(args.get("goal", "")), str(args.get("session", "")),
+                   args.get("requests") or [], allowed_domains=args.get("allowed_domains"),
+                   engine=engine, engine_why=why)
+    except RuntimeError as exc:
+        return _NoBrowser(str(exc)), f"Control a browser tab: {exc}"
     return p, B.describe(p)
 
 
 def _run_browser_control(args: dict, plan_obj, *, announce=None, checkpoint=None) -> dict:
     if plan_obj is None:
         return {"ok": False, "error": "browser control is not available here"}
+    if isinstance(plan_obj, _NoBrowser):
+        return {"ok": False, "error": plan_obj.problem}
     import jarvis_browser_control as B
     return B.run(plan_obj, announce=announce, checkpoint=checkpoint,
                  approved=True)
@@ -1170,30 +1198,30 @@ TOOLS: dict = {
     "browser_control": Tool(
         "browser_control",
         "Drive one browser tab by naming page elements (role and accessible "
-        "name). A missing or ambiguous element is reported, not guessed; "
-        "add 'within' to say which. read_new returns only a chat's messages "
-        "after a cursor; read_page returns the page's main text in pieces. "
-        "Stops if the page leaves the allowed sites, asks a question, opens "
-        "a tab or downloads.",
+        "name). A missing or ambiguous element is reported, not guessed. "
+        "read_new: a chat's new messages; read_page: the main text in "
+        "pieces. Stops if the page leaves the allowed sites, asks a "
+        "question, opens a tab or downloads.",
         {"type": "object", "properties": {
             "goal": {"type": "string"},
-            "session": {"type": "string", "description": "a label for the tab"},
+            "session": {"type": "string"},
+            "mode": {"type": "string", "enum": ["auto", "headless", "visible"],
+                "description": "headless: no window, reading only. visible: sign-in, "
+                    "checkout"},
             "allowed_domains": {"type": "array", "items": {"type": "string"},
-                "description": "hostnames the tab may visit (default: the sites the plan "
-                    "names)"},
+                "description": "hostnames allowed (default: the plan's sites)"},
             "requests": {"type": "array", "items": {"type": "object", "properties": {
                 "action": {"type": "string",
                     "enum": ["navigate", "click", "type", "select", "read", "read_new",
                              "read_page"]},
-                "role": {"type": "string", "description": "e.g. button, textbox; for "
-                    "read_new, the message list's role"},
-                "name": {"type": "string", "description": "accessible name; for read_new, "
-                    "the message list's"},
+                "role": {"type": "string", "description": "e.g. button, textbox; "
+                    "read_new: the list's"},
+                "name": {"type": "string", "description": "accessible name"},
                 "within": {"type": "string", "description": "the section, dialog or row it "
                     "is in, when two elements match"},
                 "value": {"type": "string", "description": "navigate: URL. type/select: "
-                    "text (a saved secret as <secret>name</secret>). read_new: the highest "
-                    "message index seen. read_page: character offset (\"0\" = start)"},
+                    "text (saved secret: <secret>name</secret>). read_new: highest index "
+                    "seen. read_page: offset (\"0\")"},
                 "why": {"type": "string"},
                 "irreversible": {"type": "boolean"},
                 "leaves_machine": {"type": "boolean",
@@ -3810,6 +3838,14 @@ def _publish_step(step: dict) -> None:
         pass
 
 
+def _headless_offered() -> bool:
+    try:
+        import jarvis_browser_engine as E
+        return bool(E.headless_offered())
+    except Exception:
+        return False
+
+
 def offered_tools(enabled_tools) -> list:
     """The tool names a turn actually offers the model: the ones in
     `enabled_tools` that are real tools here, in TOOLS order. `None` means
@@ -3822,11 +3858,15 @@ def offered_tools(enabled_tools) -> list:
     if enabled_tools is None:
         return list(TOOLS)
     wanted = set(enabled_tools)
-    if "browser_control" in wanted and _second_card_lane("browser_control") is None:
+    if ("browser_control" in wanted and _second_card_lane("browser_control") is None
+            and not _headless_offered()):
         # Browser control needs BOTH: its name in `[tools].enabled`, and the
         # second card's "Browser control" switch working (jarvis_second_card).
         # Its own module says why: page after page of history does not fit
-        # the main card's 16K. Without the second lane it is not offered.
+        # the main card's 16K. Without the second lane it is not offered -
+        # except that the headless browser (jarvis_browser_engine.py, switched
+        # on by the owner with one card) reads a page in the same small pieces
+        # and needs no second card for it.
         wanted.discard("browser_control")
     if FILES_TOOL in wanted and not _folders_listed():
         # Nothing to look in: not offered, so its description costs no tokens
@@ -6744,6 +6784,20 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         top = draft_email_card_lines(watch)
         if top:
             plan_text = "\n".join(top) + "\n\n" + plan_text
+    if name == "browser_control":
+        # The browser the model asked for cannot run (the headless one is off,
+        # not installed or changed): nothing to ask about, so no card, and never
+        # a quiet switch to the other browser. The model is told why.
+        problem = getattr(state, "problem", "")
+        if problem:
+            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                          "content": _tool_content({
+                              "ok": False,
+                              "error": f"refused: {problem} Nothing was opened and nobody "
+                                       f"was asked."})})
+            steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+            say_step("tool_refused", name)
+            return
     if name == "tidy_inbox":
         # A plan that says why nothing could be done (nothing matches, too
         # many, not set up, the module missing): nothing to ask about, so no

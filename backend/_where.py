@@ -323,6 +323,12 @@ SHIPPED = (
     # a small picture model on the processor, off by default, ON is one card
     # (screen-picture.patch adds the gate lines); the routes are jarvis_screen.py's
     "jarvis_screen_picture.py",
+    # The headless browser, Obscura (2026-09-29): the driver (started over
+    # standard input/output, --stealth always, no port, no proxy) and the
+    # engine choice, the switch (off by default, ON is one card) and its
+    # routes (browser-engine.patch adds the gate lines and the install block)
+    "jarvis_obscura.py",
+    "jarvis_browser_engine.py",
     # "Ask several and compare": several of the conversations above, ONE
     # card, ONE summary. No patch of its own: jarvis_chatbot.py loads it and
     # chatbot-routes.patch already installs the routes that reach it.
