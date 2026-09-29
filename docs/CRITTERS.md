@@ -28,9 +28,11 @@ this file covers it too, unless its own section says otherwise.
 
 In each picture, top row: idle, listening, thinking, speaking. Bottom row:
 waiting on you (approval), asleep (standby), confused (error), dozing
-(banked). Rendered by the desktop's own shader. The orb and rim colours are
-the default colours for each state; the owner's own colour choices replace
-them.
+(banked). Rendered by the shaders and pose code (redrawn 2026-09-29). The orb
+and rim colours are the default colours for each state; the owner's own
+colour choices replace them. The error picture also shows the still error
+ring, and the asleep one its Zs - both drawn by the apps over the face, not
+by the shader (see "Two still rings" below).
 
 ### Red panda
 
@@ -309,6 +311,97 @@ settle: each animal plays a short piece of its own (see "Waking up and
 nodding off" below); dozing off and rousing from a doze take about twice
 the usual time.
 
+### Two still rings, a focus session, and what a screen reader is told (owner, 2026-09-29)
+
+**The two rings.** Both are drawn by the apps over the face - not in the
+shader - outside the face's own shake and flinch, and neither ever moves,
+pulses or fades, so both are fine under Still, calm motion and a serious
+moment. They are told apart by **shape**, not by colour alone:
+
+| | Not connected | Error |
+|---|---|---|
+| Shape | a complete circle | an arc with a gap of 70 degrees centred at the bottom (six o'clock) |
+| Weight | the heavier: at least 2.5 px, 0.012 of the picture | thin: at least 1.5 px, 0.006 of the picture |
+| Colour | the standby colour | the error colour |
+| Which faces | every face | the four animals and the robot |
+| Radius | 1.03 of the overlay radius (0.4532 of the picture) - the same for both | |
+
+Neither is the waiting-on-you clock: that one is drawn inside them (0.95 of
+the overlay radius), starts at twelve o'clock, sweeps round, and once closed
+is a full circle with a faint track - and a face never shows it while it is
+not connected. An error never shows while not connected either (that face is
+standby).
+
+**The colour rule.** The not-connected ring used to be dimmed by standby's
+0.6 and measured **1.65 : 1** against the ground, so "cannot hear me" and
+"asleep" looked alike from across a room. Both rings now take the colour
+bound to their state, fixed (never the pattern's colour of the moment) and
+made readable against the ground they sit on: left alone if it already
+measures 3.2 to 5.5 : 1 (WCAG), otherwise moved toward white or black (too
+faint, to about 4 : 1) or back toward the ground (too loud, to about 5 : 1).
+On the desktop's dark ground the not-connected ring is now 4.0 : 1 and the
+error ring 5.0 : 1; on a light ground the same rule darkens them. The one
+rule is `ringTone` in `faces.html` and `FaceRings.tone` on the phone, held to
+the same answers by `jarvis-desktop/tests/fixtures/ring-cases.json`. The
+tray icon needed no change: its hollow ring has a two-tone outline that
+stands out on any taskbar (a new test in `tray.rs` proves it) - and an error
+on the tray is still its red disc, since the tray is not a face.
+
+**A focus session shows the focus buddy, not a sleeping animal.** A focus
+session puts Jarvis on Quiet, and Quiet reads as asleep - but the focus
+buddy only plays on an idle face, so the animal used to sleep, wake to say
+"YouTube can wait", and doze off again. The PC records why it is Quiet
+(`why` in `capabilities.power`: "the focus session" for a focus session,
+"the owner, from ..." for a hand-set one). The desktop turns that into
+`power_set_by = "focus"` (`stream.rs`), and the resting face is then idle,
+not standby, on every surface: the faces (`restingAsleep` in
+`jarvis-link.js`, `specState` in `faces.html`), the HUD, and the tray icon
+(`tray.rs spec_state`, so the two agree; its menu row says "Power: quiet ·
+focus session"). The phone reads the same `why` from the handshake and again
+on every `power` event (`RestingFace` in `FaceShellRules.kt`). A Quiet the
+owner sets by hand replaces the reason and stays asleep, and so does standby
+of any kind. A `power` event is now read together with `/api/version`, so
+the mode and its reason reach the faces together and the animal does not
+nod off for a moment first. *Known limit:* if the owner presses Quiet while
+a focus session's Quiet is already on, the mode does not change, so no
+`power` event is sent and the face keeps the focus buddy until the next
+change.
+
+**What a screen reader is told.** The desktop now says the phone's plain
+sentences - the floating face and the widget in a live region, the face page
+on its own as the picture's label (`face-words.js`; the phone's `FaceWords`):
+
+| State | Said |
+|---|---|
+| Error | Jarvis has a problem |
+| Waiting on you | Jarvis is waiting for your decision |
+| Listening | Jarvis is listening |
+| Thinking | Jarvis is working |
+| Speaking | Jarvis is speaking |
+| Banked | Jarvis has notes saved for later |
+| Asleep | Jarvis is on standby and will not speak |
+| Idle | Jarvis is idle |
+| Not connected (any pose) | Jarvis isn't connected |
+| Focus session (resting) | Jarvis is working beside you in your focus session and will not speak, except to name a distraction |
+
+`jarvis-desktop/tests/fixtures/face-words.json` holds both apps to this one
+list. (The focus sentence keeps "will not speak" true: a focus session is on
+Quiet, and the one thing it does say aloud is the short line naming a
+distraction.)
+
+**The widget's round window.** The widget shows the face in a 120 px circle,
+which cut off the panda's and monkey's Zs (they reached up to 1.3 times the
+circle's radius). The widget asks for the circle (`&clip=circle`), and the
+Zs overlay pulls each z toward the centre until the whole letter is inside
+0.94 of it - position only; nothing else changes and no other window is
+touched.
+
+**The pictures above** were redrawn on 2026-09-29 from the current shaders
+and pose code: the red panda's and pygmy owl's still showed a wave at
+"waiting on you" and a raised paw or wing at "error", which the 2026-09-28
+decision removed. They now also show what the apps draw over the face: the
+error ring on the error picture and the Zs on the asleep one.
+
 ### How they move
 
 The owner asked for the animals to move their bodies, calmly: an assistant
@@ -454,7 +547,9 @@ so they read on the dark ground beside the dimmed animal.
   wakes (before, they flashed back for about 0.7 s during the wake-up).
 - **Calm** (the desktop's reduced motion, the phone's calm motion): one
   still z beside the head instead, nothing drifting across the screen.
-- **Screen readers** hear nothing more: the face already says standby.
+- **Screen readers** hear "Jarvis is on standby and will not speak" - the
+  phone's sentence, said by the desktop too since 2026-09-29 (see "What a
+  screen reader is told" below).
 - **Both apps draw the same Zs.** Where each z is, how big, how see-through
   and how tilted is one function of the clock in the pose code (`zs()` in
   `critter-pose.js`, `CritterPose.zs` on the phone), with every number in
