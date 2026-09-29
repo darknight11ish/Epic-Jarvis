@@ -327,8 +327,10 @@ on a desk, not a busy mascot. What they do, and the limits they keep to:
   to about 3). The panda's tail swishes and
   the swing runs out along it to the tip; its ears swing a little behind
   the head when it turns.
-- **Small happenings.** When idle, about every 20 seconds (never closer
-  than 10) one animal does one small thing - listed in the tables above -
+- **Small happenings.** (Since 2026-09-29, when the owner has not used
+  Jarvis for five minutes, only about one in four of these plays - see
+  "Motion that does not repeat" below.) When idle, about every 20 seconds
+  (never closer than 10) one animal does one small thing - listed in the tables above -
   easing in and settling out. The small ones (an ear, a tail flick, a
   tilt, a blink) come up most; the big ones (a stretch, a scratch, a ruffle,
   a face wash) about one time in eight each, and never the same thing twice
@@ -603,6 +605,106 @@ Things to know, plainly:
   That is faster than anything else it does - on purpose, it is leaving -
   but eased, never a jump.
 
+#### The 2026-09-29 motion pass (the skeptical review)
+
+The owner kept the drawing; the review found the motion too alike, too busy
+when nobody is looking, and a beat late. Three changes, all in the pose code
+of both apps (held equal by `critter-pose-golden.json`, the new
+`critter-drift-golden.json` and the busy fixture), plus the small feeds each
+host gives it. Tests: `jarvis-desktop/tests/animal-motion.mjs`,
+`animal-behaviours.mjs` (the desktop's feeds), `CritterPoseTest`,
+`AnimalFeedTest`, `LipSyncTest` (the phone's).
+
+**1. Fewer small idle moves when Jarvis is not being used** (the owner's
+decision). A new optional input, `attention` (0..1, default 1: a host that
+passes nothing, or 1, draws exactly what it drew before). At 0, each
+16-second slot keeps its happening only one time in four - by its own hash,
+so the ones that remain are the same well-tested clips at the same times,
+just rarer, never shortened or sped up. Breathing, blinking and looking
+around are untouched. Between 0 and 1 each slot has its own threshold, so
+as the host eases the input over 2 seconds the happenings fade in (or out)
+one by one, and one already playing grows or shrinks smoothly. Still,
+serious and calm already switch happenings off or shrink them; this only
+takes more away. `busy()` (the frame pacer) counts a thinned-away happening
+as not playing. What each host feeds: **desktop** (`faces.html`
+`attentionWant`): 1 for five minutes after the face showed listening,
+thinking, speaking or waiting on you (so: after you talked, typed, were
+answered or asked), and while the pointer is on the display face; the Faces
+window (someone choosing a face) is always 1; a page that has only just
+opened counts as used, so it starts as before. **Phone**
+(`AnimalNow.activeAt`, `AnimalFeed`): the same, from the state the face
+shows, and while a finger is on the face.
+
+| Happenings an hour (idle, one face) | Red panda | Pygmy owl | Sea otter | Monkey | Robot |
+|---|---|---|---|---|---|
+| Before, and now while used | 166 | 159 | 155 | 188 | 160 |
+| Now, not being used | 40 | 33 | 35 | 39 | 47 |
+
+**2. Motion that does not repeat.** `noise(t, seed, scale)` replaces the
+sines every face shared: a smooth curve (a cubic B-spline through random
+control values, one every `scale` seconds, a power of two) that stays inside
+-1..1, can never change faster than `2 / scale` a second (a spline's slope
+is an average of the gaps between control values, and none is more than 2 -
+so "how fast" is a number in the code), and repeats only after `PERIOD`
+(4096 s), because its control values come from the same integer hash as
+everything else, taken round `PERIOD` - so the phone may still restart its
+clock at any multiple of 4096. It is used for: the talking sway of the head
+(yaw and roll, 4 s scale, one seed per face - the correlation between two
+faces fell from 0.86/0.91 to about 0.05); the breathing (`breathWave`: the
+phase wanders so each breath's length differs by up to about 15 percent -
+measured 14 to 15 percent at most, about 11 at the 95th percentile - and its
+depth by up to a tenth *less*, never more: the steady breath was the
+maximum); and the owl's thinking tilt. Each idle happening also gets, from
+its slot's hash (`happeningV`), a size from 0.75 to 1 (never bigger than the
+tested clip, so no lerp toward a target overshoots) and a length from 0.8
+to 1.25 times (the clip's time is divided by it, so a caller reads clip
+time and `HAPPENING_S` still covers it; the longest still ends well before
+its 16 s slot). The robot's zip keeps its length (its path is worked out in
+it) and takes only the size. The owl's thinking head: the tilt is half
+(0.13 rad, was 0.26) and wanders rather than swings, and it turns to follow
+its orb only in stretches (a slow noise gates it), not on every pass: it
+moved 87 percent of the time, now 19 (the others: 13 to 42).
+
+Measured with the comfort harness (240 frames a second, idle 10 minutes,
+speaking 5): the head angle, head speed and per-frame jump are the same or
+smaller on every face and state, the body tip the same or smaller, and the
+breath and bob ranges the same or smaller (the robot's idle bob range reads
+1 percent more only because its zip and its hover peak happen to line up
+in that window; the zip itself is no bigger). The panda's idle per-frame
+jump reads 0.0031 degrees against 0.0027 (a happening played up to 1.25
+times faster); the owl's and robot's fell.
+
+**3. Gestures that land on the end of a sentence.** Before, the host heard a
+phrase end only after it had happened (the loudness fell under a threshold),
+so a nod peaked about half a second after the sentence it marked - measured
+against Kokoro's own timing of each full stop, on 84 real clips at three
+voice speeds - median 0.53 s late at the slowest pace (0.7225x), 0.52 at
+normal, 0.36 at the fastest (1.3225x). Now both apps read each clip *before*
+it plays: `JarvisLipSync.phraseEnds(track)` (desktop, `lipsync.js`) and
+`LipSync.phraseEnds(track)` (phone) find each phrase end from the clip's own
+loudness with the same rules as the live finder (0.05 s quiet after 0.6 s of
+sound, at least 2 s apart), giving the moment its sound stops - which sits
+within 0.05 s (one standard deviation) of Kokoro's timing of the full stop.
+The host hands the pose the next end 0.65 to 0.9 s before it comes
+(`CritterPose.aheadStep`; a new input, `phraseDue`, seconds until the end,
+negative once passed), and the pose starts the gesture early enough for
+its strongest moment to land on it (`PHRASE_LEAD`: a nod peaks 0.35 s in, a
+lift is at its top from 0.4 to 0.7 s, a tilt at 0.6 s). An end found too late
+(under 0.65 s ahead - the host started listening part way into a clip) is left
+out rather than played half way. Now: median 0.01 s late at the slowest pace,
+0.03 at normal, 0.09 at the fastest; 90 percent within 0.14 s. The existing
+rules stay: gestures wait for Jarvis's first real voice, none starts while
+one of the animal's own is playing (`gesturing`), at least 2 s apart, none
+within 1.5 s of a look; a typed answer and the phone's own voice (no track)
+keep the old level-listening finder; the heard-time clock the mouth already
+uses times the ends (Bluetooth delay is the same known limit). The clip's
+last end is often the clip's own end, so an end handed over is kept in the
+pose's inputs for 2 s after it has passed so its gesture is never cut by
+the finder taking over. On the phone, `Speaker.mouthNow` writes the seconds
+until the next end into a fifth number of the array the face already passes
+(`-1`: no track, listen to the level; `LipSync.NO_PHRASE_END`: a track with
+none left).
+
 ##### What a host passes (the input API)
 
 Everything goes in the pose's last argument, `opts` (desktop:
@@ -620,6 +722,8 @@ into the clock it happened at itself.
 | `variety` | weight, default 0 | the variants of listening and thinking and the arrival reactions. Not an owner option (the owner decided variety for every face): **hosts pass 1**. It is an input only so that a host that passes nothing draws exactly what it drew before. |
 | `heard`, `heardN` | moment + count | the latest pause in the owner's talking, and how many there have been (`heardN` -1 or left out: none). Worked out from the microphone level the host already has, with `CritterPose.pauseStep` (below). Listening only. |
 | `phraseEnd`, `phraseN` | moment + count | the latest end of one of Jarvis's phrases, and how many. **Passing `phraseN` (0 or more) switches the talking gestures over** from their own random timing to the phrase ends: with `phraseN` 0 and no phrase ended yet, no gesture. From `pauseStep` on Jarvis's voice level, or from the lip-sync track's phrase ends (Kokoro knows where each sentence and comma is). Start passing it only while none of the animal's own gestures is playing (`gesturing(t)`, below), so none is cut off half way, and only while the "nods" switch is on; stop at the end of the answer. |
+| `phraseDue` (with `phraseN`) | seconds, signed | (2026-09-29) the next phrase end still to come, in seconds from now (negative once past), when the host has read the whole clip: it takes the place of `phraseEnd`, and the gesture LANDS on it instead of starting at it. See "The 2026-09-29 motion pass". Helper: `CritterPose.aheadStep(rec, dt, next)`. |
+| `attention` | weight, default 1 | (2026-09-29) how much the owner is using Jarvis; 0 keeps about one idle happening in four. Eased by the host over 2 s. |
 | `ackNod` | moment | a fact was just saved (`memory_saved`). **The host must not pass it while App lock or "Hide memory lists" is on** (the owner's rule). |
 | `ackGlow` | moment | a long answer is ready (`deep` done). |
 | `focus` | weight | a focus session is on (the `focus` event), eased. |
@@ -762,6 +866,8 @@ so they never show for a second under Still as a page opens.
 | `variety` | 1, always | 1, always |
 | `heard`, `heardN` | `pauseStep` on the microphone's level as heard (the `voice-level` event's, under the room's gate), while listening | the same, on the recorder's level (`micLevel`) |
 | `phraseEnd`, `phraseN` | `pauseStep` on Jarvis's voice as heard (the lip-sync track's level), while speaking. The face turns to "speaking" as the answer's text starts streaming, before any sound, so this is not decided at that change: while speaking it switches ON the first time a real voice is heard, if "Listening nods" is on and none of the animal's own talking gestures is playing at that moment (`gesturing(t)`; with one playing it waits for the next frame clear of one), and OFF when the speaking stretch ends (until 2026-09-28 it was decided at the change to speaking, and so almost never came on). A typed or quiet answer keeps the gestures' own timing | the same, on the speaker's level (`speechMouth` / `speechLevel`) |
+| `attention` | `attentionWant` (faces.html): 1 within 5 minutes of the face showing listening, thinking, speaking or waiting on you, or while the pointer is on the display face; the Faces window always 1; eased over 2 s | `AnimalNow.activeAt` (set by `AnimalFeed.onState`) and a finger on the face; `AnimalFeed`, eased over 2 s |
+| `phraseDue` | `LIP.ends` (`JarvisLipSync.phraseEnds` when a clip's track arrives) and `lipNextEnd()`, through `CritterPose.aheadStep`, while speaking and a clip's track is playing | `Speaker.mouthNow`'s fifth number (`LipSync.phraseEnds` at the start of each clip) through `AnimalFeed.stepFrame(ahead = ...)` |
 | `ackNod` | the `memory_saved` event, relayed by the window around the face (`face-moments.js`); never while App lock or "Hide memory lists and chat history" is on, or before the app knows (a new two-answer command, `get_lock_flags`, then the `security-changed` event); a replayed event never nods twice; at least 1.2 s apart | the same event (`JarvisRuntime.onMemorySaved`, fresh ids only), held back while App lock or "Hide memory lists" is on |
 | `ackGlow` | the `deep` event with `state: "done"`, relayed the same way; at least 1.8 s apart | the same event |
 | `focus`, `focusEnd` | the `focus` event (`started` / `changed`: on; `ended`: off), eased; the stretch is handed on once Jarvis is idle again (dropped after a minute of waiting) | the same |
