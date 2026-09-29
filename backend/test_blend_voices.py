@@ -39,7 +39,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from _where import BACKEND, REPO, require_shipped  # noqa: E402
+from _where import REPO, require_shipped  # noqa: E402
 
 for p in (HERE / "rebuilt",):
     if str(p) not in sys.path:
@@ -342,7 +342,7 @@ def t_building_refuses_what_it_does_not_expect():
 
 
 def t_the_owner_step_is_one_line_and_in_the_readme():
-    readme = (BACKEND / "README.md").read_text(encoding="utf-8")
+    readme = (HERE / "README.md").read_text(encoding="utf-8")
     check("the one line is in backend/README.md, under its own heading",
           K.MAKE_LINE in readme and "Make Ashby and Clara" in readme)
     check("it is ONE line (no newline), says where the file lands in the README, and names the "
