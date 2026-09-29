@@ -2449,6 +2449,11 @@ html[data-state="approval"] .pulse {
 .jarvis-live-hint[hidden] {
   display: none;
 }
+/* Temporary is on: this Live session is not kept (the owner, 2026-09-29).
+   Same quiet line as the hint - words, not an alarm. */
+.jarvis-live-temporary {
+  color: var(--text);
+}
 .jarvis-live-dot {
   width: 8px;
   height: 8px;

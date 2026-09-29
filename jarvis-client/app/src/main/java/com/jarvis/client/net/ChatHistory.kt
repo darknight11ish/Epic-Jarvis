@@ -339,6 +339,36 @@ object ChatHistory {
         "None of its answers were kept, so Jarvis has nothing to read back. New questions are still " +
             "filed with this chat."
     const val CONTINUED_TEMPORARY_OFF = "Temporary chat is off: a continued chat is kept."
+
+    /**
+     * Chat history is off, or cannot keep anything right now: what was said in
+     * the chat can be read, but what is said from now on is not filed with it
+     * (the owner, 2026-09-29). The desktop's Jarvis bar says the same words
+     * (tools/gen_history_cases.py).
+     */
+    const val CONTINUED_HISTORY_OFF = "Chat history is off, so new messages in this chat will not be kept."
+    const val CONTINUED_HISTORY_STUCK =
+        "Chat history cannot keep anything right now, so new messages in this chat will not be kept."
+
+    /**
+     * The line "Continue this chat" adds when the PC says new messages will
+     * not be kept, or null when they will be - or when the PC does not say
+     * (an older PC, or an answer that is not a clear yes or no: never a guess).
+     */
+    fun continuedHistoryLine(keeping: ChatLog.Keeping?): String? = when {
+        keeping == null -> null
+        keeping.enabled == false -> CONTINUED_HISTORY_OFF
+        keeping.enabled == true && keeping.recording == false -> CONTINUED_HISTORY_STUCK
+        else -> null
+    }
+
+    /**
+     * Does a finished question and answer join Home's scrollable thread, and
+     * what the model is re-sent? Not a crisis turn (the owner, 2026-09-29): the
+     * help answer shows once, on screen, and is gone with the next question.
+     * The PC still keeps the chat in History, as "A difficult moment".
+     */
+    fun keepsInThread(crisis: Boolean): Boolean = !crisis
     const val CONTINUE_BUSY = "Wait for the answer to finish, then continue the chat."
     const val CHAT_GONE =
         "That chat was deleted, so this is a new conversation. Nothing from it is sent to Jarvis again."

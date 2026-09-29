@@ -59,6 +59,7 @@ export const SEEN = Object.freeze({
   not_for_me: "(not for Jarvis)",
   trouble: "Heard you, but the words couldn't be made out - say it again",
   busy_mic: "Jarvis Live is already listening - just talk",
+  temporary_on: "Temporary is on - this Live session will not be kept in History.",
 });
 
 /** How the PC's "no voice trained yet" refusal starts (jarvis_live

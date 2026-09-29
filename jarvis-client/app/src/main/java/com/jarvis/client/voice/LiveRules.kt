@@ -72,6 +72,7 @@ object LiveRules {
         "not_for_me" to "(not for Jarvis)",
         "trouble" to "Heard you, but the words couldn't be made out - say it again",
         "busy_mic" to "Jarvis Live is already listening - just talk",
+        "temporary_on" to "Temporary is on - this Live session will not be kept in History.",
     )
 
     /** How each device is named (jarvis_live.DEVICE_WORDS): never "desktop". */

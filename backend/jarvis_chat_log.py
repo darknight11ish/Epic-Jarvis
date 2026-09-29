@@ -1398,6 +1398,19 @@ class ChatLog:
                 "waiting": state()["waiting"], "keep_days": st["keep_days"],
                 "encrypted": True}
 
+    def _keeping(self) -> dict:
+        """Whether NEW messages are being kept right now - the small answer
+        "Continue this chat" needs (the owner, 2026-09-29): the same
+        `enabled` / `recording` / `why_not` the list already carries, nothing
+        more. Never raises: a history that cannot say reads as not recording."""
+        try:
+            st = self.status()
+            return {"enabled": bool(st["enabled"]), "recording": bool(st["recording"]),
+                    "why_not": str(st["why_not"] or "")}
+        except Exception as exc:  # noqa: BLE001 - a read that must not break the chat
+            return {"enabled": False, "recording": False,
+                    "why_not": f"the chat history could not be checked ({type(exc).__name__})"}
+
     def list(self, limit=LIST_DEFAULT, before=None, kind=None) -> dict:
         """One page of the History list, newest first. `kind`: only that
         kind (KINDS) - "Live only" in both apps; anything else is ignored."""
@@ -1470,7 +1483,9 @@ class ChatLog:
         KeyUnavailable when it cannot be opened. `kind` says what it is,
         `continuable` whether the apps may offer "Continue this chat" on it
         (CONTINUABLE, and not a chat titled "A difficult moment"), and
-        `continue_why` why not when they may not."""
+        `continue_why` why not when they may not. `history` says whether new
+        messages are being kept (`enabled`, `recording`, `why_not`), so
+        "Continue this chat" can warn when they will not be."""
         self._housekeeping()
         if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
             return None
@@ -1504,7 +1519,7 @@ class ChatLog:
         kind = conv[1] if conv[1] in KINDS else "chat"
         title = self._title(aead, cid, conv[0])
         crisis = kind in CONTINUABLE and title == CRISIS_TITLE
-        return {"id": cid, "title": title,
+        return {"id": cid, "title": title, "history": self._keeping(),
                 "tainted": any(bool(r[4]) for r in rows), "turns": turns,
                 "kind": kind, "project": conv[2] or None,
                 "started": int(conv[3] or 0), "updated": int(conv[4] or 0),

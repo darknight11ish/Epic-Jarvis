@@ -190,7 +190,17 @@ object ChatLog {
         /** Whether "Continue this chat" may carry it on ([CONTINUABLE]), and why not. */
         val continuable: Boolean = true,
         val continueWhy: String? = null,
+        /**
+         * Whether the PC is keeping NEW messages right now (`history` on the
+         * conversation: `enabled` / `recording`, the same words the list uses),
+         * or null from a PC that does not say - "Continue this chat" warns
+         * from it ([ChatHistory.continuedHistoryLine], the owner, 2026-09-29).
+         */
+        val keeping: Keeping? = null,
     )
+
+    /** `history.enabled` / `history.recording` on a conversation; each null when not clearly a yes or a no. */
+    data class Keeping(val enabled: Boolean?, val recording: Boolean?)
 
     private fun JsonObject.prim(key: String): JsonPrimitive? = this[key] as? JsonPrimitive
 
@@ -271,6 +281,7 @@ object ChatLog {
             continuable = continuable,
             continueWhy = if (continuable) null else body.str("continue_why") ?: CONTINUE_WHY[kind]
                 ?: CONTINUE_WHY.getValue("support"),
+            keeping = (body["history"] as? JsonObject)?.let { Keeping(it.flag("enabled"), it.flag("recording")) },
         )
     }
 

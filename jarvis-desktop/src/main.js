@@ -165,6 +165,7 @@ import {
   CONTINUE_BUSY,
   CONTINUE_LIVE,
   CONTINUED_NOTHING,
+  continuedHistoryLine,
   CONTINUED_TAINTED,
   CONTINUED_TEMPORARY_OFF,
   CARRY_ON_LAST,
@@ -178,6 +179,8 @@ import {
   ENDED_SAVED,
   ENDED_TEMPORARY,
   historyMessages,
+  crisisRoute,
+  keepsInThread,
   IDLE_NEW_LINE,
   IDLE_NEW_LINE_TEMPORARY,
   idleExpired,
@@ -318,6 +321,7 @@ const dom = {
   liveDetail: $("jarvis-live-detail"),
   liveMove: $("jarvis-live-move"),
   liveHint: $("jarvis-live-hint"),
+  liveTemporary: $("jarvis-live-temporary"),
   liveMore: $("jarvis-live-more"),
   liveShowCard: $("jarvis-live-show-card"),
   liveFix: $("jarvis-live-fix"),
@@ -640,7 +644,11 @@ const temporaryChat = createTemporaryToggle({
   },
   busy: () => Boolean(state.inFlight || state.abort),
   announce,
-  onChange: () => syncWindowHeight(),
+  onChange: () => {
+    // Live's strip says "Temporary is on" while it is (paintLive).
+    paintLive();
+    syncWindowHeight();
+  },
 });
 
 /**
@@ -1175,6 +1183,12 @@ async function continueChat(id, { moved = false } = {}) {
   if (trimmed) lines.push(continuedTrimmed(trimmedCount));
   if (conv && conv.tainted === true) lines.push(CONTINUED_TAINTED);
   if (tempOff) lines.push(CONTINUED_TEMPORARY_OFF);
+  // History off (or unable to keep anything): the chat can be read and
+  // carried on, but what is said now is not kept (the owner, 2026-09-29).
+  // Not for "Move it here": that says where the chat went, not that it was
+  // filed, and Live's own strip carries its own Temporary line.
+  const historyLine = moved ? null : continuedHistoryLine(conv && conv.history);
+  if (historyLine) lines.push(historyLine);
   renderPreviousAnswer({ open: true });
   showChatNote(lines.join(" "));
   syncNewConversation();
@@ -3319,9 +3333,16 @@ function finishStream(phase, statusText) {
   state.turnQuestion = null;
   // Jarvis Live's side talk: "(not for Jarvis)", not kept, never spoken.
   const sideTalk = phase !== "error" && liveSideTalk();
+  // A crisis turn (the PC's own flag): its question and its help answer stay
+  // on screen as the current answer, but never join the thread or what the
+  // model is re-sent, so the next question (or leaving the chat) takes them
+  // off the screen for good (the owner, 2026-09-29). The chat is still kept
+  // in History by the PC, as "A difficult moment".
+  const crisisTurn = crisisRoute(state.turnRoute);
   if (
     question &&
     !sideTalk &&
+    keepsInThread(crisisTurn) &&
     phase !== "error" &&
     !statusText &&
     state.buffer.trim() &&
@@ -5077,6 +5098,12 @@ function paintLive() {
     if (on && !detail) hint = live.explaining ? LIVE_EXPLAINER : SEEN.end_hint;
     dom.liveHint.hidden = !hint;
     dom.liveHint.textContent = hint;
+    // Temporary is on: this Live session is not kept in History (the owner,
+    // 2026-09-29). Said once to a screen reader when it appears.
+    const tempLine = on && temporaryChat.on ? SEEN.temporary_on : "";
+    if (tempLine && dom.liveTemporary.hidden) announce(tempLine);
+    dom.liveTemporary.hidden = !tempLine;
+    dom.liveTemporary.textContent = tempLine;
     const s = live.status || {};
     dom.liveStrip.dataset.muted = String(Boolean(on && s.muted));
     dom.liveStrip.dataset.ended = String(!on);

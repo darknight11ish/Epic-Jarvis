@@ -76,6 +76,8 @@
     "continued_tainted": "Jarvis read outside text earlier in this chat, so writing notes and some other actions ask you first.",
     "continued_nothing": "None of its answers were kept, so Jarvis has nothing to read back. New questions are still filed with this chat.",
     "continued_temporary_off": "Temporary chat is off: a continued chat is kept.",
+    "continued_history_off": "Chat history is off, so new messages in this chat will not be kept.",
+    "continued_history_stuck": "Chat history cannot keep anything right now, so new messages in this chat will not be kept.",
     "continue_busy": "Wait for the answer to finish, then continue the chat.",
     "continue_live": "Jarvis Live is on here. End Live first, then continue the chat.",
     "copy": "Copy",
@@ -621,6 +623,63 @@
       "trimmed": false,
       "trimmed_count": 0,
       "skipped": 0
+    }
+  ],
+  "history_line_cases": [
+    {
+      "in": null,
+      "expect": null
+    },
+    {
+      "in": {},
+      "expect": null
+    },
+    {
+      "in": {
+        "enabled": true,
+        "recording": true,
+        "why_not": ""
+      },
+      "expect": null
+    },
+    {
+      "in": {
+        "enabled": false,
+        "recording": false,
+        "why_not": "Chat history is off."
+      },
+      "expect": "Chat history is off, so new messages in this chat will not be kept."
+    },
+    {
+      "in": {
+        "enabled": true,
+        "recording": false,
+        "why_not": "the key is missing"
+      },
+      "expect": "Chat history cannot keep anything right now, so new messages in this chat will not be kept."
+    },
+    {
+      "in": {
+        "enabled": "no",
+        "recording": false
+      },
+      "expect": null
+    },
+    {
+      "in": {
+        "recording": false
+      },
+      "expect": null
+    }
+  ],
+  "thread_keeps_cases": [
+    {
+      "crisis": false,
+      "expect": true
+    },
+    {
+      "crisis": true,
+      "expect": false
     }
   ],
   "plain_cases": [

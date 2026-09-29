@@ -209,6 +209,35 @@ export const CONTINUED_NOTHING =
   "None of its answers were kept, so Jarvis has nothing to read back. New questions are still " +
   "filed with this chat.";
 export const CONTINUED_TEMPORARY_OFF = "Temporary chat is off: a continued chat is kept.";
+/** Chat history is off, or cannot keep anything right now: what was said in
+ *  this chat can be read, but what is said from now on is not filed with it
+ *  (the owner, 2026-09-29). Both apps, the same words. */
+export const CONTINUED_HISTORY_OFF =
+  "Chat history is off, so new messages in this chat will not be kept.";
+export const CONTINUED_HISTORY_STUCK =
+  "Chat history cannot keep anything right now, so new messages in this chat will not be kept.";
+/** The line to add when the PC says (`history` on the conversation it sent:
+ *  {enabled, recording, why_not}) that new messages will not be kept; null
+ *  when they will be, or when the PC does not say (an older PC, or an answer
+ *  that is not clear - never a guess). */
+export function continuedHistoryLine(history) {
+  if (!history || typeof history !== "object" || Array.isArray(history)) return null;
+  if (history.enabled === false) return CONTINUED_HISTORY_OFF;
+  if (history.enabled === true && history.recording === false) return CONTINUED_HISTORY_STUCK;
+  return null;
+}
+/** Does a finished question and answer join the scrollable thread, and what
+ *  the model is re-sent? Not a crisis turn (the owner, 2026-09-29): its help
+ *  answer shows once, on screen, and is gone from the thread with the next
+ *  question. The PC still keeps the chat in History, as "A difficult moment". */
+export function keepsInThread(crisis) {
+  return crisis !== true;
+}
+/** Is this turn a crisis turn? `X-Jarvis-Route`'s `wellbeing: "crisis"`, the
+ *  one flag the PC already sends (docs/JARVIS-API.md section 38). */
+export function crisisRoute(route) {
+  return Boolean(route && typeof route === "object" && route.wellbeing === "crisis");
+}
 export const CONTINUE_BUSY = "Wait for the answer to finish, then continue the chat.";
 /** Jarvis Live is on here: its words are filed in its own chat. */
 export const CONTINUE_LIVE = "Jarvis Live is on here. End Live first, then continue the chat.";

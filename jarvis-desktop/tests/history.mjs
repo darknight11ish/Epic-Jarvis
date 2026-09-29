@@ -262,6 +262,8 @@ await check("History's new words are the contract's, word for word", async () =>
   assert.equal(CH.CONTINUED_TAINTED, w.continued_tainted);
   assert.equal(CH.CONTINUED_NOTHING, w.continued_nothing);
   assert.equal(CH.CONTINUED_TEMPORARY_OFF, w.continued_temporary_off);
+  assert.equal(CH.CONTINUED_HISTORY_OFF, w.continued_history_off);
+  assert.equal(CH.CONTINUED_HISTORY_STUCK, w.continued_history_stuck);
   assert.equal(CH.CONTINUE_BUSY, w.continue_busy);
   assert.equal(CH.CONTINUE_LIVE, w.continue_live);
   assert.equal(CH.CHAT_GONE, w.chat_gone);
@@ -318,6 +320,20 @@ await check("Continue this chat loads the kept messages the worked examples load
   assert.deepEqual(CH.continueWindow(read2.turns).window,
     [{ question: "keep me", answer: "Kept.", provenance: "voice" }]);
   assert.equal(read2.continuable, true);
+});
+
+await check("Continue warns when history will not keep new messages, and a crisis turn stays out of the thread (worked examples)", async () => {
+  assert.equal(CASES.history_line_cases.length, 7);
+  for (const c of CASES.history_line_cases) {
+    assert.equal(CH.continuedHistoryLine(c.in), c.expect, JSON.stringify(c.in));
+  }
+  assert.equal(CH.continuedHistoryLine([]), null, "an array is not a history object");
+  for (const c of CASES.thread_keeps_cases) assert.equal(CH.keepsInThread(c.crisis), c.expect);
+  assert.equal(CH.keepsInThread(undefined), true, "no flag: an ordinary turn");
+  // The one flag the PC already sends (X-Jarvis-Route, wellbeing.patch).
+  assert.equal(CH.crisisRoute({ wellbeing: "crisis" }), true);
+  assert.equal(CH.crisisRoute({ wellbeing: "other" }), false);
+  assert.equal(CH.crisisRoute(null), false);
 });
 
 await check("an opened record says whether it can be continued, and why not", async () => {
@@ -1183,6 +1199,29 @@ await check("the bar: Continue this chat loads the kept turns into the thread, t
   assert.equal(summary, "Earlier in this chat · 1 question");
   const last = sent.at(-1);
   assert.equal(JSON.stringify(last).includes("conv-chat-0001"), true, "the next question did not carry the chat's id");
+});
+
+await check("the bar: Continue says, in one line, that new messages will not be kept when history is off", async () => {
+  const mk = (history) => ({ id: "conv-chat-0001", title: "Dentist on Tuesday", kind: "chat", tainted: false,
+    ...(history ? { history } : {}),
+    turns: [{ role: "user", text: "when is the dentist?", provenance: "typed" }, { role: "assistant", text: "Tuesday at 3." }] });
+  const noteFor = async (history) => {
+    const conv = mk(history);
+    const page = await bar({ history: { transcripts: { [conv.id]: conv } }, chatReplies: [] });
+    await page.evaluate(() => window.__emit("continue-chat", "conv-chat-0001"));
+    await page.waitForTimeout(300);
+    const note = await page.locator("#chat-note").innerText();
+    await page.close();
+    return note;
+  };
+  const off = await noteFor({ enabled: false, recording: false, why_not: "Chat history is off." });
+  const stuck = await noteFor({ enabled: true, recording: false, why_not: "the key is missing" });
+  const on = await noteFor({ enabled: true, recording: true, why_not: "" });
+  const old = await noteFor(null);
+  assert.equal(off, `Carrying on "Dentist on Tuesday". ${CASES.words.continued_history_off}`);
+  assert.equal(stuck, `Carrying on "Dentist on Tuesday". ${CASES.words.continued_history_stuck}`);
+  assert.equal(on, `Carrying on "Dentist on Tuesday".`, "history on: nothing to warn about");
+  assert.equal(old, `Carrying on "Dentist on Tuesday".`, "an older PC says nothing, so the app does not guess");
 });
 
 await check("the bar: a chat deleted in the Brain ends here too, and says so", async () => {

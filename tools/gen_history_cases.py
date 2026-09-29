@@ -106,6 +106,12 @@ WORDS = {
     "continued_nothing": ("None of its answers were kept, so Jarvis has nothing to read back. "
                           "New questions are still filed with this chat."),
     "continued_temporary_off": "Temporary chat is off: a continued chat is kept.",
+    # Chat history is off, or cannot keep anything right now (the owner,
+    # 2026-09-29): what was said in this chat is still here to read, but
+    # what is said from now on is not filed with it.
+    "continued_history_off": "Chat history is off, so new messages in this chat will not be kept.",
+    "continued_history_stuck": ("Chat history cannot keep anything right now, so new messages in "
+                                "this chat will not be kept."),
     "continue_busy": "Wait for the answer to finish, then continue the chat.",
     "continue_live": "Jarvis Live is on here. End Live first, then continue the chat.",
     "copy": "Copy",
@@ -321,6 +327,41 @@ CONTINUE_CASES = [
       _t("chatbot", "Gemini: X2", provenance="chatbot_reply")]),
 ]
 
+def history_line(history):
+    """The line "Continue this chat" adds when new messages will not be kept
+    (the owner, 2026-09-29), from the PC's `history` object on the
+    conversation ({"enabled", "recording", "why_not"}). None: nothing to say -
+    it is keeping them, or this PC is too old to say (no object, or one that
+    is not clear: never a guess)."""
+    if not isinstance(history, dict):
+        return None
+    enabled, recording = history.get("enabled"), history.get("recording")
+    if enabled is False:
+        return WORDS["continued_history_off"]
+    if enabled is True and recording is False:
+        return WORDS["continued_history_stuck"]
+    return None
+
+
+HISTORY_CASES = [
+    None,
+    {},
+    {"enabled": True, "recording": True, "why_not": ""},
+    {"enabled": False, "recording": False, "why_not": "Chat history is off."},
+    {"enabled": True, "recording": False, "why_not": "the key is missing"},
+    {"enabled": "no", "recording": False},
+    {"recording": False},
+]
+
+
+def keeps_in_thread(crisis: bool) -> bool:
+    """Whether a finished question and answer joins the scrollable thread and
+    what is re-sent to the model (the owner, 2026-09-29): a crisis turn does
+    not - its help answer shows once and is then gone from the thread. The PC
+    still keeps the chat in History, titled "A difficult moment"."""
+    return not crisis
+
+
 PLAIN_CASES = [
     "# Title\nSome **bold** and *italic* and `code`.",
     "- one\n- two\n* three\n+ four",
@@ -347,6 +388,8 @@ def build() -> dict:
                        for a, b in LIVE_CASES],
         "continue_cases": [{"name": n, "turns": turns, **continue_window(turns)}
                            for n, turns in CONTINUE_CASES],
+        "history_line_cases": [{"in": h, "expect": history_line(h)} for h in HISTORY_CASES],
+        "thread_keeps_cases": [{"crisis": c, "expect": keeps_in_thread(c)} for c in (False, True)],
         "plain_cases": [{"in": s, "out": plain_answer(s)} for s in PLAIN_CASES],
         "messages_cases": [{"n": n, "expect": messages_words(n)} for n in (1, 2, 12)],
     }
