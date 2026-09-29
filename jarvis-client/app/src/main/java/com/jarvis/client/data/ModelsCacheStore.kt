@@ -31,8 +31,16 @@ class ModelsCacheStore(context: Context) {
     private val prefs = context.applicationContext
         .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    fun save(models: CachedModels) {
-        prefs.edit { putString(KEY_MODELS, models.toJson().toString()) }
+    /**
+     * [host] is the PC this read came from. It is kept beside the rows so
+     * a phone re-paired to a different PC never replays the old PC's
+     * models as if they were the new one's (bug audit 2026-09-29).
+     */
+    fun save(models: CachedModels, host: String = "") {
+        prefs.edit {
+            putString(KEY_MODELS, models.toJson().toString())
+            putString(KEY_HOST, host)
+        }
     }
 
     /**
@@ -42,8 +50,13 @@ class ModelsCacheStore(context: Context) {
      * as null too, the same "fall back rather than throw" rule every other
      * local store in this package follows.
      */
-    fun load(): CachedModels? {
+    fun load(host: String = ""): CachedModels? {
         val raw = prefs.getString(KEY_MODELS, null) ?: return null
+        // A cache written for another PC is not this PC's. One written before
+        // the host was kept (no stored host) still replays, once, until the
+        // next successful read stamps it.
+        val savedHost = prefs.getString(KEY_HOST, "") ?: ""
+        if (host.isNotEmpty() && savedHost.isNotEmpty() && savedHost != host) return null
         return runCatching {
             CachedModels.fromJson(JarvisJson.parseToJsonElement(raw) as JsonObject)
         }.getOrNull()
@@ -52,5 +65,6 @@ class ModelsCacheStore(context: Context) {
     private companion object {
         const val PREFS = "jarvis_models_cache"
         const val KEY_MODELS = "models"
+        const val KEY_HOST = "host"
     }
 }
