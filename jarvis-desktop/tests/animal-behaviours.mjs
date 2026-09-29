@@ -132,6 +132,15 @@ if (!K) {
   };
   const post = (page, m) => page.evaluate((x) => window.postMessage(x, location.origin), m);
   const opts = (page) => page.evaluate(() => window.__faceOpts);
+  // Waits (up to 30 s: a shader can take seconds to build on a busy machine)
+  // for a hello to be playing, and returns the switch state AT THAT MOMENT.
+  const helloSeen = async (page) => {
+    const h = await page.waitForFunction(() => {
+      const n = window.__faceSwitch.now();
+      return n.phase === "hello" && n.switching && n.switching.hello > 0 ? JSON.parse(JSON.stringify(n)) : false;
+    }, null, { timeout: 30000 });
+    return h.jsonValue();
+  };
   // Holds every request for `glob` until release() - the page's read of the
   // stored options, say, until the test has seen a frame drawn without them.
   const hold = async (page, glob) => {
@@ -179,7 +188,7 @@ if (!K) {
     });
     await page.waitForTimeout(300);
     read.release();
-    await page.waitForFunction(() => window.__faceOpts && window.__faceOpts.nods === 0, null, { timeout: 8000 });
+    await page.waitForFunction(() => window.__faceOpts && window.__faceOpts.nods === 0, null, { timeout: 30000 });
     await page.waitForTimeout(200);
     const seen = await page.evaluate(() => window.__nodsSeen);
     const late = await opts(page);
@@ -298,7 +307,7 @@ if (!K) {
     await page.waitForTimeout(300);
     await page.evaluate(() => window.__faceSwitch.to("pygmyowl"));
     await page.waitForFunction(() => { const n = window.__faceSwitch.now(); return n.face === "pygmyowl" && n.phase === null; },
-      null, { timeout: 8000 });
+      null, { timeout: 30000 });
     // "Keep the animal still" turned on while the panda is not shown, and
     // the owl settled into it.
     await page.evaluate(() => applyFaceStill({ still: true }));
@@ -311,7 +320,7 @@ if (!K) {
     });
     await page.evaluate(() => window.__faceSwitch.to("redpanda"));
     await page.waitForFunction(() => { const n = window.__faceSwitch.now(); return n.face === "redpanda" && n.phase === null; },
-      null, { timeout: 8000 });
+      null, { timeout: 30000 });
     await page.waitForTimeout(200);
     const seen = await page.evaluate(() => window.__stillSeen);
     await done();
@@ -334,7 +343,7 @@ if (!K) {
     await post(page, { type: "jarvis-hud-face", state: "approval" });
     await page.waitForTimeout(200);
     await page.evaluate(() => window.__faceSwitch.to("monkey"));
-    await page.waitForFunction(() => window.__since && window.__since[0] === "monkey", null, { timeout: 8000 });
+    await page.waitForFunction(() => window.__since && window.__since[0] === "monkey", null, { timeout: 30000 });
     const approval = await page.evaluate(() => window.__since);
     await done();
     assert.equal(idle[1], "idle");
@@ -373,8 +382,9 @@ if (!K) {
       requestAnimationFrame(tick);
     });
     read.release();
-    await page.waitForFunction(() => window.__faceOpts && window.__faceOpts.still === 1, null, { timeout: 8000 });
-    await page.waitForTimeout(300);
+    await page.waitForFunction(() => window.__faceOpts && window.__faceOpts.still === 1, null, { timeout: 30000 });
+    // Enough frames to mean something, however slow the machine is.
+    await page.waitForFunction(() => window.__seasonSeen.length > 8, null, { timeout: 30000 });
     const seen = await page.evaluate(() => window.__seasonSeen);
     await ctx.close();
     assert.ok(seen.length > 5, `frames seen: ${seen.length}`);
@@ -444,10 +454,10 @@ if (!K) {
     const mid = await page.evaluate(() => window.__faceSwitch.now());
     const o1 = await opts(page);
     // The hello's clock starts once the new face has been drawn once.
-    await page.waitForFunction(() => { const n = window.__faceSwitch.now();
-      return n.phase === "hello" && n.switching && n.switching.hello > 0; }, null, { timeout: 8000 });
-    const hello = await page.evaluate(() => window.__faceSwitch.now());
-    await page.waitForFunction(() => window.__faceSwitch.now().phase === null, null, { timeout: 5000 });
+    // The snapshot is taken by the wait itself, at the moment it sees the hello
+    // playing: looking a moment later can find it already over on a slow machine.
+    const hello = await helloSeen(page);
+    await page.waitForFunction(() => window.__faceSwitch.now().phase === null, null, { timeout: 30000 });
     const end = await page.evaluate(() => window.__faceSwitch.now());
     await done();
     assert.equal(mid.face, "redpanda");
@@ -466,9 +476,7 @@ if (!K) {
     await page.evaluate(() => window.__faceSwitch.to("monkey"));
     await page.waitForTimeout(450);
     const o1 = await opts(page);
-    await page.waitForFunction(() => { const n = window.__faceSwitch.now();
-      return n.phase === "hello" && n.switching && n.switching.hello > 0; }, null, { timeout: 8000 });
-    const hello = await page.evaluate(() => window.__faceSwitch.now());
+    const hello = await helloSeen(page);
     await done();
     assert.equal(o.variety, 1);
     assert.equal(o.nods, 0);
@@ -487,10 +495,10 @@ if (!K) {
     assert.ok(+faded.opacity < 0.8 && +faded.opacity > 0.1, `cross-fade ${faded.opacity}`);
     const inst = await open("redpanda");
     await inst.page.evaluate(() => window.__faceSwitch.to("arc"));
-    await inst.page.waitForFunction(() => window.__faceSwitch.now().face === "arc", null, { timeout: 5000 });
+    await inst.page.waitForFunction(() => window.__faceSwitch.now().face === "arc", null, { timeout: 30000 });
     await inst.page.waitForTimeout(250);
     const arc = await inst.page.evaluate(() => window.__faceSwitch.now());
-    await inst.page.waitForFunction(() => window.__faceSwitch.now().phase === null, null, { timeout: 5000 });
+    await inst.page.waitForFunction(() => window.__faceSwitch.now().phase === null, null, { timeout: 30000 });
     await inst.page.evaluate(() => window.__faceSwitch.to("orbit"));
     const orbit = await inst.page.evaluate(() => window.__faceSwitch.now());
     await inst.done();
