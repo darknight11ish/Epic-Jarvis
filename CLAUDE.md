@@ -1410,6 +1410,14 @@ Decided 2026-09-28, the owner's answers after the post-change audits
   key keeps working as today. The app builder joining Projects (an app is a
   coding project whose tests are its benchmarks) is designed first
   (`docs/APP-BUILDER-DESIGN.md`), then built.
+  **Owner's answers to that design (2026-09-29):** the first slice ships the
+  screens, the merge card and pasting a change in on the PC - **Jarvis
+  writing app code waits for the 12 GB card**, as decided 2026-09-28 (model
+  tools B2, and running commands, milestone C, are not part of it). **The
+  phone may approve an app merge**, after the whole change has been shown,
+  with the screen lock or fingerprint like other risky cards (never from the
+  approval widget or a notification). The design is
+  `docs/APPS-IN-PROJECTS-DESIGN.md`.
 
 ## Every new feature gets its own audit, without being asked
 
