@@ -17342,6 +17342,91 @@ button or Jarvis Live has the microphone, and while App lock is locked, and
 stop it the moment a question or answer starts. The last few samples are kept
 in the PC's memory only, so the same voice twice is instant.
 
+## Make Ashby and Clara (two voices blended for Jarvis)
+
+The owner's decision of 2026-09-29. Two extra voices in the voice picker, in
+both apps, made by blending two Kokoro voices each - nothing recorded, nobody
+copied:
+
+- **Ashby** - a warm British butler, not modelled on anyone: 70% George and
+  30% Michael, spoken as British English, a little slower (0.95 times your own
+  speaking speed).
+- **Clara** - a warm woman's voice that leans British: 60% Emma and 40% Heart,
+  British English, normal pace.
+
+They need **Kokoro v1.0** (the upgrade above) and one more step, once. Paste
+this into PowerShell (any folder), then restart Jarvis:
+
+```powershell
+Push-Location "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 .\jarvis_kokoro.py --make-blends; Pop-Location
+```
+
+**Where the result lands:** `voices-jarvis.bin`, next to your voice pack, in
+`%USERPROFILE%\.openjarvis\voice-models\tts` (28 MB). Your pack's own
+`voices.bin` is never opened for writing. Running the line again says "Already
+done". It needs no download and no extra packages.
+
+What it does, in order:
+
+1. Reads `voices.bin` from your voice pack and checks it is the exact file the
+   blends were made from (SHA-256 `1c5a5b983d3d50d8586d437a51f3faa2da7919ce76a013c081e65671a3447c29`, pinned in
+   `backend\jarvis_kokoro.py` as `V1_VOICES_SHA256`). If it is not, it says so
+   and makes nothing.
+2. Works out each blend: every number of each voice's table (510 rows of 256
+   numbers - one row for each length of sentence) is `0.7 x George + 0.3 x
+   Michael` (Clara: `0.6 x Emma + 0.4 x Heart`) - a plain weighted sum, the way
+   kokoro-onnx's own README blends voices.
+3. Writes a copy of the pack's table with those two blends in two slots that
+   Jarvis never uses (the Spanish and Portuguese "Santa" voices), under the name
+   `voices-jarvis.bin`, and checks the result is exactly the pinned file
+   (SHA-256 `5916383e8542460a3e1862a4ea41623b2f1cec98d10973a4a1040662ce11b057`, `BLEND_SHA256`). If it is not, nothing is kept.
+4. Jarvis loads that file instead of `voices.bin` **only when it is exactly the
+   pinned file**, and only when `[voice] tts_voices` does not name another one.
+   A file that is not the pinned one is never loaded; the picker says so.
+
+**Why a whole copy and not a small extra file** (the first thing tried): a
+Kokoro voices file has to be exactly the size the model expects. sherpa-onnx
+1.13.8 refuses anything else ("Corrupted --kokoro-voices ... Expected #floats:
+7050240, actual: 7311360" when two voices were added at the end), so the two
+blends replace two unused voices in a copy instead.
+
+**Going back:** delete `voices-jarvis.bin` and restart Jarvis. If Ashby or
+Clara was your choice, Heart speaks and the picker says so. The upgrade line
+moves the whole `tts` folder aside, so **run the line above again after
+upgrading the pack**.
+
+**The voice check.** Like any recorded voice, Ashby and Clara are checked
+against your own voice print before they are used: when you choose one, when you
+press Hear it, and again (in the background) after your voice prints change. One
+that sounded too much like you would not be listed, chosen or spoken with, and
+the picker would say why. It cannot be checked without a working voice engine,
+and then it is not used (nothing is treated as fine because it could not be
+checked). With no voice print trained yet there is nothing to compare with, and
+it is checked as soon as you train one.
+
+**Animals keep their four voices** (Bella, Nicole, Sarah, Michael). Neither
+blend can be given to an animal.
+
+**Checked in the build container (2026-09-29), with the real pack and
+sherpa-onnx 1.13.8 - not by ear:** the file built from the real pack matches both
+pins byte for byte; sherpa-onnx loads it (still 54 speakers) and each blend
+speaks a real sentence. One sentence, British English: middle pitch George 146
+Hz, Michael 120 Hz, **Ashby 136 Hz**; Emma 184 Hz, Heart 200 Hz, **Clara 192
+Hz** - each blend between its parents. Average spectrum, in decibels apart:
+Ashby is 1.8 from George and 3.0 from Michael (George and Michael are 3.7 apart);
+Clara is 2.8 from Emma and 4.3 from Heart (Emma and Heart are 6.1 apart) - and
+two runs of the same blend are only 0.3 to 0.4 apart, so those gaps are real. Ashby at
+0.95 came out 3.8% longer than at 1.0. **Nobody has listened.** The whole path
+was also run through the PC's own code with the real pack (make the file, load it,
+choose Ashby, Hear it, speak an answer): it worked, and Ashby's answer at "faster"
+came out shorter than at "normal", as it should. **The voice check was run once
+against a print made from Ashby's own sound**, using the fallback voice-ID model
+(`spectral-v1` - the container has no ONNX speaker model): it refused Ashby (score
+0.996 against a bar of 0.25) and also Clara (0.836) - so the check does refuse, but
+that fallback model is coarse and did not tell the two voices apart at all. On your
+PC, with the real speaker model, the scores will be different; nobody has run it
+there, so if Ashby or Clara is refused for no good reason, tell us.
+
 ## What is different, said plainly
 
 - **The animals' mouths use the analysed-from-sound fallback on v1.0.**
@@ -17349,8 +17434,9 @@ in the PC's memory only, so the same voice twice is instant.
   graph and refuses v1.0's (it says so in words); `jarvis_speech` does not ask
   it while v1.0 is installed. Your v0.19 timing file stays in `tts-old-...`.
   Timing for v1.0 is not built.
-- **No blended voices** (the studio's "Ashby" and "Clara" idea): they need a
-  changed `voices.bin`; not built.
+- **Ashby and Clara are built** (see "Make Ashby and Clara", above), but only
+  in a COPY of `voices.bin` that one more line makes; nobody has listened to
+  them.
 - **Speed on your PC is not measured.** In the build container, a three-second
   sentence took about 1.4 s with four threads, the same class as v0.19; the
   first sentence after starting also loads the 326 MB model.
