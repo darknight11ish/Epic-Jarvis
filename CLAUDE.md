@@ -789,6 +789,13 @@ testers, scouts and integration scouts; `.claude/agents/`):
   keep copies; the thread shows a "Jarvis reads from here" line; a chat that
   spills over the days in "Forget a time frame" starts unticked; the bigger
   re-send caps for two cards wait until the second card is measured.
+  **The owner then answered the two open items (2026-09-29):** **a crisis
+  question and its answer do not stay in the scrollable thread** (the help
+  answer shows once; the chat is still kept in History as "A difficult
+  moment"); and **two short warnings are built**: "Continue this chat" says
+  when chat history is off that new messages will not be kept, and the
+  phone's Live screen says when Temporary is on that the session will not be
+  kept.
 - **"Forget a time frame"** (owner, 2026-09-28): the owner may ask, by
   voice or typing, to forget what Jarvis learned or said in a time frame
   ("forget what you learned last week", "delete my chats from 1 to 15
