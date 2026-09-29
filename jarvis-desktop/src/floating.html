@@ -52,7 +52,7 @@
            could never fire for a mousedown the iframe consumed first. */
         pointer-events: none;
       }
-      /* Heard, not seen: floating.js's sayConnection. */
+      /* Heard, not seen: floating.js's sayFace. */
       .sr-only {
         position: absolute;
         width: 1px;
@@ -76,10 +76,11 @@
         src="faces.html?mode=display&feed=parent"
       ></iframe>
     </div>
-    <!-- The face is decorative and hidden from screen readers; the one thing
-         worth saying about it - "Jarvis isn't connected" - is said here. It
-         is present (and empty) from the start, so the first words written
-         into it are announced. -->
+    <!-- The face is decorative and hidden from screen readers; what it
+         shows - "Jarvis is listening", "Jarvis isn't connected", ... (the
+         phone's sentences, face-words.js) - is said here. It is present
+         (and empty) from the start, so the first words written into it are
+         announced. -->
     <p id="face-status" class="sr-only" role="status" aria-live="polite"></p>
     <script type="module" src="floating.js"></script>
   </body>

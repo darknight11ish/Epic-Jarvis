@@ -402,6 +402,16 @@ object JarvisRuntime {
     private val _power = MutableStateFlow("active")
     val power: StateFlow<String> = _power.asStateFlow()
 
+    /**
+     * Why the PC is in that power mode, in its own sentence (`GET /api/version`
+     * `capabilities.power.why`), or null when it did not say. The face reads
+     * it for one thing: a focus session's Quiet shows the focus buddy, not a
+     * sleeping animal ([com.jarvis.client.face.RestingFace]). `/api/status`
+     * and the `power` event carry only the mode, so it is read again from the
+     * handshake route on every `power` event, as the desktop does.
+     */
+    private val _powerWhy = MutableStateFlow<String?>(null)
+
     private val _pending = MutableStateFlow<List<PendingItem>>(emptyList())
     val pending: StateFlow<List<PendingItem>> = _pending.asStateFlow()
 
@@ -500,6 +510,15 @@ object JarvisRuntime {
      * connected" (FaceView's `offline`).
      */
     val faceOffline: StateFlow<Boolean> = _faceOffline.asStateFlow()
+
+    private val _faceFocusQuiet = MutableStateFlow(false)
+
+    /**
+     * The face is IDLE (not STANDBY) because a focus session put the PC on
+     * Quiet ([com.jarvis.client.face.RestingFace]): the focus buddy shows.
+     * Only TalkBack's words use it (FaceView's `focusQuiet`).
+     */
+    val faceFocusQuiet: StateFlow<Boolean> = _faceFocusQuiet.asStateFlow()
 
     private val _faceSerious = MutableStateFlow(false)
 
@@ -697,6 +716,7 @@ object JarvisRuntime {
             combine(_link, _activity, _power, _pending, _attention) { _, _, _, _, _ -> }
                 .combine(voice.phase) { _, _ -> }
                 .combine(_stale) { _, _ -> }
+                .combine(_powerWhy) { _, _ -> }
                 .collectLatest {
                     val wait = publishFace()
                     if (wait > 0L) {
@@ -767,6 +787,7 @@ object JarvisRuntime {
         when (result) {
             is ApiResult.Ok -> {
                 _version.value = result.value
+                _powerWhy.value = result.value.powerWhy()
                 _notice.value = null
                 // A new handshake may be a different (or upgraded) server:
                 // ask it about the appearance route afresh.
@@ -1199,7 +1220,12 @@ object JarvisRuntime {
                 _activityDetail.value = ActivityEvent.detail(event.data, ACTIVITY_DETAIL_MAX)
                 refreshStatus()
             }
-            "power", "persona" -> refreshStatus()
+            "power", "persona" -> {
+                refreshStatus()
+                // Who put the PC in this mode can change while the mode
+                // does not (a focus session's Quiet, then the owner's own).
+                if (event.kind == "power") refreshPowerWhy()
+            }
             // The brief covers these; the Watches plate on Mind reads its
             // lists again, as the desktop's Brain does.
             "finding" -> _watchTick.update { it + 1 }
@@ -1311,6 +1337,15 @@ object JarvisRuntime {
         refreshSecondCard()
         // And one more, so chat can say where a `#log` line will be filed.
         noteTargets()
+    }
+
+    /**
+     * Reads only [_powerWhy] again. Not [handshake]: that also forgets the
+     * appearance route and clears the notice, which a power change has no
+     * business doing. A failed read keeps what was known.
+     */
+    private suspend fun refreshPowerWhy() {
+        api.version().onOk { _powerWhy.value = it.powerWhy() }
     }
 
     suspend fun refreshStatus() {
@@ -4349,6 +4384,8 @@ object JarvisRuntime {
         }
         val shown = com.jarvis.client.face.FaceLink.shown(resolveFace(), faceCutSince, nowMs)
         _faceOffline.value = shown.offline
+        _faceFocusQuiet.value = !shown.offline && shown.state == FaceState.IDLE &&
+            com.jarvis.client.face.RestingFace.focusQuiet(_power.value, _powerWhy.value)
         _face.value = shown.state
         return if (shown.offline) 0L else com.jarvis.client.face.FaceLink.graceLeftMs(faceCutSince, nowMs)
     }
@@ -4392,8 +4429,12 @@ object JarvisRuntime {
             resting && _attention.value.banked -> FaceState.BANKED
             // Quiet is a power mode that suppresses speech, which is what
             // standby renders. Leaving it on IDLE said "ready to talk" about a
-            // machine that would not.
-            resting && (_power.value == "standby" || _power.value == "quiet") -> FaceState.STANDBY
+            // machine that would not. Except a focus session's Quiet (owner,
+            // 2026-09-29): that shows the focus buddy, awake and working
+            // beside the owner - see RestingFace. A Quiet set by hand stays
+            // asleep.
+            resting && com.jarvis.client.face.RestingFace.asleep(_power.value, _powerWhy.value) ->
+                FaceState.STANDBY
             else -> FaceState.IDLE
         }
     }

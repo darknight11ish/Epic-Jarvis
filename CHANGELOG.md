@@ -31,6 +31,39 @@ number as the last part - `0.2.57` is a build of 0.2.
   within a tenth of a second of the end, at every voice speed. A typed
   answer and the phone's own voice keep their old timing. Needs the new
   desktop and phone builds; no backend change.
+- **A focus session shows the focus buddy, not a sleeping animal.** A focus
+  session puts Jarvis on Quiet, and every screen drew Quiet as asleep, so the
+  animal slept, woke to say "YouTube can wait" and dozed off again - the
+  focus buddy never appeared. Now a Quiet that a focus session set shows the
+  awake focus buddy on the PC's faces, the HUD, the tray icon and the phone;
+  a Quiet you set by hand, and standby, stay asleep. The screen reader says
+  Jarvis is working beside you and will not speak, except to name a
+  distraction.
+
+- **A still ring for errors, and a not-connected ring you can see.** On the
+  four animals and the robot an error now also draws a thin, still ring with
+  a gap at the bottom in the error colour, on both apps; it never moves, so
+  it is fine under Still, calm motion and a serious moment. The
+  "not connected" ring was so faint (1.65 : 1 against the background) that it
+  looked like plain sleep from across a room; it is now a heavier, complete
+  circle at about 4 : 1, and both rings stay readable on light and dark
+  backgrounds. They differ by shape as well as colour (a gap or none, heavy
+  or thin), so a colour-blind eye can tell them apart, and neither is the
+  waiting-on-you clock.
+
+- **The desktop tells a screen reader what the face shows, in the phone's
+  words.** It used to say only "Jarvis isn't connected" (or a raw word like
+  "banked"); the floating face, the widget and the face page now say the
+  phone's eight sentences, plus not connected and a focus session.
+
+- **The widget's sleeping Zs no longer get cut off.** In the widget's round
+  120 px window the panda's and monkey's Zs poked out past the edge; they now
+  stay inside it.
+
+- **The docs pictures of the animals' eight states are redrawn.** The red
+  panda's and pygmy owl's still showed a wave at "waiting on you" and a raised
+  paw or wing at "error", removed on 2026-09-28. All five are redrawn from the
+  current code and now show the error ring and the Zs.
 
 - **A thumbs-down on a crisis-help answer no longer counts toward "suggest
   the bigger model".** Crisis messages were already never counted for the

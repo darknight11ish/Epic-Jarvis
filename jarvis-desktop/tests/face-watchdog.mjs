@@ -421,15 +421,15 @@ await check("the floating face: no approval pose on a stale link, then standby w
   const ringOff = await frame.evaluate(RING);
   await page.close();
 
-  assert.deepEqual(live, { st: "approval", off: false, label: "Jarvis's face: approval" });
+  assert.deepEqual(live, { st: "approval", off: false, label: "Jarvis is waiting for your decision" });
   assert.notEqual(stale.st, "approval", "an approval face on a stale link");
   assert.equal(stale.off, false, "the ring came before the grace was up");
-  assert.equal(staleStatus, "");
+  assert.equal(staleStatus, "Jarvis is speaking", "the live region says what the face shows");
   assert.deepEqual(offline, { st: "standby", off: true, label: "Jarvis isn't connected" });
   assert.equal(offlineStatus, "Jarvis isn't connected");
   assert.ok(ringOn.ring > ringOn.outside + 20, `no ring: ${JSON.stringify(ringOn)}`);
-  assert.deepEqual(back, { st: "idle", off: false, label: "Jarvis's face: idle" });
-  assert.equal(backStatus, "");
+  assert.deepEqual(back, { st: "idle", off: false, label: "Jarvis is idle" });
+  assert.equal(backStatus, "Jarvis is idle");
   assert.ok(ringOff.ring < ringOff.outside + 8, `the ring stayed: ${JSON.stringify(ringOff)}`);
 });
 
@@ -446,7 +446,7 @@ await check("banked shows its notches on the desktop: the waiting count reaches 
 
 await check("the widget sends the face the same signal as the floating face", () => {
   const widget = read("src/widget.js"), floating = read("src/floating.js");
-  assert.match(widget, /type: "jarvis-hud-face", \.\.\.faceSignal\(currentLink\(\)\)/);
+  assert.match(widget, /const signal = faceSignal\(currentLink\(\)\);\n  const message = \{ type: "jarvis-hud-face", \.\.\.signal \}/);
   assert.match(floating, /faceSignal\(currentLink\(\)\)/);
   assert.doesNotMatch(widget + floating, /surfaceState\(currentLink\(\)\)/, "a face fed surfaceState alone has no ring");
 });
@@ -457,11 +457,310 @@ await check("faceSignal and surfaceState: the rules in one place", async () => {
                  attention: { pending: 2, banked: false } };
   const down = { ...live, connected: false, stale: true };
   assert.equal(L.OFFLINE_GRACE_MS, 12000, "the phone's grace is 12 s");
-  assert.deepEqual(L.faceSignal(live), { state: "approval", offline: false, waiting: 2, serious: false });
+  assert.deepEqual(L.faceSignal(live), { state: "approval", offline: false, waiting: 2, serious: false, focus: false });
   // A link object that is not the window's own has no history: down is offline.
-  assert.deepEqual(L.faceSignal(down), { state: "standby", offline: true, waiting: 2, serious: false });
+  assert.deepEqual(L.faceSignal(down), { state: "standby", offline: true, waiting: 2, serious: false, focus: false });
   assert.equal(L.surfaceState({ ...live, stale: true }), "standby");
   assert.equal(L.surfaceState(live), "approval");
+});
+
+/* ── What a screen reader is told (owner, 2026-09-29): the phone's sentences ─ */
+
+const WORDS_FIXTURE = JSON.parse(read("tests/fixtures/face-words.json"));
+
+await check("the desktop says the phone's eight sentences, plus not connected and a focus session", async () => {
+  const W = await import("../src/face-words.js");
+  assert.deepEqual({ ...W.STATE_WORDS }, WORDS_FIXTURE.states);
+  assert.equal(W.OFFLINE_WORDS, WORDS_FIXTURE.offline);
+  assert.equal(W.FOCUS_WORDS, WORDS_FIXTURE.focus);
+  for (const [state, words] of Object.entries(WORDS_FIXTURE.states)) {
+    assert.equal(W.faceWords({ state }), words);
+    assert.equal(W.faceWords({ state, offline: true }), WORDS_FIXTURE.offline, "not connected wins");
+    // A focus session changes the resting face's sentence and no other.
+    assert.equal(W.faceWords({ state, focus: true }), state === "idle" ? WORDS_FIXTURE.focus : words);
+  }
+  assert.equal(W.faceWords({ state: "no-such-state" }), WORDS_FIXTURE.states.idle, "never a raw id");
+  assert.match(WORDS_FIXTURE.states.standby, /will not speak/);
+  assert.match(WORDS_FIXTURE.focus, /will not speak/, "the focus sentence must keep 'will not speak' true");
+  // Nothing says the old raw word.
+  for (const words of Object.values(WORDS_FIXTURE.states)) assert.doesNotMatch(words, /face:/);
+});
+
+await check("the floating face's live region and its frame's label say the same sentences", async () => {
+  const page = await K.open(browser, base, "floating.html", {}, { width: 240, height: 240 });
+  const frame = await faceFrame(page);
+  const said = async (l) => {
+    await page.evaluate((x) => window.__emit("jarvis-link", x), l);
+    await page.waitForTimeout(250);
+    return [await page.locator("#face-status").textContent(),
+            await frame.evaluate(() => document.getElementById("display-canvas").getAttribute("aria-label"))];
+  };
+  const S = WORDS_FIXTURE.states;
+  const rest = { ...LIVE };
+  const got = {
+    idle: await said(rest),
+    error: await said({ ...rest, activity: "error" }),
+    approval: await said({ ...rest, approvals: 1 }),
+    listening: await said({ ...rest, activity: "listening" }),
+    thinking: await said({ ...rest, activity: "thinking" }),
+    speaking: await said({ ...rest, activity: "speaking" }),
+    banked: await said({ ...rest, attention: { ...rest.attention, pending: 3, banked: true } }),
+    standby: await said({ ...rest, power: "standby" }),
+    quietByHand: await said({ ...rest, power: "quiet", power_set_by: "override" }),
+    focus: await said({ ...rest, power: "quiet", power_set_by: "focus" }),
+  };
+  await page.close();
+  for (const state of Object.keys(S)) assert.deepEqual(got[state], [S[state], S[state]], state);
+  assert.deepEqual(got.quietByHand, [S.standby, S.standby], "a Quiet set by hand is asleep");
+  assert.deepEqual(got.focus, [WORDS_FIXTURE.focus, WORDS_FIXTURE.focus], "a focus session's Quiet");
+});
+
+await check("the widget's live region says what the face shows, while the face is showing", async () => {
+  const page = await K.open(browser, base, "widget.html",
+    { pending: [], prefs: { expanded: true } }, { width: 320, height: 460 });
+  await page.waitForFunction(() => document.getElementById("face-frame").getAttribute("src"), null, { timeout: 8000 });
+  const say = async (l) => {
+    await page.evaluate((x) => window.__emit("jarvis-link", x), l);
+    await page.waitForTimeout(250);
+    return page.locator("#face-status").textContent();
+  };
+  const listening = await say({ ...LIVE, activity: "listening" });
+  const focus = await say({ ...LIVE, power: "quiet", power_set_by: "focus" });
+  const byHand = await say({ ...LIVE, power: "quiet", power_set_by: "override" });
+  const offline = await say({ ...LIVE, connected: false, stale: true });
+  const role = await page.locator("#face-status").getAttribute("aria-live");
+  await page.close();
+  assert.equal(listening, WORDS_FIXTURE.states.listening);
+  assert.equal(focus, WORDS_FIXTURE.focus);
+  assert.equal(byHand, WORDS_FIXTURE.states.standby);
+  assert.equal(role, "polite");
+  // (The widget's link goes offline only after the 12 s grace, like every window: the words then are
+  // the state's, until it is up. The floating window's test above waits the grace out.)
+  assert.ok(offline.length > 0);
+});
+
+/* ── The two still rings: not connected, and error (owner, 2026-09-29) ───── */
+
+const RING_FIXTURE = JSON.parse(read("tests/fixtures/ring-cases.json"));
+const GROUND = [4, 7, 12];   // faces.html BG, #04070c
+
+/** Pixels of a face's surface, read at 3, 6, 9 and 12 o'clock (and the gap's edges)
+ *  of the ring radius. The face itself draws nothing, so only the rings are seen. */
+const RING_PROBE = ([SRC, id, state, offline, size]) => {
+  const s = (0, eval)(SRC)(id, true);
+  const cv = s.ctx.canvas;
+  cv.style.width = size + "px"; cv.style.height = size + "px";
+  sizeSurface(s);
+  s.offline = offline;
+  for (let i = 0; i < 6; i++) drawSurface(s, 1 / 30, state);
+  const w = s.w, h = s.h, side = Math.min(w, h), R = side * 0.44 * 1.03;
+  const px = (deg, r) => {
+    const a = deg * Math.PI / 180;
+    const d = s.ctx.getImageData(Math.round(w / 2 + Math.cos(a) * r), Math.round(h / 2 + Math.sin(a) * r), 1, 1).data;
+    return [d[0], d[1], d[2]];
+  };
+  // How many pixels across the ring is, along the 3 o'clock row.
+  let thick = 0;
+  for (let dx = -8; dx <= 8; dx++) {
+    const d = s.ctx.getImageData(Math.round(w / 2 + R) + dx, Math.round(h / 2), 1, 1).data;
+    if (Math.abs(d[0] - 4) + Math.abs(d[1] - 7) + Math.abs(d[2] - 12) > 40) thick++;
+  }
+  // Around the whole ring: which of 72 five-degree steps are lit.
+  const lit = [];
+  for (let k = 0; k < 72; k++) {
+    const c = px(k * 5, R);
+    lit.push(Math.abs(c[0] - 4) + Math.abs(c[1] - 7) + Math.abs(c[2] - 12) > 40 ? 1 : 0);
+  }
+  return { right: px(0, R), bottom: px(90, R), left: px(180, R), top: px(270, R),
+           bottomLeft: px(90 + 45, R), bottomRight: px(90 - 45, R), thick, lit, w };
+};
+const contrastOf = (rgb) => {
+  const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const L = (c) => 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]);
+  const a = L(rgb), b = L(GROUND);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+};
+
+await check("the ring colours match the golden fixture both apps are held to, and stay 3.2:1 or more", async () => {
+  const page = await editor();
+  const got = await page.evaluate((cases) => cases.map((c) => ({ tone: ringTone(c.c, c.bg), k: ringContrast(ringTone(c.c, c.bg), c.bg) })),
+    RING_FIXTURE.cases);
+  await page.close();
+  RING_FIXTURE.cases.forEach((c, i) => {
+    assert.deepEqual(got[i].tone, c.tone, `${c.colour} on ${c.ground}`);
+    assert.ok(got[i].k >= 3.2 && got[i].k <= 5.6, `${c.colour} on ${c.ground} measures ${got[i].k.toFixed(2)}:1`);
+  });
+  assert.ok(RING_FIXTURE.cases.length >= 50);
+});
+
+await check("the not-connected ring is a complete circle that stands out from the ground (3:1 or more, it was 1.65:1)", async () => {
+  const page = await editor();
+  const got = await page.evaluate(RING_PROBE, [SURFACE.toString(), "redpanda", "standby", true, 300]);
+  await page.close();
+  for (const at of ["right", "bottom", "left", "top", "bottomLeft", "bottomRight"]) {
+    const k = contrastOf(got[at]);
+    assert.ok(k >= 3, `the ring at ${at} measures ${k.toFixed(2)}:1 against the ground (${got[at]})`);
+  }
+  assert.ok(got.lit.every((v) => v === 1), "the not-connected ring has a gap: " + got.lit.join(""));
+});
+
+await check("the error ring: a thin arc with a gap at the bottom, on every character face, and on nothing else", async () => {
+  const page = await editor();
+  const per = {};
+  for (const id of ["redpanda", "pygmyowl", "seaotter", "monkey", "robot"]) {
+    per[id] = await page.evaluate(RING_PROBE, [SURFACE.toString(), id, "error", false, 300]);
+  }
+  const notCharacter = await page.evaluate(RING_PROBE, [SURFACE.toString(), "arc", "error", false, 300]);
+  const idle = await page.evaluate(RING_PROBE, [SURFACE.toString(), "redpanda", "idle", false, 300]);
+  const waiting = await page.evaluate(RING_PROBE, [SURFACE.toString(), "redpanda", "approval", false, 300]);
+  const offline = await page.evaluate(RING_PROBE, [SURFACE.toString(), "redpanda", "standby", true, 300]);
+  await page.close();
+  for (const [id, r] of Object.entries(per)) {
+    for (const at of ["right", "left", "top", "bottomLeft", "bottomRight"]) {
+      assert.ok(contrastOf(r[at]) >= 3, `${id}: the error ring at ${at} measures ${contrastOf(r[at]).toFixed(2)}:1`);
+    }
+    // The gap is at the bottom: the ground shows at six o'clock...
+    assert.ok(contrastOf(r.bottom) < 1.3, `${id}: no gap at the bottom (${r.bottom})`);
+    // ...and it is 70 degrees wide (14 of the 72 five-degree steps, centred on step 18), not more, not less.
+    const dark = r.lit.map((v, i) => (v ? -1 : i)).filter((i) => i >= 0);
+    assert.ok(dark.length >= 12 && dark.length <= 16, `${id}: the gap is ${dark.length * 5} degrees wide`);
+    assert.ok(dark.every((i) => i >= 10 && i <= 26), `${id}: the gap is not at the bottom: ${dark}`);
+    // The colour is the error colour (rose), not the standby grey.
+    assert.ok(r.right[0] > r.right[2] + 30, `${id}: the error ring is not rose: ${r.right}`);
+  }
+  // Thin: clearly thinner than the not-connected ring, which is the heavy one.
+  assert.ok(per.redpanda.thick <= offline.thick - 1, `error ${per.redpanda.thick}px vs not-connected ${offline.thick}px`);
+  assert.ok(offline.thick >= 3, `the not-connected ring is ${offline.thick}px at 300`);
+  // Not a character face, not another state, not while not connected: no error ring.
+  assert.ok(notCharacter.lit.every((v) => v === 0), "the Arc face got an error ring");
+  assert.ok(idle.lit.every((v) => v === 0), "an idle face has a ring");
+  assert.ok(waiting.lit.slice(0, 72).filter((v) => v).length < 30, "the waiting clock was mistaken for a ring");
+  assert.ok(offline.lit.every((v) => v === 1), "the offline ring lost its closed shape");
+});
+
+await check("the error ring does not move: the same pixels a second later, and under Still", async () => {
+  const page = await editor();
+  const a = await page.evaluate(RING_PROBE, [SURFACE.toString(), "monkey", "error", false, 200]);
+  const b = await page.evaluate(([SRC, size]) => {
+    const s = (0, eval)(SRC)("monkey", true);
+    s.ctx.canvas.style.width = size + "px"; s.ctx.canvas.style.height = size + "px";
+    sizeSurface(s);
+    for (let i = 0; i < 90; i++) drawSurface(s, 1 / 30, "error");
+    const w = s.w, h = s.h, R = Math.min(w, h) * 0.44 * 1.03;
+    const first = [];
+    for (let k = 0; k < 72; k++) {
+      const an = k * 5 * Math.PI / 180;
+      first.push(Array.from(s.ctx.getImageData(Math.round(w / 2 + Math.cos(an) * R), Math.round(h / 2 + Math.sin(an) * R), 1, 1).data));
+    }
+    for (let i = 0; i < 90; i++) drawSurface(s, 1 / 30, "error");
+    let same = 0;
+    for (let k = 0; k < 72; k++) {
+      const an = k * 5 * Math.PI / 180;
+      const d = Array.from(s.ctx.getImageData(Math.round(w / 2 + Math.cos(an) * R), Math.round(h / 2 + Math.sin(an) * R), 1, 1).data);
+      if (d.join() === first[k].join()) same++;
+    }
+    return same;
+  }, [SURFACE.toString(), 200]);
+  await page.close();
+  assert.ok(a.lit.some((v) => v === 1));
+  assert.equal(b, 72, "the error ring changed between two moments: it pulses or moves");
+  // Static by construction: the source draws it with no clock and no alpha.
+  const src = read("src/faces.html");
+  const fn = src.slice(src.indexOf("function drawErrorRing("), src.indexOf("function drawSurface("));
+  assert.doesNotMatch(fn, /s\.clock|fxAge|performance\.now|globalAlpha|Math\.sin/, "the error ring reads a clock or fades");
+});
+
+/* ── The sleeping Zs stay inside the widget's round window ─────────────────── */
+
+await check("in the widget's 120 px circle every z stays inside it; without the circle the panda's and monkey's do not", async () => {
+  const page = await editor();
+  const run = (round) => page.evaluate(([SRC, round]) => {
+    const out = {};
+    const realNow = performance.now;
+    let fake = realNow.call(performance);
+    performance.now = () => fake;
+    for (const id of ["redpanda", "pygmyowl", "seaotter", "monkey", "robot"]) {
+      const s = (0, eval)(SRC)(id);
+      s.ctx.canvas.style.width = "120px"; s.ctx.canvas.style.height = "120px";
+      sizeSurface(s);
+      s.round = round;
+      let max = 0, seenAny = 0;
+      for (let i = 0; i < 700; i++) {
+        fake += 1000 / 30; drawSurface(s, 1 / 30, "standby");
+        const z = window.__faceZs;
+        if (i > 150 && z && z.shown > 0) { seenAny++; max = Math.max(max, z.maxR || 0); }
+      }
+      out[id] = { max: +max.toFixed(3), seenAny };
+    }
+    performance.now = realNow;
+    return out;
+  }, [SURFACE.toString(), round]);
+  const clipped = await run(true);
+  const free = await run(false);
+  await page.close();
+  console.log("      farthest z edge, in units of the circle's radius (clipped / free):",
+    JSON.stringify(Object.fromEntries(Object.keys(clipped).map((k) => [k, [clipped[k].max, free[k].max]]))));
+  for (const [id, r] of Object.entries(clipped)) {
+    assert.ok(r.seenAny > 20, `${id}: no Zs were drawn to measure`);
+    assert.ok(r.max <= 0.95, `${id}: a z reaches ${r.max} of the circle's radius (the edge is 1)`);
+  }
+  // The regression: unclipped, at least the two animals the review named poke out.
+  assert.ok(free.redpanda.max > 1 || free.monkey.max > 1,
+    "no z pokes out of the circle without the fix, so this test proves nothing: " + JSON.stringify(free));
+  // The widget asks for the circle.
+  assert.match(read("src/widget.js"), /faces\.html\?mode=display&feed=parent&clip=circle/);
+});
+
+/* ── A focus session is not a sleeping animal (owner, 2026-09-29) ────────── */
+
+await check("a focus session's Quiet shows the focus buddy (idle); a hand-set Quiet, or any standby, stays asleep", async () => {
+  const L = await import("../src/jarvis-link.js");
+  const rest = { connected: true, stale: false, activity: "idle", approvals: 0, power: "active",
+                 attention: { pending: 0, banked: false } };
+  // The bug: this said "standby" (Quiet is asleep), so the animal slept through its own focus session.
+  assert.equal(L.surfaceState({ ...rest, power: "quiet", powerSetBy: "focus" }), "idle");
+  assert.equal(L.faceSignal({ ...rest, power: "quiet", powerSetBy: "focus" }).state, "idle");
+  assert.equal(L.restingAsleep({ ...rest, power: "quiet", powerSetBy: "focus" }), false);
+  // Control: everything else that was asleep still is.
+  assert.equal(L.surfaceState({ ...rest, power: "quiet", powerSetBy: "override" }), "standby", "a Quiet set by hand");
+  assert.equal(L.surfaceState({ ...rest, power: "quiet", powerSetBy: null }), "standby");
+  assert.equal(L.surfaceState({ ...rest, power: "quiet", powerSetBy: "schedule" }), "standby");
+  assert.equal(L.surfaceState({ ...rest, power: "standby", powerSetBy: "focus" }), "standby", "only Quiet is the session's");
+  assert.equal(L.surfaceState({ ...rest, power: "standby", powerSetBy: "override" }), "standby");
+  assert.equal(L.surfaceState({ ...rest, power: "active", powerSetBy: "focus" }), "idle");
+  // Not connected is asleep whatever the reason (the stream keeps the last power).
+  assert.equal(L.surfaceState({ ...rest, connected: false, stale: true, power: "quiet", powerSetBy: "focus" }), "standby");
+  // Busy still wins over resting, as before.
+  assert.equal(L.surfaceState({ ...rest, activity: "speaking", power: "quiet", powerSetBy: "focus" }), "speaking");
+});
+
+await check("the floating face shows idle for a focus session's Quiet and standby for a hand-set one", async () => {
+  const page = await K.open(browser, base, "floating.html", {}, { width: 240, height: 240 });
+  const frame = await faceFrame(page);
+  const state = () => frame.evaluate(() => LIVE_STATE);
+  await page.evaluate((l) => window.__emit("jarvis-link", { ...l, power: "quiet", power_set_by: "focus" }), LIVE);
+  await page.waitForTimeout(300);
+  const focus = await state();
+  await page.evaluate((l) => window.__emit("jarvis-link", { ...l, power: "quiet", power_set_by: "override" }), LIVE);
+  await page.waitForTimeout(300);
+  const byHand = await state();
+  await page.close();
+  assert.equal(focus, "idle", "the animal slept through a focus session");
+  assert.equal(byHand, "standby", "a Quiet set by hand must stay asleep");
+});
+
+await check("faces.html's own specState (its fallback port of the tray rule) agrees", async () => {
+  const page = await editor();
+  const got = await page.evaluate(() => {
+    const base = { connected: true, stale: false, activity: "idle", approvals: 0, attention: { banked: false } };
+    return [
+      specState({ ...base, power: "quiet", powerSetBy: "focus" }),
+      specState({ ...base, power: "quiet", powerSetBy: "override" }),
+      specState({ ...base, power: "standby", powerSetBy: "focus" }),
+    ];
+  });
+  await page.close();
+  assert.deepEqual(got, ["idle", "standby", "standby"]);
 });
 
 await browser.close();

@@ -14,11 +14,13 @@ import com.jarvis.client.face.FlashGovernor
 import com.jarvis.client.face.MonkeyPose
 import com.jarvis.client.face.OtterPose
 import com.jarvis.client.face.OwlPose
+import com.jarvis.client.face.RestingFace
 import com.jarvis.client.face.RobotPose
 import com.jarvis.client.face.Spec
 import com.jarvis.client.face.Swatch
 import com.jarvis.client.face.ZsRule
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -114,6 +116,101 @@ class FaceShellRulesTest {
         assertEquals("Jarvis has notes saved for later", FaceWords.spoken(FaceState.BANKED, offline = false))
         assertEquals("Jarvis is on standby and will not speak", FaceWords.spoken(FaceState.STANDBY, offline = false))
         assertEquals("Jarvis is waiting for your decision", FaceWords.spoken(FaceState.APPROVAL, offline = false))
+    }
+
+    // --- a focus session is not asleep (RestingFace), owner 2026-09-29 -------
+
+    @Test
+    fun `a focus session's Quiet is awake and every other Quiet or standby is asleep`() {
+        val focus = "the focus session"
+        // The focus buddy shows: the resting face is NOT standby.
+        assertFalse(RestingFace.asleep("quiet", focus))
+        assertTrue(RestingFace.focusQuiet("quiet", focus))
+        // A Quiet the owner set by hand stays asleep, whatever else is going on.
+        assertTrue(RestingFace.asleep("quiet", "the owner, from this PC"))
+        assertTrue(RestingFace.asleep("quiet", "the standby schedule"))
+        assertTrue(RestingFace.asleep("quiet", "idle for 30 minutes"))
+        assertTrue(RestingFace.asleep("quiet", null))
+        assertTrue(RestingFace.asleep("quiet", ""))
+        // Only Quiet is the focus session's: standby is asleep even with its words.
+        assertTrue(RestingFace.asleep("standby", focus))
+        assertFalse(RestingFace.focusQuiet("standby", focus))
+        // Active is awake either way, and is not "focus quiet".
+        assertFalse(RestingFace.asleep("active", focus))
+        assertFalse(RestingFace.focusQuiet("active", focus))
+        // A server that sends only a flag (no `why`) keeps the old behaviour.
+        assertTrue(RestingFace.asleep("quiet", null))
+    }
+
+    @Test
+    fun `the words for a focus session say it is working beside you and still will not speak`() {
+        val said = FaceWords.spoken(FaceState.IDLE, offline = false, focusQuiet = true)
+        assertEquals(FaceWords.FOCUS, said)
+        assertTrue(said, said.contains("will not speak"))
+        assertTrue(said, said.contains("focus session"))
+        // Without a focus session Quiet, idle is idle. Not connected wins over all.
+        assertEquals("Jarvis is idle", FaceWords.spoken(FaceState.IDLE, offline = false))
+        assertEquals("Jarvis is idle", FaceWords.spoken(FaceState.IDLE, offline = false, focusQuiet = false))
+        assertEquals("Jarvis isn't connected", FaceWords.spoken(FaceState.IDLE, offline = true, focusQuiet = true))
+        // The flag changes the idle sentence and no other.
+        for (s in FaceState.values()) {
+            if (s == FaceState.IDLE) continue
+            assertEquals("$s", FaceWords.spoken(s, offline = false), FaceWords.spoken(s, offline = false, focusQuiet = true))
+        }
+    }
+
+    @Test
+    fun `the runtime asks RestingFace, and reads why on the handshake and on every power event`() {
+        val main = "jarvis-client/app/src/main/java/com/jarvis/client"
+        val rt = repoFile("$main/JarvisRuntime.kt").readText()
+        // The resting face is decided by RestingFace, not by the mode alone.
+        assertTrue(rt.contains("RestingFace.asleep(_power.value, _powerWhy.value)"))
+        assertFalse("the old test on the mode alone is back",
+            rt.contains("resting && (_power.value == \"standby\" || _power.value == \"quiet\") -> FaceState.STANDBY"))
+        // `why` comes from the handshake, and is read again when the power mode changes.
+        assertTrue(rt.contains("_powerWhy.value = result.value.powerWhy()"))
+        val onPower = rt.substring(rt.indexOf("\"power\", \"persona\" -> {"))
+        assertTrue(onPower.substring(0, 400).contains("refreshPowerWhy()"))
+        // ...and a change of it repaints the face.
+        assertTrue(rt.contains(".combine(_powerWhy) { _, _ -> }"))
+        // The API model reads capabilities.power.why.
+        val api = repoFile("$main/net/ApiModels.kt").readText()
+        assertTrue(api.contains("detail(\"power\")?.get(\"why\")"))
+        // The sentence is the PC's own (backend/jarvis_focus.py WHY).
+        val focus = repoFile("backend/jarvis_focus.py").readText()
+        assertTrue(focus.contains("WHY = \"${RestingFace.FOCUS_WHY}\""))
+        // TalkBack's words are told about it too.
+        val view = repoFile("$main/face/FaceView.kt").readText()
+        assertTrue(view.contains("FaceWords.spoken(state, offline, focusQuiet)"))
+    }
+
+    @Test
+    fun `the phone's sentences are the ones the desktop says, from one list`() {
+        // jarvis-desktop/tests/fixtures/face-words.json, which face-words.js is held to
+        // in tests/face-watchdog.mjs. Owner, 2026-09-29: the desktop says the phone's sentences.
+        val doc = kotlinx.serialization.json.Json.parseToJsonElement(
+            repoFile("jarvis-desktop/tests/fixtures/face-words.json").readText(),
+        ).let { it as kotlinx.serialization.json.JsonObject }
+        fun text(e: kotlinx.serialization.json.JsonElement?) = (e as kotlinx.serialization.json.JsonPrimitive).content
+        val states = doc["states"] as kotlinx.serialization.json.JsonObject
+        assertEquals("all eight states are in the list", FaceState.values().size, states.size)
+        for (s in FaceState.values()) {
+            assertEquals("$s", text(states[s.name.lowercase()]), FaceWords.spoken(s, offline = false))
+        }
+        assertEquals(text(doc["offline"]), FaceWords.OFFLINE)
+        assertEquals(text(doc["offline"]), FaceWords.spoken(FaceState.IDLE, offline = true))
+        assertEquals(text(doc["focus"]), FaceWords.FOCUS)
+        assertEquals(text(doc["focus"]), FaceWords.spoken(FaceState.IDLE, offline = false, focusQuiet = true))
+    }
+
+    private fun repoFile(rel: String): java.io.File {
+        var dir: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
+        while (dir != null) {
+            val f = java.io.File(dir, rel)
+            if (f.isFile) return f
+            dir = dir.parentFile
+        }
+        error("$rel not found above ${System.getProperty("user.dir")}")
     }
 
     // --- when the face shows Jarvis is out of reach (FaceLink) --------------

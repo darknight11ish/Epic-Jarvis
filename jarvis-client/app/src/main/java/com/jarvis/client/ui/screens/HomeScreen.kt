@@ -216,6 +216,8 @@ data class HomeState(
      * STANDBY with its hollow ring, and says "Jarvis isn't connected".
      */
     val faceOffline: Boolean = false,
+    /** The idle face is a focus session's Quiet (`JarvisRuntime.faceFocusQuiet`): TalkBack says so. */
+    val faceFocusQuiet: Boolean = false,
     val power: String,
     val status: StatusInfo?,
     val pending: List<PendingItem>,
@@ -1602,6 +1604,7 @@ private fun FaceBlock(
                     FaceView(
                         state = state.faceState,
                         offline = state.faceOffline,
+                        focusQuiet = state.faceFocusQuiet,
                         face = state.face,
                         bindings = state.bindings,
                         notches = state.attention.pending,

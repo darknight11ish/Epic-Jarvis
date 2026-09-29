@@ -1,0 +1,15 @@
+{
+ "note": "What a screen reader is told about the face, on both apps: jarvis-desktop/src/face-words.js and jarvis-client .../face/FaceShellRules.kt FaceWords. One list; change it here, then in both. Owner, 2026-09-29: the desktop says the phone's eight sentences, plus not connected and a focus session.",
+ "offline": "Jarvis isn't connected",
+ "focus": "Jarvis is working beside you in your focus session and will not speak, except to name a distraction",
+ "states": {
+  "error": "Jarvis has a problem",
+  "approval": "Jarvis is waiting for your decision",
+  "listening": "Jarvis is listening",
+  "thinking": "Jarvis is working",
+  "speaking": "Jarvis is speaking",
+  "banked": "Jarvis has notes saved for later",
+  "standby": "Jarvis is on standby and will not speak",
+  "idle": "Jarvis is idle"
+ }
+}

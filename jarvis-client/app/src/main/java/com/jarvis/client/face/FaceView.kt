@@ -155,6 +155,12 @@ fun FaceView(
      * The other faces ignore it.
      */
     stillMotion: Boolean = false,
+    /**
+     * The face is IDLE because a focus session put Jarvis on Quiet
+     * (`JarvisRuntime.faceFocusQuiet`): the focus buddy shows, awake, not a
+     * sleeping animal. Only TalkBack's words differ ([FaceWords.spoken]).
+     */
+    focusQuiet: Boolean = false,
 ) {
     val host = remember { FaceHost() }
     var frame by remember { mutableStateOf(host.snapshot()) }
@@ -507,11 +513,19 @@ fun FaceView(
     // While Jarvis cannot be reached it says so, whatever pose is showing:
     // the old link-down ladder ended in BANKED and read "Jarvis has notes
     // saved for later" about a PC this phone could not hear (FaceWords).
-    val spoken = FaceWords.spoken(state, offline)
+    val spoken = FaceWords.spoken(state, offline, focusQuiet)
     // The offline ring's colour: the shown state's own bound colour, dimmed
     // toward the ground by that state's `dim` - fixed, not the pattern's
     // colour of the moment, so the ring never breathes or pulses.
     val ringColour = if (offline) offlineRingColour(bindings, state, background) else null
+    // The error ring: a thin still arc with a gap at the bottom, on the four
+    // animals and the robot only (owner, 2026-09-29; FaceRings). Never while
+    // not connected - that face is standby, with its own ring.
+    val errorRing = if (!offline && state == FaceState.ERROR && shown is CritterFace) {
+        errorRingColour(bindings, background)
+    } else {
+        null
+    }
     Box(
         modifier
             .semantics {
@@ -606,6 +620,7 @@ fun FaceView(
                 val postGlow = if (FaceQuality.current.post) glowK else 0f
                 drawFace(f, shown, notches, glowSprite, background, postGlow)
                 if (ringColour != null) drawOfflineRing(size.minDimension, ringColour)
+                if (errorRing != null) drawErrorRing(size.minDimension, errorRing)
                 drawCost.nanos = System.nanoTime() - t0
             }
         }
@@ -2059,41 +2074,73 @@ private fun DrawScope.drawApprovalClock(
 /**
  * The offline ring: Jarvis cannot be reached (FaceView's `offline`).
  *
- * One thin, hollow circle just outside the face - at [OFFLINE_RING_R] of the
- * kit's overlay radius, so outside the face's own rim (0.44 of the box) and
- * outside the approval clock (0.95) and the notch ring (0.93) too. Drawn
- * after, and outside, the shake and flinch, and never animated: it is a
- * standing fact, not an event, and nothing about it flashes. The echo of the
- * desktop tray's hollow icon for the same news.
+ * One hollow, COMPLETE circle just outside the face - at [FaceRings.RING_R] of
+ * the kit's overlay radius, so outside the face's own rim (0.44 of the box)
+ * and outside the approval clock (0.95) and the notch ring (0.93) too. The
+ * heavier of the two still rings ([FaceRings.OFFLINE_W]; the error ring is
+ * thin and has a gap at the bottom). Drawn after, and outside, the shake and
+ * flinch, and never animated: it is a standing fact, not an event, and
+ * nothing about it flashes. The echo of the desktop tray's hollow icon for
+ * the same news.
  *
  * @param w the face's box, its shorter side - see [OVERLAY_R_FRAC].
  */
 private fun DrawScope.drawOfflineRing(w: Float, colour: Color) {
     drawCircle(
         colour,
-        w * OVERLAY_R_FRAC * OFFLINE_RING_R,
+        w * OVERLAY_R_FRAC * FaceRings.RING_R,
         Offset(size.width / 2f, size.height / 2f),
-        style = Stroke(width = max(1.5f, w * OFFLINE_RING_W)),
+        style = Stroke(width = max(FaceRings.OFFLINE_MIN_PX, w * FaceRings.OFFLINE_W)),
     )
 }
 
-/** The offline ring's radius, as a share of the overlay radius. */
-private const val OFFLINE_RING_R = 1.03f
-
-/** The offline ring's line, as a share of the face's box: thin. */
-private const val OFFLINE_RING_W = 0.008f
+/**
+ * The error ring: something went wrong. On the four animals and the robot,
+ * a thin arc with a gap of [FaceRings.ERROR_GAP_DEG] degrees centred at the
+ * BOTTOM, at the same radius as the offline ring, in the error colour. Still:
+ * never moves or pulses, so it is fine under Still, calm motion and a
+ * serious moment. Flat ends, so the gap is exactly the gap.
+ *
+ * @param w the face's box, its shorter side - see [OVERLAY_R_FRAC].
+ */
+private fun DrawScope.drawErrorRing(w: Float, colour: Color) {
+    val r = w * OVERLAY_R_FRAC * FaceRings.RING_R
+    val cx = size.width / 2f
+    val cy = size.height / 2f
+    drawArc(
+        color = colour,
+        startAngle = FaceRings.errorArcStart(),
+        sweepAngle = FaceRings.errorArcSweep(),
+        useCenter = false,
+        topLeft = Offset(cx - r, cy - r),
+        size = Size(r * 2f, r * 2f),
+        style = Stroke(width = max(FaceRings.ERROR_MIN_PX, w * FaceRings.ERROR_W), cap = StrokeCap.Butt),
+    )
+}
 
 /**
- * The offline ring's colour: [state]'s own bound colour (the neutral grey,
- * for standby, unless the owner bound another), blended toward the ground by
- * that state's `dim`, fully opaque. A fixed colour, not the pattern's colour
- * of the moment - standby BREATHES, and a ring that breathed would be a ring
- * that moved. The desktop's drawOfflineRing uses exactly this rule since
- * 2026-09-28 (it had used the pattern's second colour at 60% opacity, which
- * breathed and measured about 1.1:1 against the ground; this is about 1.6:1).
+ * A ring's colour: [tint] made readable against [background]
+ * ([FaceRings.tone]) and fixed - not the pattern's colour of the moment,
+ * because standby BREATHES and a ring that breathed would be a ring that
+ * moved. The desktop's `ringCss`. It used to be dimmed by the state's `dim`
+ * and measured about 1.6 : 1 against the ground.
  */
+private fun ringColourOf(tint: Color, background: Color): Color {
+    fun ch(v: Float): Int = (v * 255f + 0.5f).toInt().coerceIn(0, 255)
+    val c = FaceRings.tone(
+        intArrayOf(ch(tint.red), ch(tint.green), ch(tint.blue)),
+        intArrayOf(ch(background.red), ch(background.green), ch(background.blue)),
+    )
+    return Color(c[0], c[1], c[2])
+}
+
+/** The offline ring's colour: [state]'s own bound colour (standby's neutral grey unless the owner bound another). */
 private fun offlineRingColour(bindings: Bindings, state: FaceState, background: Color): Color =
-    dimmed(bindings.of(state).tint ?: Palette.NEUTRAL_3, Spec.transformFor(state).dim, background)
+    ringColourOf(bindings.of(state).tint ?: Palette.NEUTRAL_3, background)
+
+/** The error ring's colour: the error state's own bound colour. */
+private fun errorRingColour(bindings: Bindings, background: Color): Color =
+    ringColourOf(bindings.of(FaceState.ERROR).tint ?: Palette.ROSE_4, background)
 
 /**
  * The rim ring drawn full, with one notch per waiting item.
