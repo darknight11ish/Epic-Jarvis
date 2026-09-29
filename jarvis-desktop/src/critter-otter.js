@@ -19,13 +19,14 @@
           wave, bump, envAHR, happening, happeningV, noise, breathWave, NONE4, playingV, beat, shift, looks, restingGaze, optsOf, mods, blinkAt,
           overlayAt, ease, toward, eyesOpen, eyesClose, TAU, gaze, NONE, ZERO2, AWAKE, focusOf, petOf, cuteOf,
           switchE, listenNod, phraseBeat, ackNodOf, ackGlowOf, focusEndOf, variant, arrivalOf, cuteAt,
-          cuteQuiet, cuteBusy, fullTurn, HELLO_S, GOODBYE_S } = C.util;
+          cuteQuiet, cuteBusy, fullTurn, lidSet, lidNod, lidWake, HELLO_S, GOODBYE_S } = C.util;
 
   const KEYS = [
     "headYaw", "headPitch", "headRoll", "bob", "rock", "tilt", "breath",
     "eyeL", "eyeR", "paddle", "speak", "lookX", "lookY",
     "pawLx", "pawLy", "pawLz", "pawRx", "pawRy", "pawRz",
     "orbX", "orbY", "orbZ", "orbR", "orbGlow", "ripple", "wave", "asleep",
+    "lid", "lidSlope",   // the painted eyelid (uLid)
   ];
 
   const NECK = [-0.60, 0.14, 0.0];
@@ -83,6 +84,7 @@
       // (391 cycles a loop: 2.4 radians a second, kept small for the GPU.)
       wave: 6.283185307179586 * (((t - 1024 * Math.floor(t / 1024)) / 1024 * 391) % 1),
       asleep: state === "standby" ? 1 : 0,
+      lid: 0, lidSlope: 0,
     };
     // 244 cycles a loop: a breath every 4.2 seconds.
     let breathK = 244, breathDepth = 1, blinkSlow = 1, blinks = true, turnBlink = 0, calm = 1;
@@ -360,6 +362,7 @@
       P.orbY += (PEBBLE_DOWN - P.orbY) * wash;
     }
     farewell(P, state, o);
+    lidSet(P, state);
 
     const q = 1 - o.quiet;
     const k = eyeK * (1 - q * Math.max(blinks ? blinkAt(t, S_BLINK, blinkSlow, 2, 10) : 0, turnBlink));
@@ -422,6 +425,7 @@
         * (1 - ease((x - 1.4) / 0.8));
       const lid = k * toward(eyesClose(x), lids, E);
       P.eyeL = F.eyeL * lid; P.eyeR = F.eyeR * lid;
+      lidNod(P, F, 1 - lid);   // the painted lid comes down as the eyes close
       // Its paws (and the pebble in them) stay where they were until 1.2 s,
       // then take 1.2 s to come up over its eyes; the stretch is over by 1.4 s.
       const hold = e * (1 - ease((x - 1.2) / 1.2));
@@ -448,6 +452,7 @@
     const lids = 0.4 * ease((x - 0.45) / 0.4) + 0.6 * ease((x - 1.05) / 0.45);
     const f = 1 - k * (1 - toward(eyesOpen(x), lids, E));
     P.eyeL *= f; P.eyeR *= f;
+    lidWake(P, x, k);   // ...and lifts a little after they open
   }
 
   // (rock is an angle: rolled right over, it settles the short way round.)
@@ -472,6 +477,7 @@
       uNeck: toWorld(NECK),
       uHeadR0: invRow(H, 0), uHeadR1: invRow(H, 1), uHeadR2: invRow(H, 2),
       uFace: [clamp(P.eyeL, 0, 1.2), clamp(P.eyeR, 0, 1.2), clamp(P.paddle, 0, 1)],
+      uLid: [clamp(P.lid, 0, 1), clamp(P.lidSlope, -1, 1)],
       uMouth: mouthOf(P, mouth),
       uLook: [clamp(P.lookX, -1, 1), clamp(P.lookY, -1, 1)],
       // Shoulders on top of the chest, so the short arms lie along it.

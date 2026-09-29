@@ -29,7 +29,7 @@
           wave, bump, envAHR, happening, happeningV, noise, breathWave, NONE4, playingV, beat, shift, looks, restingGaze, optsOf, mods, blinkAt,
           overlayAt, ease, toward, eyesOpen, eyesClose, gaze, NONE, ZERO2, AWAKE, focusOf, petOf, cuteOf,
           switchE, listenNod, phraseBeat, ackNodOf, ackGlowOf, focusEndOf, variant, arrivalOf, cuteAt,
-          cuteQuiet, cuteBusy, fullTurn, HELLO_S, GOODBYE_S, TAU } = C.util;
+          cuteQuiet, cuteBusy, fullTurn, lidSet, lidNod, lidWake, HELLO_S, GOODBYE_S, TAU } = C.util;
 
   const KEYS = [
     "headYaw", "headPitch", "headRoll", "swing", "lean", "breath", "bob",
@@ -40,6 +40,7 @@
     "legLf", "legLo", "legLk", "legRf", "legRo", "legRk",
     "tailWrap", "tail1", "tail2", "tail3", "tail4", "tailCurl",
     "asleep",
+    "lid", "lidSlope",   // the painted eyelid (uLid)
   ];
 
   // Where the hand holds the vine (x), and the vine's height and depth there
@@ -130,6 +131,7 @@
       legLf: 0.18, legLo: 0.10, legLk: 0.45, legRf: 0.18, legRo: 0.10, legRk: 0.45,
       tailWrap: 0, tail1: 0, tail2: 0, tail3: 0, tail4: 0, tailCurl: 0,
       asleep: state === "standby" ? 1 : 0,
+      lid: 0, lidSlope: 0,
     };
     // 244 cycles a loop: a breath every 4.2 seconds.
     let breathK = 244, breathDepth = 1, blinkSlow = 1, blinks = true, turnBlink = 0;
@@ -474,6 +476,7 @@
       P.bHx += (-0.16 - P.bHx) * twirl; P.bHy += (0.10 - P.bHy) * twirl; P.bHz += (-0.30 - P.bHz) * twirl;
     }
     farewell(P, state, o);
+    lidSet(P, state);
 
     // The banana rides in the hand holding it.
     const ban = banFrame(P);
@@ -582,6 +585,7 @@
       const lids = (1 - 0.35 * ease((x - 0.1) / 0.6)) * (1 - ease((x - 1.9) / 0.9));
       const lid = k * toward(eyesClose(x), lids, E);
       P.eyeL = F.eyeL * lid; P.eyeR = F.eyeR * lid;
+      lidNod(P, F, 1 - lid);   // the painted lid comes down as the eyes close
       // Its hand keeps hold till the vine is down at its middle; its legs,
       // tail and banana wait till it is up; its head droops last.
       P.grip += e * F.grip * settled(x, 0.75) * (1 - ease((x - 1.0) / 0.7));
@@ -601,6 +605,7 @@
     const lids = eyesOpen(x) * (1 - E * bump((x - 0.75) / 0.45));
     const f = 1 - k * (1 - lids);
     P.eyeL *= f; P.eyeR *= f;
+    lidWake(P, x, k);   // ...and lifts a little after they open
     const s = e * envAHR(x - 1.2, 0.35, 0.2, 0.45);
     P.legLf += 0.25 * s; P.legRf += 0.25 * s; P.legLk -= 0.2 * s; P.legRk -= 0.2 * s;
     P.breath += 0.012 * s; P.headPitch += 0.06 * s;
@@ -725,6 +730,7 @@
       uNeck: toWorld(NECK),
       uHeadR0: invRow(H, 0), uHeadR1: invRow(H, 1), uHeadR2: invRow(H, 2),
       uFace: [clamp(P.eyeL, 0, 1.2), clamp(P.eyeR, 0, 1.2), P.brow],
+      uLid: [clamp(P.lid, 0, 1), clamp(P.lidSlope, -1, 1)],
       uMouth: mouthOf(P, mouth),
       uLook: [clamp(P.lookX, -1, 1), clamp(P.lookY, -1, 1)],
       uEars: [clamp(P.earL, -0.6, 0.6), clamp(P.earR, -0.6, 0.6)],
