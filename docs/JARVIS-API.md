@@ -14223,3 +14223,165 @@ shared cases file); without `key`, today's words.
   every phone then pairs again).
 - Retire never touches this PC, and cannot be pressed by the device that
   still depends on the shared key.
+
+## 92. Inbox tidy by voice: archive, star, mark as read, or move to Trash (added 2026-09-28)
+
+The owner's decision of 2026-09-28 (`CLAUDE.md`, "Inbox tidy by voice: yes"),
+with the owner's queue answer that Undo lasts 10 minutes. Backend:
+`backend/jarvis_inbox_tidy.py` (shipped whole), `backend/inbox-tidy.patch`
+(the gate's words and the two routes), the `tidy_inbox` tool in
+`backend/jarvis_agent.py`. Tests: `backend/test_inbox_tidy.py`, the stand-in
+mail server `backend/_fake_imap.py`, `jarvis-desktop/tests/inbox-tidy.mjs`,
+`InboxTidyTest.kt`, and the shared file `inbox-tidy-cases.json`
+(`tools/gen_inbox_tidy_cases.py`). ARCHITECTURE §4 has the row for this way
+out of the PC.
+
+### 92.1 What the owner says, and what happens
+
+"Archive the newsletters from last week." "Mark all from Sam as read." "Move
+the promos to Trash." In ordinary chat, typed or spoken. The local model
+calls the tool `tidy_inbox`; nothing is changed before a person taps Approve
+on screen, and a spoken "yes" approves nothing.
+
+1. **Find.** Code on the PC (never the model) searches the owner's mailbox
+   with the words the model turned the request into, and reads each match's
+   sender, subject and date - read-only (`EXAMINE`, `BODY.PEEK`): nothing is
+   changed and nothing is marked as read.
+2. **One card.** It lists EVERY email that will be touched, numbered, each
+   with sender, subject and date - never "and 37 more" - names the action,
+   the account and the search words in the PC's own words, and says Undo
+   lasts 10 minutes. When reading outside text (an email, a web page, a file,
+   a paste, the clipboard) shaped the request, the card starts with a plain
+   line saying so ("check that tidying these emails was your idea, and that
+   every email below is one you mean").
+3. **Approve on screen.** Gate action `tidy_inbox`, tier `ask` only (any
+   other tier: no card is raised and the model is told why), never loosened
+   from an app (`jarvis_asks_first.HARD_LIMITS`, `MUST_ASK`), counted in
+   `CARDS_PER_TURN`. It is a **risky approval** (`jarvis_gate._RISK` says
+   `("yes", "outbound", ...)`, and anything outbound is risky,
+   `jarvis_owner_check.is_risky`): Windows Hello on the PC, the screen lock
+   on the phone - the same tier as sending and saving an email, for the same
+   reason (it changes a mailbox on a server). The desktop's widget, which
+   shows one line of a card, sends this card's Approve to the Jarvis bar
+   (`email-sending.js` `isEmailCard`, `email_sending.rs` `is_email`), and the
+   card is shown verbatim, never as Markdown. The PC's notice for it (lock
+   screens, notifications, the widget) is `Jarvis wants to tidy your inbox
+   (...)` - never a sender or a subject.
+4. **Do it.** Only the emails on the card, each checked again just before it
+   is touched. Then Undo, for 10 minutes.
+
+**The choice made from reading email is still asked, not refused.** The
+brief for this feature said to refuse outright after outside text "like
+send_email"; `send_email` does not - it raises its card with the warning at
+the top, and so does this, which is also what the owner's own decision says
+("The card says when the choice came from reading email"). "Read my inbox
+and archive the newsletters" is the ordinary way to use it, and a tidy of
+what the owner is looking at is undoable. The stricter variant (refuse when
+outside text was read) is a one-line change, and a question for the owner.
+
+### 92.2 The four actions, and the one that is not there
+
+| `action` | What it does | Listed emails are exactly the ones that change |
+|---|---|---|
+| `archive` | Out of the inbox into the account's Archive folder (found by `LIST`'s `\Archive` flag; Gmail: the Inbox label comes off, the mail stays in All Mail). | An email with no Message-ID is left out (it could not be found again to undo); the card says how many. |
+| `star` | The `\Flagged` flag on. | Only emails not already starred. |
+| `mark_read` | The `\Seen` flag on. | Only unread ones. |
+| `trash` | Into the account's Trash folder (`\Trash`; Gmail: the Trash label). | As `archive`. |
+
+**There is no permanent delete, by construction.** The tool's schema has no
+such action (`"delete"` is refused by the schema, and by the module in plain
+words - "there is no permanent delete"); the module has no plain `EXPUNGE`
+and never sends `CLOSE` on a folder opened for changes (`CLOSE` silently
+removes every message marked `\Deleted` in the folder, including ones the
+owner or another program marked). On a server without `MOVE`, a move is a
+copy first and, once the server confirms it, `\Deleted` and `UID EXPUNGE` on
+that ONE message (`UIDPLUS`), so nothing else in the folder is touched; a
+server with neither is refused before anything is touched. Gmail is done by
+labels. Jarvis never empties Trash - the mail provider does, on its own
+schedule.
+
+### 92.3 The tool (what the model may say)
+
+`tidy_inbox {"action", "from"?, "subject"?, "words"?, "newsletters"?,
+"since_days"?, "older_than_days"?, "unread_only"?}`. `from`, `subject` and
+`words` are plain printable ASCII (IMAP needs a special encoding for the rest,
+and mis-encoding a search is worse than saying so); at least one narrowing
+field is required ("Archive everything" is refused: say which emails).
+`newsletters` means "carries an unsubscribe link". At most **30 emails**, and
+never more than one card can show whole (the gate keeps 4,000 characters):
+past that the answer is "too many at once ... Narrow it" and nothing is
+listed or asked. Only offered while `tidy_inbox` is in `[tools].enabled` in
+`jarvis-framework.toml`, `tidy_inbox` is `"ask"` in `[autonomy.tiers]`, and
+`email_read` is `auto` or `notify` (the search is a read made before the card
+exists; while reading email asks first, tidying is not offered and the model
+is told why). Not a plan step (`_PLAN_EXCLUDED_STEPS`). The model is told
+counts and a sentence of ours ("Archived 12 emails. The owner can undo this
+for 10 minutes with the Undo button on screen."), never a sender or a
+subject; that answer is not "outside text" (`_NOT_READING`).
+
+### 92.4 The routes
+
+Both behind the token and origin checks like every route, installed by
+`inbox-tidy.patch` (`jarvis_inbox_tidy.install`).
+
+| Route | Answers |
+|---|---|
+| `GET /api/email/tidy` | **200** `{"available": true, "title", "state", "ready", "said", "undo": null or {"count", "action", "action_name", "said", "seconds_left", "minutes_left", "until", "more"}, "last": null or {"outcome": "done" or "undone", "message", "at"}, "undo_minutes": 10, "max_emails": 30, "actions": [{"id", "label"}]}`. `undo` is the NEWEST tidy still open to Undo and `more` counts the older ones (up to 5 can wait; Undo always takes the newest first, so an older change is never undone underneath a newer one). Counts and the PC's own words only - **never a sender or a subject**. `state`/`said` say whether tidying is set up (`ready`, `tool_off`, `refused`, `off`, `no_reading`, `not_set_up`). |
+| `POST /api/email/tidy/undo` | `{}`. **200** `{"ok": true, "restored": n, "not_restored": m, "message"}` - the PC's own sentence ("Put back 3 emails."; an email the owner moved or deleted meanwhile is left alone and counted). **409** `{"ok": false, "error"}` nothing to undo (ten minutes up, or already undone), or the mail account changed since. **503** `{"ok": false, "error"}` the mail server could not be reached - the record is kept and Undo can be tried again while its ten minutes last. No card. |
+| `POST /api/email/tidy` | **405**: a tidy is asked for in chat, on a card. |
+
+A PC without the module or the patch answers **404** (an older backend) or
+**503** `{"available": false}` (the module missing); both apps say "Your PC's
+Jarvis cannot tidy your inbox yet - run apply-patches.ps1 on the PC.".
+
+### 92.5 Undo: exactly what changed, ten minutes, memory only
+
+Recorded at the moment each email is changed, only for the ones that really
+changed: a move by Message-ID plus the server's own `COPYUID` answer and the
+folder it went to; a flag only where Jarvis set it. Undo finds each email
+again (never by a UID alone), moves it back (flags travel with a move) or
+takes the flag off, and counts the ones it could not find. The record is
+**in memory only** - never written to disk, holds ids and no sender or
+subject, ends at 10 minutes (a timer and a lazy check) or when the backend
+stops, whichever comes first. Whatever was changed is recorded even when the
+server dropped part-way, so a half-done tidy can be undone. Undo needs no
+card: it only puts back what the owner had ten minutes ago.
+
+### 92.6 The apps
+
+- **Desktop:** a strip under the Jarvis bar's input (`src/inbox-tidy.js`,
+  `index.html` `#inbox-tidy`, Rust `brain/inbox_tidy.rs` `inbox_tidy_read` /
+  `inbox_tidy_undo`, permission set `inbox-tidy` on the bar only): what was
+  done, "10 min left to undo", and an Undo button. It reads the PC every 20
+  seconds while the bar is showing, at the end of every answer, on focus, and
+  a few times right after a tidy card is approved; the minutes run down
+  locally, so an Undo out of time goes even while the link is down. **Held on
+  a stale link** (the button greyed with the words "The connection to Jarvis
+  is catching up, so nothing can be sent until it does.", and Rust refuses
+  too). **App lock:** while Jarvis is locked, or "Windows Hello for memory
+  lists and chat history" hides the lists, Rust takes the PC's words out (the
+  strip says only "Your inbox was tidied. You can undo it for a few
+  minutes.") and refuses Undo ("Unlock Jarvis to undo this."). After an Undo
+  the PC's sentence stays for eight seconds.
+- **Phone:** the same strip on Home (`net/InboxTidy.kt`, `HomeScreen.kt`
+  `InboxTidyPlate`, `JarvisRuntime.refreshInboxTidy` / `inboxTidyUndo`), the
+  same words, read every 20 seconds while connected. Held on a stale link;
+  while the lists are hidden it says the same short line and Undo waits for
+  Show; the PC's sentence after Undo is the notice. The card itself is an
+  ordinary approval card in both apps (`/api/pending`).
+- Both read `inbox-tidy-cases.json`: the words, the PC's real answers, and
+  `strip` - what the strip says for each status when ordinary, locked and
+  stale (`gen_inbox_tidy_cases.py` writes the rule once).
+
+### 92.7 Not done, and not tried
+
+- **Not tried against a real mail server.** Every step is proved against a
+  stand-in that fails loudly on a plain `EXPUNGE`, a `CLOSE`, or a
+  `UID EXPUNGE` of an email with no other copy. Real servers differ; Gmail's
+  label calls (`X-GM-LABELS`, and finding All Mail by `\All`) are the part
+  most in need of the half-hour test in `backend/README.md` ("Inbox tidy").
+- One mailbox at a time (`JARVIS_IMAP_MAILBOX`); no other folders; no
+  "unstar" or "mark unread" (Undo does those, only for what Jarvis changed);
+  no search in other languages' letters (plain ASCII only).
+- Jarvis has no inbox screen of its own, on purpose: nothing here lists the
+  owner's email anywhere but on the card.

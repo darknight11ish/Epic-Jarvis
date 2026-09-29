@@ -1,0 +1,472 @@
+{
+ "cases": {
+  "status_after_undo": {
+   "body": {
+    "actions": [
+     {
+      "id": "archive",
+      "label": "Archive"
+     },
+     {
+      "id": "star",
+      "label": "Star"
+     },
+     {
+      "id": "mark_read",
+      "label": "Mark read"
+     },
+     {
+      "id": "trash",
+      "label": "Move to Trash"
+     }
+    ],
+    "available": true,
+    "last": {
+     "at": 1790596900.0,
+     "message": "Put back 1 email.",
+     "outcome": "undone"
+    },
+    "max_emails": 30,
+    "ready": false,
+    "said": "Set up. Jarvis does not offer to tidy until \"tidy_inbox\" is added to [tools].enabled in jarvis-framework.toml on the PC.",
+    "state": "tool_off",
+    "title": "Inbox tidy",
+    "undo": {
+     "action": "archive",
+     "action_name": "Archive",
+     "count": 3,
+     "minutes_left": 9,
+     "more": 0,
+     "said": "Archived 3 emails.",
+     "seconds_left": 499,
+     "until": 1790597400
+    },
+    "undo_minutes": 10
+   },
+   "status": 200
+  },
+  "status_idle": {
+   "body": {
+    "actions": [
+     {
+      "id": "archive",
+      "label": "Archive"
+     },
+     {
+      "id": "star",
+      "label": "Star"
+     },
+     {
+      "id": "mark_read",
+      "label": "Mark read"
+     },
+     {
+      "id": "trash",
+      "label": "Move to Trash"
+     }
+    ],
+    "available": true,
+    "last": null,
+    "max_emails": 30,
+    "ready": false,
+    "said": "Set up. Jarvis does not offer to tidy until \"tidy_inbox\" is added to [tools].enabled in jarvis-framework.toml on the PC.",
+    "state": "tool_off",
+    "title": "Inbox tidy",
+    "undo": null,
+    "undo_minutes": 10
+   },
+   "status": 200
+  },
+  "status_undo": {
+   "body": {
+    "actions": [
+     {
+      "id": "archive",
+      "label": "Archive"
+     },
+     {
+      "id": "star",
+      "label": "Star"
+     },
+     {
+      "id": "mark_read",
+      "label": "Mark read"
+     },
+     {
+      "id": "trash",
+      "label": "Move to Trash"
+     }
+    ],
+    "available": true,
+    "last": {
+     "at": 1790596800.0,
+     "message": "Archived 3 emails.",
+     "outcome": "done"
+    },
+    "max_emails": 30,
+    "ready": false,
+    "said": "Set up. Jarvis does not offer to tidy until \"tidy_inbox\" is added to [tools].enabled in jarvis-framework.toml on the PC.",
+    "state": "tool_off",
+    "title": "Inbox tidy",
+    "undo": {
+     "action": "archive",
+     "action_name": "Archive",
+     "count": 3,
+     "minutes_left": 10,
+     "more": 0,
+     "said": "Archived 3 emails.",
+     "seconds_left": 570,
+     "until": 1790597400
+    },
+    "undo_minutes": 10
+   },
+   "status": 200
+  },
+  "status_undo_last_minute": {
+   "body": {
+    "actions": [
+     {
+      "id": "archive",
+      "label": "Archive"
+     },
+     {
+      "id": "star",
+      "label": "Star"
+     },
+     {
+      "id": "mark_read",
+      "label": "Mark read"
+     },
+     {
+      "id": "trash",
+      "label": "Move to Trash"
+     }
+    ],
+    "available": true,
+    "last": {
+     "at": 1790596800.0,
+     "message": "Archived 3 emails.",
+     "outcome": "done"
+    },
+    "max_emails": 30,
+    "ready": false,
+    "said": "Set up. Jarvis does not offer to tidy until \"tidy_inbox\" is added to [tools].enabled in jarvis-framework.toml on the PC.",
+    "state": "tool_off",
+    "title": "Inbox tidy",
+    "undo": {
+     "action": "archive",
+     "action_name": "Archive",
+     "count": 3,
+     "minutes_left": 1,
+     "more": 0,
+     "said": "Archived 3 emails.",
+     "seconds_left": 40,
+     "until": 1790597400
+    },
+    "undo_minutes": 10
+   },
+   "status": 200
+  },
+  "status_undo_two": {
+   "body": {
+    "actions": [
+     {
+      "id": "archive",
+      "label": "Archive"
+     },
+     {
+      "id": "star",
+      "label": "Star"
+     },
+     {
+      "id": "mark_read",
+      "label": "Mark read"
+     },
+     {
+      "id": "trash",
+      "label": "Move to Trash"
+     }
+    ],
+    "available": true,
+    "last": {
+     "at": 1790596860.0,
+     "message": "Marked 1 email as read.",
+     "outcome": "done"
+    },
+    "max_emails": 30,
+    "ready": false,
+    "said": "Set up. Jarvis does not offer to tidy until \"tidy_inbox\" is added to [tools].enabled in jarvis-framework.toml on the PC.",
+    "state": "tool_off",
+    "title": "Inbox tidy",
+    "undo": {
+     "action": "mark_read",
+     "action_name": "Mark read",
+     "count": 1,
+     "minutes_left": 10,
+     "more": 1,
+     "said": "Marked 1 email as read.",
+     "seconds_left": 570,
+     "until": 1790597460
+    },
+    "undo_minutes": 10
+   },
+   "status": 200
+  },
+  "undo_done": {
+   "body": {
+    "message": "Put back 1 email.",
+    "not_restored": 0,
+    "ok": true,
+    "restored": 1
+   },
+   "status": 200
+  },
+  "undo_nothing": {
+   "body": {
+    "error": "There is nothing to undo - the 10 minutes are up, or it was already undone.",
+    "ok": false
+   },
+   "status": 409
+  },
+  "undo_some_lost": {
+   "body": {
+    "message": "Put back 2 emails. 1 email could not be put back - you moved or deleted it since, or the server changed.",
+    "not_restored": 1,
+    "ok": true,
+    "restored": 2
+   },
+   "status": 200
+  },
+  "undo_unreachable": {
+   "body": {
+    "error": "Jarvis could not reach the mail server (OSError). Try again - what is left can still be undone until the 10 minutes are up.",
+    "ok": false,
+    "restored": 0
+   },
+   "status": 503
+  }
+ },
+ "missing": {
+  "body": {
+   "error": "not found"
+  },
+  "status": 404
+ },
+ "routes": {
+  "status": "/api/email/tidy",
+  "undo": "/api/email/tidy/undo"
+ },
+ "strip": [
+  {
+   "case": "status_idle",
+   "expect": null,
+   "locked": false,
+   "stale": false
+  },
+  {
+   "case": "status_idle",
+   "expect": null,
+   "locked": false,
+   "stale": true
+  },
+  {
+   "case": "status_idle",
+   "expect": null,
+   "locked": true,
+   "stale": false
+  },
+  {
+   "case": "status_idle",
+   "expect": null,
+   "locked": true,
+   "stale": true
+  },
+  {
+   "case": "status_undo",
+   "expect": {
+    "can_undo": true,
+    "left": "10 min left to undo",
+    "note": "",
+    "text": "Archived 3 emails."
+   },
+   "locked": false,
+   "stale": false
+  },
+  {
+   "case": "status_undo",
+   "expect": {
+    "can_undo": false,
+    "left": "10 min left to undo",
+    "note": "The connection to Jarvis is catching up, so nothing can be sent until it does.",
+    "text": "Archived 3 emails."
+   },
+   "locked": false,
+   "stale": true
+  },
+  {
+   "case": "status_undo",
+   "expect": {
+    "can_undo": false,
+    "left": "10 min left to undo",
+    "note": "Unlock Jarvis to undo this.",
+    "text": "Your inbox was tidied. You can undo it for a few minutes."
+   },
+   "locked": true,
+   "stale": false
+  },
+  {
+   "case": "status_undo",
+   "expect": {
+    "can_undo": false,
+    "left": "10 min left to undo",
+    "note": "Unlock Jarvis to undo this.",
+    "text": "Your inbox was tidied. You can undo it for a few minutes."
+   },
+   "locked": true,
+   "stale": true
+  },
+  {
+   "case": "status_undo_last_minute",
+   "expect": {
+    "can_undo": true,
+    "left": "1 min left to undo",
+    "note": "",
+    "text": "Archived 3 emails."
+   },
+   "locked": false,
+   "stale": false
+  },
+  {
+   "case": "status_undo_last_minute",
+   "expect": {
+    "can_undo": false,
+    "left": "1 min left to undo",
+    "note": "The connection to Jarvis is catching up, so nothing can be sent until it does.",
+    "text": "Archived 3 emails."
+   },
+   "locked": false,
+   "stale": true
+  },
+  {
+   "case": "status_undo_last_minute",
+   "expect": {
+    "can_undo": false,
+    "left": "1 min left to undo",
+    "note": "Unlock Jarvis to undo this.",
+    "text": "Your inbox was tidied. You can undo it for a few minutes."
+   },
+   "locked": true,
+   "stale": false
+  },
+  {
+   "case": "status_undo_last_minute",
+   "expect": {
+    "can_undo": false,
+    "left": "1 min left to undo",
+    "note": "Unlock Jarvis to undo this.",
+    "text": "Your inbox was tidied. You can undo it for a few minutes."
+   },
+   "locked": true,
+   "stale": true
+  },
+  {
+   "case": "status_undo_two",
+   "expect": {
+    "can_undo": true,
+    "left": "10 min left to undo",
+    "note": "",
+    "text": "Marked 1 email as read. (1 earlier tidy can be undone after)"
+   },
+   "locked": false,
+   "stale": false
+  },
+  {
+   "case": "status_undo_two",
+   "expect": {
+    "can_undo": false,
+    "left": "10 min left to undo",
+    "note": "The connection to Jarvis is catching up, so nothing can be sent until it does.",
+    "text": "Marked 1 email as read. (1 earlier tidy can be undone after)"
+   },
+   "locked": false,
+   "stale": true
+  },
+  {
+   "case": "status_undo_two",
+   "expect": {
+    "can_undo": false,
+    "left": "10 min left to undo",
+    "note": "Unlock Jarvis to undo this.",
+    "text": "Your inbox was tidied. You can undo it for a few minutes."
+   },
+   "locked": true,
+   "stale": false
+  },
+  {
+   "case": "status_undo_two",
+   "expect": {
+    "can_undo": false,
+    "left": "10 min left to undo",
+    "note": "Unlock Jarvis to undo this.",
+    "text": "Your inbox was tidied. You can undo it for a few minutes."
+   },
+   "locked": true,
+   "stale": true
+  },
+  {
+   "case": "status_after_undo",
+   "expect": {
+    "can_undo": true,
+    "left": "9 min left to undo",
+    "note": "",
+    "text": "Archived 3 emails."
+   },
+   "locked": false,
+   "stale": false
+  },
+  {
+   "case": "status_after_undo",
+   "expect": {
+    "can_undo": false,
+    "left": "9 min left to undo",
+    "note": "The connection to Jarvis is catching up, so nothing can be sent until it does.",
+    "text": "Archived 3 emails."
+   },
+   "locked": false,
+   "stale": true
+  },
+  {
+   "case": "status_after_undo",
+   "expect": {
+    "can_undo": false,
+    "left": "9 min left to undo",
+    "note": "Unlock Jarvis to undo this.",
+    "text": "Your inbox was tidied. You can undo it for a few minutes."
+   },
+   "locked": true,
+   "stale": false
+  },
+  {
+   "case": "status_after_undo",
+   "expect": {
+    "can_undo": false,
+    "left": "9 min left to undo",
+    "note": "Unlock Jarvis to undo this.",
+    "text": "Your inbox was tidied. You can undo it for a few minutes."
+   },
+   "locked": true,
+   "stale": true
+  }
+ ],
+ "undo_minutes": 10,
+ "words": {
+  "hidden": "Your inbox was tidied. You can undo it for a few minutes.",
+  "locked": "Unlock Jarvis to undo this.",
+  "missing": "Your PC's Jarvis cannot tidy your inbox yet - run apply-patches.ps1 on the PC.",
+  "stale": "The connection to Jarvis is catching up, so nothing can be sent until it does.",
+  "title": "Inbox tidy",
+  "undo": "Undo",
+  "undo_left": "{minutes} min left to undo",
+  "undone": "Put back. Everything is as it was before."
+ }
+}

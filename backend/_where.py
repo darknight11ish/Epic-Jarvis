@@ -160,6 +160,7 @@ SHIPPED = (
     "jarvis_mail_mask.py",
     "jarvis_email_send.py",
     "jarvis_email_draft.py",
+    "jarvis_inbox_tidy.py",
     "jarvis_notes.py", "jarvis_home.py",
     "jarvis_search.py",
     # Stop everything (stop-all.patch)

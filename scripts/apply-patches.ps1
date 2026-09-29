@@ -799,6 +799,21 @@ $PATCHES = @(
     # are at other lines. No route of its own: chatbot-routes.patch already
     # installs jarvis_chatbot_routes.py, which reaches jarvis_support.py.
     'support-chat.patch'
+    # "Inbox tidy by voice" (the owner's decision of 2026-09-28; JARVIS-API
+    # section 92): archive, star, mark as read or move to Trash a checked list
+    # of emails, ONE approval card listing every one, 10 minutes to Undo.
+    # Four hunks: in jarvis_gate.py the new action joins the "a no is not a
+    # standing rule" list (right after support-chat.patch's own last line),
+    # gets its _RISK line (after support-chat.patch's last entry - an
+    # outbound one: it changes the owner's mailbox on the provider's server,
+    # so its approval is a risky one) and its _TOOL_ACTIONS line (after
+    # draft-email.patch's); in jarvis_hud.py ONE install block after
+    # sky.patch's (GET /api/email/tidy and POST /api/email/tidy/undo). Its
+    # context is other patches' lines, so it goes after them - last, like
+    # every new patch, but before devices.patch, which must stay the very
+    # last. Needs jarvis_inbox_tidy.py copied in; without it, or on any error,
+    # the banner says so and the routes are simply not there.
+    'inbox-tidy.patch'
     # Pairing a phone by QR code, with a key per device (the owner's
     # decisions of 2026-09-24 and 2026-09-28; docs/PAIRING-DESIGN.md phase 1,
     # docs/JARVIS-API.md section 90). Three hunks: two in jarvis_gate.py - the
@@ -910,6 +925,7 @@ $SHIPPED = @(
     'jarvis_mail_mask.py'        # hides one-time codes and sign-in links in everything jarvis_email.py reads
     'jarvis_email_send.py'       # tool "send_email": ONE email per approval card; email-send.patch
     'jarvis_email_draft.py'      # tool "draft_email": ONE draft per approval card, saved to Drafts only, never sent; draft-email.patch
+    'jarvis_inbox_tidy.py'       # tool "tidy_inbox": archive, star, mark as read or move to Trash, ONE card listing every email, 10 minutes to Undo, no permanent delete; inbox-tidy.patch
     'jarvis_notes.py'            # tool "notes_search"; carries the token-in-an-error fix
     'jarvis_home.py'             # tools "home_read" and "home_control": Home Assistant
     'jarvis_search.py'           # tool "web_search" (SearXNG, DuckDuckGo, Exa, Tavily or Brave) and its settings; web-search.patch

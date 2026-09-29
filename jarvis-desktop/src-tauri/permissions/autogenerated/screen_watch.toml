@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-screen-watch"
+description = "Enables the screen_watch command without any pre-configured scope."
+commands.allow = ["screen_watch"]
+
+[[permission]]
+identifier = "deny-screen-watch"
+description = "Denies the screen_watch command without any pre-configured scope."
+commands.deny = ["screen_watch"]

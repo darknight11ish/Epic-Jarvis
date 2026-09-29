@@ -299,6 +299,10 @@
       "title": "Jarvis wants to switch to a different AI model"
     },
     {
+      "action": "tidy_inbox",
+      "title": "Jarvis wants to tidy your inbox (archive, star, mark read or trash)"
+    },
+    {
       "action": "unclassified_tool",
       "title": "Jarvis wants to use a tool it has no plain name for"
     },

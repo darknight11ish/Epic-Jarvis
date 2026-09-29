@@ -1053,6 +1053,40 @@ class JarvisApi(
         }
 
     /**
+     * "Inbox tidy by voice" (docs/JARVIS-API.md section 92): the status (a
+     * GET of [InboxTidy.PATH] - counts and the PC's own words, never a sender
+     * or a subject) or Undo (a POST of an empty object to
+     * [InboxTidy.UNDO_PATH], no card). Nothing else is sent: the tidy itself
+     * is asked for in chat, and the PC raises the one approval card. The
+     * status and body come back whole ([InboxTidy.Reply]): a 404 the PC sent
+     * itself and a 404 from a PC without the routes read differently.
+     */
+    suspend fun inboxTidyCall(undo: Boolean): ApiResult<InboxTidy.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(if (undo) InboxTidy.UNDO_PATH else InboxTidy.PATH)
+                ?: return@withContext ApiResult.Failed(noAddress())
+            val builder = Request.Builder().url(target)
+            if (undo) {
+                builder.post("{}".toRequestBody("application/json".toMediaType()))
+            } else {
+                builder.get()
+            }
+            val req = builder.authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(InboxTidy.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * Projects (docs/JARVIS-API.md section 88): a read (`json` null, a GET)
      * or ONE change (a POST of `json`). The path comes from [Projects] -
      * [Projects.PATH], [Projects.projectPath], [Projects.benchPath] or

@@ -152,6 +152,7 @@ on a throwaway copy instead.
 | `photo-reminder.patch` | `jarvis_hud.py` | **Photo to reminder** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §83). One install()-shaped hunk at start-up - `jarvis_photo_remind.install(Handler, ...)` - whose context is `brain-reads.patch`'s own install block, so it goes after it, last like every new patch. It answers `POST /api/photo/scan`: the words in a picture read by Windows (`jarvis_ocr.py`), a date, time and title found by `jarvis_quick.py`'s own parser, and a PROPOSED reminder sent back - nothing set up, nothing kept, outside text. Needs `jarvis_photo_remind.py`; without it the banner says so and the route is not there. See "Photo to reminder", at the very end. |
 | `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude, Gemini or DeepSeek** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
 | `sky.patch` | `jarvis_hud.py` | **The sun, the moon and the weather behind the animal faces** (the owner's decisions of 2026-09-28). Adds `GET /api/sky` and `POST /api/sky` (ONE change: show on or off, the town - this PC only - forget the town, or the weather source; Open-Meteo ON is ONE approval card). Its context is `answer-sources.patch`'s own startup `install()` block, so it goes last. Needs `jarvis_sky.py` and `jarvis_sky_places.py` copied in; without them, or on any error, the banner says so and the route answers 503 - the faces are drawn exactly as before. See "The sky behind the animals", at the very end. |
+| `inbox-tidy.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Inbox tidy by voice"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 92): archive, star, mark as read or move to Trash a checked list of emails, ONE approval card listing every one, 10 minutes to Undo. Four hunks: in `jarvis_gate.py` `tidy_inbox` joins "a no proposes no memory rule", gets its `_RISK` line (`"yes", "outbound"` - it changes the mailbox on a server, so approving it is a risky approval; nothing is deleted for good, and Undo puts everything back) and its `_TOOL_ACTIONS` line; in `jarvis_hud.py` ONE install block after `sky.patch`'s (`GET /api/email/tidy`, `POST /api/email/tidy/undo`). Its context is other patches' lines: after `support-chat.patch`, before `devices.patch`, which stays last. Needs `jarvis_inbox_tidy.py` - see "Inbox tidy", at the very end. |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 
 ## All but two of the patches apply, and that is correct
@@ -16955,3 +16956,138 @@ Tailscale or NordVPN Meshnet - pairing is refused over anything else.
   agree word for word; EFF's own page could not be reached from here, so its
   licence (CC BY 3.0 US) is as EFF has published it elsewhere - re-read it
   on EFF's page when convenient.
+
+# Inbox tidy: `jarvis_inbox_tidy.py`, `inbox-tidy.patch` (2026-09-28)
+
+Jarvis can now **tidy your inbox when you ask**: archive, star, mark as read,
+or move to Trash a list of emails - "archive the newsletters from last week",
+"mark all from Sam as read", "move the promos to Trash". This is the owner's
+decision (`CLAUDE.md`, 2026-09-28, "Inbox tidy by voice: yes"), with Undo for
+10 minutes.
+
+**What you see.** Ask in chat, typed or spoken. Jarvis looks through your
+inbox (only the sender, subject and date of each email - nothing is opened,
+changed or marked as read while it looks) and shows you ONE card that lists
+**every** email it is about to touch, numbered, with who it is from, the
+subject and the date. It says what it will do and what you asked for. If
+Jarvis had read an email or a web page first, the card says so at the top, so
+you can check the request was yours. **Nothing happens until you tap Approve on
+screen** - saying "yes" out loud approves nothing. On the PC, Windows Hello
+asks for you once (the same as for sending an email). After you approve, a
+small strip appears under the chat: what was done, how many minutes are left,
+and an **Undo** button. One tap puts every one of those emails back exactly
+as it was. The strip is on the desktop's Jarvis bar and on the phone's Home.
+
+**"Delete" only ever means Trash.** There is no way to delete an email for
+good: Jarvis never empties Trash (your mail provider does, on its own
+schedule - often after about 30 days), and the code has no such command.
+
+**What it will not do.** More than 30 emails in one go ("too many at once -
+narrow it": one sender, fewer days - or do it in rounds; the card must be
+short enough to read every line). "Tidy everything" with nothing to narrow it
+down. An email with no message id cannot be found again after a move, so a
+move never touches one (the card says how many it left out). Search words
+with accents or quotes (plain letters and digits only). Other mailboxes than
+the one in `JARVIS_IMAP_MAILBOX` (your inbox unless you set it). It is
+offered only while Jarvis may look at your inbox without a card of its own
+(`email_read` at "auto" - if you made reading email ask first, tidying says
+so and does nothing).
+
+## Owner steps (one line each, in PowerShell)
+
+**1. Put the new code on the PC** (copies `jarvis_inbox_tidy.py` and the
+updated `jarvis_agent.py`, applies `inbox-tidy.patch`), from this
+repository's folder, then quit Jarvis from the tray icon and start it again:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**2. Nothing new to set up** if Jarvis already reads your email: tidying uses
+the same `JARVIS_IMAP_HOST`, `JARVIS_IMAP_USER` and `JARVIS_IMAP_PASSWORD`
+(or the ones saved in Windows Credential Manager).
+
+**3. Let the model use it.** In your `jarvis-framework.toml`, add
+`"tidy_inbox"` to `enabled = [...]` under `[tools]`, for example
+`enabled = ["email_check", "web_search", "tidy_inbox"]`. Under
+`[autonomy.tiers]` check there is a line `tidy_inbox = "ask"` (the shipped
+file has it) and that `email_read` is `"auto"`. `tidy_inbox` must stay
+`"ask"`: on any other setting every tidy is refused, never done unasked, and
+`"never"` switches it off. Restart Jarvis.
+
+**4. The half-hour check with a real mailbox - do this before you rely on
+it.** Everything below was proved against a stand-in mail server, not a real
+one (real servers differ; Gmail's way of archiving is the most likely to need
+a fix). Use a spare test account or a few throwaway emails, and look at the
+mail in your provider's own web page after each step:
+
+1. Send yourself three emails with a distinctive word in the subject
+   (say "tidytest"). Ask Jarvis: "mark the tidytest emails as read". Check
+   the card lists the three; approve; check they turned read. Tap **Undo**;
+   check they are unread again.
+2. Ask: "star the tidytest emails". Approve. Check the stars. **Undo**;
+   check the stars are gone.
+3. Ask: "archive the tidytest emails". Approve. Check they left the inbox and
+   are in Archive (Gmail: in All Mail). **Undo**; check they are back in the
+   inbox, unread ones still unread.
+4. Ask: "move the tidytest emails to Trash". Approve. Check they are in
+   Trash and nowhere else. **Undo**; check they are back in the inbox and
+   gone from Trash (Gmail: no longer labelled Trash).
+5. Ask for something too big ("archive everything from this year"): Jarvis
+   should say it is too many and ask you to narrow it - with no card.
+6. Wait 11 minutes after a tidy and check Undo has gone from the strip.
+7. Check your Trash still holds what you put there, and that nothing in any
+   other folder disappeared.
+
+If any step is wrong, tell me the step number, which mail provider it is, and
+what you saw - the fix is likely one small line.
+
+To stop Jarvis tidying: take `"tidy_inbox"` out of `[tools].enabled` (it is
+then not offered at all), or set `tidy_inbox = "never"`.
+
+## What the code does
+
+- `jarvis_inbox_tidy.py` - `plan()` (reads the mailbox read-only to find the
+  emails: `EXAMINE`, `UID SEARCH`, `BODY.PEEK` of the From, Subject, Date and
+  Message-ID lines; the search words are checked, at most 30 emails and a card
+  that fits; changes nothing), `describe()` (the card: every email, numbered),
+  `run()` (does exactly that plan once: refuses a plan changed after its card,
+  changed account settings, or a folder the server rebuilt since (UIDVALIDITY);
+  each email is checked again just before it is touched; a move is `MOVE`, or
+  a copy then one message removed with `UID EXPUNGE`, or Gmail's labels; the
+  password never in a plan, card, result, error, event or the log; whatever
+  was done is recorded for Undo even if the server dropped part-way),
+  `undo()` (puts back exactly what changed, newest first, in memory only for
+  10 minutes), `status()`, `install()` (the two routes).
+- `jarvis_agent.py` - the tool `tidy_inbox` (offered only when
+  `[tools].enabled` names it), in `NEEDS_A_PERSON` (only a person's yes
+  changes anything); refused with no card when the turn's model is not on
+  this PC (rule 1), when `tidy_inbox` is not `"ask"`, when reading email asks
+  first, or when the plan says why nothing can be done; the plain outside-text
+  line at the top of the card (`TIDY_INBOX_*`); the model is told counts,
+  never a sender or a subject; not a plan step; its own group in the short
+  tool list.
+- `inbox-tidy.patch` - the two routes and the gate's words.
+- `jarvis_reach.py` ("What Jarvis can reach": "Email (tidying)"),
+  `jarvis_asks_first.py` ("What asks first": never loosened, covered by
+  Lockdown), `jarvis_card_words.py` (the card's title).
+- Both apps: the Undo strip (`docs/JARVIS-API.md` section 92.6); the desktop's
+  `is_email`/`isEmailCard` cover `tidy_inbox`, so its card is shown verbatim
+  and the widget's Approve opens the Jarvis bar.
+
+## Test it
+
+```powershell
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_inbox_tidy.py
+```
+
+No pytest, no network, no model, no real mail server: `backend/_fake_imap.py`
+is an in-memory IMAP server that behaves the way the documented ones do
+(folders and UIDs, `MOVE`/`UIDPLUS`/Gmail labels, flags, `BODY.PEEK` never
+setting `\Seen`) and **fails loudly** if the code sends a plain `EXPUNGE`,
+sends `CLOSE`, or expunges an email that has no other copy. It proves the
+card lists every email, each action does exactly that to exactly those
+emails, nothing is ever lost, Undo restores the same folders and flags,
+ten minutes ends it, and the rules around it (outside text, rule 1, tiers,
+the password). Then
+`python3 tools/gen_inbox_tidy_cases.py --check`.

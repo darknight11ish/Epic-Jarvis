@@ -237,6 +237,14 @@ happen, write down which line and what you saw instead.
 - [ ] **QR pairing and Devices** (both apps): see "New pairing?" above; the
   Devices list on both apps shows each device with **Remove**, and marks
   this one.
+- [ ] **Inbox tidy (only after you add `"tidy_inbox"` to `[tools].enabled`;
+  not tried on a real mailbox yet):** send yourself three emails with
+  "tidytest" in the subject and follow the seven steps in
+  `backend/README.md`, "Inbox tidy" (mark as read, star, archive, Trash, each
+  with Undo; a too-big request; Undo gone after 11 minutes). The card lists
+  all three emails; the PC asks Windows Hello when you approve; saying "yes"
+  out loud approves nothing; "delete" only ever moves to Trash. Write down
+  the step and your mail provider if anything is off.
 - [ ] **Backup:** Settings → Backups → make one now. A locked file appears
   in the folder you chose, and the recovery code is shown once.
 

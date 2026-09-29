@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-inbox-tidy-undo"
+description = "Enables the inbox_tidy_undo command without any pre-configured scope."
+commands.allow = ["inbox_tidy_undo"]
+
+[[permission]]
+identifier = "deny-inbox-tidy-undo"
+description = "Denies the inbox_tidy_undo command without any pre-configured scope."
+commands.deny = ["inbox_tidy_undo"]

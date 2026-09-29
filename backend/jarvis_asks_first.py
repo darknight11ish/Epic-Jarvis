@@ -279,8 +279,8 @@ ENABLE_TOOL_ACTION = "enable_reading_tool"
 #: or loosens a security or privacy setting - and the actions whose module
 #: accepts only "ask". test_asks_first.py checks SWITCHABLE never meets it.
 HARD_LIMITS = frozenset({
-    "send_email", "draft_email", "spend_money", "delete_file", "delete_calendar_event",
-    "edit_calendar_event", "delete_joplin_note", "delete_logseq_page", "edit_joplin_note",
+    "send_email", "draft_email", "tidy_inbox", "spend_money", "delete_file",
+    "delete_calendar_event", "edit_calendar_event", "delete_joplin_note", "delete_logseq_page", "edit_joplin_note",
     "edit_logseq_page", "run_shell_on_host", "control_computer", "control_phone",
     "control_browser", "home_control", "post_to_external_service", "open_public_tunnel",
     "search_the_web", "web_research", "research_authenticated",
@@ -304,7 +304,7 @@ HARD_LIMITS = frozenset({
 #: switches the feature off rather than removing the card) - the toml's
 #: "Must stay 'ask'" lines, and the gate actions of NEEDS_A_PERSON's tools.
 MUST_ASK = frozenset({
-    "send_email", "run_shell_on_host", "control_computer", "control_phone", "control_browser",
+    "send_email", "tidy_inbox", "run_shell_on_host", "control_computer", "control_phone", "control_browser",
     "home_control", "web_research", "research_authenticated", "write_notes_after_outside_text",
     "search_the_web", "stop_asking_before_every_web_search", "schedule_repeat",
     "models_create", "second_card_enable", "second_card_browser_enable",
@@ -333,7 +333,7 @@ GROUPS = (
     # two cards are change_own_config cards, decided in the code; these rows
     # say so in plain words (the Projects feature audit, 2026-09-28).
     ("Projects", ["fixed:projects", "fixed:project_share", "fixed:project_unmark"]),
-    ("Email and calendar", ["draft_email", "send_email", "edit_calendar_event",
+    ("Email and calendar", ["draft_email", "send_email", "tidy_inbox", "edit_calendar_event",
                             "delete_calendar_event"]),
     ("The internet", ["search_the_web", "web_research", "research_authenticated",
                       "control_browser", "post_to_external_service", "open_public_tunnel",
@@ -1580,8 +1580,8 @@ LOCKDOWN_ACTIONS = frozenset({
     "jarvis_research_run", "jarvis_research_run_authenticated",
     # the owner's own accounts: calendar, email, Home Assistant
     "calendar_read", "read_calendar", "email_read", "home_read", "home_control",
-    # sending and saving email
-    "send_email", "draft_email",
+    # sending, saving and tidying email
+    "send_email", "draft_email", "tidy_inbox",
     # an address the owner typed, and GitHub watches
     "news_read", "page_read", "github_read",
     # the browser, a cloud AI model, models and tool updates from the internet

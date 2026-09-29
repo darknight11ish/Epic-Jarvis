@@ -149,6 +149,17 @@ draft_email               = "ask"
 # refused, never sent unasked; "never" switches sending off. The model is
 # offered the tool only once "send_email" is in [tools].enabled.
 send_email                = "ask"
+# Tidying the inbox (jarvis_inbox_tidy.py, inbox-tidy.patch; the owner's
+# decision of 2026-09-28, "inbox tidy by voice"): archive, star, mark as
+# read or move to Trash, ONE approval card listing every email, then 10
+# minutes to Undo. It changes the mailbox on the provider's server, so it asks
+# every time. Must stay "ask": anything else and every tidy is refused, never
+# done unasked; "never" switches it off. It is on the never-loosened list
+# (jarvis_asks_first.HARD_LIMITS): no app can make it "auto". The model is
+# offered the tool only once "tidy_inbox" is in [tools].enabled - and only
+# while email_read (above) lets Jarvis look at the inbox without a card of its
+# own, because the card has to list every email.
+tidy_inbox                = "ask"
 edit_calendar_event       = "ask"
 delete_calendar_event     = "ask"
 delete_file               = "ask"
