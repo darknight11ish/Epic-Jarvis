@@ -414,6 +414,36 @@ def t_each_action_does_exactly_what_the_card_said():
         check(f"{label}: no server complaint about how it was done", s.bugs == [], s.bugs)
 
 
+def t_a_server_that_refuses_a_flag_change_is_not_reported_as_done():
+    """Bug audit 2026-09-29: imaplib raises only on BAD, so a NO to STORE (a
+    read-only folder, a permission refusal) came back as a plain answer that
+    was never looked at. The tidy said "Marked 1 email as read", kept an Undo
+    record for a change that never happened, and left the email unread."""
+    import _fake_imap as FI
+    for action, flag in (("mark_read", SEEN), ("star", FLAGGED)):
+        fresh()
+        s = mailbox()
+        p = plan(s, action, sender="shop" if action == "mark_read" else "sam")
+        real = FI.FakeConn._change
+
+        def refuse_store(self, cmd, args, _real=real):
+            if cmd == "STORE":
+                return "NO", [b"[NOPERM] read-only"]
+            return _real(self, cmd, args)
+        FI.FakeConn._change = refuse_store
+        try:
+            out = run(s, p)
+        finally:
+            FI.FakeConn._change = real
+        check(f"{action}: a NO to the flag change is a failure, not 'Marked ...'",
+              out["ok"] is False and out.get("done", 0) == 0, out)
+        check(f"{action}: no Undo record is kept for a change that never happened",
+              (T.status(NOW).get("undo") or {}).get("count", 0) == 0, T.status(NOW))
+        target = ("<n1@shop.example>",) if action == "mark_read" else ("<s1@example.org>",)
+        check(f"{action}: the flag really was not set on the server",
+              not any(flag in f for k in target for _, f in s.snapshot()[k]), s.snapshot())
+
+
 def t_a_server_that_answers_flags_after_the_header_is_read_right():
     """Servers may send FLAGS before or after the header text. Read wrongly, an
     email the owner read meanwhile would be counted as changed and then
@@ -1284,6 +1314,7 @@ if __name__ == "__main__":
                    t_the_words_become_a_search, t_what_it_refuses_to_look_for,
                    t_too_many_to_show_whole, t_what_is_written_on_the_card_is_safe,
                    t_each_action_does_exactly_what_the_card_said,
+                   t_a_server_that_refuses_a_flag_change_is_not_reported_as_done,
                    t_a_server_that_answers_flags_after_the_header_is_read_right,
                    t_there_is_no_way_to_a_permanent_delete,
                    t_the_server_going_away_part_way_still_leaves_an_undo,

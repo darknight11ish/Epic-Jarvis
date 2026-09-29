@@ -536,12 +536,15 @@ def install_line() -> str:
         f"if ((Get-FileHash $f -Algorithm SHA256).Hash -ne '{str(pin['sha256']).upper()}') "
         "{ Remove-Item $f; Write-Host 'That is not the expected file, so nothing was "
         "installed. Run this line again.' -ForegroundColor Red } "
-        "else { tar -xjf $f -C $m; Remove-Item $f; "
-        "$d = Join-Path $m 'tts'; "
+        "else { tar -xjf $f -C $m; $ok = ($LASTEXITCODE -eq 0); Remove-Item $f; "
+        f"if (-not $ok -or -not (Test-Path (Join-Path (Join-Path $m '{pin['folder']}') 'voices.bin'))) "
+        "{ Write-Host 'The unpack did not finish (is the disk full?), so nothing was "
+        "installed and your old voices are untouched. Run this line again.' -ForegroundColor Red } "
+        "else { $d = Join-Path $m 'tts'; "
         "if (Test-Path $d) { Rename-Item $d ('tts-old-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }; "
         f"Rename-Item (Join-Path $m '{pin['folder']}') 'tts'; "
         "Write-Host \"OK - the new voices are in $d. Restart Jarvis to hear them.\" "
-        "-ForegroundColor Green }"
+        "-ForegroundColor Green } }"
     )
 
 

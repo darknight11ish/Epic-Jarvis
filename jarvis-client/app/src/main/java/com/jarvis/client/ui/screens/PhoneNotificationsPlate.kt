@@ -14,6 +14,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -242,8 +243,20 @@ private fun AllowedAppsList() {
     }
     if (picking) {
         Gap(8)
-        val candidates = remember(version) { store.installedApps() }
-        if (candidates.isEmpty()) {
+        // Read off the main thread: it asks Android for every installed app and
+        // each one's name, which on a phone with many apps froze the screen
+        // (bug audit 2026-09-29). Null while it loads.
+        val loaded by produceState<List<NotificationAllowListStore.InstalledApp>?>(
+            initialValue = null, version,
+        ) { value = withContext(Dispatchers.IO) { store.installedApps() } }
+        val candidates = loaded
+        if (candidates == null) {
+            Text(
+                "Looking for apps...",
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textLo,
+            )
+        } else if (candidates.isEmpty()) {
             Text(
                 "No other apps found to add.",
                 style = MaterialTheme.typography.bodySmall,

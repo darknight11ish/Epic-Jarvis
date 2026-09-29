@@ -223,6 +223,13 @@
        "title": "Set up a repeating reminder or alarm, or the standby schedule"
       },
       {
+       "fixed": true,
+       "id": "fixed:goals",
+       "note": "Your own words only. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing; ticking a step and stopping are immediate. A step that does something (a search, an email) still asks on its own card in ordinary chat.",
+       "says": "Does it without asking",
+       "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
+      },
+      {
        "action": "schedule_repeat",
        "fixed": false,
        "id": "schedule_repeat",
@@ -1194,6 +1201,13 @@
        "title": "Set up a repeating reminder or alarm, or the standby schedule"
       },
       {
+       "fixed": true,
+       "id": "fixed:goals",
+       "note": "Your own words only. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing; ticking a step and stopping are immediate. A step that does something (a search, an email) still asks on its own card in ordinary chat.",
+       "says": "Does it without asking",
+       "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
+      },
+      {
        "action": "schedule_repeat",
        "fixed": false,
        "id": "schedule_repeat",
@@ -2162,6 +2176,13 @@
        "title": "Set up a repeating reminder or alarm, or the standby schedule"
       },
       {
+       "fixed": true,
+       "id": "fixed:goals",
+       "note": "Your own words only. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing; ticking a step and stopping are immediate. A step that does something (a search, an email) still asks on its own card in ordinary chat.",
+       "says": "Does it without asking",
+       "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
+      },
+      {
        "action": "schedule_repeat",
        "fixed": false,
        "id": "schedule_repeat",
@@ -3123,6 +3144,13 @@
        "title": "Set up a repeating reminder or alarm, or the standby schedule"
       },
       {
+       "fixed": true,
+       "id": "fixed:goals",
+       "note": "Your own words only. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing; ticking a step and stopping are immediate. A step that does something (a search, an email) still asks on its own card in ordinary chat.",
+       "says": "Does it without asking",
+       "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
+      },
+      {
        "action": "schedule_repeat",
        "fixed": false,
        "id": "schedule_repeat",
@@ -4082,6 +4110,13 @@
        "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
        "says": "Does it without asking",
        "title": "Set up a repeating reminder or alarm, or the standby schedule"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:goals",
+       "note": "Your own words only. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing; ticking a step and stopping are immediate. A step that does something (a search, an email) still asks on its own card in ordinary chat.",
+       "says": "Does it without asking",
+       "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
       },
       {
        "action": "schedule_repeat",
@@ -5057,6 +5092,13 @@
        "title": "Set up a repeating reminder or alarm, or the standby schedule"
       },
       {
+       "fixed": true,
+       "id": "fixed:goals",
+       "note": "Your own words only. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing; ticking a step and stopping are immediate. A step that does something (a search, an email) still asks on its own card in ordinary chat.",
+       "says": "Does it without asking",
+       "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
+      },
+      {
        "action": "schedule_repeat",
        "fixed": false,
        "id": "schedule_repeat",
@@ -6023,6 +6065,13 @@
        "note": "Your own words only; the answer says when it next goes off, and deleting is immediate. A repeating morning briefing and \"tell me when\" still ask (below).",
        "says": "Does it without asking",
        "title": "Set up a repeating reminder or alarm, or the standby schedule"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:goals",
+       "note": "Your own words only. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing; ticking a step and stopping are immediate. A step that does something (a search, an email) still asks on its own card in ordinary chat.",
+       "says": "Does it without asking",
+       "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
       },
       {
        "action": "schedule_repeat",

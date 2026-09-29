@@ -329,7 +329,8 @@ GROUPS = (
                             "create_joplin_note", "create_logseq_page", "edit_joplin_note",
                             "edit_logseq_page", "delete_joplin_note", "delete_logseq_page",
                             "write_notes_after_outside_text", "wiki_update"]),
-    ("Timers and reminders", ["fixed:timers", "fixed:repeats", "schedule_repeat"]),
+    ("Timers and reminders", ["fixed:timers", "fixed:repeats", "fixed:goals",
+                              "schedule_repeat"]),
     ("Your smart home", ["fixed:lights", "home_control"]),
     # Projects (the owner's decision of 2026-09-28; jarvis_projects.py). Its
     # two cards are change_own_config cards, decided in the code; these rows
@@ -395,6 +396,14 @@ FIXED = {
                       "Your own words only; the answer says when it next goes off, and "
                       "deleting is immediate. A repeating morning briefing and \"tell me when\" "
                       "still ask (below)."),
+    # Goals (jarvis_goals.py): the page promises every action, and none of a
+    # goal's own actions asks (cohesiveness audit, 2026-09-29).
+    "fixed:goals": ("Make a goal, edit its plan, tick a step off, or stop tracking it",
+                    SAYS_NO_CARD,
+                    "Your own words only. Accepting a plan sets up a weekly check-in that "
+                    "reads nothing and acts on nothing; ticking a step and stopping are "
+                    "immediate. A step that does something (a search, an email) still asks "
+                    "on its own card in ordinary chat."),
     # The plug-in programs (jarvis_mcp.py): a program someone else wrote,
     # running as the owner - every use asks, in code, whatever the file says.
     "fixed:live": ("Start Jarvis Live (a back-and-forth voice conversation)", SAYS_NO_CARD,

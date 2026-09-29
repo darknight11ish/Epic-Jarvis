@@ -305,6 +305,21 @@ await check("the words are hidden with the private lists; status and steps stay 
   assert.match(text, /Hidden until Windows Hello confirms it is you\./);
 });
 
+await check("a draft opened while the lists are hidden gets its real steps back after Show", async () => {
+  // Bug audit 2026-09-29: the blank steps the PC sends while hidden were kept
+  // as the editor's working copy, so they stayed blank after Show and Accept
+  // refused an empty plan.
+  const page = await workTab({ goals: { goals: [DRAFT] }, security: { hidden: true } });
+  const hiddenValue = await page.locator("#goals-list .goal-editor-row input").first().inputValue();
+  await page.evaluate(() => { window.__security.revealed = true; });
+  await page.evaluate(() => window.__emit("security-changed", {}));
+  await page.waitForTimeout(600);
+  const shownValue = await page.locator("#goals-list .goal-editor-row input").first().inputValue();
+  await page.close();
+  assert.equal(hiddenValue, "", "the words were not hidden to begin with (the test is not testing anything)");
+  assert.equal(shownValue, DRAFT.plan[0].step);
+});
+
 await check("full: the new-goal form is not offered, and it says why", async () => {
   const many = Array.from({ length: 20 }, (_, i) => ({ ...DRAFT, id: `g${String(i).padStart(10, "0")}`,
     text: `goal ${i}` }));

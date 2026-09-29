@@ -369,6 +369,23 @@ def t_third_card_under_a_preset():
 # (_THIRD_LANE), running alongside the second card's own lane - never
 # instead of it, and never a default winner.
 
+def t_third_port_never_shares_the_second_lanes_port():
+    """Bug audit 2026-09-29: a [second_card] port of 11436 (the third lane's
+    own default) made _third_port() fall back to that same 11436, so the two
+    Ollama copies, which run at the same time, would fight over one port."""
+    def with_cfg(cfg):
+        return mock.patch.object(SC, "_cfg", lambda k, d=None: cfg.get(k, d))
+    for cfg, label in (({}, "no config"),
+                       ({"port": SC.DEFAULT_THIRD_PORT}, "second port = the third's default"),
+                       ({"third_port": SC.DEFAULT_PORT}, "third port = the second's default"),
+                       ({"third_port": SC.MAIN_OLLAMA_PORT}, "third port = the main Ollama's"),
+                       ({"port": SC.DEFAULT_THIRD_PORT, "third_port": 11436}, "both set to 11436")):
+        with with_cfg(cfg):
+            t, sec = SC._third_port(), SC._port()
+            check(f"{label}: the third lane's port is its own",
+                  t not in (sec, SC.MAIN_OLLAMA_PORT) and 1024 <= t <= 65535, (t, sec))
+
+
 def t_third_card_no_default_winner():
     with G.World(SMI_THREE) as w:
         w.switches(master=True, long_context=True)

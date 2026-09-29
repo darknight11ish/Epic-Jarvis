@@ -748,7 +748,7 @@ object JarvisRuntime {
         // something to paint at once instead of a blank screen while the
         // first live read times out. Never re-read after this except as a
         // side effect of a live read succeeding, in refreshModels().
-        _modelsCache.value = modelsStore.load()
+        _modelsCache.value = modelsStore.load(clientSettings.host.value)
         updates = UpdateChecker(clientSettings)
         chat = chatSession
         voice = voiceSession
@@ -881,6 +881,11 @@ object JarvisRuntime {
         // whenever the switch reads as off - pressed here, or learned from
         // the PC - nothing captured stays on this phone (audit A3). Also
         // runs once at start: an off switch never has rows behind it.
+        // Brain -> Model's remembered list belongs to one PC: when the phone is
+        // pointed at another, what was kept for the old one stops showing.
+        scope.launch {
+            settings.host.collect { h -> _modelsCache.value = modelsCacheStore.load(h) }
+        }
         scope.launch {
             settings.phoneNotifications.collect { on ->
                 if (!on) runCatching { com.jarvis.client.data.CapturedNotifications(app).clear() }
@@ -1064,6 +1069,9 @@ object JarvisRuntime {
             }
         }
 
+        // A stream that died on its own leaves its watchdog running; without this
+        // the next start put a second one beside it (bug audit 2026-09-29).
+        watchdog?.cancel()
         watchdog = scope.launch {
             while (true) {
                 delay(WATCHDOG_TICK_MS)
@@ -1638,7 +1646,7 @@ object JarvisRuntime {
             is ApiResult.Ok -> {
                 _models.value = result.value
                 val cached = CachedModels.from(result.value, System.currentTimeMillis())
-                modelsCacheStore.save(cached)
+                modelsCacheStore.save(cached, settings.host.value)
                 _modelsCache.value = cached
             }
             is ApiResult.Failed -> _models.value = null
@@ -3896,7 +3904,18 @@ object JarvisRuntime {
                 phoneNotificationsCheckedAt = now
                 runCatching { phoneNotificationsSettings() }
             }
-            if (phoneNotificationsAllowed()) kotlinx.coroutines.withContext(Dispatchers.IO) { store() }
+            if (phoneNotificationsAllowed()) kotlinx.coroutines.withContext(Dispatchers.IO) {
+                store()
+                // The switch can go off between the check above and the write
+                // landing: the switch-off clear may already have run, and this
+                // row would then stay behind. Look again after writing, and
+                // clear if it is off now (bug audit 2026-09-29).
+                if (!phoneNotificationsAllowed()) {
+                    appContext?.let { ctx ->
+                        runCatching { com.jarvis.client.data.CapturedNotifications(ctx).clear() }
+                    }
+                }
+            }
         }
     }
 
@@ -6356,7 +6375,11 @@ object JarvisRuntime {
     /** Re-reads the status. A failed read changes nothing: the last answer keeps aging. */
     suspend fun refreshInboxTidy() {
         when (val r = api.inboxTidyCall(false)) {
-            is ApiResult.Ok -> {
+            // A 503 from the status route is the PC hitting a passing error, not
+            // "no such feature": like a failed read it changes nothing, so an
+            // open Undo strip is not wiped for up to 20 seconds (bug audit
+            // 2026-09-29; the desktop already keeps it).
+            is ApiResult.Ok -> if (r.value.code != 503) {
                 _inboxTidy.value = if (InboxTidy.missing(r.value)) {
                     null
                 } else {

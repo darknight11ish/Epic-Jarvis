@@ -828,8 +828,13 @@ def _third_port() -> int:
         p = int(_cfg("third_port", DEFAULT_THIRD_PORT))
     except (TypeError, ValueError):
         return DEFAULT_THIRD_PORT
-    if not (1024 <= p <= 65535) or p in (MAIN_OLLAMA_PORT, _port()):
-        return DEFAULT_THIRD_PORT
+    taken = (MAIN_OLLAMA_PORT, _port())
+    if not (1024 <= p <= 65535) or p in taken:
+        p = DEFAULT_THIRD_PORT
+    # The default itself can be taken (a second-card `port` set to 11436):
+    # step up to the next port that neither of the other two copies uses.
+    while p in taken:
+        p += 1
     return p
 
 

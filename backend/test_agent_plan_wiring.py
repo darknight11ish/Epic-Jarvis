@@ -325,6 +325,43 @@ def t_a_from_step_step_gets_its_own_card():
     _with_real_enabled(body)
 
 
+def t_a_chain_of_from_step_steps_each_gets_its_own_card_and_runs_once():
+    """Bug audit 2026-09-29: jarvis_plan.run() makes a fresh copy of every
+    result-filled step and drops it when the next begins, and the
+    dispatcher cached each verdict under id(step). CPython reuses a freed
+    object's id, so the SECOND filled step in a row landed on the first's
+    cache entry: it skipped its own card and re-ran the earlier step's tool.
+    Three filled steps in a row must each be asked about and each run once."""
+    def body():
+        results = {"append_obsidian_daily": {"ok": True, "written": "A"},
+                   "append_logseq_journal": {"ok": True, "written": "B"},
+                   "calculator": {"ok": True, "value": 4}}
+        with _FakeTools(results, {"calculator": "auto", "run_plan": "ask",
+                                  **{n: "auto" for n in results}}) as fk:
+            checker, calls = _fake_checker({
+                **_APPROVE_RUN_PLAN,
+                "calculator": _Verdict(True, tier="auto", outcome="auto")})
+            result, _ = _plan_turn(
+                [{"tool": "calculator", "args": {"expression": "2+2"}, "why": "add"},
+                 {"tool": "append_obsidian_daily", "args": {"text": "one {{step 1}}"},
+                  "why": "log", "from_step": 0},
+                 {"tool": "append_logseq_journal", "args": {"text": "two {{step 2}}"},
+                  "why": "log", "from_step": 1},
+                 {"tool": "calculator", "args": {"expression": "{{step 3}}"},
+                  "why": "log", "from_step": 2}],
+                checker=checker)
+            step_cards = [c for c in calls if c[0] == AG.PLAN_STEP_ASK_ACTION
+                          and "Plan step" in c[1]["text"]]
+            check("chain: all three filled steps got their OWN card",
+                  len(step_cards) == 3, repr([c[1]["text"][:60] for c in step_cards]))
+            names = [n for n, _ in fk.ran]
+            check("chain: each step ran exactly once, in order (none repeated, none skipped)",
+                  names == ["calculator", "append_obsidian_daily",
+                            "append_logseq_journal", "calculator"], repr(names))
+            check("chain: the plan finished", result.get("ok") is True, repr(result))
+    _with_real_enabled(body)
+
+
 def t_a_risky_auto_step_needs_a_person():
     """F2: a step marked risky whose tool is auto-tier must really be asked
     (the card promised it). A gate that lets it through without a person -
@@ -529,6 +566,7 @@ if __name__ == "__main__":
                t_a_safe_step_runs_with_no_card_of_its_own,
                t_a_risky_step_gets_its_own_card,
                t_a_from_step_step_gets_its_own_card,
+               t_a_chain_of_from_step_steps_each_gets_its_own_card_and_runs_once,
                t_a_risky_auto_step_needs_a_person,
                t_a_note_write_after_a_reading_step_in_the_plan_waits_for_a_yes,
                t_a_risky_step_denied_stops_the_run_there,

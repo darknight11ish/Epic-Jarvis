@@ -129,6 +129,8 @@ fun VoicesScreen(
             stopFlag.set(true)
             clip = null
             onClearPicked()
+            // A "Hear it" sample must not keep playing after this screen is left.
+            runCatching { JarvisRuntime.voice.stopSamples() }
         }
     }
 

@@ -58,7 +58,7 @@ class CapturedNotifications(context: Context) {
         .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     /** Adds one, already-redacted notification, then trims to the caps. */
-    fun add(n: CapturedNotification) {
+    fun add(n: CapturedNotification) = synchronized(LOCK) {
         save(CapturedRows.added(load(), n, System.currentTimeMillis(), MAX_AGE_MS, MAX_KEPT))
     }
 
@@ -74,10 +74,10 @@ class CapturedNotifications(context: Context) {
      * immediate - nothing captured stays behind), and by the plate's own
      * "Delete captured notifications" after "are you sure?".
      */
-    fun clear() = prefs.edit { remove(KEY_ITEMS) }
+    fun clear() = synchronized(LOCK) { prefs.edit { remove(KEY_ITEMS) } }
 
     /** Deletes what was captured from one app - when it leaves the allow list. */
-    fun removeApp(packageName: String) {
+    fun removeApp(packageName: String) = synchronized(LOCK) {
         val all = load()
         val kept = CapturedRows.withoutApp(all, packageName)
         if (kept.size != all.size) save(kept)
@@ -158,6 +158,16 @@ class CapturedNotifications(context: Context) {
     private companion object {
         const val PREFS = "jarvis_captured_notifications"
         const val KEY_ITEMS = "items"
+
+        /**
+         * One lock for every instance: the listener's store, the switch-off
+         * clear and the plate's delete each build their own
+         * [CapturedNotifications] over the same preferences file, and
+         * [add] reads the whole list then writes it back - two at once
+         * lost a row, and a clear could land between an add's read and its
+         * write and leave the row behind (bug audit 2026-09-29).
+         */
+        val LOCK = Any()
 
         /** At most this many kept, whatever else clears the older ones out first. */
         const val MAX_KEPT = 200

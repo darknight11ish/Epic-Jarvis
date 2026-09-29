@@ -80,6 +80,8 @@ const state = {
   error: "",
   said: "",
   reading: false,
+  /** A refresh asked for while a read was running: read again when it ends. */
+  again: false,
   readAt: 0,
 };
 
@@ -230,7 +232,13 @@ async function readTaskNow(projectId) {
 
 /** Reads what is on screen again, then draws it. */
 export async function showProjects() {
-  if (state.reading) return;
+  if (state.reading) {
+    // A change finished while a read was already running: that read may have
+    // started before the change, so read once more when it ends rather than
+    // dropping this one (bug audit 2026-09-29).
+    state.again = true;
+    return;
+  }
   state.reading = true;
   try {
     await readListNow();
@@ -240,6 +248,10 @@ export async function showProjects() {
     state.reading = false;
   }
   paint();
+  if (state.again) {
+    state.again = false;
+    await showProjects();
+  }
 }
 
 /** When the list was last read without an error - the Brain's status line
@@ -254,7 +266,7 @@ export function readAtMs() {
  * ONE change. A 202 means the PC raised an approval card; its own message
  * says so. `quiet` keeps the number out of anything spoken.
  */
-async function write(action, args, { done = "", quiet = false } = {}) {
+async function write(action, args, { done = "", quiet = false, onDone = null } = {}) {
   try {
     const out = await invoke("projects_write", { action, ...args });
     if (out && out.ok === false) {
@@ -263,6 +275,9 @@ async function write(action, args, { done = "", quiet = false } = {}) {
     }
     const message = out && typeof out.message === "string" ? out.message : "";
     say(quiet ? done || "Done." : message || done || "Done.", "ok");
+    // Runs BEFORE the repaint below, so what it clears is already gone when
+    // the screen is drawn again.
+    if (onDone) onDone();
     return out || {};
   } catch (error) {
     say(errorText(error), "bad");
@@ -330,9 +345,12 @@ async function pasteChange(p, t, area) {
     area.focus();
     return;
   }
-  const out = await write("app_task_files", { project: p.id, task: t.task, body: got.body },
-    { done: "Added to this task." });
-  if (out) delete state.pastes[t.task];
+  // The pasted text is dropped as soon as the change goes through - before
+  // the repaint that write() ends with, which would otherwise draw the box
+  // with the same change still in it (a second press added it twice; bug
+  // audit 2026-09-29).
+  await write("app_task_files", { project: p.id, task: t.task, body: got.body },
+    { done: "Added to this task.", onDone: () => { delete state.pastes[t.task]; } });
 }
 
 /** Merge: ONE request; the PC raises the card, this page never decides it. */
