@@ -1079,6 +1079,7 @@ pub fn run() {
             voice_training::set_voice_animal,
             voice_training::reset_voice_animal,
             voice_training::try_voice_animal,
+            voice_training::hear_voice_sample,
             voice_training::get_face_voice_offer,
             voice_training::answer_face_voice_offer,
             vision::local_model_vision,
