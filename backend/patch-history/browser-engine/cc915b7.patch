@@ -20,7 +20,7 @@
 +    # new way onto the web, so "outbound" (a risky approval): the pages are on
 +    # the internet, and every page, click and box it fills is still its own
 +    # plan card first. Stealth is on. Turning it off is instant and stops it.
-+    "obscura_enable": ("yes", "outbound", "lets Jarvis choose a browser with no window (Obscura, a program on this PC that Jarvis starts and stops) for plain web reading; the pages are on the internet and it looks like an ordinary Chrome, but every page, click and box it fills is still its own card first, it never types a password or solves a captcha and stops at a captcha or sign-in page it recognises, it cannot open your own network, and turning it off is instant"),
++    "obscura_enable": ("yes", "outbound", "lets Jarvis choose a browser with no window (Obscura, a program on this PC that Jarvis starts and stops) for plain web reading; the pages are on the internet and it looks like an ordinary Chrome, but every page, click and box it fills is still its own card first, it never signs in, types a password or solves a captcha, it cannot open your own network, and turning it off is instant"),
  }
  
  _UNKNOWN_RISK = ("no", "outbound",

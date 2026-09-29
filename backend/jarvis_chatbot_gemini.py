@@ -23,7 +23,7 @@ docs/CHATBOT-DRIVER-DESIGN.md, "The owner's answers (2026-09-28)")
   * REVERSED 2026-09-29 (owner, after being told the ban risk several
     times): the old rule "driven openly - nothing that hides it from or
     dodges Google's bot detection" and the declined request for "tactics
-    that help avoid bans" are gone. Stealth is ON for Jarvis's browsers;
+    that help avoid bans" are gone. The headless browser runs with stealth on and the visible browser is a plain real browser;
     the ban risk is real and accepted.
 
 WHAT IS STILL TRUE, IN CODE (jarvis_chatbot_web.py does it;

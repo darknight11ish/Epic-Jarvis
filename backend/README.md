@@ -162,7 +162,7 @@ on a throwaway copy instead.
 | `inbox-tidy.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Inbox tidy by voice"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 95): archive, star, mark as read or move to Trash a checked list of emails, ONE approval card listing every one, 10 minutes to Undo. Four hunks: in `jarvis_gate.py` `tidy_inbox` joins "a no proposes no memory rule", gets its `_RISK` line (`"yes", "outbound"` - it changes the mailbox on a server, so approving it is a risky approval; nothing is deleted for good, and Undo puts everything back) and its `_TOOL_ACTIONS` line; in `jarvis_hud.py` ONE install block after `sky.patch`'s (`GET /api/email/tidy`, `POST /api/email/tidy/undo`). Its context is other patches' lines: after `support-chat.patch`, before `devices.patch`, which stays last. Needs `jarvis_inbox_tidy.py` - see "Inbox tidy", at the very end. |
 | `screen.patch` | `jarvis_hud.py` | **"Look at this" and "Watch with me": the routes and the chat turn** (the owner's decision of 2026-09-28; `docs/SCREEN-DESIGN.md`, `docs/JARVIS-API.md` sections 62 and 96). Three hunks: a small `_screen_turn(body)` helper (does the newest message carry the owner's screen - the `screen` mark or a `screen_text` part), `has_screen=_screen_turn(body)` in the router call, so such a turn never leaves this PC, and one `jarvis_screen.install(Handler, ...)` block after inbox tidy's, which answers `GET/POST /api/screen` and `GET/POST /api/screen/never-look`. The router call is the owner's own text; the hunk anchors on the lines `cloud-say-yes.patch` already added there (checked against the real file by that patch) and was applied only to the stand-in. Its context is `inbox-tidy.patch`'s startup block, `games-temporary.patch`'s helper lines and `cloud-say-yes.patch`'s router call, so it goes last in the list, after `inbox-tidy.patch`. Needs `jarvis_screen.py` and `jarvis_screen_win.py` copied in (`jarvis_screen_win.py` first); without them, or on any error, the banner says "screen NOT ON", the routes answer 404 and nothing can look. `temporary-chat.patch` also gained one word: `screen` in `_CHAT_CLIENT_FIELDS`, so the mark never travels onward. See "Looking at the screen", below. |
 | `screen-picture.patch` | `jarvis_gate.py` | **Picture mode for "Look at this" and "Watch with me" on a one-card PC** (the owner's decision of 2026-09-29; `docs/JARVIS-API.md` section 96.1). Two hunks, both right after `inbox-tidy.patch`'s own last lines: `screen_picture_enable` joins "a no proposes no memory rule" (turning it on is ONE card, tier `ask`, only), and gets its `_RISK` line (`"yes", "local"` - a small picture model on this PC's processor in a separate copy of Ollama that only this PC can reach; secrets blacked out first; nothing saved or sent anywhere; the owner downloads the model, not the card; off again is instant). Goes last in the list, after `screen.patch`. Needs `jarvis_screen_picture.py` copied in; the routes are `jarvis_screen.py`'s, so no `jarvis_hud.py` hunk. See "Picture mode for the screen", at the very end. |
-| `browser-engine.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **The headless browser, Obscura** (the owner's decision of 2026-09-29; `docs/JARVIS-API.md` section 97). Three hunks: in `jarvis_gate.py`, `obscura_enable` joins "a no proposes no memory rule" (turning it on is ONE card, tier `ask`, only) and gets its `_RISK` line (`"yes", "outbound"` - a new program on this PC and a new way onto the web, so a risky approval; stealth is on; each step is still its own card; it never signs in, types a password or solves a captcha; it cannot open your own network; off again is instant) - both right after `screen-picture.patch`'s own lines - and in `jarvis_hud.py` ONE install block right after `screen.patch`'s, the last before `_loopback_companion`. Goes last in the list. Needs `jarvis_obscura.py` and `jarvis_browser_engine.py` copied in. See "The headless browser (Obscura)", at the very end. |
+| `browser-engine.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **The headless browser, Obscura** (the owner's decision of 2026-09-29; `docs/JARVIS-API.md` section 97). Three hunks: in `jarvis_gate.py`, `obscura_enable` joins "a no proposes no memory rule" (turning it on is ONE card, tier `ask`, only) and gets its `_RISK` line (`"yes", "outbound"` - a new program on this PC and a new way onto the web, so a risky approval; stealth is on; each step is still its own card; it never types a password or solves a captcha and stops at a captcha or sign-in page it recognises; it cannot open your own network; off again is instant) - both right after `screen-picture.patch`'s own lines - and in `jarvis_hud.py` ONE install block right after `screen.patch`'s, the last before `_loopback_companion`. Goes last in the list. Needs `jarvis_obscura.py` and `jarvis_browser_engine.py` copied in. See "The headless browser (Obscura)", at the very end. |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 
 ## All but two of the patches apply, and that is correct
@@ -14252,8 +14252,7 @@ Jarvis can now work its own Gemini window: it opens gemini.google.com in a
 browser window you can see, starts a new chat, types the question at a
 steady pace, and reads back only Gemini's answer to it. (Until 2026-09-29
 this said it was done "openly", with nothing hiding that a program is typing.
-**You reversed that on 2026-09-29**, after being told the ban risk: stealth is
-on for Jarvis's browsers. This window is still a plain, real browser and
+**You reversed that on 2026-09-29**, after being told the ban risk: the headless browser runs with stealth on. This window is still a plain, real browser and
 Jarvis adds no disguise of its own to it, so you can take over.) At a captcha (a "prove you
 are a person" check), a sign-in page, or an "unusual activity" / "verify
 it's you" page, it **stops and asks you** - it never tries to get past one.
@@ -17762,10 +17761,11 @@ Apache-2.0, https://github.com/h4ckf0r0day/obscura), that Jarvis can choose
 for everything it runs**. That makes the browser look like an ordinary Chrome;
 it **does not solve captchas, a site can still block or ban it, and signing in
 to a real account with any automated browser can get that account closed** - so
-Jarvis never signs in with it, never types a password, and at a captcha or a
-sign-in page it **stops and tells you to ask again with the visible browser**,
-where you can take over. **It is off**, turning it on is **one approval card**,
-and turning it off is instant.
+Jarvis never types a password with it and never solves a captcha, and at a captcha
+or a sign-in page it recognises it **stops and tells you to ask again with the
+visible browser**, where you can take over (a sign-in that starts with only a
+username or email box may not be recognised). **It is off**, turning it on is
+**one approval card**, and turning it off is instant.
 
 **Which browser Jarvis picks.** Settings, "Headless browser" (both apps) has the
 switch and a list: *Automatic (recommended)* - the visible window whenever you
@@ -17782,7 +17782,14 @@ before it runs, on the sites the card named. What it reads is outside text.
 It cannot reach this PC, your home network, Tailscale or Meshnet; it uses no
 proxy; it keeps no cookies and saves no files; running a page's own script,
 cookies, tabs and key presses are not reachable at all; and it opens no network
-port (Jarvis talks to it over standard input and output).
+port (Jarvis talks to it over standard input and output). It is stopped after 3
+idle minutes and after 10 minutes in all, and it starts only while the switch is on.
+What it types and the addresses it opens are checked first (a password, key or
+token, or words that repeat something you told Jarvis, are refused); a link or
+button is checked before it is clicked, but a redirect or a page that moves itself
+can only be noticed after that page has loaded; text a page hides with its own
+markup is left out of what Jarvis reads, and a warning says some hidden text may
+remain (JARVIS-API section 97.3 says exactly what is and is not covered).
 
 ## Owner steps
 
@@ -17794,22 +17801,34 @@ repository's folder, then quit Jarvis from the tray icon and start it again:
 powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
 ```
 
-**2. Install Obscura - one line.** This **downloads Obscura's Windows program**
-(about 70 MB, from its GitHub releases - the `-stealth` archive), unpacks it into
-`%USERPROFILE%\.openjarvis\obscura`, and checks it: its version, that stealth is
-on, that it starts, that it reads a made-up page **inside the check itself** (no
-real website is visited), and that it **refuses** a page on this PC. Jarvis's
-backend never downloads it. Settings shows this line too, with your folder in it,
-and a "Copy the line" button:
+**2. Install Obscura - one line, then a check.** This line **downloads Obscura's
+Windows program** (about 70 MB, from its GitHub releases - the `-stealth` archive of
+ONE named release, `v0.2.3`, never "the latest"), unpacks it into
+`%USERPROFILE%\.openjarvis\obscura`, and **prints two checksums (SHA-256)**: of the zip and
+of `obscura.exe`. **It does not run the program.** Jarvis's backend never downloads
+it. Settings shows this line too, with your folder in it, and a "Copy the line"
+button:
 
 ```powershell
-$ProgressPreference = 'SilentlyContinue'; $d = 'C:\Users\pcadmin\.openjarvis\obscura'; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -ErrorAction Stop -Uri 'https://github.com/h4ckf0r0day/obscura/releases/latest/download/obscura-x86_64-windows-stealth.zip' -OutFile "$d\obscura.zip"; Expand-Archive -ErrorAction Stop -Force -LiteralPath "$d\obscura.zip" -DestinationPath $d; Remove-Item "$d\obscura.zip"; Push-Location -LiteralPath 'C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program'; py -3 .\jarvis_obscura.py --check --accept-new; Pop-Location
+$ProgressPreference = 'SilentlyContinue'; $d = 'C:\Users\pcadmin\.openjarvis\obscura'; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -ErrorAction Stop -Uri 'https://github.com/h4ckf0r0day/obscura/releases/download/v0.2.3/obscura-x86_64-windows-stealth.zip' -OutFile "$d\obscura.zip"; $z = (Get-FileHash -Algorithm SHA256 -LiteralPath "$d\obscura.zip").Hash; Expand-Archive -ErrorAction Stop -Force -LiteralPath "$d\obscura.zip" -DestinationPath $d; Remove-Item -LiteralPath "$d\obscura.zip"; $e = (Get-FileHash -Algorithm SHA256 -LiteralPath "$d\obscura.exe").Hash; $h = 'C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program'; Write-Host "Downloaded Obscura v0.2.3. Nothing has been run yet."; Write-Host "SHA-256 of the zip: $z"; Write-Host "SHA-256 of obscura.exe: $e"; Write-Host "Compare the zip's checksum with the SHA-256 GitHub shows for that file on https://github.com/h4ckf0r0day/obscura/releases/tag/v0.2.3 . If they match, run this second command to check it: Set-Location -LiteralPath '$h'; py -3 .\jarvis_obscura.py --check   (add --accept-new only if you are replacing a file you checked before)"
 ```
 
-It ends with the file's **checksum**. Nobody could read an official checksum from
-where this was built, so Jarvis **remembers this one** and refuses a different file
-later until you run the line again on purpose. If you send the checksum back it can
-be pinned in the code.
+Then **compare** the zip's checksum with the one GitHub shows for that file on the
+release page (the line prints the address). If they match, run the **second command
+the line prints** - it starts Obscura for the first time, checks it (its version, that
+stealth is on, that it starts, that it reads a made-up page **inside the check
+itself** - no real website is visited - and that it **refuses** a page on this PC),
+and remembers its checksum:
+
+```powershell
+py -3 .\jarvis_obscura.py --check
+```
+
+(Run from the folder the line printed. Add `--accept-new` **only** when you are
+replacing a file you checked before - it tells Jarvis to trust the new file's
+checksum. Jarvis remembers the first checked file's checksum and refuses a different
+file later until then.) Nobody could read an official checksum from where this was
+built; if you send the checksum back it can be pinned in the code.
 
 **3. Turn it on** (or leave it off). Settings, "Headless browser", the switch - or
 ask Jarvis "turn on the headless browser". A card explains it; nothing changes until
@@ -17822,7 +17841,7 @@ headless browser". The card's first line should say `Browser: HEADLESS (Obscura,
 window)`; approve it, and the answer should quote the page. Then ask it to read a
 page that asks you to sign in: it should stop and say to ask again with the visible
 browser. Watch that no window opens, and that the graphics card does not move.
-`py -3 tools\check_obscura.py` runs the install check again by hand.
+`py -3 tools\check_obscura.py` runs the check again by hand.
 
 To stop it: the switch (instant), "Stop everything", or delete the folder
 `%USERPROFILE%\.openjarvis\obscura`.
@@ -17834,10 +17853,13 @@ To stop it: the switch (instant), "Stop everything", or delete the folder
   an allow-list of its tools (navigate, snapshot, click, fill, select, links,
   markdown, screenshot, ...) - evaluate, cookies, storage, tabs, the network log,
   key presses and PDF are refused before anything is sent; hard limits (10 minutes
-  a run, 3 idle, 15 page changes, 45 seconds a call); an allow-listed environment
-  (none of Jarvis's keys or tokens, no proxy variable, the private-address guard held
-  ON); the install line; the owner's check (`--check`); the file's checksum
-  (`PINNED_DIGEST` is empty, so the first checked file's is remembered).
+  a run, 3 idle, 15 page changes, 45 seconds a call, enforced by a watchdog thread as
+  well as at each call); it starts only while the switch is on (a start gate); the
+  one tool that runs a script in a page, `browser_extract`, takes only Jarvis's own
+  fixed argument; an allow-listed environment (none of Jarvis's keys or tokens, no
+  proxy variable, the private-address guard held ON); the install line; the owner's
+  check (`--check`); the file's checksum (`PINNED_DIGEST` is empty, so the first
+  checked file's is remembered). Its error output goes to `obscura.log`, plain text.
 - `jarvis_browser_engine.py` (new, shipped whole): the switch and its one card
   (`obscura_enable`, tier `ask`), the mode rule (`choose()`), the engine interface
   with a headless and a visible implementation (acting only inside an approved plan),
@@ -17864,7 +17886,15 @@ To stop it: the switch (instant), "Stop everything", or delete the folder
   speaks the same protocol over a real child process. What Obscura's tools print is what
   its source says (read on 2026-09-29), not what was seen. `tools\check_obscura.py` is
   the real check; if a step of it does not pass on your PC, tell me which line.
-- **The checksum.** `PINNED_DIGEST` is empty.
+- **The checksum and the release.** `PINNED_DIGEST` is empty. The install line names
+  release `v0.2.3` (the newest tag the repository shows); its release PAGE could not be
+  read from here, so that it carries the archive is read from its workflow, not seen.
+- **What the fence and the hidden-text filter cannot do.** A redirect out of the
+  allowed sites is caught from Obscura's reply, but the page has already been fetched;
+  a page that moves itself after loading is caught at the next look; text hidden by a
+  style sheet, off screen or in the page's own colour still reaches the model, with a
+  warning. This Obscura release has no tool that leaves hidden text out (its newer,
+  unreleased code has a rendered-aware text). JARVIS-API section 97.3.
 - **Stealth's real effect.** Whether a real site treats it as an ordinary Chrome, and
   how long it stays that way, is unknown; the documentation says it does not handle
   Cloudflare's interactive challenges, Datadome, Akamai or captchas.

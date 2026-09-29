@@ -53,7 +53,7 @@ WHAT IT NEVER DOES
   * Solve a captcha, or add any spoofing of its own: it is the same visible
     window (a real browser), no script injected into the page, no captcha
     solving, no proxy. (The owner reversed "driven openly, nothing that
-    hides it" on 2026-09-29 - stealth is on for Jarvis's browsers - but the
+    hides it" on 2026-09-29 - the headless browser runs with stealth on and the visible browser is a plain real browser - but the
     owner still solves every captcha, and this file adds nothing to hide
     anything.) A tap passed on this way reaches the page as Playwright's own
     mouse event; some captchas can tell, and refuse it - the apps say so,

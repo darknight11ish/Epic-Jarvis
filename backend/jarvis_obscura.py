@@ -46,7 +46,17 @@ WHAT THIS FILE ALWAYS DOES
   * ONE program at a time, a hard time limit (SESSION_MAX_S), an idle limit
     (IDLE_MAX_S), a page-load cap (PAGE_CALLS_MAX) and a time limit on every
     single call (CALL_TIMEOUT_S). Past any of them the program is stopped and
-    the caller is told in words; it is never left running.
+    the caller is told in words; it is never left running. A small watchdog
+    thread (`_watch`) enforces the idle and session limits ON ITS OWN, so a
+    program nobody is talking to is stopped after IDLE_MAX_S (3 minutes) even
+    if no further call ever comes (a page stays open between two plans, which
+    is what lets a click follow a read, but never longer than that). An idle
+    or old program met by the NEXT call is simply replaced by a fresh one on
+    a blank page - never a refusal at the owner's next task.
+  * A program is STARTED only while the owner's switch is on: the engine hands
+    its Driver a `start_gate` (jarvis_browser_engine._start_gate) that is asked
+    before every start, so turning the switch off between two steps of a plan
+    cannot be undone by the next step quietly starting it again.
   * The program's environment is an allow-list (jarvis_child_env.py): none of
     Jarvis's own settings, keys or tokens reach it.
 
@@ -60,13 +70,22 @@ WHAT IT CANNOT DO (said plainly)
 
 INSTALL AND CHECK
   The owner pastes ONE PowerShell line (install_line()). It downloads Obscura's
-  Windows release archive (the "-stealth" one: rendering and stealth), unpacks
-  it into <settings folder>\\obscura, and runs `py -3 jarvis_obscura.py --check
-  --accept-new`. The backend never downloads it. PINNED_DIGEST is EMPTY: nobody
+  Windows release archive of ONE named release (RELEASE_TAG - never "latest",
+  so a later release cannot arrive unannounced), unpacks it into <settings
+  folder>\\obscura, and PRINTS the SHA-256 of the archive and of obscura.exe for
+  the owner to compare with the release page. The line does NOT run the
+  program: nothing of it runs before the owner has had that chance. The owner's
+  SECOND step (printed by the line) is `py -3 jarvis_obscura.py --check`, which
+  runs it for the first time, and remembers its checksum; `--accept-new` is
+  added only when replacing a file that was remembered before, and only after
+  comparing. The backend never downloads it. PINNED_DIGEST is EMPTY: nobody
   could read a real release checksum from where this was written. Until one is
   put here, the first checked file's SHA-256 is remembered (obscura-check.json)
   and a later file with any other checksum is refused until the owner runs the
-  line again on purpose.
+  second step with `--accept-new` on purpose.
+  obscura.log (the program's own error output) is kept as PLAIN TEXT beside the
+  settings; it holds what Obscura prints about its own errors, never a typed
+  value (nothing is typed to it on the command line).
 
 UNVERIFIED (said plainly): a real Obscura binary was never run for this
 (the build machine is not Windows and the release could not be downloaded), so
@@ -110,7 +129,13 @@ PROJECT_URL = "https://github.com/h4ckf0r0day/obscura"
 #: The Windows archive with rendering AND stealth (Obscura's release workflow
 #: names its archives obscura-x86_64-windows[-stealth|-no-render].zip).
 ASSET = "obscura-x86_64-windows-stealth.zip"
-DOWNLOAD_URL = PROJECT_URL + "/releases/latest/download/" + ASSET
+#: The release the install line downloads. The newest tag the repository shows
+#: (git ls-remote --tags, read 2026-09-29: v0.1.1 ... v0.2.3), and its own
+#: release workflow at that tag names the archive ASSET. NOT verified: that the
+#: release page really carries the asset (the GitHub API was not reachable from
+#: where this was written) - the owner sees a plain error if it does not.
+RELEASE_TAG = "v0.2.3"
+DOWNLOAD_URL = PROJECT_URL + "/releases/download/" + RELEASE_TAG + "/" + ASSET
 
 #: SHA-256 of obscura.exe to pin the download to, or "" while nobody has been
 #: able to read one from a real release. See "INSTALL AND CHECK" above.
@@ -124,19 +149,35 @@ SESSION_MAX_S = 600.0        # one run of the program, start to stop
 IDLE_MAX_S = 180.0           # nobody asked it anything for this long
 CALL_TIMEOUT_S = 45.0        # one call, and the start-up handshake
 START_TIMEOUT_S = 30.0
+SEND_TIMEOUT_S = 10.0        # writing one request to the program's input
+WATCH_POLL_S = 5.0           # how often the watchdog looks at the clock
 PAGE_CALLS_MAX = 15          # navigations and clicks/back/forward/reload per run
 MAX_LINE_BYTES = 12_000_000  # one reply line (a screenshot is the biggest)
 MAX_TEXT_CHARS = 250_000     # one call's text, kept
 
-#: The MCP tools that may be called. Everything else is refused in call().
+#: The MCP tools that may be called - only the ones something here really uses.
 ALLOWED_TOOLS = frozenset({
-    "browser_navigate", "browser_snapshot", "browser_markdown", "browser_links",
+    "browser_navigate", "browser_snapshot", "browser_links",
     "browser_interactive_elements", "browser_click", "browser_fill",
-    "browser_select_option", "browser_get_attribute", "browser_detect_forms", "browser_back",
-    "browser_wait_for_text", "browser_screenshot", "browser_close",
+    "browser_select_option", "browser_get_attribute", "browser_detect_forms",
+    "browser_extract", "browser_screenshot",
 })
 #: The ones that change which page is showing (counted against the page cap).
-PAGE_CALLS = frozenset({"browser_navigate", "browser_click", "browser_back"})
+PAGE_CALLS = frozenset({"browser_navigate", "browser_click"})
+#: A tool that runs a little script inside the page - `browser_extract` - may be
+#: called ONLY with exactly this argument, which Jarvis wrote (a fixed list of
+#: CSS selectors; no word from the model or from a page is in it). Any other
+#: argument is refused before anything is sent, so it can never become
+#: "run this script" (browser_evaluate stays off the list).
+HIDDEN_SELECTORS = (
+    '[hidden], [aria-hidden="true"], template, [inert], '
+    '[style*="display:none"], [style*="display: none"], '
+    '[style*="visibility:hidden"], [style*="visibility: hidden"], '
+    '[style*="opacity:0"], [style*="opacity: 0"], '
+    '[style*="font-size:0"], [style*="font-size: 0"]')
+FIXED_ARGS = {
+    "browser_extract": {"schema": {"text": "body", "hidden[]": HIDDEN_SELECTORS}},
+}
 #: What is NOT on the list, kept as words so a test can prove each is refused.
 REFUSED_TOOLS = (
     "browser_evaluate", "browser_get_cookies", "browser_set_cookie",
@@ -144,8 +185,9 @@ REFUSED_TOOLS = (
     "browser_tab_new", "browser_tab_list", "browser_tab_switch", "browser_tab_close",
     "browser_network_requests", "browser_console_messages", "browser_press_key",
     "browser_type", "browser_fill_form", "browser_pdf", "browser_reload",
-    "browser_forward", "browser_scroll", "browser_extract", "browser_search",
-    "browser_count", "browser_wait_for",
+    "browser_forward", "browser_scroll", "browser_search",
+    "browser_count", "browser_wait_for", "browser_markdown", "browser_back",
+    "browser_wait_for_text", "browser_close",
 )
 
 #: What the owner sees for each reason a run did not go ahead. Words only.
@@ -153,15 +195,18 @@ WHY = {
     "not_installed": ("Obscura (the headless browser) is not installed on this PC yet. "
                       "Settings shows the one line that installs it."),
     "not_checked": ("Obscura is installed but has not been checked yet, so Jarvis will not "
-                    "start it. Run the install line in Settings once: it checks the file."),
+                    "start it. Compare the checksum the install line printed with the release "
+                    "page, then run the check command the line printed."),
     "changed": ("Obscura's file has changed since it was checked, so Jarvis will not start "
-                "it. If you updated it yourself, run the install line in Settings again."),
+                "it. If you updated it yourself, run the install line in Settings again, "
+                "compare the checksum, then run the check command with --accept-new."),
     "start_failed": "Obscura could not be started.",
     "slow": "Obscura took too long, so it was stopped.",
     "died": "Obscura stopped unexpectedly.",
     "limit_time": "Obscura had been running for its time limit, so it was stopped.",
     "limit_pages": "Obscura reached its limit of pages for one run, so it was stopped.",
     "refused_tool": "Jarvis does not allow that Obscura tool.",
+    "switched_off": "The headless browser is switched off, so Obscura was not started",
     "error": "Obscura ran into an error.",
     "not_windows": "Obscura's Windows program can only be started on Windows.",
 }
@@ -385,12 +430,19 @@ def _kill_tree(p) -> None:
 
 class Driver:
     """The one Obscura process, or none. All methods are safe to call from any
-    thread; calls are one at a time."""
+    thread; calls are one at a time.
+
+    `start_gate() -> str`, when given, is asked before every START: a plain
+    reason means "do not start it" (the engine passes one that says no while
+    the owner's switch is off). It is what keeps a plan whose switch was turned
+    off half-way from quietly starting the program again."""
 
     def __init__(self, *, clock: Callable[[], float] = time.monotonic,
                  popen: Optional[Callable] = None,
-                 command_fn: Optional[Callable] = None, verify: bool = True) -> None:
+                 command_fn: Optional[Callable] = None, verify: bool = True,
+                 start_gate: Optional[Callable[[], str]] = None) -> None:
         self.verify = verify
+        self.start_gate = start_gate
         self.lock = threading.RLock()
         self.clock = clock
         self._popen_fn = popen
@@ -402,6 +454,7 @@ class Driver:
         self.pages = 0
         self.next_id = 0
         self.gen = 0
+        self.busy = 0                 # calls in flight (the watchdog waits for them)
         self.version = ""
         self.last_stop_why = ""
 
@@ -415,9 +468,11 @@ class Driver:
             return False
 
     def view(self) -> dict:
-        with self.lock:
-            return {"running": self.alive(), "pages": self.pages, "version": self.version,
-                    "why_stopped": self.last_stop_why}
+        """What a settings screen may show. Reads plain numbers WITHOUT the lock a
+        running call holds (a call can wait up to CALL_TIMEOUT_S), so asking never
+        hangs behind a slow page."""
+        return {"running": self.alive(), "pages": self.pages, "version": self.version,
+                "why_stopped": self.last_stop_why}
 
     # ---- starting and stopping ------------------------------------------
 
@@ -438,11 +493,35 @@ class Driver:
             pass
         self.lines.put((gen, None, "eof"))
 
+    def _watch(self, gen: int) -> None:
+        """The watchdog: stops a program nobody is using (IDLE_MAX_S) or that has
+        run for SESSION_MAX_S, without waiting for another call to notice. It
+        ends when that program is gone (a newer run has its own watchdog)."""
+        while True:
+            time.sleep(WATCH_POLL_S)
+            if self.gen != gen or not self.alive():
+                return
+            now = self.clock()
+            if now - self.started > SESSION_MAX_S:
+                self.stop("time limit")
+                return
+            if not self.busy and now - self.last_used > IDLE_MAX_S:
+                self.stop("idle")
+                return
+
     def start(self) -> None:
         with self.lock:
             if self.alive():
                 return
             self._drop()
+            # The owner's switch first: never start it while it is off.
+            if self.start_gate is not None:
+                try:
+                    why = str(self.start_gate() or "")
+                except Exception:
+                    why = "the switch could not be read"
+                if why:
+                    raise ObscuraError("switched_off", why.rstrip("."))
             # Tests hand in their own command; the real one is checked first.
             prob = problem() if (self._command_fn is None and self.verify) else ""
             if prob:
@@ -476,6 +555,8 @@ class Driver:
             self.lines = queue.Queue()
             threading.Thread(target=self._reader, args=(self.proc, self.gen),
                              name="jarvis-obscura-reader", daemon=True).start()
+            threading.Thread(target=self._watch, args=(self.gen,),
+                             name="jarvis-obscura-watchdog", daemon=True).start()
             self.started = self.last_used = self.clock()
             self.pages = 0
             self.next_id = 0
@@ -530,11 +611,29 @@ class Driver:
     # ---- talking --------------------------------------------------------
 
     def _send(self, msg: dict) -> None:
+        """Writes one request. The write happens in a helper thread with its own
+        time limit: a program that has stopped reading its input (hung) would
+        otherwise block a large write for ever while this thread holds the lock."""
         data = (json.dumps(msg) + "\n").encode("utf-8")
-        try:
-            self.proc.stdin.write(data)
-            self.proc.stdin.flush()
-        except Exception:
+        proc = self.proc
+        if proc is None:
+            raise ObscuraError("died")
+        failed: list = []
+
+        def write() -> None:
+            try:
+                proc.stdin.write(data)
+                proc.stdin.flush()
+            except Exception as exc:
+                failed.append(exc)
+
+        t = threading.Thread(target=write, name="jarvis-obscura-writer", daemon=True)
+        t.start()
+        t.join(SEND_TIMEOUT_S)
+        if t.is_alive():
+            self.stop("slow")          # kills the program, which frees the writer
+            raise ObscuraError("slow")
+        if failed:
             raise ObscuraError("died")
 
     def _notify(self, method: str) -> None:
@@ -572,22 +671,31 @@ class Driver:
             return res if isinstance(res, dict) else {}
 
     def _check_limits(self) -> None:
+        """Called by a call that finds the program still running. A program left
+        idle too long, or run for its time limit while NOBODY was using it, is
+        replaced quietly - the next call starts a fresh one on a blank page - so
+        the owner's next task is never refused for something that happened
+        between tasks. Only a program that was in use right up to the limit is
+        stopped with a reason."""
         now = self.clock()
+        if now - self.last_used > IDLE_MAX_S:
+            self.stop("idle")
+            return
         if now - self.started > SESSION_MAX_S:
             self.stop("time limit")
             raise ObscuraError("limit_time")
-        if now - self.last_used > IDLE_MAX_S:
-            # Idle too long: not an error for the caller - a fresh run is
-            # started for the next call, on a blank page.
-            self.stop("idle")
 
     def call(self, tool: str, args: Optional[dict] = None, *,
              timeout: Optional[float] = None) -> dict:
         """One MCP tool call. Returns {"text": str, "image": bytes|None,
         "error": bool}. A tool not on ALLOWED_TOOLS is refused before anything is
-        sent. Starts the program when it is not running."""
+        sent, and so is a tool with fixed arguments (FIXED_ARGS) given any other.
+        Starts the program when it is not running - unless the start gate says
+        the owner's switch is off."""
         if tool not in ALLOWED_TOOLS:
             raise ObscuraError("refused_tool", tool)
+        if tool in FIXED_ARGS and (args or {}) != FIXED_ARGS[tool]:
+            raise ObscuraError("refused_tool", tool + " with other arguments")
         with self.lock:
             if self.alive():
                 self._check_limits()
@@ -598,13 +706,18 @@ class Driver:
                     self.stop("page limit")
                     raise ObscuraError("limit_pages")
                 self.pages += 1
+            self.busy += 1
             try:
                 res = self._rpc("tools/call", {"name": tool, "arguments": dict(args or {})},
                                 timeout=timeout or CALL_TIMEOUT_S)
             except ObscuraError as exc:
                 if exc.code in ("slow", "died"):
+                    if exc.code == "died" and self.last_stop_why == "time limit":
+                        raise ObscuraError("limit_time") from None
                     self.stop(exc.code)
                 raise
+            finally:
+                self.busy -= 1
             self.last_used = self.clock()
         return _content(res)
 
@@ -656,20 +769,34 @@ def stop_all(why: str = "switched off") -> None:
 
 
 def install_line() -> str:
-    """The ONE PowerShell line the owner pastes. Downloads the archive, unpacks
-    it into Jarvis's own folder, then runs the check (which remembers the
-    file's checksum). Jarvis's backend never downloads it."""
+    """The ONE PowerShell line the owner pastes. Downloads the archive of the ONE
+    named release (RELEASE_TAG), unpacks it into Jarvis's own folder, and PRINTS
+    the SHA-256 of the archive and of obscura.exe for the owner to compare with
+    the release page. It does NOT run the program and does not tell Jarvis to
+    trust it: the owner compares first, then runs the check command the line
+    prints (`--accept-new` only when replacing a file checked before). Jarvis's
+    backend never downloads it. One line, kept to what Windows PowerShell 5.1
+    has (no `??`, no `&&`)."""
     here = str(Path(__file__).resolve().parent).replace("'", "''")
     # The folder Jarvis really looks in (its own settings folder's `obscura`),
     # so the line is right even when the settings folder is not the default.
     dest = str(install_dir()).replace("'", "''")
-    return (f"$ProgressPreference = 'SilentlyContinue'; "
-            f"$d = '{dest}'; New-Item -ItemType Directory -Force -Path $d | Out-Null; "
-            f"Invoke-WebRequest -ErrorAction Stop -Uri '{DOWNLOAD_URL}' -OutFile \"$d\\obscura.zip\"; "
-            f"Expand-Archive -ErrorAction Stop -Force -LiteralPath \"$d\\obscura.zip\" -DestinationPath $d; "
-            f"Remove-Item \"$d\\obscura.zip\"; "
-            f"Push-Location -LiteralPath '{here}'; "
-            f"py -3 .\\jarvis_obscura.py --check --accept-new; Pop-Location")
+    page = f"{PROJECT_URL}/releases/tag/{RELEASE_TAG}"
+    return (
+        "$ProgressPreference = 'SilentlyContinue'; "
+        f"$d = '{dest}'; New-Item -ItemType Directory -Force -Path $d | Out-Null; "
+        f"Invoke-WebRequest -ErrorAction Stop -Uri '{DOWNLOAD_URL}' -OutFile \"$d\\obscura.zip\"; "
+        "$z = (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash; "
+        "Expand-Archive -ErrorAction Stop -Force -LiteralPath \"$d\\obscura.zip\" -DestinationPath $d; "
+        "Remove-Item -LiteralPath \"$d\\obscura.zip\"; "
+        "$e = (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.exe\").Hash; "
+        f"$h = '{here}'; "
+        f"Write-Host \"Downloaded Obscura {RELEASE_TAG}. Nothing has been run yet.\"; "
+        "Write-Host \"SHA-256 of the zip: $z\"; Write-Host \"SHA-256 of obscura.exe: $e\"; "
+        f"Write-Host \"Compare the zip's checksum with the SHA-256 GitHub shows for that file on {page} . "
+        "If they match, run this second command to check it: "
+        "Set-Location -LiteralPath '$h'; py -3 .\\jarvis_obscura.py --check   "
+        "(add --accept-new only if you are replacing a file you checked before)\"")
 
 
 def _self_test_page() -> str:

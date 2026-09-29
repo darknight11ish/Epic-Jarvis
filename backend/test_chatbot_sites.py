@@ -11,8 +11,7 @@ driver becomes versatile" - ChatGPT, Claude, Microsoft Copilot, Perplexity
 and other commonly used chatbot websites, each in a visible window like
 Gemini (a person's pace, no captcha solving), each with its own spare account
 signed in once by hand. REVERSED 2026-09-29 (owner): the old "driven openly -
-nothing that hides the automation" rule is gone (stealth is on for Jarvis's
-browsers; the ban risk is accepted); what this file still tests is no proxy,
+nothing that hides the automation" rule is gone (the headless browser runs with stealth on and the visible browser is a plain real browser; the ban risk is accepted); what this file still tests is no proxy,
 no captcha solving, and no spoofing code of Jarvis's own in the visible real
 browser.
 
@@ -169,8 +168,8 @@ def _code_only(src: str) -> str:
 
 #: The same list as test_chatbot_gemini.py's (checked below that it is).
 # CHANGED 2026-09-29 (owner): the old rule "driven openly - nothing that hides
-# it, nothing that dodges bot detection" was REVERSED (stealth is on for
-# Jarvis's browsers; the ban risk is accepted). This list is NOT that old rule
+# it, nothing that dodges bot detection" was REVERSED (the headless browser runs with
+# stealth on and the visible browser is a plain real browser; the ban risk is accepted). This list is NOT that old rule
 # any more. It holds what is still true for THIS code (the chatbot driver's
 # visible, real browser):
 #   * never a proxy and never captcha solving (Jarvis hands a captcha to the

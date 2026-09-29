@@ -33,8 +33,8 @@ THE OWNER'S DECISIONS (CLAUDE.md, "Customer-support chats", 2026-09-28)
   * Jarvis sends the messages itself, at a person's pace, no captcha solving;
     each card names that company's terms risk before the owner approves (the
     real account could be closed). (The owner reversed "never hiding from
-    the site's bot detection" on 2026-09-29: stealth is on for Jarvis's
-    browsers and the risk is accepted; Jarvis still never claims to be
+    the site's bot detection" on 2026-09-29: the headless browser runs with stealth on and the visible browser is a plain real browser,
+    and the risk is accepted; Jarvis still never claims to be
     human and never solves a captcha.)
   * Identity checks (the last digits of a card, security questions, codes)
     are ALWAYS handed to the owner in the window, never answered by Jarvis

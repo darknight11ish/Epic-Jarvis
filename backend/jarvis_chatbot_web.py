@@ -34,10 +34,10 @@ docs/CHATBOT-DRIVER-DESIGN.md)
   * REVERSED 2026-09-29 (owner, after being told the ban risk several
     times): the old rule "driven openly - nothing that hides it from or
     dodges the site's bot detection", and the declined request for "tactics
-    that help avoid bans", are gone. Stealth is ON for Jarvis's browsers,
-    including the headless engine (jarvis_browser_engine*.py, not this
-    file). The ban risk is real and accepted; the spare account stays as
-    advice, not as a rule.
+    that help avoid bans", are gone. The headless browser runs with stealth on (that engine is
+    jarvis_browser_engine*.py, not this file); the visible browser is a plain real browser,
+    and this file writes no spoofing for it. The ban risk is real and accepted;
+    the spare account stays as advice, not as a rule.
 
 WHAT IS STILL TRUE, IN CODE (test_chatbot_gemini.py and test_chatbot_sites.py
 check each one, over this file and every site file)

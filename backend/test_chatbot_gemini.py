@@ -10,7 +10,7 @@ its website, in a visible window at a person's pace, no captcha solving; at a
 captcha, a sign-in page or an "unusual activity" page it stops and asks the
 owner; a spare Google account, signed in once by hand. REVERSED 2026-09-29:
 the old "driven openly - nothing that hides the automation or dodges Google's
-bot checks" rule is gone (stealth is on for Jarvis's browsers; the ban risk is
+bot checks" rule is gone (the headless browser runs with stealth on and the visible browser is a plain real browser; the ban risk is
 accepted). Still tested here: no proxy, no captcha solving, no spoofing code
 of Jarvis's own in the visible real browser.
 
@@ -139,8 +139,8 @@ def _code_only(src: str) -> str:
 
 
 # CHANGED 2026-09-29 (owner): the old rule "driven openly - nothing that hides
-# it, nothing that dodges bot detection" was REVERSED (stealth is on for
-# Jarvis's browsers; the ban risk is accepted). This list is NOT that old rule
+# it, nothing that dodges bot detection" was REVERSED (the headless browser runs with
+# stealth on and the visible browser is a plain real browser; the ban risk is accepted). This list is NOT that old rule
 # any more. It holds what is still true for THIS code (the chatbot driver's
 # visible, real browser):
 #   * never a proxy and never captcha solving (Jarvis hands a captcha to the

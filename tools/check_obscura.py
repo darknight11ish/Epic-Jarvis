@@ -27,9 +27,11 @@ If every step passes, the result is saved next to Jarvis's settings
 (obscura-check.json) and Settings shows it. If one does not, nothing is saved
 and the line above it says which.
 
-The install line in Settings (Headless browser) runs the same check for you
-right after it unpacks the program. This is the same code, for running it by
-hand.
+The install line in Settings (Headless browser) downloads one named release,
+unpacks it and PRINTS its checksums for you to compare with the release page; it
+does not run the program. It then prints the command that runs this same check
+(`--accept-new` only when you are replacing a file that was checked before).
+This is that same code, for running it by hand.
 
 It never touches a real website, a key, a proxy or your Jarvis settings other
 than that one file. Standard library only.

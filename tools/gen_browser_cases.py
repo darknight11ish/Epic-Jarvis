@@ -46,8 +46,7 @@ COPIES = (DESKTOP, PHONE)
 
 _LINE = ("$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path "
          "$d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile "
-         "\"$d\\obscura.zip\"; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 "
-         ".\\jarvis_obscura.py --check --accept-new; Pop-Location")
+         "\"$d\\obscura.zip\"; (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash")
 _INSTALLED = "Installed and checked (version 0.1.0, last checked 29 Sep 2026)."
 
 

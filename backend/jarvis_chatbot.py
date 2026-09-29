@@ -20,7 +20,7 @@ docs/CHATBOT-DRIVER-DESIGN.md, "The owner's answers (2026-09-28)")
     "unusual activity" page Jarvis stops and asks the owner. A spare Google
     account used only by Jarvis. (REVERSED 2026-09-29, owner: the old
     "driven openly - nothing that hides the automation or dodges the
-    site's bot checks" rule is gone; stealth is on for Jarvis's browsers,
+    site's bot checks" rule is gone; the headless browser runs with stealth on and the visible browser is a plain real browser,
     the ban risk is accepted. Never solving a captcha stays.)
   * VERSATILE: one driver (this file) and a separate ADAPTER per chatbot
     website. Each new chatbot is a new named way out of the PC and gets the

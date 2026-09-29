@@ -1660,8 +1660,12 @@ def plan(goal: str, session: str, requests: list, *,
         secret_names = _secret_names(value)
         no = _engine_reject(engine, r)
         if no:
-            unmatched.append({**r, "value": "(withheld)" if secret_names else value,
-                              "reason": no})
+            # The value stays off the plan (and so off the card and the log) when it
+            # was a saved secret, or when the headless engine judged it to look like
+            # a password, key or token.
+            unmatched.append({**r, "value": "(withheld)" if (
+                secret_names or getattr(no, "withhold", False)) else value,
+                "reason": str(no)})
             continue
         if action not in _ACTIONS:
             unmatched.append({**r, "reason": f"unknown action {action!r}"})

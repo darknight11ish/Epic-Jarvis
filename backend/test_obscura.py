@@ -18,9 +18,17 @@ stop, kill, timeouts, one at a time) is tested for real. What it proves:
   - one program at a time; stop kills it; limits: a page cap, a time limit, an
     idle limit and a per-call limit each stop it, in words; a program that dies or
     sends a huge line is reported, never hung on;
+  - a program is STARTED only while the start gate (the owner's switch) says yes; a
+    watchdog stops an idle or over-age program on its own; an idle or old program
+    met by the next call is replaced quietly, never a refusal; asking for the state
+    never waits behind a running call; a write to a program that stopped reading is
+    cut off; the one tool that runs a script in the page only takes Jarvis's own
+    fixed argument;
   - install state: not installed, never checked (refused), changed since checked
-    (refused), pinned checksum; the install line is ONE line and the backend never
-    downloads anything; PINNED_DIGEST is empty (said plainly);
+    (refused), pinned checksum; the install line is ONE line, downloads one NAMED
+    release (never "latest"), prints the checksums and does NOT run the program,
+    parses as PowerShell, and the backend never downloads anything; PINNED_DIGEST
+    is empty (said plainly);
   - the owner's check: prints what it did, refuses a changed file unless told,
     fails when the stand-in visits a private address (guard off), and saves only
     when every step passed.
@@ -31,6 +39,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import time
 import traceback
 import types
@@ -223,7 +232,13 @@ def t_limits():
     d = driver(clock=clock)
     try:
         d.call("browser_navigate", {"url": "https://example.test/"})
-        clock.t += OB.SESSION_MAX_S + 1
+        # A session that is USED right up to the limit (a call every couple of
+        # minutes, never idle for the idle limit) is stopped with a reason. (One
+        # that merely sat there is replaced quietly - see t_a_program_nobody_uses.)
+        for _ in range(4):
+            clock.t += OB.IDLE_MAX_S - 30
+            d.call("browser_snapshot", {})
+        clock.t += 60                       # 660 s in all, but only 60 s since the last call
         try:
             d.call("browser_snapshot", {})
             check("the time limit stops the program", False)
@@ -327,21 +342,236 @@ def t_install_state():
 def t_install_line():
     line = OB.install_line()
     check("the install line is ONE line", "\n" not in line and "\r" not in line and len(line) < 1400)
-    check("it downloads the stealth Windows archive from Obscura's own releases",
+    import re as _re
+    check("it downloads the stealth Windows archive of ONE NAMED release from Obscura's own releases",
           OB.DOWNLOAD_URL in line and line.count("Invoke-WebRequest") == 1
           and "windows-stealth.zip" in OB.DOWNLOAD_URL
-          and OB.DOWNLOAD_URL.startswith("https://github.com/h4ckf0r0day/obscura/releases/"))
-    check("it unpacks into the folder Jarvis really looks in and then runs the check",
-          f"$d = '{OB.install_dir()}'" in line and "jarvis_obscura.py --check --accept-new" in line)
+          and OB.DOWNLOAD_URL.startswith("https://github.com/h4ckf0r0day/obscura/releases/download/"
+                                          + OB.RELEASE_TAG + "/"))
+    check("the release is a version tag, never 'latest'",
+          _re.fullmatch(r"v\d+\.\d+\.\d+", OB.RELEASE_TAG) is not None and "latest" not in line.lower())
+    check("it unpacks into the folder Jarvis really looks in", f"$d = '{OB.install_dir()}'" in line)
     check("... whatever the settings folder is", str(fresh()) in OB.install_line())
-    check("no proxy, no key and no other host in it",
-          "proxy" not in line.lower() and line.count("http") == 1)
+    line = OB.install_line()
+    head = line.split("Write-Host", 1)[0]
+    check("it PRINTS the checksum of the zip and of obscura.exe (Get-FileHash, SHA256), for the owner to compare",
+          line.count("Get-FileHash -Algorithm SHA256") == 2 and "SHA-256 of the zip" in line
+          and "SHA-256 of obscura.exe" in line and "Compare" in line)
+    check("it does NOT run the program: nothing before the printing runs py, the check or the exe",
+          "py -3" not in head and "--check" not in head and "--accept-new" not in head
+          and "Start-Process" not in line and "& '" not in line and "obscura.exe --" not in line)
+    tail = line.split("Write-Host", 1)[1]
+    check("the second step it prints is the plain check, and says --accept-new is only for replacing a "
+          "file checked before",
+          "py -3 .\\jarvis_obscura.py --check" in tail and "add --accept-new only if you are replacing" in tail
+          and "--check --accept-new" not in line)
+    check("the archive is deleted by a literal path (a [ in a folder name is not a wildcard)",
+          'Remove-Item -LiteralPath "$d\\obscura.zip"' in line and 'Remove-Item "' not in line)
+    urls = _re.findall(r"https?://\S+", line)
+    check("no proxy, no key and no host other than Obscura's own GitHub project in it",
+          "proxy" not in line.lower() and bool(urls) and all(u.startswith(OB.PROJECT_URL + "/") for u in urls), urls)
+    check("it is written for Windows PowerShell 5.1: no ?? and no &&", "??" not in line and "&&" not in line)
+    import subprocess as _sp
+    ps = "/opt/pwsh/pwsh"
+    if os.path.exists(ps):
+        f = _TMP / "install-line.ps1"
+        f.write_text(line, encoding="utf-8")
+        g = _TMP / "parse.ps1"
+        g.write_text("param([string]$p); $t=$null; $e=$null; [void][System.Management.Automation.Language."
+                     "Parser]::ParseFile($p,[ref]$t,[ref]$e); $e.Count", encoding="utf-8")
+        r = _sp.run([ps, "-NoProfile", "-File", str(g), "-p", str(f)], capture_output=True, text=True, timeout=120)
+        check("the line parses as PowerShell with no errors", r.stdout.strip() == "0", r.stdout + r.stderr)
+    else:
+        print("note: no PowerShell 7 at /opt/pwsh/pwsh here, so the parse check was skipped")
     src = (HERE / "jarvis_obscura.py").read_text()
     import re
     check("the backend never downloads anything itself (no urllib/requests/urlopen in the driver)",
           not re.search(r"urllib|import requests|urlopen|http\.client|socket\.socket|create_connection", src.split('"""', 2)[2]),
           [m.group(0) for m in re.finditer(r"urllib|import requests|urlopen|http\.client|socket\.socket",
                                             src.split('"""', 2)[2])][:3])
+
+
+def t_the_start_gate_keeps_it_off():
+    fresh()
+    log = _TMP / "log-gate.jsonl"
+    gate = {"why": "The headless browser is switched off."}
+    d = driver(log=log)
+    d.start_gate = lambda: gate["why"]
+    try:
+        try:
+            d.call("browser_navigate", {"url": "https://example.test/"})
+            check("a call with the gate saying no does not start the program", False)
+        except OB.ObscuraError as exc:
+            check("a call with the gate saying no is refused in words and starts nothing",
+                  exc.code == "switched_off" and "switched off" in exc.words() and not d.alive()
+                  and not [e for e in events(log) if e.get("start")], exc.code)
+        gate["why"] = ""
+        d.call("browser_navigate", {"url": "https://example.test/"})
+        check("with the gate saying yes it starts", d.alive())
+        d.stop("switch off")
+        gate["why"] = "The headless browser is switched off."
+        try:
+            d.call("browser_snapshot", {})
+            check("after a stop with the gate saying no, the next call does not restart it", False)
+        except OB.ObscuraError as exc:
+            check("after a stop with the gate saying no, the next call does not restart it",
+                  exc.code == "switched_off" and not d.alive()
+                  and len([e for e in events(log) if e.get("start")]) == 1, exc.code)
+
+        def broken():
+            raise RuntimeError("x")
+        d.start_gate = broken
+        try:
+            d.start()
+            check("a gate that breaks does not start it", False)
+        except OB.ObscuraError as exc:
+            check("a gate that breaks keeps it off (fail closed)", exc.code == "switched_off" and not d.alive())
+    finally:
+        d.stop("t")
+        d._restore()
+    plain = OB.Driver(command_fn=lambda: [sys.executable, str(FAKE), "--stealth", "mcp"], verify=False)
+    check("a driver made without a gate (the owner's own check) is not held back", plain.start_gate is None)
+
+
+def t_a_program_nobody_uses():
+    fresh()
+    real = OB.WATCH_POLL_S
+    OB.WATCH_POLL_S = 0.05
+    clock = Clock()
+    d = driver(clock=clock)
+    try:
+        d.call("browser_navigate", {"url": "https://example.test/"})
+        proc = d.proc
+        check("running after a call", d.alive())
+        clock.t += OB.IDLE_MAX_S + 1
+        deadline = time.monotonic() + 5
+        while d.alive() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        check("the watchdog stops an idle program ON ITS OWN, with no further call",
+              not d.alive() and proc.poll() is not None and d.last_stop_why == "idle", d.last_stop_why)
+        got = d.call("browser_snapshot", {})
+        check("the next call after that starts a fresh program on a blank page, no refusal",
+              d.alive() and "URL: about:blank" in got["text"], got["text"][:40])
+        proc = d.proc
+        clock.t += OB.SESSION_MAX_S + 1
+        deadline = time.monotonic() + 5
+        while d.alive() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        check("the watchdog stops a program at the session limit too",
+              not d.alive() and proc.poll() is not None and d.last_stop_why in ("time limit", "idle"),
+              d.last_stop_why)
+    finally:
+        d.stop("t")
+        d._restore()
+        OB.WATCH_POLL_S = real
+    # The owner comes back after 11 minutes and the watchdog has not run (a slow
+    # poll): the call itself replaces the program quietly.
+    clock = Clock()
+    d = driver(clock=clock)
+    try:
+        d.call("browser_navigate", {"url": "https://example.test/"})
+        proc = d.proc
+        clock.t += 11 * 60
+        got = d.call("browser_snapshot", {})
+        check("11 quiet minutes later the next task gets a fresh program quietly (no 'limit' refusal)",
+              d.alive() and d.proc is not proc and proc.poll() is not None
+              and "URL: about:blank" in got["text"], got["text"][:40])
+        check("... and the pages counter started again", d.pages == 0)
+    finally:
+        d.stop("t")
+        d._restore()
+
+
+def t_asking_for_the_state_never_waits():
+    fresh()
+    real = OB.CALL_TIMEOUT_S
+    OB.CALL_TIMEOUT_S = 30.0
+    d = driver("hang")
+    out = {}
+
+    def call():
+        try:
+            d.call("browser_navigate", {"url": "https://example.test/"})
+        except OB.ObscuraError as exc:
+            out["code"] = exc.code
+    t = threading.Thread(target=call, daemon=True)
+    t.start()
+    try:
+        deadline = time.monotonic() + 10
+        while not d.alive() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        time.sleep(0.5)                     # the call now holds the lock, waiting on the program
+        t0 = time.monotonic()
+        v = d.view()
+        took = time.monotonic() - t0
+        check("view() answers at once while a call is hung on the program (it does not take the call's lock)",
+              took < 1.0 and v["running"] is True, f"took {took:.1f}s")
+    finally:
+        d.stop("t")
+        t.join(10)
+        d._restore()
+        OB.CALL_TIMEOUT_S = real
+
+
+def t_a_write_to_a_program_that_stopped_reading_is_cut_off():
+    fresh()
+    real = OB.SEND_TIMEOUT_S
+    OB.SEND_TIMEOUT_S = 1.0
+    d = driver("deaf")
+    try:
+        d.start()
+        t0 = time.monotonic()
+        try:
+            d.call("browser_fill", {"ref": "e1", "value": "x" * 6_000_000})
+            check("a huge write to a program that reads nothing is cut off", False)
+        except OB.ObscuraError as exc:
+            took = time.monotonic() - t0
+            free = d.lock.acquire(timeout=1)
+            if free:
+                d.lock.release()
+            check("a huge write to a program that reads nothing is cut off, the program is stopped, and the "
+                  "lock is free again", exc.code == "slow" and not d.alive() and took < 10 and free,
+                  (exc.code, took, free))
+    finally:
+        d.stop("t")
+        d._restore()
+        OB.SEND_TIMEOUT_S = real
+
+
+def t_the_script_tool_takes_only_jarvis_own_argument():
+    import re as _re
+    fresh()
+    log = _TMP / "log-extract.jsonl"
+    d = driver(log=log)
+    try:
+        for bad in ({}, {"schema": {"x": "body"}}, {"schema": {"text": "body", "hidden[]": "*"}},
+                    {"schema": OB.FIXED_ARGS["browser_extract"]["schema"], "extra": 1},
+                    {"selector": "body"}):
+            try:
+                d.call("browser_extract", bad)
+                check(f"browser_extract with {str(bad)[:40]} is refused", False)
+            except OB.ObscuraError as exc:
+                check(f"browser_extract with other arguments is refused ({str(bad)[:40]})",
+                      exc.code == "refused_tool")
+        check("... before the program was even started", not d.alive() and not events(log))
+        got = d.call("browser_extract", OB.FIXED_ARGS["browser_extract"])
+        doc = json.loads(got["text"])
+        check("with exactly Jarvis's own argument it is called", "text" in doc and "hidden" in doc and d.alive())
+        sel = OB.FIXED_ARGS["browser_extract"]["schema"]["hidden[]"]
+        check("its selectors are a fixed list of plain CSS: letters, digits and [ ] = \" - : , * only - no "
+              "@attribute form, no script, no page or model word",
+              _re.fullmatch(r'[A-Za-z0-9\[\]="\-:,* ]+', sel) is not None and "@" not in sel, sel)
+        check("browser_evaluate is still not on the list", "browser_evaluate" not in OB.ALLOWED_TOOLS)
+    finally:
+        d.stop("t")
+        d._restore()
+
+
+def t_every_allowed_tool_is_used():
+    used = (HERE / "jarvis_browser_engine.py").read_text() + \
+        (HERE / "jarvis_obscura.py").read_text().split("def check(", 1)[1]
+    unused = [t for t in sorted(OB.ALLOWED_TOOLS) if f'"{t}"' not in used]
+    check("every tool on the allow-list is one the engine or the owner's check calls", not unused, unused)
 
 
 def _cli(webdriver="false", version="obscura 0.0.0-test"):

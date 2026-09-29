@@ -466,6 +466,46 @@ def _run_browser_control(args: dict, plan_obj, *, announce=None, checkpoint=None
                  approved=True)
 
 
+#: The headless browser (jarvis_browser_engine.py; JARVIS-API 97.3): rule 1 for what
+#: a plan would TYPE or put in a web address. The plan-time secret check is the
+#: engine's own (reject_request). This is the half that needs THIS TURN'S saved
+#: facts, which only the loop has: a typed value, or an address's query, that
+#: repeats a saved fact is refused before any card, like a search would ask.
+BROWSER_OUTSIDE_LINE = ("Jarvis read outside text in this conversation (an email, a file, a note, "
+                        "a web page or another tool's answer). Check that nothing private is in "
+                        "the words this plan types or puts in an address.")
+
+
+def _browser_private_refusal(state, watch: "_TurnWatch") -> str:
+    """"" or the plain reason a plan on the HEADLESS browser is refused because
+    what it types, or an address's query, repeats a saved fact (or could not be
+    compared with them). Any other plan: ""."""
+    if getattr(state, "engine", "") != "headless":
+        return ""
+    try:
+        import jarvis_browser_engine as E
+        return E.private_words_problem(getattr(state, "steps", []), facts=watch.facts,
+                                       owner_words=watch.owner_words, memory=watch.memory)
+    except Exception as exc:
+        return (f"the words the headless browser would type could not be checked "
+                f"({type(exc).__name__}), so it did not go ahead")
+
+
+def browser_card_lines(state, watch: "_TurnWatch") -> list:
+    """The plain line at the TOP of a headless browser plan's card when outside text
+    shaped the turn AND the plan types something or puts words in an address."""
+    if getattr(state, "engine", "") != "headless" or not (watch.read or watch.tainted):
+        return []
+    for st in getattr(state, "steps", []) or []:
+        value = getattr(st, "value", None)
+        if not isinstance(value, str) or not value:
+            continue
+        if st.action in ("type", "select") or (
+                st.action == "navigate" and ("?" in value or "#" in value)):
+            return [BROWSER_OUTSIDE_LINE]
+    return []
+
+
 def _prepare_github_search(args: dict):
     try:
         import jarvis_research as R
@@ -6787,17 +6827,26 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
     if name == "browser_control":
         # The browser the model asked for cannot run (the headless one is off,
         # not installed or changed): nothing to ask about, so no card, and never
-        # a quiet switch to the other browser. The model is told why.
+        # a quiet switch to the other browser. The model is told why. The same
+        # for a headless plan whose typed words or address repeat a saved fact.
         problem = getattr(state, "problem", "")
-        if problem:
+        private = "" if problem else _browser_private_refusal(state, watch)
+        if problem or private:
             convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                           "content": _tool_content({
                               "ok": False,
-                              "error": f"refused: {problem} Nothing was opened and nobody "
-                                       f"was asked."})})
+                              "error": (f"refused: {problem} Nothing was opened and nobody "
+                                        f"was asked." if problem else
+                                        f"refused: {private}. Nothing was opened and nobody "
+                                        f"was asked.")})})
             steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
             say_step("tool_refused", name)
             return
+        # The owner's decision (rule 1): the card says PLAINLY, at the top, when
+        # outside text shaped a plan that types or puts words in an address.
+        top = browser_card_lines(state, watch)
+        if top:
+            plan_text = "\n".join(top) + "\n\n" + plan_text
     if name == "tidy_inbox":
         # A plan that says why nothing could be done (nothing matches, too
         # many, not set up, the module missing): nothing to ask about, so no
