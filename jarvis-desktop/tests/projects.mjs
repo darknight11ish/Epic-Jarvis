@@ -1055,6 +1055,23 @@ await check("a11y: the Task view's controls are named, the change is a named reg
   assert.deepEqual(errors, []);
 });
 
+await check("the sentences the PC shares about apps (projects-cases.json app_words) are the page's own", async () => {
+  const W = CASES.app_words;
+  assert.ok(W && W.outcomes, "the shared file has app_words");
+  assert.equal(APP_WORDS.cant_run, W.cant_run);
+  assert.equal(APP_WORDS.merge_blocked_card, W.card_waiting);
+  assert.equal(APP_WORDS.merge_pasted, W.pasted_line);
+  assert.equal(APP_WORDS.delete_app_project_q, W.delete_app_project_q);
+  assert.equal(APP_WORDS.deleted_app_kept, W.deleted_app_kept);
+  // The nine merge outcomes are the PC's to send; the page shows them as they come,
+  // so the hand-made answers above must use the same ones ("refused" adds the gate's reason).
+  assert.deepEqual(Object.keys(W.outcomes).sort(), Object.keys(OUTCOMES).sort());
+  for (const k of Object.keys(OUTCOMES)) {
+    if (k === "refused") assert.ok(OUTCOMES[k].startsWith(W.outcomes[k]), k);
+    else assert.equal(OUTCOMES[k], W.outcomes[k], k);
+  }
+});
+
 await browser.close();
 close();
 console.log(fails.length ? `\n${fails.length} failed` : "\nall projects checks passed");

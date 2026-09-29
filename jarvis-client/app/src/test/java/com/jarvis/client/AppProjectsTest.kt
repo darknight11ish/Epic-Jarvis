@@ -8,6 +8,8 @@ import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.Projects
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -20,10 +22,10 @@ import java.io.File
  * Apps in Projects, the phone's half (docs/APPS-IN-PROJECTS-DESIGN.md
  * sections 5, 6 and 7.4).
  *
- * These build their OWN JSON to the frozen shapes of section 7.1. They are
- * NOT yet checked against the shared fixture `contract/projects-cases.json`:
- * once the backend regenerates it (tools/gen_projects_cases.py) with the
- * `app` answers and `words`, re-point these at it, like [ProjectsTest].
+ * Most of these build their OWN JSON to the frozen shapes of section 7.1. The
+ * sentences the PC shares (`app_words` in the shared fixture
+ * `contract/projects-cases.json`, written by tools/gen_projects_cases.py) are
+ * checked against the phone's own by [theSharedAppSentencesArePcs].
  */
 class AppProjectsTest {
 
@@ -48,6 +50,21 @@ class AppProjectsTest {
          "shareable": false, "benchmarks": 0, "benchmark_list": []
          ${if (app != null) ", \"app\": $app" else ""}}
     """.trimIndent()
+
+    @Test
+    fun theSharedAppSentencesArePcs() {
+        val text = requireNotNull(javaClass.classLoader?.getResource("contract/projects-cases.json")) {
+            "contract/projects-cases.json is missing - run tools/gen_projects_cases.py"
+        }.readText()
+        val shared = (Json.parseToJsonElement(text) as JsonObject)["app_words"]!!.jsonObject
+        val outcomes = shared["outcomes"]!!.jsonObject
+        assertEquals(outcomes.keys, Projects.MERGE_OUTCOMES.keys)
+        for ((key, sentence) in Projects.MERGE_OUTCOMES) {
+            assertEquals(key, outcomes[key]!!.jsonPrimitive.content, sentence)
+        }
+        assertEquals(shared["pasted_line"]!!.jsonPrimitive.content, Projects.aw("task_from_paste"))
+        assertEquals(shared["card_waiting"]!!.jsonPrimitive.content, Projects.aw("merge_card_up"))
+    }
 
     // ------------------------------------------------------------ parsing ---
 
