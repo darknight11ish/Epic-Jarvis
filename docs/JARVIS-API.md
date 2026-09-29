@@ -10183,25 +10183,21 @@ heuristic's documented behaviour and the banking/SMS refusal - Kotlin
 compilation itself is confirmed only once CI runs (no local Android build,
 `CLAUDE.md`, "How the Android apps get built").
 
-## 62. Looking at the screen: "Look at this" and "Watch with me" (added 2026-09-28; backend only, not in the apps yet)
+## 62. Looking at the screen: "Look at this" and "Watch with me" (added 2026-09-28; built 2026-09-29 on both apps, with the limits below)
 
 The owner's decision of 2026-09-28 (`CLAUDE.md`, "Jarvis may look at the
-owner's screen"), designed in `docs/SCREEN-DESIGN.md`; this section is its
-**build steps 1 and 2 only**: `backend/jarvis_front.py` (the front-window
-reader, split out of focus sessions) and `backend/jarvis_screen.py` (the
-session rules), both shipped whole, no patch. **No route reaches them and
-neither app has the key, the badge or the phone gesture yet** - so today
-nothing can start a look from either app. (One setting is in both apps
-already: "Answers about your screen after "Hey Jarvis"", §62.7 and §16.) `tools/check_parity.py`
-has nothing to check (no route).
-
-**Not built yet, said plainly:** the Windows readers (is the focused box a
-password box, is the window protected from capture, the window's own text -
-build step 3, testable only on the owner's PC); the desktop's "Look at this"
-key, badge, tray row and phrases (steps 4 and 5); the second card's picture
-route (step 6); the phone (steps 7 and 8); and the chat route reading
-`screen_text` (below). The preflight has a `screen` check that says so: a
-skip, "not built on this PC yet".
+owner's screen"), designed in `docs/SCREEN-DESIGN.md`. Built in this order:
+the rules (`backend/jarvis_front.py`, `backend/jarvis_screen.py`, shipped
+whole), then the PC's Windows readers (`backend/jarvis_screen_win.py`, shipped
+whole), the routes and the chat turn (`backend/screen.patch`, three hunks on
+`jarvis_hud.py`, plus one word in `temporary-chat.patch`), the desktop (the
+Look at this key, the Jarvis bar's Watch button and strip, the always-on-top
+badge, the tray row, the Never look at list in Settings) and the phone (the
+assistant gesture, "Watch this phone with me", the Security switch and list).
+The routes are in section 62.9, the chat turn in 62.6, the phrases in 62.10,
+the phone in 62.11; **section 62.12 says plainly what was not run on a real
+machine.** (One setting was in both apps already: "Answers about your
+screen after "Hey Jarvis"", 62.7 and section 16.)
 
 ### 62.1 Two ways, and nothing else
 
@@ -10282,9 +10278,8 @@ nothing could be read. The picture itself is not sent on one graphics card.
 The answer is shown with a note, "Looked at: <program> window · words only".
 A screen turn records a read of **`read_screen`** (`jarvis_screen.SCREEN_TOOL`),
 so a note write or web search after it asks first and a card says
-"Proposed after Jarvis read: your screen" - **when the chat route is wired
-(next)**. Nothing on the screen is learned, and nothing on it can start a
-look.
+"Proposed after Jarvis read: your screen" (wired in 62.6). Nothing on the
+screen is learned, and nothing on it can start a look.
 
 ### 62.5 What the apps will see
 
@@ -10304,7 +10299,7 @@ site, title and screen words and proves they reach only the model's text
 and the "Looked at" note - not the status, the events, the audit log, Stop
 everything's words or the list's file.
 
-### 62.6 Rule 1, and the chat route (`screen_text`) - next
+### 62.6 Rule 1, and the chat route (`screen`, `screen_text`)
 
 `jarvis_router.choose()` takes **`has_screen`**: a turn carrying the
 screen's words stays on this PC, gate **`screen`**, even when it is long,
@@ -10316,14 +10311,38 @@ the usual `image_url` part when there is a picture, and the backend labels
 it as outside text whatever the app says (`jarvis_screen.label_phone_text`,
 capped at 3,000; `jarvis_screen.turn_has_screen(messages)` finds it).
 
-**Not wired yet, and why:** the line in the owner's `jarvis_hud.py` that
-reads `/api/chat`'s body and calls `jarvis_router.choose(..., has_image=...)`
-is the owner's own original text - no patch in this repository holds it
-(`rebuilt/jarvis_router.py`'s header cites it as `jarvis_hud:1707`) - so a
-patch adding `has_screen=` there would guess its context and fail on the
-PC, or apply somewhere wrong. It is written down as the next step, with the
-chat route's `read_screen` record, to be made against the real file. Until
-then no app sends a `screen_text` part, so there is nothing for it to miss.
+**Wired 2026-09-29 (`backend/screen.patch`).** The call to
+`jarvis_router.choose(...)` in `jarvis_hud.py`'s chat route is the owner's own
+original text. The patch anchors on the lines `cloud-say-yes.patch` already
+added to that call (`owner_said_yes=...`), which that patch checked against the
+owner's real file, and it was applied and tested only against the stand-in
+(`_stack.py`) - so `apply-patches.ps1` on the PC is the first real check. It adds a small `_screen_turn(body)` helper and
+one argument, `has_screen=_screen_turn(body)`, to that call; `_screen_turn`
+is `jarvis_screen.turn_has_screen(messages)`, and a missing
+`jarvis_screen.py` reads as False. The chat route then does three things,
+all in `jarvis_agent.py`/`jarvis_screen.py`, none in an app:
+
+1. **What marks a turn.** The newest user message carries the owner's screen
+   when it has a `"screen": "look"` mark (the desktop: "Look at this" was
+   pressed and a look is held) or a `"screen": "phone"` mark (the phone's
+   Watch picture), or a `screen_text` part (the phone's assistant-gesture
+   words). `_CHAT_CLIENT_FIELDS` (`temporary-chat.patch`) strips the `screen`
+   field before any model or relay sees the conversation, so the mark can never
+   travel onward.
+2. **`with_screen(messages, mark)`** replaces the mark or part with the
+   OUTSIDE TEXT block in 62.4 - labelled **by the backend** whatever the app
+   said - and records a read of `read_screen` (a step event `tool_started` and
+   `tool_finished`, and `read_screen` at the front of `tools_ran`). For the
+   desktop the words come from THIS PC's own screen (the held look, or the
+   one the Watch session takes for the question, waiting up to 35 s). For the
+   phone the words are the `screen_text` part (capped at 3,000), or - for a
+   Watch picture - the words the PC's own text recognition finds in it. **No
+   picture is ever given to a model** on one graphics card: a phone screen
+   picture is read for its words and dropped, and `choose_lane` treats it as
+   not a vision turn. An empty `screen_text` part (the phone read nothing) is
+   the "could not read any words" line, never silence.
+3. **The router** keeps the turn on this PC (gate `screen`, above), so it
+   never reaches a cloud lane.
 
 ### 62.7 Read aloud
 
@@ -10347,15 +10366,166 @@ Jarvis"" -> "Read aloud", in both apps' voice settings) allows reading
 them aloud even then; turning it on raises the voice card, turning it off
 is immediate (§16). With "Same as the talk button" (the default) nothing
 changes: screen answers are read aloud as above. The talk button's own
-questions are always treated like "Same as the talk button". Until
-something sends `read_screen` (the apps' key and gesture are not built
-yet), this has nothing to act on.
+questions are always treated like "Same as the talk button". The chat
+route's `read_screen` step (62.6) is what both apps read to know an answer
+was about the screen.
 
 ### 62.8 Chat history
 
 The question and the answer are kept like any chat (the owner's answer of
 2026-09-28); the picture and the screen's words never are - they are added
-to the one request only, as §36 does for a picture's words.
+to the one request only, as §36 does for a picture's words. The desktop
+drops a held look when the Jarvis bar closes, and the phone's marks
+(`screen_text` part, `screen: "phone"`) are on the request only: the phone's
+own record of the conversation (`ChatHistory`) keeps the owner's words and
+Jarvis's answer, never the part or the picture.
+
+### 62.9 The routes (`backend/screen.patch`, `jarvis_screen.install`)
+
+Both wrap the server's `Handler` after its own origin and token checks.
+
+- **`GET /api/screen`** - the status in 62.5, flat, with `available`,
+  `unavailable_why`, `default_minutes` (30), `max_minutes` (120) and
+  `follow_up_s` (120). Fixed words and numbers only. Any device may read it.
+- **`POST /api/screen`** `{"do": ...}`:
+  - `look` (`whole: true` for the whole desktop; default is the window in
+    front), `ask` (a question is starting: take the look now if none is
+    held), `start` (`minutes`), `extend` (`minutes`) - **refused with 403
+    from any machine but this PC** (`is_local`: loopback, or one of this PC's
+    own addresses; a phone over Tailscale or Meshnet, any other machine and
+    an address that cannot be read are NOT local - looking at a screen fails
+    closed). The words say so: "Jarvis can only look at the screen of the PC
+    it runs on, and only when it is asked from that PC."
+  - `stop` and `drop` - accepted from **anywhere**, because they only make
+    Jarvis look less. The phone's "Stop watching" on Home is `stop`.
+  - The answer is the same flat status, plus the verb's own fields: `ok`,
+    `note` (the "Looked at: ..." line, never a word from the screen), `said`
+    (the plain reason for a refusal), `why` (the pause reason of a refused
+    look - named `why` so it can never be mistaken for the status's own
+    `paused`), `stopped`. **Never a word from the screen, never a program, a
+    site or a title.** `part` (what was read) is removed before the answer
+    leaves.
+  - 503 with the words in `not_built_words()` when the PC's Windows readers
+    are not there (`available: false`): the routes still answer, so both apps
+    can say so.
+- **`GET/POST /api/screen/never-look`** - the PC's Never look at list (62.3).
+  Refused from any other device. `{"do": "add", "kind": "program"|"site",
+  "value": ...}` is instant; `{"do": "remove", ...}` raises ONE
+  `change_own_config` card and answers 202 with `pending`. The phone keeps its
+  own list of Android apps on the phone (62.11), so it never calls this; see
+  ARCHITECTURE section 8.
+- **The event** `screen_watch` carries exactly the status (62.5). Both apps
+  keep their sign in step with it; the desktop's badge, strip and tray row
+  and the phone's Home sign are drawn from it and from nothing else.
+- **The sign** is the same words on every surface: the title "Jarvis is
+  watching" / "Jarvis is watching - paused", "Watching ended" for 15 seconds,
+  "24 min left" / "under a minute left", "Paused: <fixed reason>", the
+  buttons "Stop watching" and "20 more minutes" (only while it is ending
+  soon). They come from `jarvis_screen.SEEN`/`sign()`, and
+  `tools/gen_screen_cases.py` writes them to
+  `jarvis-desktop/tests/screen-cases.json` and
+  `jarvis-client/app/src/test/resources/contract/screen-cases.json`, which
+  the desktop's `look-rules.js` and the phone's `ScreenRules.kt` are held to
+  (`tests/look-rules.mjs`, `ScreenRulesTest`).
+- **A watch look is used up by ONE question** (stricter than the "held"
+  words the design used): a look taken for a Watch question goes with that
+  question only. A "Look at this" look is held 2 minutes for follow-ups.
+- `POST /api/chat` carries a `screen` mark and a `screen_text` part (62.6),
+  not a new route.
+
+### 62.10 By voice or typing (`jarvis_quick.py`, no model)
+
+Whole sentences only, answered with no AI model like a timer:
+"watch with me", "start watching with me for 20 minutes", "watch along",
+"stop watching", "stop watching my screen", "watch 20 more minutes", "keep
+watching a bit longer", "are you watching?". **Start, extend and the status
+answer only from this PC** (they are `local` verbs, 62.9); "stop watching"
+works from anywhere. Asked on a phone, "start" answers "Watch with me looks
+at this PC's screen, so it can only be started, extended ... from the PC" -
+the phone has its own button for its own screen. "Look at this" itself has
+no phrase: it is a key (below) and the assistant gesture, because the words
+"look at this" would be about whatever is being said, not the screen.
+
+### 62.11 The apps
+
+**Desktop** (`jarvis-desktop/src-tauri/src/look.rs`, `src/look-rules.js`,
+`look-settings.js`, `watch-badge.html`): the **"Look at this" key**
+(Alt+Shift+S by default, changeable in Settings; it replaces the old "attach
+a screen capture" key, and the capture command remains only for the paths
+that attach a picture) looks BEFORE the Jarvis bar is shown - because the
+bar would otherwise be the window in front - and the bar opens with a
+"Looked at: ..." line and the question box. The bar's own **Watch** button
+starts a session, and an optional **"Watch with me" key** (off until the
+owner picks one; Alt+Shift+V is suggested). While a session runs: a strip on
+the bar, an **always-on-top badge** that is excluded from screen capture and
+never takes focus, a **tray row** ("Jarvis is watching - Stop watching") and
+a **tray eye**. Settings has a "Never look at" card (programs and websites,
+add now, remove asks). A look is only ever taken from this PC: the desktop
+refuses to look when pointed at a remote Jarvis.
+
+**Phone** (`assistant/JarvisVoiceInteractionSession.kt`, `LookGate.kt`,
+`AssistReader.kt`, `net/ScreenText.kt`, `ScreenLook.kt`, `ScreenNever.kt`,
+`ScreenWatch.kt`, `service/ScreenWatchService.kt`):
+
+- **"Look at this"** is the assistant gesture (press and hold Home, when
+  Jarvis is the phone's assistant app), **off by default**: the Security
+  switch **"Let Jarvis read this phone's screen"** (`screenRead`) - turning it
+  on asks for the fingerprint or PIN, off is instant. With it on, the session
+  waits up to 2 seconds for Android's `onHandleAssist`, checks the app in
+  front against the phone's Never look at list (Jarvis itself, password
+  managers, bank-looking apps - the same two signals phone notifications
+  use, an app the system does not name - and the owner's own list, where
+  adding is instant and taking one off asks for the fingerprint or PIN),
+  drops **password fields** (by input type, autofill hints, id and hint
+  words, and a web page's `type=password`) with everything in them, leaves
+  out masked text and views that block assistance, and keeps the words
+  **in memory for 2 minutes of follow-up questions** (`ScreenLook`; a look
+  taken behind App lock waits for the unlock and is dropped after a minute).
+  The words ride with the next question as a `screen_text` part (62.6), shown
+  as the chip "Looked at: Chrome screen - words only" with Forget it. No
+  screenshot is asked for.
+- **"Watch this phone with me"** (Home, offered while the same switch is on):
+  Android's own screen sharing (`MediaProjection`), **Android's question
+  every time**, a foreground service of type `mediaProjection` with the
+  notification "Jarvis is watching this phone - Only when you ask a question
+  - Stop ends it", ending after **30 minutes**, when the screen goes off,
+  when Android ends the sharing, on Stop, and on Stop everything. **Nothing
+  is streamed**: when the owner asks a question, ONE picture (long side at
+  most 1,280 pixels, JPEG) is taken, checked (the app in front from Android's
+  **Usage access** - without it Watch does not start; the same Never look at
+  list; the screen on and unlocked; not almost all black, which is how a
+  secure app draws; the same app still in front after), sent inside that
+  question as an `image_url` part marked `"screen": "phone"`, and used up by
+  it. The PC reads the words in it and keeps neither. Any doubt is a refusal,
+  said in a fixed sentence, and the question goes without a picture.
+- **The PC's watching, on the phone**: Home shows the PC's own sign (the
+  `screen_watch` event and `GET /api/screen`) with **Stop watching**, never
+  held on a stale link. The phone never asks the PC to look or start.
+- **Stop everything** on the phone also drops a held look and ends a phone
+  Watch.
+
+### 62.12 Not verified on a real machine (said plainly)
+
+- **The Windows readers** (`jarvis_screen_win.py`): the screen capture
+  through GDI, the UI Automation text walk, the focused-password-box check,
+  the window's capture-protection flag and the lock check are ctypes calls
+  that only run on Windows. The pure parts (PNG encoding, the lock-desktop
+  name, clipping, the word cap) are tested (`test_screen_win.py`); the rest
+  is unrun until the owner's PC does it. So is whether the badge, which is
+  excluded from capture, is really absent from a GDI capture.
+- **The phone's Kotlin** compiles only in CI here. The pure files
+  (`ScreenText`, `ScreenLook`, `ScreenNever`, `ScreenWatch`, `ScreenRules`,
+  the chat body) were compiled with `kotlinc` and run with JUnit; the
+  Android-backed files compiled against the platform library with small
+  stand-ins for the parts of the app they touch, not against Gradle.
+- **What a phone really gives**: how complete `AssistStructure` is on Android
+  14 and 15, GrapheneOS, Compose, Flutter and web content; whether a secure
+  app really draws black into screen sharing; how complete Usage access's
+  front-app log is; and the battery cost. A question typed **inside Jarvis**
+  while Watch is on is about Jarvis's own screen, which is never looked at:
+  ask by voice from another app.
+- **Pictures**: with one graphics card no model is shown a picture (62.6);
+  the picture path waits for the 12 GB card.
 
 ## 63. Jarvis Live: talking back and forth (added 2026-09-28)
 
@@ -14223,3 +14393,22 @@ shared cases file); without `key`, today's words.
   every phone then pairs again).
 - Retire never touches this PC, and cannot be pressed by the device that
   still depends on the shared key.
+
+## 93. The screen routes in one place (added 2026-09-29)
+
+The two routes `backend/screen.patch` installs (`jarvis_screen.install`), for a reader who wants the list rather than the story. The story - what a look is, the pause rules, the words, the apps - is section 62; this is only the table.
+
+| route | who may call it | what it does | card |
+|---|---|---|---|
+| `GET /api/screen` | any paired device | the status (62.5) plus `available`, `unavailable_why`, `default_minutes`, `max_minutes`, `follow_up_s`; fixed words and numbers only | none |
+| `POST /api/screen` `{"do":"look"}` | **this PC only** (403 otherwise) | one look at the window in front (`whole: true` for the desktop); answers `ok`, `note` or `said`, `why` | none - the owner's own act |
+| `POST /api/screen` `{"do":"ask"}` | **this PC only** | a question is starting: take the look now if none is held | none |
+| `POST /api/screen` `{"do":"start","minutes":N}` | **this PC only** | starts "Watch with me" (1 to 120 minutes, 30 by default) | none - the sign is the safeguard |
+| `POST /api/screen` `{"do":"extend","minutes":N}` | **this PC only** | more time, never past 2 hours from now | none |
+| `POST /api/screen` `{"do":"stop"}` | any paired device | ends "Watch with me" | none, never held on a stale link |
+| `POST /api/screen` `{"do":"drop"}` | any paired device | throws away a held look (the bar closed) | none |
+| `GET /api/screen/never-look` | **this PC only** | the list of programs and websites, and the last removal | none |
+| `POST /api/screen/never-look` `{"do":"add",...}` | **this PC only** | adds one (stricter, so instant) | none |
+| `POST /api/screen/never-look` `{"do":"remove",...}` | **this PC only** | asks to take one off (a built-in one too); 202 with `pending` | **one** `change_own_config` card |
+
+No verb answers with a word from the screen, a program, a site or a title. The phone reads `GET /api/screen` and sends only `stop`; it never sends `start` or `look`, and the PC would refuse it if it did. Its own looks travel inside `POST /api/chat` (62.6), not through these routes. The event `screen_watch` carries the status and nothing more.
