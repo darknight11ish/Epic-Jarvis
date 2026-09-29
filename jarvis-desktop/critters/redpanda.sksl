@@ -97,8 +97,7 @@ float partTorso(float3 b) {
 }
 // One piece per leg: the thigh, reaching forward into the foot.
 float partLegs(float3 b) {
-    float3 bs = float3(abs(b.x), b.y, b.z);
-    return sdEllipsoid(bs - float3(0.205, 0.075, -0.22), float3(0.14, 0.11, 0.26));
+    return sdEllipsoid(float3(abs(b.x) - 0.205, b.y - 0.075, b.z + 0.22), float3(0.14, 0.11, 0.26));
 }
 // The rounded end of each arm is its paw.
 float partArms(float3 p) {
@@ -149,9 +148,8 @@ float mouthCarve(float3 h) { return mouthShape(h) + max(0.02 - 0.08 * uMouth.x, 
 // The head (head frame, unscaled): skull, cheek fluff, muzzle and eyebrow
 // puffs, with the mouth carved out of it.
 float partHead(float3 h) {
-    float3 hs = float3(abs(h.x), h.y, h.z);
     float d = sdEllipsoid(h - float3(0.0, 0.34, 0.0), float3(0.45, 0.37, 0.39));
-    d = smin(d, sdEllipsoid(hs - float3(0.25, 0.21, -0.09), float3(0.22, 0.17, 0.20)), 0.10);
+    d = smin(d, sdEllipsoid(float3(abs(h.x) - 0.25, h.y - 0.21, h.z + 0.09), float3(0.22, 0.17, 0.20)), 0.10);
     // The muzzle; its lower edge - the chin - drops as the jaw opens, and
     // it pushes forward a little for an "oo".
     d = smin(d, sdEllipsoid(h - float3(0.0, 0.205, -0.29) + float3(0.0, 0.045, 0.012) * uMouth.xxz,
@@ -323,7 +321,10 @@ float3 earColour(float3 e) {
 // means: 0 fur, above 0 glossy, -1 matte without fur, -2 inside a mouth).
 float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
-    if (id == ID_EYE) return float4(INK, 1.0);
+    if (id == ID_EYE) {
+        float4 l = eyeLid(INK, RUST * 1.3, h, eyeAt(), 0.101);
+        return float4(l.rgb, 1.0 - l.w);
+    }
     if (id == ID_NOSE) return float4(INK * 2.0, 0.6);
     if (id == ID_HEAD) {
         // The painted mouth on the front of the muzzle, and the walls of
@@ -356,7 +357,7 @@ float3 sparkle(float id, float3 pos) {
     float2 sparkAt = float2(-0.024 + 0.014 * uLook.x, 0.028 + 0.010 * uLook.y);
     float spark = 1.0 - smoothstep(0.012, 0.021, length(q - sparkAt));
     float spark2 = 1.0 - smoothstep(0.005, 0.009, length(q - sparkAt - float2(0.036, -0.036)));
-    float lit = smoothstep(0.02, 0.2, min(uFace.x, uFace.y));
+    float lit = smoothstep(0.02, 0.2, min(uFace.x, uFace.y)) * (1.0 - uLid.x);
     return float3(1.6) * max(spark, spark2 * 0.8) * lit * (h.z < -0.28 ? 1.0 : 0.0);
 }
 
