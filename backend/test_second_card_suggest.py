@@ -32,6 +32,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import time
 import traceback
 from pathlib import Path
@@ -652,6 +653,205 @@ def t_backoff_declares_the_offer_honestly():
     declared = BO.OFFERS[SC.SUGGEST_OFFER_KIND]
     check("it asks only for what MAY_ASK lists, never anything in NEVER_ASKS",
           all(a in BO.MAY_ASK and a not in BO.NEVER_ASKS for a in declared), declared)
+
+
+# --------------------------------------------------------------------------
+#   A thumbs-down on a crisis-help answer is never counted (owner, 2026-09-29)
+# --------------------------------------------------------------------------
+#
+# CLAUDE.md 2026-09-27 already kept a crisis turn out of the "suggest the
+# bigger model" counters for the live phrase check and the struggle count.
+# The wrong-mark button was the written-down gap: it arrives as its own
+# later request that knows only the turn's id. jarvis_agent now keeps a
+# small, bounded, memory-only list of crisis turn ids (note_crisis_turn /
+# is_crisis_turn), hud hands the id over (second-card-suggest.patch), and
+# note_correction skips an id on the list.
+
+def _clear_crisis_turns():
+    with AG._CRISIS_TURNS_LOCK:
+        AG._CRISIS_TURNS.clear()
+
+
+def t_a_thumbs_down_on_a_crisis_turn_is_not_counted():
+    _clear_crisis_turns()
+    cid = "conv-crisis-thumb-test"
+    AG.reset_suggest_counts(cid)
+    crisis_turn = "c" * 32
+    check("note_crisis_turn accepts a real turn id", AG.note_crisis_turn(crisis_turn) is True)
+    check("is_crisis_turn says so", AG.is_crisis_turn(crisis_turn) is True)
+    check("a thumbs-down on the crisis turn adds nothing (count stays 0)",
+          AG.note_correction(cid, turn_id=crisis_turn) == 0)
+    check("the counts are still (0, 0)", AG.suggest_counts(cid) == (0, 0),
+          AG.suggest_counts(cid))
+    check("marking it again is still not counted",
+          AG.note_correction(cid, turn_id=crisis_turn) == 0 and AG.suggest_counts(cid) == (0, 0))
+    check("no row was even made for the conversation (nothing about it is kept)",
+          cid not in AG._SUGGEST)
+    # With counts already there, the crisis turn leaves them exactly as they were.
+    AG.note_struggle(cid, 2)
+    ordinary = AG.note_correction(cid, turn_id="d" * 32)
+    check("CONTROL: an ordinary turn's thumbs-down in the same conversation counts",
+          ordinary == 1 and AG.suggest_counts(cid) == (2, 1), AG.suggest_counts(cid))
+    check("a crisis turn's thumbs-down returns the count as it stands and changes nothing",
+          AG.note_correction(cid, turn_id=crisis_turn) == 1
+          and AG.suggest_counts(cid) == (2, 1), AG.suggest_counts(cid))
+    check("the crisis turn's id was not put in the conversation's marked-turns memory",
+          crisis_turn not in AG._SUGGEST[cid].get("marked_turns", set()))
+    AG.reset_suggest_counts(cid)
+    _clear_crisis_turns()
+
+
+def t_a_thumbs_down_on_a_normal_turn_still_counts():
+    _clear_crisis_turns()
+    cid = "conv-normal-thumb-test"
+    AG.reset_suggest_counts(cid)
+    AG.note_crisis_turn("c" * 32)            # some OTHER turn is a crisis turn
+    normal = "e" * 32
+    check("a normal turn is not on the crisis list", AG.is_crisis_turn(normal) is False)
+    check("its first thumbs-down counts", AG.note_correction(cid, turn_id=normal) == 1)
+    check("and it is still deduped, as before (finding #9)",
+          AG.note_correction(cid, turn_id=normal) == 1)
+    check("a call with no turn id at all (the phrase signal) still counts",
+          AG.note_correction(cid) == 2)
+    AG.reset_suggest_counts(cid)
+    _clear_crisis_turns()
+
+
+def t_a_turn_id_no_longer_on_the_list_counts_as_normal():
+    _clear_crisis_turns()
+    cid = "conv-crisis-aged-out-test"
+    AG.reset_suggest_counts(cid)
+    old = "a1" * 16
+    AG.note_crisis_turn(old)
+    check("CONTROL: while it is on the list it is not counted",
+          AG.note_correction(cid, turn_id=old) == 0)
+    for i in range(AG._CRISIS_TURNS_MAX):
+        AG.note_crisis_turn(f"{i:032x}")
+    check("after the list has moved on, the oldest id has aged out",
+          AG.is_crisis_turn(old) is False)
+    check("and its thumbs-down then behaves as a normal turn's (counted once)",
+          AG.note_correction(cid, turn_id=old) == 1 and AG.suggest_counts(cid) == (0, 1),
+          AG.suggest_counts(cid))
+    check("the newest crisis ids are still remembered",
+          AG.is_crisis_turn(f"{AG._CRISIS_TURNS_MAX - 1:032x}") is True)
+    AG.reset_suggest_counts(cid)
+    _clear_crisis_turns()
+
+
+def t_the_crisis_list_is_bounded_and_oldest_first():
+    _clear_crisis_turns()
+    for i in range(AG._CRISIS_TURNS_MAX * 3):
+        AG.note_crisis_turn(f"{i:032x}")
+    check("the list never grows past its cap",
+          len(AG._CRISIS_TURNS) == AG._CRISIS_TURNS_MAX, len(AG._CRISIS_TURNS))
+    check("the oldest went first, the newest stayed",
+          not AG.is_crisis_turn(f"{0:032x}")
+          and AG.is_crisis_turn(f"{AG._CRISIS_TURNS_MAX * 3 - 1:032x}"))
+    # Noting an id that is already there refreshes it instead of growing.
+    keep = f"{AG._CRISIS_TURNS_MAX * 2:032x}"
+    AG.note_crisis_turn(keep)
+    for i in range(AG._CRISIS_TURNS_MAX - 1):
+        AG.note_crisis_turn(f"f{i:031x}")
+    check("noting an id twice does not add it twice, and refreshes it",
+          AG.is_crisis_turn(keep) and len(AG._CRISIS_TURNS) == AG._CRISIS_TURNS_MAX)
+    _clear_crisis_turns()
+
+
+def t_the_crisis_list_ignores_bad_ids_and_never_raises():
+    _clear_crisis_turns()
+    for bad in (None, "", 123, ["a"], b"abc", "x" * 5000):
+        label = bad if not isinstance(bad, str) or len(bad) <= 20 else f"'x'*{len(bad)}"
+        check(f"note_crisis_turn({label!r}) remembers nothing and does not raise",
+              AG.note_crisis_turn(bad) is False)
+        check(f"is_crisis_turn({label!r}) is False", AG.is_crisis_turn(bad) is False)
+    check("nothing got onto the list", len(AG._CRISIS_TURNS) == 0)
+    check("note_correction with a non-string turn id still counts as before "
+          "(the id is ignored)", AG.note_correction("conv-bad-id", turn_id=123) == 1)
+    AG.reset_suggest_counts("conv-bad-id")
+
+
+def t_the_crisis_list_keeps_no_words_and_writes_nothing():
+    import inspect
+    src = inspect.getsource(AG.note_crisis_turn) + inspect.getsource(AG.is_crisis_turn)
+    for bad in ("open(", ".write(", "print(", "logging", "log(", "sqlite", "json.dump",
+                "feedback", "_SUGGEST", "conversation"):
+        check(f"note_crisis_turn / is_crisis_turn never use {bad!r}", bad not in src)
+    _clear_crisis_turns()
+    AG.note_crisis_turn("9" * 32)
+    check("the list holds the id and nothing else (its value is None: no words, "
+          "no conversation id, no time)",
+          list(AG._CRISIS_TURNS.items()) == [("9" * 32, None)], list(AG._CRISIS_TURNS.items()))
+    _clear_crisis_turns()
+
+
+# The two lines second-card-suggest.patch adds to jarvis_hud.py, run against
+# the text the whole stack really leaves (not a copy in this test).
+
+def _hud_between(start_marker, end_marker):
+    hud = _stack.stand_in("jarvis_hud.py")[0]
+    start = hud.index(start_marker)
+    end = hud.index(end_marker, start)
+    return textwrap.dedent(hud[start:end])
+
+
+def t_the_patch_hands_over_a_crisis_turn_id_only():
+    header_hook = _hud_between(
+        '            try:\n                if route_header.get("wellbeing") == "crisis":',
+        "            if use_tools:")
+    result_hook = _hud_between(
+        '                    try:\n                        if _turn.get("crisis"):',
+        "                    if (_speed is not None")
+    check("both snippets were found in the stack's jarvis_hud.py",
+          bool(header_hook.strip()) and bool(result_hook.strip()))
+
+    def run_header(route_header, agent=AG):
+        env = {"route_header": route_header, "__builtins__": __builtins__}
+        # `import jarvis_agent` inside the snippet: make that resolve to `agent`.
+        saved = sys.modules.get("jarvis_agent")
+        sys.modules["jarvis_agent"] = agent
+        try:
+            exec(header_hook, env)
+        finally:
+            sys.modules["jarvis_agent"] = saved
+        return env
+
+    def run_result(turn, route_header, agent=AG):
+        exec(result_hook, {"_turn": turn, "route_header": route_header, "jarvis_agent": agent})
+
+    tid = "1" * 32
+    _clear_crisis_turns()
+    run_header({"wellbeing": "crisis", "turn_id": tid})
+    check("a header flagged 'crisis' hands its turn id over", AG.is_crisis_turn(tid))
+    _clear_crisis_turns()
+    run_header({"turn_id": tid})
+    check("CONTROL: an ordinary header (no flag) hands nothing over",
+          not AG.is_crisis_turn(tid))
+    run_header({"wellbeing": "crisis"})
+    check("a crisis header with no turn id (feedback off) hands nothing over, no crash",
+          len(AG._CRISIS_TURNS) == 0)
+
+    _clear_crisis_turns()
+    run_result({"crisis": True, "answer": "SECRET WORDS"}, {"turn_id": tid})
+    check("a finished turn whose own result says crisis hands its turn id over",
+          AG.is_crisis_turn(tid))
+    check("only the id went over - nothing of the answer is on the list",
+          list(AG._CRISIS_TURNS.items()) == [(tid, None)], list(AG._CRISIS_TURNS.items()))
+    _clear_crisis_turns()
+    run_result({"crisis": False}, {"turn_id": tid})
+    run_result({}, {"turn_id": tid})
+    check("CONTROL: an ordinary result hands nothing over", len(AG._CRISIS_TURNS) == 0)
+
+    class OldAgent:            # a jarvis_agent.py from before this change
+        pass
+    try:
+        run_header({"wellbeing": "crisis", "turn_id": tid}, agent=OldAgent)
+        run_result({"crisis": True}, {"turn_id": tid}, agent=OldAgent)
+        ok = True
+    except Exception:
+        ok = False
+    check("an older jarvis_agent.py without the function never raises "
+          "(bookkeeping must not fail a delivered answer)", ok)
+    _clear_crisis_turns()
 
 
 if __name__ == "__main__":

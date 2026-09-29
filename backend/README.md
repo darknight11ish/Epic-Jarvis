@@ -138,7 +138,7 @@ on a throwaway copy instead.
 | `data-health.patch` | `jarvis_hud.py` | **"Data health in the preflight"** (feasibility I97, `docs/FEASIBILITY-AUDIT-2026-09-26.md`: "Small, read-only." / "WARN, never fix."). Adds `GET /api/data-health` - fixed shape, not a setting, **no approval card either way**, the same shape as `sayable.patch` and `reach.patch`. Checks (never fixes) whether the chat history and memory databases open, whether there is disk space where Jarvis writes its data, and whether the settings files parse; every row is `ok` or `warn`, never a failure. Read by `backend/selftest.py --preflight`'s own "Is Jarvis's own data healthy?" check. Its context is `sayable.patch`'s own new route block, unaffected by the patches above it in this table (including `memory-shared.patch`), which touch a different, unrelated part of `jarvis_hud.py`; last in the list. Needs `jarvis_data_health.py`. |
 | `tool-updates.patch` | `jarvis_hud.py` | **"Check for tool updates"** (the owner's own request, made directly, not from the feasibility backlog). One call at start-up, `jarvis_tool_updates.install(Handler, ...)`, answers `GET /api/tool_updates` and `POST /api/tool_updates/check`. Report only - never installs or changes a file; ONE approval card, ever, the first time it is run. Last in the list; its context is `news.patch`'s own new route block. `memory-shared.patch` and `data-health.patch`, above it in this list, both touch a different, unrelated part of `jarvis_hud.py` (the route-dispatch chain, not the startup install() block), so neither one's own place in the list changes what this patch's hunk actually finds. Needs `jarvis_tool_updates.py`, and the two files `apply-patches.ps1` step 3b copies (`backend/requirements.lock`, `jarvis-desktop/src-tauri/Cargo.lock` as `rust-crates.lock`) - without any of the three, or on any error, the banner says so and the routes answer 503 or say plainly what could not be read. See "Checking for tool updates", at the very end. |
 | `answer-sources.patch` | `jarvis_hud.py` | **"Where this came from", and the quote check** (feasibility I42/I132, `docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md` detail 1). Two hunks. The first, like every install()-shaped patch, adds one call at start-up - `jarvis_sources.install(Handler, ...)`, answering `GET /api/chat/sources?turn_id=<id>` - and its context is `tool-updates.patch`'s own new route block, so it goes after it, last like every new patch. The second sits right after `chat-history.patch`'s `_history["turn"] = _turn` line (nothing later in the stack touches `_turn`): it hands `jarvis_sources.record()` this turn's `tool_sources` and `unverified_quotes` (both new fields on `run_local_turn`'s own return dict, `jarvis_agent.py`, no patch needed there) under the SAME `turn_id` `feedback.patch` already put in `X-Jarvis-Route` - which has to happen AFTER `run_local_turn` returns, since the header (turn_id included) is sent to the app before that loop even starts. Needs `jarvis_sources.py` - without it, or on any error, the banner says so, the route answers 503, and nothing about an ordinary chat turn changes: no tool result is read a second time, and this adds no new fetch of anything (docs/ARCHITECTURE.md §4). See "Where this came from", at the very end. |
-| `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
+| `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Two more small hunks (owner's go-ahead, 2026-09-29) close the one gap that had been written down: a thumbs-down on a crisis-help answer is not counted (`jarvis_agent.note_crisis_turn`, a bounded in-memory list of crisis turn ids - see "A thumbs-down on a crisis answer is never counted" below). Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
 | `sky.patch` | `jarvis_hud.py` | **The sun, the moon and the weather behind the animal faces** (the owner's decisions of 2026-09-28). Adds `GET /api/sky` and `POST /api/sky` (ONE change: show on or off, the town - this PC only - forget the town, or the weather source; Open-Meteo ON is ONE approval card). Its context is `answer-sources.patch`'s own startup `install()` block, so it goes last. Needs `jarvis_sky.py` and `jarvis_sky_places.py` copied in; without them, or on any error, the banner says so and the route answers 503 - the faces are drawn exactly as before. See "The sky behind the animals", at the very end. |
 | `animal.patch` | `jarvis_hud.py` | **Animal options** (the owner's decisions of 2026-09-28). Adds `GET /api/animal` and `POST /api/animal` (ONE switch: "Keep the animal still" or one of the animal's behaviour switches; at once, no card) and puts the same values in `GET /api/appearance` as `animal`. Two hunks: one in `appearance.patch`'s `_appearance_view`, one right after `sky.patch`'s startup `install()` block, so it goes last. Needs `jarvis_animal.py` copied in; without it, or on any error, the banner says so and the route answers 503 - the faces are drawn as before. See "Animal options", at the very end. |
 
@@ -5825,6 +5825,8 @@ file - two small additions to the whole modules `jarvis_agent.py` and
   never a scan for the bare word "no"), or a "wrong" mark that changed
   (`jarvis_feedback.mark`, reached through the one small hunk
   `second-card-suggest.patch` adds - see its own row in the table above).
+  Never for a crisis-help answer: see "A thumbs-down on a crisis answer is
+  never counted", just below.
 
 `jarvis_second_card.maybe_suggest_combined(conversation_id)`, called once at
 the end of every turn (`jarvis_agent.run_local_turn`'s own `finally` block -
@@ -5862,10 +5864,50 @@ The offer's kind, `second_card_combined_offer`, is declared in
 `jarvis_backoff.OFFERS` asking only `suggest_bigger_model` - `test_backoff_rule.py`
 checks it against rule 4 like every offer.
 
+### A thumbs-down on a crisis answer is never counted (owner's go-ahead, 2026-09-29)
+
+**The gap.** CLAUDE.md (2026-09-27) says a crisis turn is kept out of the
+"suggest the bigger model" counters. That was true for two of the three
+signs - the owner's own words (`looks_like_correction`) and the struggle
+count both check `_TurnWatch.crisis` - but not for the "wrong" mark (the
+thumbs-down button). The mark reaches `note_correction` as its own, later
+request that knows only the turn's id, not whether that turn was a crisis
+turn, so a thumbs-down on a crisis-help answer still counted. It was found
+by the Opus 5.5 re-check and written down rather than patched blind; the
+owner then gave the go-ahead for this one gap.
+
+**The fix (memory only, nothing else about crisis handling changes).**
+
+- `jarvis_agent.py`: `_CRISIS_TURNS`, a small list of turn ids kept in
+  memory, oldest dropped first, at most `_CRISIS_TURNS_MAX` (200) ids.
+  `note_crisis_turn(turn_id)` adds one; `is_crisis_turn(turn_id)` asks.
+  `note_correction` returns the count as it stands, unchanged, and makes no
+  row for the conversation, when the turn id it is given is on the list.
+  A turn id that is not on the list - never added, or dropped because the
+  list moved on - counts as an ordinary turn.
+- `second-card-suggest.patch` (two new hunks on `jarvis_hud.py`, right after
+  the two places the id and the crisis flag first exist together): after
+  `feedback.patch` has given the answer its `turn_id`, if
+  `wellbeing.patch` flagged the header as `"crisis"`, hand that id over; and
+  again once `run_local_turn` returns, if its own result says `"crisis":
+  true` (its own check, on the owner's own newest words - the same flag that
+  already decides "no tools" and "never learned"). Either is enough. Both
+  sit in their own `try`, so an older `jarvis_agent.py` without the function
+  cannot turn an answer into an error.
+
+**What it does not do.** The list holds random 32-character ids and nothing
+else: no words, no conversation id, no time, no reason. It is never written
+to disk, to a log, to `feedback.db` or to any file, and it is gone when the
+backend restarts, so it is not a record of who was in crisis. The mark
+itself is still saved in `feedback.db` exactly as before (that file keeps no
+conversation id and no words, and this change does not touch it) - only the
+"suggest the bigger model" counter skips it.
+
 ### Test it
 
 ```
 python3 backend/test_second_card_suggest.py
+python3 backend/test_wellbeing.py
 ```
 
 Runs anywhere: the correction-phrase check's true and false positives (real
@@ -5879,7 +5921,14 @@ off, raises the real card with a reason once both are met, a "yes" turns it
 on and clears the counts, a "no" is heard by `jarvis_backoff` and clears
 them too, and already-on or a card already waiting offers nothing. Plus
 `second-card-suggest.patch` applying to what `feedback.patch` wrote, and
-reversing.
+reversing. And, for the crisis gap above: a thumbs-down on a crisis turn is
+not counted, one on an ordinary turn still is, an id that has aged out of the
+list counts as ordinary, the list stays bounded (oldest out first), bad ids
+are ignored without raising, the list keeps no words and writes nothing, the
+patch's two hand-overs fire only on a crisis flag (run against
+`jarvis_hud.py` as the whole stack leaves it) - and `test_wellbeing.py` runs
+the whole chain: a real crisis turn through `run_local_turn`, then the
+thumbs-down, not counted; the same for an ordinary turn, counted.
 
 # `wiki.patch` and `jarvis_wiki.py` — the wiki builder, on the second card (or the big model)
 

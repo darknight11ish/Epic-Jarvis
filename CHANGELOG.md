@@ -6,6 +6,17 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **A thumbs-down on a crisis-help answer no longer counts toward "suggest
+  the bigger model".** Crisis messages were already never counted for the
+  owner's own "that's wrong" words or for Jarvis struggling with a tool, but
+  pressing the thumbs-down on the answer to a crisis message still added one
+  to the "you corrected me" count. It no longer does. The backend keeps a
+  short list of crisis-answer ids in memory only (ids, no words, nothing
+  written to disk or to a log, gone when it restarts, oldest dropped after
+  200), and the count skips any answer on it. Nothing else about the crisis
+  help line changes. Needs `apply-patches.ps1` on the PC (`jarvis_agent.py`
+  and `second-card-suggest.patch`).
+
 - **The animals' new behaviours, on both apps.** Every animal and the robot
   now does what the six "Animal options" switches promised, each switch
   turning its own off: **listening nods** (a small nod in your pauses while
