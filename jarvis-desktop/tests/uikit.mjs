@@ -15,6 +15,12 @@
  * to get the app running. Paying for a UI test harness at that moment is the
  * wrong trade, so it is loaded at run time and its absence is explained rather
  * than thrown.
+ *
+ * A suite that runs part of itself WITHOUT Playwright (sky, season, face-pace,
+ * animal-settings - the browser-free half runs in CI's backend job) must
+ * import "playwright" itself FIRST and only then this file: the exit below
+ * happens while this module loads, and no try/catch around the import can
+ * catch it. `try { await import("playwright"); K = await import("./uikit.mjs"); }`
  */
 let chromium;
 try {
@@ -101,6 +107,11 @@ export const EMAIL_SENDING = JSON.parse(fsSync.readFileSync(path.join(
   "utf8"));
 
 /** GET /api/folders as the backend answers it (tools/gen_folders_cases.py). */
+// "Animal options" (backend/jarvis_animal.py, 2026-09-28): what GET
+// /api/animal answers on a PC nobody has changed, and the stepping rule's
+// cases (tools/gen_animal_cases.py).
+export const ANIMAL = JSON.parse(fsSync.readFileSync(path.join(
+  path.dirname(fileURLToPath(import.meta.url)), "fixtures", "animal-cases.json"), "utf8"));
 export const FOLDERS = JSON.parse(fsSync.readFileSync(path.join(
   path.dirname(fileURLToPath(import.meta.url)), "fixtures", "folders-cases.json"),
   "utf8"));
@@ -484,9 +495,12 @@ export const UPDATE_NONE = {
 };
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals,
-  folders, chatbot, support, historyImport, widgets, devices }) {
+  folders, animal, chatbot, support, historyImport, widgets, devices }) {
   const listeners = {};
   window.__calls = [];
+  // animal.rs: GET /api/animal's answer (a scenario's, else a PC nobody has
+  // changed), changed by set_animal like the PC would.
+  window.__animal = animal ? JSON.parse(JSON.stringify(animal)) : null;
   window.__emailSending = emailSending || null;
   // folders.rs: { view, addAnswer, removeAnswer, importAnswer } (folders.mjs).
   window.__folders = folders || null;
@@ -661,9 +675,31 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           }
           // From memory, never the network: what the widget's face and the
           // chrome colours read.
-          case "appearance_snapshot":
-            return { face: (window.__appearance || {}).face || null,
-                     bindings: (window.__appearance || {}).bindings || {}, updated: 0 };
+          case "appearance_snapshot": {
+            const doc = { face: (window.__appearance || {}).face || null,
+                          bindings: (window.__appearance || {}).bindings || {}, updated: 0 };
+            // animal.patch: the shared animal switches ride along.
+            if (window.__animal && window.__animal.values) doc.animal = { ...window.__animal.values };
+            return doc;
+          }
+          // animal.rs: "Animal options" - a read, ONE change, and the old
+          // Still sent to the PC once.
+          case "get_animal":
+            if (window.__animalFails) throw new Error(window.__animalFails);
+            return window.__animal ? JSON.parse(JSON.stringify(window.__animal))
+              : { available: false, why: "Your PC's Jarvis cannot share the animal options yet - run apply-patches.ps1 on the PC." };
+          case "set_animal": {
+            const [[key, on]] = Object.entries(args.change);
+            const a = window.__animal;
+            if (!a) throw new Error("Your PC's Jarvis cannot share the animal options yet - run apply-patches.ps1 on the PC.");
+            a.values[key] = on;
+            for (const sw of a.switches) if (sw.id === key) sw.on = on;
+            return { ok: true, said: `Done - ${key} ${on ? "on" : "off"}.`, changed: true, view: JSON.parse(JSON.stringify(a)) };
+          }
+          case "migrate_animal_still":
+            window.__calls.push(["__migratedStill"]);
+            if (window.__animal) { window.__animal.values.still = true; return "sent"; }
+            throw new Error("Your PC's Jarvis cannot share the animal options yet - run apply-patches.ps1 on the PC.");
           case "appearance_colours": return window.__appearanceColours || {};
           case "open_faces": window.__calls.push(["__openedFaces"]); return null;
           // feedback.patch. `window.__markRoute = false` is a backend
@@ -2545,6 +2581,7 @@ export async function open(browser, base, file, data, viewport) {
     emailSending: EMAIL_SENDING.cases.tool_off,
     secondCard: { status: SECOND_CARD.one_card },
     appearance: { face: null, bindings: {}, updated: 0, source: "default", shared: false },
+    animal: ANIMAL.view,
     ...data,
     // A scenario names only what it changes; the real POST answers stay.
     hardware: { status: HARDWARE.today_one_card,
@@ -2584,6 +2621,16 @@ export async function open(browser, base, file, data, viewport) {
       ...(data && data.vt),
     },
   });
+  // `storage`: this computer's localStorage before the page's own scripts
+  // run - a value of null removes that key.
+  if (data && data.storage) {
+    await page.addInitScript((kv) => {
+      for (const [k, v] of Object.entries(kv)) {
+        if (v === null) localStorage.removeItem(k);
+        else localStorage.setItem(k, v);
+      }
+    }, data.storage);
+  }
   await page.goto(`${base}/${file}`);
   await page.waitForTimeout(500);
   page.__errors = errors;

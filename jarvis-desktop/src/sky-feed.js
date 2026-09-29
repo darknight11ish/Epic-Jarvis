@@ -61,8 +61,12 @@ export function storeSky(view) {
   }
 }
 
-/** Ask the PC now (unless another window just did), and every FEED_MS. */
-export function startSkyFeed({ invoke } = {}) {
+/**
+ * Ask the PC now (unless another window just did), and every FEED_MS - and
+ * at once when the PC rings the `sky` doorbell (a change made on the phone
+ * or by asking Jarvis, 2026-09-28): `onEvent` is jarvis-link.js's.
+ */
+export function startSkyFeed({ invoke, onEvent } = {}) {
   const call = invoke || (IS_TAURI ? (c, a) => TAURI.core.invoke(c, a) : null);
   if (!call) return () => {};
   let stopped = false;
@@ -85,5 +89,8 @@ export function startSkyFeed({ invoke } = {}) {
   };
   tick(false);
   const id = setInterval(() => tick(false), FEED_MS);
-  return () => { stopped = true; clearInterval(id); };
+  const off = typeof onEvent === "function"
+    ? onEvent((frame) => { if (frame && frame.kind === "sky") tick(true); })
+    : null;
+  return () => { stopped = true; clearInterval(id); if (typeof off === "function") off(); };
 }

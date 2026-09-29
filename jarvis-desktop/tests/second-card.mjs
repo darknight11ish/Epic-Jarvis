@@ -800,7 +800,7 @@ await check("CONTROL: the route line passes second_card on, and nothing more", a
   // are not keys: drop them before reading the quoted strings.
   const body = list[1].replace(/\/\/[^\n]*/g, "");
   const keys = [...body.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(keys, ["lane", "where", "gate", "second_card", "quick", "open_settings", "offer", "open_brain"]);
+  assert.deepEqual(keys, ["lane", "where", "gate", "second_card", "quick", "open_settings", "face_tuning", "offer", "open_brain"]);
 });
 
 await browser.close();

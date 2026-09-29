@@ -52,6 +52,12 @@ CLIPS = RESOURCES / "lipsync"
 OUT = RESOURCES / "lipsync-golden.json"
 MOUTH_SOURCE = CLIPS / "kokoro-panda-lips.wav"
 MOUTH_FIXTURE = RESOURCES / "lipsync-mouth" / "kokoro-panda-lips-jmth.wav"
+# The voice-speed clips (2026-09-28): "Okay. Maybe Bob made a map." at the
+# slowest and the fastest pace the apps offer (an animal's Slower/Faster times
+# the owner's), made as say() makes them, each with the PC's "jmth" chunk.
+# Their merged tracks go in the fixture too, so the phone's LipSync.forClip
+# is held to the desktop's at both paces.
+PACED = [("kokoro-panda-lips-slowest.wav", 0.7225), ("kokoro-robot-lips-fastest.wav", 1.3225)]
 
 # Runs in node: argv[1] = lipsync.js, stdin = {clips: WAV paths (relative
 # names are what the fixture records), mouth: the jmth fixture and variants}. Values rounded to 6 decimals, which
@@ -80,7 +86,7 @@ for (const c of clips) {
   }
   out.clips.push({ file: c.name, sampleRate: w.sampleRate, samples: w.samples.length, n: t.n,
     level: Array.from(t.level, r), open: Array.from(t.open, r), wide: Array.from(t.wide, r),
-    round: Array.from(t.round, r), reads });
+    round: Array.from(t.round, r), reads, phrase_ends: Array.from(L.phraseEnds(t), r) });
 }
 // Mouth shapes inside the WAV: the fixture's merged track and reads, then
 // what the desktop made of each variant (a mouth? merged? the same sound?).
@@ -105,6 +111,22 @@ for (const c of m.cases) {
   const t = L.merge(a, w.mouth);
   out.mouth.cases.push({ ...c.spec, sha256: c.sha256, mouth: !!w.mouth, merged: t !== a,
     sameSound: same(w.samples, src.samples) });
+}
+// The voice-speed clips (the slowest and fastest pace the apps offer, each
+// with the PC's jmth chunk): the merged track both apps play, and reads.
+out.paces = [];
+for (const c of input.paced) {
+  const w = L.fromWav(fs.readFileSync(c.path));
+  const a = L.analyse(w.samples, w.sampleRate);
+  const t = L.merge(a, w.mouth);
+  const reads = [];
+  for (const s of [0.02, 0.2345, 0.5051, 1.0101, (t.n - 3) / t.fps - L.LEAD_S + 0.0001]) {
+    const o = L.sample(t, s);
+    reads.push({ t: s, out: [r(o.level), r(o.open), r(o.wide), r(o.round)] });
+  }
+  out.paces.push({ file: c.name, pace: c.pace, n: t.n, merged: t !== a,
+    level: Array.from(t.level, r), open: Array.from(t.open, r), wide: Array.from(t.wide, r),
+    round: Array.from(t.round, r), reads });
 }
 process.stdout.write(JSON.stringify(out) + "\n");
 """
@@ -213,8 +235,9 @@ def build() -> str:
     mouth = {"fixture": str(MOUTH_FIXTURE), "fixtureName": MOUTH_FIXTURE.name,
              "source": base64.b64encode(src).decode("ascii"), "sourceName": MOUTH_SOURCE.name,
              "cases": cases}
+    paced = [{"name": n, "path": str(CLIPS / n), "pace": pace} for n, pace in PACED]
     res = subprocess.run(["node", "-e", NODE, str(LIPSYNC_JS)],
-                         input=json.dumps({"clips": clips, "mouth": mouth}),
+                         input=json.dumps({"clips": clips, "mouth": mouth, "paced": paced}),
                          capture_output=True, text=True, check=True)
     # Each variant must be read as its spec says: "merged" (the shapes are
     # used), "kept apart" (read, but the lengths differ by more than 3
@@ -228,6 +251,9 @@ def build() -> str:
                              f"(same sound: {c['sameSound']}); it should be {c['want']!r}")
     if not got["mouth"]["sameSound"] or got["mouth"]["mouthN"] != got["mouth"]["n"] - 2:
         raise SystemExit("lipsync.js does not read the jmth fixture as made")
+    for c in got["paces"]:
+        if not c["merged"]:
+            raise SystemExit(f"lipsync.js did not merge the PC's mouth in {c['file']}")
     return res.stdout
 
 

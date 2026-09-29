@@ -615,7 +615,40 @@
     return t;
   }
 
-  var JarvisLipSync = { FPS: FPS, LEAD_S: LEAD_S, ONSET_S: ONSET_S, analyse: analyse, sample: sample,
+  // ---- Where the phrases end, worked out before they are heard ----------------
+  // The talking gestures (docs/CRITTERS.md) land on the end of one of Jarvis's
+  // phrases. The whole clip is read before it plays, so the ends can be found
+  // ahead of time from its own loudness (`level`) with the same rules as the
+  // live finder (critter-pose.js pauseStep, PAUSE): a phrase end is a stretch
+  // of PH.QUIET seconds under PH.OFF after at least PH.TALK_MIN seconds over
+  // PH.ON, and never closer than PH.GAP to the one before. Returns the seconds
+  // (into the clip, on the same clock as sample()) where each phrase's sound
+  // STOPS - the start of that quiet stretch, which on the 84 real Kokoro clips
+  // of the voice-speed check lies within 0.05 s (one standard deviation) of
+  // Kokoro's own timing of the full stop - plus the clip's own end if its
+  // sound runs right up to it. A clip that ends in silence gives its last phrase
+  // end there too. Counted in whole frames, so the phone's copy
+  // (LipSync.phraseEnds) agrees to the frame.
+  var PH = { ON: 0.10, OFF: 0.05, TALK_MIN: 0.6, QUIET: 0.05, GAP: 2.0 };
+  function phraseEnds(track) {
+    var out = [];
+    if (!track || !(track.n > 0) || !(track.fps > 0)) return out;
+    var fps = track.fps, quietN = Math.round(PH.QUIET * fps), talkN = Math.round(PH.TALK_MIN * fps),
+      gapN = Math.round(PH.GAP * fps), talk = 0, quiet = 0, last = -1e9, i;
+    for (i = 0; i < track.n; i++) {
+      var lv = track.level[i];
+      if (lv >= PH.ON) { talk++; quiet = 0; } else if (lv <= PH.OFF) quiet++;
+      if (quiet >= quietN && talk > 0) {
+        if (talk >= talkN && i - last >= gapN) { out.push((i - quietN + 1) / fps); last = i; }
+        talk = 0;
+      }
+    }
+    // Sound right up to the clip's last frame: the clip's end is a phrase end.
+    if (talk >= talkN && track.n - last >= gapN) out.push(track.n / fps);
+    return out;
+  }
+
+  var JarvisLipSync = { FPS: FPS, PHRASE: PH, phraseEnds: phraseEnds, LEAD_S: LEAD_S, ONSET_S: ONSET_S, analyse: analyse, sample: sample,
     fromWav: fromWav, pack: pack, unpack: unpack, mouthFrom: mouthFrom, merge: merge,
     MERGE_SLACK: MERGE_SLACK };
   globalThis.JarvisLipSync = JarvisLipSync;

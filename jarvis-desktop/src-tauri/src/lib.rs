@@ -20,6 +20,7 @@
 
 pub mod account_secrets;
 pub mod aec;
+pub mod animal;
 pub mod appearance;
 pub mod asks_first;
 pub mod attention;
@@ -813,6 +814,8 @@ pub fn run() {
             hud_proxy::hud_chat_cancel,
             // App lock and the widget (apps security audit M3).
             commands::get_app_lock,
+            // The two lock switches, for the faces' fact nod (face-moments.js).
+            commands::get_lock_flags,
             commands::open_approval_in_quickbar,
             // The five `jarvis-link.js` has invoked since before they
             // existed. Without these lines every task-control button and the
@@ -992,6 +995,9 @@ pub fn run() {
             plain_errors::open_fix_place,
             sky::get_sky,
             sky::set_sky,
+            animal::get_animal,
+            animal::set_animal,
+            animal::migrate_animal_still,
             appearance::get_appearance,
             appearance::set_appearance,
             appearance::appearance_snapshot,

@@ -668,10 +668,16 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
         "power" => {
             if let Some(mode) = event.data["value"].as_str() {
                 let mode = mode.to_string();
-                publish_link(app, |link| link.power = mode.clone());
                 // The event carries the mode and nothing else, so who set it
                 // has to come from /api/version. Cheap, and only on a change.
-                prime_from_version(app, base).await;
+                // Read FIRST, so the mode and who set it reach the faces
+                // together: a focus session's Quiet published on its own for
+                // the length of that read would put the animal to sleep for a
+                // moment before the focus buddy took over. Only if that read
+                // failed does the event's own mode go out.
+                if !prime_from_version(app, base).await {
+                    publish_link(app, |link| link.power = mode.clone());
+                }
             }
         }
 
@@ -843,9 +849,12 @@ fn activity_detail(data: &serde_json::Value) -> Option<String> {
 /// but the owner's server may be older - so anything still missing is read
 /// from `GET /api/status`, which reports the power mode and is what the phone
 /// reads (`StatusInfo.power`). Nothing here is guessed: absent stays absent.
-async fn prime_from_version(app: &AppHandle, base: &str) {
+///
+/// True when it published a power mode (the caller of a `power` event falls
+/// back to the event's own mode when it did not).
+async fn prime_from_version(app: &AppHandle, base: &str) -> bool {
     let Some(version) = fetch_json(app, base, "/api/version").await else {
-        return;
+        return false;
     };
     let mut activity = version["activity"].as_str().map(str::to_string);
     let mut power = power_mode(&version["capabilities"]["power"]);
@@ -863,6 +872,7 @@ async fn prime_from_version(app: &AppHandle, base: &str) {
         }
     }
     let activity = activity.unwrap_or_else(|| "idle".to_string());
+    let published = power.is_some();
     // Lockdown's state rides on the handshake like the power mode; a PC
     // without it says nothing, and the link says off.
     let lockdown = lockdown_on(&version["capabilities"]["lockdown"]).unwrap_or(false);
@@ -874,6 +884,7 @@ async fn prime_from_version(app: &AppHandle, base: &str) {
         }
         link.lockdown = lockdown;
     });
+    published
 }
 
 /// `{"on": bool}` - the `lockdown` event's data, or `capabilities.lockdown`
@@ -935,8 +946,10 @@ fn power_mode(value: &serde_json::Value) -> Option<String> {
 }
 
 /// Who put Jarvis in its current mode, in the words `tray.rs` understands:
-/// "override" (a person), "schedule" (quiet hours), "idle" (the idle timer)
-/// or "standby_schedule" (the standby schedule, a job on the scheduler).
+/// "override" (a person), "schedule" (quiet hours), "idle" (the idle timer),
+/// "standby_schedule" (the standby schedule, a job on the scheduler) or
+/// "focus" (a focus session, which puts Jarvis on Quiet - the faces show the
+/// focus buddy for it, not a sleeping animal: owner, 2026-09-29).
 ///
 /// `set_by` if the server sends it. `jarvis_power.status()` does not - it
 /// has `why`, a sentence ("the owner, from this PC", "startup", ...) - so the
@@ -952,6 +965,12 @@ fn power_set_by(value: &serde_json::Value) -> Option<String> {
     // itself as "the standby schedule" - not a person, and not quiet hours.
     if why == "the standby schedule" {
         return Some("standby_schedule".to_string());
+    }
+    // backend/jarvis_focus.py `WHY`, recorded by jarvis_power when a focus
+    // session goes Quiet. A Quiet the owner sets afterwards replaces it with
+    // "the owner, ..." (below), so a hand-set Quiet stays asleep.
+    if why == "the focus session" {
+        return Some("focus".to_string());
     }
     if why.starts_with("the owner") {
         return Some("override".to_string());
@@ -1364,6 +1383,18 @@ mod power_prime_tests {
         // CONTROL: an ordinary startup says nothing rather than guessing.
         let startup = json!({"mode": "active", "why": "startup", "quiet_hours": false});
         assert_eq!(power_set_by(&startup), None);
+    }
+
+    /// A focus session's Quiet is named, so the faces can show the focus
+    /// buddy instead of a sleeping animal (owner, 2026-09-29). It is the
+    /// backend's own sentence (`jarvis_focus.WHY`); the owner's own Quiet
+    /// is a different sentence and stays "override".
+    #[test]
+    fn a_focus_sessions_quiet_is_named() {
+        let focus = json!({"mode": "quiet", "why": "the focus session"});
+        assert_eq!(power_set_by(&focus).as_deref(), Some("focus"));
+        let by_hand = json!({"mode": "quiet", "why": "the owner, from this PC"});
+        assert_eq!(power_set_by(&by_hand).as_deref(), Some("override"));
     }
 }
 

@@ -7,9 +7,10 @@ import com.jarvis.client.FaceState
 
 /**
  * An animal face - a CHARACTER, where the other twenty faces are
- * instruments (rings, orbits, a drum skin). Four of them: [RedPanda],
- * [PygmyOwl], [SeaOtter] and [Monkey], each only its shader and its pose; everything
- * about how an animal is drawn on the phone lives here, once.
+ * instruments (rings, orbits, a drum skin). Five of them: [RedPanda],
+ * [PygmyOwl], [SeaOtter], [Monkey] and the [Robot], each only its shader and
+ * its pose; everything about how an animal is drawn on the phone lives here,
+ * once (the robot is drawn exactly as an animal is).
  *
  * A character needs its own pose for every state, so an animal reads the
  * real state ([FaceFrame.state]) rather than the borrowed movement
@@ -57,12 +58,36 @@ abstract class CritterFace(
      */
     abstract fun busyAt(state: FaceState, t: Float): Boolean
 
+    /**
+     * [busyAt], told how long the face has shown [state] ([since], seconds)
+     * and its [opts] - so one of its cute moments counts as well (the pose's
+     * `busy(state, t, since, opts)`, the desktop's). A face whose pose has
+     * no cute moments need not override it.
+     */
+    open fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts): Boolean = busyAt(state, t)
+
+    /**
+     * Whether one of the face's own-timed talking gestures (a nod, a paw or
+     * a mitten, a tilt - the timing used until the host hands the pose
+     * Jarvis's phrase ends) is playing at clock [t]: its pose's `gesturing`,
+     * the desktop's `gesturing(t)`, checked against it by CritterPoseTest.
+     * The host asks before it switches the gestures over to the phrase ends
+     * part way into an answer, so a gesture is never cut off half way. A
+     * face with no talking gestures of its own need not override it.
+     */
+    open fun talkingAt(t: Float): Boolean = false
+
     /** What the host remembered at the last state changes (see [CritterPose.Hist]). */
     protected fun hist(f: FaceFrame) =
         CritterPose.Hist(prev2 = f.prevState2, gap = f.prevGap, prevAmp = f.prevAmp, prevAmp2 = f.prevAmp2, past = f.past)
 
-    /** Calm motion, a serious moment, "Still": the host's eased weights (see [CritterPose.Opts]). */
-    protected fun opts(f: FaceFrame) = CritterPose.Opts(calm = f.calmW, serious = f.seriousW, still = f.stillW)
+    /**
+     * Calm motion, a serious moment, "Still" - the host's eased weights - and
+     * the new behaviours the host feeds ([FaceFrame.behave]: the owner's
+     * switches, a focus session, the pauses, the moments, petting and a face
+     * switch; see [CritterPose.Opts] and [AnimalFeed]).
+     */
+    protected fun opts(f: FaceFrame) = f.behave.copy(calm = f.calmW, serious = f.seriousW, still = f.stillW)
 
     // The shell's spin rate. This receives the BORROWED movement (approval,
     // standby and banked arrive as IDLE, error as THINKING), so the desktop's
@@ -359,6 +384,9 @@ object RedPanda : CritterFace("redpanda", "Red Panda", CritterShaders.RED_PANDA)
     override fun uniformsOf(p: FloatArray, mouth: FloatArray?) = CritterPose.uniforms(p, mouth)
     override fun overlayOf(p: FloatArray, yaw: Float, pitch: Float) = CritterPose.overlay(p, yaw, pitch, 1f)
     override fun busyAt(state: FaceState, t: Float) = CritterPose.busy(state, t)
+    override fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts) =
+        CritterPose.busy(state, t, since, opts)
+    override fun talkingAt(t: Float) = CritterPose.gesturing(t)
 }
 
 /** The pygmy owl on its branch, its orb floating beside it. */
@@ -368,6 +396,9 @@ object PygmyOwl : CritterFace("pygmyowl", "Pygmy Owl", CritterShaders.PYGMY_OWL)
     override fun uniformsOf(p: FloatArray, mouth: FloatArray?) = OwlPose.uniforms(p, mouth)
     override fun overlayOf(p: FloatArray, yaw: Float, pitch: Float) = OwlPose.overlay(p, yaw, pitch, 1f)
     override fun busyAt(state: FaceState, t: Float) = OwlPose.busy(state, t)
+    override fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts) =
+        OwlPose.busy(state, t, since, opts)
+    override fun talkingAt(t: Float) = OwlPose.gesturing(t)
 }
 
 /** The sea otter afloat in its pool, a glowing pebble on its chest. */
@@ -377,6 +408,9 @@ object SeaOtter : CritterFace("seaotter", "Sea Otter", CritterShaders.SEA_OTTER)
     override fun uniformsOf(p: FloatArray, mouth: FloatArray?) = OtterPose.uniforms(p, mouth)
     override fun overlayOf(p: FloatArray, yaw: Float, pitch: Float) = OtterPose.overlay(p, yaw, pitch, 1f)
     override fun busyAt(state: FaceState, t: Float) = OtterPose.busy(state, t)
+    override fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts) =
+        OtterPose.busy(state, t, since, opts)
+    override fun talkingAt(t: Float) = OtterPose.gesturing(t)
 }
 
 /**
@@ -389,10 +423,33 @@ object Monkey : CritterFace("monkey", "Monkey", CritterShaders.MONKEY) {
     override fun uniformsOf(p: FloatArray, mouth: FloatArray?) = MonkeyPose.uniforms(p, mouth)
     override fun overlayOf(p: FloatArray, yaw: Float, pitch: Float) = MonkeyPose.overlay(p, yaw, pitch, 1f)
     override fun busyAt(state: FaceState, t: Float) = MonkeyPose.busy(state, t)
+    override fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts) =
+        MonkeyPose.busy(state, t, since, opts)
+    override fun talkingAt(t: Float) = MonkeyPose.gesturing(t)
 }
 
 /**
- * Compiles all four animals' shaders on the calling thread - meant for a
+ * The robot (the owner's fifth face, 2026-09-28): a small cute robot that
+ * floats, a soft shadow on the ground below it. No mouth and no orb - its
+ * glowing eyes on its visor are its face, in the state's colour (`hot`, the
+ * colour the animals' orbs glow in), and while Jarvis speaks they pulse with
+ * the real voice ([FaceFrame.mouth]) instead of a mouth moving. Now and then
+ * at rest it zips round inside its own space, and it waves or polishes its
+ * visor. Everything else is an animal's: this class draws it the same way.
+ */
+object Robot : CritterFace("robot", "Robot", CritterShaders.ROBOT) {
+    override fun pose(f: FaceFrame) =
+        RobotPose.pose(f.state, f.prevState, f.hitchPhase, f.t, f.amp, hist = hist(f), opts = opts(f))
+    override fun uniformsOf(p: FloatArray, mouth: FloatArray?) = RobotPose.uniforms(p, mouth)
+    override fun overlayOf(p: FloatArray, yaw: Float, pitch: Float) = RobotPose.overlay(p, yaw, pitch, 1f)
+    override fun busyAt(state: FaceState, t: Float) = RobotPose.busy(state, t)
+    override fun busyAt(state: FaceState, t: Float, since: Float, opts: CritterPose.Opts) =
+        RobotPose.busy(state, t, since, opts)
+    override fun talkingAt(t: Float) = RobotPose.gesturing(t)
+}
+
+/**
+ * Compiles all five character faces' shaders (the four animals and the robot) on the calling thread - meant for a
  * background one ([kotlinx.coroutines.Dispatchers.Default]). Appearance
  * calls it when it opens: its picker draws a still of every face, and
  * compiling four large animal shaders on the main thread the first time
@@ -404,4 +461,5 @@ fun warmCritterShaders() {
     PygmyOwl.warm()
     SeaOtter.warm()
     Monkey.warm()
+    Robot.warm()
 }

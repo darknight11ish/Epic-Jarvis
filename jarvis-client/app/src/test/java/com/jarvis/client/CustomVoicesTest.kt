@@ -415,7 +415,7 @@ class CustomVoicesTest {
     fun `each animal's voice - the PC's rows, choices and words, no card`() {
         for (case in voices["status"]!!.jsonObject.keys) {
             val fv = requireNotNull(status(case).faceVoice) { "$case: no face_voice" }
-            assertEquals(case, listOf("redpanda", "pygmyowl", "seaotter", "monkey"), fv.animals.map { it.face })
+            assertEquals(case, listOf("redpanda", "pygmyowl", "seaotter", "monkey", "robot"), fv.animals.map { it.face })
             assertEquals(case, 11, fv.choices.voices.size)
             assertEquals(case, listOf("slower", "normal", "faster"), fv.choices.paces.map { it.id })
             assertEquals(case, -3.0, fv.choices.pitchMin, 0.0)
@@ -425,7 +425,12 @@ class CustomVoicesTest {
         }
         val own = requireNotNull(status("face_showing").faceVoice).animals
         assertEquals(
-            listOf(Triple("1", 2.0, "normal"), Triple("2", 1.0, "slower"), Triple("3", 3.0, "faster"), Triple("6", 1.0, "normal")),
+            // The otter is Sarah ("3"), not "4" (Sky): the owner's 2026-09-28
+            // decision, in the merged jarvis_voices.py FACE_VOICES.
+            listOf(
+                Triple("1", 2.0, "normal"), Triple("2", 1.0, "slower"), Triple("3", 3.0, "faster"), Triple("6", 1.0, "normal"),
+                Triple("7", 2.0, "faster"),
+            ),
             own.map { Triple(it.speaker, it.semitones, it.pace) },
         )
         assertFalse(own.any { it.changed })
@@ -453,7 +458,7 @@ class CustomVoicesTest {
             CustomVoices.answerLine(answer("animal_bad")),
         )
         assertEquals(
-            "Choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey.",
+            "Choose the Red Panda, the Pygmy Owl, the Sea Otter, the Monkey or the Robot.",
             CustomVoices.answerLine(answer("animal_try_bad")),
         )
         // A PC too old to have the rows: the switch alone, no rows.

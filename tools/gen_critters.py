@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate both apps' copies of the animal faces from one source.
 
-Each animal (red panda, pygmy owl, sea otter) is drawn by one shader, built
+Each face (red panda, pygmy owl, sea otter, monkey, robot) is drawn by one shader, built
 from three parts in `jarvis-desktop/critters/`: `common_head.sksl` (shared
 uniforms and helpers) + `<animal>.sksl` (its shapes and colours) +
 `common_tail.sksl` (the shared march, lighting, orb and soft outline). The
@@ -22,14 +22,19 @@ sleeping Zs drawn over an animal on standby (`zs` in `critter-pose.js`,
 `CritterPose.zs` on the phone): their numbers and their answers go into
 `critter-zs-golden.json`, which the same test reads. And whether an idle
 happening is playing (`busy` in each pose file), which both apps' frame pacers
-read: `critter-busy-golden.json`.
+read, and whether one of its own talking gestures is (`gesturing`), which both
+hosts read before handing the pose Jarvis's phrase ends:
+`critter-busy-golden.json`. And the slow wander that replaces the shared sines
+(`noise`, `breathWave`) and the host's look-ahead for phrase ends (`aheadStep`):
+`critter-drift-golden.json`.
 
-    python3 tools/gen_critters.py          # write all four outputs
+    python3 tools/gen_critters.py          # write all the outputs
     python3 tools/gen_critters.py --check  # exit 1 if any is out of date
 
 CI and `jarvis-desktop/tests/faces.mjs` run `--check`.
 """
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -38,11 +43,12 @@ ROOT = Path(__file__).resolve().parent.parent
 CRITTERS = ROOT / "jarvis-desktop" / "critters"
 # Each animal: its face id (also its .sksl file name), and the name of its
 # shader constant on the phone. The desktop's copy is keyed by the face id.
-ANIMALS = [("redpanda", "RED_PANDA"), ("pygmyowl", "PYGMY_OWL"), ("seaotter", "SEA_OTTER"), ("monkey", "MONKEY")]
+ANIMALS = [("redpanda", "RED_PANDA"), ("pygmyowl", "PYGMY_OWL"), ("seaotter", "SEA_OTTER"), ("monkey", "MONKEY"),
+           ("robot", "ROBOT")]
 # The pose code, in load order: critter-pose.js holds the shared helpers and
 # the panda; each other animal's file registers itself with it.
 POSE_JS = [ROOT / "jarvis-desktop" / "src" / f
-           for f in ("critter-pose.js", "critter-owl.js", "critter-otter.js", "critter-monkey.js")]
+           for f in ("critter-pose.js", "critter-owl.js", "critter-otter.js", "critter-monkey.js", "critter-robot.js")]
 OUT_JS = ROOT / "jarvis-desktop" / "src" / "critters-gen.js"
 OUT_KT = (ROOT / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis"
           / "client" / "face" / "CritterShaders.kt")
@@ -55,6 +61,19 @@ OUT_ZS = OUT_GOLDEN.with_name("critter-zs-golden.json")
 # frame pacer on both apps reads: one line of 0s and 1s per animal, four
 # samples a second over the first 320 seconds and around a day-long clock.
 OUT_BUSY = OUT_GOLDEN.with_name("critter-busy-golden.json")
+
+# The desktop (WebGL) copy of each face is marched with MORE steps than the
+# phone's (`MARCH_STEPS` in jarvis-desktop/critters/<face>.sksl, which Android's
+# shader size limit sets - see docs/CRITTERS.md, "Drawing quality"): the PC has
+# no such limit, and a ray that ran out of steps is where the small faults are
+# (a dotted seam where the panda's tail crosses its cheek, a blue fringe round
+# the monkey's head). Chosen by measurement, not by hope: wrongly drawn pixels
+# against a 400-step reference, and the time to build the shader (which grows
+# with the step count) - the numbers are in docs/CRITTERS.md. The PHONE's copy
+# (CritterShaders.kt) always keeps the number in the .sksl, and
+# tools/shader_size.py measures that copy.
+DESKTOP_STEPS = {"redpanda": 64, "pygmyowl": 72, "seaotter": 96, "monkey": 64, "robot": 96}
+MARCH_LINE = re.compile(r"const int MARCH_STEPS = (\d+);")
 
 GLSL_HEAD = """#version 300 es
 precision highp float;
@@ -106,18 +125,21 @@ STATES = ["idle", "listening", "thinking", "speaking", "approval", "standby", "e
 MOMENTS = {
     # A blink starting (each animal blinks on its own clock), and one of the
     # double blinks.
-    "blink": {"redpanda": 4.0, "pygmyowl": 7.285, "seaotter": 5.45, "monkey": 3.465},
-    "double": {"redpanda": 54.9, "pygmyowl": 18.32, "seaotter": 24.26, "monkey": 6.71},
+    "blink": {"redpanda": 4.0, "pygmyowl": 7.285, "seaotter": 5.45, "monkey": 3.465, "robot": 2.595},
+    "double": {"redpanda": 54.9, "pygmyowl": 18.32, "seaotter": 24.26, "monkey": 6.71, "robot": 15.72},
     # The middle of each idle happening, in the order of its kinds.
     "happen": {
         "redpanda": [117.15, 81.4, 70.3, 150.1, 132.51],              # stretch, tail flick, scratch, hears L, R
         "pygmyowl": [85.13, 342.55, 306.45, 101.58, 133.49, 65.74],  # ruffle, wing L, R, tilt L, R, slow blink
         "seaotter": [101.83, 56.48, 23.65, 39.48, 163.71],           # face wash, roll L, R, kick, pebble rub
         "monkey": [5.26, 83.68, 101.51, 70.01, 17.96, 214.61],      # scratch, banana, kick, swing, look round, tail
+        "robot": [20.94, 69.74, 244.65, 52.35, 162.97, 101.947],     # fin flick, curious look, dip, mitten, squint, zip
     },
     # Half a second into each speaking gesture: a nod, a paw (wing) lifted, a tilt.
     "gesture": {"redpanda": [44.78, 52.85, 12.84], "pygmyowl": [64.77, 12.88, 16.7],
-                "seaotter": [18.64, 55.01, 65.06], "monkey": [3.09, 32.78, 127.06]},
+                "seaotter": [18.64, 55.01, 65.06], "monkey": [3.09, 32.78, 127.06],
+                # (the robot's five: a nod, the right mitten, the left, both, a tilt)
+                "robot": [2.97, 6.81, 8.53, 104.89, 102.9]},
 }
 # Clock values exactly representable as 32-bit floats (the phone's clock is
 # one): a day, and three. (Much past a week the phone's own clock only
@@ -258,6 +280,15 @@ def golden_cases(species):
         # Where the sleeping Zs rise from, with the host's own camera turn and zoom.
         cases.append({"species": sp, "state": "standby", "prev": "standby", "since": 9.0, "t": 33.3, "amp": 0.0,
                       "look": {}, "view": {"yaw": 0.4, "pitch": -0.15, "zoom": 1.3}})
+    # The new behaviours (critter-pose.js "New behaviours"): each input the
+    # host may pass, in the states it acts in, fully on and part way, under
+    # the options that switch it off or make it smaller.
+    for sp in species:
+        cases.extend(behaviour_cases(sp))
+        if sp != "robot":
+            cases.extend(lid_cases(sp))
+    if "robot" in species:
+        cases.extend(robot_cases())
     # The owl's orb kept clear of its head while the pointer turns the head
     # toward it (the push in critter-owl.js's clearOfHead is working here),
     # and coming up its side into the thinking circle.
@@ -268,6 +299,205 @@ def golden_cases(species):
         for since in (0.1, 0.5, 1.5, 3.0):
             cases.append({"species": "pygmyowl", "state": "thinking", "prev": "idle", "since": since,
                           "t": 44.0 + since, "amp": 0.0, "look": {}, "hist": {"prevAmp": 0.0}})
+    return cases
+
+
+# Where each animal's two cute idle moments start (clock, seconds): found by
+# scanning the pose code, like MOMENTS - if the timings change these stop
+# landing on a moment, so find new ones the same way (cuteAt, since 1e6).
+CUTE = {"redpanda": (102.082, 408.591), "pygmyowl": (173.461, 313.491),
+        "seaotter": (101.685, 403.501), "monkey": (87.92, 426.323), "robot": (130.566, 452.031)}
+
+
+def behaviour_cases(sp):
+    """The new behaviours' moments for one animal (see golden_cases)."""
+    cases = []
+    base = {"species": sp, "amp": 0.3, "look": {}}
+
+    def add(state, t, opts, since=20.0, prev=None, hist=None, amp=None):
+        c = dict(base, state=state, prev=prev or state, since=since, t=t, opts=opts)
+        if hist is not None:
+            c["hist"] = hist
+        if amp is not None:
+            c["amp"] = amp
+        cases.append(c)
+
+    # Listening nods in the owner's pauses, all three kinds, and under calm
+    # (smaller) and serious (none).
+    for n, ago in enumerate((0.35, 0.4, 0.5, 0.9)):
+        add("listening", 10.4 + n, {"heard": ago, "heardN": n})
+    add("listening", 10.4, {"heard": 0.4, "heardN": 0, "calm": 1})
+    add("listening", 10.4, {"heard": 0.4, "heardN": 0, "serious": 1})
+    # Gestures at Jarvis's phrase ends (in place of the random ones), and the
+    # host tracking phrases before the first one ends (no gesture).
+    for n, t in enumerate((20.0, 31.3, 44.6, 57.1, 63.9)):
+        add("speaking", t, {"phraseEnd": 0.3 + 0.2 * n, "phraseN": n + 1})
+    add("speaking", 20.0, {"phraseN": 0})
+    # A fact saved (a nod), a long answer ready (the orb swells), in idle and
+    # while speaking; none while waiting on you or asleep.
+    for st in ("idle", "speaking", "approval", "standby"):
+        add(st, 30.0, {"ackNod": 0.4, "ackGlow": 0.9})
+    # A focus session, fully and part way, and the stretch as it ends.
+    add("idle", 30.0, {"focus": 1})
+    add("idle", 77.3, {"focus": 0.5})
+    add("idle", 30.0, {"focusEnd": 1.2})
+    # Petting, in idle and listening, and switched off by still.
+    add("idle", 30.0, {"pet": 1, "petX": 0.5, "petDir": 1})
+    add("listening", 30.0, {"pet": 0.6, "petX": -0.8, "petDir": -0.5})
+    add("idle", 30.0, {"pet": 1, "petX": 0.5, "still": 1})
+    # Each owner's switch (jarvis_animal.SWITCHES) off, and part way.
+    add("listening", 10.4, {"heard": 0.4, "heardN": 0, "nods": 0})
+    add("idle", 30.0, {"ackNod": 0.4, "ackGlow": 0.9, "acks": 0.5})
+    add("idle", 30.0, {"focus": 1, "focus_buddy": 0})
+    add("idle", 30.0, {"focusEnd": 1.2, "focus_buddy": 0})
+    add("idle", 30.0, {"pet": 1, "petX": 0.5, "petting": 0})
+    # Goodbye and hello, part way; none of it while waiting on you (the
+    # host's cross-fade, as in a serious moment); nothing but the move out of
+    # view asleep; only a cross-fade under calm.
+    for g in (0.3, 0.7):
+        add("idle", 30.0, {"goodbye": g})
+    for h in (0.2, 0.6):
+        add("idle", 30.0, {"hello": h})
+    add("approval", 30.0, {"goodbye": 0.3})
+    add("standby", 30.0, {"goodbye": 0.5}, since=9.0)
+    add("idle", 30.0, {"goodbye": 0.5, "calm": 1})
+    # Variety: listening's and thinking's variants now and then, and the
+    # small reaction as waiting on you or something wrong arrives - the
+    # second arrival in a row never repeating the first's.
+    for i in range(8):
+        add("listening", 2000.3 + 7.7 * i, {"variety": 1})
+        add("thinking", 2000.3 + 7.7 * i, {"variety": 1})
+    for since in (0.3, 0.6):
+        add("approval", 40.0 + since, {"variety": 1}, since=since, prev="idle", hist={"prevAmp": 0.0}, amp=0.28)
+        add("error", 50.0 + since, {"variety": 1}, since=since, prev="idle", hist={"prevAmp": 0.0}, amp=0.0)
+        add("approval", 60.0 + since, {"variety": 1}, since=since, prev="idle", amp=0.28,
+            hist={"past": [{"state": "idle", "gap": 3.0, "amp": 0.0}, {"state": "approval", "gap": 2.0, "amp": 0.28},
+                           {"state": "idle", "gap": 9.0, "amp": 0.0}]})
+    # The two cute idle moments, part way through each (idle long enough),
+    # and switched off by the owner's switch, smaller under calm, and none
+    # when it has not been idle long.
+    for start in CUTE[sp]:
+        for x in (1.5, 2.6, 3.8):
+            add("idle", start + x, {}, since=1e6, amp=0.0)
+    add("idle", CUTE[sp][0] + 2.6, {"cute_moments": 0}, since=1e6, amp=0.0)
+    add("idle", CUTE[sp][1] + 2.6, {"cute_moments": 0.5}, since=1e6, amp=0.0)
+    add("idle", CUTE[sp][0] + 2.6, {"calm": 1}, since=1e6, amp=0.0)
+    add("idle", CUTE[sp][0] + 2.6, {}, since=100.0, amp=0.0)
+    # Added 2026-09-29 (the skeptical review): fewer idle happenings while
+    # Jarvis is not being used - each of the animal's happenings with
+    # `attention` 0 (thinned away or one of the quarter that stay, by its
+    # slot) and part way - and its gestures landing ON a phrase end handed
+    # over ahead of time (`phraseDue`: seconds until it, negative once past).
+    for t in MOMENTS["happen"][sp]:
+        add("idle", t, {"attention": 0}, since=99.0, amp=0.0)
+        add("idle", t, {"attention": 0.5}, since=99.0, amp=0.0)
+    for n, (t, due) in enumerate(((20.0, 0.35), (31.3, 0.0), (44.6, -0.2), (57.1, -0.5), (63.9, 0.5), (20.0, -1.4))):
+        add("speaking", t, {"phraseDue": due, "phraseN": n + 1})
+    add("speaking", 31.3, {"phraseDue": 0.0, "phraseN": 2, "calm": 1})
+    add("speaking", 31.3, {"phraseDue": 0.0, "phraseN": 2, "serious": 1})
+    # Added 2026-09-28 (the audit's fixes): a focus session under calm (its
+    # pose smaller), and a hello and a goodbye at an error (none of it).
+    add("idle", 30.0, {"focus": 1, "calm": 1})
+    add("idle", 77.3, {"focus": 1, "calm": 0.5})
+    add("error", 30.0, {"hello": 0.6})
+    add("error", 30.0, {"goodbye": 0.7})
+    return cases
+
+
+def lid_cases(sp):
+    """The painted eyelids (uLid, 2026-09-29; the robot has none): each state
+    that has one, settled and arriving, at several moments; woken into and
+    nodded off from; and switched off by a crisis-help moment. (Every state
+    is also in golden_cases above; these are the moments that show the lid
+    easing in and out.)"""
+    cases = []
+    base = {"species": sp, "amp": 0.0, "look": {}}
+    asleep9 = [{"state": "standby", "gap": 9.0, "amp": 0.0}, {"state": "idle", "gap": 20.0, "amp": 0.0}]
+
+    def add(state, prev, since, t, hist=None, opts=None, amp=None):
+        c = dict(base, state=state, prev=prev, since=since, t=t)
+        if amp is not None:
+            c["amp"] = amp
+        if hist is not None:
+            c["hist"] = hist
+        if opts is not None:
+            c["opts"] = opts
+        cases.append(c)
+
+    # Something went wrong arriving (the sloped, worried lid eases in), waiting
+    # on you arriving (the level one), a doze arriving and leaving.
+    for i, since in enumerate((0.0, 0.1, 0.25, 0.5, 1.0, 2.5)):
+        add("error", "idle", since, 300.0 + since, {"prevAmp": 0.0})
+        add("approval", "idle", since, 310.0 + since, {"prevAmp": 0.0}, amp=0.28)
+        add("banked", "idle", since, 320.0 + since, {"prevAmp": 0.0})
+        add("idle", "banked", since, 330.0 + since, {"prevAmp": 0.0})
+        add("idle", "error", since, 340.0 + since, {"prevAmp": 0.0})
+        add("error", "approval", since, 350.0 + since, {"prevAmp": 0.28})
+    # ...under calm and still (the lid is a settled look: the same amount).
+    for opts in ({"calm": 1}, {"still": 1}):
+        for since in (0.25, 1.0):
+            add("error", "idle", since, 360.0 + since, {"prevAmp": 0.0}, opts)
+            add("approval", "idle", since, 370.0 + since, {"prevAmp": 0.0}, opts, amp=0.28)
+    # Nodding off from each look (the lid comes down with the eyes, from the one it had).
+    for prev, past_amp in (("approval", 0.28), ("error", 0.0), ("idle", 0.0)):
+        awake = [{"state": prev, "gap": 20.0, "amp": past_amp}, {"state": "standby", "gap": 9.0, "amp": 0.0}]
+        for x in (0.5, 1.0, 1.7, 2.4, 3.2):
+            add("standby", prev, x, 380.0 + x, {"past": awake})
+    # Waking into each look (the heavy lid lifts after the eyes open).
+    for state in ("idle", "error", "approval", "banked"):
+        for x in (0.3, 0.6, 0.9, 1.3, 1.8, 2.6):
+            add(state, "standby", x, 400.0 + x, {"past": asleep9}, amp=0.28 if state == "approval" else 0.0)
+    # A crisis-help moment (serious) leaves the animal neutral: no lid at all,
+    # part way as the host eases the weight, and asleep or dozing.
+    for state in ("error", "approval", "banked", "standby"):
+        for w in (0.5, 1.0):
+            add(state, state, 20.0, 420.0, None, {"serious": w})
+    return cases
+
+
+def robot_cases():
+    """The robot's own moments (critter-robot.js): its zip part way (it
+    needs 10 s of rest, and none under calm), the gleam across its visor as
+    a polish ends, its hello and goodbye at their ends (out of view), the
+    eyes' pulse with a voice and none without, woken straight into waiting on
+    you (no reaction, only the eyes), and its phrase-end gestures mapped onto
+    its five kinds."""
+    cases = []
+    base = {"species": "robot", "amp": 0.3, "look": {}}
+
+    def add(state, t, opts, since=999.0, prev=None, hist=None, mouth=None):
+        c = dict(base, state=state, prev=prev or state, since=since, t=t, opts=opts)
+        if hist is not None:
+            c["hist"] = hist
+        if mouth is not None:
+            c["mouth"] = mouth
+        cases.append(c)
+
+    zip0 = MOMENTS["happen"]["robot"][5] - 1.2
+    for x in (0.2, 0.7, 1.2, 1.9, 2.5):
+        add("idle", zip0 + x, {})
+    add("idle", zip0 + 1.2, {}, since=5.0)
+    add("idle", zip0 + 1.2, {"calm": 1})
+    add("idle", zip0 + 1.2, {"calm": 0.4})
+    add("idle", zip0 + 1.2, {"attention": 0})
+    add("idle", zip0 + 1.2, {"attention": 0.5})
+    for x in (2.5, 2.8, 3.1):
+        add("idle", CUTE["robot"][1] + x, {}, since=1e6)
+    for o in ({"goodbye": 1}, {"hello": 0}, {"goodbye": 0.9, "still": 1}, {"hello": 0.1, "serious": 1}):
+        add("idle", 30.0, o)
+    voice = {"open": 0.9, "wide": 0.4, "round": 0.1}
+    add("speaking", 12.0, {}, mouth=voice)
+    add("speaking", 12.0, {})
+    add("idle", 12.0, {}, mouth=voice)
+    for x in (0.3, 0.9):
+        add("approval", 160.0 + x, {"variety": 1}, since=x, prev="standby",
+            hist={"past": [{"state": "standby", "gap": 9.0, "amp": 0.0}, {"state": "idle", "gap": 20.0, "amp": 0.0}]})
+    for n in range(6):
+        add("speaking", 20.0 + 3 * n, {"phraseEnd": 0.5, "phraseN": n})
+    # Added 2026-09-28: its hello's fin flick, awake, asleep and dozing (none
+    # but awake), and waiting on you (none of the hello at all).
+    for st in ("idle", "standby", "banked", "approval"):
+        add(st, 30.0, {"hello": 0.6})
     return cases
 
 
@@ -318,13 +548,57 @@ process.stdout.write(JSON.stringify(out, (k, v) =>
 BUSY_TIMES = [round(k * 0.25 + 0.013, 3) for k in range(1280)] + \
              [round(86400 + k * 0.25 + 0.013, 3) for k in range(160)]
 
+# Whether a moment the host hands in is playing (critter-pose.js
+# momentsBusy, the frame pacer's): a stroke, a fact's nod, the long answer's
+# glow and the focus stretch, inside and just outside their lengths, in the
+# states they play in and those they do not, and under still and serious.
+MOMENT_CASES = [
+    {"state": st, "opts": o}
+    for st in ("idle", "speaking", "approval", "standby")
+    for o in ({}, {"pet": 0.4}, {"pet": 1, "petting": 0}, {"ackNod": 0.5}, {"ackNod": 1.3}, {"ackNod": 0.5, "acks": 0},
+              {"ackGlow": 1.7}, {"ackGlow": 1.9}, {"focusEnd": 3.1}, {"focusEnd": 3.3}, {"focusEnd": 1, "focus_buddy": 0},
+              {"pet": 1, "still": 1}, {"ackNod": 0.5, "serious": 1}, {"ackNod": 0.5, "calm": 1})
+]
+
+# The slow wander (critter-pose.js noise(), breathWave()) and the host's side
+# of gestures that land on phrase ends (aheadStep): their answers at fixed
+# moments - inside one period, past it, and days on - which the phone's
+# CritterPoseTest checks its copies against (critter-drift-golden.json).
+OUT_DRIFT = OUT_GOLDEN.with_name("critter-drift-golden.json")
+DRIFT_TIMES = [0.0, 0.7, 1.9, 3.3, 5.1, 12.34, 47.6, 133.05, 1023.5, 1024.25, 4095.5, 4096.25, 4100.0, 8191.75, 86400.25, 259200.375]
+AHEAD_STEPS = [  # (dt, next): a clip's ends coming up, one too late, one too soon after the last, a gap of nothing
+    (0.0, None), (0.016, 1.4), (0.016, 0.95), (0.016, 0.88), (0.016, 0.87), (0.016, 0.5), (0.5, 3.0), (0.5, 2.9),
+    (0.016, 0.7), (0.016, 0.6), (0.3, 0.8), (1.2, 0.85), (0.016, 0.66), (0.016, None), (2.5, 0.9), (0.016, 0.64),
+]
+DRIFT_NODE = r"""
+for (const f of process.argv.slice(1)) require(f);
+const C = globalThis.CritterPose, U = C.util;
+const inp = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+const out = { noise: [], breath: [], ahead: [], ahead_limits: C.AHEAD, breath_var: null };
+for (const seed of [8, 17, 26, 34, 42]) for (const scale of [4, 8, 16, 32]) for (const t of inp.times) {
+  out.noise.push({ t, seed, scale, v: U.noise(t, seed, scale) });
+}
+for (const k of [171, 205, 256, 300]) for (const t of inp.times) out.breath.push({ t, k, seed: 10, v: U.breathWave(t, k, 10) });
+let rec = null;
+for (const [dt, next] of inp.ahead) { rec = C.aheadStep(rec, dt, next); out.ahead.push({ dt, next, n: rec.n, due: rec.due }); }
+process.stdout.write(JSON.stringify(out, (k, v) => typeof v === 'number' ? Math.round(v * 1e6) / 1e6 : v, 1) + '\n');
+"""
+
 BUSY_NODE = r"""
 for (const f of process.argv.slice(1)) require(f);
 const C = globalThis.CritterPose;
-const times = JSON.parse(require('fs').readFileSync(0, 'utf8'));
-const out = { happening_s: C.HAPPENING_S, times, busy: {} };
+const inp = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+const times = inp.times;
+const out = { happening_s: C.HAPPENING_S, times, busy: {}, gesture_s: C.util.GESTURE_S, gesturing: {},
+              moments: inp.moments.map(c => ({ ...c, busy: C.momentsBusy(c.state, c.opts) })) };
+out.busy_att0 = {};
 for (const sp of Object.keys(C.species)) {
   out.busy[sp] = times.map(t => C.species[sp].busy('idle', t) ? '1' : '0').join('');
+  // ...and with the owner not using Jarvis (`attention` 0): about one in four.
+  out.busy_att0[sp] = times.map(t => C.species[sp].busy('idle', t, undefined, { attention: 0 }) ? '1' : '0').join('');
+  // Whether one of its own talking gestures plays (the host's check before
+  // it hands the pose Jarvis's phrase ends part way into an answer).
+  out.gesturing[sp] = times.map(t => C.species[sp].gesturing(t) ? '1' : '0').join('');
   // Never outside idle.
   for (const st of ['listening', 'thinking', 'speaking', 'approval', 'standby', 'error', 'banked'])
     if (times.some(t => C.species[sp].busy(st, t))) throw new Error(sp + ' is busy in ' + st);
@@ -348,7 +622,11 @@ def animals():
 def build():
     js_rows, kt_rows = [], []
     for face_id, const, body in animals():
-        glsl = GLSL_HEAD + body + GLSL_MAIN
+        steps = DESKTOP_STEPS[face_id]
+        if len(MARCH_LINE.findall(body)) != 1 or int(MARCH_LINE.search(body).group(1)) > steps:
+            sys.exit(f"{face_id}: needs exactly one 'const int MARCH_STEPS = N;' with N no more than its "
+                     f"DESKTOP_STEPS ({steps})")
+        glsl = GLSL_HEAD + MARCH_LINE.sub(f"const int MARCH_STEPS = {steps};", body) + GLSL_MAIN
         agsl = body + AGSL_MAIN
         if '"""' in agsl or "$" in agsl:
             sys.exit(f"{face_id}: the shader must not contain a triple quote or a dollar sign: "
@@ -378,9 +656,12 @@ def build():
                          capture_output=True, text=True, check=True)
     zs = subprocess.run(["node", "-e", ZS_NODE, *pose_files], input=json.dumps(zs_cases()),
                         capture_output=True, text=True, check=True)
-    busy = subprocess.run(["node", "-e", BUSY_NODE, *pose_files], input=json.dumps(BUSY_TIMES),
+    busy = subprocess.run(["node", "-e", BUSY_NODE, *pose_files], input=json.dumps({"times": BUSY_TIMES, "moments": MOMENT_CASES}),
                           capture_output=True, text=True, check=True)
-    return {OUT_JS: js, OUT_KT: kt, OUT_GOLDEN: res.stdout, OUT_ZS: zs.stdout, OUT_BUSY: busy.stdout}
+    drift = subprocess.run(["node", "-e", DRIFT_NODE, *pose_files],
+                           input=json.dumps({"times": DRIFT_TIMES, "ahead": AHEAD_STEPS}),
+                           capture_output=True, text=True, check=True)
+    return {OUT_JS: js, OUT_KT: kt, OUT_GOLDEN: res.stdout, OUT_ZS: zs.stdout, OUT_BUSY: busy.stdout, OUT_DRIFT: drift.stdout}
 
 
 def main():

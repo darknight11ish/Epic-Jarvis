@@ -549,6 +549,71 @@ def t_say():
           and isinstance(st["available"], bool))
 
 
+#: Every pace the built-in voice can be asked for (jarvis_voices.builtin_voice:
+#: an animal's Slower/Normal/Faster times the owner's own, 0.7225..1.3225 from
+#: the apps, and the hand-set `[voice] tts_speed` 0.5..2.0).
+PACES = (0.5, 0.7225, 0.8, 1.0, 1.15, 1.3225, 2.0)
+
+
+def t_pace_timing_follows_the_sound():
+    """The mouth's timing is worked out at the SAME speed Kokoro is asked to
+    speak at, whatever the pace and pitch (voice-speed check, 2026-09-28): a
+    timing made at one speed and played at another would put every mouth
+    shape in the wrong place, more so the longer the sentence."""
+    labels = ["", "m", "ˈ", "u", "n", ",", " ", "b", "i", "."]
+    base = np.array([4, 3, 1, 6, 3, 14, 0, 2, 5, 12], dtype=float)
+    real_sherpa = sys.modules.get("sherpa_onnx")
+    orig_begin = J.begin
+    sys.modules["sherpa_onnx"] = types.SimpleNamespace(GenerationConfig=lambda: types.SimpleNamespace(
+        sid=0, speed=1.0, silence_scale=0.2))
+    same, made, shut, bad = 0, 0, 0, []
+    try:
+        for pace in PACES:
+            for semis in (0.0, 2.0, 4.0, -3.0):
+                f = 2.0 ** (semis / 12)
+                # Kokoro's own lengths at the speed it is asked for: the
+                # pad and the pauses too (a mark or pad of 0 stays 0).
+                frames = np.where(base > 0, np.maximum(1, np.round(base / (pace / f))), 0).astype(int)
+                raw = _synthetic([frames], np.random.default_rng(7))
+                asked = []
+
+                def begin(text, sid, speed, *a, _fr=frames, **k):
+                    asked.append(round(float(speed), 6))
+                    return _fake_job([(labels, _fr)])
+                J.begin = begin
+                eng = FakeEngine(raw)
+                got = J.speak(eng, "Moon, bee.", 1, pace, semis, pitch_up=S.pitch_up,
+                              silence_scale=0.2, paths={}, wait=1.0)
+                spoke = [c[3] for c in eng.calls if c[0] == "config"]
+                if asked == [round(pace / f, 6)] and spoke == [round(pace / f, 4)]:
+                    same += 1
+                else:
+                    bad.append((pace, semis, asked, spoke))
+                if got is None or got[2] is None:
+                    bad.append((pace, semis, "no mouth"))
+                    continue
+                samples, rate, payload = got
+                tr = J.unpack(payload.split(";")[-1])
+                made += tr["n"] == J.frame_count(len(samples), rate)
+                # the "m" is shut where the sound has it (Kokoro's lead taken off)
+                _y, rm = J.scale_silence(raw[0], 24000, 0.2)
+                edges = np.concatenate(([0], np.cumsum(frames))) * J.KOKORO_FRAME
+                mid = (rm(float(max(0, edges[1] - J.SOUND_LEAD))) + rm(float(max(0, edges[2] - J.SOUND_LEAD)))) / 2
+                i = int(round(mid / f / 24000 * J.FPS))
+                shut += tr["open"][min(i, tr["n"] - 1)] < 0.05
+    finally:
+        J.begin = orig_begin
+        if real_sherpa is not None:
+            sys.modules["sherpa_onnx"] = real_sherpa
+        else:
+            sys.modules.pop("sherpa_onnx", None)
+    n = len(PACES) * 4
+    check(f"every pace ({PACES[0]}..{PACES[-1]}) and pitch: the timing is asked for the speed Kokoro "
+          f"speaks at, pace / f ({same}/{n})", same == n, str(bad[:3]))
+    check(f"... and each makes a mouth one frame per 10 ms of the final sound ({made}/{n})", made == n)
+    check(f"... with the 'm' shut where the sound has it ({shut}/{n})", shut == n)
+
+
 def t_ready_words():
     d = TMP / "tts"
     (d / "espeak-ng-data").mkdir(parents=True)
@@ -655,9 +720,14 @@ REAL_SENTENCES = [
     "Who's there? Oh, it's you!",
 ]
 VOICES = {"default": (0, 1.0, 0.0), "panda": (1, 1.0, 2.0), "owl": (2, 0.85, 1.0),
-          "otter": (4, 1.15, 3.0), "monkey": (6, 1.0, 1.0),
+          "otter": (4, 1.15, 3.0), "monkey": (6, 1.0, 1.0), "robot": (7, 1.15, 2.0),
           # The deepest an owner may make an animal (2026-09-28), at a quick pace.
-          "deep": (9, 1.15, -3.0)}
+          "deep": (9, 1.15, -3.0),
+          # The slowest and fastest paces the apps can pick (an animal's
+          # Slower/Faster times the owner's Slower/Faster), and the ends of
+          # the hand-set [voice] tts_speed (voice-speed check, 2026-09-28).
+          "slowest": (1, 0.7225, 2.0), "fastest": (4, 1.3225, 3.0),
+          "hand-slow": (2, 0.5, 1.0), "hand-fast": (0, 2.0, 0.0)}
 
 
 def _real_paths():

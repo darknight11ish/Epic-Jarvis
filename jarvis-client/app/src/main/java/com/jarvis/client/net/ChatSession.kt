@@ -273,6 +273,21 @@ class ChatSession(
 
     private val _openSettings = MutableStateFlow<String?>(null)
 
+    private val _faceTuningChange = MutableStateFlow<String?>(null)
+
+    /**
+     * "Make the animal sharper" by voice or chat (docs/JARVIS-API.md section
+     * 60): one of [AnimalOptions.DEVICE_CHANGES], read off the same
+     * `X-Jarvis-Route` header ([AnimalOptions.fromRoute]), or null. Per
+     * device, so the PC changed nothing: `MainActivity` applies it to this
+     * phone's own face settings once, then calls [consumeFaceTuningChange].
+     */
+    val faceTuningChange: StateFlow<String?> = _faceTuningChange.asStateFlow()
+
+    fun consumeFaceTuningChange() {
+        _faceTuningChange.value = null
+    }
+
     /**
      * "Open <a settings section>" by voice or chat
      * (`jarvis_settings_registry.py`, docs/JARVIS-API.md section 58.1): the
@@ -639,6 +654,8 @@ class ChatSession(
                         // through OpenPlace. Nothing is removed by it.
                         _openSettings.value = Schedule.openSettingsFromRoute(routeHeader)
                             ?: ForgetRange.openFromRoute(routeHeader)
+                        // Sharpness or frame rate, for this phone only.
+                        _faceTuningChange.value = AnimalOptions.fromRoute(routeHeader)
                         // "A cloud model could give this one a second
                         // look." (jarvis_router.choose(), gate "offer"):
                         // read the same way as [crisis] and [usedIds]

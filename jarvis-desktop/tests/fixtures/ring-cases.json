@@ -1,0 +1,1091 @@
+{
+ "note": "Golden numbers for the two still rings' colours (faces.html ringTone, face/FaceRings.kt tone). Regenerate with the script that wrote this only when the RULE changes on purpose; both apps are held to it.",
+ "rule": {
+  "lo": 3.2,
+  "hi": 5.5,
+  "boost": 4,
+  "temper": 5
+ },
+ "cases": [
+  {
+   "colour": "neutral-3",
+   "ground": "desktop dark",
+   "c": [
+    70,
+    86,
+    106
+   ],
+   "bg": [
+    4,
+    7,
+    12
+   ],
+   "tone": [
+    99,
+    112,
+    129
+   ],
+   "contrast": 4
+  },
+  {
+   "colour": "neutral-3",
+   "ground": "black",
+   "c": [
+    70,
+    86,
+    106
+   ],
+   "bg": [
+    0,
+    0,
+    0
+   ],
+   "tone": [
+    96,
+    110,
+    127
+   ],
+   "contrast": 4.03
+  },
+  {
+   "colour": "neutral-3",
+   "ground": "phone dark",
+   "c": [
+    70,
+    86,
+    106
+   ],
+   "bg": [
+    16,
+    20,
+    24
+   ],
+   "tone": [
+    105,
+    118,
+    135
+   ],
+   "contrast": 4
+  },
+  {
+   "colour": "neutral-3",
+   "ground": "mid",
+   "c": [
+    70,
+    86,
+    106
+   ],
+   "bg": [
+    122,
+    132,
+    148
+   ],
+   "tone": [
+    31,
+    38,
+    47
+   ],
+   "contrast": 4.04
+  },
+  {
+   "colour": "neutral-3",
+   "ground": "phone light",
+   "c": [
+    70,
+    86,
+    106
+   ],
+   "bg": [
+    232,
+    236,
+    240
+   ],
+   "tone": [
+    87,
+    102,
+    120
+   ],
+   "contrast": 4.94
+  },
+  {
+   "colour": "neutral-3",
+   "ground": "white",
+   "c": [
+    70,
+    86,
+    106
+   ],
+   "bg": [
+    255,
+    255,
+    255
+   ],
+   "tone": [
+    99,
+    113,
+    130
+   ],
+   "contrast": 4.98
+  },
+  {
+   "colour": "neutral-4",
+   "ground": "desktop dark",
+   "c": [
+    143,
+    163,
+    184
+   ],
+   "bg": [
+    4,
+    7,
+    12
+   ],
+   "tone": [
+    112,
+    128,
+    146
+   ],
+   "contrast": 4.99
+  },
+  {
+   "colour": "neutral-4",
+   "ground": "black",
+   "c": [
+    143,
+    163,
+    184
+   ],
+   "bg": [
+    0,
+    0,
+    0
+   ],
+   "tone": [
+    110,
+    125,
+    142
+   ],
+   "contrast": 4.99
+  },
+  {
+   "colour": "neutral-4",
+   "ground": "phone dark",
+   "c": [
+    143,
+    163,
+    184
+   ],
+   "bg": [
+    16,
+    20,
+    24
+   ],
+   "tone": [
+    117,
+    134,
+    152
+   ],
+   "contrast": 4.95
+  },
+  {
+   "colour": "neutral-4",
+   "ground": "mid",
+   "c": [
+    143,
+    163,
+    184
+   ],
+   "bg": [
+    122,
+    132,
+    148
+   ],
+   "tone": [
+    34,
+    38,
+    43
+   ],
+   "contrast": 4.03
+  },
+  {
+   "colour": "neutral-4",
+   "ground": "phone light",
+   "c": [
+    143,
+    163,
+    184
+   ],
+   "bg": [
+    232,
+    236,
+    240
+   ],
+   "tone": [
+    102,
+    116,
+    131
+   ],
+   "contrast": 4.03
+  },
+  {
+   "colour": "neutral-4",
+   "ground": "white",
+   "c": [
+    143,
+    163,
+    184
+   ],
+   "bg": [
+    255,
+    255,
+    255
+   ],
+   "tone": [
+    113,
+    128,
+    145
+   ],
+   "contrast": 4.04
+  },
+  {
+   "colour": "rose-4",
+   "ground": "desktop dark",
+   "c": [
+    255,
+    123,
+    134
+   ],
+   "bg": [
+    4,
+    7,
+    12
+   ],
+   "tone": [
+    195,
+    95,
+    105
+   ],
+   "contrast": 4.96
+  },
+  {
+   "colour": "rose-4",
+   "ground": "black",
+   "c": [
+    255,
+    123,
+    134
+   ],
+   "bg": [
+    0,
+    0,
+    0
+   ],
+   "tone": [
+    192,
+    93,
+    101
+   ],
+   "contrast": 4.99
+  },
+  {
+   "colour": "rose-4",
+   "ground": "phone dark",
+   "c": [
+    255,
+    123,
+    134
+   ],
+   "bg": [
+    16,
+    20,
+    24
+   ],
+   "tone": [
+    204,
+    101,
+    111
+   ],
+   "contrast": 4.98
+  },
+  {
+   "colour": "rose-4",
+   "ground": "mid",
+   "c": [
+    255,
+    123,
+    134
+   ],
+   "bg": [
+    122,
+    132,
+    148
+   ],
+   "tone": [
+    60,
+    29,
+    32
+   ],
+   "contrast": 4
+  },
+  {
+   "colour": "rose-4",
+   "ground": "phone light",
+   "c": [
+    255,
+    123,
+    134
+   ],
+   "bg": [
+    232,
+    236,
+    240
+   ],
+   "tone": [
+    179,
+    86,
+    94
+   ],
+   "contrast": 4.01
+  },
+  {
+   "colour": "rose-4",
+   "ground": "white",
+   "c": [
+    255,
+    123,
+    134
+   ],
+   "bg": [
+    255,
+    255,
+    255
+   ],
+   "tone": [
+    198,
+    95,
+    104
+   ],
+   "contrast": 4.01
+  },
+  {
+   "colour": "amber-4",
+   "ground": "desktop dark",
+   "c": [
+    255,
+    192,
+    64
+   ],
+   "bg": [
+    4,
+    7,
+    12
+   ],
+   "tone": [
+    158,
+    120,
+    44
+   ],
+   "contrast": 4.97
+  },
+  {
+   "colour": "amber-4",
+   "ground": "black",
+   "c": [
+    255,
+    192,
+    64
+   ],
+   "bg": [
+    0,
+    0,
+    0
+   ],
+   "tone": [
+    156,
+    117,
+    39
+   ],
+   "contrast": 4.99
+  },
+  {
+   "colour": "amber-4",
+   "ground": "phone dark",
+   "c": [
+    255,
+    192,
+    64
+   ],
+   "bg": [
+    16,
+    20,
+    24
+   ],
+   "tone": [
+    164,
+    127,
+    49
+   ],
+   "contrast": 4.98
+  },
+  {
+   "colour": "amber-4",
+   "ground": "mid",
+   "c": [
+    255,
+    192,
+    64
+   ],
+   "bg": [
+    122,
+    132,
+    148
+   ],
+   "tone": [
+    48,
+    36,
+    12
+   ],
+   "contrast": 4.02
+  },
+  {
+   "colour": "amber-4",
+   "ground": "phone light",
+   "c": [
+    255,
+    192,
+    64
+   ],
+   "bg": [
+    232,
+    236,
+    240
+   ],
+   "tone": [
+    145,
+    109,
+    36
+   ],
+   "contrast": 4
+  },
+  {
+   "colour": "amber-4",
+   "ground": "white",
+   "c": [
+    255,
+    192,
+    64
+   ],
+   "bg": [
+    255,
+    255,
+    255
+   ],
+   "tone": [
+    160,
+    120,
+    40
+   ],
+   "contrast": 4.03
+  },
+  {
+   "colour": "ice-3",
+   "ground": "desktop dark",
+   "c": [
+    79,
+    184,
+    220
+   ],
+   "bg": [
+    4,
+    7,
+    12
+   ],
+   "tone": [
+    58,
+    135,
+    163
+   ],
+   "contrast": 4.97
+  },
+  {
+   "colour": "ice-3",
+   "ground": "black",
+   "c": [
+    79,
+    184,
+    220
+   ],
+   "bg": [
+    0,
+    0,
+    0
+   ],
+   "tone": [
+    57,
+    132,
+    158
+   ],
+   "contrast": 4.97
+  },
+  {
+   "colour": "ice-3",
+   "ground": "phone dark",
+   "c": [
+    79,
+    184,
+    220
+   ],
+   "bg": [
+    16,
+    20,
+    24
+   ],
+   "tone": [
+    63,
+    142,
+    170
+   ],
+   "contrast": 4.99
+  },
+  {
+   "colour": "ice-3",
+   "ground": "mid",
+   "c": [
+    79,
+    184,
+    220
+   ],
+   "bg": [
+    122,
+    132,
+    148
+   ],
+   "tone": [
+    18,
+    41,
+    49
+   ],
+   "contrast": 4
+  },
+  {
+   "colour": "ice-3",
+   "ground": "phone light",
+   "c": [
+    79,
+    184,
+    220
+   ],
+   "bg": [
+    232,
+    236,
+    240
+   ],
+   "tone": [
+    53,
+    123,
+    147
+   ],
+   "contrast": 4.01
+  },
+  {
+   "colour": "ice-3",
+   "ground": "white",
+   "c": [
+    79,
+    184,
+    220
+   ],
+   "bg": [
+    255,
+    255,
+    255
+   ],
+   "tone": [
+    58,
+    136,
+    163
+   ],
+   "contrast": 4.01
+  },
+  {
+   "colour": "ember-4",
+   "ground": "desktop dark",
+   "c": [
+    255,
+    154,
+    92
+   ],
+   "bg": [
+    4,
+    7,
+    12
+   ],
+   "tone": [
+    179,
+    109,
+    68
+   ],
+   "contrast": 4.98
+  },
+  {
+   "colour": "ember-4",
+   "ground": "black",
+   "c": [
+    255,
+    154,
+    92
+   ],
+   "bg": [
+    0,
+    0,
+    0
+   ],
+   "tone": [
+    176,
+    106,
+    64
+   ],
+   "contrast": 4.98
+  },
+  {
+   "colour": "ember-4",
+   "ground": "phone dark",
+   "c": [
+    255,
+    154,
+    92
+   ],
+   "bg": [
+    16,
+    20,
+    24
+   ],
+   "tone": [
+    186,
+    115,
+    72
+   ],
+   "contrast": 4.96
+  },
+  {
+   "colour": "ember-4",
+   "ground": "mid",
+   "c": [
+    255,
+    154,
+    92
+   ],
+   "bg": [
+    122,
+    132,
+    148
+   ],
+   "tone": [
+    54,
+    33,
+    20
+   ],
+   "contrast": 4.01
+  },
+  {
+   "colour": "ember-4",
+   "ground": "phone light",
+   "c": [
+    255,
+    154,
+    92
+   ],
+   "bg": [
+    232,
+    236,
+    240
+   ],
+   "tone": [
+    163,
+    99,
+    59
+   ],
+   "contrast": 4.02
+  },
+  {
+   "colour": "ember-4",
+   "ground": "white",
+   "c": [
+    255,
+    154,
+    92
+   ],
+   "bg": [
+    255,
+    255,
+    255
+   ],
+   "tone": [
+    181,
+    109,
+    65
+   ],
+   "contrast": 4.02
+  },
+  {
+   "colour": "white",
+   "ground": "desktop dark",
+   "c": [
+    255,
+    255,
+    255
+   ],
+   "bg": [
+    4,
+    7,
+    12
+   ],
+   "tone": [
+    125,
+    126,
+    129
+   ],
+   "contrast": 4.97
+  },
+  {
+   "colour": "white",
+   "ground": "black",
+   "c": [
+    255,
+    255,
+    255
+   ],
+   "bg": [
+    0,
+    0,
+    0
+   ],
+   "tone": [
+    123,
+    123,
+    123
+   ],
+   "contrast": 4.96
+  },
+  {
+   "colour": "white",
+   "ground": "phone dark",
+   "c": [
+    255,
+    255,
+    255
+   ],
+   "bg": [
+    16,
+    20,
+    24
+   ],
+   "tone": [
+    131,
+    133,
+    135
+   ],
+   "contrast": 4.99
+  },
+  {
+   "colour": "white",
+   "ground": "mid",
+   "c": [
+    255,
+    255,
+    255
+   ],
+   "bg": [
+    122,
+    132,
+    148
+   ],
+   "tone": [
+    255,
+    255,
+    255
+   ],
+   "contrast": 3.78
+  },
+  {
+   "colour": "white",
+   "ground": "phone light",
+   "c": [
+    255,
+    255,
+    255
+   ],
+   "bg": [
+    232,
+    236,
+    240
+   ],
+   "tone": [
+    114,
+    114,
+    114
+   ],
+   "contrast": 4.05
+  },
+  {
+   "colour": "white",
+   "ground": "white",
+   "c": [
+    255,
+    255,
+    255
+   ],
+   "bg": [
+    255,
+    255,
+    255
+   ],
+   "tone": [
+    127,
+    127,
+    127
+   ],
+   "contrast": 4
+  },
+  {
+   "colour": "black",
+   "ground": "desktop dark",
+   "c": [
+    0,
+    0,
+    0
+   ],
+   "bg": [
+    4,
+    7,
+    12
+   ],
+   "tone": [
+    111,
+    111,
+    111
+   ],
+   "contrast": 4.02
+  },
+  {
+   "colour": "black",
+   "ground": "black",
+   "c": [
+    0,
+    0,
+    0
+   ],
+   "bg": [
+    0,
+    0,
+    0
+   ],
+   "tone": [
+    109,
+    109,
+    109
+   ],
+   "contrast": 4.06
+  },
+  {
+   "colour": "black",
+   "ground": "phone dark",
+   "c": [
+    0,
+    0,
+    0
+   ],
+   "bg": [
+    16,
+    20,
+    24
+   ],
+   "tone": [
+    117,
+    117,
+    117
+   ],
+   "contrast": 4.01
+  },
+  {
+   "colour": "black",
+   "ground": "mid",
+   "c": [
+    0,
+    0,
+    0
+   ],
+   "bg": [
+    122,
+    132,
+    148
+   ],
+   "tone": [
+    16,
+    17,
+    19
+   ],
+   "contrast": 5
+  },
+  {
+   "colour": "black",
+   "ground": "phone light",
+   "c": [
+    0,
+    0,
+    0
+   ],
+   "bg": [
+    232,
+    236,
+    240
+   ],
+   "tone": [
+    99,
+    100,
+    102
+   ],
+   "contrast": 4.99
+  },
+  {
+   "colour": "black",
+   "ground": "white",
+   "c": [
+    0,
+    0,
+    0
+   ],
+   "bg": [
+    255,
+    255,
+    255
+   ],
+   "tone": [
+    112,
+    112,
+    112
+   ],
+   "contrast": 4.95
+  },
+  {
+   "colour": "mid-grey",
+   "ground": "desktop dark",
+   "c": [
+    128,
+    128,
+    128
+   ],
+   "bg": [
+    4,
+    7,
+    12
+   ],
+   "tone": [
+    128,
+    128,
+    128
+   ],
+   "contrast": 5.11
+  },
+  {
+   "colour": "mid-grey",
+   "ground": "black",
+   "c": [
+    128,
+    128,
+    128
+   ],
+   "bg": [
+    0,
+    0,
+    0
+   ],
+   "tone": [
+    128,
+    128,
+    128
+   ],
+   "contrast": 5.32
+  },
+  {
+   "colour": "mid-grey",
+   "ground": "phone dark",
+   "c": [
+    128,
+    128,
+    128
+   ],
+   "bg": [
+    16,
+    20,
+    24
+   ],
+   "tone": [
+    128,
+    128,
+    128
+   ],
+   "contrast": 4.68
+  },
+  {
+   "colour": "mid-grey",
+   "ground": "mid",
+   "c": [
+    128,
+    128,
+    128
+   ],
+   "bg": [
+    122,
+    132,
+    148
+   ],
+   "tone": [
+    38,
+    38,
+    38
+   ],
+   "contrast": 4
+  },
+  {
+   "colour": "mid-grey",
+   "ground": "phone light",
+   "c": [
+    128,
+    128,
+    128
+   ],
+   "bg": [
+    232,
+    236,
+    240
+   ],
+   "tone": [
+    128,
+    128,
+    128
+   ],
+   "contrast": 3.33
+  },
+  {
+   "colour": "mid-grey",
+   "ground": "white",
+   "c": [
+    128,
+    128,
+    128
+   ],
+   "bg": [
+    255,
+    255,
+    255
+   ],
+   "tone": [
+    128,
+    128,
+    128
+   ],
+   "contrast": 3.95
+  }
+ ]
+}

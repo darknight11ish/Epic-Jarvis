@@ -116,8 +116,9 @@ export function faceVoiceView(status) {
   };
 }
 
-/** The four animal faces that have a voice of their own. */
-export const ANIMAL_FACES = Object.freeze(["redpanda", "pygmyowl", "seaotter", "monkey"]);
+/** The four animal faces, and the robot (counted as one here as everywhere,
+ *  2026-09-28), that have a voice of their own. */
+export const ANIMAL_FACES = Object.freeze(["redpanda", "pygmyowl", "seaotter", "monkey", "robot"]);
 
 /**
  * The one-time question the PC asks after an animal face is picked (the

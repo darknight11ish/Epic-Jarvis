@@ -23,6 +23,9 @@ class FaceCalmMotionTest {
 
     private fun advanced(calm: Boolean, state: FaceState, steps: Int): FaceFrame {
         val host = FaceHost()
+        // One idle frame first, so [state] is a change (the shake needs one):
+        // a host's first state is worn as it is, not changed to (FaceHost.adopt).
+        host.advance(1f / 60f, FaceState.IDLE, null, null, Bindings.DEFAULTS, Arc, calm)
         repeat(steps) {
             host.advance(1f / 60f, state, null, null, Bindings.DEFAULTS, Arc, calm)
         }

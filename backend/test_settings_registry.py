@@ -128,7 +128,9 @@ def t_sections_match_the_real_ui():
     # desktop's settings.html uses "appearance-card" for its own <section id>.
     # "security" and "voice" are named below too, defensively, since they are
     # never missing to begin with; anything else missing is a real drift.
-    ALLOWED_NO_KEY = {"security", "appearance-card", "voice"}
+    # "animal-options" (2026-09-28): on the phone the section is inside
+    # Appearance, so it maps to the Appearance row (SETTINGS_ITEM_INDEX).
+    ALLOWED_NO_KEY = {"security", "appearance-card", "voice", "animal-options"}
     phone_missing = [i for i in phone_missing if i not in ALLOWED_NO_KEY]
     check("every 'both'/'phone' section (bar the appearance-card id spelling) "
           "is a real SettingsScreen.kt item key", not phone_missing, phone_missing)
@@ -160,7 +162,7 @@ def _check_settings_item_index(kt: str):
     # phone's own item key "appearance" (docs/JARVIS-API.md section 58.1's
     # own note on this one intentional name mismatch) - checked against
     # "appearance" instead of expecting the wire id to appear verbatim.
-    ALIAS = {"appearance-card": "appearance"}
+    ALIAS = {"appearance-card": "appearance", "animal-options": "appearance"}
     wrong = []
     for key, declared_i in declared.items():
         real_i = real_index.get(ALIAS.get(key, key))

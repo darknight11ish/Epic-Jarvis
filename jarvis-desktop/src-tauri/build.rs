@@ -33,6 +33,9 @@ fn main() {
             // App lock and the widget: is the lock on, and "Approve in the
             // Jarvis bar" (apps security audit M3).
             "get_app_lock",
+            // App lock and "Hide memory lists", two yes/no answers: a face's
+            // nod on a saved fact never plays while either is on.
+            "get_lock_flags",
             "open_approval_in_quickbar",
             // A note on a proposal, and the controls for the turn already
             // running. `jarvis-link.js` invoked all five of these before any
@@ -230,6 +233,15 @@ fn main() {
             // approval card on the PC; adding is held on a stale link).
             "get_sky",
             "set_sky",
+            // "Animal options" (backend/animal.patch, 2026-09-28): "Keep the
+            // animal still" and the behaviour switches, shared with the
+            // phone - a read and ONE change at a time (Settings only; no card
+            // either way; turning one on is held on a stale link); and, from
+            // any window with jarvis-link, sending this computer's old Still
+            // to the PC once, only if it was on.
+            "get_animal",
+            "set_animal",
+            "migrate_animal_still",
             // Settings' "What asks first" (backend/asks-first.patch): every
             // action and whether it asks, in the PC's words; "Ask me first"
             // on ONE action of the short safe list (stricter at once, never

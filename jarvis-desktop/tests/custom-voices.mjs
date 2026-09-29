@@ -447,7 +447,7 @@ await check("the animal voice question: the PC's words as they are, or nothing",
   assert.equal(CV.faceOfferView(V.face_voice_off).show, false, "no offer: nothing shown");
   assert.equal(CV.faceOfferView(withOffer(V.face_voice_off, null)).show, false);
   assert.equal(CV.faceOfferView(withOffer(V.face_voice_off, { ...OFFER, face: "orbit" })).show, false,
-    "only the four animals have a voice of their own");
+    "only the animals and the robot have a voice of their own");
   assert.equal(CV.faceOfferView(withOffer(V.face_voice_off, { ...OFFER, keep: "" })).show, false);
   assert.equal(CV.faceOfferView({ voices: [] }).show, false, "an older PC: nothing shown");
   // The Rust checks the same shape for the Faces window.
@@ -514,8 +514,8 @@ const mindButtons = (page) => page.evaluate(() =>
   }));
 
 await check("change your mind: 'Use its own voice' after keep, 'Keep my voice' after use, nothing before an answer", async () => {
-  const st = withAnswers(["keep", "use", null, "keep"]);
-  assert.deepEqual(CV.animalVoicesView(st).animals.map((a) => a.answer), ["keep", "use", null, "keep"]);
+  const st = withAnswers(["keep", "use", null, "keep", null]);
+  assert.deepEqual(CV.animalVoicesView(st).animals.map((a) => a.answer), ["keep", "use", null, "keep", null]);
   const page = await open(st, {
     faceOfferAnswer: { ok: true, http: 200, message: "The Red Panda speaks in its own voice now.",
       face_voice: { enabled: true } },
@@ -535,6 +535,7 @@ await check("change your mind: 'Use its own voice' after keep, 'Keep my voice' a
     { text: "Keep my voice", disabled: false },
     null,
     { text: "Use its own voice", disabled: false },
+    null,
   ]);
   assert.deepEqual(first, [{ face: "redpanda", answer: "use" }]);
   assert.equal(said, "The Red Panda speaks in its own voice now.");
@@ -544,14 +545,14 @@ await check("change your mind: 'Use its own voice' after keep, 'Keep my voice' a
   const stale = await open(st, {}, { link: { stale: true } });
   const greyed = await mindButtons(stale);
   await stale.close();
-  assert.deepEqual(greyed.map((b) => b && b.disabled), [true, true, null, true], "greyed on a stale link (rule 4)");
+  assert.deepEqual(greyed.map((b) => b && b.disabled), [true, true, null, true, null], "greyed on a stale link (rule 4)");
 });
 
 await check("each animal's voice: the PC's rows, choices and words, from every real status", async () => {
   for (const [name, st] of Object.entries(V)) {
     const av = CV.animalVoicesView(st);
     assert.equal(av.show, true, `${name}: no animals`);
-    assert.deepEqual(av.animals.map((a) => a.face), ["redpanda", "pygmyowl", "seaotter", "monkey"], name);
+    assert.deepEqual(av.animals.map((a) => a.face), ["redpanda", "pygmyowl", "seaotter", "monkey", "robot"], name);
     assert.equal(av.voices.length, 11, name);
     assert.deepEqual(av.paces.map((p) => p.id), ["slower", "normal", "faster"], name);
     assert.deepEqual(av.pitch, { min: -3, max: 4, step: 0.5 }, name);
@@ -560,7 +561,8 @@ await check("each animal's voice: the PC's rows, choices and words, from every r
   }
   const own = CV.animalVoicesView(V.face_showing).animals;
   assert.deepEqual(own.map((a) => [a.speaker, a.semitones, a.pace, a.changed]),
-    [["1", 2, "normal", false], ["2", 1, "slower", false], ["3", 3, "faster", false], ["6", 1, "normal", false]]);
+    [["1", 2, "normal", false], ["2", 1, "slower", false], ["3", 3, "faster", false], ["6", 1, "normal", false],
+     ["7", 2, "faster", false]]);
   assert.equal(own[0].line, "Bella, 2 steps higher, at normal pace.");
   const panda = CV.animalVoicesView(V.animal_changed).animals[0];
   assert.deepEqual([panda.speaker, panda.semitones, panda.pace, panda.changed], ["3", -1.5, "faster", true]);
@@ -575,7 +577,7 @@ await check("each animal's voice: the PC's rows, choices and words, from every r
   assert.equal(CV.voiceReply(P("animal_bad"), WHERE).text,
     "The pitch must be from 3 steps deeper to 4 steps higher, in half steps.");
   assert.equal(CV.voiceReply(P("animal_try_bad"), WHERE).text,
-    "Choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey.");
+    "Choose the Red Panda, the Pygmy Owl, the Sea Otter, the Monkey or the Robot.");
   assert.deepEqual([2, -1.5, 0, 1, 0.5].map(CV.pitchWords),
     ["2 steps higher", "1.5 steps deeper", "Normal pitch", "1 step higher", "0.5 steps higher"]);
   assert.deepEqual([2, -1.5, 0].map(CV.pitchShort), ["+2", "-1.5", "0"]);
@@ -602,7 +604,7 @@ await check("each animal's voice: pick, slide, pace, Try it and Reset - at once,
     };
   });
   assert.equal(shown.hidden, false);
-  assert.deepEqual(shown.faces, ["redpanda", "pygmyowl", "seaotter", "monkey"]);
+  assert.deepEqual(shown.faces, ["redpanda", "pygmyowl", "seaotter", "monkey", "robot"]);
   assert.equal(shown.name, "Red Panda");
   assert.equal(shown.line, "Bella, 2 steps higher, at normal pace.");
   assert.equal(shown.voice, "1");
