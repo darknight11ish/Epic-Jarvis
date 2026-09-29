@@ -57,9 +57,10 @@ checks each push.
 
 1. Talk-to-type on the PC: one card to switch it on.
 2. Web search, weather and home status answers are read aloud.
-3. **The chatbot driver:** Gemini first, **through its website, driven
-   openly** (no hiding from bot detection - a request for ban-avoidance
-   tactics was declined), with **a spare Google account** used only by
+3. **The chatbot driver:** Gemini first, **through its website**
+   (~~driven openly, no hiding from bot detection, ban-avoidance tactics
+   declined~~ - **reversed by the owner on 2026-09-29**, see `CLAUDE.md`
+   "Stealth on for everything"), with **a spare Google account** used only by
    Jarvis; **versatile** (an adapter per chatbot, more later, each with the
    owner's OK); **one-card limited and two-card full versions**;
    **built first**.

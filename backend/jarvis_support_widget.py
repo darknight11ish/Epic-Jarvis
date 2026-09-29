@@ -12,12 +12,14 @@ the same "needs the owner" words for captchas, sign-in pages and "unusual
 activity" pages. Design: docs/CHATBOT-DRIVER-DESIGN.md, "Customer-support
 chats", section 2.
 
-DRIVEN OPENLY, as the base's docstring says, in code: a real, VISIBLE
-window with Playwright's own defaults. No stealth plug-in, no change to how
-the browser presents itself, no script injected into the page, no proxy,
-no captcha solving, no retrying to get past a limit. At a captcha, a
-sign-in page or an "unusual activity" page, status() says so and nothing
-else happens; jarvis_support pauses and asks the owner.
+A REAL, VISIBLE WINDOW, as the base's docstring says, in code: Playwright's
+own defaults, the default wherever the owner may have to take over. The
+owner reversed "driven openly, nothing that hides it" on 2026-09-29 (stealth
+is on for Jarvis's browsers; the ban risk is accepted), but this file writes
+no fingerprint-spoofing of its own. Still true: no script injected into the
+page, no proxy, no captcha solving, no retrying to get past a limit. At a
+captcha, a sign-in page or an "unusual activity" page, status() says so and
+nothing else happens; jarvis_support pauses and asks the owner.
 
 WHAT IT CLICKS: the message box, the chat's Send button, and - only when
 jarvis_support's driver picks one whose label is exactly on screen, after

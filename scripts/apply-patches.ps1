@@ -1055,7 +1055,7 @@ $SHIPPED = @(
     'jarvis_projects.py'         # projects.patch: projects, life benchmarks and their numbers, projects.db; jarvis_quick.py (already SHIPPED) calls it for "log 5 km run"
     'jarvis_chatbot_gemini.py'   # the Gemini website adapter: a visible browser window, typed at a person's pace, stops at any captcha or sign-in page; needs Playwright (not installed by this script)
     'jarvis_chatbot_routes.py'   # chatbot-routes.patch: GET /api/chatbot/status, POST /api/chatbot/start (ONE card), /stop and /limits (a new card)
-    # --- more chatbot websites, driven the same open way (2026-09-28, "the chatbot driver becomes versatile"); reached through chatbot-routes.patch ---
+    # --- more chatbot websites, in a visible window the same way (2026-09-28, "the chatbot driver becomes versatile"); reached through chatbot-routes.patch ---
     'jarvis_chatbot_web.py'      # what every website adapter shares: the visible window, the typing, the host lock, every "needs you" page, sign-in and self-check; jarvis_chatbot.py loads it, and it loads the site files below
     'jarvis_chatbot_chatgpt.py'  # ChatGPT (chatgpt.com): a thin site file - its selectors, host and words; its own profile and spare account
     'jarvis_chatbot_claude.py'   # Claude (claude.ai): a thin site file

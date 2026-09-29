@@ -4,9 +4,11 @@ Status (corrected 2026-09-28): **built, reachable from both apps, not yet
 tried against the real sites.** The core (`backend/jarvis_chatbot.py`), its
 routes (`backend/jarvis_chatbot_routes.py`) and both apps' screens
 (`docs/JARVIS-API.md` section 87); Gemini's website adapter
-(`backend/jarvis_chatbot_gemini.py`, driven openly as the owner chose).
+(`backend/jarvis_chatbot_gemini.py`, in a visible window as the owner chose;
+the 2026-09-28 "driven openly" rule was **reversed on 2026-09-29** - see
+"Stealth is on" below).
 Since "the chatbot driver becomes versatile" (owner, 2026-09-28), eight
-more websites are built the same open way over one shared base
+more websites are built the same way (a visible window) over one shared base
 (`backend/jarvis_chatbot_web.py`): ChatGPT, Claude, Copilot, Perplexity,
 DeepSeek, Grok, Le Chat and Meta AI, each with its own spare account and
 self-check, none yet tried against its real site (section 87.5); the API
@@ -282,15 +284,49 @@ key is entered on the PC only, like the web-search keys.
 8. **Second-card mode,** measured on the owner's PC.
 9. **The new-feature audit** (bugs, both apps, fit).
 
+## Stealth is on (owner, 2026-09-29 - reverses "driven openly")
+
+On 2026-09-28 the owner chose to drive chatbot and support websites "openly"
+(no hiding from the site's bot detection) and a request for "tactics that
+help avoid bans" was declined. **On 2026-09-29 the owner reversed this**,
+asked several times and after being told the ban risk each time: Jarvis's
+browsers - including the new Obscura headless browser (Apache-2.0) with its
+`--stealth` mode - run with stealth ON for everything.
+
+- **Changed:** the "driven openly" rule, the refusal of ban-avoidance
+  tactics, and the card notes' promise that Jarvis "never hides that it is a
+  program" and "never changes how the browser looks". The cards no longer
+  say it; they still name the company's terms and that the account may be
+  blocked or closed.
+- **The visible browser stays the default** for the chatbot driver and
+  wherever the owner may have to take over (a captcha, a sign-in). It is a
+  real browser (Playwright's Chromium or Edge, `headless=False`), and Jarvis
+  writes no fingerprint-spoofing of its own for it. The headless engine that
+  carries the stealth is separate code (`backend/jarvis_browser_engine*.py`).
+- **Unchanged:** Jarvis never solves a captcha (it hands it to the owner:
+  the PC window or "Solve it here"); no proxy and no proxy service; nothing
+  private (email, files, credentials, memory) goes into a chat or page; every
+  card and approval rule; identity checks in support chats go to the owner;
+  and if the agent asks whether it is talking to a bot, Jarvis never claims
+  to be human - it pauses and asks the owner.
+- **The ban risk is real and accepted.** A spare account used only by Jarvis
+  stays as advice, so a ban cannot touch the owner's own account.
+- Tests: `test_chatbot_gemini.py`, `test_chatbot_sites.py`,
+  `test_support_widget.py` and `test_handoff.py` used to fail on any stealth,
+  user-agent or webdriver word; they now check what is still true (no proxy
+  code, no captcha-solving code, no spoofing of Jarvis's own in the visible
+  browser, and cards that promise nothing about hiding).
+
 ## The owner's answers (2026-09-28)
 
-- **Gemini first, through the website, driven openly** (option b, against
-  the recommendation, with the risk understood). Jarvis types into
+- **Gemini first, through the website** (option b, against the
+  recommendation, with the risk understood). Jarvis types into
   gemini.google.com in a visible browser window at human pace; it never
-  hides that it is automated, never changes its browser fingerprint, never
   solves or skips a captcha, and stops and asks the owner if a login check,
-  captcha or "unusual activity" page appears. A request for ban-avoidance
-  tactics was declined.
+  captcha or "unusual activity" page appears. ~~It was "driven openly": it
+  never hides that it is automated and never changes its browser
+  fingerprint. A request for ban-avoidance tactics was declined.~~
+  **Reversed 2026-09-29, see "Stealth is on" below.**
 - This changes parts of the design above: the "API client" steps become a
   browser driver (Playwright on the PC, one browser profile used only for
   this), the cost cap becomes a turn and time cap (for the websites; the
@@ -517,7 +553,9 @@ plain word match as well as the driver), Jarvis sends nothing, **pauses and
 hands the question to the owner**, who answers in the window (owner,
 2026-09-28). The driver's instructions forbid it from saying it is a person
 or the owner "in person". If the agent refuses to continue, Jarvis stops and
-offers Take over. The site's bot detection is never dodged either way.
+offers Take over. (Until 2026-09-29 the design said the site's bot detection
+is never dodged; the owner reversed that - see "Stealth is on" below. Jarvis
+still never claims to be human.)
 
 ### 5. Offers and promises
 
@@ -595,8 +633,8 @@ widget changes its layout (the general check, then a pause with a reason).
 
 ### The owner's answers (2026-09-28)
 
-- **Jarvis sends the messages itself** (human speed, never dodging bot
-  detection; no opening AI line - see §4), and each
+- **Jarvis sends the messages itself** (human speed; ~~never dodging bot
+  detection~~ - reversed 2026-09-29; no opening AI line - see §4), and each
   support card names that company's terms risk before the owner approves.
 - **Identity checks are always handed to the owner** (last four digits of a
   card, security questions, codes) - never answered by Jarvis, never on a card.
@@ -627,7 +665,7 @@ text and Perkins Coie's summary.
 The owner's decision (CLAUDE.md, "A captcha can be handed to the owner's
 phone"), item 2 of the build queue. Every website adapter already stops at a
 captcha, a sign-in page or an "unusual activity" page and asks the owner
-(section 1, "driven openly"); until now the only place to deal with it was
+(section 1); until now the only place to deal with it was
 the window on the PC. `jarvis_handoff.py` (JARVIS-API §87.8) adds the phone:
 
 - **The alert** names the site and the reason only, on its own channel,
