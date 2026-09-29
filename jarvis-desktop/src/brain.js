@@ -5439,7 +5439,18 @@ function paintChatbot() {
   } else if (v.anyBuilt) {
     out.push(el("p", "empty", "No conversation yet."));
   }
+  // The poll repaints this box every few seconds while a conversation runs;
+  // a keyboard user sitting on Pause or Stop was thrown back to the page each
+  // time. Note which button had focus and give it back (bug audit 2026-09-29).
+  const focusedLabel = box.contains(document.activeElement)
+    && document.activeElement.closest(".row-actions")
+    ? document.activeElement.textContent : null;
   box.replaceChildren(...out);
+  if (focusedLabel) {
+    const again = [...box.querySelectorAll(".row-actions button")]
+      .find((b) => b.textContent === focusedLabel);
+    if (again) again.focus();
+  }
   paintChatbotLimits(v, s);
   if (showCompare) paintCompareLog(c);
   else paintChatbotLog(s);
@@ -6579,7 +6590,14 @@ async function loadGoals() {
 /** The working copy of a draft's plan - made once, from what the PC sent,
  *  then edited in place so typing does not get wiped by the next read. */
 function workingPlan(goal) {
-  if (!draftPlans.has(goal.id)) draftPlans.set(goal.id, goal.plan.map((s) => ({ ...s })));
+  if (!draftPlans.has(goal.id)) {
+    const copy = goal.plan.map((s) => ({ ...s }));
+    // While the private lists are hidden the PC sends the steps with their
+    // words taken out. Keeping THAT copy meant the blanks stayed after Show
+    // and Accept refused an empty plan (bug audit 2026-09-29). Not kept.
+    if (goal.hidden) return copy;
+    draftPlans.set(goal.id, copy);
+  }
   return draftPlans.get(goal.id);
 }
 

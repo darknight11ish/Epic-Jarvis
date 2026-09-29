@@ -885,6 +885,19 @@ await check("a pasted task says so; pasting sends the blocks", async () => {
   assert.equal(said, APP_WORDS.paste_empty);
 });
 
+await check("after a pasted change goes through, the box is empty (a second press must not add it twice)", async () => {
+  // Bug audit 2026-09-29: the repaint that follows every change redrew the
+  // box with the same change still in it, because the text was dropped after.
+  const page = await appPage(appObj());
+  await openTask(page, "Rename the header");
+  await page.locator("#projects-paste").fill("<<<FILE src/App.tsx>>>\nexport const x = 1;\n<<<END>>>");
+  await page.locator("#projects-paste-go").click();
+  await page.waitForTimeout(500);
+  const left = await page.locator("#projects-paste").inputValue();
+  await page.close();
+  assert.equal(left, "");
+});
+
 await check("merge waiting: the task says so, Merge and paste are greyed, another task's Merge too", async () => {
   const app = appObj({ merge: { waiting: T1, last: null } });
   app.tasks[0].waiting = true;
