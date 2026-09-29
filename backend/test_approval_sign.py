@@ -150,8 +150,11 @@ def t_the_frozen_vectors_hold():
     check("an object with no text, or a text that is not text, is empty",
           D.detail_text({"detail": {"to": "x"}}) == "" and D.detail_text({"detail": {"text": 5}}) == ""
           and D.detail_text({"detail": 5}) == "" and D.detail_text({}) == "")
-    check("no notice: the title is the shared fallback",
-          D.card_title({"action": "pair_device"}) == "Jarvis wants to connect a new device")
+    check("no notice: the title is the generic line the apps show (never a known action's phrase)",
+          D.card_title({"action": "pair_device"}) == 'Jarvis wants your OK for "pair device"',
+          D.card_title({"action": "pair_device"}))
+    check("no notice, no action: the shared no-action title",
+          D.card_title({}) == "Jarvis is asking for your approval", D.card_title({}))
     msg = D.sign_message("a1", "send_email", "AAECAwQFBgcICQoLDA0ODw", "ab" * 32)
     check("the message is magic, id, action, nonce, hash split by 0x00",
           msg == b"jarvis-approve-v1\x00a1\x00send_email\x00AAECAwQFBgcICQoLDA0ODw\x00" + b"ab" * 32)

@@ -1838,10 +1838,14 @@ def card_title(row) -> str:
     notice = row.get("notice") if isinstance(row.get("notice"), dict) else {}
     title = notice.get("title")
     if isinstance(title, str) and title.strip():
-        return title.strip()
+        return title    # as sent: the phone shows and hashes it unchanged (a blank one falls back)
+    # A row with NO notice: the apps show the generic line built from the
+    # action's name (the phone's CardWords.fallbackTitle), never the fixed
+    # phrase title_for() gives a known action - so hash what they show.
     try:
-        import jarvis_card_words
-        return str(jarvis_card_words.title_for(row.get("action")))
+        import jarvis_card_words as W
+        name = W._name(str(row.get("action") or ""))
+        return W.FALLBACK.format(name=name) if name else W.NO_ACTION
     except Exception:
         return ""
 

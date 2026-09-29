@@ -85,10 +85,13 @@ ROWS = [
      {"id": "c3", "action": "send_email",
       "notice": {"title": "Jarvis wants to send an email"},
       "detail": "Plain words"}),
-    ("no notice: the title is the shared fallback for the action",
+    ("no notice: the title is the generic line built from the action name",
      {"id": "d4", "action": "pair_device", "detail": {"text": "x"}}),
-    ("a blank notice title falls back the same way",
+    ("a blank notice title falls back the same way (the generic line)",
      {"id": "e5", "action": "register_approval_key", "notice": {"title": "  "}}),
+    ("a notice title is used exactly as sent, spaces and all",
+     {"id": "i9", "action": "send_email", "notice": {"title": " Padded title "},
+      "detail": {"text": "x"}}),
     ("a numeric id is its text",
      {"id": 12, "action": "run_shell_on_host", "notice": {"title": "Jarvis wants to run a command"},
       "detail": {"command": "dir"}}),
@@ -127,8 +130,10 @@ def build() -> dict:
                      "docs/JARVIS-API.md section 91). Do not edit by hand."),
         "rule": {
             "words_hash": ("lowercase hex SHA-256 (UTF-8) of id, action, title and text joined "
-                           "by the byte 0x1F; title is the notice's title, or the shared "
-                           "fallback for the action when there is none; text is detail.text "
+                           "by the byte 0x1F; title is the notice's title, or - when there is "
+                           "none - the generic line the apps show, 'Jarvis wants your OK for \"<the "
+                           "action's name as words>\"' (never a known action's fixed phrase); "
+                           "text is detail.text "
                            "when detail is an object with text, the detail itself when it is "
                            "plain text, else the empty string"),
             "separator": "0x1f",
