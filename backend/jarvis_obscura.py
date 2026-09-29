@@ -129,11 +129,10 @@ PROJECT_URL = "https://github.com/h4ckf0r0day/obscura"
 #: The Windows archive with rendering AND stealth (Obscura's release workflow
 #: names its archives obscura-x86_64-windows[-stealth|-no-render].zip).
 ASSET = "obscura-x86_64-windows-stealth.zip"
-#: The release the install line downloads. The newest tag the repository shows
-#: (git ls-remote --tags, read 2026-09-29: v0.1.1 ... v0.2.3), and its own
-#: release workflow at that tag names the archive ASSET. NOT verified: that the
-#: release page really carries the asset (the GitHub API was not reachable from
-#: where this was written) - the owner sees a plain error if it does not.
+#: The release the install line downloads: v0.2.3, the newest release on
+#: https://github.com/h4ckf0r0day/obscura/releases (dated 2026-09-20, marked
+#: Latest, read 2026-09-29), whose asset list carries this archive by this exact
+#: name (read through a page reader, not by downloading it).
 RELEASE_TAG = "v0.2.3"
 DOWNLOAD_URL = PROJECT_URL + "/releases/download/" + RELEASE_TAG + "/" + ASSET
 #: The SHA-256 of that archive as the release page LISTS it next to the file
