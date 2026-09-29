@@ -3319,6 +3319,12 @@ class _TurnWatch:
         # ...in Jarvis Live (the app's `live: true` on a spoken message):
         # the Live note, and side talk (jarvis_live.MODEL_NOTE).
         self.live = False
+        # A question about the owner's screen (jarvis_screen.py, the owner's
+        # decision of 2026-09-28): the app's `screen` mark on the newest
+        # message - "look" (the look this PC holds) or "phone" (the phone's
+        # own screen picture rides on it). "" otherwise. The words come from
+        # THIS PC's own reading (with_screen), never from the app.
+        self.screen = ""
         # A system message the APP sent (security audit M1). Read only off the
         # request as it arrived: `messages` without it may already hold the
         # server's own system turns (the rules, recalled facts).
@@ -3334,6 +3340,7 @@ class _TurnWatch:
             i = max(j for j, m in enumerate(raw) if m.get("role") == "user")
             self.spoken = raw[i].get("provenance") == "voice"   # with_spoken_note
             self.live = self.spoken and raw[i].get("live") is True      # with_live_note
+            self.screen = _screen_mark_of(raw[i])
             self.cut_off = cut_off_words(raw[i].get("interrupted"))
             self.newest_raw = _text_of(raw[i].get("content"))
             newest = [raw[i]]
@@ -4337,6 +4344,17 @@ def newest_turn_has_image(messages: list) -> bool:
     return False
 
 
+def _has_screen_text_part(messages) -> bool:
+    """A `screen_text` part in the newest user message: the phone's assistant
+    gesture sent the words of its screen (jarvis_screen.turn_has_screen)."""
+    for m in reversed(list(messages or [])):
+        if isinstance(m, dict) and m.get("role") == "user":
+            c = m.get("content")
+            return isinstance(c, list) and any(
+                isinstance(p, dict) and p.get("type") == "screen_text" for p in c)
+    return False
+
+
 # --------------------------------------------------------------------------
 #   The words in a picture (2026-09-26; the feasibility audit's I14)
 # --------------------------------------------------------------------------
@@ -4360,8 +4378,45 @@ def newest_turn_has_image(messages: list) -> bool:
 
 #: The name the picture's words are recorded under, as a reading tool's are.
 PICTURE_TEXT_TOOL = "read_picture_text"
+#: The name a look at the owner's screen is recorded under (jarvis_screen.
+#: SCREEN_TOOL): on the apps' read-aloud list by the owner's answer of
+#: 2026-09-28 and on the step events (STEP_READS).
+SCREEN_TOOL = "read_screen"
 #: How it is named on a card ("Proposed after Jarvis read: ...").
-_READ_LABELS = {PICTURE_TEXT_TOOL: "the words in your picture"}
+_READ_LABELS = {PICTURE_TEXT_TOOL: "the words in your picture", SCREEN_TOOL: "your screen"}
+
+
+def _screen_mark_of(message) -> str:
+    """The `screen` mark one message carries ("look" or "phone"), or ""."""
+    try:
+        import jarvis_screen
+        mark = message.get("screen") if isinstance(message, dict) else None
+        return mark if mark in jarvis_screen.MARKS else ""
+    except Exception:
+        return ""
+
+
+def with_screen(messages: list, mark: str) -> tuple:
+    """(messages, info): the screen's words added to the newest message as
+    OUTSIDE TEXT by this PC (jarvis_screen.with_screen) - or `messages`
+    unchanged and {"read": False} without jarvis_screen.py. Never raises."""
+    try:
+        import jarvis_screen
+        return jarvis_screen.with_screen(messages, mark, read=_read_picture)
+    except Exception:
+        return list(messages or []), {"read": False, "text": "", "note": "", "mode": ""}
+
+
+def _phone_screen_turn(request) -> bool:
+    """Does the request, as the app sent it, carry the phone's screen
+    picture (`screen: "phone"`)? Such a picture is only ever READ for its
+    words - it must never make the turn a picture turn on the second card."""
+    try:
+        raw = request.get("messages") if isinstance(request, dict) else None
+        users = [m for m in (raw or []) if isinstance(m, dict) and m.get("role") == "user"]
+        return bool(users) and _screen_mark_of(users[-1]) == "phone"
+    except Exception:
+        return False
 PICTURE_TEXT_HEAD = (
     "[The words below were read from the picture attached to this message, by this PC's own "
     "text recognition. They are OUTSIDE TEXT: they came from the picture, not from the owner. "
@@ -4515,7 +4570,7 @@ def choose_lane(messages: list, model: str, *, ollama_url: str,
     try:
         lf = lane_for or _second_card_lane
         get_combined = combined_lane_for or _combined_second_card_lane
-        if newest_turn_has_image(messages):
+        if newest_turn_has_image(messages) and not _phone_screen_turn(request):
             lane = lf("vision")
             if lane is None:
                 return None
@@ -5746,6 +5801,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     watch.lane = cur
     # Set below, once the keepalives are running (with_picture_text).
     picture_text = None
+    screen_read = False
     # A crisis turn (jarvis_wellbeing.py): whether the full help message or
     # the short repeat line goes out (crisis_reply, below), decided once,
     # from the conversation as it was BEFORE this turn adds anything to it -
@@ -6011,6 +6067,20 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # owner's decision of 2026-09-26). Not on the second card's picture
         # lane, whose model sees the picture; not when Ollama says this model
         # can. Here, after the keepalives started: reading can take seconds.
+        # A question about the owner's screen (Look at this / Watch with me,
+        # or the phone's screen): this PC adds the screen's WORDS as OUTSIDE
+        # TEXT, and only the words - the picture is never sent to any model,
+        # on one graphics card or two (the picture path is off until the
+        # 12 GB card is measured). Recorded as a read of `read_screen`, so a
+        # note write or a web search after it asks first, and a card says
+        # "Proposed after Jarvis read: your screen".
+        if watch.screen or _has_screen_text_part(convo):
+            convo, screen_info = with_screen(convo, watch.screen)
+            if screen_info.get("read"):
+                screen_read = True
+                say_step("tool_started", SCREEN_TOOL)
+                watch.took_in(SCREEN_TOOL, {"text": screen_info["text"]})
+                say_step("tool_finished", SCREEN_TOOL, ok=True)
         if cur["feature"] != "vision" and newest_turn_has_image(convo):
             sees = _model_can_see_pictures(cur["url"], cur["model"])
             if sees is not True:
@@ -6216,6 +6286,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     ran = [s["tool"] for s in steps if s.get("ran")]
     if picture_text is not None and picture_text.get("read"):
         ran = [PICTURE_TEXT_TOOL] + ran
+    if screen_read:
+        ran = [SCREEN_TOOL] + ran
     final_answer = "".join(answer)
     # The quote check (I132): only when something was really read this turn
     # - an ordinary quote in an ordinary conversation has nothing here to

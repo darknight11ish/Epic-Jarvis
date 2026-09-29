@@ -123,6 +123,14 @@ card?", "when did my PC last restart?" - read on this PC, answered at once.
 Read-only: no card, nothing changes. An answer that names programs is
 private and marked as outside text (a program picks its own name).
 
+"WATCH WITH ME" (jarvis_screen.py, 2026-09-29): "watch with me", "watch with
+me for 20 minutes", "start watching my screen" - a session the owner starts,
+30 minutes by default, 2 hours at most, with a sign on screen the whole time.
+No card: the owner's own act, like a focus session. "Stop watching" ends it;
+"watch 20 more minutes" extends it; "are you watching?" says whether it is
+on. Only from this PC (it is this PC's screen). "Look at this" is not here:
+it is a key and a button, and the model answers what is asked about it.
+
 LOCKDOWN (jarvis_asks_first.py, 2026-09-28): "lockdown", "turn on lockdown",
 "lock everything down" - every way out of this PC asks first, or stops, at
 once. "Turn off lockdown" goes through the same path as the apps' button:
@@ -1010,6 +1018,11 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- "watch with me" (jarvis_screen.py, 2026-09-29) --------------------------------
+    got = _watch(s)
+    if got is not None:
+        return got
+
     # --- "ring my phone" (jarvis_find_phone.py) and Lockdown (jarvis_asks_first.py) ----
     got = _find_phone(s) or _lockdown(s)
     if got is not None:
@@ -1586,6 +1599,69 @@ def _find_phone(s: str) -> Optional[Intent]:
     return Intent("phone_ring", {"named": bool(name) and name not in ("own", "android")})
 
 
+#: "Watch with me" (jarvis_screen.py, 2026-09-29). Whole sentences only.
+_WATCH_START = (
+    r"(?:start\s+|begin\s+)?watch(?:ing)?\s+with\s+me(?:\s+(?:for|of)\s+(?P<d>.+))?",
+    r"(?:start|begin|turn\s+on|switch\s+on)\s+watch(?:ing)?\s+with\s+me(?:\s+(?:for|of)\s+(?P<d2>.+))?",
+    r"(?:start|begin)\s+watching\s+(?:my\s+)?screen(?:\s+(?:for|of)\s+(?P<d3>.+))?",
+    r"watch\s+(?:my\s+)?screen\s+with\s+me(?:\s+(?:for|of)\s+(?P<d4>.+))?",
+    r"watch\s+along(?:\s+with\s+me)?(?:\s+(?:for|of)\s+(?P<d5>.+))?",
+)
+_WATCH_STOP = re.compile(
+    r"(?:stop|end|quit|cancel)\s+watch(?:ing)?\s+with\s+me"
+    r"|stop\s+watching(?:\s+(?:my\s+)?screen)?(?:\s+(?:now|please))?"
+    r"|(?:turn|switch)\s+off\s+watch(?:ing)?\s+with\s+me"
+    r"|stop\s+looking\s+at\s+my\s+screen")
+_WATCH_MORE = re.compile(
+    r"(?:keep\s+)?watch(?:ing)?\s+(?:(?:for|another)\s+)?(?P<d>.+?)\s+more"
+    r"|(?:keep\s+)?watch(?:ing)?\s+(?:for\s+)?(?:another|a\s+bit\s+longer|a\s+while\s+longer|longer)"
+    r"(?:\s+(?P<d2>.+))?"
+    r"|watch\s+(?:a\s+)?(?:bit|little)\s+longer")
+_WATCH_MORE_N = re.compile(
+    r"(?:keep\s+)?watch(?:ing)?\s+(?:(?:for|another)\s+)?(?P<n>\d{1,3})\s+more"
+    r"\s+(?P<u>minutes?|mins?|hours?)")
+_WATCH_ASK = re.compile(r"(?:are\s+you|is\s+jarvis)\s+watching(?:\s+(?:me|my\s+screen))?"
+                        r"|is\s+watch\s+with\s+me\s+on")
+
+
+def _watch_minutes(d) -> Optional[float]:
+    """Minutes from "20 minutes", "an hour", "half an hour" - or a bare
+    "20"; None when it is not a length of time."""
+    if d is None:
+        return None
+    secs = parse_duration(d)
+    if secs is None and re.fullmatch(r"\d{1,3}", d.strip()):
+        secs = float(d.strip()) * 60
+    return None if secs is None else max(1.0, secs / 60.0)
+
+
+def _watch(s: str) -> Optional[Intent]:
+    if _WATCH_STOP.fullmatch(s):
+        return Intent("screen_stop")
+    if _WATCH_ASK.fullmatch(s):
+        return Intent("screen_status")
+    m = _WATCH_MORE_N.fullmatch(s)
+    if m:
+        n = float(m.group("n")) * (60 if m.group("u").startswith("h") else 1)
+        return Intent("screen_more", {"minutes": n})
+    m = _WATCH_MORE.fullmatch(s)
+    if m:
+        d = m.groupdict().get("d") or m.groupdict().get("d2")
+        mins = _watch_minutes(d)
+        if d and mins is None:
+            return None
+        return Intent("screen_more", {"minutes": mins})
+    for pat in _WATCH_START:
+        m = re.fullmatch(pat, s)
+        if m:
+            d = next((v for k, v in m.groupdict().items() if k.startswith("d") and v), None)
+            mins = _watch_minutes(d)
+            if d and mins is None:
+                return None           # "watch with me for a bit" goes to the model
+            return Intent("screen_start", {"minutes": mins})
+    return None
+
+
 #: Lockdown (jarvis_asks_first.py, 2026-09-28).
 _LOCKDOWN_ON = re.compile(
     r"lock\s*down(?:\s+(?:now|jarvis|everything|the\s+pc|mode))?"
@@ -1784,6 +1860,53 @@ def _run_find_phone(intent: Intent) -> Result:
         return Result(FIND_PHONE_MISSING, n)
     out = FP.stop() if n == "phone_stop" else FP.ring(named=bool(intent.f.get("named")))
     return Result(str(out.get("said") or ""), n)
+
+
+SCREEN_MISSING = ("Your PC's Jarvis cannot look at the screen yet - run apply-patches.ps1 on "
+                  "the PC.")
+SCREEN_PC_ONLY = ("Watch with me looks at this PC's screen, so it can only be started, extended "
+                  "or asked about from this PC.")
+
+
+def _run_screen(intent: Intent, peer, local) -> Result:
+    """"Watch with me" by voice or typing: jarvis_screen's one engine, at
+    once, no card. Only from this PC - it is this PC's screen (stopping is
+    allowed from anywhere: it only makes Jarvis look less)."""
+    n, f = intent.name, intent.f
+    try:
+        import jarvis_screen as SC
+    except Exception:
+        return Result(SCREEN_MISSING, n)
+    e = SC.ENGINE
+    if n == "screen_stop":
+        out = e.stop("owner")
+        return Result("I've stopped watching." if out.get("stopped")
+                      else "I wasn't watching.", n)
+    if not SC.is_local(peer, local):
+        return Result(SCREEN_PC_ONLY, n)
+    st = e.status()
+    if n == "screen_status":
+        if not st["on"]:
+            return Result("No, I'm not watching. Say \"watch with me\" to start.", n)
+        mins = max(1, int(round((st["left_s"] or 0) / 60)))
+        now_ = (f"Yes - paused for now: {st['pause_words']}." if st["paused"]
+                else "Yes, I'm watching.")
+        return Result(f"{now_} About {mins} minute{'s' if mins != 1 else ''} left.", n)
+    if n == "screen_more":
+        out = e.extend(f.get("minutes"))
+        if not out.get("ok"):
+            return Result(str(out.get("error") or "I'm not watching right now."), n)
+        mins = max(1, int(round((out["status"]["left_s"] or 0) / 60)))
+        return Result(f"Done - about {mins} minutes left.", n)
+    if not e.built():
+        return Result(SC.not_built_words(), n)
+    out = e.start(f.get("minutes"))
+    if not out.get("ok"):
+        return Result(str(out.get("error") or "I couldn't start watching."), n)
+    mins = max(1, int(round((out["status"]["left_s"] or 0) / 60)))
+    return Result(f"Watching with you for {mins} minutes. There is a sign on screen the whole "
+                  "time, and \"stop watching\" ends it. Ask me about your screen whenever you "
+                  "like.", n)
 
 
 def _run_lockdown(intent: Intent, peer, local) -> Result:
@@ -2985,6 +3108,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_find_phone(intent)
     if n.startswith("lockdown_"):
         return _run_lockdown(intent, peer, local)
+    if n.startswith("screen_"):
+        return _run_screen(intent, peer, local)
     if n.startswith("tellme_"):
         return _run_tellme(intent, sched, now)
     if n == "project_log":

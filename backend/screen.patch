@@ -1,0 +1,62 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -1368,6 +1368,20 @@
+         import jarvis_intake
+         return bool(jarvis_intake.game_or_roleplay(body.get("messages") or [],
+                                                    body.get("conversation_id")))
++    except Exception:
++        return False
++
++
++# screen.patch (the owner's decision of 2026-09-28, "Jarvis may look at the
++# owner's screen"; JARVIS-API section 62): does the newest message of this
++# request carry the owner's screen - the app's `screen` mark, or the phone's
++# `screen_text` part? Such a turn stays on THIS PC, whatever else is true
++# (jarvis_router.choose(has_screen=...), gate "screen"). A missing
++# jarvis_screen.py reads as False.
++def _screen_turn(body) -> bool:
++    try:
++        import jarvis_screen
++        return bool(jarvis_screen.turn_has_screen(body.get("messages")))
+     except Exception:
+         return False
+ 
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3473,6 +3487,22 @@
+     except Exception as exc:
+         print(f"  sky        NOT ON ({type(exc).__name__}) - the sun, moon and weather are off")
+         print("             until jarvis_sky.py is back: run apply-patches.ps1 again")
++    # screen.patch ("Look at this" and "Watch with me", the owner's decision
++    # of 2026-09-28; docs/SCREEN-DESIGN.md, JARVIS-API sections 62 and 93):
++    # GET/POST /api/screen (look, ask, start, extend - only from this PC -
++    # and stop, drop from anywhere) and GET/POST /api/screen/never-look (the
++    # list of programs and sites Jarvis never looks at: this PC only; adding
++    # is instant, removing is ONE approval card). No card to look or to
++    # start: the owner's own act, with a sign on screen the whole time.
++    # Wrapped round Handler here, before anything listens, like sky above;
++    # the rules are all in jarvis_screen.py and jarvis_screen_win.py.
++    try:
++        import jarvis_screen
++        print(jarvis_screen.install(Handler, origin_ok=_origin_ok,
++                                    token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  screen     NOT ON ({type(exc).__name__}) - Look at this / Watch with me are off")
++        print("             until jarvis_screen.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -4282,6 +4312,11 @@
+                 # from "offer" into "escalate" for a question that had
+                 # already cleared every other gate on its own merits.
+                 owner_said_yes=bool(body.get("cloud_yes")),
++                # screen.patch: a turn carrying the owner's screen never
++                # leaves this PC - not when it is long, not when a cloud lane
++                # is offered, not when the owner said yes to the cloud for
++                # it. The router's own gate "screen" (test_router_private_terms).
++                has_screen=_screen_turn(body),
+             )
+             if jarvis_side_memory and decision.gate == "unavailable":
+                 decision.reason = "escalation off while Jarvis injects memory itself"
