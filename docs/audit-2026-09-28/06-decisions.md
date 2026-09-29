@@ -137,7 +137,7 @@ Not re-checked, except where below. The new work did not change `jarvis_search.p
 |---|---|---|
 | Talk-to-type: one card to switch on, PC only | OK | `talk_type.rs:10-17` (ON = `change_own_config` card via `/api/voice/enroll`); §8 row 29. CLAUDE.md:511 still says "Not built yet" (stale, low) |
 | Web search / weather / home answers read aloud | Not re-checked | - |
-| Chatbot driver: Gemini website, driven openly, spare account | OK in design/code comments | Not tried for real (ARCHITECTURE §4 rows say so) |
+| Chatbot driver: Gemini website, driven openly (reversed 2026-09-29), spare account | OK in design/code comments | Not tried for real (ARCHITECTURE §4 rows say so) |
 | Inbox tidy by voice | Not built | No module |
 | Animal voices offered once, otter not Sky | **Violated** | V1 |
 | Kokoro v1.0 | Not built | Voices still numeric (`jarvis_voices.py:388-399`) |

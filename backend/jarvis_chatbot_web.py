@@ -23,26 +23,32 @@ apps through /api/chatbot/* (jarvis_chatbot_routes.py, docs/JARVIS-API.md
 section 87) once Playwright is installed and that site's window has been
 signed in. NONE of them has yet been tried against its real site.
 
-THE OWNER'S DECISIONS (CLAUDE.md, 2026-09-28; docs/CHATBOT-DRIVER-DESIGN.md)
-  * Gemini first, through its WEBSITE, driven OPENLY; then "the chatbot
-    driver becomes versatile": ChatGPT, Claude, Microsoft Copilot,
-    Perplexity and other commonly used chatbot websites, driven openly like
-    Gemini, each with its own SPARE account used only by Jarvis. The owner
-    chose this knowing each company's terms restrict automated access and
-    that an account could be blocked or closed.
-  * A request for "tactics that help avoid bans" was declined: getting round
-    a site's bot protection is not something this project builds.
+THE OWNER'S DECISIONS (CLAUDE.md, 2026-09-28 and 2026-09-29;
+docs/CHATBOT-DRIVER-DESIGN.md)
+  * Gemini first, through its WEBSITE; then "the chatbot driver becomes
+    versatile": ChatGPT, Claude, Microsoft Copilot, Perplexity and other
+    commonly used chatbot websites, driven in a visible window like Gemini,
+    each with its own SPARE account used only by Jarvis. The owner chose
+    this knowing each company's terms restrict automated access and that an
+    account could be blocked or closed.
+  * REVERSED 2026-09-29 (owner, after being told the ban risk several
+    times): the old rule "driven openly - nothing that hides it from or
+    dodges the site's bot detection", and the declined request for "tactics
+    that help avoid bans", are gone. Stealth is ON for Jarvis's browsers,
+    including the headless engine (jarvis_browser_engine*.py, not this
+    file). The ban risk is real and accepted; the spare account stays as
+    advice, not as a rule.
 
-WHAT "OPENLY" MEANS HERE, IN CODE (test_chatbot_gemini.py and
-test_chatbot_sites.py check each one, over this file and every site file)
+WHAT IS STILL TRUE, IN CODE (test_chatbot_gemini.py and test_chatbot_sites.py
+check each one, over this file and every site file)
   * A real, VISIBLE browser window (Playwright's Chromium, or Microsoft
     Edge), launched with `headless=False` and Playwright's own defaults.
-    Nothing hides that a program is driving it: the browser's own
-    "controlled by automated test software" signs stay as they are, and the
-    browser identifies itself exactly as it normally would.
-  * No stealth plug-in, no change to how the browser presents itself, no
-    script injected into the page, no proxy, no captcha solving, no retrying
-    to get past a limit.
+    It is a real browser and stays the default for the chatbot driver,
+    because the owner may have to take over (a captcha, a sign-in). This
+    file writes no fingerprint-spoofing of its own for it.
+  * No proxy (no proxy service, no rotating addresses), no captcha
+    solving, no retrying to get past a limit, and nothing private (email,
+    files, credentials, memory) typed into the chat (rule 1).
   * A person's pace: a plain, fixed pause after every typed character (the
     point is not to overload the site - not to look like a person).
   * At a captcha, a sign-in page, an "unusual activity" / "verify it's you"
@@ -119,7 +125,7 @@ SITE_MODULES = (
 )
 
 #: A plain, fixed pause after every typed character, in milliseconds. A
-#: person's pace, so the site is not flooded - not a disguise.
+#: person's pace, so the site is not flooded.
 TYPE_DELAY_MS = 45
 #: A reply is complete when the "stop" control is gone AND its text has not
 #: changed for this many seconds.
@@ -315,14 +321,15 @@ class Site:
 
     @property
     def note(self) -> str:
-        """The card note: driven openly, the terms, the spare account, and
-        that the account may be blocked or closed - in plain words."""
+        """The card note: the visible window, the captcha rule, the terms, the
+        spare account, and that the account may be blocked or closed - in
+        plain words. (Reworded 2026-09-29: the owner reversed "never hides
+        that it is a program", so the note no longer promises it.)"""
         if self.card_note:
             return self.card_note
-        return ("Driven openly: Jarvis types at a person's pace in a window you can see, "
-                "never hides that it is a program, never changes how the browser looks to "
-                f"{self.company}, and never solves or skips a captcha - at a captcha, a "
-                "sign-in or an \"unusual activity\" page it stops and asks you. It opens a "
+        return ("Jarvis types at a person's pace in a window you can see, and it never "
+                "solves or skips a captcha - at a captcha, a sign-in or an \"unusual activity\" "
+                "page it stops and asks you. It opens a "
                 "new chat and reads only the replies to its own messages. "
                 + (self.terms.strip() + " " if self.terms.strip() else "")
                 + f"It uses a spare {self.account} used only by Jarvis, never your own, and "

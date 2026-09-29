@@ -141,7 +141,7 @@ on a throwaway copy instead.
 | `answer-sources.patch` | `jarvis_hud.py` | **"Where this came from", and the quote check** (feasibility I42/I132, `docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md` detail 1). Two hunks. The first, like every install()-shaped patch, adds one call at start-up - `jarvis_sources.install(Handler, ...)`, answering `GET /api/chat/sources?turn_id=<id>` - and its context is `tool-updates.patch`'s own new route block, so it goes after it, last like every new patch. The second sits right after `chat-history.patch`'s `_history["turn"] = _turn` line (nothing later in the stack touches `_turn`): it hands `jarvis_sources.record()` this turn's `tool_sources` and `unverified_quotes` (both new fields on `run_local_turn`'s own return dict, `jarvis_agent.py`, no patch needed there) under the SAME `turn_id` `feedback.patch` already put in `X-Jarvis-Route` - which has to happen AFTER `run_local_turn` returns, since the header (turn_id included) is sent to the app before that loop even starts. Needs `jarvis_sources.py` - without it, or on any error, the banner says so, the route answers 503, and nothing about an ordinary chat turn changes: no tool result is read a second time, and this adds no new fetch of anything (docs/ARCHITECTURE.md §4). See "Where this came from", at the very end. |
 | `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Two more small hunks (the owner, 2026-09-28) hand a crisis turn's `turn_id` to `jarvis_agent.note_crisis_turn` - right after `feedback.patch` makes the id, on `wellbeing.patch`'s flag, and again after `run_local_turn` on its own crisis check - so a "wrong" mark on a crisis answer is never counted. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
 | `projects.patch` | `jarvis_hud.py` | **Projects, build steps 1 and 2** (the owner's decision of 2026-09-28, `docs/PROJECTS-DESIGN.md`). One hunk, like every install()-shaped patch: `jarvis_projects.install(Handler, ...)` at start-up, answering `GET`/`POST /api/projects` and its benchmarks (`docs/JARVIS-API.md` §88). Its context is `answer-sources.patch`'s own install block, so it goes after it - last, like every new patch. **When the continuation branch merges:** `goals.patch` there anchors on the very same lines, so whichever lands second is re-anchored on the other's block. Needs `jarvis_projects.py`; without it, or on any error, the banner says so and the routes are not there. See "Projects", at the very end. |
-| `chatbot.patch` | `jarvis_gate.py` | **Talking to an AI chatbot for you: the gate's words for it** (the owner's decisions of 2026-09-27/28). Two hunks: `chatbot_session` gets its `_RISK` line (`"no", "outbound"` - it leaves this PC and cannot be taken back, so approving it is a risky approval: Windows Hello on the PC, a screen lock on the phone) and joins the list of actions whose "no" proposes no standing rule (it always asks, one card per conversation). Before this, the gate already treated it as risky, as an unclassified action. Last in the list; its context is `backup.patch`'s own lines. The feature itself is `jarvis_chatbot.py`, `jarvis_chatbot_gemini.py` and the other website adapters (`jarvis_chatbot_web.py` and a site file each), shipped whole - see "Talking to an AI chatbot for you, step 2: Gemini's window" and "... more chatbot websites, the same open way", at the very end. |
+| `chatbot.patch` | `jarvis_gate.py` | **Talking to an AI chatbot for you: the gate's words for it** (the owner's decisions of 2026-09-27/28). Two hunks: `chatbot_session` gets its `_RISK` line (`"no", "outbound"` - it leaves this PC and cannot be taken back, so approving it is a risky approval: Windows Hello on the PC, a screen lock on the phone) and joins the list of actions whose "no" proposes no standing rule (it always asks, one card per conversation). Before this, the gate already treated it as risky, as an unclassified action. Last in the list; its context is `backup.patch`'s own lines. The feature itself is `jarvis_chatbot.py`, `jarvis_chatbot_gemini.py` and the other website adapters (`jarvis_chatbot_web.py` and a site file each), shipped whole - see "Talking to an AI chatbot for you, step 2: Gemini's window" and "... more chatbot websites, the same visible window", at the very end. |
 | `live.patch` | `jarvis_hud.py` | **Jarvis Live: talking back and forth** (the owner's decision and answers of 2026-09-28, `docs/LIVE-DESIGN.md`). One call at start-up, `jarvis_live.install(Handler, ...)`, answers `GET`/`POST /api/voice/live` (JARVIS-API section 63): start (no card; refused until your voice is trained), stop, more time, carry on, mute. Last in the list; its context is `chatbot-routes.patch`'s install block. Needs `jarvis_live.py` - without it, or on any error, the banner says so. See "Jarvis Live", at the very end. |
 | `rules-first-relay.patch` | `jarvis_hud.py` | **The Jarvis rules stay first on a turn with no tools enabled** (the owner's 2026-09-25 decision: the rules are never dropped). One hunk in the relay's `_open()`, right after `chat-history.patch`'s `_chat_client_fields_off` lines: for the local model only, `jarvis_agent.keep_rules_first()` - the same call the tool loop already makes. Last in the list. Needs nothing new copied in. See "The rules on a turn with no tools", at the very end. |
 | `cloud-say-yes.patch` | `jarvis_hud.py` | **"Try the cloud model" - the owner's yes for one question** (the owner's "yes, build it now", 2026-09-27; `docs/ARCHITECTURE.md` "Cloud / API keys"). One line added to the chat turn's already-existing `jarvis_router.choose()` call: `owner_said_yes=bool(body.get("cloud_yes"))`. Every gate in `choose()` still runs first and in the same order - private, tainted, a picture, no lane, no budget - so this can only ever turn THIS question's own gate 6 from `"offer"` into `"escalate"`, for a question that had already cleared every other gate on its own merits; a yes never carries a private, tainted or picture turn out. Both apps' "Try the cloud model" button (`docs/JARVIS-API.md` §18.1, §4 "`offer` in `X-Jarvis-Route`") sends `cloud_yes: true` only when the owner actually pressed it, resending the exact same question and nothing else. **Real, verified against the owner's own `jarvis_hud.py` by hand, not a `_stack.py` stand-in**: no earlier patch's hunk had ever touched this call site before, so `_stack.stand_in()` could not check it against the real file (it would have materialised the hunk's own claimed pre-image instead of failing) - see the patch's own comment, and `test_cloud_say_yes.py`, which round-trips it against the real, hand-verified lines instead of a derived fixture. Its context is the router call itself, `second-card-suggest.patch`'s own new code above it in this table notwithstanding (that patch touches a different, unrelated part of `jarvis_hud.py`). `goals.patch`, after it in this table, touches a third, separate part again (the startup install() block), so the two never interact. Needs no new module - `jarvis_router.py`'s `owner_said_yes` parameter has accepted this since 2026-09-24, unused until now. |
@@ -14250,9 +14250,11 @@ real gemini.google.com yet. Shipped whole, like the core.
 
 Jarvis can now work its own Gemini window: it opens gemini.google.com in a
 browser window you can see, starts a new chat, types the question at a
-steady pace, and reads back only Gemini's answer to it. It does this
-**openly**, as you decided: nothing hides that a program is typing, and
-nothing changes how the browser looks to Google. At a captcha (a "prove you
+steady pace, and reads back only Gemini's answer to it. (Until 2026-09-29
+this said it was done "openly", with nothing hiding that a program is typing.
+**You reversed that on 2026-09-29**, after being told the ban risk: stealth is
+on for Jarvis's browsers. This window is still a plain, real browser and
+Jarvis adds no disguise of its own to it, so you can take over.) At a captcha (a "prove you
 are a person" check), a sign-in page, or an "unusual activity" / "verify
 it's you" page, it **stops and asks you** - it never tries to get past one.
 You deal with it in the window, then press Resume.
@@ -14387,9 +14389,11 @@ Linux machine with none) against a fake Gemini page on 127.0.0.1: a full
 turn, a reply that pauses before it finishes, each "needs you" page, no
 navigation away, close. It skips its browser half, and says so, where
 Playwright or a browser is missing. Its first half also reads the module's
-own code and fails on any stealth, fingerprint, webdriver-hiding, proxy or
-captcha-solving code, on any headless launch, and on a click anywhere but
-the message box and the send button.
+own code and fails on any proxy code, any captcha-solving code, any
+spoofing code of Jarvis's own for the visible real browser, any headless
+launch, and on a click anywhere but the message box and the send button.
+(Until 2026-09-29 it was worded as "no stealth" - the owner reversed that
+rule; what is left is what is still true.)
 
 ## Not checked, said plainly
 
@@ -14397,9 +14401,10 @@ the message box and the send button.
   best guess from how Gemini's page is known to be built (a
   `role="textbox"` message box, "Send message" and "Stop response"
   buttons, `<model-response>` answers). The self-check above is the proof.
-- **Google may block it anyway.** Driving the site openly is exactly what
-  Google's terms forbid; the spare account could be closed. Jarvis will
-  not work around a block.
+- **Google may block it anyway.** Automated use of the site is exactly what
+  Google's terms forbid; the spare account could be closed, and you accepted
+  that risk (2026-09-29). Jarvis never solves a captcha: it stops and asks
+  you.
 - A notice laid over the page (a welcome or "what's new" box) counts as
   "needs you": Jarvis stops rather than guess which button closes it.
 - If the send button is not found, it stops - it does not press Enter
@@ -14430,12 +14435,14 @@ node jarvis-desktop/tests/chatbot.mjs
   running conversation, and keeping the transcript in the encrypted chat
   history (it is in memory only, lost on a backend restart).
 
-# Talking to an AI chatbot for you: more chatbot websites, the same open way (2026-09-28)
+# Talking to an AI chatbot for you: more chatbot websites, the same visible window (2026-09-28)
 
 The owner's decision "the chatbot driver becomes versatile" (`CLAUDE.md`,
 2026-09-28): ChatGPT, Claude, Microsoft Copilot, Perplexity and other
-commonly used chatbot websites, each driven **openly like Gemini**, each
-with **its own spare account** used only by Jarvis. `docs/JARVIS-API.md`
+commonly used chatbot websites, each in a **visible window like Gemini**
+(the word "openly" was dropped when the owner reversed that rule on
+2026-09-29), each with **its own spare account** used only by Jarvis (advice,
+not a rule, since then). `docs/JARVIS-API.md`
 section 87.5. ~~Still not usable from either app: no route and no app
 screen yet.~~ **Corrected 2026-09-28:** the routes and both apps' screens
 (`chatbot-routes.patch`) take any chatbot id, so this is reachable
@@ -14446,10 +14453,11 @@ real sites yet.
 
 Jarvis can now work eight more chatbot websites the same way it works
 Gemini: a browser window you can see, a new chat, the question typed at a
-steady pace, and only the answer read back. Nothing hides that a program is
-typing, nothing changes how the browser looks to the site, and at a
+steady pace, and only the answer read back. (This used to promise that
+nothing hides that a program is typing; you reversed that on 2026-09-29. The
+window is still a plain, real browser with no disguise added by Jarvis.) At a
 captcha, a sign-in page or an "unusual activity" / "verify you are human"
-page it **stops and asks you**. Each website has its own browser profile
+page it **stops and asks you** - Jarvis never solves a captcha. Each website has its own browser profile
 (its own folder under `.openjarvis\chatbot\`) and you sign in to each one
 **once, by hand**, with a spare account made only for Jarvis.
 
@@ -14659,8 +14667,8 @@ with no screen): a full turn, a reply that pauses before it finishes, the
 new chat's own address, every "needs you" page, another host refused,
 close from another thread, the sign-in helper, the self-check, and
 Perplexity's sources through the whole driver. Without a browser it still
-reads the shared base and every site file for any stealth, fingerprint,
-webdriver-hiding, proxy or captcha-solving code, checks that only the base
+reads the shared base and every site file for any proxy code, captcha-solving
+code or spoofing code of Jarvis's own, checks that only the base
 drives the browser (one visible launch, one host-checked address, clicks
 only on the message box and the send button), and that every send selector
 names "send" or "submit". Pass site names to run just those
@@ -14673,7 +14681,8 @@ names "send" or "submit". Pass site names to run just those
   adapter and its table fit together, not that the table matches the real
   page. The self-checks above are the proof.
 - **Any of these sites may block it anyway**, and its spare account may be
-  closed. Jarvis will not work around a block.
+  closed - the owner accepted that risk on 2026-09-29. Jarvis never solves a
+  captcha: it stops and asks you.
 - A cookie box or "what's new" box over the page counts as "needs you":
   Jarvis stops rather than guess which button closes it (some of these
   sites show a cookie box in some countries).

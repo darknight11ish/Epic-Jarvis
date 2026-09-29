@@ -13,24 +13,27 @@ every "needs the owner" page, the sign-in helper and the self-check - is in
 jarvis_chatbot_web.py. This file holds only what is Gemini's own: the
 SELECTORS table, the hosts, and the words.
 
-THE OWNER'S DECISIONS (CLAUDE.md, 2026-09-28; docs/CHATBOT-DRIVER-DESIGN.md,
-"The owner's answers (2026-09-28)")
-  * Gemini first, through its WEBSITE, driven OPENLY. The owner chose this
-    knowing Google's terms forbid automated access and that the account
-    could be closed.
+THE OWNER'S DECISIONS (CLAUDE.md, 2026-09-28 and 2026-09-29;
+docs/CHATBOT-DRIVER-DESIGN.md, "The owner's answers (2026-09-28)")
+  * Gemini first, through its WEBSITE. The owner chose this knowing Google's
+    terms forbid automated access and that the account could be closed.
   * A SPARE Google account used only by Jarvis, so a ban cannot touch the
     owner's Gmail, and the owner's email and Gemini's memory of them stay
-    out of these chats.
-  * A request for "tactics that help avoid bans" was declined: getting round
-    a site's bot protection is not something this project builds.
+    out of these chats. (Advice the owner took, not a rule.)
+  * REVERSED 2026-09-29 (owner, after being told the ban risk several
+    times): the old rule "driven openly - nothing that hides it from or
+    dodges Google's bot detection" and the declined request for "tactics
+    that help avoid bans" are gone. Stealth is ON for Jarvis's browsers;
+    the ban risk is real and accepted.
 
-WHAT "OPENLY" MEANS HERE (jarvis_chatbot_web.py does it; test_chatbot_gemini.py
-checks each one, over both files)
+WHAT IS STILL TRUE, IN CODE (jarvis_chatbot_web.py does it;
+test_chatbot_gemini.py checks each one, over both files)
   * A real, VISIBLE browser window, launched with `headless=False` and
-    Playwright's own defaults. Nothing hides that a program is driving it.
-  * No stealth plug-in, no change to how the browser presents itself, no
-    script injected into the page, no proxy, no captcha solving, no retrying
-    to get past a limit.
+    Playwright's own defaults - a real browser, the default for the chatbot
+    driver because the owner may have to take over. Neither file writes any
+    fingerprint-spoofing of its own for it.
+  * No proxy, no captcha solving, no retrying to get past a limit, and
+    nothing private (email, files, credentials, memory) typed into the chat.
   * A person's pace: a plain, fixed pause after every typed character.
   * At a captcha, a sign-in page, an "unusual activity" / "verify it's you"
     page (including Google's own google.com/sorry page), a notice over the
@@ -192,9 +195,8 @@ SITE = W.Site(
     # Google's "unusual traffic" page (google.<tld>/sorry/...).
     blocked_page=W.is_google_sorry,
     browser_env="JARVIS_GEMINI_BROWSER",
-    card_note=("Jarvis types at a person's pace and never hides that it is a program, "
-               "never changes how the browser looks to Google, and never solves or skips "
-               "a captcha - at a captcha, a sign-in or an \"unusual activity\" page it stops "
+    card_note=("Jarvis types at a person's pace, in a window you can see, and never "
+               "solves or skips a captcha - at a captcha, a sign-in or an \"unusual activity\" page it stops "
                "and asks you. It opens a new chat and reads only the replies to its own "
                "messages. Google's terms forbid automated use of its services, so the "
                "spare account could be closed."))

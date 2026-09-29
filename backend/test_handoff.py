@@ -10,8 +10,9 @@ paused-at-owner-page state"), in code and in behaviour:
     both run only through _on_window(), which frame() and send_input() reach
     only AFTER _mine() - the check that the session is still paused at that
     page with that window. No goto, no evaluate, no launch, no page script,
-    no stealth or captcha-solving words (the chatbot sites' own FORBIDDEN
-    list).
+    no proxy, spoofing or captcha-solving words (the chatbot sites' own
+    FORBIDDEN list; the owner reversed "driven openly" on 2026-09-29, and the
+    list now says what still holds).
   * in behaviour, with a stand-in window that records every call: nothing is
     offered, pictured or passed on while a session runs, is paused for any
     other reason (a card, an "are you a bot?" question, Pause), is part of
@@ -232,10 +233,11 @@ def t_code():
     check("the chatbot sites' forbidden list was read", len(forbidden) > 20)
     code = _code_only(SRC).lower()
     found = [w for w in forbidden if w in code]
-    check("no stealth, fingerprint, webdriver-hiding, proxy or captcha-solving code",
-          not found, found)
-    check("its docstring says what it never does", "No stealth plug-in" in SRC
-          and "captcha solving" in SRC and "never saved" in SRC)
+    check("no proxy, no captcha-solving code, no spoofing code of its own (the owner "
+          "reversed 'driven openly' on 2026-09-29; these three still hold)", not found, found)
+    check("its docstring records the reversal and what still holds",
+          "2026-09-29" in SRC and "captcha solving" in " ".join(SRC.split())
+          and "never saved" in SRC)
     tree = ast.parse(SRC)
     calls = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
              and isinstance(n.func, ast.Attribute)]

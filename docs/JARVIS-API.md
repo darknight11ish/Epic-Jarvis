@@ -11163,8 +11163,9 @@ this forgets, and "Erase the words" is per fact. A spoken "yes" or
 driver, because the other side is a company acting on the owner's REAL
 account, often a real person. Groupon first. Jarvis sends the messages
 itself, in the owner's name, at a person's pace, in a browser window the
-owner can see on the PC - never hiding from the site's bot detection, no
-captcha solving.
+owner can see on the PC. No captcha solving. (The 2026-09-28 wording "never
+hiding from the site's bot detection" was reversed by the owner on
+2026-09-29 - CLAUDE.md, "Stealth on for everything".)
 
 - **ONE card per chat** (gate action `support_chat`, tier `ask` only, a
   risky approval: Windows Hello on the PC, a screen lock on the phone)
@@ -13447,7 +13448,7 @@ owner's answers (2026-09-28)"); the owner's decisions are in `CLAUDE.md`
   while one is going ("Talking to Gemini, 3 of 5", with Stop;
   `service/ChatbotNotifier.kt`).
 - **Eight more websites** (the owner's "the chatbot driver becomes
-  versatile", 2026-09-28), built the same open way (§87.5): each a thin site
+  versatile", 2026-09-28), built the same way, in a visible window (§87.5): each a thin site
   file over one shared base, `backend/jarvis_chatbot_web.py`, tested by
   `backend/test_chatbot_sites.py`. None of their selectors is checked against
   the real sites yet either.
@@ -13578,11 +13579,14 @@ that same `note` as `error`, before any card.
 
 ### 87.4 Gemini through its website (`jarvis_chatbot_gemini.py`)
 
-Driven **openly** (the owner's decision of 2026-09-28): Playwright for
-Python drives a real, visible Chromium (or Edge) window, launched
-`headless=False` with Playwright's own defaults. No stealth plug-in, no
-change to how the browser presents itself, nothing that hides that a
-program is driving, no proxy, no captcha solving. It types at a fixed pace
+Driven in a **visible window** (the owner's decision of 2026-09-28; its
+"driven openly - nothing that hides it" half was **reversed on 2026-09-29**,
+CLAUDE.md "Stealth on for everything": stealth is on for Jarvis's browsers,
+the ban risk accepted): Playwright for Python drives a real, visible
+Chromium (or Edge) window, launched `headless=False` with Playwright's own
+defaults - a real browser, the default wherever the owner may have to take
+over. Jarvis writes no fingerprint-spoofing of its own for it. Still true:
+no proxy, no captcha solving, nothing private typed. It types at a fixed pace
 (45 ms a character; a line break is Shift+Enter so a message is never sent
 in halves), clicks only the message box and the send button, opens a new
 chat every conversation and reads only the newest reply that appeared after
@@ -13821,8 +13825,9 @@ runs before every message.
 
 The owner's decision of 2026-09-28 ("The chatbot driver becomes
 versatile"): ChatGPT, Claude, Microsoft Copilot, Perplexity **and other
-commonly used chatbot websites**, each driven **openly like Gemini** with
-its **own spare account** used only by Jarvis. The last four in the table
+commonly used chatbot websites**, each in a **visible window like Gemini**
+(the word "openly" was dropped on 2026-09-29, see 87.4) with its **own spare
+account** used only by Jarvis (advice, not a rule, since 2026-09-29). The last four in the table
 (DeepSeek, Grok, Le Chat, Meta AI) are the studio's reading of "other
 commonly used" - the owner can drop any of them.
 
@@ -13875,8 +13880,9 @@ plain text, `1. <label> - <address>`: read from the reply's own links with
 each once, at most 20. So a comparison can say which answers came with
 sources. Like every reply, it is outside text.
 
-**Each card note says, in plain words:** driven openly (a person's pace, a
-window you can see, never hidden, never a captcha solved); that site's
+**Each card note says, in plain words:** a person's pace, a window you can
+see, never a captcha solved or skipped (no longer "never hidden" - reversed
+2026-09-29); that site's
 terms (OpenAI's terms forbid automatically extracting ChatGPT's answers,
 as quoted in `docs/CHATBOT-DRIVER-DESIGN.md`; for the others, "their terms
 restrict automated access" - not read word for word); a spare account used

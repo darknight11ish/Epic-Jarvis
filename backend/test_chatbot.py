@@ -6,8 +6,9 @@ owner approved on ONE card.
 
 The owner's decisions (CLAUDE.md, 2026-09-27 and 2026-09-28): Jarvis may
 follow up on its own within the owner's limits; Gemini first through its
-website, driven openly, stopping at any captcha, sign-in or "unusual
-activity" page; one driver plus an adapter per chatbot; two versions by
+website in a visible window, stopping at any captcha, sign-in or "unusual
+activity" page (the 2026-09-28 "driven openly - nothing that hides it" rule
+was reversed by the owner on 2026-09-29; never solving a captcha stays); one driver plus an adapter per chatbot; two versions by
 hardware, the two-card one off until the second card is measured. Rule 1
 is unchanged: nothing private goes into these chats.
 

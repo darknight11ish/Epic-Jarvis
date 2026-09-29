@@ -8,9 +8,13 @@ here touches the internet, and nothing here ever opens a real chatbot site.
 
 The owner's decisions (CLAUDE.md, 2026-09-28): Gemini, then "the chatbot
 driver becomes versatile" - ChatGPT, Claude, Microsoft Copilot, Perplexity
-and other commonly used chatbot websites, each driven OPENLY like Gemini
-(a visible window, a person's pace, nothing that hides the automation, no
-captcha solving), each with its own spare account signed in once by hand.
+and other commonly used chatbot websites, each in a visible window like
+Gemini (a person's pace, no captcha solving), each with its own spare account
+signed in once by hand. REVERSED 2026-09-29 (owner): the old "driven openly -
+nothing that hides the automation" rule is gone (stealth is on for Jarvis's
+browsers; the ban risk is accepted); what this file still tests is no proxy,
+no captcha solving, and no spoofing code of Jarvis's own in the visible real
+browser.
 
 ONE GENERIC FAKE PAGE, BUILT FROM EACH SITE'S OWN SELECTORS TABLE. For each
 site, the first selector of every role (the message box, the send and stop
@@ -42,8 +46,8 @@ Per site it proves:
     only) and no source link is ever opened; through the whole driver they
     reach the transcript as outside text.
 And, without a browser, over the shared base and EVERY site file: no
-stealth, fingerprint, webdriver-hiding, proxy or captcha-solving code; one
-visible launch and one host-checked address, both in the base; no site file
+proxy code, captcha-solving code, or spoofing code of Jarvis's own in the
+visible real browser; one visible launch and one host-checked address, both in the base; no site file
 drives the browser itself; every send selector names "send" or "submit"
 (so a fallback can never click some other button); each site's own host,
 profile folder, commands, registration and card note; shipped and
@@ -164,23 +168,39 @@ def _code_only(src: str) -> str:
 
 
 #: The same list as test_chatbot_gemini.py's (checked below that it is).
+# CHANGED 2026-09-29 (owner): the old rule "driven openly - nothing that hides
+# it, nothing that dodges bot detection" was REVERSED (stealth is on for
+# Jarvis's browsers; the ban risk is accepted). This list is NOT that old rule
+# any more. It holds what is still true for THIS code (the chatbot driver's
+# visible, real browser):
+#   * never a proxy and never captcha solving (Jarvis hands a captcha to the
+#     owner - PC or phone "Solve it here");
+#   * a real browser that Jarvis writes no fingerprint-spoofing of its own
+#     for (the headless engine's stealth lives in jarvis_browser_engine*.py,
+#     not in the chatbot driver, which stays visible so the owner can take
+#     over at a captcha or sign-in).
 FORBIDDEN = (
-    # stealth kits and patched drivers
+    # no spoofing kits or patched drivers in the visible-browser code
     "stealth", "undetected", "puppeteer_extra", "selenium_stealth", "playwright_extra",
-    # changing how the browser presents itself
+    # no changing how the visible, real browser presents itself
     "user_agent", "useragent", "user-agent", "fingerprint", "extra_http_headers",
     "set_extra_http_headers", "locale", "timezone_id", "geolocation", "device_scale_factor",
     "--disable-blink-features", "automationcontrolled", "enable-automation",
     "ignore_default_args", "excludeswitches",
-    # hiding that a program is driving
+    # no scripts injected into the page
     "webdriver", "defineproperty", "add_init_script", "addinitscript",
     "__proto__", "navigator.",
-    # going round limits or blocks
+    # STILL TRUE: no proxy, no rotating addresses, no getting past a limit
     "proxy", "rotate_", "socks5", "bypass",
-    # solving captchas
+    # STILL TRUE: Jarvis never solves a captcha
     "2captcha", "twocaptcha", "anticaptcha", "anti-captcha", "capsolver", "capmonster",
     "deathbycaptcha", "solve_", "solve(", "solver", "recaptcha_token", "g-recaptcha-response",
 )
+PROXY_WORDS = ("proxy", "rotate_", "socks5", "bypass")
+CAPTCHA_WORDS = ("2captcha", "twocaptcha", "anticaptcha", "anti-captcha", "capsolver",
+                 "capmonster", "deathbycaptcha", "solve_", "solve(", "solver",
+                 "recaptcha_token", "g-recaptcha-response")
+SPOOF_WORDS = tuple(w for w in FORBIDDEN if w not in PROXY_WORDS + CAPTCHA_WORDS)
 #: Browser calls no SITE file may make: all driving is the shared base's.
 BROWSER_CALLS = {"launch", "launch_persistent_context", "goto", "click", "dblclick", "tap",
                  "check", "fill", "type", "press", "evaluate", "route", "add_init_script",
@@ -197,27 +217,38 @@ SITE_SRC = {k: (HERE / f"jarvis_chatbot_{k}.py").read_text(encoding="utf-8")
             for k in SITE_FILES}
 
 
-def t_no_stealth_anywhere():
+def t_still_true_no_proxy_no_captcha_solving():
     gem = (HERE / "test_chatbot_gemini.py").read_text(encoding="utf-8")
     gem_list = re.search(r"FORBIDDEN = \((.*?)\n\)", gem, re.S)
     mine = re.search(r"FORBIDDEN = \((.*?)\n\)", Path(__file__).read_text("utf-8"), re.S)
     check("this test forbids exactly what test_chatbot_gemini.py forbids",
           gem_list is not None and mine is not None
           and re.sub(r"\s+", "", gem_list.group(1)) == re.sub(r"\s+", "", mine.group(1)))
+    for label, words in (("proxy", ("proxy", "socks5")), ("captcha solving", ("capsolver",
+                         "2captcha", "solve_"))):
+        check(f"the shared list still forbids {label} (Jarvis never solves a captcha, "
+              "never uses a proxy)", all(w in FORBIDDEN for w in words))
     for name, src in [("jarvis_chatbot_web.py", BASE_SRC)] + \
             [(f"jarvis_chatbot_{k}.py", s) for k, s in SITE_SRC.items()]:
         code = _code_only(src).lower()
-        found = [w for w in FORBIDDEN if w in code]
-        check(f"{name}: no stealth, fingerprint, webdriver-hiding, proxy or captcha-solving "
-              "code", not found, found)
+        check(f"{name}: no proxy code (still true after the 2026-09-29 reversal)",
+              not [w for w in PROXY_WORDS if w in code], [w for w in PROXY_WORDS if w in code])
+        check(f"{name}: no captcha-solving code (Jarvis never solves a captcha)",
+              not [w for w in CAPTCHA_WORDS if w in code],
+              [w for w in CAPTCHA_WORDS if w in code])
+        check(f"{name}: no fingerprint-spoofing of Jarvis's own in the visible real browser "
+              "(the headless engine's stealth is elsewhere)",
+              not [w for w in SPOOF_WORDS if w in code], [w for w in SPOOF_WORDS if w in code])
         check(f"{name}: a fixed typing pace, nothing random", "random" not in code)
-        check(f"{name}: nothing starts a headless browser",
+        check(f"{name}: the chatbot driver's window is the visible one (the owner may have "
+              "to take over at a captcha)",
               "headless=True" not in src and "headless = True" not in src)
-        check(f"{name}: its docstring says what it never does",
-              "No stealth plug-in" in src and "captcha solving" in src)
+        flat = " ".join(src.split())
+        check(f"{name}: its docstring records the 2026-09-29 reversal and what still holds",
+              "2026-09-29" in flat and "captcha solving" in flat and "proxy" in flat)
 
 
-def t_the_base_drives_openly():
+def t_the_base_launches_one_visible_real_browser():
     tree = ast.parse(BASE_SRC)
     launches = [n for n in ast.walk(tree) if isinstance(n, ast.Call)
                 and isinstance(n.func, ast.Attribute)
@@ -347,15 +378,17 @@ def t_registered_and_ready():
         a.close()
         note = info.card_note
         if k == "gemini":
-            ok = "never hides that it is a program" in note and "spare account could be " \
-                 "closed" in note
+            ok = "never hides that it is a program" not in note and "captcha" in note \
+                 and "spare account could be closed" in note
         else:
-            ok = (note.startswith("Driven openly") and "never hides that it is a program" in note
+            ok = ("never hides that it is a program" not in note
+                  and "never changes how the browser looks" not in note
                   and "captcha" in note and "terms" in note
                   and f"spare {m.SITE.account} used only by Jarvis" in note
                   and "blocked or closed" in note)
-        check(f"{k}: the card note says: driven openly, the terms, a spare account, "
-              "may be blocked or closed", ok, note)
+        check(f"{k}: the card note says: a window you can see, the captcha rule, the terms, a "
+              "spare account, may be blocked or closed - and promises nothing about hiding",
+              ok, note)
         check(f"{k}: the card's 'how' names the spare account",
               "spare" in info.how and "window you can see" in info.how, info.how)
     check("ChatGPT's note names what OpenAI's terms forbid (quoted in the design doc)",
@@ -1041,7 +1074,7 @@ def main(argv):
     only = [k for k in argv if k in SITE_FILES] or list(SITE_FILES)
     xvfb = None
     try:
-        for fn in (t_no_stealth_anywhere, t_the_base_drives_openly, t_site_files_are_thin,
+        for fn in (t_still_true_no_proxy_no_captcha_solving, t_the_base_launches_one_visible_real_browser, t_site_files_are_thin,
                    t_selector_tables, t_registered_and_ready, t_shipped_and_documented):
             _run(fn)
         skip = ""
