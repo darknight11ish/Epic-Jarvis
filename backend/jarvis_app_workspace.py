@@ -84,7 +84,14 @@ MAX_CHANGE_FILES = 200
 #: A diff longer than this is not put on one card: the owner is asked to
 #: split the work instead, because a card nobody can read is not a decision.
 MAX_CARD_DIFF_CHARS = 60_000
+#: Tasks that may be open at once for one app. Each is a whole separate copy
+#: of the app on disk, so the number is small on purpose.
+MAX_OPEN_TASKS = 10
 GIT_SECONDS = 60.0
+#: Who wrote a task's files: Jarvis (a model tool, a later slice), the owner
+#: (a change pasted in on the PC), or nobody yet (a task just started).
+SOURCES = ("jarvis", "pasted", "empty")
+PASTED_LINE = "You pasted this change in on your PC."
 
 _NAME = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 _TASK = re.compile(r"^[0-9a-f]{12}$")
@@ -109,6 +116,11 @@ _LOCK = threading.RLock()
 
 class WorkspaceError(Exception):
     """A plain-words reason something was refused or failed."""
+
+
+class GitUnavailable(WorkspaceError):
+    """git is not installed, or did not answer in time: the caller answers 503
+    (not 400), because nothing the owner typed was wrong."""
 
 
 # --------------------------------------------------------------------------
@@ -197,10 +209,10 @@ def _git(args: list, cwd: Path, *, check: bool = True) -> subprocess.CompletedPr
         out = subprocess.run(cmd, cwd=str(cwd), env=env, capture_output=True, text=True,
                              encoding="utf-8", errors="replace", timeout=GIT_SECONDS)
     except FileNotFoundError:
-        raise WorkspaceError("git is not installed on this PC (https://git-scm.com), so "
+        raise GitUnavailable("git is not installed on this PC (https://git-scm.com), so "
                              "Jarvis cannot keep app projects yet")
     except subprocess.TimeoutExpired:
-        raise WorkspaceError("git took too long and was stopped")
+        raise GitUnavailable("git took too long and was stopped")
     if check and out.returncode != 0:
         raise WorkspaceError(f"git {args[0]} failed: {(out.stderr or out.stdout).strip()[:300]}")
     return out
@@ -253,6 +265,14 @@ def create_project(name: str, kind: str, title: str = "") -> dict:
     return {"name": name, "kind": kind, "title": title}
 
 
+def remove_new_project(name: str) -> None:
+    """Removes an app folder the caller has JUST created and nothing else has
+    used yet (Projects, when saving the project fails afterwards). Only ever
+    called with the name create_project() returned a moment ago."""
+    with _LOCK:
+        shutil.rmtree(project_dir(name), ignore_errors=True)
+
+
 # --------------------------------------------------------------------------
 #   Tasks: a separate copy per piece of work
 # --------------------------------------------------------------------------
@@ -272,23 +292,30 @@ def _branch(task: str) -> str:
     return f"jarvis/task-{task}"
 
 
-def start_task(name: str, title: str) -> dict:
-    """A new task: its own copy of `main`, on its own branch. Returns its id."""
+def start_task(name: str, title: str, source: str = "jarvis") -> dict:
+    """A new task: its own copy of `main`, on its own branch. Returns its id.
+    `source` says who will write its files (SOURCES); at most MAX_OPEN_TASKS
+    tasks are open for one app."""
     proj = project_dir(name)
     if not (proj / ".git").exists():
         raise WorkspaceError(f"there is no app called {name}")
+    if source not in SOURCES:
+        raise WorkspaceError("a task's source is 'jarvis', 'pasted' or 'empty'")
     title = " ".join(str(title or "").split())[:120] or "Untitled change"
     task = uuid.uuid4().hex[:12]
     with _LOCK:
+        if len(list_tasks(name)) >= MAX_OPEN_TASKS:
+            raise WorkspaceError(f"this app already has {MAX_OPEN_TASKS} open tasks - add or "
+                                 "throw one away first")
         _tasks_dir().mkdir(parents=True, exist_ok=True)
         _git(["worktree", "add", "-q", "-b", _branch(task), str(task_dir(name, task)), "main"],
              proj)
         base = _git(["rev-parse", "main"], proj).stdout.strip()
         _write_json(_task_meta_path(name, task),
                     {"project": name, "task": task, "title": title, "base": base,
-                     "started": time.time()})
+                     "source": source, "started": time.time()})
     _audit("app_task_started", {})
-    return {"project": name, "task": task, "title": title}
+    return {"project": name, "task": task, "title": title, "source": source}
 
 
 def list_tasks(name: str) -> list:
@@ -299,8 +326,64 @@ def list_tasks(name: str) -> list:
         for f in sorted(d.glob(f"{name}-*.json")):
             meta = _read_json(f)
             if meta.get("project") == name and task_dir(name, meta.get("task", "")).is_dir():
-                out.append({"task": meta["task"], "title": meta.get("title", "")})
+                src = meta.get("source")
+                out.append({"task": meta["task"], "title": meta.get("title", ""),
+                            "source": src if src in SOURCES else "jarvis",
+                            "base": meta.get("base", ""),
+                            "started": meta.get("started")})
     return out
+
+
+def task_known(name: str, task: str) -> bool:
+    """Is there anything of this task left - its copy or its note? A task
+    whose copy was deleted by hand is not listed (list_tasks), but discard()
+    can still clean up its branch and note."""
+    try:
+        return task_dir(name, task).is_dir() or _task_meta_path(name, task).is_file()
+    except WorkspaceError:
+        return False
+
+
+def set_source(name: str, task: str, source: str) -> None:
+    """Records who wrote the task's files. A change pasted into a task always
+    makes the whole task "pasted", so its card never claims Jarvis wrote what
+    the owner typed."""
+    if source not in SOURCES:
+        raise WorkspaceError("a task's source is 'jarvis', 'pasted' or 'empty'")
+    path = _task_meta_path(name, task)
+    with _LOCK:
+        meta = _read_json(path)
+        if not meta:
+            raise WorkspaceError("that task is gone - it was merged or thrown away")
+        meta["source"] = source
+        _write_json(path, meta)
+
+
+def main_info(name: str) -> dict:
+    """The app's latest saved version, read from git on `main`: short commit,
+    the subject line, when, and how many versions (commits) there are."""
+    proj = project_dir(name)
+    if not (proj / ".git").exists():
+        raise WorkspaceError(f"there is no app called {name}")
+    with _LOCK:
+        head = _git(["rev-parse", "main"], proj).stdout.strip()
+        line = _git(["log", "-1", "--format=%ct%x09%s", "main"], proj).stdout.strip()
+        count = _git(["rev-list", "--count", "main"], proj).stdout.strip()
+    at, _, subject = line.partition("\t")
+    try:
+        when = float(at)
+    except ValueError:
+        when = None
+    try:
+        versions = int(count)
+    except ValueError:
+        versions = 0
+    return {"head": head[:7], "subject": subject.strip(), "at": when, "versions": versions}
+
+
+def main_head(name: str) -> str:
+    """The full commit `main` is at now."""
+    return _git(["rev-parse", "main"], project_dir(name)).stdout.strip()
 
 
 def safe_path(tdir: Path, rel: str) -> Path:
@@ -382,8 +465,35 @@ def apply_change(name: str, task: str, changes: list, summary: str) -> dict:
             return {"ok": True, "changed": 0}
         msg = " ".join(str(summary or "").split())[:200] or "Change by Jarvis"
         _git(["commit", "-q", "-m", msg], tdir)
-    _audit("app_change_applied", {"files": len(checked)})
-    return {"ok": True, "changed": len(checked)}
+        # What git really kept: a file its .gitignore drops (.env, dist/, a
+        # signing key) is written but never part of the change, so counting
+        # the blocks would promise a file the merge card will not show.
+        kept = [f for f in _git(["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"],
+                                tdir).stdout.splitlines() if f.strip()]
+    _audit("app_change_applied", {"files": len(kept)})
+    return {"ok": True, "changed": len(kept)}
+
+
+def diff_stat(name: str, task: str) -> list:
+    """What the task would change in `main`, file by file, without the text
+    of the change: [{"path", "added", "removed"}] (counts as strings; "-" for
+    a file git cannot count)."""
+    proj, tdir = project_dir(name), task_dir(name, task)
+    if not tdir.is_dir():
+        raise WorkspaceError("that task is gone - it was merged or thrown away")
+    stat = _git(["diff", "--numstat", f"main...{_branch(task)}"], proj).stdout
+    files = []
+    for line in stat.splitlines():
+        a, d, path = (line.split("\t", 2) + ["", "", ""])[:3]
+        files.append({"path": path, "added": a, "removed": d})
+    return files
+
+
+def app_meta(name: str) -> dict:
+    """What `.jarvis-app.json` says about an app: {"kind", "title"} - empty
+    strings when the folder or the note is missing."""
+    meta = _read_json(project_dir(name) / ".jarvis-app.json")
+    return {"kind": str(meta.get("kind", "")), "title": str(meta.get("title", name))}
 
 
 def diff(name: str, task: str) -> dict:
@@ -392,11 +502,7 @@ def diff(name: str, task: str) -> dict:
     if not tdir.is_dir():
         raise WorkspaceError("that task is gone - it was merged or thrown away")
     rng = f"main...{_branch(task)}"
-    stat = _git(["diff", "--numstat", rng], proj).stdout
-    files = []
-    for line in stat.splitlines():
-        a, d, path = (line.split("\t", 2) + ["", "", ""])[:3]
-        files.append({"path": path, "added": a, "removed": d})
+    files = diff_stat(name, task)
     text = _git(["diff", "--no-color", "--no-ext-diff", rng], proj).stdout
     return {"files": files, "diff": text}
 
@@ -433,6 +539,8 @@ class MergePlan:
     head: str = ""
     main: str = ""
     refused: str = ""
+    #: "jarvis", "pasted" or "empty" - the card says so for a pasted change.
+    source: str = "jarvis"
 
     def detail(self) -> dict:
         """What the gate records - no file contents."""
@@ -442,7 +550,8 @@ class MergePlan:
 def plan_merge(name: str, task: str) -> MergePlan:
     tdir = task_dir(name, task)
     meta = _read_json(_task_meta_path(name, task))
-    plan = MergePlan(project=name, task=task, title=meta.get("title", ""))
+    plan = MergePlan(project=name, task=task, title=meta.get("title", ""),
+                     source=meta.get("source") if meta.get("source") in SOURCES else "jarvis")
     if not tdir.is_dir():
         plan.refused = "that task is gone - it was merged or thrown away"
         return plan
@@ -463,8 +572,11 @@ def describe(plan: MergePlan) -> str:
     """The approval card's words: every file, then the whole comparison."""
     if plan.refused:
         return f"Nothing to approve for {plan.project}: {plan.refused}."
-    lines = [f"Add Jarvis's change to your app \"{plan.project}\": {plan.title}",
-             "", f"{len(plan.files)} file(s):"]
+    lines = [f"Add Jarvis's change to your app \"{plan.project}\": {plan.title}", ""]
+    if plan.source == "pasted":
+        # The owner typed this, not Jarvis: the card must never say otherwise.
+        lines += [PASTED_LINE, ""]
+    lines.append(f"{len(plan.files)} file(s):")
     for f in plan.files:
         lines.append(f"  {f['path']}  (+{f['added']} -{f['removed']})")
     lines += ["", "Nothing is run: this only changes the app's files. "
@@ -477,25 +589,28 @@ def run_merge(plan: MergePlan, approved: bool = False) -> dict:
     if not approved:
         return {"ok": False, "error": "not approved"}
     if plan.refused:
-        return {"ok": False, "error": plan.refused}
+        return {"ok": False, "error": plan.refused, "why": "refused"}
     proj, tdir = project_dir(plan.project), task_dir(plan.project, plan.task)
     with _LOCK:
         if not tdir.is_dir():
-            return {"ok": False, "error": "that task is gone - it was merged or thrown away"}
+            return {"ok": False, "error": "that task is gone - it was merged or thrown away",
+                    "why": "gone"}
         head = _git(["rev-parse", _branch(plan.task)], proj).stdout.strip()
         main = _git(["rev-parse", "main"], proj).stdout.strip()
         if head != plan.head or main != plan.main:
             return {"ok": False, "error": "the app changed after the card was shown, so "
-                                          "nothing was merged - look at the new card"}
+                                          "nothing was merged - look at the new card",
+                    "why": "stale"}
         if _git(["status", "--porcelain"], proj).stdout.strip():
             return {"ok": False, "error": "the app's own folder has changes that are not "
-                                          "saved in git, so nothing was merged"}
+                                          "saved in git, so nothing was merged",
+                    "why": "unsaved"}
         out = _git(["merge", "--no-ff", "--no-edit", "-m",
                     f"Jarvis: {plan.title}"[:200], _branch(plan.task)], proj, check=False)
         if out.returncode != 0:
             _git(["merge", "--abort"], proj, check=False)
             return {"ok": False, "error": "the change could not be merged cleanly; "
-                                          "nothing was changed"}
+                                          "nothing was changed", "why": "conflict"}
     discard(plan.project, plan.task)
     _audit("app_change_merged", {"files": len(plan.files)})
     return {"ok": True, "files": len(plan.files)}
