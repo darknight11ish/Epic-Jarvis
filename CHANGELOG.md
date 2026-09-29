@@ -6,6 +6,25 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Three drawing fixes for the animal faces (2026-09-29, from the skeptical
+  review).** (1) **The robot's eyes now show the colour of what Jarvis is
+  doing.** They were coming out nearly white in every state (so listening
+  and waiting on you looked the same pale pink); now listening is amber,
+  waiting on you yellow, thinking violet, an error rose, idle cyan - the
+  same colours the animals' orbs use. Both apps. The picture in
+  `docs/critters/robot-states.png` was redrawn. (2) **Sharper animals on the
+  PC:** the desktop draws each animal with 1.5 to 2 times more steps of its
+  ray-marching than the phone can afford, which removes the dotted seam where
+  the panda's tail crosses its cheek and the blue fringe round the monkey's
+  head (wrongly drawn pixels against a very slow reference: panda 9,042 to
+  289, monkey 3,481 to 46, owl 1,448 to 34, otter 2,822 to 4, robot 98 to 1).
+  The phone's drawing is unchanged; the two now differ by a few edge pixels.
+  Not measured here: how long a Windows graphics driver takes to build the
+  longer shaders the first time a face opens - if a face is slow to appear,
+  lower its number in `tools/gen_critters.py` (`DESKTOP_STEPS`). (3) **The
+  owl's cream chest fades into the brown at the neck** instead of ending in a
+  straight line. Needs the new desktop and phone builds; no backend change.
+
 - **The animals move less when Jarvis is not being used, and never the
   same way twice (2026-09-29, both apps).** Three fixes from the skeptical
   review. (1) **Fewer small idle moves:** while you have not talked to

@@ -34,6 +34,7 @@ hosts read before handing the pose Jarvis's phrase ends:
 CI and `jarvis-desktop/tests/faces.mjs` run `--check`.
 """
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -60,6 +61,19 @@ OUT_ZS = OUT_GOLDEN.with_name("critter-zs-golden.json")
 # frame pacer on both apps reads: one line of 0s and 1s per animal, four
 # samples a second over the first 320 seconds and around a day-long clock.
 OUT_BUSY = OUT_GOLDEN.with_name("critter-busy-golden.json")
+
+# The desktop (WebGL) copy of each face is marched with MORE steps than the
+# phone's (`MARCH_STEPS` in jarvis-desktop/critters/<face>.sksl, which Android's
+# shader size limit sets - see docs/CRITTERS.md, "Drawing quality"): the PC has
+# no such limit, and a ray that ran out of steps is where the small faults are
+# (a dotted seam where the panda's tail crosses its cheek, a blue fringe round
+# the monkey's head). Chosen by measurement, not by hope: wrongly drawn pixels
+# against a 400-step reference, and the time to build the shader (which grows
+# with the step count) - the numbers are in docs/CRITTERS.md. The PHONE's copy
+# (CritterShaders.kt) always keeps the number in the .sksl, and
+# tools/shader_size.py measures that copy.
+DESKTOP_STEPS = {"redpanda": 64, "pygmyowl": 72, "seaotter": 96, "monkey": 64, "robot": 96}
+MARCH_LINE = re.compile(r"const int MARCH_STEPS = (\d+);")
 
 GLSL_HEAD = """#version 300 es
 precision highp float;
@@ -555,7 +569,11 @@ def animals():
 def build():
     js_rows, kt_rows = [], []
     for face_id, const, body in animals():
-        glsl = GLSL_HEAD + body + GLSL_MAIN
+        steps = DESKTOP_STEPS[face_id]
+        if len(MARCH_LINE.findall(body)) != 1 or int(MARCH_LINE.search(body).group(1)) > steps:
+            sys.exit(f"{face_id}: needs exactly one 'const int MARCH_STEPS = N;' with N no more than its "
+                     f"DESKTOP_STEPS ({steps})")
+        glsl = GLSL_HEAD + MARCH_LINE.sub(f"const int MARCH_STEPS = {steps};", body) + GLSL_MAIN
         agsl = body + AGSL_MAIN
         if '"""' in agsl or "$" in agsl:
             sys.exit(f"{face_id}: the shader must not contain a triple quote or a dollar sign: "

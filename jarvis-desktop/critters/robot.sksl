@@ -224,6 +224,18 @@ float eyeAt(float2 q, float open, float side) {
     return max(d, q.y - mix(r, 0.3 * r, uEyes2.x) * max(open, 0.2));
 }
 
+// Where the eyes are: the distance to the nearest eye's edge (negative
+// inside), from the head-frame point's x, y relative to the head's middle.
+// Each eye drifts toward where it looks, and hops a little with the voice
+// and grows a touch with it too. Both material() (to darken the glass under
+// them) and sparkle() (to light them) ask.
+float eyesAt(float2 q) {
+    float pulse = uEyes2.w;
+    float2 e = q - float2(0.0, -0.08 + 0.018 * pulse) - float2(0.05, 0.04) * uLook;
+    float side = e.x < 0.0 ? -1.0 : 1.0;
+    return eyeAt(float2(e.x - side * 0.170, e.y) / (1.0 + 0.16 * pulse), e.x < 0.0 ? uEyes.x : uEyes.y, side);
+}
+
 float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
     if (id == ID_FIN) return float4(TEAL, 0.35);
@@ -241,6 +253,10 @@ float4 material(float id, float3 pos, float3 n) {
         float glass = 1.0 - smoothstep(-0.004, 0.004, v);
         float seam = 1.0 - smoothstep(0.004, 0.014, abs(v - 0.006));
         float3 c = mix(VISOR, VISOR_DEEP, smoothstep(-0.14, 0.0, v) * 0.8);
+        // Under an eye the glass is nearly black, so the eye's own colour
+        // is all that shows there: over the blue glass it came out pink or
+        // violet whatever the state's colour was.
+        c *= 1.0 - 0.9 * (1.0 - smoothstep(-0.01, 0.03, eyesAt(q)));
         return float4(mix(SHELL * (1.0 - 0.55 * seam), c, glass), mix(0.3, 1.0, glass));
     }
     // The body's teal shield on the chest, and the thin blue line round the
@@ -259,7 +275,7 @@ float4 material(float id, float3 pos, float3 n) {
 }
 
 // Painted on top of the lighting: what glows. The eyes, in the state's
-// colour (uHot) with a white-hot middle; the visor's rim; a soft
+// colour (uHot) with a small white middle (the glass under them is dark, see material()); the visor's rim; a soft
 // reflection on the glass; the gleam of a polish; the fins' edges.
 float3 sparkle(float id, float3 pos) {
     float3 hot = toLinear(uHot);
@@ -285,16 +301,14 @@ float3 sparkle(float id, float3 pos) {
     float gd = q.x + 0.5 * q.y - mix(-0.6, 0.6, uFins.w);
     c += float3(0.55) * sin(3.14159 * clamp(uFins.w, 0.0, 1.0)) *
          ((1.0 - smoothstep(0.0, 0.07, abs(gd))) + 0.6 * (1.0 - smoothstep(0.0, 0.018, abs(gd - 0.11))));
-    // The eyes. Each drifts toward where it looks, and hops a little with
-    // the voice; they grow a touch with it too.
+    // The eyes, in the state's colour with only a small white-hot middle.
     float pulse = uEyes2.w;
-    float2 e = q - float2(0.0, -0.08 + 0.018 * pulse) - float2(0.05, 0.04) * uLook;
-    float side = e.x < 0.0 ? -1.0 : 1.0;
-    float d = eyeAt(float2(e.x - side * 0.170, e.y) / (1.0 + 0.16 * pulse), e.x < 0.0 ? uEyes.x : uEyes.y, side);
+    float d = eyesAt(q);
     float core = 1.0 - smoothstep(-px, px, d);
+    float mid = 1.0 - smoothstep(-px, px, d + 0.014);
     float bloom = exp(-max(d, 0.0) * 55.0) * 0.45;
     float bright = uEyes2.z * (1.0 + 0.45 * pulse);
-    c += (mix(hot, float3(1.0), 0.55) * 2.2 * core + hot * bloom) * bright;
+    c += (mix(hot, float3(1.0), 0.05 * mid) * 0.85 * core + hot * bloom * 0.8) * bright;
     // A faint glow of the eyes' colour inside the glass.
     return c + hot * 0.035 * uEyes2.z * smoothstep(0.0, -0.2, v);
 }
