@@ -1357,7 +1357,8 @@ float3 headColour(float3 h) {
 float3 bodyColour(float3 b) {
     // A pale front, narrower than the owl, with brown streaks running down
     // it; brown sides and back with white spots.
-    float front = (1.0 - smoothstep(-0.20, -0.02, b.z)) * (1.0 - smoothstep(0.16, 0.26, abs(b.x)));
+    float front = (1.0 - smoothstep(-0.20, -0.02, b.z)) * (1.0 - smoothstep(0.16, 0.26, abs(b.x))) *
+                  (1.0 - smoothstep(0.54, 0.72, b.y));
     float streak = smoothstep(0.35, 0.75, sin(b.x * 30.0 + sin(b.y * 6.0) * 1.6)) *
                    (1.0 - smoothstep(0.25, 0.80, b.y));
     float3 belly = mix(CREAM, BROWN * 1.15, streak * 0.85);
