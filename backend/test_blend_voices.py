@@ -427,8 +427,11 @@ def t_the_picker_says_where_each_case_stands():
           and view["pack"] == {"kind": "v1", "name": "Kokoro v1.0", "voices": 54}
           and view["choice"] == "af_heart" and view["default"] == "af_heart", view)
     check("GET /api/voice/voices carries it", V.status()["speaker"] == V.speaker_view())
+    check("made: no line to copy", view["make_line"] == "", view)
     reset("v1", "none")
     view = V.speaker_view()
+    check("not made yet: the one PowerShell line rides along for the phone's Copy button",
+          view["make_line"] == K.MAKE_LINE, view)
     check("the new pack, not made yet: not listed, and the note says how",
           [c["id"] for c in view["choices"]] == list(K.V1_PICK)
           and view["note"] == K.BLENDS_TO_MAKE

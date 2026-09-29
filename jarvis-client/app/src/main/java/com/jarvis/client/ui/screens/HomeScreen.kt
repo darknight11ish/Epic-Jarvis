@@ -691,7 +691,8 @@ data class HomeActions(
     /** "Forget it": throw the held look at the screen away without asking anything. */
     val onForgetLook: () -> Unit = {},
     /** End the PC's "Watch with me". Never held on a stale link, never a card. */
-    val onStopWatching: suspend () -> Unit = {},
+    /** Returns a plain line when the PC could not be reached, else null. */
+    val onStopWatching: suspend () -> String? = { null },
     /** The owner's tap on "Watch this phone with me": Android asks its own question next. */
     val onStartPhoneWatch: () -> Unit = {},
     /** Ends Watch on this phone. Never held on a stale link, never a card. */
@@ -1200,11 +1201,11 @@ private fun ConversationList(
         // "Jarvis is watching" (owner, 2026-09-28): the PC's Watch with me,
         // said here too, with Stop. Stop is never held on a stale link.
         if (state.watchSign != null) {
-            item(key = "pc-watching") { PcWatchingPlate(state.watchSign, actions.onStopWatching) }
+            item(key = "pc-watching") { PcWatchingPlate(state.watchSign, actions.onStopWatching, pcScreen = true) }
         }
         // ...and the same for THIS phone's screen ("Watch this phone with me").
         if (state.phoneWatchSign != null) {
-            item(key = "phone-watching") { PcWatchingPlate(state.phoneWatchSign, actions.onStopPhoneWatch) }
+            item(key = "phone-watching") { PcWatchingPlate(state.phoneWatchSign, { actions.onStopPhoneWatch(); null }) }
         } else if (state.phoneWatchOffered) {
             item(key = "phone-watch-start") { PhoneWatchStartPlate(state, actions) }
         }
@@ -2148,20 +2149,41 @@ private fun LockdownPlate() {
  * phone is refused by the PC itself.
  */
 @Composable
-private fun PcWatchingPlate(sign: com.jarvis.client.net.ScreenRules.Sign, onStop: suspend () -> Unit) {
+private fun PcWatchingPlate(
+    sign: com.jarvis.client.net.ScreenRules.Sign,
+    onStop: suspend () -> String?,
+    pcScreen: Boolean = false,
+) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
+    // A plain line when Stop could not reach the PC. The sign itself is never
+    // marked off here: it only follows what the PC says when it is re-read.
+    var said by remember { mutableStateOf<String?>(null) }
     Plate(outline = chrome.warnInk.copy(alpha = 0.35f)) {
-        Kicker(sign.title, color = chrome.warnInk)
+        // The plate's own, larger title (the shared words stay in ScreenRules).
+        Text(sign.title, style = MaterialTheme.typography.titleSmall, color = chrome.warnInk)
+        if (pcScreen) {
+            Gap(2)
+            Text(
+                com.jarvis.client.net.ScreenPlateText.PC_SCREEN,
+                style = MaterialTheme.typography.bodyMedium,
+                color = chrome.textMid,
+            )
+        }
         if (sign.detail.isNotEmpty()) {
             Gap(6)
             Text(
-                sign.detail,
+                // Only the PC can extend a watch, so an "Ending soon" line says so.
+                if (pcScreen) com.jarvis.client.net.ScreenPlateText.withExtendHint(sign.detail) else sign.detail,
                 style = MaterialTheme.typography.bodyMedium,
                 color = chrome.textMid,
                 modifier = Modifier.liveStatus(),
             )
+        }
+        said?.let {
+            Gap(6)
+            Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.badInk, modifier = Modifier.liveStatus())
         }
         if (sign.on && sign.stop.isNotEmpty()) {
             Quiet(
@@ -2171,9 +2193,13 @@ private fun PcWatchingPlate(sign: com.jarvis.client.net.ScreenRules.Sign, onStop
                 onClick = {
                     if (!busy) {
                         busy = true
+                        said = null
                         scope.launch {
-                            onStop()
-                            busy = false
+                            try {
+                                said = onStop()
+                            } finally {
+                                busy = false
+                            }
                         }
                     }
                 },
@@ -2215,6 +2241,24 @@ private fun PhoneWatchStartPlate(state: HomeState, actions: HomeActions) {
                 com.jarvis.client.net.ScreenWatch.START_LABEL,
                 enabled = state.link == LinkState.CONNECTED,
                 onClick = actions.onStartPhoneWatch,
+            )
+            if (state.link != LinkState.CONNECTED) {
+                Text(
+                    com.jarvis.client.net.ScreenPlateText.WAITING_LINK,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = chrome.textLo,
+                    modifier = Modifier.liveStatus(),
+                )
+            }
+        }
+        // Asking about the screen goes through Android's assistant gesture, so
+        // Jarvis has to be the phone's assistant app; shown only when it is not.
+        if (!PlatformReadiness.assistantRoleHeld(LocalContext.current)) {
+            Gap(6)
+            Text(
+                com.jarvis.client.net.ScreenPlateText.ASSISTANT_HINT,
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textLo,
             )
         }
     }
