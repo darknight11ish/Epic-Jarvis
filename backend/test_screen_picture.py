@@ -1373,8 +1373,12 @@ def t_nothing_from_the_screen_reaches_status_or_the_route_answers():
         check("no program, title, word or picture description in a status body",
               not any(x in b.lower() for x in LEAKS), b[:200])
     check("the audit log holds counts and seconds only",
-          all(set((d or {})) <= {"seconds", "chars", "mode", "ocr_chars", "ui_chars", "did", "hidden",
-                                 "minutes", "why", "outcome", "kind"} for _e, d in AUDIT), AUDIT)
+          all(set((d or {})) <= {"seconds", "chars", "mode", "ocr_chars", "ui_chars", "did",
+                                 "minutes", "why", "outcome", "kind", "hidden"}
+              for _e, d in AUDIT), AUDIT)
+    # "hidden" is screen safety's COUNT of hidden runs (jarvis_screen.py's screen.look line): a number.
+    check("... and 'hidden' in it is only a count",
+          all(isinstance(d.get("hidden"), int) for _e, d in AUDIT if d and "hidden" in d), AUDIT)
 
 
 # ==========================================================================

@@ -398,6 +398,8 @@ of the screen is hidden by `jarvis_secrets.py` (gitleaks's and Presidio's
 patterns, a much bigger table than `jarvis_router._SECRET_PATTERNS`, which
 only decides whether a typed question may go to a cloud lane, or
 `jarvis_scrub.py`, which cleans the log) and painted black in the picture;
+a picture the owner attaches to a chat is cleaned the same way before any model sees it (`jarvis_chat_picture.py`, 2026-09-29: the
+owner's "Yes, clean them too"), and one that cannot be checked is withheld;
 like the others, a pattern list never recognises everything.
 
 ### A known limit: a program already on the PC

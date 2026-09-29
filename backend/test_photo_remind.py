@@ -437,6 +437,41 @@ def t_patch_and_shipping():
               not any(line.startswith("photo-reminder.patch") for line in log), log)
 
 
+def t_secrets_in_the_picture_are_hidden_before_a_title_is_picked():
+    """2026-09-29 ("Yes, clean them too"): the words shown and the titles proposed
+    never carry a key or a card number, and the check is done on ALL the words
+    before the cut, and an unchecked picture gives no words."""
+    token = "ghp_" + "aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bC1eF3hJ5"          # made up
+    text = f"Pay card 4111 1111 1111 1111 or use {token} by Sat 12 Oct, 2pm"
+    code, out = P.scan({"image": URI}, reader=reader(text), now=NOW)
+    body = json.dumps(out)
+    check("the words shown hide the card number and the key", code == 200
+          and "[hidden]" in out["text"] and "4111" not in body and token not in body, out.get("text"))
+    check("a date is still found and no title carries a secret",
+          len(out["found"]) == 1 and "4111" not in json.dumps(out["found"])
+          and token not in json.dumps(out["found"]), out["found"])
+    import jarvis_ocr
+    filler = "word " * (jarvis_ocr.MAX_CHARS // 5 - 6)
+    edge = filler + token                    # the key would straddle the cut at MAX_CHARS
+    code, out = P.scan({"image": URI}, reader=reader(edge), now=NOW)
+    check("a key that straddles the cut is hidden whole (checked before cutting)",
+          code == 200 and token[:12] not in out["text"] and token[-12:] not in out["text"],
+          out["text"][-80:])
+    import jarvis_secrets as SEC
+    saved = SEC.check
+
+    def cannot(lines, **k):
+        raise SEC.Unchecked("checking took too long")
+    SEC.check = cannot
+    try:
+        code, out = P.scan({"image": URI}, reader=reader(text), now=NOW)
+    finally:
+        SEC.check = saved
+    check("a picture that cannot be checked gives NO words: 503 with the reason",
+          code == 503 and out["ok"] is False and "text" not in out and "checking took too long" in out["error"],
+          (code, out))
+
+
 def t_both_apps_say_these_words():
     js = (REPO / "jarvis-desktop" / "src" / "photo-reminder.js").read_text(encoding="utf-8")
     kt = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis" /

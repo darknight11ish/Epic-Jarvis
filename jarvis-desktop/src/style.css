@@ -685,6 +685,14 @@ html[data-state="error"] .reactor-ring-mid {
   max-width: 420px;
 }
 
+/* One plain sentence under an attached picture (secrets are covered with black
+   before Jarvis looks). Wraps, unlike the mono metadata line above it. */
+.attachment-note {
+  font-size: var(--text-2xs);
+  color: var(--text-faint);
+  max-width: 420px;
+}
+
 /* The local model cannot see the attached picture: say so, and ask. Amber
    like every other "this needs you" line, never the accent of an answer. */
 .picture-notice {

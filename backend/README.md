@@ -17523,6 +17523,30 @@ secrets), `jarvis_secret_rules.py` (gitleaks's rule data, generated),
 `jarvis_screen.clean_picture` (the one door), and changes to `jarvis_ocr.py`,
 `jarvis_screen_win.py` and `jarvis_screen.py`.
 
+**Added 2026-09-29 (the owner's "Yes, clean them too"): the pictures the owner
+ATTACHES to a chat go through the same door too.** New whole module
+`jarvis_chat_picture.py` (no patch: `jarvis_agent.py`, which calls it, is itself
+a whole module; `clean_attached_pictures` and `_cleaned_reader` in
+`jarvis_agent.py`). Before ANY model sees an attached picture - the second card's
+picture model, a main model that can see, or the words read for a model that
+cannot - secrets in it are painted solid black; a picture with nothing to hide
+goes on untouched; one that cannot be checked is NOT handed on, and both the
+model's text and the answer itself say so. The note beside the answer counts the
+places covered. Both apps say, in the same words, "Secrets in pictures you attach
+are covered with black boxes before Jarvis looks." Test: `py -3
+backend\test_chat_picture.py` (a fake key and card number are blacked out at the
+right boxes; each way a picture cannot be checked is withheld; the model stub never
+receives the original bytes; no cleaner installed = withheld). JARVIS-API section
+36 ("Secrets in it are covered first") and 62.13 part 4. Not covered, same as the
+screen: a password behind a show-password eye, tiny or stylised text, a QR code, a
+photo of a card. "Photo to reminder" (`jarvis_photo_remind.scan`) gets the same
+check on its words too (`[hidden]` before a date or title is picked; unchecked =
+503, no words). **Owner step:** none beyond
+the usual `apply-patches.ps1` (it copies the new module); the picture check on your
+PC is the same `py -3 tools\check_screen_safety.py`. A JPEG (what both apps attach)
+can only be painted on where Windows can open it for the text reader; where it
+cannot, the picture is withheld and the answer says why.
+
 ## In plain words
 
 Before Jarvis reads your screen, it looks for anything that looks like a key, a

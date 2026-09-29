@@ -994,6 +994,7 @@ $SHIPPED = @(
     'jarvis_secret_rules.py'     # GENERATED (tools/gen_secret_rules.py): gitleaks's rule data (MIT), what a key, token or password looks like; no patch
     'jarvis_secrets.py'          # finds secrets in the words read from a picture (gitleaks + Presidio patterns, a card must pass the check digit) and works out the black boxes; no patch
     'jarvis_picture.py'          # paints SOLID BLACK boxes on a picture and hands on only a checked one; jarvis_screen.clean_picture is the door; no patch
+    'jarvis_chat_picture.py'     # the pictures the owner ATTACHES to a chat get the same black-out (jarvis_screen.clean_picture) before any model sees them; one that cannot be checked is withheld and the answer says so; jarvis_agent.py calls it, no patch
     # --- plug-in programs (MCP), reached only through more_tools("plugins") ---
     'jarvis_mcp.py'              # read-only tools from programs on this PC you list under [mcp]; stdio only; every call asks
     # --- the crisis help line (2026-09-27) ---

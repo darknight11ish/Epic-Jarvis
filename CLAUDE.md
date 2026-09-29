@@ -1578,6 +1578,13 @@ instructions):
   even when they sit behind the front one (fail closed if the window list
   cannot be read), plus pauses for private browser windows and protected
   video, and skipping hidden or off-screen text in the accessibility tree.
+- **Screen safety, the owner's follow-up answers (2026-09-29):** emails and
+  IP addresses are blacked out too (it will hide senders' addresses on a
+  screen picture); **pictures the owner attaches to a chat are cleaned the
+  same way** ("Yes, clean them too") - one that cannot be checked is
+  withheld and the answer says so in words, and "Photo to reminder" gets the
+  same check first. Jarvis Live's camera, when it is switched on, must use
+  this same door.
 - **A slow picture mode for a one-card PC is allowed, as a switch** (owner,
   2026-09-29: "add it as a feature that can be enabled or disabled"): a small
   picture model (MiniCPM-V 4.6, 1.3 B, Apache-2.0) running on the processor,

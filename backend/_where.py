@@ -185,6 +185,8 @@ SHIPPED = (
     # screen safety (2026-09-29): secrets in a picture of the screen are painted
     # black before anything reads it (no patch)
     "jarvis_secret_rules.py", "jarvis_secrets.py", "jarvis_picture.py",
+    # the pictures the owner attaches to a chat get the same treatment, before any model (no patch)
+    "jarvis_chat_picture.py",
     # plug-in programs (MCP): read-only tools from programs on this PC, through more_tools
     "jarvis_mcp.py",
     # the crisis help line: the word check, the fixed US help message, the note to the model

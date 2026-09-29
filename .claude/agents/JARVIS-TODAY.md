@@ -178,7 +178,11 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
   PC's picture is taken with every Never look at window, private browser
   window and Jarvis window painted black; a private browser window in front is
   a pause; the text reader runs inside Jarvis (pywinrt) with word positions.
-  Not run on a real PC yet.
+  Not run on a real PC yet. **Pictures the owner attaches to a chat are cleaned
+  the same way** (2026-09-29, "Yes, clean them too"; `jarvis_chat_picture.py`,
+  JARVIS-API §36): before any model sees one, secrets are painted solid black;
+  nothing to hide - it goes on untouched; one that cannot be checked is
+  withheld and the answer says so.
 - **Third graphics card: its own lane, off by default** - on
   `claude/jarvis-continuation-03kls1` (2026-09-28, 5cc47a9c): a third
   NVIDIA card is detected, and one of the five second-card features can be
