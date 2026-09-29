@@ -15,7 +15,12 @@
  * steps it always took, so the pictures should be the same except for a
  * stray pixel or two along an edge, where a ray that only skims past the
  * animal can go either way. The measured worst is 10 pixels in one 96-pixel
- * picture (docs/CRITTERS.md, "The bounding volumes").
+ * picture (docs/CRITTERS.md, "The bounding volumes"). The desktop's shader is
+ * marched with more steps than the phone's (tools/gen_critters.py
+ * DESKTOP_STEPS), which is the one this draws, both times: the two sides of
+ * the comparison always take the same steps, so it still tests the cut-off
+ * and nothing else (and with the longer march far fewer stray pixels are
+ * left, at most 1 in a picture).
  *
  * The poses: every state, looks in all directions and the mouth's shapes, the
  * idle happenings and cute moments (the robot's zip, the monkey's swing, the

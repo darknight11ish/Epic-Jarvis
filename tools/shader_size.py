@@ -15,8 +15,10 @@ A newer Skia on a PC (skia-python) and WebGL both accept a shader that
 breaks this rule, which is how the red panda first shipped over the limit and
 crashed the phone's emulator test. This measures the rule instead of hoping.
 
-It works on the desktop's GLSL copy (the same source as the phone's AGSL),
-using glslang's syntax tree. glslang's tree is shaped a little differently
+It works on the PHONE's copy of each face (CritterShaders.kt, in GLSL clothes:
+AGSL and GLSL agree except for a few type names) - not the desktop's, which is
+marched with more steps because a PC has no such limit (gen_critters.py
+DESKTOP_STEPS) - using glslang's syntax tree. glslang's tree is shaped a little differently
 from Skia's, so the count is an estimate, not the exact figure: it is checked
 against Nucleus (which Android accepts) and the first red panda (which it
 refused), and faces are held to a margin well under the limit.
@@ -144,8 +146,27 @@ def measure(glsl: str) -> int:
 
 
 def critters():
-    js = (ROOT / "jarvis-desktop" / "src" / "critters-gen.js").read_text(encoding="utf-8")
-    return {m.group(1): json.loads(m.group(2)) for m in re.finditer(r"  (\w+): (\".*\"),\n", js)}
+    """The PHONE's copy of every face, as a GLSL program glslang can read.
+
+    Android is where the size limit bites, and the desktop's copy is marched
+    with more steps than the phone's (tools/gen_critters.py DESKTOP_STEPS), so
+    it is CritterShaders.kt that is measured, not critters-gen.js: its AGSL
+    text with the same few #defines and the same `main` the desktop adds
+    (AGSL's own `main` swapped for the GLSL one - two lines either way).
+    """
+    sys.path.insert(0, str(ROOT / "tools"))
+    import gen_critters as G
+    kt = (G.OUT_KT).read_text(encoding="utf-8")
+    out = {}
+    for face_id, const in G.ANIMALS:
+        m = re.search(r'const val %s = """(.*?)"""' % const, kt, re.S)
+        if not m:
+            continue
+        body = m.group(1)
+        if not body.endswith(G.AGSL_MAIN):
+            sys.exit(f"{const}: CritterShaders.kt no longer ends with the phone's main() - run tools/gen_critters.py")
+        out[face_id] = G.GLSL_HEAD + body[: -len(G.AGSL_MAIN)] + G.GLSL_MAIN
+    return out
 
 
 def nucleus():
@@ -157,7 +178,7 @@ def nucleus():
 
 def main():
     check = "--check" in sys.argv
-    print(f"Android's limit {LIMIT:,}; critters are held to {BUDGET:,}.")
+    print(f"Android's limit {LIMIT:,}; critters are held to {BUDGET:,}. (Measured on the phone's copy, CritterShaders.kt.)")
     print(f"  nucleus (accepted on Android): {measure(nucleus()):,}")
     over = []
     for name, glsl in critters().items():
