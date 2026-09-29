@@ -230,6 +230,16 @@
     },
     {
      "asks": "-",
+     "id": "screen_picture",
+     "line": "Off: with one graphics card Jarvis reads only the words on your screen. Switching it on asks you with an approval card.",
+     "name": "Picture mode for the screen (slow)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "sky_weather",
      "line": "Off: no weather is drawn behind the face. The sun and moon never go online - they are worked out on your own devices.",
      "name": "Weather behind the face",
@@ -477,6 +487,16 @@
      "id": "big_model",
      "line": "Off. Switching it on asks you with an approval card.",
      "name": "Big model (slow)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "screen_picture",
+     "line": "Off: with one graphics card Jarvis reads only the words on your screen. Switching it on asks you with an approval card.",
+     "name": "Picture mode for the screen (slow)",
      "on": false,
      "state": "off",
      "state_words": "Off",
@@ -734,6 +754,16 @@
     },
     {
      "asks": "-",
+     "id": "screen_picture",
+     "line": "Off: with one graphics card Jarvis reads only the words on your screen. Switching it on asks you with an approval card.",
+     "name": "Picture mode for the screen (slow)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "sky_weather",
      "line": "Off: no weather is drawn behind the face. The sun and moon never go online - they are worked out on your own devices.",
      "name": "Weather behind the face",
@@ -784,7 +814,7 @@
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
    "everything_else": "Anything not on this list stays on this PC.",
-   "on": 22,
+   "on": 23,
    "rows": [
     {
      "asks": "Yes, every question",
@@ -1005,6 +1035,16 @@
      "state": "on",
      "state_words": "On",
      "where": "this PC (colibri)"
+    },
+    {
+     "asks": "-",
+     "id": "screen_picture",
+     "line": "Switched on: when you ask Jarvis to look at your screen, a small picture model also looks at the picture, slowly. Secrets in it are blacked out first, it runs on the processor and nothing leaves the PC or is saved.",
+     "name": "Picture mode for the screen (slow)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "this PC (a separate copy of Ollama, on the processor)"
     },
     {
      "asks": "-",
@@ -1358,6 +1398,16 @@
     },
     {
      "asks": "-",
+     "id": "screen_picture",
+     "line": "Off: with one graphics card Jarvis reads only the words on your screen. Switching it on asks you with an approval card.",
+     "name": "Picture mode for the screen (slow)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "sky_weather",
      "line": "Off: no weather is drawn behind the face. The sun and moon never go online - they are worked out on your own devices.",
      "name": "Weather behind the face",
@@ -1400,6 +1450,7 @@
   "plugins",
   "second_card",
   "big_model",
+  "screen_picture",
   "sky_weather"
  ],
  "missing": "Your PC's Jarvis cannot list what it can reach yet - run apply-patches.ps1 on the PC.",

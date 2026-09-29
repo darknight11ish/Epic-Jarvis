@@ -260,6 +260,9 @@ class Ctx:
     # Customer-support chats (jarvis_support.py): {"routed": bool, "ready":
     # "" or why not, "companies": [names]}; None: read them.
     support: Optional[dict] = None
+    # Picture mode for the screen (jarvis_screen_picture.py): {"enabled": bool,
+    # "model": tag}; None: read the switch file.
+    screen_picture: Optional[dict] = None
 
 
 def _gate_action(lookup: str) -> Optional[str]:
@@ -770,6 +773,36 @@ def _big_model(ctx: Ctx) -> dict:
                 f"Switched on for: {what}. It runs on this PC: nothing it handles leaves the PC.")
 
 
+def _screen_picture_status() -> dict:
+    try:
+        import jarvis_screen_picture as SP
+        return {"enabled": bool(SP.settings()["enabled"]), "model": SP.model()}
+    except Exception:
+        return {"enabled": False, "model": "", "missing": True}
+
+
+def _screen_picture(ctx: Ctx) -> dict:
+    """Picture mode (jarvis_screen_picture.py, the owner's decision of
+    2026-09-29): a small picture model on the PROCESSOR, in its own copy of
+    Ollama on this PC, that also looks at the picture of the screen. Not a way
+    out of the PC - like the second card and the big model, it is listed so the
+    page is honest about every model Jarvis runs."""
+    name = "Picture mode for the screen (slow)"
+    st = ctx.screen_picture if ctx.screen_picture is not None else _screen_picture_status()
+    if st.get("missing"):
+        return _row("screen_picture", name, "not_set_up", "", ASK_NA,
+                    "Not set up: this PC's Jarvis has no picture mode yet.")
+    if not st.get("enabled"):
+        return _row("screen_picture", name, "off", "", ASK_NA,
+                    "Off: with one graphics card Jarvis reads only the words on your screen. "
+                    "Switching it on asks you with an approval card.")
+    return _row("screen_picture", name, "on", "this PC (a separate copy of Ollama, on the "
+                                              "processor)", ASK_NA,
+                "Switched on: when you ask Jarvis to look at your screen, a small picture model "
+                "also looks at the picture, slowly. Secrets in it are blacked out first, it runs "
+                "on the processor and nothing leaves the PC or is saved.")
+
+
 def _plugin_status() -> dict:
     try:
         import jarvis_mcp
@@ -1053,6 +1086,7 @@ KINDS = (
     ("plugins", _plugins),
     ("second_card", _second_card),
     ("big_model", _big_model),
+    ("screen_picture", _screen_picture),
     ("sky_weather", _sky_weather),
 )
 

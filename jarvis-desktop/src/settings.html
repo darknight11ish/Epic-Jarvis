@@ -1688,6 +1688,31 @@
           </div>
           <span class="status" id="sl-status" role="status"></span>
         </div>
+
+        <!-- Picture mode (the owner's decision of 2026-09-29; backend
+             jarvis_screen_picture.py; look.rs screen_picture): with ONE graphics
+             card, let a small picture model on the PROCESSOR also look at the
+             picture. Off by default; on is ONE approval card; off is at once. The
+             PC gives the words, the measured seconds per look (never a guess) and
+             the one PowerShell line that installs and measures the model. -->
+        <div id="sp-body" hidden>
+          <h3 class="subhead" id="sp-title">Read pictures of my screen (slow, on the processor)</h3>
+          <p class="note" id="sp-detail"></p>
+          <label class="toggle">
+            <input id="sp-switch" type="checkbox" />
+            <span id="sp-switch-label">Let Jarvis look at pictures of my screen (slow)</span>
+          </label>
+          <p class="sc-line" id="sp-line" role="status"></p>
+          <p class="note" id="sp-measured" hidden></p>
+          <p class="note" id="sp-steps-title" hidden></p>
+          <div class="row sc-command">
+            <input id="sp-line-text" type="text" readonly spellcheck="false" autocomplete="off"
+                   aria-label="The PowerShell line to install and measure the picture model" hidden />
+            <button class="btn small" id="sp-copy" type="button" hidden>Copy the line</button>
+          </div>
+          <p class="note" id="sp-steps-note" hidden></p>
+          <span class="status" id="sp-status" role="status"></span>
+        </div>
       </section>
 
       <!-- ── Backups ────────────────────────────────────────────────────────

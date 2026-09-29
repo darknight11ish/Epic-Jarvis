@@ -314,6 +314,10 @@ SHIPPED = (
     # the picture, the window's own text (2026-09-29)
     "jarvis_screen_win.py",
     "jarvis_screen.py",
+    # ... and its slow picture mode for a PC with one graphics card (2026-09-29):
+    # a small picture model on the processor, off by default, ON is one card
+    # (screen-picture.patch adds the gate lines); the routes are jarvis_screen.py's
+    "jarvis_screen_picture.py",
     # "Ask several and compare": several of the conversations above, ONE
     # card, ONE summary. No patch of its own: jarvis_chatbot.py loads it and
     # chatbot-routes.patch already installs the routes that reach it.

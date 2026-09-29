@@ -259,6 +259,10 @@
       "title": "Jarvis wants to set up something that repeats"
     },
     {
+      "action": "screen_picture_enable",
+      "title": "Jarvis wants to let it look at pictures of your screen, slowly, on the processor"
+    },
+    {
       "action": "search_the_web",
       "title": "Jarvis wants to search the web"
     },

@@ -868,6 +868,15 @@ $PATCHES = @(
     # jarvis_screen.py and jarvis_screen_win.py copied in; without them, or
     # on any error, the banner says so and the routes are simply not there.
     'screen.patch'
+    # Picture mode for "Look at this" and "Watch with me" on a PC with one
+    # graphics card (the owner's decision of 2026-09-29; JARVIS-API section
+    # 96.1): ONE card to turn it on (screen_picture_enable, tier ask). Two
+    # hunks in jarvis_gate.py, both right after inbox-tidy.patch's own last
+    # lines (the "acts only on tier ask" list and the _RISK table), so it goes
+    # after everything else - last, like every new patch. Needs
+    # jarvis_screen_picture.py copied in; the routes are answered by
+    # jarvis_screen.py, which screen.patch already installs.
+    'screen-picture.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1056,6 +1065,7 @@ $SHIPPED = @(
     # --- looking at the screen (2026-09-28/29): the session rules, the Windows readers and the routes (screen.patch) ---
     'jarvis_screen_win.py'       # the Windows half of "Look at this" and "Watch with me": what is in front (password box, capture protection, lock), the picture (in memory, never on disk) and the window's own text; copied before jarvis_screen.py
     'jarvis_screen.py'           # "Look at this" and "Watch with me": session states, pause rules, caps, the Never look at list, GET/POST /api/screen and /api/screen/never-look (screen.patch)
+    'jarvis_screen_picture.py'   # slow picture mode for one graphics card: a small picture model on the PROCESSOR in its own copy of Ollama; off by default, ON is one card, OFF is instant; secrets blacked out first or no picture; GET/POST /api/screen/picture (routes in jarvis_screen.py, gate lines in screen-picture.patch)
     'jarvis_chatbot_compare.py'  # "Ask several and compare": 2 or more chatbots, ONE card listing every one, one after another, ONE summary; routes in jarvis_chatbot_routes.py
     # --- Jarvis Live (2026-09-28): talking back and forth; the camera off until the second card passes the photo test ---
     'jarvis_live.py'             # the Live session (start, stop, time limit, quiet, pauses), the source=live rules jarvis_speech follows, GET/POST /api/voice/live (live.patch)

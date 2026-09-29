@@ -589,6 +589,9 @@ fn main() {
             "screen_status",
             "screen_watch",
             "screen_never",
+            // Picture mode's switch (look.rs): read it, turn it on (ONE card
+            // on the PC) or off. Settings only.
+            "screen_picture",
             // Interrupting by talking and "One moment." (voice_flow.rs):
             // ask for one utterance to be checked, read the status's `flow`
             // block, fetch the clip. Quickbar only; none records anything.

@@ -159,6 +159,7 @@ on a throwaway copy instead.
 
 | `inbox-tidy.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Inbox tidy by voice"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 95): archive, star, mark as read or move to Trash a checked list of emails, ONE approval card listing every one, 10 minutes to Undo. Four hunks: in `jarvis_gate.py` `tidy_inbox` joins "a no proposes no memory rule", gets its `_RISK` line (`"yes", "outbound"` - it changes the mailbox on a server, so approving it is a risky approval; nothing is deleted for good, and Undo puts everything back) and its `_TOOL_ACTIONS` line; in `jarvis_hud.py` ONE install block after `sky.patch`'s (`GET /api/email/tidy`, `POST /api/email/tidy/undo`). Its context is other patches' lines: after `support-chat.patch`, before `devices.patch`, which stays last. Needs `jarvis_inbox_tidy.py` - see "Inbox tidy", at the very end. |
 | `screen.patch` | `jarvis_hud.py` | **"Look at this" and "Watch with me": the routes and the chat turn** (the owner's decision of 2026-09-28; `docs/SCREEN-DESIGN.md`, `docs/JARVIS-API.md` sections 62 and 96). Three hunks: a small `_screen_turn(body)` helper (does the newest message carry the owner's screen - the `screen` mark or a `screen_text` part), `has_screen=_screen_turn(body)` in the router call, so such a turn never leaves this PC, and one `jarvis_screen.install(Handler, ...)` block after inbox tidy's, which answers `GET/POST /api/screen` and `GET/POST /api/screen/never-look`. The router call is the owner's own text; the hunk anchors on the lines `cloud-say-yes.patch` already added there (checked against the real file by that patch) and was applied only to the stand-in. Its context is `inbox-tidy.patch`'s startup block, `games-temporary.patch`'s helper lines and `cloud-say-yes.patch`'s router call, so it goes last in the list, after `inbox-tidy.patch`. Needs `jarvis_screen.py` and `jarvis_screen_win.py` copied in (`jarvis_screen_win.py` first); without them, or on any error, the banner says "screen NOT ON", the routes answer 404 and nothing can look. `temporary-chat.patch` also gained one word: `screen` in `_CHAT_CLIENT_FIELDS`, so the mark never travels onward. See "Looking at the screen", below. |
+| `screen-picture.patch` | `jarvis_gate.py` | **Picture mode for "Look at this" and "Watch with me" on a one-card PC** (the owner's decision of 2026-09-29; `docs/JARVIS-API.md` section 96.1). Two hunks, both right after `inbox-tidy.patch`'s own last lines: `screen_picture_enable` joins "a no proposes no memory rule" (turning it on is ONE card, tier `ask`, only), and gets its `_RISK` line (`"yes", "local"` - a small picture model on this PC's processor in a separate copy of Ollama that only this PC can reach; secrets blacked out first; nothing saved or sent anywhere; the owner downloads the model, not the card; off again is instant). Goes last in the list, after `screen.patch`. Needs `jarvis_screen_picture.py` copied in; the routes are `jarvis_screen.py`'s, so no `jarvis_hud.py` hunk. See "Picture mode for the screen", at the very end. |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 
 ## All but two of the patches apply, and that is correct
@@ -17508,3 +17509,115 @@ unpacked: `$env:JARVIS_KOKORO_V1_DIR = "...\voice-models\tts"; py -3
 backend\test_kokoro.py` speaks in every offered voice with the real model.
 The rules both apps are tested against: `python3 tools/gen_voice_training_cases.py
 --check` and `python3 tools/gen_phone_voice_cases.py --check`.
+
+
+# Picture mode for the screen: `jarvis_screen_picture.py`, `screen-picture.patch` (2026-09-29)
+
+With **one graphics card**, "Look at this" and "Watch with me" read only the
+words on your screen. This adds an **optional, slow** way for Jarvis to also
+look at the *picture*: a small model, **MiniCPM-V 4.6** (OpenBMB, 1.3 B
+parameters, Apache-2.0), running on your **processor** - so it uses none of
+the graphics card's memory and your everyday chat model is not disturbed. It is
+your decision of 2026-09-29 ("add it as a feature that can be enabled or
+disabled"). **It is off**, turning it on is **one approval card**, turning it
+off is instant, and **nothing says it works until you have measured how slow it
+is on your PC.**
+
+**What you see.** Settings, then "Look at this and Watch with me" on the PC (and
+Settings, "Looking at your screen: pictures" on the phone) has a switch, one
+line saying what state it is in, the measured speed once you have one (never a
+guess), and the one PowerShell line below. When it is on and you ask Jarvis to
+look, the answer's note says `words and picture (slow mode)`. If the picture
+model is missing, too slow or breaks, the note says `words only (why)` and
+Jarvis says so - it never quietly does less.
+
+**Kept safe.** Before any picture reaches the model, anything that looks like a
+key, a card number or a password is blacked out; **if that part is not
+installed, no picture is sent at all** (Jarvis says so and reads the words
+only). What the model says about the picture is *outside text*: Jarvis never
+follows instructions in it and never saves it as a fact. Nothing is saved and
+nothing leaves this PC.
+
+## Owner steps (one line each, in PowerShell)
+
+**1. Put the new code on the PC** (copies `jarvis_screen_picture.py` and the
+updated `jarvis_screen.py`, applies `screen-picture.patch`), from this
+repository's folder, then quit Jarvis from the tray icon and start it again:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**2. Install the model and measure it - one line.** This **downloads the model
+from Ollama** (ollama.com; how big it is has not been checked - the tag
+`minicpm-v:4.6` is unverified, and if Ollama says it cannot find it, tell me
+what it said). Then it measures how many seconds one look takes on your PC,
+with a made-up test picture (never your screen), and saves the number:
+
+```powershell
+ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program'; py -3 .\jarvis_screen_picture.py --measure; Pop-Location
+```
+
+(Settings shows this line too, with your folder in it, and a "Copy the line"
+button.) It prints, in plain words: the seconds for a plain reply and for a
+look with a picture, Ollama's `prompt_eval_count` (how much of the prompt it
+read) without and with the picture, how much graphics memory the model held
+(it must be **0 bytes** - if it is not, picture mode refuses to use it), and
+that your everyday model is still on the graphics card. It saves them in
+`%USERPROFILE%\.openjarvis\screen-picture-measure.json` and ends with a
+**checksum** for the model file. If you send that checksum back, it can be pinned
+in the code so a different file under the same name is refused; until then the
+first measurement's checksum is remembered and a change refuses.
+
+**3. Turn it on** (or leave it off if the number is too slow for you). Settings,
+"Look at this and Watch with me", the switch - or ask Jarvis "turn on picture
+mode". An approval card explains it; nothing changes until you say yes.
+
+**4. The half-hour check on the real machine** (nothing here has run on your PC
+yet): with it on, press the "Look at this" key on a window with a chart or a
+picture in it and ask "what does this show?" - the note should say `words and
+picture (slow mode)` and the answer should mention what is in the picture. Then
+ask again after taking the model away (`ollama rm minicpm-v:4.6`): the note must
+say `words only (the picture model is not installed)`. Watch the graphics card in
+Task Manager while a look runs: **its memory must not move.** Tell me the
+seconds it took (Settings shows "Your last look took N seconds").
+
+To stop it: the switch, or ask "turn off picture mode" - instant. Or take the
+model away with `ollama rm minicpm-v:4.6`.
+
+## What the code does
+
+- `jarvis_screen_picture.py` (new, shipped whole): the switch and its one card
+  (`screen_picture_enable`, tier `ask`), the picture reader's own copy of Ollama
+  (processor only, this PC only), the picture job, the cleaner hook (fails
+  closed), the measuring line (`--measure`), and what the apps read
+  (`GET /api/screen/picture`).
+- `jarvis_screen.py`: a look hands its picture to the job (`_take`), a question
+  waits a little for it, the description joins the words as outside text, the
+  note says what was used, and the two routes are answered here.
+- `screen-picture.patch` (new, last): two lines in `jarvis_gate.py` (a "no" is
+  not a standing rule; the notice's words).
+- `rebuilt/jarvis-framework.toml`: `screen_picture_enable = "ask"` and an
+  optional `[screen_picture]` section (`model`, `port`, `timeout_s`, `wait_s`,
+  `max_px`, `threads`, `keep_alive`).
+- What asks first, What Jarvis can reach, the card words and "picture mode" by
+  voice all list it; both apps show the switch.
+
+## Not checked, said plainly
+
+- **The Ollama tag, its size, its speed on a processor, whether Ollama's runner
+  accepts this model without a graphics card, and what it says about a real
+  screenshot** - ollama.com and Hugging Face could not be reached when this was
+  built. The measuring line is how you find out.
+- **The cleaner.** Another piece of work builds `jarvis_screen.clean_picture`;
+  until it is in, picture mode says "the part that blacks out secrets is not
+  installed" and sends nothing.
+- The Windows-only parts (starting `ollama serve` with no window, stopping it)
+  are written from Ollama's and Windows' documentation and tested with stand-ins
+  here, not run on Windows.
+
+## Test it
+
+```
+python3 backend/test_screen_picture.py
+```

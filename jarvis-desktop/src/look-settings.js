@@ -18,7 +18,7 @@
  */
 
 import { currentLink, linkWords, onLink } from "./jarvis-link.js";
-import { neverView, refusedWords, SETTINGS } from "./look-rules.js";
+import { neverView, PICTURE, pictureView, refusedWords, SETTINGS } from "./look-rules.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -38,11 +38,28 @@ const el = {
   value: $("sl-value"),
   add: $("sl-add"),
   status: $("sl-status"),
+  // Picture mode (a slow picture model on the processor; the owner's decision
+  // of 2026-09-29).
+  pBody: $("sp-body"),
+  pTitle: $("sp-title"),
+  pDetail: $("sp-detail"),
+  pSwitch: $("sp-switch"),
+  pSwitchLabel: $("sp-switch-label"),
+  pLine: $("sp-line"),
+  pMeasured: $("sp-measured"),
+  pStepsTitle: $("sp-steps-title"),
+  pLineText: $("sp-line-text"),
+  pCopy: $("sp-copy"),
+  pStepsNote: $("sp-steps-note"),
+  pStatus: $("sp-status"),
 };
 
 let view = null;
 let busy = false;
 let poll = null;
+let pView = null;
+let pBusy = false;
+let pPoll = null;
 
 function node(tag, className, text) {
   const n = document.createElement(tag);
@@ -167,6 +184,99 @@ async function remove(row) {
   const out = await run("remove", kind, row.name, "Asking for your yes...");
   if (out) say(SETTINGS.askedCard, "ok");
   await load();
+}
+
+// ── Picture mode ──────────────────────────────────────────────────────────
+
+function pSay(text, tone) {
+  if (!el.pStatus) return;
+  el.pStatus.textContent = text;
+  if (tone) el.pStatus.dataset.tone = tone;
+  else delete el.pStatus.dataset.tone;
+}
+
+function pPaint() {
+  if (!el.pBody || !pView) return;
+  el.pTitle.textContent = PICTURE.title;
+  el.pDetail.textContent = PICTURE.detail;
+  el.pSwitchLabel.textContent = PICTURE.switch;
+  el.pStepsTitle.textContent = PICTURE.stepsTitle;
+  el.pStepsNote.textContent = PICTURE.stepsNote;
+  el.pCopy.textContent = PICTURE.copy;
+  el.pSwitch.checked = pView.checked;
+  // Turning it ON needs a live link (a card is raised); turning it OFF never
+  // waits (rule 4 only holds what loosens). While a card waits the switch stays
+  // usable, so it can be turned back off (which takes the card back).
+  el.pSwitch.disabled = pBusy || (!pView.checked && !live());
+  el.pSwitch.title = !pView.checked && !live() ? linkWords(currentLink()).why || "" : "";
+  el.pLine.textContent = pView.line;
+  el.pMeasured.textContent = pView.measured;
+  el.pMeasured.hidden = !pView.measured;
+  el.pLineText.value = pView.installLine;
+  const has = Boolean(pView.installLine);
+  el.pLineText.hidden = !has;
+  el.pCopy.hidden = !has;
+  el.pStepsTitle.hidden = !has;
+  el.pStepsNote.hidden = !has;
+}
+
+async function pLoad() {
+  if (!el.pBody || !IS_TAURI) return;
+  try {
+    pView = pictureView(await TAURI.core.invoke("screen_picture", { action: "read" }));
+  } catch (error) {
+    // An older backend has no picture mode: say so in the PC's own words.
+    el.pBody.hidden = false;
+    el.pDetail.textContent = "";
+    el.pLine.textContent = refusedWords(error);
+    el.pSwitch.disabled = true;
+    el.pSwitch.checked = false;
+    return;
+  }
+  el.pBody.hidden = false;
+  pPaint();
+  // While a card waits, look again now and then so the switch follows the answer.
+  clearTimeout(pPoll);
+  if (pView.waiting) pPoll = setTimeout(pLoad, 3000);
+}
+
+async function pSet(on) {
+  if (pBusy) return;
+  pBusy = true;
+  pSay(on ? PICTURE.asking : PICTURE.turningOff);
+  pPaint();
+  try {
+    const out = await TAURI.core.invoke("screen_picture", { action: on ? "on" : "off" });
+    pSay(on ? PICTURE.askedCard : words(out && out.message) || PICTURE.off, "ok");
+  } catch (error) {
+    pSay(refusedWords(error), "warn");
+  } finally {
+    pBusy = false;
+  }
+  await pLoad();
+}
+
+async function pCopy() {
+  try {
+    await navigator.clipboard.writeText(pView ? pView.installLine : "");
+    pSay(PICTURE.copied, "ok");
+  } catch {
+    // No clipboard: select the line so Ctrl+C works.
+    el.pLineText.focus();
+    el.pLineText.select();
+  }
+}
+
+function words(x) {
+  return typeof x === "string" ? x.trim() : "";
+}
+
+if (el.pBody) {
+  el.pSwitch.addEventListener("change", (event) => pSet(event.target.checked));
+  el.pCopy.addEventListener("click", pCopy);
+  el.pLineText.addEventListener("focus", () => el.pLineText.select());
+  onLink(() => pPaint());
+  pLoad();
 }
 
 if (el.section) {

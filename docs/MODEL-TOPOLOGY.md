@@ -518,6 +518,47 @@ everyday model (`jarvis_agent.py`). It leaves
 
 ---
 
+## The picture reader on the processor (one-card PCs, 2026-09-29)
+
+The owner's decision of 2026-09-29: a PC with ONE graphics card may switch on a
+slow "picture mode" for "Look at this" and "Watch with me" - a small picture
+model, **MiniCPM-V 4.6** (OpenBMB, 1.3 B parameters, Apache-2.0), running on the
+**processor**, so it uses **0 GB of graphics memory** and the everyday chat model
+on the 8 GB card is not touched. It reverses the earlier "one card reads the
+screen's words only", and it is **off by default**.
+
+How it is kept off the card, and why it does not share the everyday Ollama:
+
+- It runs in its own `ollama serve` on 127.0.0.1:11437 (this PC only; not
+  11434, and not 11435 or 11436, which are the second and third card's) with
+  `CUDA_VISIBLE_DEVICES=-1` (Ollama's own documented way to force the
+  processor: "use an invalid GPU ID (e.g., "-1")", docs/gpu.md), `OLLAMA_VULKAN=0`,
+  AMD's variables at -1, one model and one request at a time, and
+  `OLLAMA_NO_CLOUD=1`. A separate process has no shared scheduler with the
+  everyday one, so it cannot push the chat model off the card - which asking
+  the everyday Ollama for `num_gpu 0` could not promise (unverified).
+  Every request also says `num_gpu 0`, and after a look the copy is asked what
+  it holds (`/api/ps`): any graphics memory in use stops it and says so.
+- The model is downloaded by ONE PowerShell line the owner pastes
+  (`ollama pull`, from Ollama's library); the backend never downloads
+  anything. **Unverified:** the exact Ollama tag (`minicpm-v:4.6` is a guess
+  from the scout's note - ollama.com could not be reached), its download size,
+  whether Ollama's runner accepts it on the processor, and its speed. What was
+  checked: llama.cpp has `docs/multimodal/minicpmv4.6.md` (a Qwen3.5-based
+  1.3 B language model with a SigLIP vision tower and a window-attention
+  merger).
+- **Speed is not known until the owner measures it.** The same line then runs
+  `py -3 jarvis_screen_picture.py --measure`, which uses a made-up picture (never
+  the owner's screen) and prints seconds per look and Ollama's `prompt_eval_count`
+  with and without the picture, and saves them; the setting shows that number
+  and nothing else. Threads default to half of this PC's, so chat keeps the rest
+  (`[screen_picture] threads`, unmeasured).
+- If the model is missing, too slow (`timeout_s`, 240 s by default), or fails,
+  the note beside the answer and the everyday model both say so, and the
+  answer uses the words only.
+
+---
+
 ## If you are thinking about a second card
 
 A Tesla P100 has been suggested. **I would not buy one for this workload**, and

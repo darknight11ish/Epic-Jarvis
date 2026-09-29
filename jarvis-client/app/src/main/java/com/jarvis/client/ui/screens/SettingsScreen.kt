@@ -89,8 +89,9 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "backup" to 10,
     "watch-notify" to 11,
     "phone-notify" to 12,
-    "devices" to 13,
-    "quick-tiles" to 14,
+    "screen-look" to 13,
+    "devices" to 14,
+    "quick-tiles" to 15,
 )
 
 /**
@@ -309,6 +310,10 @@ fun SettingsScreen(
                     onOpenNotificationAccess = onOpenNotificationAccess,
                 )
             }
+
+            // Picture mode for "Look at this" and "Watch with me" (the owner's
+            // decision of 2026-09-29): a slow picture model on the PC's processor.
+            item(key = "screen-look") { ScreenPictureSection(canAct = canAct) }
 
             // Every device with its own key (docs/PAIRING-DESIGN.md section 7.2),
             // shown only when the PC reports pairing (section 5.5).

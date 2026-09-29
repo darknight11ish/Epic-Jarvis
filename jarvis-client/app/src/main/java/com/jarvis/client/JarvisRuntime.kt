@@ -3840,6 +3840,33 @@ object JarvisRuntime {
         }
     }
 
+    // ----------------------------------- picture mode for the screen ----
+    // docs/JARVIS-API.md section 96.1; see [com.jarvis.client.net.ScreenPicture]
+    // and ui/screens/ScreenPicturePlate.kt. OFF by default, ON is one approval
+    // card on the PC. Nothing is cached on this phone: the PC decides, and the
+    // phone only shows what the PC says (never a guessed speed).
+
+    /** `GET /api/screen/picture`. */
+    suspend fun screenPictureSettings(): ApiResult<JsonObject> = api.screenPictureSettings()
+
+    /**
+     * The switch. ON is held on a stale link (rule 4) and raises an approval
+     * card on the PC; OFF is never held. @return the sentence to show under
+     * the switch.
+     */
+    suspend fun setScreenPicture(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setScreenPicture(on) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.ScreenPicture.said(on, r.value)
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.ScreenPicture.missing(r.error)) {
+                    com.jarvis.client.net.ScreenPicture.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
     /**
      * Read by [com.jarvis.client.service.PhoneNotificationListenerService]
      * to decide whether to store anything at all - the cached last-known

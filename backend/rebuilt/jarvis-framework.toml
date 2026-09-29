@@ -304,6 +304,16 @@ second_card_combined_enable = "ask"
 # same reason as above.
 second_card_third_assign = "ask"
 
+# --- Picture mode for "Look at this" and "Watch with me" (2026-09-29) -----
+# Lets a small picture model, running on the PROCESSOR (never the graphics
+# card) in its own copy of Ollama that only this PC can reach, also look at
+# the picture of the screen - slowly - on a PC with one graphics card. Off
+# until the owner turns it on (Settings on the PC, or the phone), which is one
+# approval card; turning it off never asks. The model is downloaded by a line
+# the owner pastes themselves, never by Jarvis. Must stay "ask": anything else
+# and the switch refuses to turn on at all.
+screen_picture_enable = "ask"
+
 # --- The wiki builder (Brain window or phone: "Add to wiki") -------------
 # Adding one document from <your vault>/Jarvis Wiki/Sources writes pages in
 # that Jarvis Wiki folder, on this PC, using the model on the second card -
@@ -731,6 +741,31 @@ flash_attention = "auto"
 # those two are never running at the same time). Not 11434 (the everyday
 # Ollama) or the `port` above.
 third_port = 11436
+
+# ------------------------------------------------------------------------
+# 9b1. PICTURE MODE FOR THE SCREEN (jarvis_screen_picture.py)
+# ------------------------------------------------------------------------
+# Every line here is optional; the built-in value is shown. The picture
+# reader is a separate copy of Ollama on 127.0.0.1 (this PC only - that part
+# cannot be changed) that cannot see the graphics card. UNVERIFIED: the model
+# tag below (Ollama's site could not be reached when this was written), its
+# size and its speed - the line the owner pastes measures the speed.
+[screen_picture]
+# The Ollama model tag. A model whose name ends in -cloud or :cloud is
+# refused: it would send the screen off this PC.
+# model = "minicpm-v:4.6"
+# Not 11434 (the everyday Ollama), 11435 or 11436 (the second and third card).
+# port = 11437
+# Seconds one look may spend on the picture before it is given up, and how
+# long a question waits for it after the words are ready.
+# timeout_s = 240
+# wait_s = 60
+# The longest side of the picture the model is given, in pixels.
+# max_px = 1024
+# Processor threads for the picture model; 0 means half of this PC's threads.
+# threads = 0
+# How long the model stays in memory after a look.
+# keep_alive = "5m"
 
 # ------------------------------------------------------------------------
 # 9b2. TALKING TO AN AI CHATBOT FOR YOU (jarvis_chatbot.py)
