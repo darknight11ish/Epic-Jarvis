@@ -1,7 +1,16 @@
 package com.jarvis.client.data
 
 import android.content.Context
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
+import android.util.Log
 import androidx.core.content.edit
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
 import com.jarvis.client.net.JarvisJson
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -33,7 +42,8 @@ data class CapturedNotification(
  * The phone's own local store of captured notifications - NEVER sent
  * anywhere on its own (CLAUDE.md, 2026-09-26: "nothing leaves the owner's
  * own devices... shown or summarised only when the owner asks"). Kept on
- * this phone only, in a private `SharedPreferences` file, the same
+ * this phone only, in a private `SharedPreferences` file, encrypted with a key
+ * that never leaves the Android Keystore (as the pairing token is), the same
  * mechanism [ModelsCacheStore] and [NotificationAllowListStore] already
  * use - never synced, never backed up ([android:allowBackup="false"] on
  * this whole app already covers that).
@@ -57,6 +67,13 @@ class CapturedNotifications(context: Context) {
     private val prefs = context.applicationContext
         .getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    init {
+        // One-time move of rows an older build stored as plain text.
+        synchronized(LOCK) {
+            if (prefs.contains(KEY_ITEMS)) save(load())
+        }
+    }
+
     /** Adds one, already-redacted notification, then trims to the caps. */
     fun add(n: CapturedNotification) = synchronized(LOCK) {
         save(CapturedRows.added(load(), n, System.currentTimeMillis(), MAX_AGE_MS, MAX_KEPT))
@@ -74,7 +91,7 @@ class CapturedNotifications(context: Context) {
      * immediate - nothing captured stays behind), and by the plate's own
      * "Delete captured notifications" after "are you sure?".
      */
-    fun clear() = synchronized(LOCK) { prefs.edit { remove(KEY_ITEMS) } }
+    fun clear() = synchronized(LOCK) { prefs.edit { remove(KEY_ITEMS).remove(KEY_ENC) } }
 
     /** Deletes what was captured from one app - when it leaves the allow list. */
     fun removeApp(packageName: String) = synchronized(LOCK) {
@@ -121,7 +138,20 @@ class CapturedNotifications(context: Context) {
     }
 
     private fun load(): List<CapturedNotification> {
-        val raw = prefs.getString(KEY_ITEMS, null) ?: return emptyList()
+        val enc = prefs.getString(KEY_ENC, null)
+        val raw = if (enc != null) {
+            runCatching { decrypt(enc) }.getOrElse {
+                // Cannot be opened right now (e.g. before the first unlock
+                // after a reboot): show nothing, keep the blob where it is.
+                Log.w(TAG, "captured notifications unreadable for now", it)
+                return emptyList()
+            }
+        } else {
+            // Rows written by an older build, before they were encrypted.
+            // Read once here; the next save() rewrites them encrypted and
+            // removes this plain copy.
+            prefs.getString(KEY_ITEMS, null) ?: return emptyList()
+        }
         return runCatching {
             (JarvisJson.parseToJsonElement(raw) as JsonArray).mapNotNull(::fromJson)
         }.getOrDefault(emptyList())
@@ -132,7 +162,48 @@ class CapturedNotifications(context: Context) {
         // `add(CapturedNotification)`, which an unqualified call inside
         // this lambda could otherwise be mistaken for at a glance.
         val arr = buildJsonArray { items.forEach { this.add(it.toJson()) } }
-        prefs.edit { putString(KEY_ITEMS, arr.toString()) }
+        val blob = runCatching { encrypt(arr.toString()) }.getOrNull()
+        if (blob == null) {
+            // Never fall back to plain text: better to lose this row.
+            // Any old plain copy goes too, so nothing readable stays behind.
+            Log.w(TAG, "could not encrypt captured notifications; not saving")
+            prefs.edit { remove(KEY_ITEMS) }
+            return
+        }
+        prefs.edit { putString(KEY_ENC, blob).remove(KEY_ITEMS) }
+    }
+
+    private fun secretKey(): SecretKey {
+        val ks = KeyStore.getInstance(PROVIDER).apply { load(null) }
+        (ks.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
+        val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, PROVIDER)
+        gen.init(
+            KeyGenParameterSpec.Builder(
+                KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                // Not setUserAuthenticationRequired: the listener stores
+                // notifications while the screen is off.
+                .build(),
+        )
+        return gen.generateKey()
+    }
+
+    private fun encrypt(plain: String): String {
+        val cipher = Cipher.getInstance(TRANSFORM)
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey())
+        val body = cipher.doFinal(plain.toByteArray(Charsets.UTF_8))
+        return Base64.encodeToString(cipher.iv + body, Base64.NO_WRAP)
+    }
+
+    private fun decrypt(blob: String): String {
+        val packed = Base64.decode(blob, Base64.NO_WRAP)
+        require(packed.size >= IV_BYTES + TAG_BITS / 8) { "ciphertext too short" }
+        val cipher = Cipher.getInstance(TRANSFORM)
+        cipher.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(TAG_BITS, packed, 0, IV_BYTES))
+        return String(cipher.doFinal(packed, IV_BYTES, packed.size - IV_BYTES), Charsets.UTF_8)
     }
 
     private fun CapturedNotification.toJson(): JsonObject = buildJsonObject {
@@ -157,7 +228,14 @@ class CapturedNotifications(context: Context) {
 
     private companion object {
         const val PREFS = "jarvis_captured_notifications"
-        const val KEY_ITEMS = "items"
+        const val KEY_ITEMS = "items" // old plain-text rows; read once, then removed
+        const val KEY_ENC = "items_enc"
+        const val TAG = "CapturedNotifications"
+        const val KEY_ALIAS = "jarvis_captured_notifications_key"
+        const val PROVIDER = "AndroidKeyStore"
+        const val TRANSFORM = "AES/GCM/NoPadding"
+        const val IV_BYTES = 12
+        const val TAG_BITS = 128
 
         /**
          * One lock for every instance: the listener's store, the switch-off

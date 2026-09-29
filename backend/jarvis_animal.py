@@ -360,6 +360,15 @@ def _stored_meta() -> dict:
         return {}
 
 
+def _still_changed() -> float:
+    """When Still was last chosen here, or 0.0 if never."""
+    when = _stored_meta().get("when")
+    try:
+        return float(when.get("still") or 0.0) if isinstance(when, dict) else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _save(key: str, on: bool) -> dict:
     with _LOCK:
         cur = values()
@@ -367,7 +376,13 @@ def _save(key: str, on: bool) -> dict:
         p = settings_path()
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_name(p.name + ".tmp")
-        tmp.write_text(json.dumps({"switches": cur, "changed": time.time()}, indent=1),
+        now = time.time()
+        # When each switch was last chosen: the old "Keep the animal still"
+        # carry-over needs to know about Still ONLY, not any other switch.
+        when = _stored_meta().get("when")
+        when = dict(when) if isinstance(when, dict) else {}
+        when[key] = now
+        tmp.write_text(json.dumps({"switches": cur, "changed": now, "when": when}, indent=1),
                        encoding="utf-8")
         os.replace(tmp, p)
         return values()
@@ -384,6 +399,7 @@ def view() -> dict:
                       "built": s.built, "on": v[s.id]} for s in SWITCHES],
         "values": v,
         "changed": float(_stored_meta().get("changed") or 0.0),
+        "still_changed": _still_changed(),
         "device": {"title": DEVICE_TITLE, "note": DEVICE_NOTE,
                    "sharpness": [{"id": i, "label": w} for i, w in SHARPNESS],
                    "frame_rates": [{"id": i, "label": w} for i, w in FRAME_RATES]},

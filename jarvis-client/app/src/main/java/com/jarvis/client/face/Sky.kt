@@ -268,16 +268,20 @@ object Sky {
 
     /** sky.js todayWords: the settings line, the same words in both apps. [fmt] turns milliseconds into clock time. */
     fun todayWords(sm: Summary, fmt: (Long) -> String): String {
-        val sun = ArrayList<String>()
-        sm.sunrise?.let { sun.add("rises ${fmt(it)}") }
-        sm.sunset?.let { sun.add("sets ${fmt(it)}") }
-        val first = if (sun.isNotEmpty()) "Sun ${sun.joinToString(", ")}."
+        // In the order they happen, with "then": the next rise and set can be
+        // on different days (sky.js todayWords).
+        fun seq(rise: Long?, set: Long?): String {
+            val ev = ArrayList<Pair<Long, String>>()
+            rise?.let { ev.add(it to "rises ${fmt(it)}") }
+            set?.let { ev.add(it to "sets ${fmt(it)}") }
+            return ev.sortedBy { it.first }.joinToString(", then ") { it.second }
+        }
+        val sun = seq(sm.sunrise, sm.sunset)
+        val first = if (sun.isNotEmpty()) "Sun $sun."
         else if (sm.sunUp) "The sun stays up all day." else "The sun stays down all day."
-        val moon = ArrayList<String>()
-        sm.moonrise?.let { moon.add("rises ${fmt(it)}") }
-        sm.moonset?.let { moon.add("sets ${fmt(it)}") }
+        val moon = seq(sm.moonrise, sm.moonset)
         return "$first Moon: ${sm.phaseName.lowercase()}, ${sm.percent}% lit" +
-            (if (moon.isNotEmpty()) ", ${moon.joinToString(", ")}" else "") + "."
+            (if (moon.isNotEmpty()) ", $moon" else "") + "."
     }
 
     // ---- The scene ----------------------------------------------------------

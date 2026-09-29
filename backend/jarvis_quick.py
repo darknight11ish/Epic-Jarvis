@@ -2651,12 +2651,16 @@ _DEV_MAKE = re.compile(
     r"make\s+" + _BEAST + r"(?:\s+look)?\s+(sharper|crisper|clearer|more\s+detailed"
     r"|softer|less\s+sharp|blurrier|smoother|less\s+smooth|choppier)"
     r"|make\s+" + _BEAST + r"(?:\s+look)?\s+as\s+sharp\s+as\s+(?:it\s+can(?:\s+be)?|possible)")
+#: "Sharpness" alone is the face's own word; "quality", "resolution" and
+#: "frame rate" are everyday words for video, games and screens, so they
+#: count only when an animal, robot or face is named ("lower the frame rate"
+#: on its own is not an animal request - it goes to the model).
+_DEV_WHAT = (r"(?:(?:the\s+)?(sharpness)"
+             r"|(?:" + _BEASTS + r"|(?:the\s+|my\s+)?face(?:'s)?)\s+(sharpness|quality|resolution|frame\s?rate))")
 _DEV_UPDOWN = re.compile(
-    r"(raise|increase|turn\s+up|lower|reduce|decrease|turn\s+down)\s+(?:the\s+)?(?:"
-    + _BEASTS + r"\s+)?(sharpness|quality|resolution|frame\s?rate)")
+    r"(raise|increase|turn\s+up|lower|reduce|decrease|turn\s+down)\s+" + _DEV_WHAT)
 _DEV_SET = re.compile(
-    r"(?:set|change|put|switch)\s+(?:the\s+)?(?:" + _BEASTS + r"\s+)?(sharpness|quality|resolution"
-    r"|frame\s?rate)\s+to\s+(.+?)(?:\s+(?:fps|frames\s+a\s+second))?")
+    r"(?:set|change|put|switch)\s+" + _DEV_WHAT + r"\s+to\s+(.+?)(?:\s+(?:fps|frames\s+a\s+second))?")
 _DEV_AUTO = re.compile(
     r"(?:turn|switch)\s+on\s+auto(?:matic)?[\s-]?adjust(?:ment)?"
     r"|let\s+" + _BEAST + r"\s+(?:pick|choose|adjust)\s+(?:its\s+own\s+)?(?:sharpness(?:\s+and\s+"
@@ -2738,12 +2742,12 @@ def _animal(s: str) -> Optional[Intent]:
     m = _DEV_UPDOWN.fullmatch(s)
     if m:
         up = m.group(1) in ("raise", "increase", "turn up")
-        rate = m.group(2).startswith("frame")
+        rate = (m.group(2) or m.group(3)).startswith("frame")
         change = ("smoother" if up else "less_smooth") if rate else ("sharper" if up else "softer")
         return Intent("animal_device", {"change": change})
     m = _DEV_SET.fullmatch(s)
     if m:
-        what, value = m.group(1), m.group(2).strip()
+        what, value = (m.group(1) or m.group(2)), m.group(3).strip()
         if what.startswith("frame"):
             v = _RATE_WORD.get(value)
             if v is not None:

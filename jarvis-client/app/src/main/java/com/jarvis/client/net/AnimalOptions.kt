@@ -213,14 +213,16 @@ object AnimalOptions {
 
     /**
      * Whether this phone's old "on" should still be sent: the PC answered,
-     * its Still is off, and no switch has been changed there yet (`changed`
-     * 0) - a choice made since is newer and wins. The desktop's
+     * its Still is off, and Still itself has not been chosen there yet
+     * (`still_changed` 0; another switch changing does not count, and an older
+     * PC without the field is judged by `changed`) - a choice made since is
+     * newer and wins. The desktop's
      * `animal.rs still_move_needed` is the same rule.
      */
     fun stillMoveNeeded(body: JsonObject): Boolean {
         if (body.flag("available") == false) return false
         val still = (body["values"] as? JsonObject)?.flag("still") ?: return false
-        val changed = (body["changed"] as? JsonPrimitive)?.takeIf { !it.isString }?.contentOrNull
+        val changed = (body["still_changed"] as? JsonPrimitive ?: body["changed"] as? JsonPrimitive)?.takeIf { !it.isString }?.contentOrNull
             ?.toDoubleOrNull() ?: 0.0
         return !still && changed <= 0.0
     }
