@@ -390,7 +390,7 @@ def _request_text(goal, requests) -> str:
     for r in requests or []:
         if isinstance(r, dict):
             parts += [str(r.get("name") or ""), str(r.get("why") or ""),
-                      str(r.get("value") or "") if r.get("action") == "navigate" else "",
+                      str(r.get("value") or "") if str(r.get("action") or "").strip() == "navigate" else "",
                       str(r.get("role") or "")]
     return " ".join(parts)
 
@@ -472,7 +472,9 @@ def reject_request(engine: str, r) -> Optional[str]:
     if engine != "headless" or not isinstance(r, dict):
         return None
     value = r.get("value")
-    action = str(r.get("action") or "")
+    # Stripped the same way jarvis_browser_control.plan strips it, so " navigate"
+    # is checked as "navigate" (an unstripped name skipped every check below).
+    action = str(r.get("action") or "").strip()
     if isinstance(value, str) and "<secret>" in value:
         return _refusal("the headless browser never types a saved secret or password - sign-in "
                         "needs the visible browser", withhold=True)
@@ -582,6 +584,12 @@ def _choose(requested=None, *, goal="", requests=None) -> dict:
     ok, not_ready = ready()
     if requested == "visible":
         return {"engine": "visible", "why": "you or Jarvis asked for the visible browser",
+                "refused": ""}
+    if requested == "headless" and settings()["mode"] == "visible":
+        # The owner's "Always the visible browser" wins over a request for the
+        # headless one (the model's own argument or a phrase in the goal): both
+        # apps promise the window is always the one you can see.
+        return {"engine": "visible", "why": "your setting is always the visible browser",
                 "refused": ""}
     if requested == "headless":
         if not ok:
@@ -1011,6 +1019,14 @@ class HeadlessEngine(Engine):
         why = _private_problem(url)
         if why:
             raise RuntimeError("the headless browser did not open that address: " + why)
+        kind = _secret_kind(url)
+        if kind:
+            # The plan-time check (reject_request) is the first line; this is the
+            # run-time one, like fill() and select(), so a password, key or token
+            # in an address is never sent whatever reached the plan.
+            raise RuntimeError(f"the address looks like it holds a password, key or token "
+                               f"({kind}) - the headless browser never sends one, so nothing "
+                               f"was opened")
         got = self._call("browser_navigate", {"url": url, "waitUntil": "load"})
         if got["error"]:
             raise RuntimeError(_plain_error(got["text"]))

@@ -350,6 +350,9 @@ def t_the_mode_rule():
     rn = READ + [{"action": "read_new", "role": "log", "name": "Chat", "value": "0"}]
     check("auto + reading a message list -> visible", c(reqs=rn)["engine"] == "visible")
     check("the owner's default 'visible' wins over auto", (E.set_mode("visible"), c())[1]["engine"] == "visible")
+    check("'Always the visible browser' wins over a request for the headless one (both apps promise it)",
+          c("headless")["engine"] == "visible" and "always the visible" in c("headless")["why"]
+          and not c("headless")["refused"], c("headless"))
     check("the owner's default 'headless' is followed when it can run",
           (E.set_mode("headless"), c())[1]["engine"] == "headless")
     check("a default of 'headless' is followed for plain reading", c()["engine"] == "headless")
@@ -551,6 +554,23 @@ def t_secrets_passwords_and_message_lists_never_headless():
           and p.unmatched[0]["value"] == "(withheld)", p.unmatched)
     check("a message list ('read_new') is refused at plan time in words",
           "cannot read a message list" in p.unmatched[1]["reason"])
+    d.stop("t")
+    # A stray space in the action name must not skip the checks (plan() strips it).
+    JWT = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"
+    for act in ("navigate", " navigate", "navigate ", "\tnavigate"):
+        p = B.plan("g", "s1", [{"action": act, "value": "https://a.test/?token=" + JWT, "why": "x"}],
+                   engine="headless")
+        check(f"a token in an address is refused at plan time for action {act!r}", not p.steps, p.steps)
+    # ... and the engine itself refuses to open such an address, whatever reached it.
+    d = rig()
+    run_plan("open", [dict(NAV)])
+    with E.approved_run():
+        E.HEADLESS.set_fence(lambda host: True)
+        try:
+            E.HEADLESS.open("https://a.test/?token=" + JWT)
+            check("open() refuses an address holding a token", False)
+        except RuntimeError as exc:
+            check("open() refuses an address holding a token, by itself", "password, key or token" in str(exc), str(exc))
     d.stop("t")
     # an engine-level guard as well: a password box is never typed into
     d = rig()
