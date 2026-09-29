@@ -94,7 +94,9 @@ internal fun ProjectsSection(
 
     // A card this screen caused is answered elsewhere; read again when the
     // queue changes while one waits.
-    val waiting = project?.let { p -> p.shareableWaiting || p.benchList.any { it.unmarkWaiting } } == true
+    val waiting = project?.let { p ->
+        p.shareableWaiting || p.benchList.any { it.unmarkWaiting } || p.app?.mergeWaiting == true
+    } == true
     val queueKey = if (waiting) pending.size else -1
 
     LaunchedEffect(reads, tick, openId, queueKey) {
@@ -215,7 +217,18 @@ internal fun ProjectsSection(
                                 Text(p.name, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
                                 val kind = if (p.kind == "coding") Projects.w("coding") else Projects.w("life")
                                 val n = p.benchmarks
-                                Text("$kind · $n ${if (n == 1) "benchmark" else "benchmarks"}",
+                                val a = p.app
+                                val appNote = buildString {
+                                    if (a != null) {
+                                        append(" · ").append(Projects.aw("app"))
+                                        if (a.openTasks > 0) {
+                                            append(" · ").append(a.openTasks)
+                                                .append(if (a.openTasks == 1) " open task" else " open tasks")
+                                        }
+                                        if (a.mergeWaiting) append(" · ").append(Projects.aw("app_waiting"))
+                                    }
+                                }
+                                Text("$kind · $n ${if (n == 1) "benchmark" else "benchmarks"}$appNote",
                                     style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                             }
                             Quiet(Projects.w("open"), modifier = Modifier.semantics {
@@ -233,7 +246,7 @@ internal fun ProjectsSection(
                         onValueChange = { newName = it.take(60) },
                         label = Projects.w("new"),
                         placeholder = Projects.w("name"),
-                        supportingText = Projects.w("coding_on_pc"),
+                        supportingText = Projects.w("coding_on_pc") + " " + Projects.aw("app_create_on_pc"),
                     )
                     Gap(6)
                     Primary(
@@ -267,7 +280,8 @@ internal fun ProjectsSection(
     }
 }
 
-private typealias Change = (
+/** ONE change through [JarvisRuntime.projectsWrite]; also used by AppSection.kt and TaskDiffScreen.kt. */
+internal typealias Change = (
     action: String,
     path: String?,
     json: String,
@@ -319,7 +333,12 @@ private fun ProjectView(
             "Saved.", false, null) {}
     })
 
-    if (p.kind == "coding") {
+    val app = p.app
+    if (app != null) {
+        // A Jarvis-built app: its files are Jarvis's own folder, not a folder
+        // the owner chose (AppSection.kt).
+        AppSection(p, app, canAct, busy, change)
+    } else if (p.kind == "coding") {
         Gap(10)
         Label(Projects.w("folder"))
         Text(p.folder?.path ?: Projects.w("folder_none"), style = MaterialTheme.typography.bodySmall,
