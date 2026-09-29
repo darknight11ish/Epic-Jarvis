@@ -293,6 +293,7 @@ HARD_LIMITS = frozenset({
     "app_merge_change",
     "run_plan", "phone_notifications_read",
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
+    "register_approval_key",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -309,6 +310,7 @@ MUST_ASK = frozenset({
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
     "restore_backup", "check_tool_updates", "run_plan", "phone_notifications_read",
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
+    "register_approval_key",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -335,7 +337,8 @@ GROUPS = (
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
                                 "run_plan", "fixed:plugin_start", "fixed:plugin_use",
                                 "delete_file", "spend_money", "power_manage",
-                                "app_merge_change", "pair_device", "unretire_shared_key"]),
+                                "app_merge_change", "pair_device", "unretire_shared_key",
+                                "register_approval_key"]),
     ("AI models and graphics cards", ["browse_model_catalog", "download_model",
                                       "switch_model", "rollback_model", "models_create",
                                       "second_card_enable", "second_card_browser_enable",

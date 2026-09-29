@@ -118,9 +118,12 @@ QUEUE_UNREADABLE = ("The approval queue could not be read, so Jarvis cannot tell
 #: back for other devices (jarvis_devices.py, docs/PAIRING-DESIGN.md 6.3 and
 #: 6.4, 2026-09-28): a stolen key used elsewhere cannot approve a new device
 #: of its own, and on a PC without Windows Hello pairing waits until it is
-#: set up (the owner's "no lock, no risky approval").
+#: set up (the owner's "no lock, no risky approval"). And letting a paired
+#: phone approve risky cards with its own fingerprint or PIN
+#: (register_approval_key, docs/PAIRING-DESIGN.md section 11): a stolen key
+#: used elsewhere must not be able to register a signing key of its own.
 PC_ONLY_ACTIONS = frozenset({"loosen_what_asks_first", "enable_reading_tool", "restore_backup",
-                             "pair_device", "unretire_shared_key"})
+                             "pair_device", "unretire_shared_key", "register_approval_key"})
 PC_ONLY = ("This card can only be approved on the PC, with Windows Hello, so nothing was "
            "approved")
 
@@ -600,8 +603,26 @@ def _pending_rows() -> list:
     return list(jarvis_gate.pending())
 
 
+def _signed_check(body, row, device) -> Optional[tuple]:
+    """Phase 2 (docs/PAIRING-DESIGN.md 11.4): a RISKY card approved from
+    another device with a DEVICE key must carry a valid signature from that
+    device's approval key. `device` is who the request's own key said it
+    was: "pc", "shared" (the old shared key - allowed as today, until it is
+    retired), a device id, or None (jarvis_devices is not running - nothing
+    to check, today's behaviour)."""
+    if not isinstance(device, str) or device in ("", "pc", "shared"):
+        return None
+    try:
+        import jarvis_devices
+        return jarvis_devices.check_signed_approval(body, row, device)
+    except Exception:
+        return 503, {"ok": False, "owner_check": "cannot_check",
+                     "error": ("This PC could not check the fingerprint or PIN signature "
+                               "just now, so nothing was approved.")}
+
+
 def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
-                  own=None) -> Optional[tuple]:
+                  own=None, device=None) -> Optional[tuple]:
     """What must happen before the owner's own /api/approve handler records
     an approval. None: go ahead (the approval is stamped). Otherwise
     (http_status, body) to answer instead, and nothing is approved.
@@ -618,6 +639,10 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
     - Except a card in PC_ONLY_ACTIONS (loosening "What asks first",
       2026-09-26): refused from another device, and always Windows Hello
       from this PC, risky or not.
+    - A risky card from another device, made with a DEVICE key (`device`,
+      set by jarvis_devices' key check): needs that device's signature
+      (`_signed_check`). A phone with no approval key yet is refused with
+      "no_approval_key", so it can offer to turn signed approvals on.
     """
     pending = pending or _pending_rows
     request_id = body.get("id") if isinstance(body, dict) else None
@@ -634,6 +659,10 @@ def approve_check(body, *, peer, local=None, pending: Callable[[], list] = None,
     if action in PC_ONLY_ACTIONS and not here:
         # Approved on the PC only, with Windows Hello (PC_ONLY_ACTIONS).
         return 403, {"ok": False, "error": PC_ONLY, "owner_check": "pc_only"}
+    if not here and is_risky(row):
+        refused = _signed_check(body, row, device)
+        if refused is not None:
+            return refused
     if (is_risky(row) or action in PC_ONLY_ACTIONS) and here:
         left = _time_left(row)
         if left <= 0:
@@ -713,7 +742,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
                 local = self.connection.getsockname()[0]
             except Exception:
                 local = None
-            refused = approve_check(body, peer=peer, local=local)
+            refused = approve_check(body, peer=peer, local=local,
+                                    device=getattr(self, "_jarvis_device", None))
             if refused is not None:
                 code, out = refused
                 return self._send(code, out)

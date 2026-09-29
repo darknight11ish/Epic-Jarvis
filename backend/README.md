@@ -151,7 +151,7 @@ on a throwaway copy instead.
 | `forget-range.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Forget a time frame"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 64). Adds `GET /api/memory/forget_range` and `/preview` (what Jarvis learned and the chats from some days, as a list the owner unticks), `POST /api/memory/forget_range` (ONE approval card, `memory_forget_range`, listing every item - nothing changes before a person approves) and `/undo` (10 minutes, no card), and the gate's risk line for the new action (local, not reversible: a risky approval). Last in the list: its context is `chatbot.patch`'s gate lines and `live.patch`'s install block. Needs `jarvis_forget_range.py` - see "Forget a time frame", at the very end. |
 | `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
 | `sky.patch` | `jarvis_hud.py` | **The sun, the moon and the weather behind the animal faces** (the owner's decisions of 2026-09-28). Adds `GET /api/sky` and `POST /api/sky` (ONE change: show on or off, the town - this PC only - forget the town, or the weather source; Open-Meteo ON is ONE approval card). Its context is `answer-sources.patch`'s own startup `install()` block, so it goes last. Needs `jarvis_sky.py` and `jarvis_sky_places.py` copied in; without them, or on any error, the banner says so and the route answers 503 - the faces are drawn exactly as before. See "The sky behind the animals", at the very end. |
-| `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
+| `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Three lines in `jarvis_gate.py`: the cards `pair_device`, `unretire_shared_key` and (phase 2, 2026-09-29, signed approvals from the phone) `register_approval_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; all three are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 | `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude, Gemini or DeepSeek** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
 
 ## All but two of the patches apply, and that is correct
@@ -16684,11 +16684,25 @@ Tailscale or NordVPN Meshnet - pairing is refused over anything else.
   `py -3 jarvis_devices.py --start-fresh` (the bad file is kept beside it as
   `registry.json.broken-<time>`; every phone then pairs again).
 
+## Signed approvals from the phone (phase 2, 2026-09-29)
+
+Also in `jarvis_devices.py` (no new file): a paired phone registers an
+approval key (`POST /api/devices/approval-key`, ONE `register_approval_key`
+card, PC only, Windows Hello), asks for a challenge
+(`POST /api/approve/challenge`), and signs each risky approval;
+`jarvis_owner_check.approve_check` refuses a risky approval from another
+device made with a device key unless the signature is good. It needs the
+`cryptography` package (already in `requirements.txt`); without it those
+two routes answer 503 and a signed approval is refused, never waved
+through. `docs/JARVIS-API.md` section 91.
+
 ## Test it
 
-`py -3 backend\test_devices.py` and `py -3 backend\test_pairing_cases.py`
+`py -3 backend\test_devices.py`, `py -3 backend\test_pairing_cases.py`
+and `py -3 backend\test_approval_sign.py`
 (no network, no model). The rules both apps are tested against:
-`python3 tools/gen_pairing_cases.py --check`.
+`python3 tools/gen_pairing_cases.py --check` and
+`python3 tools/gen_approval_sign_cases.py --check`.
 
 ## Not checked, said plainly
 
@@ -16703,6 +16717,14 @@ Tailscale or NordVPN Meshnet - pairing is refused over anything else.
 - **Windows Hello missing** is found only when the card is approved (Windows
   cannot be asked without showing the prompt), so the Devices page cannot
   warn about it in advance.
+- **Signed approvals, on the real PC** (phase 2): the words hash is worked
+  out from `jarvis_gate.pending()`'s rows; your `/api/pending` must show the
+  phone the same `notice.title` and `detail` for the same card. Check one
+  real card (any risky one): the challenge's `words_sha256` must equal the
+  hash the phone shows. If they differ the phone refuses (safe), and the
+  fix is in how the two rows are built. Also unverified: the phone's real
+  Keystore signatures against this PC's `cryptography` (only a generated
+  test key was used here).
 - **The word list** is the EFF short word list 2, taken from two
   independent copies (passphraseme on GitHub and the xkcdpass package) that
   agree word for word; EFF's own page could not be reached from here, so its

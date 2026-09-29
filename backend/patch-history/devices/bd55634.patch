@@ -1,14 +1,13 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -559,4 +559,7 @@
+@@ -559,4 +559,6 @@
  # Memory tab that says nothing. How each one comes to ask:
  _NO_RULE_FROM_DENIAL = frozenset({
 +    "pair_device",  # jarvis_devices.py acts only on tier "ask": ONE card per phone paired (devices.patch)
 +    "unretire_shared_key",  # jarvis_devices.py acts only on tier "ask": bringing the old shared key back (devices.patch)
-+    "register_approval_key",  # jarvis_devices.py acts only on tier "ask": ONE card per phone that turns on signed approvals (devices.patch)
      "second_card_enable",     # jarvis_second_card.py acts only on tier "ask"
      "second_card_browser_enable",  # jarvis_second_card.py: the same (Browser control)
-@@ -602,2 +605,19 @@
+@@ -602,2 +604,14 @@
      "phone_notifications_read": ("yes", "local", "lets your phone start reading notifications from apps you choose (none, until you add one); banking apps are blocked on the phone; a notification only reaches Jarvis when you attach it to a chat yourself; turning it off again is instant"),
 +    # devices.patch (jarvis_devices.py, docs/PAIRING-DESIGN.md; the owner's
 +    # decisions of 2026-09-24 and 2026-09-28). Pairing a phone gives it a
@@ -22,11 +21,6 @@
 +    # retiring it again is instant, so "yes"; it only decides who may talk
 +    # to this PC, so "local".
 +    "unretire_shared_key": ("yes", "local", "lets any device that still has the old shared key reach Jarvis again, not only this PC; you can retire it again any time, and that is instant"),
-+    # Phase 2 (docs/PAIRING-DESIGN.md section 11): a paired phone's signing
-+    # key, so its risky approvals need a fresh fingerprint or PIN on the
-+    # phone. Removing the device drops it again, so "yes" and "local";
-+    # also PC only, always with Windows Hello (PC_ONLY_ACTIONS).
-+    "register_approval_key": ("yes", "local", "lets the phone named on the card approve risky actions with its own fingerprint or PIN, checked here on this PC; you can remove the device any time in Settings, Devices, and that drops the key again"),
      # note-capture.patch (jarvis_note_capture.py). All three stay on this PC:
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py

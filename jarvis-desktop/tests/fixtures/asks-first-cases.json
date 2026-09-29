@@ -524,6 +524,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let the old shared key work from other devices again"
+      },
+      {
+       "action": "register_approval_key",
+       "fixed": false,
+       "id": "register_approval_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let a phone approve risky actions with its fingerprint or PIN"
       }
      ],
      "title": "This PC and your phone"
@@ -1436,6 +1445,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let the old shared key work from other devices again"
+      },
+      {
+       "action": "register_approval_key",
+       "fixed": false,
+       "id": "register_approval_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let a phone approve risky actions with its fingerprint or PIN"
       }
      ],
      "title": "This PC and your phone"
@@ -2344,6 +2362,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let the old shared key work from other devices again"
+      },
+      {
+       "action": "register_approval_key",
+       "fixed": false,
+       "id": "register_approval_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let a phone approve risky actions with its fingerprint or PIN"
       }
      ],
      "title": "This PC and your phone"
@@ -3246,6 +3273,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let the old shared key work from other devices again"
+      },
+      {
+       "action": "register_approval_key",
+       "fixed": false,
+       "id": "register_approval_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let a phone approve risky actions with its fingerprint or PIN"
       }
      ],
      "title": "This PC and your phone"
@@ -4148,6 +4184,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let the old shared key work from other devices again"
+      },
+      {
+       "action": "register_approval_key",
+       "fixed": false,
+       "id": "register_approval_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let a phone approve risky actions with its fingerprint or PIN"
       }
      ],
      "title": "This PC and your phone"
@@ -5063,6 +5108,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let the old shared key work from other devices again"
+      },
+      {
+       "action": "register_approval_key",
+       "fixed": false,
+       "id": "register_approval_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let a phone approve risky actions with its fingerprint or PIN"
       }
      ],
      "title": "This PC and your phone"
@@ -5971,6 +6025,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Let the old shared key work from other devices again"
+      },
+      {
+       "action": "register_approval_key",
+       "fixed": false,
+       "id": "register_approval_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let a phone approve risky actions with its fingerprint or PIN"
       }
      ],
      "title": "This PC and your phone"

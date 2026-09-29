@@ -139,6 +139,10 @@ TITLES = {
     # --- devices (jarvis_devices.py, docs/PAIRING-DESIGN.md, 2026-09-28)
     "pair_device": "connect a new device",
     "unretire_shared_key": "let the old shared key work from other devices again",
+    # phase 2 (docs/PAIRING-DESIGN.md section 11). A title is built from the
+    # action's name only, never the payload, so the phone's name is on the
+    # card's text instead.
+    "register_approval_key": "let a phone approve risky actions with its fingerprint or PIN",
     # --- the app builder (docs/APP-BUILDER-DESIGN.md)
     "app_merge_change": "add its change to one of your apps",
     # --- helpers and anything else a tool asks for
