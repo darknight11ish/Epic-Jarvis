@@ -101,6 +101,7 @@ TOOL_NAMES = {
     "web_search": "Web search",
     "send_email": "Send an email (one card each)",
     "draft_email": "Save an email draft (one card each)",
+    "tidy_inbox": "Tidy your inbox (one card lists every email)",
     "calendar_read": "Reading your calendar",
     "email_check": "Reading your email",
     "notes_search": "Searching your notes",
@@ -139,7 +140,7 @@ _FALLBACK_ACTIONS = {
 #: Tools jarvis_agent.py runs only on a person's yes, if it cannot be read.
 _NEEDS_A_PERSON = frozenset({"github_search", "browser_control", "control_computer",
                              "control_phone", "shell_exec", "home_control",
-                             "send_email", "draft_email"})
+                             "send_email", "draft_email", "tidy_inbox"})
 _NOTE_WRITES = frozenset({"append_logseq_journal", "append_obsidian_daily",
                           "create_joplin_note"})
 
@@ -547,6 +548,28 @@ def _email_send(ctx: Ctx) -> dict:
                  "a card showing the recipients, the subject and every word. No attachments."),
         not_set_up="No email account is set up on this PC for sending.",
         off_line=_enable_line("send_email"))
+
+
+def _email_tidy(ctx: Ctx) -> dict:
+    """Tidying the inbox (jarvis_inbox_tidy.py): the same account as reading,
+    one approval card that lists every email, then 10 minutes to Undo. It
+    changes the mailbox on the owner's mail server - archive, star, mark as
+    read, or move to Trash - and deletes nothing for good."""
+    host = ctx.env("JARVIS_IMAP_HOST")
+    user = ctx.env("JARVIS_IMAP_USER")
+    configured = bool(user) and bool(ctx.env("JARVIS_IMAP_PASSWORD")) and bool(host)
+    where = where_words(host_of("imap://" + host)) if host else ""
+    if where and user:
+        where = f"{where} (as {user[:80]})"
+    return _tool_row(
+        "email_tidy", "Email (tidying)", "tidy_inbox", ctx, configured=configured,
+        where=where,
+        on_line=("Archives, stars, marks as read or moves to Trash the emails you name, in "
+                 "your own mailbox, only after you approve a card that lists every one of "
+                 "them - and for 10 minutes you can undo it with one tap. Nothing is ever "
+                 "deleted for good, and Jarvis never empties Trash."),
+        not_set_up="No email account is set up on this PC for tidying.",
+        off_line=_enable_line("tidy_inbox"))
 
 
 def _home_read(ctx: Ctx) -> dict:
@@ -1013,6 +1036,7 @@ KINDS = (
     ("calendar", _calendar),
     ("email_read", _email_read),
     ("email_send", _email_send),
+    ("email_tidy", _email_tidy),
     ("home_read", _home_read),
     ("home_control", _home_control),
     ("notes_read", _notes_read),

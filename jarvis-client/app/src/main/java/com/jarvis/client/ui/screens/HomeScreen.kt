@@ -407,6 +407,16 @@ data class HomeState(
      */
     val cloudOffer: String? = null,
     /**
+     * The Undo strip for the newest inbox tidy still open to it ("Inbox tidy
+     * by voice", 2026-09-28; docs/JARVIS-API.md section 95), or null when
+     * there is none. Counts and the PC's own words - never a sender or a
+     * subject. See [com.jarvis.client.net.InboxTidy.strip] for what it says
+     * while the lists are hidden and on a stale link.
+     */
+    val inboxTidy: com.jarvis.client.net.InboxTidy.Strip? = null,
+    /** An Undo of [inboxTidy] is on its way - the button waits. */
+    val inboxTidyBusy: Boolean = false,
+    /**
      * Whether the quick-note field is open - the home-screen widget's Note
      * button opens it. See [QuickNotePlate].
      */
@@ -603,6 +613,12 @@ data class HomeActions(
     val onTryCloud: () -> Unit = {},
     /** Dismisses [HomeState.cloudOffer] without asking anything. */
     val onDismissCloudOffer: () -> Unit = {},
+    /**
+     * Undo the inbox tidy on [HomeState.inboxTidy] - one tap, no card
+     * ([com.jarvis.client.JarvisRuntime.inboxTidyUndoDetached]). Held on a
+     * stale link and while the lists are hidden: the strip disables the button.
+     */
+    val onInboxUndo: () -> Unit = {},
     /**
      * Forget the conversation and start afresh: the next question goes on
      * its own, with nothing before it. Clears the question and answer on
@@ -1171,6 +1187,14 @@ private fun ConversationList(
                 canAct = state.link == LinkState.CONNECTED && !state.stale,
                 actions = actions,
             )
+        }
+
+        // "Inbox tidy by voice" (2026-09-28): ten minutes of Undo after a
+        // tidy card was approved. A strip, not a card - it approves nothing.
+        state.inboxTidy?.let { strip ->
+            item(key = "inbox-tidy") {
+                InboxTidyPlate(strip, busy = state.inboxTidyBusy, onUndo = actions.onInboxUndo)
+            }
         }
 
         if (state.notice != null) {
@@ -2105,6 +2129,55 @@ private fun PcMediaPlate(canAct: Boolean, actions: HomeActions) {
                     },
                 )
             }
+        }
+    }
+}
+
+/**
+ * The Undo strip under an inbox tidy ("Inbox tidy by voice", the owner's
+ * decision of 2026-09-28; docs/JARVIS-API.md section 95): what was done, how
+ * long Undo lasts, and one button. The words are the PC's own and the
+ * desktop's strip says the same ([com.jarvis.client.net.InboxTidy], checked
+ * against contract/inbox-tidy-cases.json). It approves nothing and raises no
+ * card; the button is held while the link is stale (rule 4) and while the
+ * lists are hidden, and the strip says why in its own line.
+ */
+@Composable
+private fun InboxTidyPlate(
+    strip: com.jarvis.client.net.InboxTidy.Strip,
+    busy: Boolean,
+    onUndo: () -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Plate {
+        Kicker(com.jarvis.client.net.InboxTidy.w("title"))
+        Gap(4)
+        Text(
+            strip.text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = chrome.textHi,
+        )
+        Gap(2)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                strip.left,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Quiet(
+                com.jarvis.client.net.InboxTidy.w("undo"),
+                enabled = strip.canUndo && !busy,
+                onClick = onUndo,
+            )
+        }
+        if (strip.note.isNotEmpty()) {
+            Text(
+                strip.note,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo,
+            )
         }
     }
 }

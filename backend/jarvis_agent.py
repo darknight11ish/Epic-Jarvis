@@ -563,6 +563,38 @@ def _run_draft_email(args: dict, plan_obj, **_) -> dict:
     return DRAFT.run(plan_obj, approved=True)
 
 
+def _prepare_tidy_inbox(args: dict):
+    """Finds the emails the owner's words describe (a READ-ONLY look at their
+    From, Subject and Date lines - the card has to list every one) and works
+    out what would be done to each. The plan carries no password."""
+    try:
+        import jarvis_inbox_tidy as TIDY
+    except Exception as exc:
+        # No arguments on this line. A plan that carries a `problem` never
+        # reaches a card (_one_call).
+        import types
+        why = f"tidying the inbox is not available here ({type(exc).__name__})"
+        return types.SimpleNamespace(problem=why), f"Tidy the inbox ({why})"
+    # Only these fields are ever read out of the model's arguments. There is
+    # no argument that could ask for anything but the four actions.
+    p = TIDY.plan(args.get("action"), sender=args.get("from") or "",
+                  subject=args.get("subject") or "", words=args.get("words") or "",
+                  newsletters=args.get("newsletters") is True,
+                  since_days=args.get("since_days"),
+                  older_than_days=args.get("older_than_days"),
+                  unread_only=args.get("unread_only") is True)
+    return p, TIDY.describe(p)
+
+
+def _run_tidy_inbox(args: dict, plan_obj, **_) -> dict:
+    """Does the plan the card showed - `plan_obj`, the SAME object, never a
+    new search from `args` (jarvis_inbox_tidy.run checks its fingerprint)."""
+    if plan_obj is None or getattr(plan_obj, "problem", ""):
+        return {"ok": False, "done": 0, "error": "tidying the inbox is not available here"}
+    import jarvis_inbox_tidy as TIDY
+    return TIDY.run(plan_obj, approved=True)
+
+
 def _prepare_notes_search(args: dict):
     try:
         import jarvis_notes as NOTES
@@ -792,16 +824,17 @@ def _plain_prepare(label: str) -> Callable[[dict], tuple]:
 #   - the SCHEDULE_TOOLS' own Tool.execute is a dummy that always returns
 #     {"ok": False} - the real path is _schedule_call, not the Tool
 #     contract at all;
-#   - send_email/draft_email are refused outright by their own rule-1 lane
-#     check and "problem" state (_send_email_refusal, _draft_email_refusal)
-#     BEFORE prepare() ever runs - a check this dispatcher does not
-#     reproduce;
+#   - send_email/draft_email/tidy_inbox are refused outright by their own
+#     rule-1 lane check and "problem" state (_send_email_refusal,
+#     _draft_email_refusal, _tidy_inbox_refusal) BEFORE prepare() ever runs -
+#     a check this dispatcher does not reproduce (tidy_inbox's prepare() also
+#     reads the mailbox);
 #   - propose_plan itself, so a plan cannot name a step that starts another
 #     plan.
 # A step naming one of these is refused with a plain reason, rather than
 # guessing at a smaller version of a check this file is most careful about
 # getting right.
-_PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "propose_plan"})
+_PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "tidy_inbox", "propose_plan"})
 
 #: The gate action a plan step is put to when it must be asked about on its
 #: own card (marked risky, or filled in from an earlier step's result) but
@@ -1271,6 +1304,30 @@ TOOLS: dict = {
         _prepare_draft_email, _run_draft_email,
         gate_lookup_name=lambda args: "draft_email",
         instead={"send_email": "To send an email now, use send_email."}),
+    # Tidying the inbox (jarvis_inbox_tidy.py; the owner's decision of
+    # 2026-09-28): archive, star, mark as read or move to Trash a checked
+    # list of emails. ONE approval card lists every email, and only a
+    # person's yes changes anything (NEEDS_A_PERSON); the owner then has 10
+    # minutes to Undo. There is no permanent delete. Never on a model that is
+    # not on this PC (rule 1) - see _one_call and TIDY_INBOX_*.
+    "tidy_inbox": Tool(
+        "tidy_inbox",
+        "Archive, star, mark read or trash emails in the owner's inbox. The owner "
+        "sees every email on a card first and can undo for 10 minutes. Name which "
+        "emails.",
+        {"type": "object", "properties": {
+            "action": {"type": "string", "enum": ["archive", "star", "mark_read", "trash"]},
+            "from": {"type": "string", "description": "sender name or address"},
+            "subject": {"type": "string"},
+            "words": {"type": "string"},
+            "newsletters": {"type": "boolean", "description": "bulk mail only"},
+            "since_days": {"type": "integer"},
+            "older_than_days": {"type": "integer"},
+            "unread_only": {"type": "boolean"}},
+         "required": ["action"]},
+        _prepare_tidy_inbox, _run_tidy_inbox,
+        gate_lookup_name=lambda args: "tidy_inbox",
+        instead={"email_check": "To only read the inbox, use email_check."}),
     "notes_search": Tool(
         "notes_search",
         "Search the owner's own notes (Obsidian or Joplin). Read-only.",
@@ -1669,6 +1726,8 @@ NEEDS_A_PERSON = {
     "home_control": "changes something real in the house",
     "send_email": "sends an email in the owner's name, which cannot be taken back",
     "draft_email": "writes into the owner's own Drafts folder on their mail account",
+    "tidy_inbox": "archives, stars, marks as read or moves to Trash emails in the owner's "
+                  "own mailbox",
     "propose_plan": "runs the safe steps of an approved plan at once, which can do "
                     "anything the tools inside it can do",
 }
@@ -1850,6 +1909,77 @@ def _draft_email_refusal(watch: "_TurnWatch") -> str:
     why = DRAFT.tier_problem(_tier_of)
     if why:
         return f"refused: {why}. Nobody was asked and nothing was saved. Tell the owner."
+    return ""
+
+
+#: Tidying the inbox (jarvis_inbox_tidy.py; the owner's decision of
+#: 2026-09-28, CLAUDE.md): archive, star, mark as read or move to Trash, ONE
+#: approval card listing every email, the card saying plainly when the choice
+#: came from reading email (outside text), 10 minutes to Undo. The same shape
+#: as SEND_EMAIL_* just above. In _one_call, on top of the generic path
+#: (NEEDS_A_PERSON, the card limit, "What shaped this request:"):
+#:   - refused with no card unless the turn's model is on this PC (rule 1);
+#:   - refused with no card unless tidy_inbox is tier "ask" (a card that
+#:     could not end in a person deciding is never raised);
+#:   - refused with no card unless reading email is allowed without a card of
+#:     its own (email_read "auto" or "notify"): the plan LOOKS at the emails
+#:     to list them, before any card exists;
+#:   - refused with no card when the plan itself says why nothing could be
+#:     done (nothing matches, too many, not set up);
+#:   - put to the gate under jarvis_inbox_tidy.ACTION whatever the lookup
+#:     says, so its card, tier and notice are always tidy_inbox's;
+#:   - a card too long to show whole is refused, never cut.
+#: Unlike propose_plan, it is NOT refused after outside text: "read my inbox
+#: and archive the newsletters" is the ordinary way to use it, and the
+#: owner's decision is that the CARD says so, at the top, next to the whole
+#: list - the same as an email's (send_email_card_lines).
+TIDY_INBOX_ACTION = "tidy_inbox"
+TIDY_INBOX_READ = ("This conversation read outside text (an email, a web page, a file or "
+                   "another tool's answer) before this tidy was chosen - check that "
+                   "tidying these emails was your idea, and that every email below is one "
+                   "you mean.")
+TIDY_INBOX_NOT_TYPED = ("Your newest message {how} - check that tidying these emails was "
+                        "your idea, and that every email below is one you mean.")
+TIDY_INBOX_APP = ("The app sent extra text with your message (for example the clipboard) "
+                  "- check that tidying these emails was your idea.")
+TIDY_INBOX_NOT_LOCAL = ("refused: the inbox may only be tidied by the model on this PC "
+                        "(rule 1), and this turn's model is not on this PC. Nothing was "
+                        "changed and nobody was asked.")
+TIDY_INBOX_TOO_LONG = ("refused: this tidy's card would be too long to show every email in "
+                       "full, so nobody was asked and nothing was changed. Narrow it - one "
+                       "sender, fewer days - or do it in rounds.")
+
+
+def tidy_inbox_card_lines(watch: "_TurnWatch") -> list:
+    """The plain lines at the TOP of a tidy's card when outside text shaped
+    the turn - [] when the owner's own typed or said words did. Same rule as
+    send_email_card_lines."""
+    lines = []
+    if watch.read or watch.tainted:
+        lines.append(TIDY_INBOX_READ)
+    if watch.provenance:
+        lines.append(TIDY_INBOX_NOT_TYPED.format(how=_NOT_OWN_WORDS[watch.provenance]))
+    if watch.app_context:
+        lines.append(TIDY_INBOX_APP)
+    return lines
+
+
+def _tidy_inbox_refusal(watch: "_TurnWatch") -> str:
+    """Why this turn may not even ask about tidying, or "". Fails closed: a
+    turn whose model is unknown is refused."""
+    lane = getattr(watch, "lane", None)
+    if not isinstance(lane, dict) or local_model_refusal(lane.get("url"), lane.get("model")):
+        return TIDY_INBOX_NOT_LOCAL
+    try:
+        import jarvis_inbox_tidy as TIDY
+    except Exception as exc:
+        return f"refused: tidying the inbox is not available here ({type(exc).__name__})."
+    why = TIDY.tier_problem(_tier_of)
+    if why:
+        return f"refused: {why}. Nobody was asked and nothing was changed. Tell the owner."
+    why = TIDY.read_problem(_tier_of)
+    if why:
+        return f"refused: {why}. Nobody was asked and nothing was changed. Tell the owner."
     return ""
 
 
@@ -3159,7 +3289,9 @@ def _provenance(m: dict) -> str:
 #: to your Drafts folder..."), each built from the plan the owner approved -
 #: so a second email or draft in the same answer is not marked as shaped by
 #: outside text just because the first one was sent or saved.
-_NOT_READING = {"calculator", "send_email", "draft_email"}
+#: tidy_inbox's own answer ("Archived 3 emails.") is counts and words of
+#: ours, never a subject or a sender - so it is not outside text either.
+_NOT_READING = {"calculator", "send_email", "draft_email", "tidy_inbox"}
 
 
 def strip_chat_markers(text: str) -> str:
@@ -3748,7 +3880,11 @@ TOOL_GROUPS = (
     ("timers", "a countdown timer, the to-do list, what is coming up",
      ("set_timer", "todo_add", "todo_done", "coming_up")),
     ("send_email", "send an email", ("send_email",)),
-    ("draft_email", "save an email draft", ("draft_email",)),
+    # tidy_inbox (jarvis_inbox_tidy.py) shares this group rather than adding
+    # a fifth-from-last name to more_tools' own description (see propose_plan
+    # below for the same reasoning): both change the owner's mailbox, and
+    # both are opt-in via [tools].enabled.
+    ("draft_email", "draft or tidy email", ("draft_email", "tidy_inbox")),
     ("notes", "add to the owner's Logseq, Obsidian or Joplin notes",
      ("append_logseq_journal", "append_obsidian_daily", "create_joplin_note")),
     ("home_control", "switch a light or another device", ("home_control",)),
@@ -6332,6 +6468,17 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
             say_step("tool_refused", name)
             return
+    if name == "tidy_inbox":
+        # Refused before anything is looked at or anyone asked - see
+        # TIDY_INBOX_*.
+        why = _tidy_inbox_refusal(watch)
+        if why:
+            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                          "content": _tool_content({"ok": False, "done": 0,
+                                                    "error": why})})
+            steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+            say_step("tool_refused", name)
+            return
     if name == "propose_plan":
         # Refused before anything is planned or anyone asked - the safety
         # gate (jarvis_plan.enabled()) and outside text, at the same point
@@ -6370,6 +6517,8 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         action_name = SEND_EMAIL_ACTION
     if name == "draft_email":
         action_name = DRAFT_EMAIL_ACTION
+    if name == "tidy_inbox":
+        action_name = TIDY_INBOX_ACTION
     # A note write after outside text waits for a person (NOTE_WRITES): put
     # to the gate as NOTE_AFTER_OUTSIDE_ACTION when its own tier would not
     # ask. "never" stays "never", and "ask" asks anyway.
@@ -6429,6 +6578,25 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         top = draft_email_card_lines(watch)
         if top:
             plan_text = "\n".join(top) + "\n\n" + plan_text
+    if name == "tidy_inbox":
+        # A plan that says why nothing could be done (nothing matches, too
+        # many, not set up, the module missing): nothing to ask about, so no
+        # card. The model is told why, in the plan's own words.
+        problem = getattr(state, "problem", "")
+        if problem:
+            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                          "content": _tool_content({
+                              "ok": False, "done": 0,
+                              "error": f"refused: {problem}. Nothing was changed and nobody "
+                                       f"was asked."})})
+            steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+            say_step("tool_refused", name)
+            return
+        # The owner's decision: the card says PLAINLY, at the top, when
+        # outside text shaped this turn.
+        top = tidy_inbox_card_lines(watch)
+        if top:
+            plan_text = "\n".join(top) + "\n\n" + plan_text
     # "Lights, plugs and fans without a card" (LIGHTS_WITHOUT_CARD): with the
     # owner's setting on, a light, plug or fan the owner named in their own
     # words, in a turn nothing from outside shaped, runs with no card.
@@ -6449,6 +6617,7 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
                           {"ok": False,
                            "error": SEND_EMAIL_TOO_LONG if name == "send_email" else
                                     DRAFT_EMAIL_TOO_LONG if name == "draft_email" else
+                                    TIDY_INBOX_TOO_LONG if name == "tidy_inbox" else
                                     (f"refused: the plan for {name} is too long "
                                      f"to show in full on one approval card, so "
                                      f"nobody was asked and nothing ran. Make a "

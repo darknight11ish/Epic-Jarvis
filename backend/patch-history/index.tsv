@@ -86,6 +86,7 @@ temporary-chat.patch	temporary-chat/6173f88.patch	6173f881992a70be94ca3e77a50393
 tool-calling-wiring.patch	tool-calling-wiring/a2f0c5b.patch	a2f0c5bc31b7cd68c57c649bfdfd62418fa14f44	2026-09-18T00:52:27+00:00	backend: fix the 6 findings from the tool-calling audit
 tool-calling-wiring.patch	tool-calling-wiring/f736850.patch	f736850c839e98752330182da3bab016aede1013	2026-09-18T00:27:47+00:00	backend: jarvis_agent.py - the model can finally use a tool, local lane only
 voice-503.patch	voice-503/8d2c6f6.patch	8d2c6f615e4db690c28465fc892805f3d74a70a0	2026-09-15T01:07:41+00:00	The voice routes were telling four different stories, and one was a leak
+voices.patch	voices/4cb57cc.patch	4cb57ccf673945c02ff193b7c02c2083bc3463b3	2026-09-28T20:49:46+00:00	Animal faces offer their own voice once (backend half)
 voices.patch	voices/e7ee631.patch	e7ee6314ac1884c8600e3251ddd07db8b5cb832e	2026-09-28T06:15:08+00:00	Each animal's voice: pick a voice, pitch and pace per animal, in both apps
 voices.patch	voices/15d1300.patch	15d1300e6f10b21b724535bb9ca761388700d761	2026-09-27T23:23:06+00:00	Voice follows the face: each animal face speaks in its own voice (PC side)
 voices.patch	voices/1262208.patch	126220810bc58273cd6196d6a8fbce1b538655de	2026-09-26T19:47:59+00:00	Grow "What did I miss?" and add a built-in-voice-choice setting

@@ -116,6 +116,9 @@ try:
 except Exception:
     sherpa_onnx = None  # type: ignore
 
+# Which Kokoro pack is installed and its voices by name (shipped beside this).
+import jarvis_kokoro as K
+
 
 # --------------------------------------------------------------------------
 #   Constants
@@ -357,82 +360,160 @@ def set_speed(body) -> tuple:
 
 
 # --------------------------------------------------------------------------
-#   Which built-in voice speaks (the voice-choice setting, 2026-09-27)
+#   Which built-in voice speaks (the voice-choice setting, 2026-09-27; saved
+#   by NAME and "Hear it", 2026-09-29)
 # --------------------------------------------------------------------------
 #
 # Ease-of-use audit row 13: speaking speed already had this shape (above);
-# WHICH of Kokoro's own voices speaks did not - `[voice] tts_speaker_id` in
-# jarvis-framework.toml (file-only, a bare number) was the only way to
-# change it. Same shape as speed, reusing the SAME UI pattern in both
-# apps, right beside it: set from either app (POST
-# /api/voice/voices/speaker), kept in voices/state.json, NO CARD EITHER
+# WHICH of Kokoro's own voices speaks did not. Same shape as speed, reusing
+# the SAME UI pattern in both apps, right beside it: set from either app
+# (POST /api/voice/voices/speaker), kept in voices/state.json, NO CARD EITHER
 # WAY - manner.patch's shape: a voice is cosmetic, it never changes what
 # Jarvis does, asks or remembers.
 #
-# THE LIST, AND WHAT IS ACTUALLY CONFIRMED. Kokoro ships several voices
-# baked into one file (voice-models/tts/voices.bin); `sid` below (Kokoro's
-# own word) just indexes into it. The installed sherpa-onnx (checked: this
-# repository's Python has sherpa_onnx 1.13.8) exposes only a COUNT for
-# this - `OfflineTts.num_speakers` - never names; and status() stays cheap
-# on purpose (no model is loaded to answer GET /api/voice/voices), so this
-# is a fixed table, exactly like SPEEDS above, not read from the model at
-# answer time. Only TWO entries are confirmed against this repository:
-# index 0 and index 9, from jarvis-framework.toml's own commented-out
-# example ("0 = American female; 9 = British male (bm_george)"). The rest
-# is Kokoro's own published American+British English voice pack
-# (kokoro-en-v0_19) - not read from any file here - kept only because it
-# is internally consistent with those two confirmed points (index 9 lands
-# on the British male voice named bm_george either way). Choosing a voice
-# beyond what a particular PC's installed model really has is no worse
-# than setting tts_speaker_id to a number too high by hand today - it is
-# Kokoro's own behaviour for that, untouched by this setting.
-KOKORO_VOICES = (
-    ("0", "American (female)"),
-    ("1", "American (female) - Bella"),
-    ("2", "American (female) - Nicole"),
-    ("3", "American (female) - Sarah"),
-    ("4", "American (female) - Sky"),
-    ("5", "American (male) - Adam"),
-    ("6", "American (male) - Michael"),
-    ("7", "British (female) - Emma"),
-    ("8", "British (female) - Isabella"),
-    ("9", "British (male) - George"),
-    ("10", "British (male) - Lewis"),
-)
-SPEAKER_LABEL = dict(KOKORO_VOICES)
-SPEAKER_DEFAULT = "0"
+# SAVED BY NAME (the owner's decision, 2026-09-28: Kokoro v1.0). The choice
+# used to be a bare number, and a number means a different voice in a
+# different pack (9 was George; on Kokoro v1.0 it is Sarah). It is now the
+# voice's NAME ("bm_george"). jarvis_kokoro.py knows both packs - which one
+# is installed (from voices.bin's size, no model is loaded to answer GET
+# /api/voice/voices), each voice's number for sherpa-onnx, the voices the
+# pickers offer, and the accent. THE CARRY-OVER: an old saved number is read
+# as the name it meant (jarvis_kokoro.LEGACY_NAME) the first time, and
+# rewritten as that name once (migrate_saved_choices, run by status()) - so
+# the owner's choice never changes. `[voice] tts_speaker_id` (a number in
+# the settings file) keeps meaning the same old numbering; a number beyond
+# it is used as it is, as before.
+#
+# The list is the voices the pack really has, best rated first, and the
+# owner's current choice if it is not among them (jarvis_kokoro.offered).
+
+def _voices_file() -> str:
+    """Where the installed voice pack's voices.bin is: the place
+    jarvis_speech speaks from (its `[voice] tts_voices` setting included)."""
+    try:
+        import jarvis_speech as S
+        return str(S._sherpa_tts_paths()["voices"])
+    except Exception:
+        return str(_models_dir() / "tts" / "voices.bin")
+
+
+def pack_kind() -> str:
+    """"v1" (Kokoro v1.0), "v019" (the pack Jarvis shipped with) or "" (no
+    pack, or one this does not know). Cheap: one file's size."""
+    return K.kind_of_file(_voices_file())
+
+
 SPEAKER_TITLE = "Jarvis's built-in voice"
 SPEAKER_DETAIL = ("Which of Kokoro's voices Jarvis's built-in voice uses - never a voice "
-                  "you recorded, which stays under \"Voices\" below.")
+                  "you recorded, which stays under \"Voices\" below. \"Hear it\" plays a "
+                  "short sample without changing your choice.")
+#: "Hear it": the one line the PC says. Fixed here - an app never sends
+#: words to be spoken this way. No name, nothing private.
+SAMPLE_LINE = "Hello, I'm Jarvis. This is how I sound."
+SAMPLE_BUSY = ("the PC is still making the sound for the last Hear it. Try again in a "
+               "moment")
 
 
-def speaker() -> int:
-    """The built-in voice's number (Kokoro's `sid`): the owner's choice,
-    else `[voice] tts_speaker_id` (a whole number, default 0). Never
-    raises."""
-    choice = _read_state().get("speaker")
-    if choice in SPEAKER_LABEL:
-        return int(choice)
+def _config_number() -> Optional[int]:
+    """`[voice] tts_speaker_id` as a whole number, or None (unset, damaged
+    or negative - an impossible value is ignored, as it always was)."""
     try:
         v = int(_cfg("tts_speaker_id", 0) or 0)
     except (TypeError, ValueError):
+        return None
+    return v if v >= 0 else None
+
+
+def _builtin_now(kind: str) -> dict:
+    """What the built-in voice is set to, once, in every form callers need:
+    {"name": the name that speaks in this pack ("" for a hand-set number
+    beyond the pack), "sid", "chosen": the name the owner saved or None,
+    "fell_back": the saved voice is not in this pack, "custom": a hand-set
+    number that is not one of the old list}. Never raises."""
+    saved = _read_state()["speaker"]
+    if saved is not None:
+        got = K.resolve(kind, saved)
+        if got is not None:
+            return {"name": got, "sid": K.sid_of(kind, got), "chosen": saved,
+                    "fell_back": False, "custom": False}
+        # A voice the installed pack does not have (a v1.0 voice while the old
+        # pack is installed): the pack's own default speaks, and the view says so.
+        return {"name": K.default_name(kind), "sid": K.default_sid(kind), "chosen": saved,
+                "fell_back": True, "custom": False}
+    n = _config_number()
+    if n is None:
+        return {"name": K.default_name(kind), "sid": K.default_sid(kind), "chosen": None,
+                "fell_back": False, "custom": False}
+    legacy = K.LEGACY_NAME.get(str(n))
+    if legacy is not None:
+        got = K.resolve(kind, legacy)
+        if got is not None:
+            return {"name": got, "sid": K.sid_of(kind, got), "chosen": None,
+                    "fell_back": False, "custom": False}
+    return {"name": K.name_of(kind, n) or "", "sid": n, "chosen": None,
+            "fell_back": False, "custom": True}
+
+
+def speaker() -> int:
+    """The built-in voice's number (sherpa-onnx's `sid`) in the installed
+    pack: the owner's choice, else `[voice] tts_speaker_id` (the old
+    numbering), else the pack's default. Never raises."""
+    try:
+        return int(_builtin_now(pack_kind())["sid"])
+    except Exception:
         return 0
-    return v if v >= 0 else 0
+
+
+def speaker_name() -> str:
+    """The NAME of the built-in voice that speaks ("af_heart"), "" for a
+    hand-set number beyond the pack. Never raises."""
+    try:
+        return str(_builtin_now(pack_kind())["name"])
+    except Exception:
+        return ""
+
+
+def accent_lang(sid) -> Optional[str]:
+    """The espeak voice to ask for with built-in voice number `sid`, or None
+    for the engine's own default: only Kokoro v1.0's British voices take one
+    (jarvis_speech.kokoro_speak asks). Never raises."""
+    try:
+        kind = pack_kind()
+        return K.accent_lang(kind, K.name_of(kind, int(sid)),
+                             str(_cfg("tts_lang_british", "") or ""))
+    except Exception:
+        return None
+
+
+def _speaker_rows(kind: str, now: Optional[dict] = None) -> list:
+    """The picker rows: what the pack offers, then the current choice if it
+    is not one of them."""
+    now = now or _builtin_now(kind)
+    return K.offered(kind, now["name"] if not now["custom"] and now["name"] else None)
 
 
 def speaker_view() -> dict:
     """GET /api/voice/voices `speaker`: the choice, and every word the
     apps show - the same shape `speed` uses above, so both apps reuse ONE
     row of UI for it."""
-    choice = _read_state().get("speaker")
-    value = speaker()
+    kind = pack_kind()
+    now = _builtin_now(kind)
+    rows = _speaker_rows(kind, now)
     note = ""
-    if choice not in SPEAKER_LABEL:
-        choice = str(value) if str(value) in SPEAKER_LABEL else "custom"
-        if choice == "custom":
-            note = (f"Set by hand on your PC to voice {value} ([voice] tts_speaker_id in "
-                    f"jarvis-framework.toml), which is not one of the named voices below. "
-                    f"Choosing one here replaces it.")
+    if now["custom"]:
+        choice = "custom"
+        note = (f"Set by hand on your PC to voice {now['sid']} ([voice] tts_speaker_id in "
+                f"jarvis-framework.toml), which is not one of the named voices below. "
+                f"Choosing one here replaces it.")
+    else:
+        choice = now["name"]
+    if now["fell_back"]:
+        note = (f"You chose {K.label_of(now['chosen'])}, which needs the newer voice pack "
+                f"(Kokoro v1.0). Until it is installed, {K.label_of(now['name'])} speaks.")
+    if kind == K.V019:
+        up = K.upgrade_note()
+        if up:
+            note = (note + " " if note else "") + up
     try:
         fv = face_voice()
     except Exception:
@@ -443,16 +524,18 @@ def speaker_view() -> dict:
         note = (note + " " if note else "") + (
             f"While the {fv['name']} face is showing, its own voice speaks instead "
             f"(\"{FACE_VOICE_TITLE}\" is on); this choice is used the rest of the time.")
-    return {"choice": choice, "value": value, "default": SPEAKER_DEFAULT,
+    return {"choice": choice, "value": now["sid"], "default": K.default_name(kind),
             "title": SPEAKER_TITLE, "detail": SPEAKER_DETAIL, "note": note,
-            "choices": [{"id": k, "label": v} for k, v in KOKORO_VOICES]}
+            "choices": rows, "pack": K.pack_words(kind)}
 
 
 def set_speaker(body) -> tuple:
-    """POST /api/voice/voices/speaker {"speaker": "0" .. "10"}: at once, no
-    card either way (see above)."""
+    """POST /api/voice/voices/speaker {"speaker": "<a name from
+    speaker.choices>"}: at once, no card either way (see above)."""
+    kind = pack_kind()
+    ids = {r["id"] for r in _speaker_rows(kind)}
     if not isinstance(body, dict) or set(body) != {"speaker"} \
-            or not isinstance(body["speaker"], str) or body["speaker"] not in SPEAKER_LABEL:
+            or not isinstance(body["speaker"], str) or body["speaker"] not in ids:
         return 400, {"ok": False, "error": "choose one of the listed voices"}
     choice = body["speaker"]
     err = _write_state(speaker=choice)
@@ -461,8 +544,136 @@ def set_speaker(body) -> tuple:
     _audit("voices.speaker", {"speaker": choice})
     _publish({"what": "speaker", "outcome": "set"})
     return 200, {"ok": True,
-                "message": f"Jarvis's built-in voice is now {SPEAKER_LABEL[choice]}.",
+                "message": f"Jarvis's built-in voice is now {K.label_of(choice)}.",
                 "speaker": speaker_view()}
+
+
+def migrate_saved_choices() -> list:
+    """The carry-over, done ONCE: any voice still saved as an old NUMBER in
+    state.json - the built-in voice, or an animal's - is rewritten as the
+    NAME it meant, so the owner's choice does not change. [(what, from, to)]
+    for what moved ("to" is None for an animal choice that is no longer
+    allowed - Sky or Adam - and went back to the animal's own voice);
+    [] when there was nothing to do. status() runs it; it is cheap and
+    idempotent, and the audit line has the numbers and names only."""
+    with _STATE_LOCK:
+        try:
+            raw = json.loads(_state_path().read_text(encoding="utf-8"))
+        except Exception:
+            return []
+        if not isinstance(raw, dict):
+            return []
+        moved = []
+        sp = raw.get("speaker")
+        if K.is_legacy_number(sp):
+            moved.append(("built-in voice", sp, K.LEGACY_NAME[sp]))
+        animals = raw.get("face_animals")
+        if isinstance(animals, dict):
+            allowed = K.pickable_for_animals()
+            for face, v in animals.items():
+                if isinstance(v, dict) and K.is_legacy_number(v.get("speaker")):
+                    name = K.LEGACY_NAME[v["speaker"]]
+                    moved.append((str(face), v["speaker"], name if name in allowed else None))
+        if not moved:
+            return []
+        # _read_state already reads the numbers as names (and drops what an
+        # animal may no longer use); writing it back is the whole migration.
+        if _write_state():
+            return []
+    for what, old, new in moved:
+        _audit("voices.speaker_migrated", {"what": what, "from": old, "to": new})
+    return moved
+
+
+# --------------------------------------------------------------------------
+#   "Hear it": one short fixed line in a named voice, changing nothing
+# --------------------------------------------------------------------------
+#
+# POST /api/voice/voices/sample {"voice": "<a name from speaker.choices>"}
+# answers a WAV (200 audio/wav) of SAMPLE_LINE in that Kokoro voice at the
+# owner's speaking speed - never a custom voice, never an animal's pitch, so
+# it can never be the owner's own voice (a recording is not reachable from
+# here at all). NO CARD, NO EVENT, NO AUDIT LINE, nothing saved and the
+# chosen voice untouched: it only makes a sound for the app that asked, like
+# an animal's "Try it" (below), so it is not a way out of this PC and is not
+# held on a stale link. What the apps do around it - never over Jarvis, not
+# while the talk button, "hey Jarvis" or Jarvis Live has the microphone, only
+# in an unlocked app - is the apps' own, exactly as for "Try it".
+#
+# One at a time (the same lock "Try it" uses: the sound is made on the
+# processor or the card, and a second request would only queue behind it),
+# and the last few samples are kept IN MEMORY only, so hearing the same voice
+# twice is instant. Nothing is written to disk.
+
+_SAMPLE_CACHE: "dict" = {}
+_SAMPLE_CACHE_MAX = 16
+
+
+def sample_voice(body, speech_module=None) -> tuple:
+    """POST /api/voice/voices/sample {"voice": name} -> (200, WAV bytes) or
+    (4xx/503, {"ok": false, "error"})."""
+    kind = pack_kind()
+    ids = {r["id"] for r in _speaker_rows(kind)}
+    if not isinstance(body, dict) or set(body) != {"voice"} \
+            or not isinstance(body["voice"], str) or body["voice"] not in ids:
+        return 400, {"ok": False, "error": "choose one of the listed voices"}
+    if not _TRY_LOCK.acquire(blocking=False):
+        return 429, {"ok": False, "error": SAMPLE_BUSY}
+    try:
+        return _sample_voice(kind, body["voice"], speech_module)
+    finally:
+        _TRY_LOCK.release()
+
+
+def _sample_voice(kind: str, name: str, speech_module=None) -> tuple:
+    S = speech_module
+    if S is None:
+        try:
+            import jarvis_speech as S
+        except Exception:
+            S = None
+    engine = None
+    if S is not None:
+        try:
+            engine = S._tts_engine()
+        except Exception:
+            engine = None
+    if engine is None:
+        return 503, {"ok": False, "error": "this PC has no built-in voice to play it with"}
+    sid = K.sid_of(kind, name)
+    if sid is None:
+        return 400, {"ok": False, "error": "choose one of the listed voices"}
+    pace = min(2.0, max(0.5, speed()))
+    try:
+        stamp = os.path.getsize(_voices_file())
+    except OSError:
+        stamp = -1
+    key = (kind, stamp, name, round(pace, 3))
+    hit = _SAMPLE_CACHE.get(key)
+    if hit is not None:
+        return 200, hit
+    try:
+        audio = S.kokoro_speak(engine, SAMPLE_LINE, sid, pace, 0.0)
+    except Exception as exc:
+        return 503, {"ok": False, "error": f"the built-in voice failed ({type(exc).__name__})"}
+    if audio is None:
+        return 503, {"ok": False, "error": "the built-in voice made no sound"}
+    wav = S._write_wav(audio[0], audio[1])
+    while len(_SAMPLE_CACHE) >= _SAMPLE_CACHE_MAX:
+        _SAMPLE_CACHE.pop(next(iter(_SAMPLE_CACHE)), None)
+    _SAMPLE_CACHE[key] = wav
+    return 200, wav
+
+
+def handle_audio(route: str, body, speech_module=None) -> tuple:
+    """The two routes that answer a sound instead of JSON - an animal's "Try
+    it" and "Hear it" - for jarvis_hud's one audio block (voices.patch):
+    (200, WAV bytes) or (code, {"ok": false, "error"})."""
+    if route == "/api/voice/voices/sample":
+        return sample_voice(body, speech_module)
+    if route == "/api/voice/voices/face_animal/try":
+        return try_face_animal(body, speech_module)
+    return 404, {"ok": False, "error": "no such voice route"}
 
 
 # --------------------------------------------------------------------------
@@ -499,7 +710,7 @@ def set_speaker(body) -> tuple:
 #
 # EACH ANIMAL'S VOICE, THE OWNER'S OWN (2026-09-28). The rows below are only
 # where each animal starts: for each one the owner may pick any of the
-# built-in voices (KOKORO_VOICES), a pitch from MIN_SEMITONES (deeper) to
+# built-in voices (jarvis_kokoro.offered), a pitch from MIN_SEMITONES (deeper) to
 # MAX_SEMITONES (higher) in PITCH_STEP steps, and a pace (the speaking-speed
 # words: Slower / Normal / Faster, still times the owner's own speed) - POST
 # /api/voice/voices/face_animal, kept in voices/state.json `face_animals`,
@@ -514,12 +725,19 @@ def set_speaker(body) -> tuple:
 #: face id -> (its name, Kokoro voice, pace, pitch rise in semitones) - where
 #: each animal STARTS; the owner's own choice per animal is in state.json.
 FACE_VOICES = {
-    "redpanda": {"name": "Red Panda", "speaker": "1", "speed": 1.0, "semitones": 2.0},
-    "pygmyowl": {"name": "Pygmy Owl", "speaker": "2", "speed": 0.85, "semitones": 1.0},
-    # Not "4" ("Sky"): the owner's 2026-09-28 decision - its name matches the
-    # voice OpenAI withdrew in 2024 over a likeness complaint. Sarah, with the
-    # same playful lift and pace the otter had.
-    "seaotter": {"name": "Sea Otter", "speaker": "3", "speed": 1.15, "semitones": 3.0},
+    # The voices are saved by NAME now (they were numbers: 1, 2, 3, 6). Each
+    # of these four exists under the same name in BOTH Kokoro packs, and the
+    # v1.0 version of each was MEASURED against the v0.19 one, not listened
+    # to (the same sentence, middle pitch in Hz, v0.19 then v1.0): Bella 207
+    # then 198, Nicole 160 then 156, Sarah 205 then 197, Michael 126 then
+    # 121; the sentence took within 8% as long (docs/CRITTERS.md). So no
+    # animal needed another voice for the upgrade.
+    "redpanda": {"name": "Red Panda", "speaker": "af_bella", "speed": 1.0, "semitones": 2.0},
+    "pygmyowl": {"name": "Pygmy Owl", "speaker": "af_nicole", "speed": 0.85, "semitones": 1.0},
+    # Never "af_sky" (it was number 4): the owner's 2026-09-28 decision - its
+    # name matches the voice OpenAI withdrew in 2024 over a likeness
+    # complaint. Sarah, with the same playful lift and pace the otter had.
+    "seaotter": {"name": "Sea Otter", "speaker": "af_sarah", "speed": 1.15, "semitones": 3.0},
     # The fourth animal (owner, 2026-09-28): "a male voice, a touch
     # energetic". Michael, one step higher at normal pace. Made with the real
     # Kokoro model (kokoro-en-v0_19) and MEASURED, not judged by ear: his
@@ -527,7 +745,7 @@ FACE_VOICES = {
     # voice, a little brighter, the same kind of lift that makes the other
     # three sound small - and his pitch moves over a slightly wider range.
     # ("Faster" was made too: about a tenth quicker, same pitch.)
-    "monkey": {"name": "Monkey", "speaker": "6", "speed": 1.0, "semitones": 1.0},
+    "monkey": {"name": "Monkey", "speaker": "am_michael", "speed": 1.0, "semitones": 1.0},
     # The fifth face, the robot (2026-09-28), counted as an animal here as
     # everywhere: energetic, and unlike the other four's voices. Emma (a
     # British voice none of the others use), two steps higher and "Faster".
@@ -537,7 +755,7 @@ FACE_VOICES = {
     # slightly wider range (69 -> 76 Hz) - brisk and bright, still clear.
     # (Also made and measured: Sarah, Adam, Lewis and Isabella, faster and
     # a step or two higher.)
-    "robot": {"name": "Robot", "speaker": "7", "speed": 1.15, "semitones": 2.0},
+    "robot": {"name": "Robot", "speaker": "bf_emma", "speed": 1.15, "semitones": 2.0},
 }
 #: The pitch the owner may pick for an animal, in semitones ("steps" on
 #: screen): 3 deeper to 4 higher, in half steps.
@@ -634,9 +852,12 @@ def _clean_animals(raw) -> dict:
     for face, v in raw.items():
         if face not in FACE_VOICES or not isinstance(v, dict):
             continue
-        sk, pace = v.get("speaker"), v.get("pace")
+        # An old number is read as the name it meant (the carry-over); a voice
+        # no animal may use (Sky, Adam: jarvis_kokoro.NEVER_FOR_ANIMALS) is no
+        # choice at all - the animal keeps its own voice.
+        sk, pace = K.normalise(v.get("speaker")), v.get("pace")
         semis = _semitones_ok(v.get("semitones"))
-        if isinstance(sk, str) and sk in SPEAKER_LABEL and isinstance(pace, str) \
+        if sk in K.pickable_for_animals() and isinstance(pace, str) \
                 and pace in SPEED_VALUE and semis is not None:
             out[face] = {"speaker": sk, "semitones": semis, "pace": pace}
     return out
@@ -653,7 +874,14 @@ def animal_voice(face: str) -> Optional[dict]:
     own = _animal_own(face)
     chosen = _read_state()["face_animals"].get(face)
     use = chosen or own
-    return {"face": face, "name": row["name"], "speaker": use["speaker"],
+    # The name THIS pack has for it: a voice saved as the old pack's "af" is
+    # "af_heart" on v1.0 - the name the picker lists, so the row shows it and
+    # sending it back is accepted. A voice this pack does not have (a v1.0
+    # voice on the old pack) shows as the animal's own voice, which is what
+    # speaks (_animal_sid).
+    speaker_now = (K.resolve(pack_kind(), use["speaker"])
+                   or K.resolve(pack_kind(), own["speaker"]) or own["speaker"])
+    return {"face": face, "name": row["name"], "speaker": speaker_now,
             "speed": SPEED_VALUE[use["pace"]], "semitones": float(use["semitones"]),
             "pace": use["pace"], "changed": chosen is not None and chosen != own}
 
@@ -683,13 +911,22 @@ def builtin_voice() -> tuple:
         return speaker(), speed(), 0.0, ""
     pace = min(2.0, max(0.5, float(fv["speed"]) * speed()))
     semis = min(MAX_SEMITONES, max(MIN_SEMITONES, float(fv["semitones"])))
-    return int(fv["speaker"]), pace, semis, fv["face"]
+    return _animal_sid(pack_kind(), fv), pace, semis, fv["face"]
 
 
-def _voice_name(sid: str) -> str:
+def _animal_sid(kind: str, av: dict) -> int:
+    """sherpa-onnx's number for an animal's voice in the installed pack. A
+    voice this pack does not have (a v1.0 voice on the old pack) is the
+    animal's own row's voice instead - never a wrong voice by number."""
+    sid = K.sid_of(kind, av["speaker"])
+    if sid is None:
+        sid = K.sid_of(kind, FACE_VOICES[av["face"]]["speaker"])
+    return sid if sid is not None else K.default_sid(kind)
+
+
+def _voice_name(name: str) -> str:
     """"Bella" for a named voice, else its whole label ("American (female)")."""
-    label = SPEAKER_LABEL.get(sid, f"voice {sid}")
-    return label.split(" - ")[-1]
+    return K.label_of(name).split(" - ")[-1]
 
 
 def pitch_words(semis: float) -> str:
@@ -778,7 +1015,7 @@ def face_voice_view() -> dict:
             "animals": [_animal_row(f) for f in FACE_VOICES],
             "animals_title": ANIMALS_TITLE, "animals_detail": ANIMALS_DETAIL,
             "animal_choices": {
-                "voices": [{"id": k, "label": v} for k, v in KOKORO_VOICES],
+                "voices": K.offered(pack_kind()),
                 "paces": [{"id": k, "label": PACE_LABEL[k]} for k, _ in SPEEDS],
                 "pitch": {"min": MIN_SEMITONES, "max": MAX_SEMITONES, "step": PITCH_STEP}},
             "offer": face_offer()}
@@ -859,7 +1096,8 @@ def set_face_animal(body) -> tuple:
     elif set(body) != {"face", "speaker", "semitones", "pace"}:
         return 400, {"ok": False, "error": "choose a voice, a pitch and a pace for the animal"}
     else:
-        if not isinstance(body["speaker"], str) or body["speaker"] not in SPEAKER_LABEL:
+        if not isinstance(body["speaker"], str) \
+                or body["speaker"] not in {r["id"] for r in K.offered(pack_kind())}:
             return 400, {"ok": False, "error": "choose one of the listed voices"}
         semis = _semitones_ok(body["semitones"])
         if semis is None:
@@ -944,7 +1182,8 @@ def _try_face_animal(face: str, speech_module=None) -> tuple:
     semis = min(MAX_SEMITONES, max(MIN_SEMITONES, float(av["semitones"])))
     mouth: list = []
     try:
-        audio = S.kokoro_speak(engine, TRY_LINE.format(name=av["name"]), int(av["speaker"]),
+        audio = S.kokoro_speak(engine, TRY_LINE.format(name=av["name"]),
+                               _animal_sid(pack_kind(), av),
                                pace, semis, mouth=mouth)
     except Exception as exc:
         return 503, {"ok": False, "error": f"the built-in voice failed ({type(exc).__name__})"}
@@ -1001,7 +1240,7 @@ _STATE_LOCK = threading.RLock()
 
 def _read_state() -> dict:
     """{"active": id, "better_voice": bool, "speed": choice or None,
-    "speaker": choice or None, "face_voice": bool or None, "face_animals":
+    "speaker": a voice NAME or None, "face_voice": bool or None, "face_animals":
     {face: {"speaker", "semitones", "pace"}}, "face_answers": {face: "use" |
     "keep"}}. Missing or broken is the built-in voice, the better voice off
     and no speed, built-in-voice, face-voice or animal-voice choice made, and
@@ -1022,9 +1261,9 @@ def _read_state() -> dict:
     sp = raw.get("speed")
     if isinstance(sp, str) and sp in SPEED_VALUE:
         out["speed"] = sp
-    sk = raw.get("speaker")
-    if isinstance(sk, str) and sk in SPEAKER_LABEL:
-        out["speaker"] = sk
+    # A voice NAME; an old saved NUMBER is read as the name it meant, so the
+    # choice carries over at once (migrate_saved_choices writes it back).
+    out["speaker"] = K.normalise(raw.get("speaker"))
     fv = raw.get("face_voice")
     if isinstance(fv, bool):
         out["face_voice"] = fv
@@ -2516,6 +2755,10 @@ def status() -> dict:
         _F5.check_idle()
     except Exception:
         pass
+    try:
+        migrate_saved_choices()  # the one-time number -> name carry-over
+    except Exception:
+        pass
     st = _read_state()
     voices = list_voices()
     engine, fallback = _predict(st, voices)
@@ -3082,6 +3325,7 @@ ROUTES = {"/api/voice/voices/create": create, "/api/voice/voices/active": switch
           "/api/voice/voices/face": set_face_voice,
           "/api/voice/voices/face_animal": set_face_animal,
           "/api/voice/voices/face_animal/try": try_face_animal,
+          "/api/voice/voices/sample": sample_voice,
           "/api/voice/voices/face_offer": answer_face_offer}
 
 
@@ -3102,6 +3346,7 @@ def _reset_for_tests() -> None:
         _BLAST.clear()
     with _SLOW_LOCK:
         _SLOW.update(rtfs=[], until=-1e9, why="")
+    _SAMPLE_CACHE.clear()
     wake()
     try:
         _F5.stop("reset")

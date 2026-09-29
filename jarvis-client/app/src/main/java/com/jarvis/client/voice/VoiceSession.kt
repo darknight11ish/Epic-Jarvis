@@ -767,16 +767,59 @@ class VoiceSession(
         face: String,
         name: String,
         progress: (String) -> Unit = {},
+    ): String = soundFromPc(
+        ask = { api.voiceAnimalTry(face) },
+        busy = CustomVoices.TRY_BUSY,
+        update = CustomVoices.TRY_UPDATE,
+        playing = CustomVoices.tryPlaying(name),
+        done = CustomVoices.tryDone(name),
+        progress = progress,
+    )
+
+    /**
+     * "Hear it" on the Voices screen (2026-09-29): the PC says one fixed line
+     * in the built-in voice named [voice] ([JarvisApi.voiceSample]), and it
+     * plays here, exactly as "Try it" does - never over a question, stopped
+     * the moment one starts ([turnStarting]), and never while Jarvis Live
+     * has the microphone ([voiceBusy]). Changes nothing on the PC (the voice
+     * Jarvis uses stays as it is), so it is not held on a stale link. [label]
+     * is the voice's own words on screen ("American (female) - Bella").
+     */
+    suspend fun hearVoiceSample(
+        voice: String,
+        label: String,
+        progress: (String) -> Unit = {},
+    ): String = soundFromPc(
+        ask = { api.voiceSample(voice) },
+        busy = CustomVoices.HEAR_BUSY,
+        update = CustomVoices.HEAR_UPDATE,
+        playing = CustomVoices.hearPlaying(label),
+        done = CustomVoices.hearDone(label),
+        progress = progress,
+    )
+
+    /**
+     * The shared body of "Try it" and "Hear it": [ask] the PC for a sound,
+     * then play it unless something else is being heard or said. Returns the
+     * words to show at the end, always.
+     */
+    private suspend fun soundFromPc(
+        ask: suspend () -> ApiResult<CustomVoices.Tried>,
+        busy: String,
+        update: String,
+        playing: String,
+        done: String,
+        progress: (String) -> Unit,
     ): String {
         val seen = turnsStarted.get()
-        if (voiceBusy()) return CustomVoices.TRY_BUSY
-        return when (val r = api.voiceAnimalTry(face)) {
+        if (voiceBusy()) return busy
+        return when (val r = ask()) {
             is ApiResult.Ok -> when (val t = r.value) {
                 is CustomVoices.Tried.Refused -> t.why
-                is CustomVoices.Tried.Sound -> playTry(t.wav, name, seen, progress)
+                is CustomVoices.Tried.Sound -> playTry(t.wav, seen, busy, playing, done, progress)
             }
             is ApiResult.Failed -> when (r.error) {
-                com.jarvis.client.net.ApiError.NotFound -> CustomVoices.TRY_UPDATE
+                com.jarvis.client.net.ApiError.NotFound -> update
                 com.jarvis.client.net.ApiError.BadToken -> "The desktop refused this phone's pairing token."
                 else -> "Could not reach your PC to play it."
             }
@@ -784,8 +827,8 @@ class VoiceSession(
     }
 
     /**
-     * Plays a "Try it" clip unless a turn began since [seen] or one is
-     * running. [tryPlaying] is raised BEFORE that last look and
+     * Plays a "Try it" or "Hear it" clip unless a turn began since [seen] or
+     * one is running. [tryPlaying] is raised BEFORE that last look and
      * [turnStarting] bumps [turnsStarted] BEFORE it reads [tryPlaying], so
      * whichever comes second sees the other: either this refuses, or the
      * turn stops the clip ([tryCut] covers a stop that lands before
@@ -793,27 +836,34 @@ class VoiceSession(
      */
     private suspend fun playTry(
         wav: ByteArray,
-        name: String,
         seen: Long,
+        busy: String,
+        playing: String,
+        done: String,
         progress: (String) -> Unit,
     ): String {
         tryCut = false
         tryPlaying = true
         try {
-            if (turnsStarted.get() != seen || voiceBusy()) return CustomVoices.TRY_BUSY
+            if (turnsStarted.get() != seen || voiceBusy()) return busy
             speaker.arm()
             if (!tryCut) {
-                progress(CustomVoices.tryPlaying(name))
+                progress(playing)
                 speaker.play(wav)
             }
         } finally {
             tryPlaying = false
         }
-        return if (tryCut) CustomVoices.TRY_STOPPED else CustomVoices.tryDone(name)
+        return if (tryCut) CustomVoices.TRY_STOPPED else done
     }
 
-    /** Talking, listening or answering: what "Try it" must never play over. */
-    private fun voiceBusy(): Boolean = _phase.value != Phase.OFF || job?.isCompleted == false
+    /**
+     * Talking, listening, answering or Jarvis Live: what "Try it" and "Hear
+     * it" must never play over. (Live keeps the microphone open between
+     * turns, so a sample played then would go into the next question.)
+     */
+    private fun voiceBusy(): Boolean =
+        _phase.value != Phase.OFF || job?.isCompleted == false || liveOn()
 
     /** Bumped by every turn that starts; see [playTry]. */
     private val turnsStarted = java.util.concurrent.atomic.AtomicLong(0)

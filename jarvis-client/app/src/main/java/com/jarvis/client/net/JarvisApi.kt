@@ -1053,6 +1053,40 @@ class JarvisApi(
         }
 
     /**
+     * "Inbox tidy by voice" (docs/JARVIS-API.md section 95): the status (a
+     * GET of [InboxTidy.PATH] - counts and the PC's own words, never a sender
+     * or a subject) or Undo (a POST of an empty object to
+     * [InboxTidy.UNDO_PATH], no card). Nothing else is sent: the tidy itself
+     * is asked for in chat, and the PC raises the one approval card. The
+     * status and body come back whole ([InboxTidy.Reply]): a 404 the PC sent
+     * itself and a 404 from a PC without the routes read differently.
+     */
+    suspend fun inboxTidyCall(undo: Boolean): ApiResult<InboxTidy.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(if (undo) InboxTidy.UNDO_PATH else InboxTidy.PATH)
+                ?: return@withContext ApiResult.Failed(noAddress())
+            val builder = Request.Builder().url(target)
+            if (undo) {
+                builder.post("{}".toRequestBody("application/json".toMediaType()))
+            } else {
+                builder.get()
+            }
+            val req = builder.authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(InboxTidy.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * Projects (docs/JARVIS-API.md section 88): a read (`json` null, a GET)
      * or ONE change (a POST of `json`). The path comes from [Projects] -
      * [Projects.PATH], [Projects.projectPath], [Projects.benchPath] or
@@ -2151,11 +2185,23 @@ class JarvisApi(
      * own sentence; a 404 is a PC too old to have it. Nothing is logged.
      */
     suspend fun voiceAnimalTry(face: String): ApiResult<CustomVoices.Tried> =
+        voiceSound(CustomVoices.ANIMAL_TRY_PATH, CustomVoices.animalTryBody(face))
+
+    /**
+     * "Hear it" for one built-in voice ([CustomVoices.SAMPLE_PATH]): the PC
+     * says one fixed line of its own in that voice, by name, and sends the
+     * WAV - exactly like [voiceAnimalTry], and it changes nothing on the PC.
+     */
+    suspend fun voiceSample(voice: String): ApiResult<CustomVoices.Tried> =
+        voiceSound(CustomVoices.SAMPLE_PATH, CustomVoices.sampleBody(voice))
+
+    /** The one request "Try it" and "Hear it" both make: a POST that answers a WAV or the PC's sentence. */
+    private suspend fun voiceSound(path: String, json: String): ApiResult<CustomVoices.Tried> =
         withContext(Dispatchers.IO) {
-            val target = url(CustomVoices.ANIMAL_TRY_PATH) ?: return@withContext ApiResult.Failed(
+            val target = url(path) ?: return@withContext ApiResult.Failed(
                 noAddress(),
             )
-            val body = CustomVoices.animalTryBody(face).toRequestBody("application/json".toMediaType())
+            val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed()
                 .header("Accept", "audio/wav")
                 .build()

@@ -208,6 +208,8 @@ import { buildSayableList } from "./sayable.js";
 // A timer said aloud while hands-free listening is on (2026-09-25).
 import { aloudFor } from "./coming-up.js";
 import { READING as PHOTO_READING, mountProposal } from "./photo-reminder.js";
+// "Inbox tidy by voice" (2026-09-28): the Undo strip under the input.
+import { mountInboxTidy } from "./inbox-tidy.js";
 // What a `step` event means, in words - shared with Brain's Live tab
 // (item 10, UI-AUDIT-2026-09-26.md).
 import { stepText } from "./step-words.js";
@@ -386,6 +388,7 @@ const dom = {
   captureRemove: $("capture-remove"),
   captureFindDate: $("capture-find-date"),
   photoProposal: $("photo-proposal"),
+  inboxTidy: $("inbox-tidy"),
   clipboardChip: $("attachment-clipboard"),
   clipboardMeta: $("clipboard-meta"),
   clipboardRemove: $("clipboard-remove"),
@@ -690,6 +693,29 @@ const answerMemory = createAnswerMemory({
   },
 });
 
+/** The Undo strip for an inbox tidy (inbox-tidy.js), mounted just below.
+ *  Declared BEFORE it is mounted: a `let` used above its own line is a
+ *  ReferenceError at load, which took the whole bar down. */
+let inboxTidyView = null;
+
+/**
+ * "Inbox tidy by voice" (inbox-tidy.js; JARVIS-API.md section 95): ten
+ * minutes of Undo after a tidy card was approved. The card itself is decided
+ * above, in this bar; this strip only offers Undo - one tap, no card, held on
+ * a stale link, and waiting for the unlock while Jarvis is locked (Rust).
+ * It shows counts and the PC's own words, never a sender or a subject.
+ */
+if (dom.inboxTidy) {
+  inboxTidyView = mountInboxTidy(dom.inboxTidy, {
+    invoke: (command, args) => invokeStrict(command, args),
+    isStale: () => Boolean(currentLink().stale),
+    announce,
+    onChange: () => syncWindowHeight(),
+  });
+  inboxTidyView.refresh();
+  window.addEventListener("focus", () => inboxTidyView.refresh());
+}
+
 /** Tools that ran (`step` events) and drops of the event stream, for the
  *  private-answer rule - fed below, where this window subscribes to the
  *  link (private-speech.js `createToolWatch`). */
@@ -753,6 +779,8 @@ const PROMPT_HISTORY_LIMIT = 50;
 function setPhase(phase) {
   state.phase = phase;
   dom.root.dataset.state = phase;
+  // An answer just finished: a tidy it made may now be open to Undo.
+  if (phase === "done" && inboxTidyView) inboxTidyView.refresh();
 }
 
 /* ==========================================================================
@@ -2500,6 +2528,10 @@ async function decideApproval(approved, optionId = null) {
 
   try {
     await decideOnBackend(approval.id, approved, optionId);
+    // An inbox tidy approved here: its Undo strip shows as soon as the PC has done it.
+    if (approved && approval.action === "tidy_inbox" && inboxTidyView) {
+      inboxTidyView.watchQuickly();
+    }
     // The card's own title (card-words.js), not the code name.
     state.buffer += `${state.buffer.trim() ? "\n\n" : ""}> ${
       approved ? "Approved" : "Denied"

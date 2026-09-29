@@ -53,6 +53,7 @@ TITLES = {
     # --- email and calendar
     "send_email": "send an email",
     "draft_email": "write an email draft",
+    "tidy_inbox": "tidy your inbox (archive, star, mark read or trash)",
     "email_read": "read your email",
     "read_calendar": "read your calendar",
     "calendar_read": "read your calendar",

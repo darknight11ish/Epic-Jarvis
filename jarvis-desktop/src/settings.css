@@ -395,6 +395,12 @@ input:focus-visible, textarea:focus-visible {
 .theme-check { visibility: hidden; color: var(--accent-text); }
 .theme-row:has(input:checked) .theme-check { visibility: visible; }
 
+/* A voice's "Hear it" button beside its row (voice-panel.js paintChoiceRow):
+   outside the label, so pressing it never changes the choice. */
+.cv-choice { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.cv-choice .theme-row { flex: 1; margin-top: 0; min-width: 0; }
+.cv-choice .btn.small { margin-left: 0; flex: none; }
+
 .choices {
   display: flex;
   flex-wrap: wrap;

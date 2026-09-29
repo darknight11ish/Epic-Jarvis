@@ -1012,14 +1012,14 @@ def t_the_patch():
     check("the approval notice knows custom_voice and better_voice_enable stay on this PC",
           '"custom_voice": ("yes", "local",' in ga and '"better_voice_enable": ("yes", "local",' in ga
           and '"big_model_enable"' in ga)
-    i = after.index('if route == "/api/voice/voices/face_animal/try":')
+    i = after.index('if route in ("/api/voice/voices/face_animal/try", "/api/voice/voices/sample"):')
     blk = after[i:after.index('if route in ("/api/voice/voices/create"')]
-    check("POST face_animal/try checks origin and token and answers a WAV or words",
+    check("POST face_animal/try and sample ('Hear it') check origin and token and answer a WAV or words",
           "_origin_ok(self)" in blk and "_token_ok(self)" in blk
-          and "jarvis_voices.try_face_animal(body)" in blk and 'ctype="audio/wav"' in blk
+          and "jarvis_voices.handle_audio(route, body)" in blk and 'ctype="audio/wav"' in blk
           and "str(exc)" not in blk)
     for start, end in (('        if path == "/api/voice/voices"', '        if path in ("/api/memory/pending"'),
-                       ('        if route == "/api/voice/voices/face_animal/try"',
+                       ('        if route in ("/api/voice/voices/face_animal/try", "/api/voice/voices/sample")',
                         '        if route in ("/api/voice/voices/create"'),
                        ('        if route in ("/api/voice/voices/create"', '        if route in ("/api/memory/forget"')):
         block = after[after.index(start):after.index(end)]

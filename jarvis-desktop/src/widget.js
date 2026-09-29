@@ -38,7 +38,7 @@ import {
   start as startLink,
 } from "./jarvis-link.js";
 import { TARGETS, fileNote, loadTargets, noTargetsLine, targetName } from "./note-capture.js";
-import { EMAIL_APPROVE, EMAIL_DETAIL, isEmailCard } from "./email-sending.js";
+import { EMAIL_APPROVE, emailDetail, isEmailCard } from "./email-sending.js";
 import { CARD_KICKER, cardTitle } from "./card-words.js";
 import { isHeavy } from "./heavy-approve.js";
 import { faceWords } from "./face-words.js";
@@ -1057,7 +1057,7 @@ function openApproval(approval) {
   dom.apprAction.textContent = locked ? lockedTitle(approval) : cardTitle(approval);
   // textContent, never innerHTML: this string comes from a model.
   dom.apprDetail.textContent = locked ? LOCKED_DETAIL
-    : email ? EMAIL_DETAIL : approvalDetail(approval);
+    : email ? emailDetail(approval) : approvalDetail(approval);
   dom.btnApprYes.textContent = locked || heavy ? LOCKED_APPROVE : email ? EMAIL_APPROVE : "Approve";
   dom.btnApprYes.title = locked
     ? "App lock is on: opens the Jarvis bar, which asks Windows Hello, to approve there"

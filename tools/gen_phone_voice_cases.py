@@ -63,6 +63,7 @@ import jarvis_speech as S  # noqa: E402
 import jarvis_turn as T  # noqa: E402
 import jarvis_voice as V  # noqa: E402
 import jarvis_voice_enroll as E  # noqa: E402
+import jarvis_kokoro as K  # noqa: E402
 import jarvis_voices as VS  # noqa: E402
 import jarvis_wakeword as W  # noqa: E402
 
@@ -595,7 +596,7 @@ def vpost(fn, body, g=None, spawn=run_now, check=not_owner):
     if fn in (VS.create, VS.switch):
         kw["check"] = check
     if fn in (VS.delete, VS.set_speed, VS.set_speaker, VS.set_face_voice,
-              VS.set_face_animal, VS.try_face_animal, VS.answer_face_offer):
+              VS.set_face_animal, VS.try_face_animal, VS.sample_voice, VS.answer_face_offer):
         return fn(body)
     return fn(body, **kw)
 
@@ -651,9 +652,18 @@ def voices_cases():
         answers["speed_bad"] = scrub(answer(vpost(VS.set_speed, {"speed": "warp"})), w)
         answers["speed_normal"] = scrub(answer(vpost(VS.set_speed, {"speed": "normal"})), w)
         # Which of Kokoro's own voices speaks: the same shape, no card either way.
-        answers["speaker_9"] = scrub(answer(vpost(VS.set_speaker, {"speaker": "9"})), w)
-        status["speaker_9"] = scrub(VS.status(), w)
-        answers["speaker_bad"] = scrub(answer(vpost(VS.set_speaker, {"speaker": "99"})), w)
+        # By NAME since 2026-09-29 (Kokoro v1.0): a number is refused now.
+        answers["speaker_george"] = scrub(answer(vpost(VS.set_speaker,
+                                                       {"speaker": "bm_george"})), w)
+        status["speaker_george"] = scrub(VS.status(), w)
+        answers["speaker_bad"] = scrub(answer(vpost(VS.set_speaker, {"speaker": "9"})), w)
+        # "Hear it": a voice's sample. Its WAV answer is bytes, so only the
+        # refusals are kept: a name that is not offered, and a second one
+        # while the first is still being made.
+        answers["sample_bad"] = scrub(answer(vpost(VS.sample_voice, {"voice": "af_sky"})), w)
+        with VS._TRY_LOCK:
+            answers["sample_busy"] = scrub(answer(vpost(VS.sample_voice,
+                                                        {"voice": "af_bella"})), w)
         # The voice follows the face: an on/off switch, no card either way.
         # With the red panda showing (appearance.json, the one place both
         # apps keep the face), its own voice stands in.
@@ -678,12 +688,13 @@ def voices_cases():
         # "Try it" for a face that is not an animal (its WAV answer is
         # bytes, not JSON, so only its refusal is kept here).
         answers["animal_set"] = scrub(answer(vpost(VS.set_face_animal, {
-            "face": "redpanda", "speaker": "3", "semitones": -1.5, "pace": "faster"})), w)
+            "face": "redpanda", "speaker": "af_sarah", "semitones": -1.5,
+            "pace": "faster"})), w)
         status["animal_changed"] = scrub(VS.status(), w)
         answers["animal_reset"] = scrub(answer(vpost(VS.set_face_animal, {
             "face": "redpanda", "reset": True})), w)
         answers["animal_bad"] = scrub(answer(vpost(VS.set_face_animal, {
-            "face": "redpanda", "speaker": "3", "semitones": 9, "pace": "normal"})), w)
+            "face": "redpanda", "speaker": "af_sarah", "semitones": 9, "pace": "normal"})), w)
         answers["animal_try_bad"] = scrub(answer(vpost(VS.try_face_animal, {"face": "orbit"})), w)
         # "Try it" while another is still being made: one at a time.
         with VS._TRY_LOCK:
@@ -715,6 +726,36 @@ def voices_cases():
         (w.dir / "appearance.json").write_text(json.dumps({"face": "monkey"}),
                                                encoding="utf-8")
         status["face_unanswered_on"] = scrub(VS.status(), w)
+
+    # The voice pack (Kokoro v1.0, 2026-09-29): the names each pack offers, the
+    # upgrade line while the old pack is installed, and the one-time carry-over
+    # of an old saved NUMBER to the name it meant (a stand-in voices.bin of each
+    # pack's real size is all the PC looks at - no model is loaded).
+    def install_pack(w, kind):
+        tts = w.dir / "voice-models" / "tts"
+        tts.mkdir(parents=True, exist_ok=True)
+        with open(tts / "voices.bin", "wb") as f:
+            f.truncate(K.voices_file_size(kind))
+
+    with VoicesWorld() as w:
+        install_pack(w, "v019")
+        status["pack_old"] = scrub(VS.status(), w)
+    with VoicesWorld() as w:
+        install_pack(w, "v1")
+        status["pack_v1"] = scrub(VS.status(), w)
+        answers["pack_v1_heart"] = scrub(answer(vpost(VS.set_speaker,
+                                                      {"speaker": "af_heart"})), w)
+        status["pack_v1_chosen"] = scrub(VS.status(), w)
+        answers["pack_v1_sky"] = scrub(answer(vpost(VS.set_speaker, {"speaker": "af_sky"})), w)
+    with VoicesWorld() as w:
+        install_pack(w, "v019")
+        VS._state_path().parent.mkdir(parents=True, exist_ok=True)
+        VS._state_path().write_text(json.dumps({
+            "active": "builtin", "speaker": "9",
+            "face_animals": {"seaotter": {"speaker": "4", "semitones": 3.0, "pace": "normal"},
+                             "monkey": {"speaker": "7", "semitones": 1.0, "pace": "normal"}}}),
+            encoding="utf-8")
+        status["carried_over"] = scrub(VS.status(), w)
 
     with VoicesWorld(zipvoice=False) as w:
         vpost(VS.create, create_body())

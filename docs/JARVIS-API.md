@@ -2287,18 +2287,11 @@ like every change, held on a stale link. Before the owner first chooses,
 next to it in both apps - `status()` carries the choices and every word
 (`speaker`, below); `POST /api/voice/voices/speaker` sets it; no card either
 way; held on a stale link; `[voice] tts_speaker_id` still applies before the
-owner first chooses. This closes the one gap the audit found in speed's own
-shape: speed already had settings UI in both apps, the built-in voice choice
-never had. Only two of the eleven named choices are confirmed against
-this repository (`jarvis_voices.KOKORO_VOICES`'s own comment): index 0 and
-index 9, from `jarvis-framework.toml`'s commented-out example ("0 =
-American female; 9 = British male (bm_george)"). The rest is Kokoro's own
-published American+British voice pack (kokoro-en-v0_19) - kept only for
-being internally consistent with those two confirmed points - since the
-installed sherpa-onnx exposes a voice **count** (`OfflineTts.num_speakers`)
-but no names at all, and `status()` stays cheap on purpose (no model is
-loaded to answer it). Choosing a voice beyond what a PC's real model has is
-no different from setting `tts_speaker_id` too high by hand today.
+owner first chooses. **Since 2026-09-29 the choice is a voice's NAME
+("bm_george"), not a number, and the list is the voices the installed pack
+really has - Kokoro v0.19 or v1.0, with "Hear it" on every voice: section
+91.** The old number is carried over once, and `[voice] tts_speaker_id` keeps
+its old numbering.
 
 **Voice follows the face** (added 2026-09-27, the owner's choice): with one
 of the animal faces showing (red panda, pygmy owl, sea otter, monkey, and
@@ -2341,8 +2334,9 @@ but held on a stale link like every change.
 
 **Each animal's voice** (added 2026-09-28, the owner's choice "per animal,
 built-in voices"): the `FACE_VOICES` rows are only where each animal
-starts. For each of the three the owner may pick **any of the eleven
-built-in voices** (`speaker.choices`), a **pitch** from 3 steps deeper to 4
+starts. For each of the four the owner may pick **any of the built-in
+voices the pack offers** (`speaker.choices`, without the current-choice extra;
+by name since 2026-09-29, section 94), a **pitch** from 3 steps deeper to 4
 steps higher in half steps (a step is a semitone; below 0 the sound is
 played slower, so it is deeper and longer - Kokoro is asked for faster
 speech first, so the pace still comes out as chosen), and a **pace**
@@ -2421,11 +2415,11 @@ owner.
 | `POST /api/voice/voices/active` | `{"voice": "<id>"}` or `{"voice": "builtin"}` | `builtin`: **200** `{"ok": true, "active": "builtin", "pending": false, "message"}` at once, no card (it also withdraws a waiting switch card and stops the better voice). A custom voice: **202** `{"ok": true, "pending": true, "voice": "<id>", "message"}` - ONE card (`custom_voice`); **200** `{"ok": true, "active": "<id>", "pending": false, "message"}` if already active; **404** unknown id; **409** as for create (`refused: "owner_voice"`, a card waiting, tier not `ask`, or its recording unreadable) | Nothing changes until the card is approved. |
 | `POST /api/voice/voices/delete` | `{"voice": "<id>"}` | **200** `{"ok": true, "deleted": "<id>", "active": "<id>" \| "builtin"}` at once, no card; **400** for `builtin`; **404** unknown id; 500 `{"ok": false, "error"}` if the folder could not be removed | Deletes the folder. If Jarvis was speaking in it, it goes back to the built-in voice (`active` says so). |
 | `POST /api/voice/voices/speed` | `{"speed": "slower" \| "normal" \| "faster"}` (one of `speed.choices[].id`) | **200** `{"ok": true, "message": "Jarvis now speaks faster.", "speed": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "the speed must be slower, normal or faster"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speed", "outcome": "set"}`). |
-| `POST /api/voice/voices/speaker` (added 2026-09-27) | `{"speaker": "0".."10"}` (one of `speaker.choices[].id`) | **200** `{"ok": true, "message": "Jarvis's built-in voice is now British (male) - George.", "speaker": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "choose one of the listed voices"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speaker", "outcome": "set"}`). |
+| `POST /api/voice/voices/speaker` (added 2026-09-27; by NAME since 2026-09-29) | `{"speaker": "bm_george"}` (one of `speaker.choices[].id` - a NAME; a number is refused) | **200** `{"ok": true, "message": "Jarvis's built-in voice is now British (male) - George.", "speaker": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "choose one of the listed voices"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speaker", "outcome": "set"}`). |
 | `POST /api/voice/voices/face` (added 2026-09-27) | `{"enabled": true \| false}` (nothing else in the body) | **200** `{"ok": true, "message": "Jarvis's voice now follows the face." \| "Jarvis's voice now stays the same whatever the face.", "face_voice": {...as in status()}}` at once, no card either way; **400** `{"ok": false, "error": "choose on or off"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "face_voice", "outcome": "on" \| "off"}`). |
-| `POST /api/voice/voices/face_offer` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey", "answer": "use" \| "keep"}` (both, nothing else) | **200** `{"ok": true, "message": "The Red Panda speaks in its own voice now. \"Voice follows the face\" is on; turn it off in the voice settings to go back." \| "Jarvis keeps your voice for the Red Panda. Each animal asks once for itself.", "face_voice": {...as in status(), with "offer": null}}` at once, no card either way; **400** `{"ok": false, "error"}` in words - "send the face and the answer, \"use\" or \"keep\"", "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey", "the answer must be \"use\" or \"keep\""; 500 `{"ok": false, "error"}` if it could not be saved | The answer is kept for that face alone (`face_answers` in `<config dir>/voices/state.json`); an animal speaks as itself only with the switch on and its answer "use". "use" also turns "Voice follows the face" on; "keep" leaves the switch as it is. Rings the `voices` event (`{"what": "face_offer", "outcome": "use" \| "keep"}`). The audit line has the face and the answer only. |
-| `POST /api/voice/voices/face_animal` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey" \| "robot", "speaker": "0".."10", "semitones": -3.0..4.0 in steps of 0.5, "pace": "slower" \| "normal" \| "faster"}` (all four, nothing else), or `{"face": ..., "reset": true}` | **200** `{"ok": true, "message": "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster." \| "The Red Panda speaks in its own voice again.", "face_voice": {...as in status()}}` at once, no card either way (with the switch off the message adds that it is heard once the switch is on); **400** `{"ok": false, "error"}` in words - "choose the Red Panda, the Pygmy Owl, the Sea Otter, the Monkey or the Robot", "choose a voice, a pitch and a pace for the animal", "choose one of the listed voices", "the pitch must be from 3 steps deeper to 4 steps higher, in half steps", "the pace must be slower, normal or faster", "to reset, send reset: true"; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json` (`face_animals`); a choice equal to the animal's own voice is kept as none. Rings the `voices` event (`{"what": "face_animal", "outcome": "set" \| "reset"}`). The audit line has the face and the choice only. |
-| `POST /api/voice/voices/face_animal/try` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey" \| "robot"}` (nothing else - never any words) | **200** `audio/wav`: one fixed line in that animal's voice as it is now (with a `jmth` chunk when the PC makes one); **400** `{"ok": false, "error": "choose the Red Panda, the Pygmy Owl, the Sea Otter, the Monkey or the Robot"}`; **429** `{"ok": false, "error": "the PC is still making the sound for the last Try it. Try it again in a moment"}` - one at a time; **503** `{"ok": false, "error": "this PC has no built-in voice to play it with"}` or why the voice failed | No card, nothing saved, no event, no audit line. Not held on a stale link. Both apps play it where they are (the desktop's Settings window - the faces in its other windows do not move; the phone through its answer speaker), never while Jarvis is talking or listening, and stop it when a question or answer starts (above). |
+| `POST /api/voice/voices/face_offer` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey" \| "robot", "answer": "use" \| "keep"}` (both, nothing else) | **200** `{"ok": true, "message": "The Red Panda speaks in its own voice now. \"Voice follows the face\" is on; turn it off in the voice settings to go back." \| "Jarvis keeps your voice for the Red Panda. Each animal asks once for itself.", "face_voice": {...as in status(), with "offer": null}}` at once, no card either way; **400** `{"ok": false, "error"}` in words - "send the face and the answer, \"use\" or \"keep\"", "choose the Red Panda, the Pygmy Owl, the Sea Otter, the Monkey or the Robot", "the answer must be \"use\" or \"keep\""; 500 `{"ok": false, "error"}` if it could not be saved | The answer is kept for that face alone (`face_answers` in `<config dir>/voices/state.json`); an animal speaks as itself only with the switch on and its answer "use". "use" also turns "Voice follows the face" on; "keep" leaves the switch as it is. Rings the `voices` event (`{"what": "face_offer", "outcome": "use" \| "keep"}`). The audit line has the face and the answer only. |
+| `POST /api/voice/voices/face_animal` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey" \| "robot", "speaker": "af_sarah" (a NAME from `face_voice.animal_choices.voices`), "semitones": -3.0..4.0 in steps of 0.5, "pace": "slower" \| "normal" \| "faster"}` (all four, nothing else), or `{"face": ..., "reset": true}` | **200** `{"ok": true, "message": "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster." \| "The Red Panda speaks in its own voice again.", "face_voice": {...as in status()}}` at once, no card either way (with the switch off the message adds that it is heard once the switch is on; with it on, and that animal not answered for or answered "keep", the message says so); **400** `{"ok": false, "error"}` in words - "choose the Red Panda, the Pygmy Owl, the Sea Otter the Monkey or the Robot", "choose a voice, a pitch and a pace for the animal", "choose one of the listed voices", "the pitch must be from 3 steps deeper to 4 steps higher, in half steps", "the pace must be slower, normal or faster", "to reset, send reset: true"; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json` (`face_animals`); a choice equal to the animal's own voice is kept as none. Rings the `voices` event (`{"what": "face_animal", "outcome": "set" \| "reset"}`). The audit line has the face and the choice only. |
+| `POST /api/voice/voices/face_animal/try` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey" \| "robot"}` (nothing else - never any words) | **200** `audio/wav`: one fixed line in that animal's voice as it is now (with a `jmth` chunk when the PC makes one); **400** `{"ok": false, "error": "choose the Red Panda, the Pygmy Owl, the Sea Otter the Monkey or the Robot"}`; **429** `{"ok": false, "error": "the PC is still making the sound for the last Try it. Try it again in a moment"}` - one at a time; **503** `{"ok": false, "error": "this PC has no built-in voice to play it with"}` or why the voice failed | No card, nothing saved, no event, no audit line. Not held on a stale link. Both apps play it where they are (the desktop's Settings window - the faces in its other windows do not move; the phone through its answer speaker), never while Jarvis is talking or listening, and stop it when a question or answer starts (above). |
 | `POST /api/voice/voices/better` | `{"enabled": true \| false}` | `false`: **200** `{"ok": true, "enabled": false, "pending": false, "message"}` at once, and the F5 program stops. `true`: **202** `{"ok": true, "enabled": false, "pending": true, "message"}` - ONE card (`better_voice_enable`); **200** `{"ok": true, "enabled": true, "pending": false, "message"}` if already on; **409** `{"ok": false, "pending": true, "error"}` a card waits; **503** `{"ok": false, "error"}` no capable second card, or the tier is not `ask`; **400** `enabled` not a boolean | Offer the switch only when `better_voice.can_turn_on` is true. |
 
 Errors from the route itself (not the module): **400** `{"error": "the
@@ -2470,11 +2464,12 @@ request.
            "choices": [{"id": "slower", "label": "Slower"},
                        {"id": "normal", "label": "Normal"},
                        {"id": "faster", "label": "Faster"}]},        absent on an older PC: show nothing
- "speaker": {"choice": "0".."10" | "custom",   "custom": set by hand in the toml, not a named voice
-             "value": 0,                  Kokoro's own `sid`
-             "default": "0",
+ "speaker": {"choice": "<a voice NAME, e.g. af_heart>" | "custom",   "custom": set by hand in the toml, not a named voice
+             "value": 3,                  sherpa-onnx's own `sid` in the installed pack
+             "default": "af_heart",       the pack's own default voice ("af" on the old pack)
              "title": "Jarvis's built-in voice", "detail": str, "note": str,
-             "choices": [{"id": "0", "label": "American (female)"}, ... 11 in all]},   absent on an older PC: show nothing
+             "choices": [{"id": "af_heart", "label": "American (female) - Heart"}, ...],   9-12 by pack: section 94
+             "pack": {"kind": "v1" | "v019" | "", "name": "Kokoro v1.0", "voices": 54}},   absent on an older PC: show nothing
  "face_voice": {"enabled": bool,          the switch, the master (off unless turned on; off = no animal voice)
                 "default": false,
                 "face": "" | "<face id>",  the face saved in appearance.json ("" if none)
@@ -2483,13 +2478,13 @@ request.
                 "line": str,              what is happening now, one sentence: show it under the switch
                 "title": "Voice follows the face", "detail": str,   absent on an older PC: show nothing
                 "animals": [{"face": "redpanda", "name": "Red Panda",   one row each, in this order
-                             "speaker": "1", "voice": "Bella", "semitones": 2.0, "pace": "normal",
+                             "speaker": "af_bella", "voice": "Bella", "semitones": 2.0, "pace": "normal",
                              "changed": bool,     the owner's choice differs from its own (Reset does something)
                              "own": {"speaker", "semitones", "pace"},   where it starts
                              "answer": "use" | "keep" | null,   its one-time question's answer (null: not asked yet)
                              "line": "Bella, 2 steps higher, at normal pace."}, ...],
                 "animals_title": "Each animal's voice", "animals_detail": str,
-                "animal_choices": {"voices": [{"id", "label"}, ... the 11 of speaker.choices],
+                "animal_choices": {"voices": [{"id", "label"}, ... speaker.choices without the current-choice extra],
                                    "paces": [{"id": "slower", "label": "Slower"}, ...],
                                    "pitch": {"min": -3.0, "max": 4.0, "step": 0.5}},
                 "offer": null | {"face": "redpanda",   the one-time question (added 2026-09-28)
@@ -14641,3 +14636,289 @@ lands, an old "on" still counts on that device (`effectiveStill`); an older
 PC without `/api/animal` keeps each device's own switch, offered in the
 section with the line "Kept on this computer/phone only until your PC's Jarvis
 is updated."
+
+
+## 94. Kokoro v1.0 voices: saved by name, and "Hear it" (added 2026-09-29)
+
+The owner's decision of 2026-09-28: "the best rated voices, real British
+pronunciation, and a 'Hear it' sample button for every voice in both apps.
+The saved choice moves from a number to the voice's name, and the owner's
+current choice carries over. A 350 MB download on the PC, checksum-pinned."
+Built as `backend/jarvis_kokoro.py` (new, shipped whole), changes in
+`jarvis_voices.py` and `jarvis_speech.py`, one route added to `voices.patch`'s
+sound block, and a "Hear it" button in both apps. Everything in section 15
+that says a voice is a number ("0".."10") now says a name; this section is
+the difference.
+
+### 94.1 Two packs, voices by name
+
+`status().speaker.pack` says which pack is installed - found from
+`voices.bin`'s SIZE alone (no model is loaded to answer `GET
+/api/voice/voices`):
+
+| `pack.kind` | Pack | Voices | Sizes checked |
+|---|---|---|---|
+| `"v019"` | Kokoro v0.19 (what Jarvis shipped with) | 11 | 5,755,904 bytes |
+| `"v1"` | Kokoro v1.0 (sherpa-onnx `kokoro-multi-lang-v1_0`) | 54 | 28,200,960 bytes |
+| `""` | none installed, or a pack this does not know | - | anything else |
+
+`speaker.choices` is `[{"id": "<name>", "label": "<words>"}]` - the voices the
+pack offers, best rated first, then (only when it is not one of them) the
+owner's current choice, labelled "... (your current choice)". Ids are voice
+NAMES (`af_heart`, `bm_george`), never numbers; `speaker.choice` is one of
+them (or `"custom"`), `speaker.default` the pack's own default (`af_heart` on
+v1.0, `af` on the old pack; an old pack's `af` and v1.0's `af_heart` stand in
+for each other - MEASURED alike, middle pitch 205 Hz and 203 Hz).
+
+- **Kokoro v1.0 offers 11**: Heart, Bella, Nicole, Sarah, Michael, Fenrir,
+  Puck, Emma, Isabella, George, Lewis. **The old pack offers 9** of those it
+  has (its own default first). Left out on purpose: `af_sky` (its name matches
+  the voice OpenAI withdrew in 2024 - the owner's rule for the sea otter) and
+  `am_adam` (graded F+) - though an owner who already chose one keeps it -
+  the names that match OpenAI's voices, the low-rated ones, and every
+  non-English voice. **No animal may use Sky or Adam, ever**: a saved animal
+  choice of either goes back to the animal's own voice.
+- `speaker.note` on the old pack carries the upgrade line's pointer ("Better
+  voices are available: Kokoro v1.0 ... run the one line under \"Upgrade the
+  voice pack to Kokoro v1.0\" in backend\README.md ... Your choice carries
+  over."), and says so in words when the owner's saved voice is not in the
+  installed pack (it speaks the pack's default until the pack is installed -
+  **never a wrong voice by number**). Show it as it is.
+- Where a pack's number comes from, and that the tables are the real ones:
+  each pack's `voices.bin` rows were matched, byte for byte, against the
+  arrays kokoro-onnx publishes under names - v1.0's order is alphabetical
+  with `em_santa` last (index 53).
+
+### 94.2 The carry-over (once)
+
+A choice saved before this change is a number. The first `GET
+/api/voice/voices` after it rewrites `voices/state.json`: `speaker` and each
+`face_animals[*].speaker` that is a number become the name it meant in the
+pack Jarvis shipped with (`"9"` -> `bm_george`), nothing else in the file
+changes, and one audit line per change has the numbers and names only
+(`voices.speaker_migrated`). Until then it is read as the name it meant, so
+the choice never changes. `[voice] tts_speaker_id` in the settings file keeps
+its OLD numbering (0-10) on either pack; a number beyond it is used as it is
+and shown as `"custom"`. **The apps store no voice choice of their own**
+(both read it from `speaker.choice` every time), so there is nothing to
+migrate on a phone or in the desktop app: they only stop assuming an id is a
+number.
+
+### 94.3 "Hear it"
+
+| Route | Body | Answers | Notes |
+|---|---|---|---|
+| `POST /api/voice/voices/sample` (added 2026-09-29) | `{"voice": "<a name from speaker.choices>"}` (nothing else - never any words) | **200** `audio/wav`: one fixed line ("Hello, I'm Jarvis. This is how I sound.") in that Kokoro voice at the owner's speaking speed; **400** `{"ok": false, "error": "choose one of the listed voices"}` (an unlisted name, a number, a recorded voice's id, extra fields); **429** `{"ok": false, "error": "the PC is still making the sound for the last Hear it. Try again in a moment"}` - one at a time, and never at the same time as "Try it"; **503** `{"ok": false, "error": "this PC has no built-in voice to play it with"}` or `"the built-in voice failed (<exception name>)"` or `"the built-in voice made no sound"` | **No card, nothing saved, no event, no audit line - and no change**: the voice Jarvis uses, the face and every setting stay as they were. It only makes a sound for the app that asked, so it is not a way out of the PC and is not held on a stale link. **Never a recorded voice** (only Kokoro's own, by name; a custom voice being active changes nothing), never an animal's pitch, so it can never be the owner's voice. The last 16 samples are kept in the PC's memory only (key: pack size, voice, speed), never on disk. |
+
+Both apps put a **Hear it** button on every voice row (desktop: Settings ->
+Jarvis's voice -> "Jarvis's built-in voice", `hear_voice_sample`; phone: the
+Voices screen, one row per voice), in the same words, and play the sound where
+they are, the way "Try it" does: refused while Jarvis is talking or listening
+("Jarvis is busy talking or listening. Try again in a moment."), **while the
+talk button or Jarvis Live has the microphone** (the desktop's Rust refuses
+while the talk button records or `live::on_here()`; the phone's `voiceBusy()`
+now includes Live - which also protects "Try it"), **while App lock would ask
+again** ("Jarvis is locked right now. Unlock it, then try again."), stopped the
+moment a question or an answer starts, and, on an older PC with no such route,
+"Your PC cannot play voice samples yet. Run the patch script on the PC first."
+While it asks: "Asking the PC for the sound..."; while it plays: "Playing
+<the voice's label>."; after: "That was <the voice's label>."; if a question cut
+it short: "Stopped, because Jarvis is talking or listening now." (`HEAR_*` and
+`TRY_*` in `custom-voices.js` and `net/CustomVoices.kt`, held together by the
+desktop's `tests/custom-voices.mjs`).
+
+### 94.4 The accent
+
+On Kokoro v1.0 the British voices (`bf_*`, `bm_*`) are asked for espeak-ng's
+British English, `en-gb-x-rp` (one `lang` per sentence, `[voice]
+tts_lang_british` changes it); American voices and the old pack are spoken
+exactly as before. Checked against the real pack: `en-gb` alone is refused by
+the pack's own espeak data; `en-gb-x-rp` works and changes the sound.
+Applies to every way the built-in voice speaks (an answer, the "One moment."
+clip, the talk-over reference, "Try it", "Hear it"): they all go through
+`jarvis_speech.kokoro_speak`.
+
+### 94.5 The pinned download
+
+`jarvis_kokoro.V1_PACK` is the ONE place the v1.0 download is written down
+(URL, size 349,906,910 bytes, SHA-256, the folder it unpacks to).
+`install_line()` writes the one PowerShell line from it, `backend/README.md`
+holds the same line under "Upgrade the voice pack to Kokoro v1.0"
+(`test_kokoro.py` checks they agree, and runs the real line under PowerShell 7
+against a local server), and **no line is offered when the checksum is empty**.
+The line refuses to install a file whose SHA-256 differs, keeps the old pack
+as `tts-old-<time>`, and asks for a restart. Nothing in the backend downloads
+anything: the owner pastes the line.
+
+### 94.6 Said plainly
+
+- **The animals' mouths fall back to "analysed from the sound" on v1.0.**
+  `jarvis_mouth`'s timing is built from the v0.19 model's own graph;
+  `jarvis_speech.kokoro_speak` does not ask it while v1.0 is installed.
+- **Nobody has listened** to a v1.0 voice or the British accent. The four
+  animals keep their four names; pitch and pace were measured to be close
+  (docs/CRITTERS.md), not judged by ear.
+- **No blended voices** (the studio's "Ashby"/"Clara"): they need a changed
+  `voices.bin`; not built.
+
+## 95. Inbox tidy by voice: archive, star, mark as read, or move to Trash (added 2026-09-28)
+
+The owner's decision of 2026-09-28 (`CLAUDE.md`, "Inbox tidy by voice: yes"),
+with the owner's queue answer that Undo lasts 10 minutes. Backend:
+`backend/jarvis_inbox_tidy.py` (shipped whole), `backend/inbox-tidy.patch`
+(the gate's words and the two routes), the `tidy_inbox` tool in
+`backend/jarvis_agent.py`. Tests: `backend/test_inbox_tidy.py`, the stand-in
+mail server `backend/_fake_imap.py`, `jarvis-desktop/tests/inbox-tidy.mjs`,
+`InboxTidyTest.kt`, and the shared file `inbox-tidy-cases.json`
+(`tools/gen_inbox_tidy_cases.py`). ARCHITECTURE §4 has the row for this way
+out of the PC.
+
+### 95.1 What the owner says, and what happens
+
+"Archive the newsletters from last week." "Mark all from Sam as read." "Move
+the promos to Trash." In ordinary chat, typed or spoken. The local model
+calls the tool `tidy_inbox`; nothing is changed before a person taps Approve
+on screen, and a spoken "yes" approves nothing.
+
+1. **Find.** Code on the PC (never the model) searches the owner's mailbox
+   with the words the model turned the request into, and reads each match's
+   sender, subject and date - read-only (`EXAMINE`, `BODY.PEEK`): nothing is
+   changed and nothing is marked as read.
+2. **One card.** It lists EVERY email that will be touched, numbered, each
+   with sender, subject and date - never "and 37 more" - names the action,
+   the account and the search words in the PC's own words, and says Undo
+   lasts 10 minutes. When reading outside text (an email, a web page, a file,
+   a paste, the clipboard) shaped the request, the card starts with a plain
+   line saying so ("check that tidying these emails was your idea, and that
+   every email below is one you mean").
+3. **Approve on screen.** Gate action `tidy_inbox`, tier `ask` only (any
+   other tier: no card is raised and the model is told why), never loosened
+   from an app (`jarvis_asks_first.HARD_LIMITS`, `MUST_ASK`), counted in
+   `CARDS_PER_TURN`. It is a **risky approval** (`jarvis_gate._RISK` says
+   `("yes", "outbound", ...)`, and anything outbound is risky,
+   `jarvis_owner_check.is_risky`): Windows Hello on the PC, the screen lock
+   on the phone - the same tier as sending and saving an email, for the same
+   reason (it changes a mailbox on a server). The desktop's widget, which
+   shows one line of a card, sends this card's Approve to the Jarvis bar
+   (`email-sending.js` `isEmailCard`, `email_sending.rs` `is_email`), and the
+   card is shown verbatim, never as Markdown. The PC's notice for it (lock
+   screens, notifications, the widget) is `Jarvis wants to tidy your inbox
+   (...)` - never a sender or a subject.
+4. **Do it.** Only the emails on the card, each checked again just before it
+   is touched. Then Undo, for 10 minutes.
+
+**The choice made from reading email is still asked, not refused.** The
+brief for this feature said to refuse outright after outside text "like
+send_email"; `send_email` does not - it raises its card with the warning at
+the top, and so does this, which is also what the owner's own decision says
+("The card says when the choice came from reading email"). "Read my inbox
+and archive the newsletters" is the ordinary way to use it, and a tidy of
+what the owner is looking at is undoable. The stricter variant (refuse when
+outside text was read) is a one-line change, and a question for the owner.
+
+### 95.2 The four actions, and the one that is not there
+
+| `action` | What it does | Listed emails are exactly the ones that change |
+|---|---|---|
+| `archive` | Out of the inbox into the account's Archive folder (found by `LIST`'s `\Archive` flag; Gmail: the Inbox label comes off, the mail stays in All Mail). | An email with no Message-ID is left out (it could not be found again to undo); the card says how many. |
+| `star` | The `\Flagged` flag on. | Only emails not already starred. |
+| `mark_read` | The `\Seen` flag on. | Only unread ones. |
+| `trash` | Into the account's Trash folder (`\Trash`; Gmail: the Trash label). | As `archive`. |
+
+**There is no permanent delete, by construction.** The tool's schema has no
+such action (`"delete"` is refused by the schema, and by the module in plain
+words - "there is no permanent delete"); the module has no plain `EXPUNGE`
+and never sends `CLOSE` on a folder opened for changes (`CLOSE` silently
+removes every message marked `\Deleted` in the folder, including ones the
+owner or another program marked). On a server without `MOVE`, a move is a
+copy first and, once the server confirms it, `\Deleted` and `UID EXPUNGE` on
+that ONE message (`UIDPLUS`), so nothing else in the folder is touched; a
+server with neither is refused before anything is touched. Gmail is done by
+labels. Jarvis never empties Trash - the mail provider does, on its own
+schedule.
+
+### 95.3 The tool (what the model may say)
+
+`tidy_inbox {"action", "from"?, "subject"?, "words"?, "newsletters"?,
+"since_days"?, "older_than_days"?, "unread_only"?}`. `from`, `subject` and
+`words` are plain printable ASCII (IMAP needs a special encoding for the rest,
+and mis-encoding a search is worse than saying so); at least one narrowing
+field is required ("Archive everything" is refused: say which emails).
+`newsletters` means "carries an unsubscribe link". At most **30 emails**, and
+never more than one card can show whole (the gate keeps 4,000 characters):
+past that the answer is "too many at once ... Narrow it" and nothing is
+listed or asked. Only offered while `tidy_inbox` is in `[tools].enabled` in
+`jarvis-framework.toml`, `tidy_inbox` is `"ask"` in `[autonomy.tiers]`, and
+`email_read` is `auto` or `notify` (the search is a read made before the card
+exists; while reading email asks first, tidying is not offered and the model
+is told why). Not a plan step (`_PLAN_EXCLUDED_STEPS`). The model is told
+counts and a sentence of ours ("Archived 12 emails. The owner can undo this
+for 10 minutes with the Undo button on screen."), never a sender or a
+subject; that answer is not "outside text" (`_NOT_READING`).
+
+### 95.4 The routes
+
+Both behind the token and origin checks like every route, installed by
+`inbox-tidy.patch` (`jarvis_inbox_tidy.install`).
+
+| Route | Answers |
+|---|---|
+| `GET /api/email/tidy` | **200** `{"available": true, "title", "state", "ready", "said", "undo": null or {"count", "action", "action_name", "said", "seconds_left", "minutes_left", "until", "more"}, "last": null or {"outcome": "done" or "undone", "message", "at"}, "undo_minutes": 10, "max_emails": 30, "actions": [{"id", "label"}]}`. `undo` is the NEWEST tidy still open to Undo and `more` counts the older ones (up to 5 can wait; Undo always takes the newest first, so an older change is never undone underneath a newer one). Counts and the PC's own words only - **never a sender or a subject**. `state`/`said` say whether tidying is set up (`ready`, `tool_off`, `refused`, `off`, `no_reading`, `not_set_up`). |
+| `POST /api/email/tidy/undo` | `{}`. **200** `{"ok": true, "restored": n, "not_restored": m, "message"}` - the PC's own sentence ("Put back 3 emails."; an email the owner moved or deleted meanwhile is left alone and counted). **409** `{"ok": false, "error"}` nothing to undo (ten minutes up, or already undone), or the mail account changed since. **503** `{"ok": false, "error"}` the mail server could not be reached - the record is kept and Undo can be tried again while its ten minutes last. No card. |
+| `POST /api/email/tidy` | **405**: a tidy is asked for in chat, on a card. |
+
+A PC without the module or the patch answers **404** (an older backend) or
+**503** `{"available": false}` (the module missing); both apps say "Your PC's
+Jarvis cannot tidy your inbox yet - run apply-patches.ps1 on the PC.".
+
+### 95.5 Undo: exactly what changed, ten minutes, memory only
+
+Recorded at the moment each email is changed, only for the ones that really
+changed: a move by Message-ID plus the server's own `COPYUID` answer and the
+folder it went to; a flag only where Jarvis set it. Undo finds each email
+again (never by a UID alone), moves it back (flags travel with a move) or
+takes the flag off, and counts the ones it could not find. The record is
+**in memory only** - never written to disk, holds ids and no sender or
+subject, ends at 10 minutes (a timer and a lazy check) or when the backend
+stops, whichever comes first. Whatever was changed is recorded even when the
+server dropped part-way, so a half-done tidy can be undone. Undo needs no
+card: it only puts back what the owner had ten minutes ago.
+
+### 95.6 The apps
+
+- **Desktop:** a strip under the Jarvis bar's input (`src/inbox-tidy.js`,
+  `index.html` `#inbox-tidy`, Rust `brain/inbox_tidy.rs` `inbox_tidy_read` /
+  `inbox_tidy_undo`, permission set `inbox-tidy` on the bar only): what was
+  done, "10 min left to undo", and an Undo button. It reads the PC every 20
+  seconds while the bar is showing, at the end of every answer, on focus, and
+  a few times right after a tidy card is approved; the minutes run down
+  locally, so an Undo out of time goes even while the link is down. **Held on
+  a stale link** (the button greyed with the words "The connection to Jarvis
+  is catching up, so nothing can be sent until it does.", and Rust refuses
+  too). **App lock:** while Jarvis is locked, or "Windows Hello for memory
+  lists and chat history" hides the lists, Rust takes the PC's words out (the
+  strip says only "Your inbox was tidied. You can undo it for a few
+  minutes.") and refuses Undo ("Unlock Jarvis to undo this."). After an Undo
+  the PC's sentence stays for eight seconds.
+- **Phone:** the same strip on Home (`net/InboxTidy.kt`, `HomeScreen.kt`
+  `InboxTidyPlate`, `JarvisRuntime.refreshInboxTidy` / `inboxTidyUndo`), the
+  same words, read every 20 seconds while connected. Held on a stale link;
+  while the lists are hidden it says the same short line and Undo waits for
+  Show; the PC's sentence after Undo is the notice. The card itself is an
+  ordinary approval card in both apps (`/api/pending`).
+- Both read `inbox-tidy-cases.json`: the words, the PC's real answers, and
+  `strip` - what the strip says for each status when ordinary, locked and
+  stale (`gen_inbox_tidy_cases.py` writes the rule once).
+
+### 95.7 Not done, and not tried
+
+- **Not tried against a real mail server.** Every step is proved against a
+  stand-in that fails loudly on a plain `EXPUNGE`, a `CLOSE`, or a
+  `UID EXPUNGE` of an email with no other copy. Real servers differ; Gmail's
+  label calls (`X-GM-LABELS`, and finding All Mail by `\All`) are the part
+  most in need of the half-hour test in `backend/README.md` ("Inbox tidy").
+- One mailbox at a time (`JARVIS_IMAP_MAILBOX`); no other folders; no
+  "unstar" or "mark unread" (Undo does those, only for what Jarvis changed);
+  no search in other languages' letters (plain ASCII only).
+- Jarvis has no inbox screen of its own, on purpose: nothing here lists the
+  owner's email anywhere but on the card.

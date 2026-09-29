@@ -126,7 +126,11 @@ SHIPPED = (
     "jarvis_big_model.py",
     "jarvis_turn.py", "jarvis_wakebank.py", "jarvis_stopword.py",
     "jarvis_local_http.py", "jarvis_child_env.py",
-    "jarvis_voices.py", "jarvis_f5_worker.py", "jarvis_bakeoff.py",
+    "jarvis_voices.py", "jarvis_f5_worker.py",
+    # which Kokoro voice pack is installed, its voices by name, the pinned
+    # v1.0 download: jarvis_voices.py imports it (no patch)
+    "jarvis_kokoro.py",
+    "jarvis_bakeoff.py",
     "jarvis_learning_switch.py",
     "jarvis_voicebank.py",
     "jarvis_voice_flow.py",
@@ -160,6 +164,7 @@ SHIPPED = (
     "jarvis_mail_mask.py",
     "jarvis_email_send.py",
     "jarvis_email_draft.py",
+    "jarvis_inbox_tidy.py",
     "jarvis_notes.py", "jarvis_home.py",
     "jarvis_search.py",
     # Stop everything (stop-all.patch)

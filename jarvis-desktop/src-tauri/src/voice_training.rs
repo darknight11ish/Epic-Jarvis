@@ -107,6 +107,16 @@ pub(crate) const TRY_UPDATE: &str =
 /// "Try it" while the talk button records: it would be recorded with the
 /// question. The phone says the same (CustomVoices.kt `TRY_BUSY`).
 pub(crate) const TRY_BUSY: &str = "Jarvis is busy talking or listening. Try it again in a moment.";
+/// "Hear it" (a voice's sample) while the talk button records or Jarvis Live
+/// has the microphone. The phone says the same (CustomVoices.kt `HEAR_BUSY`).
+pub(crate) const HEAR_BUSY: &str = "Jarvis is busy talking or listening. Try again in a moment.";
+/// "Hear it" while App lock would ask again. The phone says the same
+/// (CustomVoices.kt `HEAR_LOCKED`).
+pub(crate) const HEAR_LOCKED: &str = "Jarvis is locked right now. Unlock it, then try again.";
+/// "Hear it" on a PC whose backend has no such route yet - the same words on
+/// the phone (CustomVoices.kt `HEAR_UPDATE`; custom-voices.js too).
+pub(crate) const HEAR_UPDATE: &str =
+    "Your PC cannot play voice samples yet. Run the patch script on the PC first.";
 /// Asking for a card, or loosening, while the event stream is stale.
 pub(crate) const HELD_STALE: &str =
     "The connection to Jarvis is catching up, so this cannot be sent until it does. \
@@ -1099,20 +1109,32 @@ pub async fn set_voice_speed(app: AppHandle, speed: String) -> Result<Value, Str
     voices_answer(status, &text)
 }
 
-/// The built-in voices Kokoro offers (`GET /api/voice/voices`
-/// `speaker.choices`, eleven of them, "0".."10"). Checked against that same
-/// list here too, so a PC on an older backend that never sends `speaker` at
-/// all cannot be sent a value it has no way to show back correctly.
-pub(crate) const SPEAKERS: [&str; 11] = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"];
+/// A built-in voice's NAME as the PC sends it (`GET /api/voice/voices`
+/// `speaker.choices[].id`): the voice's own name in Kokoro's pack - "af_bella",
+/// "bm_george", or the old pack's default "af". (Until 2026-09-29 it was a
+/// number, "0".."10", and a number means a different voice in a different
+/// pack.) Which names are offered is the PC's to say, by the pack it really
+/// has, so this only refuses what can never be one - anything that does not
+/// start with two lower-case letters, or is the wrong length, or has other
+/// characters - before it is sent. The PC checks the rest against its list.
+pub(crate) fn speaker_name(speaker: &str) -> Option<&str> {
+    let s = speaker.trim();
+    let b = s.as_bytes();
+    let shape = (2..=32).contains(&b.len())
+        && b[0].is_ascii_lowercase()
+        && b[1].is_ascii_lowercase()
+        && b.iter()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_');
+    shape.then_some(s)
+}
 
 /// Which of Kokoro's own voices the built-in voice uses. Same shape as
 /// [`set_voice_speed`]: no card either way, held on a stale link (rule 4).
 #[tauri::command]
 pub async fn set_voice_speaker(app: AppHandle, speaker: String) -> Result<Value, String> {
-    let speaker = speaker.trim().to_string();
-    if !SPEAKERS.contains(&speaker.as_str()) {
-        return Err("Choose one of the listed voices.".to_string());
-    }
+    let speaker = speaker_name(&speaker)
+        .ok_or_else(|| "Choose one of the listed voices.".to_string())?
+        .to_string();
     if stale(&app) {
         return Err(HELD_STALE.to_string());
     }
@@ -1184,10 +1206,8 @@ pub(crate) fn animal_body(
     pace: &str,
 ) -> Result<Value, String> {
     let face = animal_id(face)?;
-    let speaker = speaker.trim();
-    if !SPEAKERS.contains(&speaker) {
-        return Err("Choose one of the listed voices.".to_string());
-    }
+    let speaker =
+        speaker_name(speaker).ok_or_else(|| "Choose one of the listed voices.".to_string())?;
     let semitones = animal_pitch(semitones).ok_or_else(|| {
         "The pitch must be from 3 steps deeper to 4 steps higher, in half steps.".to_string()
     })?;
@@ -1258,11 +1278,64 @@ pub async fn try_voice_animal(
     if capture.busy() {
         return Err(TRY_BUSY.to_string());
     }
-    let base = jarvis_base(&app);
+    sound_from_pc(
+        &app,
+        "/api/voice/voices/face_animal/try",
+        json!({ "face": face }),
+        TRY_UPDATE,
+    )
+    .await
+}
+
+/// "Hear it" (2026-09-29): the PC says one fixed line (its own words, never
+/// the app's) in one built-in voice, by NAME, without changing the voice
+/// Jarvis uses - `POST /api/voice/voices/sample {"voice": "bm_george"}` - and
+/// it comes back like "Try it": `{"ok": true, "audio": "data:audio/wav;..."}`
+/// for the page to play. No card, nothing saved, not held on a stale link
+/// (it changes nothing). Never a voice you recorded: the PC only takes a
+/// name from its own list. Refused here while the talk button records or
+/// Jarvis Live has the microphone ([`HEAR_BUSY`]) - the sound would go into
+/// the question - and while App lock would ask again ([`HEAR_LOCKED`]).
+/// Settings also refuses while Jarvis is speaking or listening, from the
+/// events it hears (voice-panel.js `jarvisBusy`).
+#[tauri::command]
+pub async fn hear_voice_sample(
+    app: AppHandle,
+    capture: State<'_, VoiceCaptureState>,
+    voice: String,
+) -> Result<Value, String> {
+    let voice = speaker_name(&voice)
+        .ok_or_else(|| "Choose one of the listed voices.".to_string())?
+        .to_string();
+    if crate::lock::app_locked(&app) {
+        return Err(HEAR_LOCKED.to_string());
+    }
+    if capture.busy() || crate::live::on_here() {
+        return Err(HEAR_BUSY.to_string());
+    }
+    sound_from_pc(
+        &app,
+        "/api/voice/voices/sample",
+        json!({ "voice": voice }),
+        HEAR_UPDATE,
+    )
+    .await
+}
+
+/// Asks the PC for a sound (`path`, `body`) and hands the page the WAV as a
+/// data URI, or the PC's own sentence, or - a 404 that is not the PC's own
+/// answer - `update` ([`sound_refusal`]).
+async fn sound_from_pc(
+    app: &AppHandle,
+    path: &str,
+    body: Value,
+    update: &str,
+) -> Result<Value, String> {
+    let base = jarvis_base(app);
     let response = jarvis_client(Some(VOICES_TIMEOUT))?
-        .post(format!("{base}/api/voice/voices/face_animal/try"))
-        .headers(jarvis_headers(&app)?)
-        .json(&json!({ "face": face }))
+        .post(format!("{base}{path}"))
+        .headers(jarvis_headers(app)?)
+        .json(&body)
         .send()
         .await
         .map_err(|e| backend_unreachable(&e, &base))?;
@@ -1280,16 +1353,17 @@ pub async fn try_voice_animal(
         return try_answer(&bytes);
     }
     let text = response.text().await.unwrap_or_default();
-    try_refusal(status, &text)
+    sound_refusal(status, &text, update)
 }
 
-/// Why "Try it" got no sound. A 404 that is not the PC's own answer means
-/// its backend is older than the route: said in the same words as the
-/// phone ([`TRY_UPDATE`]), not the general "update the backend" one.
-pub(crate) fn try_refusal(status: u16, body: &str) -> Result<Value, String> {
+/// Why "Try it" or "Hear it" got no sound. A 404 that is not the PC's own
+/// answer means its backend is older than the route: said in the same words as
+/// the phone (`update`: [`TRY_UPDATE`] or [`HEAR_UPDATE`]), not the general
+/// "update the backend" one.
+pub(crate) fn sound_refusal(status: u16, body: &str, update: &str) -> Result<Value, String> {
     let has_ok = parsed_object(body).is_some_and(|m| m.contains_key("ok"));
     if status == 404 && !has_ok {
-        return Err(TRY_UPDATE.to_string());
+        return Err(update.to_string());
     }
     voices_answer(status, body)
 }
@@ -1399,6 +1473,16 @@ pub async fn answer_face_voice_offer(
 mod tests {
     use super::*;
 
+    /// Why "Try it" got no sound, with its own words for an older PC.
+    fn try_refusal(status: u16, body: &str) -> Result<Value, String> {
+        sound_refusal(status, body, TRY_UPDATE)
+    }
+
+    /// The same for "Hear it".
+    fn hear_refusal(status: u16, body: &str) -> Result<Value, String> {
+        sound_refusal(status, body, HEAR_UPDATE)
+    }
+
     /// The backend's real answers (tools/gen_voice_training_cases.py).
     const CASES: &str = include_str!("../../tests/fixtures/voice-training-cases.json");
 
@@ -1457,7 +1541,10 @@ mod tests {
             .iter()
             .map(|c| c["id"].as_str().expect("id"))
             .collect();
-        assert_eq!(voices, SPEAKERS);
+        assert!(!voices.is_empty(), "the PC offers voices");
+        for v in &voices {
+            assert_eq!(speaker_name(v), Some(*v), "{v} is sent as the PC named it");
+        }
         let paces: Vec<&str> = ch["paces"]
             .as_array()
             .expect("paces")
@@ -1473,15 +1560,15 @@ mod tests {
     #[test]
     fn an_animal_body_is_checked_before_it_is_sent() {
         assert_eq!(
-            animal_body("redpanda", "3", -1.5, "faster").expect("sent"),
-            json!({"face": "redpanda", "speaker": "3", "semitones": -1.5, "pace": "faster"})
+            animal_body("redpanda", "af_sarah", -1.5, "faster").expect("sent"),
+            json!({"face": "redpanda", "speaker": "af_sarah", "semitones": -1.5, "pace": "faster"})
         );
-        assert!(animal_body("orbit", "3", 0.0, "normal").is_err());
+        assert!(animal_body("orbit", "af_sarah", 0.0, "normal").is_err());
         assert!(animal_body("redpanda", "11", 0.0, "normal").is_err());
-        assert!(animal_body("redpanda", "3", 0.0, "fast").is_err());
+        assert!(animal_body("redpanda", "af_sarah", 0.0, "fast").is_err());
         for bad in [4.5, -3.5, 1.25, f64::NAN, f64::INFINITY] {
             assert!(
-                animal_body("redpanda", "3", bad, "normal").is_err(),
+                animal_body("redpanda", "af_sarah", bad, "normal").is_err(),
                 "{bad}"
             );
         }
@@ -1534,6 +1621,56 @@ mod tests {
         // A 503 from a backend without jarvis_voices.py is still the general one.
         assert_eq!(
             try_refusal(503, "{\"available\": false, \"error\": \"x\"}").unwrap_err(),
+            VOICES_UPDATE
+        );
+    }
+
+    #[test]
+    fn a_voice_name_is_checked_before_it_is_sent() {
+        for ok in ["af", "af_bella", "bm_george", "am_michael", "af_heart"] {
+            assert_eq!(speaker_name(ok), Some(ok), "{ok}");
+        }
+        assert_eq!(speaker_name("  af_bella "), Some("af_bella"));
+        let long = "a".repeat(33);
+        for bad in [
+            "",
+            "a",
+            "9",
+            "10",
+            "AF_BELLA",
+            "af bella",
+            "af-bella",
+            "../x",
+            "_af",
+            long.as_str(),
+        ] {
+            assert_eq!(speaker_name(bad), None, "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn hear_it_on_an_older_pc_says_so_like_the_phone() {
+        // No route: the server's own 404, which is not a voices answer.
+        for body in ["", "{\"error\": \"not found\"}", "<html>404</html>"] {
+            assert_eq!(
+                hear_refusal(404, body).unwrap_err(),
+                HEAR_UPDATE,
+                "{body:?}"
+            );
+        }
+        // The PC's own refusals still come through in its own words.
+        let all = cases();
+        let bad = hear_refusal(400, &all["voice_posts"]["sample_bad"]["body"].to_string())
+            .expect("the PC's own sentence");
+        assert_eq!(bad["http"], 400);
+        assert_eq!(bad["error"], "choose one of the listed voices");
+        let busy = hear_refusal(429, &all["voice_posts"]["sample_busy"]["body"].to_string())
+            .expect("the PC's own sentence");
+        assert_eq!(busy["http"], 429);
+        assert_eq!(busy["ok"], false);
+        // A 503 from a backend without jarvis_voices.py is still the general one.
+        assert_eq!(
+            hear_refusal(503, "{\"available\": false, \"error\": \"x\"}").unwrap_err(),
             VOICES_UPDATE
         );
     }
