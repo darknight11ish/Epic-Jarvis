@@ -1750,7 +1750,57 @@ class JarvisApi(
 
     // ----------------------------------------------------------- writes ----
 
-    suspend fun approve(id: String): ApiResult<Unit> = decide("/api/approve", id)
+    /**
+     * `POST /api/approve`. With a [signature] (a risky approval from a phone
+     * that has signed approvals on, docs/PAIRING-DESIGN.md §11) the body
+     * carries it. A 403 whose body names one of the three signature refusals
+     * is kept in [ApprovalRefusal] for [com.jarvis.client.JarvisRuntime.decide]
+     * to explain, so it is not taken for a refused key.
+     */
+    suspend fun approve(id: String, signature: SignedApproval.Signature? = null): ApiResult<Unit> =
+        withContext(Dispatchers.IO) {
+            ApprovalRefusal.clear()
+            val target = url(SignedApproval.APPROVE_PATH) ?: return@withContext ApiResult.Failed(noAddress())
+            val body = SignedApproval.approveBody(id, signature).toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use {
+                    when {
+                        it.isSuccessful -> ApiResult.Ok(Unit)
+                        it.code == 409 -> ApiResult.Failed(ApiError.AlreadyHandled)
+                        else -> {
+                            if (it.code == 403) {
+                                ApprovalRefusal.note(runCatching { it.peekBody(2_048L).string() }.getOrNull())
+                            }
+                            ApiResult.Failed(errorFor(it))
+                        }
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * `POST /api/approve/challenge` or `/api/devices/approval-key`: the status
+     * and the body come back together ([SignedApproval.challengeAnswer],
+     * [SignedApproval.registerAnswer]). A 401 is a refused key. Neither the
+     * request nor the answer is logged: a nonce and a public key are in them.
+     */
+    suspend fun approvalPost(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            if (path != SignedApproval.KEY_PATH && path != SignedApproval.CHALLENGE_PATH) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a signed-approval route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    if (resp.code == 401) ApiResult.Failed(ApiError.BadToken) else ApiResult.Ok(resp.code to obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
 
     suspend fun deny(id: String): ApiResult<Unit> = decide("/api/deny", id)
 
