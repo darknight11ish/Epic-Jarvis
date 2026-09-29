@@ -101,10 +101,26 @@ def t_nothing_is_added_when_loopback_is_already_covered():
 
 def t_a_mesh_bind_also_answers_on_loopback():
     fn, _ = _companion_fn()
-    try:
-        main = ThreadingHTTPServer(("127.0.0.2", 0), Echo)
-    except OSError as exc:
-        return check(f"SKIP - this machine cannot bind 127.0.0.2 ({exc})", True)
+    main = None
+    # A random port free on 127.0.0.2 can already be taken on 127.0.0.1 (another
+    # program's connection); the companion then correctly refuses. Pick a port
+    # free on both, so the test checks the code and not the machine's luck.
+    for _ in range(20):
+        try:
+            main = ThreadingHTTPServer(("127.0.0.2", 0), Echo)
+        except OSError as exc:
+            return check(f"SKIP - this machine cannot bind 127.0.0.2 ({exc})", True)
+        probe = socket.socket()
+        try:
+            probe.bind(("127.0.0.1", main.server_address[1]))
+            break
+        except OSError:
+            main.server_close()
+            main = None
+        finally:
+            probe.close()
+    if main is None:
+        return check("SKIP - no port free on both 127.0.0.1 and 127.0.0.2", True)
     port = main.server_address[1]
     import threading
     threading.Thread(target=main.serve_forever, daemon=True).start()

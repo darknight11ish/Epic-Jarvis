@@ -405,8 +405,12 @@ def t_the_stream_guard():
 
 def t_the_hunk_comes_before_every_token_ok():
     order = _stack.order()
-    check("devices.patch is in apply-patches.ps1's list, last",
-          order and order[-1] == "devices.patch", order[-3:])
+    # Last but for patches whose context is ITS lines (apps-in-projects.patch
+    # anchors on register_approval_key's risk line, 2026-09-29).
+    after_it = order[order.index("devices.patch") + 1:] if "devices.patch" in order else None
+    check("devices.patch is in apply-patches.ps1's list, and only "
+          "apps-in-projects.patch (which builds on its lines) comes after it",
+          after_it is not None and set(after_it) <= {"apps-in-projects.patch"}, order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")
     check("the stacked jarvis_hud.py builds", text is not None, "\n".join(log[-3:]))
     if text is None:
@@ -436,8 +440,9 @@ def t_the_patch_applies_and_reverses():
         return check("SKIP - git is not installed", True)
     order = _stack.order()
     for target in ("jarvis_hud.py", "jarvis_gate.py"):
-        before, log = _stack.stand_in(target, order[:-1])
-        after, log2 = _stack.stand_in(target)
+        at = order.index("devices.patch")
+        before, log = _stack.stand_in(target, order[:at])
+        after, log2 = _stack.stand_in(target, order[:at + 1])
         check(f"{target}: the stack builds with and without it",
               before is not None and after is not None)
         if before is None or after is None:
@@ -1004,7 +1009,8 @@ def t_the_routes():
     banner = D.install(H, origin_ok=lambda h: True, token_ok=orig,
                        read_body=lambda h: h.body)
     check("the banner line says pairing is on", "pairing by QR code on" in banner, banner)
-    check("capabilities.pairing = {version: 1}", D.capability() == {"version": 1})
+    check("capabilities.pairing = {version: 1, signed_approvals: true}",
+          D.capability() == {"version": 1, "signed_approvals": True})
     h = H("/api/other", token=SHARED)
     h.do_GET()
     check("another route goes to the original", h.sent == [("original GET", "/api/other")])
@@ -1075,7 +1081,8 @@ def t_the_routes():
           E._capability_probe()["pairing"] is False)
     D._ARMED = True
     try:
-        check("installed: {version: 1}", E._capability_probe()["pairing"] == {"version": 1})
+        check("installed: {version: 1, signed_approvals: true}",
+              E._capability_probe()["pairing"] == {"version": 1, "signed_approvals": True})
     finally:
         D._ARMED = False
 

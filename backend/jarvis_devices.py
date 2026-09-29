@@ -4,9 +4,12 @@ NEW MODULE, shipped whole. devices.patch adds ONE block to jarvis_hud.py,
 right after `_refuse_every_interface(bind)` and BEFORE every module's
 `install(..., token_ok=_token_ok, ...)` (owner-check's is the first of
 them), plus two lines in jarvis_gate.py's tables. The design, with every
-choice and its reason, is docs/PAIRING-DESIGN.md (phase 1 only - phase 2,
-the fingerprint-signed yes, is NOT built here). The routes are
-docs/JARVIS-API.md section 90.
+choice and its reason, is docs/PAIRING-DESIGN.md. Phase 1 is the pairing
+and the key per device; phase 2 (section 11, the backend half, built
+2026-09-29) is the fingerprint-signed yes from the phone: a device's
+approval key (a card, PC only), a challenge, and the signature check that
+jarvis_owner_check.approve_check asks for. The routes are docs/JARVIS-API.md
+sections 90 and 91.
 
 THE OWNER'S DECISIONS (CLAUDE.md, 2026-09-24, and "build QR-code pairing
 now", 2026-09-28): a QR code with a short typed code as the backup; an
@@ -59,7 +62,10 @@ key and edit this registry (docs/ARCHITECTURE.md section 3, "A known
 limit"). What changes: a copied phone key can be removed on its own, and
 the old shared key stops working from other devices once retired.
 
-Standard library only (phase 1 needs no `cryptography`).
+Standard library only for phase 1. Phase 2 (signed approvals) needs the
+`cryptography` package to read a phone's public key and check its
+signature; without it those two routes answer 503 and nothing else here
+changes.
 
     python jarvis_devices.py                 what is paired, and whether pairing works
     python jarvis_devices.py --start-fresh   move an unreadable registry aside
@@ -77,6 +83,7 @@ import secrets
 import sys
 import threading
 import time
+import types
 import unicodedata
 from pathlib import Path
 from typing import Callable, Optional
@@ -92,6 +99,18 @@ ACTION = "pair_device"
 #: The approval card for bringing the old shared key back for other devices
 #: (a loosening). Also in PC_ONLY_ACTIONS.
 UNRETIRE_ACTION = "unretire_shared_key"
+
+#: Phase 2 (docs/PAIRING-DESIGN.md section 11): the card that lets a paired
+#: phone approve risky cards with its own fingerprint or PIN. Also in
+#: jarvis_owner_check.PC_ONLY_ACTIONS.
+KEY_ACTION = "register_approval_key"
+#: A signed approval's challenge: how long it lives, and how many one device
+#: may have outstanding at once (the oldest is dropped).
+NONCE_SECONDS = 120
+NONCES_PER_DEVICE = 6
+#: The signed message starts with these bytes (design 11.3).
+SIGN_MAGIC = b"jarvis-approve-v1"
+_SPKI_MAX = 256
 
 KEY_PREFIX = "jdk1."
 #: The device key's shape, used by the scrubbers and the shared cases file.
@@ -227,6 +246,52 @@ ADDRESS_NOT_A_NAME = ("Jarvis's address {address} is on your own network, but th
                       "for your PC.")
 
 CARD_TITLE = "Jarvis wants to connect a new device"
+
+#: Phase 2's sentences (design 11). Both apps' words for these come from
+#: tools/gen_approval_sign_cases.py's shared cases file.
+SIGN_WORDS = {
+    "device_key_needed": ("Signed approvals are turned on from a phone that is paired with its "
+                          "own key. Pair this phone with the QR code first (Settings, Devices, "
+                          "on your PC)."),
+    "no_crypto": "Risky approvals from the phone need the cryptography package on your PC.",
+    "bad_key": ("That is not an approval key this PC can use. It must be an EC P-256 public "
+                "key, sent as base64url text."),
+    "no_such_card": "No approval is waiting with that id.",
+    "no_approval_key": "Turn on signed approvals for this phone first.",
+    "no_signature": "This approval needs your fingerprint or PIN on the phone. Try it again.",
+    "bad_signature": ("The fingerprint or PIN check did not match this card, so nothing was "
+                      "approved. Look at the card again and try again."),
+    "cannot_check": ("This PC could not check the fingerprint or PIN signature just now, so "
+                     "nothing was approved."),
+    "bad_request": 'need {"public_key": "<base64url>"} and nothing else',
+    "challenge_request": 'need {"id": "<the card id>"} and nothing else',
+}
+
+#: What the register_approval_key card says. {name} is the phone's name.
+KEY_CARD_TEXT = "\n".join([
+    "\"{name}\" wants to approve risky actions with its fingerprint or PIN.",
+    "",
+    "Approve only if you just pressed \"Turn on signed approvals\" on that phone. From then "
+    "on, a risky card approved from that phone needs a fresh fingerprint or PIN on the phone "
+    "itself, and this PC checks it.",
+    "",
+    "If you did not press it, deny this. You can remove the device any time in Settings, "
+    "Devices.",
+])
+
+#: The same card when this device ALREADY has a key: a swap is a bigger thing than
+#: a first key, and a stolen device key could ask for one, so the words say it.
+KEY_REPLACE_CARD_TEXT = "\n".join([
+    "\"{name}\" already has a signed-approvals key on this PC, and is asking to REPLACE it "
+    "with a new one.",
+    "",
+    "Approve only if you just pressed \"Turn on signed approvals\" on that phone yourself "
+    "(for example because signed approvals stopped working there). Once replaced, the old key "
+    "stops working and that phone's approvals are checked against the new one.",
+    "",
+    "If you did not press it, deny this: someone who holds that phone's key may be trying to "
+    "swap in their own. Denying keeps the key this PC has now.",
+])
 
 UNRETIRE_CARD_TEXT = "\n".join([
     "Let devices that still have the old shared key reach Jarvis again.",
@@ -1238,6 +1303,10 @@ def _reset_for_tests() -> None:
         _SEEN.clear()
         _SEEN_WRITTEN.clear()
         _OTHER.clear()
+    with _SIGN_LOCK:
+        _AK.clear()
+        _AK_WITHDRAWN.clear()
+        _NONCES.clear()
     with _REG_LOCK:
         _CACHE.update(stamp=None, doc=None, why="")
 
@@ -1529,7 +1598,7 @@ def devices_view(*, you: str, here: bool, tier_of=None, armed=None) -> dict:
         rows.append({"id": r["id"], "name": r.get("name", ""), "kind": r.get("kind", "phone"),
                      "created": r.get("created"), "last_seen": last,
                      "this_device": r["id"] == you, "removable": True,
-                     "approval_key": False})
+                     "approval_key": approval_key_state(r["id"], r)})
     sh = doc["shared"]
     last_other = max([x for x in (sh.get("last_other_seen"), other.get("at"))
                       if isinstance(x, int)], default=None)
@@ -1566,6 +1635,7 @@ def remove(body, *, you: str) -> tuple:
             return
         row["removed"] = int(_wall())
         row["token_sha256"] = ""
+        row["approval_key"] = None           # a removed device's signing key goes too
         holder["name"] = row.get("name", "")
 
     try:
@@ -1579,6 +1649,7 @@ def remove(body, *, you: str) -> tuple:
         return 404, {"ok": False, "reason": "no_such_device", "error": "No such device."}
     with _SEEN_LOCK:
         _SEEN.pop(device_id, None)
+    _forget_signing(device_id)
     _audit("devices.removed", {"id": device_id})
     _publish("devices", {})
     return 200, {"ok": True, "id": device_id, "name": holder["name"],
@@ -1691,12 +1762,372 @@ def shared(body, *, you: str, here: bool, gate: Optional[Callable] = None,
 
 
 # ---------------------------------------------------------------------------
+# Phase 2: a fingerprint-signed yes from the phone (design section 11)
+# ---------------------------------------------------------------------------
+#
+# Three pieces, all here because the registry is here:
+#   1. register_key   POST /api/devices/approval-key - a device's public key,
+#                     stored only after the register_approval_key card is
+#                     approved on this PC (Windows Hello, PC only).
+#   2. challenge      POST /api/approve/challenge - a nonce for ONE card and
+#                     ONE device, in memory only, single use, 120 seconds.
+#   3. check_signed_approval  what jarvis_owner_check.approve_check asks for a
+#                     risky card approved from another device.
+#
+# The public key is not a secret, but it is kept out of every log, event and
+# error anyway. Nothing here ever holds a private key: the phone keeps that
+# in its Keystore and never sends it.
+
+_SIGN_LOCK = threading.Lock()
+_AK: dict = {}             # device id -> the id of its waiting register card
+_AK_WITHDRAWN: set = set() # card ids replaced or cancelled while they waited
+_NONCES: dict = {}         # nonce -> {"card", "device", "at"} (memory only)
+
+
+def _crypto():
+    """The `cryptography` pieces this needs, or None. Never raises: on some
+    machines the package is broken rather than missing, and its Rust core
+    then raises an exception that is not an `Exception`."""
+    try:
+        from cryptography.exceptions import InvalidSignature
+        from cryptography.hazmat.primitives import hashes, serialization
+        from cryptography.hazmat.primitives.asymmetric import ec
+    except BaseException as exc:  # noqa: BLE001
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        return None
+    return types.SimpleNamespace(InvalidSignature=InvalidSignature, hashes=hashes,
+                                 serialization=serialization, ec=ec)
+
+
+def parse_public_key(text) -> tuple:
+    """(SPKI as base64url text, None) for a good EC P-256 public key, else
+    (None, the plain-words reason). `text` is the SPKI DER, base64url with
+    no padding."""
+    c = _crypto()
+    if c is None:
+        return None, SIGN_WORDS["no_crypto"]
+    raw = _unb64u(text) if isinstance(text, str) and 0 < len(text) <= 400 else None
+    if not raw or len(raw) > _SPKI_MAX:
+        return None, SIGN_WORDS["bad_key"]
+    try:
+        pub = c.serialization.load_der_public_key(raw)
+    except BaseException as exc:  # noqa: BLE001
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        return None, SIGN_WORDS["bad_key"]
+    if not isinstance(pub, c.ec.EllipticCurvePublicKey) \
+            or not isinstance(pub.curve, c.ec.SECP256R1):
+        return None, SIGN_WORDS["bad_key"]
+    return _b64u(raw), None
+
+
+def signature_ok(spki_b64: str, message: bytes, sig_b64: str) -> Optional[bool]:
+    """True/False for an ECDSA-SHA256 signature (DER) by the stored key;
+    None when `cryptography` is not there to check it."""
+    c = _crypto()
+    if c is None:
+        return None
+    raw, sig = _unb64u(spki_b64), _unb64u(sig_b64)
+    if not raw or not sig or len(sig) > 80:
+        return False
+    try:
+        pub = c.serialization.load_der_public_key(raw)
+        pub.verify(sig, message, c.ec.ECDSA(c.hashes.SHA256()))
+        return True
+    except BaseException as exc:  # noqa: BLE001 - InvalidSignature, or anything odd
+        if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+            raise
+        return False
+
+
+# ---- what the phone showed: the words hash (design 11.3) -------------------
+
+
+def card_title(row) -> str:
+    """The title the apps show for a pending row: `notice.title`, else the
+    shared fallback built from the action name (jarvis_card_words.title_for)
+    - the same rule the phone's PendingRows.kt and the desktop follow."""
+    row = row if isinstance(row, dict) else {}
+    notice = row.get("notice") if isinstance(row.get("notice"), dict) else {}
+    title = notice.get("title")
+    if isinstance(title, str) and title.strip():
+        return title    # as sent: the phone shows and hashes it unchanged (a blank one falls back)
+    # A row with NO notice: the apps show the generic line built from the
+    # action's name (the phone's CardWords.fallbackTitle), never the fixed
+    # phrase title_for() gives a known action - so hash what they show.
+    try:
+        import jarvis_card_words as W
+        name = W._name(str(row.get("action") or ""))
+        return W.FALLBACK.format(name=name) if name else W.NO_ACTION
+    except Exception:
+        return ""
+
+
+def detail_text(row) -> str:
+    """`detail.text` when detail is an object with `text`; the detail itself
+    when it is plain text; else ''."""
+    detail = row.get("detail") if isinstance(row, dict) else None
+    if isinstance(detail, dict):
+        text = detail.get("text")
+        return text if isinstance(text, str) else ""
+    return detail if isinstance(detail, str) else ""
+
+
+def words_sha256(row) -> str:
+    """Lowercase hex SHA-256 of id, action, title and text joined by 0x1F.
+    The one rule the phone hashes what it SHOWED by, and this PC hashes what
+    it holds NOW - a card changed in between no longer matches."""
+    row = row if isinstance(row, dict) else {}
+    parts = (str(row.get("id")).strip(), str(row.get("action") or ""), card_title(row),
+             detail_text(row))
+    return hashlib.sha256("\x1f".join(parts).encode("utf-8")).hexdigest()
+
+
+def sign_message(card_id: str, action: str, nonce: str, words_hash: str) -> bytes:
+    """What the phone signs (design 11.3)."""
+    return b"\x00".join((SIGN_MAGIC, str(card_id).encode("utf-8"), str(action).encode("utf-8"),
+                         str(nonce).encode("utf-8"), str(words_hash).encode("ascii")))
+
+
+# ---- the registry side ----------------------------------------------------
+
+
+def approval_key_of(device_id: str) -> Optional[str]:
+    """The device's stored approval key (SPKI, base64url), or None."""
+    try:
+        doc, why = load()
+    except Exception:
+        return None
+    if why:
+        return None
+    row = _live_row(doc, device_id)
+    key = row.get("approval_key") if row else None
+    return key if isinstance(key, str) and key else None
+
+
+def approval_key_state(device_id: str, row: Optional[dict] = None):
+    """"waiting" while its card waits, True once stored, else False."""
+    with _SIGN_LOCK:
+        if device_id in _AK:
+            return "waiting"
+    key = row.get("approval_key") if isinstance(row, dict) else approval_key_of(device_id)
+    return bool(isinstance(key, str) and key)
+
+
+def _forget_signing(device_id: str) -> None:
+    """A device was removed, or its key replaced: its waiting card is
+    withdrawn and every challenge it holds is dead."""
+    with _SIGN_LOCK:
+        pid = _AK.pop(device_id, None)
+        if pid:
+            _AK_WITHDRAWN.add(pid)
+        for n in [n for n, v in _NONCES.items() if v["device"] == device_id]:
+            del _NONCES[n]
+
+
+def _device_only(you) -> Optional[tuple]:
+    if not isinstance(you, str) or not _ID_RE.fullmatch(you):
+        return 403, {"ok": False, "reason": "device_key_needed",
+                     "error": SIGN_WORDS["device_key_needed"]}
+    return None
+
+
+def key_card_text(name: str, replacing: bool = False) -> str:
+    return (KEY_REPLACE_CARD_TEXT if replacing else KEY_CARD_TEXT).format(name=name)
+
+
+def _k_decide(device_id: str, pid: str, spki: str, name: str, gate: Callable,
+              tier_of: Callable, replacing: bool = False) -> None:
+    """Raise the register_approval_key card and wait for it (its own thread).
+    `replacing`: the device already has a key, so the card says it is a swap."""
+    text = key_card_text(name, replacing)
+    try:
+        if tier_of(KEY_ACTION) != "ask":
+            raise LookupError("tier")
+        v = gate(KEY_ACTION, {"text": text, "what": "let a phone approve risky actions with "
+                              "its fingerprint or PIN", "device_name": name,
+                              "leaves_this_pc": False}, text)
+        outcome, why = _verdict(v, KEY_ACTION, tier_of)
+    except LookupError:
+        outcome, why = "refused", f"{KEY_ACTION} is not set to \"ask\""
+    except Exception as exc:
+        outcome, why = "refused", f"the approval gate failed ({type(exc).__name__})"
+    with _SIGN_LOCK:
+        current = _AK.get(device_id) == pid
+        if current:
+            del _AK[device_id]
+        withdrawn = pid in _AK_WITHDRAWN
+        _AK_WITHDRAWN.discard(pid)
+    if withdrawn or not current:
+        # Replaced by a newer request, or the device was removed: approving
+        # this card stores nothing.
+        _audit("devices.approval_key", {"id": device_id, "state": "withdrawn", "card": outcome})
+        return
+    if outcome != "approved":
+        _audit("devices.approval_key", {"id": device_id, "state": outcome})
+        _publish("devices", {})
+        return
+
+    def change(doc):
+        row = _live_row(doc, device_id)
+        if row is None:
+            return
+        row["approval_key"] = spki
+
+    try:
+        _mutate(change)
+    except Exception as exc:
+        _audit("devices.approval_key", {"id": device_id, "state": "failed",
+                                        "why": type(exc).__name__})
+        return
+    with _SIGN_LOCK:      # a new key: challenges made for the old one are dead
+        for n in [n for n, v in _NONCES.items() if v["device"] == device_id]:
+            del _NONCES[n]
+    _audit("devices.approval_key", {"id": device_id, "state": "registered"})
+    _publish("devices", {})
+
+
+def register_key(body, *, you: str, gate: Optional[Callable] = None,
+                 tier_of: Optional[Callable] = None, spawn: Optional[Callable] = None,
+                 armed: Optional[Callable] = None) -> tuple:
+    """POST /api/devices/approval-key {"public_key"}. A device key only."""
+    refused = _device_only(you)
+    if refused:
+        return refused
+    if _crypto() is None:
+        return 503, {"ok": False, "reason": "no_crypto", "error": SIGN_WORDS["no_crypto"]}
+    if not isinstance(body, dict) or set(body) != {"public_key"}:
+        return 400, {"ok": False, "reason": "bad_request", "error": SIGN_WORDS["bad_request"]}
+    spki, problem = parse_public_key(body["public_key"])
+    if spki is None:
+        return 400, {"ok": False, "reason": "bad_key", "error": problem}
+    gate = gate or _gate
+    tier_of = tier_of or _tier
+    spawn = spawn or _spawn
+    doc, why = load()
+    if why:
+        return 503, {"ok": False, "error": DEVICES_WORDS["registry_unreadable"]}
+    row = _live_row(doc, you)
+    if row is None:
+        return 403, {"ok": False, "reason": "device_key_needed",
+                     "error": SIGN_WORDS["device_key_needed"]}
+    tier = tier_of(KEY_ACTION)
+    if tier != "ask":
+        return 503, {"ok": False, "error": (
+            f"{KEY_ACTION} is tier {tier!r} in jarvis-framework.toml; turning on signed "
+            f"approvals needs a person to say yes, so it must be 'ask'")}
+    if not (armed or _owner_check_armed)():
+        return 503, {"ok": False, "error": DEVICES_WORDS["no_owner_check"]}
+    pid = secrets.token_hex(8)
+    with _SIGN_LOCK:
+        old = _AK.get(you)
+        if old:                         # a new request replaces the waiting one
+            _AK_WITHDRAWN.add(old)
+        _AK[you] = pid
+    name = str(row.get("name") or "This phone")
+    replacing = bool(row.get("approval_key"))
+    try:
+        spawn(lambda: _k_decide(you, pid, spki, name, gate, tier_of, replacing))
+    except Exception:
+        with _SIGN_LOCK:
+            if _AK.get(you) == pid:
+                del _AK[you]
+        return 503, {"ok": False, "error": "could not raise the approval card"}
+    return 202, {"waiting": True}
+
+
+# ---- the challenge ---------------------------------------------------------
+
+
+def _pending() -> list:
+    import jarvis_gate
+    return list(jarvis_gate.pending())
+
+
+def _find_row(rows, card_id) -> Optional[dict]:
+    want = str(card_id).strip()
+    for r in rows or ():
+        if isinstance(r, dict) and str(r.get("id")).strip() == want:
+            return r
+    return None
+
+
+def challenge(body, *, you: str, pending: Optional[Callable] = None) -> tuple:
+    """POST /api/approve/challenge {"id"}. A device key that has an approval
+    key. The nonce lives in memory only, for this card and this device."""
+    refused = _device_only(you)
+    if refused:
+        return refused
+    if not isinstance(body, dict) or set(body) != {"id"} \
+            or not isinstance(body["id"], (str, int)) or isinstance(body["id"], bool) \
+            or str(body["id"]).strip() == "":
+        return 400, {"ok": False, "reason": "bad_request",
+                     "error": SIGN_WORDS["challenge_request"]}
+    if approval_key_of(you) is None:
+        return 403, {"ok": False, "reason": "no_approval_key", "owner_check": "no_approval_key",
+                     "error": SIGN_WORDS["no_approval_key"]}
+    try:
+        row = _find_row((pending or _pending)(), body["id"])
+    except Exception:
+        return 503, {"ok": False, "error": "The approval queue could not be read."}
+    if row is None:
+        return 404, {"ok": False, "reason": "no_such_card", "error": SIGN_WORDS["no_such_card"]}
+    nonce = _b64u(secrets.token_bytes(16))
+    now = _now()
+    with _SIGN_LOCK:
+        for n in [n for n, v in _NONCES.items() if now - v["at"] > NONCE_SECONDS]:
+            del _NONCES[n]
+        mine = [n for n, v in _NONCES.items() if v["device"] == you]
+        while len(mine) >= NONCES_PER_DEVICE:
+            del _NONCES[mine.pop(0)]     # insertion order: the oldest goes
+        _NONCES[nonce] = {"card": str(row.get("id")).strip(), "device": you, "at": now}
+    return 200, {"nonce": nonce, "words_sha256": words_sha256(row), "expires_in": NONCE_SECONDS}
+
+
+def _take_nonce(nonce, card_id: str, device_id: str) -> bool:
+    """Burn `nonce`; True only if it was ours, for this card, still fresh."""
+    with _SIGN_LOCK:
+        got = _NONCES.pop(nonce, None) if isinstance(nonce, str) else None
+    return bool(got and got["device"] == device_id and got["card"] == card_id
+                and _now() - got["at"] <= NONCE_SECONDS)
+
+
+def check_signed_approval(body, row: dict, device_id: str) -> Optional[tuple]:
+    """What POST /api/approve needs for a RISKY card approved from a device
+    that holds its own key (jarvis_owner_check.approve_check calls this).
+    None: the signature is good. Otherwise (status, body) to answer with,
+    and nothing is approved. The nonce is burnt whether the signature was
+    good or not."""
+    def no(kind, code=403):
+        return code, {"ok": False, "owner_check": kind, "error": SIGN_WORDS[kind]}
+
+    key = approval_key_of(device_id)
+    if key is None:
+        return no("no_approval_key")
+    sig = body.get("signature") if isinstance(body, dict) else None
+    if not isinstance(sig, dict):
+        return no("no_signature")
+    card_id = str(row.get("id")).strip()
+    fresh = _take_nonce(sig.get("nonce"), card_id, device_id)     # burnt either way
+    if sig.get("device") != device_id or not fresh or not isinstance(sig.get("sig"), str):
+        return no("bad_signature")
+    message = sign_message(card_id, str(row.get("action") or ""), sig["nonce"],
+                           words_sha256(row))
+    good = signature_ok(key, message, sig["sig"])
+    if good is None:
+        return no("cannot_check", 503)
+    return None if good else no("bad_signature")
+
+
+# ---------------------------------------------------------------------------
 # The routes - wrapped round the handler, like jarvis_owner_check.install()
 # ---------------------------------------------------------------------------
 
 GET_ROUTES = ("/api/pair/session", "/api/devices")
 POST_ROUTES = ("/api/pair/start", "/api/pair/cancel", "/api/pair/claim", "/api/pair/collect",
-               "/api/devices/remove", "/api/devices/shared")
+               "/api/devices/remove", "/api/devices/shared",
+               "/api/devices/approval-key", "/api/approve/challenge")
 #: The only routes in Jarvis that take no key: the phone has none yet.
 KEYLESS = ("/api/pair/claim", "/api/pair/collect")
 
@@ -1710,8 +2141,10 @@ def armed() -> bool:
 
 
 def capability():
-    """capabilities.pairing for /api/version: {"version": 1}, or False."""
-    return {"version": 1} if _ARMED else False
+    """capabilities.pairing for /api/version: {"version": 1, "signed_approvals":
+    true} (the second key is phase 2, 2026-09-29; additive, `version` stays
+    1), or False."""
+    return {"version": 1, "signed_approvals": True} if _ARMED else False
 
 
 def _own_port(handler) -> Optional[int]:
@@ -1795,6 +2228,10 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
                     code, out = start(body, here=here, default_port=_own_port(self))
                 elif route == "/api/pair/cancel":
                     code, out = cancel(here=here)
+                elif route == "/api/devices/approval-key":
+                    code, out = register_key(body, you=you)
+                elif route == "/api/approve/challenge":
+                    code, out = challenge(body, you=you)
                 elif route == "/api/devices/remove":
                     code, out = remove(body, you=you)
                     if out.get("was_this_device"):

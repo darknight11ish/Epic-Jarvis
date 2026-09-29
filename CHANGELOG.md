@@ -6,6 +6,19 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **An app Jarvis builds is now a project (the backend half).** In
+  Projects, a coding project can be an app: its latest saved version and its
+  open tasks show on its page. A task is one change kept as a separate copy
+  of the app; open it, read the whole change, then **Merge** - ONE approval
+  card lists every file and the whole change (Windows Hello on the PC, your
+  fingerprint or PIN on the phone; never from a widget) - or **Discard**. On
+  the PC you can paste a change in. A change too big for one card is refused
+  with "ask Jarvis to split it". Nothing runs and Jarvis does not write the
+  code yet (that waits for the 12 GB card). Deleting the project keeps the
+  app's files; they can be added back. Also fixed: throwing away a task whose
+  copy had been deleted by hand left its branch behind. Needs git. Not yet
+  tried on your PC's real approval queue (`backend/README.md`, "Apps in
+  Projects").
 - **Chats: carry one on, see the whole thing, find it again.** Open any chat
   or Jarvis Live session in History and press **Continue this chat**: the
   Jarvis bar (PC) or Home (phone) picks it up where it stopped - the same

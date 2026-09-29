@@ -60,7 +60,10 @@ import com.jarvis.client.net.Feedback
 import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.Provenance
 import com.jarvis.client.net.SecondCard
+import com.jarvis.client.net.SignedApproval
 import com.jarvis.client.net.UpdateCheck
+import android.security.keystore.KeyPermanentlyInvalidatedException
+import com.jarvis.client.platform.ApprovalKey
 import com.jarvis.client.platform.CrashLog
 import com.jarvis.client.platform.DisplayRate
 import com.jarvis.client.platform.PictureEncoder
@@ -2637,11 +2640,7 @@ class MainActivity : FragmentActivity() {
                                     // coroutine after the POST had landed, drop
                                     // the result, and leave the card on screen
                                     // for a second tap to send again.
-                                    scope.launch {
-                                        if (confirmed(item)) {
-                                            JarvisRuntime.decideDetached(item, approve = true)
-                                        }
-                                    }
+                                    scope.launch { approveItem(item) }
                                 },
                                 // Denying is the safe direction and is never gated:
                                 // a gate on refusing would make the cautious answer
@@ -2725,6 +2724,11 @@ class MainActivity : FragmentActivity() {
                                 onQuickNoteOpenChange = { open -> quickNoteOpen.value = open },
                                 onOpenUpdate = ::openReleasePage,
                                 onOpenLockSettings = ::openLockSettings,
+                                // The owner's one tap (design §11): the key is made
+                                // here, the PC raises its own card.
+                                onTurnOnSignedApprovals = {
+                                    scope.launch { JarvisRuntime.setNotice(JarvisRuntime.turnOnSignedApprovals()) }
+                                },
                                 onKeepLinkAlive = {
                                     JarvisRuntime.settings.answerKeepAliveOffer()
                                     requestBatteryExemption()
@@ -2861,6 +2865,90 @@ class MainActivity : FragmentActivity() {
                 false
             }
         }
+    }
+
+    /**
+     * Approve [item]. Which way it goes is [SignedApproval.pathFor]: a risky
+     * card on a paired phone with signed approvals on is signed with the
+     * fingerprint or PIN (docs/PAIRING-DESIGN.md §11); a paired phone
+     * without them is offered the one button that turns them on; everything
+     * else - a card that is not risky, the old shared key, a PC that does
+     * not know signed approvals, or a PC that could not be read - takes
+     * today's way, and the PC says `no_approval_key` if it needed one.
+     */
+    private suspend fun approveItem(item: PendingItem) {
+        val risky = SecurityRules.riskyByToday(item)
+        // pcOnly and needsChoice cards are refused in decide() with their own words.
+        val read = if (risky && !item.pcOnly && !item.needsChoice) JarvisRuntime.signedApprovalRead() else null
+        when (val path = SignedApproval.pathFor(risky, read?.state)) {
+            SignedApproval.Path.PLAIN ->
+                if (confirmed(item)) JarvisRuntime.decideDetached(item, approve = true)
+            SignedApproval.Path.SIGNED -> signedApprove(item, read?.device)
+            SignedApproval.Path.OFFER,
+            SignedApproval.Path.OFFER_AGAIN,
+            SignedApproval.Path.WAITING,
+            -> SignedApproval.noticeFor(path)?.let { JarvisRuntime.setNotice(it) }
+        }
+    }
+
+    /**
+     * The signed way: a nonce from the PC, the words checked against what this
+     * phone showed, the fingerprint prompt with the approval key, the signature.
+     * Nothing here is logged.
+     */
+    private suspend fun signedApprove(item: PendingItem, device: String?) {
+        if (device == null) {
+            JarvisRuntime.setNotice(SignedApproval.OFFER_WORDS)
+            return
+        }
+        val challenge = JarvisRuntime.beginSignedApproval(item) ?: return
+        val key = try {
+            ApprovalKey.newSignature()
+        } catch (e: KeyPermanentlyInvalidatedException) {
+            JarvisRuntime.setNotice(SignedApproval.OFFER_AGAIN_WORDS)
+            return
+        } catch (e: Exception) {
+            JarvisRuntime.setNotice(SignedApproval.SIGN_FAILED)
+            return
+        }
+        val s = currentSecurity()
+        var result: BiometricGate.Signed? = null
+        val outcome = withOwnerCheck {
+            val signed = BiometricGate.sign(this, item, s.method, key)
+            result = signed
+            signed.outcome
+        }
+        when (val verdict = SecurityRules.afterApprovalCheck(s, outcome)) {
+            SecurityRules.Verdict.Go -> Unit
+            is SecurityRules.Verdict.Stop -> {
+                verdict.say?.let { JarvisRuntime.setNotice(it) }
+                return
+            }
+        }
+        val unlocked = result?.signature
+        if (unlocked == null) {
+            JarvisRuntime.setNotice(SignedApproval.SIGN_FAILED)
+            return
+        }
+        val der = try {
+            unlocked.update(
+                SignedApproval.signedMessage(
+                    item.id,
+                    item.action.orEmpty(),
+                    challenge.nonce,
+                    SignedApproval.wordsSha256(item),
+                ),
+            )
+            unlocked.sign()
+        } catch (e: java.security.GeneralSecurityException) {
+            JarvisRuntime.setNotice(SignedApproval.SIGN_FAILED)
+            return
+        }
+        JarvisRuntime.decideDetached(
+            item,
+            approve = true,
+            signature = SignedApproval.Signature(device, challenge.nonce, SignedApproval.b64url(der)),
+        )
     }
 
     private fun currentSecurity(): Security = JarvisRuntime.settings.security.value

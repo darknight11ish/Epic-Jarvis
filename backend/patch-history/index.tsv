@@ -6,6 +6,7 @@ appearance.patch	appearance/35a1001.patch	35a1001e2028fb245b79606eae6e1e45a8df17
 appearance.patch	appearance/647c8ad.patch	647c8ade8ab9f1d3ecc2107ceb89880d912d0f3b	2026-09-14T22:30:27+00:00	The backend route, written against the real jarvis_hud.py
 approval-expiry.patch	approval-expiry/ba8799f.patch	ba8799f4c6df6486a22a93b38d079fa9a66ed520	2026-09-24T00:01:50+00:00	Approvals: a countdown on every card, rush and risk on the HUD, one row shape
 approval-notice.patch	approval-notice/d2db37e.patch	d2db37e80b413ab3f2e7911b410b644c3c2491cc	2026-09-15T17:29:34+00:00	Approval notifications you can act on, and fix the CRLF that broke all 20 patches
+apps-in-projects.patch	apps-in-projects/6769786.patch	6769786fc7f27ea2d379c8d3d417589e39e7d12f	2026-09-29T03:03:54+00:00	Apps in Projects: the gate patch, tier and tables, tests for the new pieces
 asks-first.patch	asks-first/0088dd5.patch	0088dd526f1f34b64638a14d5281e8a08f6ddec5	2026-09-26T03:47:42+00:00	Gate notice for schedule_repeat: say that each run reads the owner's own servers
 asks-first.patch	asks-first/b8a2145.patch	b8a214597e0f2a6e71a6256dd3b8e2a3f61ca554	2026-09-26T02:38:37+00:00	Backend: repeats without a card, lights setting, "What asks first"
 auto-learn.patch	auto-learn/f3b3652.patch	f3b36529eb06a32c17a51a62d1993ca02863fd56	2026-09-26T07:10:08+00:00	Memory review, backend half: bugs B1-B15 and B17, improvements measured
@@ -25,6 +26,7 @@ chat-history.patch	chat-history/92cbd90.patch	92cbd906388bfa9a2b6b9c7f7377e621ae
 chat-history.patch	chat-history/6e8f817.patch	6e8f817a09aa25daba351ee5c77a9496b506137c	2026-09-24T14:27:53+00:00	Backend: keep chat history on the PC, encrypted (chat-history.patch)
 chatbot-routes.patch	chatbot-routes/59b73f8.patch	59b73f84de12bc9c9661fa7ef1620052d2437275	2026-09-28T02:09:55+00:00	Merge branch 'studio-chatbot-screens' into claude/jarvis-ai-assistant-research-ff37vy
 chatbot.patch	chatbot/8b95a55.patch	8b95a5550048e1a6ae397787b2f1ac8eef2e6ee5	2026-09-28T01:31:34+00:00	Chatbot driver, step 2: the Gemini website adapter (not usable from the apps yet)
+devices.patch	devices/bd55634.patch	bd55634d1d0bc149d4ae0236c443f90265db6e5f	2026-09-28T21:11:27+00:00	backend: devices.patch, before every token_ok=_token_ok; ship jarvis_devices.py
 email-send.patch	email-send/ab2eb89.patch	ab2eb8925786245dca22da666433ce25f1b22678	2026-09-25T22:40:42+00:00	Email sending: one approval card per email, the whole text on it (backend)
 extraction-wiring.patch	extraction-wiring/2641f6d.patch	2641f6d676ed75ad47d45e453c350baf9b163eab	2026-09-15T02:33:18+00:00	Routes to read, edit, forget and export what Jarvis has learned
 extraction-wiring.patch	extraction-wiring/35a1001.patch	35a1001e2028fb245b79606eae6e1e45a8df1750	2026-09-15T02:16:30+00:00	I invented a NameError, then reported it twice as a finding

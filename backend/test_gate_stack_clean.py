@@ -29,6 +29,7 @@ ON_EARLIER_LINES = (
     "chatbot.patch",
     "forget-range.patch",
     "devices.patch",
+    "apps-in-projects.patch",
 )
 
 failures = 0
@@ -54,7 +55,8 @@ if text is not None:
     start = text.find('"restore_backup",  # jarvis_backup.py')
     end = text.find("})", start)
     block = text[start:end]
-    for entry in ('"phone_notifications_read"', '"chatbot_session"', '"memory_forget_range"'):
+    for entry in ('"phone_notifications_read"', '"chatbot_session"', '"memory_forget_range"',
+                  '"app_merge_change"'):
         check(block.count(entry) == 1, f"{entry} is in the tier-ask set exactly once")
 
 print()
