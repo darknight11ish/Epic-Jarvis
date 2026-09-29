@@ -82,6 +82,65 @@ export const WORDS = {
   coding: "Coding",
 };
 
+/**
+ * The words of the "App" section (docs/APPS-IN-PROJECTS-DESIGN.md sections 1,
+ * 2, 3 and 5), kept apart from WORDS on purpose: WORDS is compared word for
+ * word with the shared contract file and the phone. When the backend's
+ * fixture carries these, point the test at it. The sentences that say how a
+ * merge ended are NOT here: the PC sends them (`app.merge.last.message`) and
+ * this page shows them as they come.
+ */
+export const APP_WORDS = {
+  section: "App",
+  type_web: "Web app",
+  type_android: "Android app (native)",
+  files_where: "Files: kept on this PC in Jarvis's apps folder.",
+  only_here: "This app's files are only on this PC.",
+  latest_version: "Latest version: {subject}, {date}",
+  versions: "{count} saved versions",
+  version_one: "1 saved version",
+  no_versions: "No saved version yet.",
+  tasks: "Open tasks",
+  tasks_empty: "No open tasks. A task is one change to the app that you look at first, then add or throw away.",
+  task_files: "{files} files, +{added} -{removed}",
+  task_files_one: "1 file, +{added} -{removed}",
+  task_nothing: "Nothing in it yet",
+  task_older: "made before another change - may not fit",
+  task_waiting: "waiting for your card",
+  task_open: "Open task",
+  start_task: "Start a task",
+  start_title: "What is the change?",
+  start_under: "Starting a task only makes an empty copy of the app to work in. Nothing runs and your app is not touched.",
+  git_missing: "This PC has no git, so the app's saved versions cannot be shown.",
+  back_project: "Back to the project",
+  task_files_title: "Files in this change",
+  task_diff_title: "The whole change",
+  task_diff_under: "Green lines are added, red lines are removed. This is everything that will be added to your app.",
+  task_diff_empty: "Nothing to show yet.",
+  merge: "Merge",
+  merge_how: "Approve the card that appears - it needs Windows Hello.",
+  merge_pasted: "You pasted this change in on your PC.",
+  merge_blocked_card: "A card for this app is already waiting - answer it first.",
+  discard: "Discard",
+  discard_q: "Throw this change away? It has not been added to your app. Nothing in your app changes.",
+  discard_waiting_q: "Throw this change away? The approval card waiting for it is withdrawn. Nothing in your app changes.",
+  paste: "Paste a change in",
+  paste_under: "Blocks that start with <<<FILE folder/name.txt>>> and end with <<<END>>>, or <<<DELETE folder/name.txt>>> to remove a file. They land only in this task - nothing reaches your app until you approve the merge card. On your PC only.",
+  paste_button: "Add to this task",
+  paste_empty: "Paste the change first.",
+  new_app: "An app Jarvis builds",
+  new_app_web: "An app Jarvis builds - web",
+  new_app_android: "An app Jarvis builds - native Android",
+  adopt_title: "Add an app I already have",
+  adopt_under: "These app folders are already in Jarvis's apps folder but have no project. Adding one only links it - nothing runs.",
+  adopt: "Add",
+  cant_run: "Jarvis cannot run this yet. Run it yourself and log the number.",
+  delete_app_project_q: "Delete the project \"{name}\"? Its benchmarks and every number logged go with it. The app's files stay on this PC and can be added back later. This cannot be undone.",
+  deleted_app_kept: "Deleted. The app's files stay on this PC and can be added back.",
+  app_project: "App",
+  open_tasks_meta: "{count} open",
+};
+
 /** `{name}` and friends filled in. */
 export function fill(template, values) {
   return String(template).replace(/\{(\w+)\}/g, (m, k) =>
@@ -225,11 +284,172 @@ export function readProject(p) {
     shareable: o.shareable === true,
     shareableWaiting: o.shareable_waiting === true,
     shareableLast: last ? text(last.message) : "",
+    app: o.app && typeof o.app === "object" ? readApp(o.app) : null,
     workList: wl ? { name: text(wl.name), title: text(wl.title) || text(wl.name) } : null,
     benchmarks: Number.isInteger(o.benchmarks) ? o.benchmarks : 0,
     benchList: Array.isArray(o.benchmark_list) ? o.benchmark_list.map(readBench) : [],
     max: o.max && typeof o.max === "object" ? o.max : {},
   };
+}
+
+const OUTCOMES = ["merged", "denied", "timed_out", "stale", "unsaved", "conflict",
+  "withdrawn", "refused", "failed"];
+
+/** A task in the list (design 7.1 "task summary"). */
+export function readTaskSummary(t) {
+  const o = t && typeof t === "object" ? t : {};
+  const n = (v) => (Number.isFinite(Number(v)) && Number(v) >= 0 ? Number(v) : 0);
+  return {
+    task: text(o.task),
+    title: text(o.title),
+    started: num(o.started),
+    source: o.source === "jarvis" || o.source === "pasted" ? o.source : "empty",
+    files: n(o.files),
+    added: n(o.added),
+    removed: n(o.removed),
+    olderMain: o.older_main === true,
+    waiting: o.waiting === true,
+  };
+}
+
+/**
+ * One task with its whole change (`GET .../app/tasks/<task>`, or the answer to
+ * pasting into it). `diff` is the whole text, never cut: it is shown as text
+ * and never stored or logged by this page.
+ */
+export function readTask(answer) {
+  const t = answer && typeof answer === "object" && answer.task && typeof answer.task === "object"
+    ? answer.task : answer;
+  const o = t && typeof t === "object" ? t : {};
+  return {
+    ...readTaskSummary(o),
+    list: Array.isArray(o.list)
+      ? o.list.filter((f) => f && text(f.path)).map((f) => ({
+        path: text(f.path), added: text(f.added), removed: text(f.removed) }))
+      : [],
+    diff: text(o.diff),
+    tooBig: o.too_big === true,
+    refused: text(o.refused),
+  };
+}
+
+/**
+ * A project's `app`: the full object (tasks is an array, `main`, `merge`) or
+ * the list's short one (`tasks` is a number, `merge_waiting`). Never trusts a
+ * shape it was not given.
+ */
+export function readApp(a) {
+  const o = a && typeof a === "object" ? a : null;
+  if (!o) return null;
+  const main = o.main && typeof o.main === "object" ? o.main : null;
+  const merge = o.merge && typeof o.merge === "object" ? o.merge : {};
+  const last = merge.last && typeof merge.last === "object" ? merge.last : null;
+  const full = Array.isArray(o.tasks);
+  const waiting = full ? text(merge.waiting) : (o.merge_waiting === true ? "yes" : "");
+  return {
+    full,
+    name: text(o.name),
+    type: o.type === "android" ? "android" : "web",
+    title: text(o.title),
+    gitOk: o.git_ok !== false,
+    said: text(o.said),
+    main: main ? {
+      head: text(main.head), subject: text(main.subject), at: num(main.at),
+      versions: Number.isInteger(main.versions) ? main.versions : 0 } : null,
+    tasks: full ? o.tasks.map(readTaskSummary).filter((t) => t.task) : [],
+    taskCount: full ? o.tasks.length : (Number.isInteger(o.tasks) ? o.tasks : 0),
+    mergeWaiting: waiting,
+    last: last ? {
+      task: text(last.task),
+      outcome: OUTCOMES.includes(last.outcome) ? last.outcome : "failed",
+      message: text(last.message), at: num(last.at) } : null,
+  };
+}
+
+/** GET /api/projects: the app folders that have no project yet. */
+export function readUnlinked(answer) {
+  const a = answer && Array.isArray(answer.unlinked_apps) ? answer.unlinked_apps : [];
+  return a.filter((x) => x && text(x.name)).map((x) => ({
+    name: text(x.name), type: x.type === "android" ? "android" : "web",
+    title: text(x.title) || text(x.name) }));
+}
+
+/** "Web app" or "Android app (native)". */
+export function appTypeWords(type) {
+  return type === "android" ? APP_WORDS.type_android : APP_WORDS.type_web;
+}
+
+/** "3 files, +41 -2" for a task row. */
+export function taskChange(t) {
+  if (!t.files) return APP_WORDS.task_nothing;
+  return fill(t.files === 1 ? APP_WORDS.task_files_one : APP_WORDS.task_files,
+    { files: t.files, added: t.added, removed: t.removed });
+}
+
+/** "Latest version: Jarvis: Add a dark mode, 3 Oct" and "7 saved versions". */
+export function versionLines(app) {
+  if (!app.gitOk) return [app.said || APP_WORDS.git_missing];
+  if (!app.main || !app.main.head) return [APP_WORDS.no_versions];
+  const n = app.main.versions;
+  return [
+    fill(APP_WORDS.latest_version, { subject: app.main.subject, date: shortDate(app.main.at) }),
+    n === 1 ? APP_WORDS.version_one : fill(APP_WORDS.versions, { count: n }),
+  ];
+}
+
+/**
+ * What Merge does for one task, as data: `{ok: true}`, or `{ok: false, why}`
+ * with a plain sentence (also what greys the button). A change that cannot be
+ * shown whole raises no card, so it is told why here instead.
+ */
+export function mergeOffer(app, t) {
+  if (t.waiting || app.mergeWaiting === t.task) return { ok: false, why: WORDS.waiting_card, waiting: true };
+  if (app.mergeWaiting) return { ok: false, why: APP_WORDS.merge_blocked_card };
+  if (t.refused) return { ok: false, why: t.refused };
+  return { ok: true, why: "" };
+}
+
+/** Which lines of a diff are added, removed, a hunk mark or a file header. */
+export function diffLineKind(line) {
+  if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("diff ")
+    || line.startsWith("index ") || line.startsWith("new file") || line.startsWith("deleted file")) return "meta";
+  if (line.startsWith("@@")) return "hunk";
+  if (line.startsWith("+")) return "add";
+  if (line.startsWith("-")) return "del";
+  return "ctx";
+}
+
+/** The body for "Start a task", or an error sentence. The PC checks it again. */
+export function taskTitleBody(raw) {
+  const title = String(raw || "").trim();
+  if (!title) return { error: "Give the task a title." };
+  if ([...title].length > 120) return { error: "A task title is at most 120 characters." };
+  return { body: { title } };
+}
+
+/**
+ * The body for pasting a change in, or an error sentence. Whether there are
+ * real <<<FILE>>> blocks in it is the PC's to say - it does.
+ */
+export function pasteBody(raw) {
+  const blocks = String(raw || "");
+  if (!blocks.trim()) return { error: APP_WORDS.paste_empty };
+  if ([...blocks].length > 2000000) return { error: "That paste is too big - split it into smaller changes." };
+  return { body: { blocks } };
+}
+
+/**
+ * The body for a new project that is an app: `choice` is "app-web",
+ * "app-android" or "adopt:<folder>"; null for anything else.
+ */
+export function appProjectBody(name, choice) {
+  const c = String(choice || "");
+  if (c === "app-web" || c === "app-android") {
+    return { name: String(name || "").trim(), kind: "coding",
+      app: { type: c === "app-android" ? "android" : "web" } };
+  }
+  if (c.startsWith("adopt:")) return { kind: "coding", app: { adopt: c.slice(6) } };
+  return null;
 }
 
 /**
@@ -250,6 +470,7 @@ export function readList(answer) {
     available: true,
     why: "",
     projects: Array.isArray(answer.projects) ? answer.projects.map(readProject).filter((p) => p.id) : [],
+    unlinked: readUnlinked(answer),
     hidden: false,
     hiddenCount: 0,
     empty: text(answer.empty),
@@ -259,9 +480,16 @@ export function readList(answer) {
 
 /** The lines under a project's name in the list. */
 export function projectMeta(p) {
-  const kind = p.kind === "coding" ? WORDS.coding : WORDS.life;
+  const kind = p.app ? APP_WORDS.app_project : (p.kind === "coding" ? WORDS.coding : WORDS.life);
   const n = p.benchmarks;
-  return [`${kind} · ${n} ${n === 1 ? "benchmark" : "benchmarks"}`];
+  const lines = [`${kind} · ${n} ${n === 1 ? "benchmark" : "benchmarks"}`];
+  if (p.app) {
+    const bits = [];
+    if (p.app.taskCount) bits.push(fill(APP_WORDS.open_tasks_meta, { count: p.app.taskCount }));
+    if (p.app.mergeWaiting) bits.push(APP_WORDS.task_waiting);
+    if (bits.length) lines.push(`${APP_WORDS.app_project} · ${bits.join(" · ")}`);
+  }
+  return lines;
 }
 
 /** The body of the notes box: one line per note, blanks dropped. */

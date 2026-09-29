@@ -647,6 +647,7 @@ mod tests {
             write_path("app_task_start", Some(&p), None, None, None).unwrap(),
             format!("/api/projects/{p}/app/tasks")
         );
+        let task_path = format!("/api/projects/{p}/app/tasks/{t}");
         for (action, tail) in [
             ("app_task_files", "files"),
             ("app_task_merge", "merge"),
@@ -654,7 +655,7 @@ mod tests {
         ] {
             assert_eq!(
                 write_path(action, Some(&p), None, None, Some(&t)).unwrap(),
-                format!("/api/projects/{p}/app/tasks/{t}/{tail}")
+                task_path.clone() + "/" + tail
             );
             assert!(write_path(action, Some(&p), None, None, None).is_err());
             for bad in [
