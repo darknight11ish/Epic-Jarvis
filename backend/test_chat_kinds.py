@@ -222,6 +222,23 @@ def t_crisis_title():
               rows["conv-phrase-009"]["title"] == H.CRISIS_TITLE, rows)
 
 
+def t_a_crisis_chat_is_not_continued():
+    """The second chat audit (2026-09-28): a chat titled "A difficult moment"
+    is kept but not carried on - its words would go back to the model."""
+    if H.AESGCM is None:
+        return check("SKIP - the cryptography package is not installed", True)
+    log = new_log()
+    turn(log, "conv-crisis-101", "I feel like I can't go on", crisis=True)
+    conv = log.get("conv-crisis-101")
+    check("the chat is kept and titled neutrally", conv["title"] == H.CRISIS_TITLE
+          and len(conv["turns"]) == 2, conv["title"])
+    check("but it cannot be continued, with the PC's own plain reason",
+          conv["continuable"] is False and conv["continue_why"] == H.CRISIS_CONTINUE_WHY
+          and "start a new chat" in conv["continue_why"], conv)
+    turn(log, "conv-plain-0102", "help me plan dinner")
+    check("an ordinary chat still can", log.get("conv-plain-0102")["continuable"] is True)
+
+
 def t_title_prefers_the_owners_words():
     if H.AESGCM is None:
         return check("SKIP - the cryptography package is not installed", True)

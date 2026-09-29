@@ -56,7 +56,7 @@
       "label": "31 August to 1 September · 2 messages",
       "spills": true,
       "started": 1788213600,
-      "ticked": true,
+      "ticked": false,
       "title": "Help me write a poem",
       "turns": 2,
       "updated": 1788249600
@@ -140,7 +140,7 @@
       "label": "31 August to 1 September · 2 messages",
       "spills": true,
       "started": 1788213600,
-      "ticked": true,
+      "ticked": false,
       "title": "Help me write a poem",
       "turns": 2,
       "updated": 1788249600
@@ -681,7 +681,7 @@
   "none_ticked": "Tick at least one thing to forget.",
   "pinned": "Always kept in mind",
   "show": "Show the list",
-  "spills": "Also has messages from outside these days - the whole chat is deleted.",
+  "spills": "Also has messages from outside these days. Tick it only if the whole chat should go.",
   "stale": "The connection to Jarvis is catching up, so nothing can be sent until it does.",
   "support": "A customer-support chat record - kept unless you tick it.",
   "title": "Forget a time frame",

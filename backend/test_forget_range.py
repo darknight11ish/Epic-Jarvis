@@ -306,6 +306,12 @@ def t_the_list():
     spills = {c["id"]: c["spills"] for c in p["chats"]}
     check("the one that started the day before is marked: the whole chat goes",
           spills == {"conv-spills-0002": True, "conv-inside-0001": False}, spills)
+    ticks = {c["id"]: c["ticked"] for c in p["chats"]}
+    check("a chat with messages from outside the days starts UNticked (finding 10, "
+          "2026-09-28); one wholly inside starts ticked",
+          ticks == {"conv-spills-0002": False, "conv-inside-0001": True}, ticks)
+    check("its warning says to tick it only if the whole chat should go",
+          "Tick it only if the whole chat should go" in FR.WORDS["spills"])
     first = p["chats"][1]
     check("a chat's title, days and messages", first["title"] == "Plan the trip to Rome"
           and first["label"] == "4 September · 2 messages" and first["turns"] == 2, first)

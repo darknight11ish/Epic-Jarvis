@@ -225,6 +225,62 @@ def t_temporary_chat_detects_a_game():
             sys.modules["jarvis_intake"] = real
 
 
+def t_a_game_stays_a_game_when_the_window_slides():
+    """The second chat audit (2026-09-28), finding 1, reproduced: the apps
+    re-send at most 10 pairs and then cut to the newest 6, so about 11
+    exchanges in, the message that started the game was no longer in the
+    request and the PC stopped treating the chat as temporary (kept in
+    History, memory recalled into the role-play, facts learned from it).
+    The PC now remembers the conversation id."""
+    src = _hud()
+    if src is None:
+        return
+    fn = _temporary_chat_fn(src)
+    I.forget_games_for_tests()
+    try:
+        cid = "conv-game-window-1"
+        history = mk("let's play a text adventure")
+        history.append({"role": "assistant", "content": "You stand before a door."})
+        flags = []
+        for move in range(1, 16):
+            history += mk(f"I go through door {move}")
+            # The apps' own trim: only the newest 6 messages once past 10 pairs.
+            window = history if len(history) <= 20 else history[-6:]
+            flags.append(fn({"messages": window, "conversation_id": cid}))
+            history.append({"role": "assistant", "content": f"Room {move}."})
+        check("moves 1 to 15 of a text adventure: temporary on every one of them",
+              all(flags), flags)
+        check("the message that started it really had slid out of the last request",
+              not any("text adventure" in str(m["content"]) for m in window))
+        check("the same window with another conversation id is an ordinary chat",
+              fn({"messages": window, "conversation_id": "conv-not-game-9"}) is False)
+        check("the same window with no conversation id is judged on its words alone",
+              fn({"messages": window}) is False)
+        check("an id that is not one is ignored, not an error",
+              fn({"messages": window, "conversation_id": "x"}) is False
+              and fn({"messages": window, "conversation_id": 12345}) is False)
+        check("a game is remembered by its id only (no words kept)",
+              I.is_game_conversation(cid) and not I.is_game_conversation("conv-game-window-2"))
+    finally:
+        I.forget_games_for_tests()
+
+
+def t_the_game_memory_is_bounded():
+    I.forget_games_for_tests()
+    try:
+        for n in range(I._GAME_CIDS_MAX + 20):
+            I.note_game(f"conv-bound-{n:06d}")
+        check("the oldest are forgotten, the newest kept",
+              not I.is_game_conversation("conv-bound-000000")
+              and I.is_game_conversation(f"conv-bound-{I._GAME_CIDS_MAX + 19:06d}"))
+        check("temporary_body: the flag, a game and a plain chat",
+              I.temporary_body({"temporary": True}) is True
+              and I.temporary_body({"messages": mk("hello"), "conversation_id": "conv-plain-77"})
+              is False and I.temporary_body("x") is False)
+    finally:
+        I.forget_games_for_tests()
+
+
 def _finally_snippet(src):
     frag = _stack.fragment_with(src, "jarvis_chat_log.record_turn(")
     a = next(i for i, line in enumerate(frag) if line.strip() == '_activity("idle")')

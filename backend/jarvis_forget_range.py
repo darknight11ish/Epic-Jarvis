@@ -139,7 +139,7 @@ WORDS = {
                "approve it - saying yes out loud does not.",
     "undo": "Undo",
     "undo_left": "{minutes} min left to undo",
-    "spills": "Also has messages from outside these days - the whole chat is deleted.",
+    "spills": "Also has messages from outside these days. Tick it only if the whole chat should go.",
     # The owner, 2026-09-28 ("Chats, after the chat audit"): "Forget a time
     # frame" asks before removing a customer-support chat's record. The
     # simplest honest way: it is listed like every chat, but NOT ticked to
@@ -434,8 +434,12 @@ def _chat_item(c: dict, year: int) -> dict:
             "updated": int(c["updated"]), "turns": int(c["turns"]),
             "in_frame": int(c["in_frame"]), "spills": bool(c["spills"]),
             "label": _chat_label(c, year), "kind": kind,
-            # A support record starts unticked in both apps (WORDS["support"]).
-            "ticked": kind != "support"}
+            # A support record starts unticked in both apps (WORDS["support"]),
+            # and so does a chat with messages from outside the days: since
+            # "Continue this chat" a chat can span weeks, and one message
+            # inside the days would delete all of it (the second chat audit,
+            # 2026-09-28, finding 10).
+            "ticked": kind != "support" and not bool(c["spills"])}
 
 
 def _pinned(mem) -> set:

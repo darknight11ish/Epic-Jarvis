@@ -222,7 +222,9 @@ LOST_CODE = ("Write this down or save it somewhere safe now - Jarvis will not sh
              "opened again; there is no other way in.")
 ERASE_LIMIT = ("\"Erase the words\" cannot reach into an older backup: an erased fact's "
                "original words may still be readable in a backup kept from before it was "
-               "erased, until that backup ages out of the last {keep} kept.").format(keep=KEEP)
+               "erased, until that backup ages out of the last {keep} kept. A chat you "
+               "delete is the same: it can still be in an older backup until that backup "
+               "ages out.").format(keep=KEEP)
 
 
 class WrongCode(Exception):

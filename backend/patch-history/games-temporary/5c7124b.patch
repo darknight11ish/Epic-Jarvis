@@ -33,7 +33,7 @@
                      LEARNER.offer(body.get("messages") or [], origin="owner",
                                    conversation_id=body.get("conversation_id"))
              except Exception:
-@@ -1314,7 +1326,27 @@
+@@ -1314,7 +1326,23 @@
  # name (jarvis_events._hud_has), so an app offers the mode only on a PC that
  # has it.
  def _temporary_chat(body) -> bool:
@@ -49,14 +49,10 @@
 +    # or scenario must never be filed as a fact about the owner. Checked on
 +    # the owner's own words only (jarvis_intake.game_or_roleplay); without
 +    # that module, or on any error, not detected - exactly as before this
-+    # patch. The conversation id goes too: the PC remembers a conversation
-+    # it has seen turn into a game (the second chat audit, 2026-09-28), so
-+    # it stays a game after the apps' re-sent window has slid past the
-+    # message that started it.
++    # patch.
 +    try:
 +        import jarvis_intake
-+        return bool(jarvis_intake.game_or_roleplay(body.get("messages") or [],
-+                                                   body.get("conversation_id")))
++        return bool(jarvis_intake.game_or_roleplay(body.get("messages") or []))
 +    except Exception:
 +        return False
 

@@ -322,11 +322,11 @@
 +    # instead of every one becoming "extracted", and a fact saved without a
 +    # card (accept_auto) is "auto", with where it came from in its meta.
 +    fid = store.add_fact(row["text"], source=_fact_source(row), supersedes=supersedes,
-+                         meta=_fact_meta(row, c))
++                         meta=_fact_meta(row))
      c.execute("UPDATE proposals SET state='accepted', decided=?, fact_id=? WHERE id=?",
                (time.time(), fid, row["id"]))
      return fid
-@@ -608,3 +611,88 @@
+@@ -608,3 +611,67 @@
                f"Nothing was sent there.", file=sys.stderr)
          return []
      return _propose_unchecked(*args, **kwargs)
@@ -387,31 +387,10 @@
 +    return src
 +
 +
-+def _fact_meta(row, c=None) -> dict:
++def _fact_meta(row) -> dict:
 +    meta = {"confidence": row.get("confidence"), "proposal_id": row.get("id")}
 +    extra = row.get("_auto")
 +    if isinstance(extra, dict):
 +        meta.update(extra)
 +        meta["auto"] = True
-+    elif c is not None:
-+        # A card the owner accepted BY HAND keeps the link to the chat it
-+        # came from, like an automatically saved fact does (the second chat
-+        # audit, 2026-09-28): the sensitive facts are the ones that wait for
-+        # a card, and "Erase the words" and the list of what a chat taught
-+        # need the link. The chat is noted with the card (jarvis_auto_learn.
-+        # _note_card); a card with no note, or a database without the
-+        # table, simply has none.
-+        cid = _proposal_chat(c, row.get("id"))
-+        if cid:
-+            meta["conversation_id"] = cid
 +    return meta
-+
-+
-+def _proposal_chat(c, proposal_id) -> Optional[str]:
-+    try:
-+        got = c.execute("SELECT conversation_id FROM auto_learn_notes WHERE proposal_id=?",
-+                        (int(proposal_id),)).fetchone()
-+    except Exception:
-+        return None
-+    cid = got[0] if got else None
-+    return cid if isinstance(cid, str) and cid else None

@@ -132,7 +132,7 @@ def _extract_stand_in(M):
     body = [line for line in src.splitlines()
             if line.startswith(("RETIRE_SOURCE = ", "AUTO_SOURCES = ", "MERGE_SOURCE = "))]
     for name in ("_accept_retire", "_accept_merge", "_accept", "accept_auto", "_fact_source",
-                 "_fact_meta", "propose_verbatim"):
+                 "_fact_meta", "_proposal_chat", "propose_verbatim"):
         t = _stack.function_text(src, name)
         if t is None:
             raise RuntimeError(f"the stack does not write exactly one {name}()")

@@ -198,6 +198,9 @@ DEVICES = ("desktop", "hud", "phone")
 KEEP_DAYS = (0, 30, 90, 365)
 VOICE_WINDOW = 600          # a transcript counts as voice for 10 minutes
 LIVE_MAX = 200              # the live-turn registry holds this many turns
+#: The most user turns of one continued chat put back in the registry from
+#: its own record (see ChatLog._rehydrate). More than the apps ever re-send.
+REHYDRATE_MAX = 60
 TITLE_CHARS = 80
 #: temporary-chat.patch looks for this before it hands this module a
 #: temporary chat: a jarvis_chat_log.py without it would keep one.
@@ -389,6 +392,16 @@ CONTINUE_WHY = {
 }
 
 
+#: Said, in place of the button, under an opened "A difficult moment" chat
+#: (the second chat audit, 2026-09-28: "gate on crisis chats"). A crisis turn
+#: is never learned from or counted, and the PC puts no such chat's words back
+#: in its registry (ChatLog._rehydrate); carrying it on would re-send those
+#: words to the model, so the apps offer a fresh start instead. Sent by the PC
+#: as `continue_why`, so it is not in the shared per-kind contract.
+CRISIS_CONTINUE_WHY = ("This chat is kept as your own record. It is not carried on - start a "
+                       "new chat any time, and nothing from that moment is read again.")
+
+
 def _row(cid, title, started, updated, turns, device, voice, outside, kind, project) -> dict:
     """One History list row, as GET /api/history and the search send it."""
     return {"id": cid, "title": title,
@@ -577,6 +590,11 @@ class ChatLog:
         # _taint only ever holds conversations that are in here.
         self._seen: "OrderedDict" = OrderedDict()   # cid -> True
         self._live_seq = 0
+        # conversation id -> {"seq", "erased"}: turns re-registered from the
+        # record (see _rehydrate) up to this seq were already learned from
+        # before the owner Forgot or Erased a fact of the chat, so the
+        # learner must never learn from them again (jarvis_auto_learn.hushed).
+        self._hush_floor: dict = {}
         self._schema_ok = False       # _migrate has run on this file (kind, project)
 
     # -- settings ---------------------------------------------------------
@@ -759,6 +777,8 @@ class ChatLog:
         for cid in ids:
             c.execute("DELETE FROM turns WHERE conversation_id=?", (cid,))
             c.execute("DELETE FROM conversations WHERE id=?", (cid,))
+            c.execute("DELETE FROM meta WHERE k=?", (self._hush_key(cid),))
+            self._hush_floor.pop(cid, None)
 
     def sweep(self) -> int:
         """Delete conversations whose last turn is older than keep_days.
@@ -873,6 +893,7 @@ class ChatLog:
         while len(self._seen) > LIVE_MAX:
             old, _ = self._seen.popitem(last=False)
             self._taint.pop(old, None)
+            self._hush_floor.pop(old, None)
             for key in [k for k in self._live if k[0] == old]:
                 del self._live[key]
 
@@ -928,6 +949,141 @@ class ChatLog:
         self._met(cid)
         if tainted:
             self._taint[cid] = 0
+        self._rehydrate(cid)
+
+    def _rehydrate(self, cid) -> None:
+        """A conversation this process meets for the first time, and the PC
+        already holds (after a restart, or "Continue this chat" on a chat the
+        registry has forgotten): put the owner's own typed and spoken
+        messages of it back in the live-turn registry, from the encrypted
+        record.
+
+        Why (the owner, 2026-09-28, after the second chat audit): the apps
+        re-send earlier messages with every question, and automatic learning
+        saves a fact only from messages this PC saw arrive live. A restart
+        wiped the registry, so after Continue every new fact waited as a card
+        for about ten questions. The PC's own record is as good as having
+        seen the message: it wrote those words itself.
+
+        Only what the record vouches for: user rows tagged "typed" or "voice"
+        (never shared, pasted, clipboard, picture, chatbot, support, imported
+        or tool text), with the voice check's facts kept beside a spoken one,
+        in a chat of a kind the apps may continue, and never in a chat titled
+        "A difficult moment". The outside-text mark is not decided here: it
+        is the taint _seed just worked out from the same record, and every
+        re-registered turn of a tainted chat is tainted. A message the app
+        re-sends with other words matches nothing (the registry is keyed by
+        the words' hash), so it is a card, as before. Best effort: no key,
+        no record or any error re-registers nothing, which is the old
+        behaviour. Under self._lock."""
+        try:
+            if not self.db_path.exists():
+                return
+            with closing(self._connect()) as c:
+                conv = c.execute("SELECT title, COALESCE(kind, 'chat') FROM conversations"
+                                 " WHERE id=?", (cid,)).fetchone()
+                if conv is None or conv[1] not in CONTINUABLE:
+                    return
+                rows = c.execute(
+                    "SELECT idx, at, provenance, device, read_outside, voice_check, text"
+                    " FROM turns WHERE conversation_id=? AND role='user'"
+                    " AND provenance IN ('typed', 'voice') ORDER BY idx DESC LIMIT ?",
+                    (cid, REHYDRATE_MAX)).fetchall()
+                hush = self._hush_read(c, cid)
+            if not rows:
+                return
+            aead = self._cipher()
+            if self._title(aead, cid, conv[0]) == CRISIS_TITLE:
+                return
+            floor_seq = None
+            for idx, at, prov, device, outside, vc, blob in reversed(rows):
+                try:
+                    text = self._open(aead, blob, self._aad(cid, idx)).decode("utf-8")
+                except Exception:
+                    continue
+                if not _norm(text):
+                    continue
+                voice_check = None
+                if prov == "voice" and vc:
+                    try:
+                        got = json.loads(vc)
+                        voice_check = got if isinstance(got, dict) else None
+                    except ValueError:
+                        voice_check = None
+                self._live_seq += 1
+                key = (cid, _hash(text))
+                self._live.pop(key, None)
+                self._live[key] = {"conversation_id": cid, "message_hash": key[1],
+                                   "provenance": prov, "voice_check": voice_check,
+                                   "read_outside": bool(outside),
+                                   "device": device if device in DEVICES else "unknown",
+                                   "at": float(at or 0), "seq": self._live_seq,
+                                   "from_record": True}
+                if hush is not None and idx <= hush["upto"]:
+                    floor_seq = self._live_seq
+            if floor_seq is not None:
+                self._hush_floor[cid] = {"seq": floor_seq, "erased": hush["erased"]}
+            while len(self._live) > LIVE_MAX:
+                self._live.popitem(last=False)
+        except Exception:
+            return
+
+    @staticmethod
+    def _hush_key(cid: str) -> str:
+        return "hush:" + cid
+
+    def _hush_read(self, c, cid: str):
+        """{"upto": last turn number, "erased": bool} or None."""
+        row = c.execute("SELECT v FROM meta WHERE k=?", (self._hush_key(cid),)).fetchone()
+        if row is None:
+            return None
+        try:
+            d = json.loads(bytes(row[0]).decode("utf-8"))
+            upto = d["upto"]
+            if isinstance(upto, bool) or not isinstance(upto, int):
+                return None
+            return {"upto": upto, "erased": bool(d.get("erased"))}
+        except Exception:
+            return None
+
+    def note_hush(self, cid, erased: bool = False) -> None:
+        """The owner Forgot or Erased a fact that was said in `cid`
+        (jarvis_auto_learn.forgotten_in): keep, in the record itself, that
+        every message of it kept so far was already learned from - numbers
+        only, never words. After a restart and "Continue this chat" those
+        messages come back into the registry (_rehydrate), and without this
+        the learner would propose the forgotten fact again. Nothing to keep
+        for a chat that is not in the record (a temporary chat, history off).
+        Never raises."""
+        try:
+            if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
+                return
+            with self._lock, closing(self._connect()) as c:
+                last = c.execute("SELECT MAX(idx) FROM turns WHERE conversation_id=?"
+                                 " AND role='user'", (cid,)).fetchone()
+                if last is None or last[0] is None:
+                    return
+                prev = self._hush_read(c, cid) or {"upto": -1, "erased": False}
+                new = {"upto": max(int(last[0]), prev["upto"]),
+                       "erased": bool(erased or prev["erased"])}
+                with c:
+                    c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
+                              (self._hush_key(cid), json.dumps(new).encode("utf-8")))
+        except Exception:
+            pass
+
+    def hush_floor(self, cid) -> Optional[dict]:
+        """{"seq", "erased"} - registry turns of `cid` up to `seq` were
+        already learned from before a Forget or Erase - or None."""
+        with self._lock:
+            got = self._hush_floor.get(cid)
+            return dict(got) if got else None
+
+    def live_upto(self, cid) -> Optional[int]:
+        """The newest registry seq of `cid`, or None when it has no turn there."""
+        with self._lock:
+            seqs = [e["seq"] for (c, _h), e in self._live.items() if c == cid]
+            return max(seqs) if seqs else None
 
     def live_turn(self, conversation_id, text) -> Optional[dict]:
         """The registry's entry for this message in this conversation, or
@@ -1313,7 +1469,8 @@ class ChatLog:
         """The whole conversation, or None if there is no such one. Raises
         KeyUnavailable when it cannot be opened. `kind` says what it is,
         `continuable` whether the apps may offer "Continue this chat" on it
-        (CONTINUABLE), and `continue_why` why not when they may not."""
+        (CONTINUABLE, and not a chat titled "A difficult moment"), and
+        `continue_why` why not when they may not."""
         self._housekeeping()
         if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
             return None
@@ -1345,12 +1502,15 @@ class ChatLog:
                          answer_kept=bool(kept))
             turns.append(t)
         kind = conv[1] if conv[1] in KINDS else "chat"
-        return {"id": cid, "title": self._title(aead, cid, conv[0]),
+        title = self._title(aead, cid, conv[0])
+        crisis = kind in CONTINUABLE and title == CRISIS_TITLE
+        return {"id": cid, "title": title,
                 "tainted": any(bool(r[4]) for r in rows), "turns": turns,
                 "kind": kind, "project": conv[2] or None,
                 "started": int(conv[3] or 0), "updated": int(conv[4] or 0),
-                "continuable": kind in CONTINUABLE,
-                "continue_why": "" if kind in CONTINUABLE else CONTINUE_WHY[kind]}
+                "continuable": kind in CONTINUABLE and not crisis,
+                "continue_why": (CRISIS_CONTINUE_WHY if crisis
+                                 else "" if kind in CONTINUABLE else CONTINUE_WHY[kind])}
 
     def search(self, query, limit=SEARCH_DEFAULT) -> dict:
         """Search what was said in the kept conversations (GET
@@ -1599,6 +1759,10 @@ class ChatLog:
                     turns = c.execute(f"SELECT {self._TURN_COLS} FROM turns"
                                       " WHERE conversation_id=? ORDER BY idx", (cid,)).fetchall()
                     held[cid] = {"conversation": tuple(conv), "turns": [tuple(t) for t in turns]}
+                    hush = c.execute("SELECT v FROM meta WHERE k=?",
+                                     (self._hush_key(cid),)).fetchone()
+                    if hush is not None:
+                        held[cid]["hush"] = bytes(hush[0])
                     self._drop(c, [cid])
         if held:
             self._deleted()
@@ -1630,6 +1794,10 @@ class ChatLog:
     def _put_one(self, c, cid: str, h: dict) -> None:
         conv = h["conversation"]
         turns = h["turns"]
+        if isinstance(h.get("hush"), (bytes, bytearray)):
+            # "Already learned from before a Forget" goes back with the chat.
+            c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
+                      (self._hush_key(cid), bytes(h["hush"])))
         marks = ",".join("?" * 11)
         now_conv = c.execute("SELECT updated FROM conversations WHERE id=?", (cid,)).fetchone()
         if now_conv is None:
@@ -1702,6 +1870,18 @@ def live_turn(conversation_id, text) -> Optional[dict]:
     """For jarvis_auto_learn: did this PC see this message arrive live, in
     this conversation, and with what provenance? None if not."""
     return _log().live_turn(conversation_id, text)
+
+
+def note_hush(conversation_id, erased: bool = False) -> None:
+    _log().note_hush(conversation_id, erased)
+
+
+def hush_floor(conversation_id) -> Optional[dict]:
+    return _log().hush_floor(conversation_id)
+
+
+def live_upto(conversation_id) -> Optional[int]:
+    return _log().live_upto(conversation_id)
 
 
 def live_turn_any(text) -> Optional[dict]:

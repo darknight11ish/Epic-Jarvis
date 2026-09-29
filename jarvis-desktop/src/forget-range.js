@@ -42,7 +42,7 @@ export const WORDS = Object.freeze({
   none_ticked: "Tick at least one thing to forget.",
   pinned: "Always kept in mind",
   show: "Show the list",
-  spills: "Also has messages from outside these days - the whole chat is deleted.",
+  spills: "Also has messages from outside these days. Tick it only if the whole chat should go.",
   stale: "The connection to Jarvis is catching up, so nothing can be sent until it does.",
   support: "A customer-support chat record - kept unless you tick it.",
   title: "Forget a time frame",
@@ -147,7 +147,7 @@ export function readPreview(v) {
       // starts ticked - a customer-support record does not (the owner:
       // "Forget a time frame" asks before removing a support chat).
       kind: ["chat", "live", "support", "chatbot", "compare"].includes(x.kind) ? x.kind : "chat",
-      ticked: x.ticked !== false && x.kind !== "support",
+      ticked: x.ticked !== false && x.kind !== "support" && x.spills !== true,
     }));
   const counts = v.counts && typeof v.counts === "object" ? v.counts : {};
   return {

@@ -3704,7 +3704,7 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None,
     # jarvis_hud.py's own _temporary_chat(body) makes; needed here for
     # "from now on ..." (2026-09-27), which keeps a temporary chat's style
     # change in that chat only, never written to manner.json.
-    temporary = isinstance(body, dict) and body.get("temporary") is True
+    temporary = _temporary_body(body)
     text = newest_own_words(body)
     res = None if text is None else answer(text, sched=sched, now=now,
                                            conversation=conversation, seen=seen,
@@ -3726,6 +3726,21 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None,
             pass
         res.reply = in_manner(res.reply, manner)
     return res
+
+
+def _temporary_body(body) -> bool:
+    """Is this request a temporary chat? `temporary: true`, or a game or
+    role-play the PC has seen in this conversation - the same test the chat
+    route makes (jarvis_hud._temporary_chat, games-temporary.patch). This
+    path used to read the flag alone, so in a role-play chat "where is my
+    passport" was answered from saved memory and "from now on, be plainer"
+    was written to manner.json for good (the second chat audit,
+    2026-09-28, finding 7, reproduced). Without jarvis_intake: the flag."""
+    try:
+        import jarvis_intake
+        return bool(jarvis_intake.temporary_body(body))
+    except Exception:
+        return isinstance(body, dict) and body.get("temporary") is True
 
 
 def _forget_set(sched, conversation) -> None:

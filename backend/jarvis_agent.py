@@ -5017,7 +5017,8 @@ def _looks_temporary(request) -> bool:
         return True
     try:
         import jarvis_intake
-        return bool(jarvis_intake.game_or_roleplay(request.get("messages") or []))
+        return bool(jarvis_intake.game_or_roleplay(request.get("messages") or [],
+                                                   request.get("conversation_id")))
     except Exception:
         return False
 

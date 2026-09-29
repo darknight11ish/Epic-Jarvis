@@ -62,7 +62,7 @@ object ForgetRange {
         "none_ticked" to "Tick at least one thing to forget.",
         "pinned" to "Always kept in mind",
         "show" to "Show the list",
-        "spills" to "Also has messages from outside these days - the whole chat is deleted.",
+        "spills" to "Also has messages from outside these days. Tick it only if the whole chat should go.",
         "stale" to "The connection to Jarvis is catching up, so nothing can be sent until it does.",
         "support" to "A customer-support chat record - kept unless you tick it.",
         "title" to "Forget a time frame",
@@ -225,11 +225,13 @@ object ForgetRange {
         val chats = o.list("chats").mapNotNull { x ->
             val id = x.text("id") ?: return@mapNotNull null
             val kind = x.text("kind")?.takeIf { it in ChatLog.KINDS } ?: "chat"
-            // A support record starts unticked even from a PC that sent no
-            // `ticked`; an ordinary chat starts ticked unless the PC says not.
+            // A support record, or a chat with messages from outside the
+            // days, starts unticked even from a PC that sent no `ticked`; an
+            // ordinary chat starts ticked unless the PC says not.
+            val spills = x.flag("spills")
             val ticked = (x["ticked"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull != false &&
-                kind != "support"
-            Chat(id, x.text("title").orEmpty(), x.text("label").orEmpty(), x.flag("spills"), kind, ticked)
+                kind != "support" && !spills
+            Chat(id, x.text("title").orEmpty(), x.text("label").orEmpty(), spills, kind, ticked)
         }
         return Preview(
             available = true,
