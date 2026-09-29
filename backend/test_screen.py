@@ -847,6 +847,24 @@ def t_picture_reader_words_make_the_turn_a_screen_read():
           info["read"] is True and "login form" in info["text"], info)
 
 
+def t_a_look_mark_counts_only_from_this_pc():
+    def body():
+        return {"messages": [{"role": "user", "content": "hi", "screen": "look"},
+                             {"role": "user", "content": "and this", "screen": "phone"}]}
+    b = body()
+    check("from this PC (loopback) the look mark stays", SC.drop_remote_look_marks(b, "127.0.0.1") == 0
+          and b["messages"][0]["screen"] == "look")
+    b = body()
+    n = SC.drop_remote_look_marks(b, "100.64.1.2", "100.64.1.9")
+    check("from another device the look mark comes off, in place", n == 1
+          and "screen" not in b["messages"][0], b)
+    check("...and the phone's own mark is left alone", b["messages"][1]["screen"] == "phone")
+    b = body()
+    check("an address that cannot be read is NOT this PC (fails the safe way)",
+          SC.drop_remote_look_marks(b, "", None) == 1 and "screen" not in b["messages"][0])
+    check("a body that is not a dict never raises", SC.drop_remote_look_marks(None, "1.2.3.4") == 0)
+
+
 def t_a_failed_phone_read_drops_the_screen_parts():
     msgs = [{"role": "user", "content": [{"type": "text", "text": "hi"},
                                          {"type": "screen_text", "text": "secret words"}]}]

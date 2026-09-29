@@ -21,6 +21,29 @@
      except Exception:
          return False
  
+@@ -2831,6 +2845,22 @@
+         # the end, read it. `_history` is what that record needs.
+         messages = _chat_client_fields_off(messages)
+         _history = {"turn": None, "at": time.time()}
++        # screen.patch: a `screen: "look"` mark uses up the look THIS PC holds,
++        # so it counts only when the request comes from this PC. From any
++        # other device it comes off the messages here, before the turn reads
++        # it (jarvis_screen.drop_remote_look_marks), and the turn is an
++        # ordinary one. `body` is the object the turn reads its marks from.
++        try:
++            import jarvis_screen
++            _lp = None
++            try:
++                _lp = self.connection.getsockname()[0]
++            except Exception:
++                pass
++            jarvis_screen.drop_remote_look_marks(
++                body, (getattr(self, "client_address", None) or ("",))[0], _lp)
++        except Exception:
++            pass
+         # schedule.patch: timers, alarms, reminders and the to-do list are
+         # answered WITHOUT the model (the owner's decision, 2026-09-25), so
+         # they work when the model is slow, unloaded or asleep. A sentence
 @@ -3473,6 +3487,22 @@
      except Exception as exc:
          print(f"  inbox      NOT ON ({type(exc).__name__}) - Inbox tidy is off")

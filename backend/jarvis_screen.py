@@ -1766,6 +1766,27 @@ def is_local(peer, local=None) -> bool:
         return False
 
 
+def drop_remote_look_marks(body, peer, local=None) -> int:
+    """A `screen: "look"` mark on a chat message uses up the look THIS PC holds,
+    so it counts only from this PC (looking is PC-only, LOCAL_DOS). From any
+    other device the mark is taken off the request's messages in place, before
+    the turn reads it, and the turn goes on as an ordinary one. The phone's own
+    marks ("phone", and its screen_text part) are not touched. Returns how many
+    marks were removed; never raises."""
+    try:
+        if is_local(peer, local):
+            return 0
+        n = 0
+        msgs = body.get("messages") if isinstance(body, dict) else None
+        for m in (msgs if isinstance(msgs, list) else []):
+            if isinstance(m, dict) and m.get("screen") == "look":
+                m.pop("screen", None)
+                n += 1
+        return n
+    except Exception:
+        return 0
+
+
 def _flat(extra: Optional[dict] = None) -> dict:
     st = ENGINE.status()
     out = dict(st)
