@@ -16997,7 +16997,7 @@ What it does, in order:
 
 **Going back:** rename the new `tts` folder to anything, rename `tts-old-...`
 back to `tts`, restart Jarvis. Delete the old folder yourself once you are
-happy (it is about 330 MB).
+happy (it is about 350 MB).
 
 **Not a second copy of what you have:** the pack is the official sherpa-onnx
 release of Kokoro v1.0 (Apache-2.0, `THIRD-PARTY-NOTICES.txt`). The SHA-256 in
