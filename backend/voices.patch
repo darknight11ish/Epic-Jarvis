@@ -30,16 +30,19 @@
          if path in ("/api/memory/pending", "/api/memory/status", "/api/initiative",
                      "/api/compute", "/api/memory/facts", "/api/memory/export"):
              if not _origin_ok(self):
-@@ -2414,6 +2437,87 @@
+@@ -2414,6 +2437,90 @@
                  code, out = jarvis_big_model.handle_deep_post(body)
              return self._send(code, out)
  
-+        if route == "/api/voice/voices/face_animal/try":
-+            # voices.patch - "Try it" for one animal's voice (jarvis_voices.py
-+            # try_face_animal): {"face": "redpanda"} -> a WAV of one fixed
-+            # line in that animal's voice as it is now, like /api/voice/say;
-+            # 400/503 with the reason in words otherwise. No card: it plays a
-+            # sound for the app that asked, and keeps nothing.
++        if route in ("/api/voice/voices/face_animal/try", "/api/voice/voices/sample"):
++            # voices.patch - the two routes that answer a SOUND (jarvis_voices.py
++            # handle_audio). "Try it" for one animal's voice: {"face":
++            # "redpanda"} -> a WAV of one fixed line in that animal's voice as
++            # it is now. "Hear it" for one built-in voice: {"voice":
++            # "bm_george"} -> a WAV of one fixed line in that voice, changing
++            # no setting. Both like /api/voice/say; 400/429/503 with the
++            # reason in words otherwise. No card: they play a sound for the
++            # app that asked, and keep nothing.
 +            if not _origin_ok(self):
 +                return self._send(403, {"error": "cross-origin request refused"})
 +            if not _token_ok(self):
@@ -51,7 +54,7 @@
 +                                                 f"({type(exc).__name__})"})
 +            try:
 +                import jarvis_voices
-+                code, out = jarvis_voices.try_face_animal(body)
++                code, out = jarvis_voices.handle_audio(route, body)
 +            except Exception as exc:
 +                return self._send(503, {"ok": False, "error": type(exc).__name__})
 +            if code == 200 and isinstance(out, (bytes, bytearray)):
@@ -77,8 +80,8 @@
 +            #   once.
 +            #   speed {"speed": "slower"|"normal"|"faster"}: how fast every
 +            #   voice speaks - no card either way (it trusts nothing more).
-+            #   speaker {"speaker": "0".."10"}: which of Kokoro's own voices
-+            #   the built-in voice uses - no card either way, same reason.
++            #   speaker {"speaker": "af_heart"} (a NAME): which of Kokoro's
++            #   voices the built-in voice uses - no card either way, same reason.
 +            #   face {"enabled": true|false}: the built-in voice follows an
 +            #   animal face - no card either way, same reason.
 +            #   face_animal {"face", "speaker", "semitones", "pace"} or

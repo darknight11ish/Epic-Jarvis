@@ -347,6 +347,7 @@ fn main() {
             "set_voice_animal",
             "reset_voice_animal",
             "try_voice_animal",
+            "hear_voice_sample",
             "get_face_voice_offer",
             "answer_face_voice_offer",
             // Widget geometry and capture
@@ -485,6 +486,15 @@ fn main() {
             // list is hidden) or Undo (no card, never held). Brain only.
             "forget_range_read",
             "forget_range_write",
+            // "Inbox tidy by voice" (backend/inbox-tidy.patch; JARVIS-API
+            // section 95; the owner's decision of 2026-09-28): the Undo
+            // strip under the Jarvis bar's input. Read whether a tidy is
+            // open to Undo (counts and the PC's words, taken out in Rust
+            // while Jarvis is locked or the lists are hidden) and Undo it -
+            // one tap, no card, held on a stale link and while the words
+            // are hidden. The tidy itself is an ordinary approval card.
+            "inbox_tidy_read",
+            "inbox_tidy_undo",
             // Focus sessions (backend/focus.patch): read one, start one
             // (Brain only, held on a stale link), and ONE thing to it -
             // pause, resume, +10 minutes, stop, and the widget's Lock on

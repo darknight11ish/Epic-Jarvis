@@ -310,6 +310,15 @@
        "title": "Send an email"
       },
       {
+       "action": "tidy_inbox",
+       "fixed": false,
+       "id": "tidy_inbox",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tidy your inbox (archive, star, mark read or trash)"
+      },
+      {
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
@@ -1263,6 +1272,15 @@
        "title": "Send an email"
       },
       {
+       "action": "tidy_inbox",
+       "fixed": false,
+       "id": "tidy_inbox",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tidy your inbox (archive, star, mark read or trash)"
+      },
+      {
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
@@ -2213,6 +2231,15 @@
        "title": "Send an email"
       },
       {
+       "action": "tidy_inbox",
+       "fixed": false,
+       "id": "tidy_inbox",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tidy your inbox (archive, star, mark read or trash)"
+      },
+      {
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
@@ -3156,6 +3183,15 @@
        "title": "Send an email"
       },
       {
+       "action": "tidy_inbox",
+       "fixed": false,
+       "id": "tidy_inbox",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tidy your inbox (archive, star, mark read or trash)"
+      },
+      {
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
@@ -4097,6 +4133,15 @@
        "says": "Refused - it only runs on your yes, so its line must say \"ask\"",
        "tier": "auto",
        "title": "Send an email"
+      },
+      {
+       "action": "tidy_inbox",
+       "fixed": false,
+       "id": "tidy_inbox",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tidy your inbox (archive, star, mark read or trash)"
       },
       {
        "action": "edit_calendar_event",
@@ -5054,6 +5099,15 @@
        "title": "Send an email"
       },
       {
+       "action": "tidy_inbox",
+       "fixed": false,
+       "id": "tidy_inbox",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tidy your inbox (archive, star, mark read or trash)"
+      },
+      {
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
@@ -6002,6 +6056,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Send an email"
+      },
+      {
+       "action": "tidy_inbox",
+       "fixed": false,
+       "id": "tidy_inbox",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tidy your inbox (archive, star, mark read or trash)"
       },
       {
        "action": "edit_calendar_event",

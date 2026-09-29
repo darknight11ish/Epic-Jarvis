@@ -570,6 +570,10 @@ permissions = [
   "allow-set-voice-animal",
   "allow-reset-voice-animal",
   "allow-try-voice-animal",
+  # "Hear it" for one built-in voice (the owner, 2026-09-28: Kokoro v1.0): the PC
+  # says one fixed line in it, by name, and changes no setting - the same
+  # shape as "Try it", so no card and never held on a stale link.
+  "allow-hear-voice-sample",
   # The one-time "The Red Panda has its own voice. Use it?" question
   # (the owner, 2026-09-28): the answer, under "Voice follows the face".
   # No card either way, held on a stale link like the switch.
@@ -955,6 +959,22 @@ description = "Read what Jarvis learned and the chats from some days, ask the PC
 permissions = [
   "allow-forget-range-read",
   "allow-forget-range-write",
+]
+
+# "Inbox tidy by voice" (backend/inbox-tidy.patch; JARVIS-API section 95; the
+# owner's decision of 2026-09-28). The tidy itself is an ordinary approval
+# card, decided in the Jarvis bar (never by voice, never from the widget's
+# one line). This set is only the Undo strip under the bar's input: reading
+# whether a tidy is open to Undo is a read (the PC's words taken out in Rust
+# while Jarvis is locked or the private lists are hidden), and Undo puts back
+# what the last tidy changed - one tap, no card, held on a stale link and
+# while the words are hidden. It cannot start a tidy or approve anything.
+[[set]]
+identifier = "inbox-tidy"
+description = "Read whether an inbox tidy is open to Undo, and Undo it within 10 minutes (no card). Cannot start a tidy or approve one."
+permissions = [
+  "allow-inbox-tidy-read",
+  "allow-inbox-tidy-undo",
 ]
 
 # Focus sessions (backend/focus.patch; the owner's decision of 2026-09-25): a

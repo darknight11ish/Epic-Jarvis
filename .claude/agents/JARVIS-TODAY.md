@@ -70,8 +70,11 @@ last week" fills in the list - never removes anything).
 **Voice** (all speech work happens on the PC; the phone never does
 speech-to-text) - "Hey Jarvis" (openWakeWord; livekit-wakeword candidate),
 the owner voice check before any words exist, Silero VAD, Smart Turn v3.2,
-Parakeet speech-to-text (sherpa-onnx), Kokoro v0.19 text-to-speech (11
-voices, `speaker` setting), custom voices (ZipVoice on the processor, F5 on
+Parakeet speech-to-text (sherpa-onnx), Kokoro text-to-speech (v0.19's
+voices, or v1.0's - a 350 MB one-line install, pinned in
+`jarvis_kokoro.py`; the choice is saved by NAME, a **Hear it** button on
+every voice in both apps, British voices asked for British English on v1.0;
+JARVIS-API §94), custom voices (ZipVoice on the processor, F5 on
 the second card; Pocket TTS built, off), speaking from the first comma,
 spoken-style answers, "stop" and barge-in, "One moment", "I heard you". **Jarvis Live** (2026-09-28,
 `jarvis_live.py`, JARVIS-API §63, `docs/LIVE-DESIGN.md`): a back-and-forth
@@ -94,7 +97,7 @@ Details: `backend/jarvis_speech.py`, `jarvis_voices.py`, `docs/WAKE-WORD.md`.
 
 **Everyday tools** - timers, alarms, reminders, to-do lists, one shared
 scheduler; morning briefing; "tell me when" (email, devices, web pages);
-email read, drafts, send (one card per email); web search (SearXNG default,
+email read, drafts, send (one card per email), tidy by voice (archive, star, mark read, Trash: one card listing every email, Undo 10 min, no permanent delete; built, untried on a real mailbox); web search (SearXNG default,
 DuckDuckGo, Exa, Tavily, Brave); Google Calendar read-only; Home Assistant;
 folders and documents (PDF, Word, Excel, PowerPoint, Notion export); notes
 (Obsidian, Logseq, Joplin); screenshot text reading (Windows OCR); music
@@ -193,7 +196,8 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
 ## Decided but not built yet (don't propose these as new)
 
 QR pairing with per-device keys; the plan
-card; Kokoro v1.0 and a voice picker with samples; animal voices; the
+card; the animals' mouths timed by Kokoro v1.0 itself (built for v0.19
+only); blended voices; the
 12 GB card's long-context lane; the memory re-ranker bake-off; the
 feasibility audit's small items. (Talk-to-type, the Today page and the
 overnight tidy, review cards only, are built - merged from `main`.) The owner's full list of

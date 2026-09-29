@@ -60,6 +60,16 @@
     },
     {
      "asks": "-",
+     "id": "email_tidy",
+     "line": "Set up on this PC, but the AI model is not offered it: \"tidy_inbox\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "name": "Email (tidying)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "home_read",
      "line": "Home Assistant is not set up on this PC.",
      "name": "Home Assistant (reading)",
@@ -297,6 +307,16 @@
      "id": "email_send",
      "line": "No email account is set up on this PC for sending.",
      "name": "Email (sending)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "email_tidy",
+     "line": "No email account is set up on this PC for tidying.",
+     "name": "Email (tidying)",
      "on": false,
      "state": "not_set_up",
      "state_words": "Not set up",
@@ -544,6 +564,16 @@
     },
     {
      "asks": "-",
+     "id": "email_tidy",
+     "line": "Set up on this PC, but the AI model is not offered it: \"tidy_inbox\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "name": "Email (tidying)",
+     "on": false,
+     "state": "off",
+     "state_words": "Off",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "home_read",
      "line": "Home Assistant is not set up on this PC.",
      "name": "Home Assistant (reading)",
@@ -754,7 +784,7 @@
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
    "everything_else": "Anything not on this list stays on this PC.",
-   "on": 21,
+   "on": 22,
    "rows": [
     {
      "asks": "Yes, every question",
@@ -805,6 +835,16 @@
      "state": "on",
      "state_words": "On",
      "where": "smtp.example.com (as me@example.com)"
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "email_tidy",
+     "line": "Archives, stars, marks as read or moves to Trash the emails you name, in your own mailbox, only after you approve a card that lists every one of them - and for 10 minutes you can undo it with one tap. Nothing is ever deleted for good, and Jarvis never empties Trash.",
+     "name": "Email (tidying)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "imap.example.com (as me@example.com)"
     },
     {
      "asks": "No",
@@ -1028,6 +1068,10 @@
      "name": "Save an email draft (one card each)"
     },
     {
+     "id": "tidy_inbox",
+     "name": "Tidy your inbox (one card lists every email)"
+    },
+    {
      "id": "notes_search",
      "name": "Searching your notes"
     },
@@ -1137,6 +1181,16 @@
      "id": "email_send",
      "line": "No email account is set up on this PC for sending.",
      "name": "Email (sending)",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
+     "id": "email_tidy",
+     "line": "No email account is set up on this PC for tidying.",
+     "name": "Email (tidying)",
      "on": false,
      "state": "not_set_up",
      "state_words": "Not set up",
@@ -1329,6 +1383,7 @@
   "calendar",
   "email_read",
   "email_send",
+  "email_tidy",
   "home_read",
   "home_control",
   "notes_read",

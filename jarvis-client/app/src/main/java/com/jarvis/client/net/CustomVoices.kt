@@ -63,6 +63,9 @@ object CustomVoices {
     const val ANIMAL_PATH = "/api/voice/voices/face_animal"
     const val ANIMAL_TRY_PATH = "/api/voice/voices/face_animal/try"
 
+    /** "Hear it" for one built-in voice, by name (2026-09-29): a WAV, like [ANIMAL_TRY_PATH]. */
+    const val SAMPLE_PATH = "/api/voice/voices/sample"
+
     /** The one-time "The panda has its own voice. Use it?" answer (owner, 2026-09-28). */
     const val FACE_OFFER_PATH = "/api/voice/voices/face_offer"
 
@@ -552,6 +555,9 @@ object CustomVoices {
     /** `{"face"}` - "Try it". Never any words: the PC says its own line. */
     fun animalTryBody(face: String): String = "{\"face\":" + JarvisApi.quote(face) + "}"
 
+    /** `{"voice": "<name>"}` - "Hear it": one of the names the PC offered. Never any words. */
+    fun sampleBody(voice: String): String = "{\"voice\":" + JarvisApi.quote(voice) + "}"
+
     /** [semitones] rounded to a half step, as JSON ("2.0", "-1.5"). */
     fun halfSteps(semitones: Double): String =
         if (semitones.isFinite()) (Math.round(semitones * 2.0) / 2.0).toString() else "0.0"
@@ -608,6 +614,33 @@ object CustomVoices {
 
     /** Once it has played to the end. */
     fun tryDone(name: String): String = "That was the $name's voice."
+
+    // "Hear it" for one built-in voice (2026-09-29): a button on every voice in
+    // "Jarvis's built-in voice". The PC says one fixed line in that voice, by
+    // name, and the voice Jarvis uses does not change. It plays the way "Try
+    // it" does - here, never over Jarvis, stopped when a question or an answer
+    // starts (VoiceSession.hearVoiceSample / turnStarting) - and says the same
+    // words as "Try it" while it asks ([TRY_ASKING]) and when a question cuts it
+    // short ([TRY_STOPPED]). The desktop says exactly the same (custom-voices.js
+    // `HEAR_*`, held together by the desktop's tests/custom-voices.mjs).
+
+    /** The button on each voice. */
+    const val HEAR_LABEL = "Hear it"
+
+    /** Refused: Jarvis is talking, or listening to the owner, or Jarvis Live has the microphone. */
+    const val HEAR_BUSY = "Jarvis is busy talking or listening. Try again in a moment."
+
+    /** Refused: App lock would ask again (the button is out of reach then; belt and braces). */
+    const val HEAR_LOCKED = "Jarvis is locked right now. Unlock it, then try again."
+
+    /** A PC whose backend has no sample route yet. */
+    const val HEAR_UPDATE = "Your PC cannot play voice samples yet. Run the patch script on the PC first."
+
+    /** While it plays: the voice's own label ("American (female) - Bella"). */
+    fun hearPlaying(label: String): String = "Playing $label."
+
+    /** Once it has played to the end. */
+    fun hearDone(label: String): String = "That was $label."
 
     /** What "Try it" came to: the PC's sound, or its sentence saying why not. */
     sealed interface Tried {

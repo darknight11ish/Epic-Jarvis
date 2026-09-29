@@ -1014,6 +1014,13 @@ class MainActivity : FragmentActivity() {
         // "`offer` in `X-Jarvis-Route`") - the lane named on the answer on
         // screen's route, or null.
         val cloudOffer by chat.cloudOffer.collectAsState()
+        // "Inbox tidy by voice" (2026-09-28; docs/JARVIS-API.md section 95):
+        // the newest tidy still open to Undo, as the PC last said - its
+        // minutes run down on the runtime's clock, and an Undo whose ten
+        // minutes are up is gone even while the link is down.
+        val inboxTidyHeld by JarvisRuntime.inboxTidy.collectAsState()
+        val inboxTidyClock by JarvisRuntime.inboxTidyClock.collectAsState()
+        val inboxTidyBusy by JarvisRuntime.inboxTidyBusy.collectAsState()
         // "Open <a settings section>" by voice or chat
         // (jarvis_settings_registry.py, docs/JARVIS-API.md section 58.1):
         // jump to Settings, at the section the answer named. Pure
@@ -1949,6 +1956,9 @@ class MainActivity : FragmentActivity() {
                             tryAnimal = { face, name, playing ->
                                 JarvisRuntime.voice.tryAnimalVoice(face, name, playing)
                             },
+                            hearVoice = { id, label, playing ->
+                                JarvisRuntime.hearVoice(id, label, playing)
+                            },
                             // Any audio type: the file is checked for being a WAV
                             // once read, and says so plainly when it is not.
                             onPickFile = { pickVoiceFile.launch(arrayOf("audio/*")) },
@@ -2544,6 +2554,17 @@ class MainActivity : FragmentActivity() {
                             answerTurnId = answerTurnId,
                             crisisAnswer = crisisAnswer,
                             cloudOffer = cloudOffer,
+                            inboxTidy = inboxTidyHeld?.let { held ->
+                                com.jarvis.client.net.InboxTidy.strip(
+                                    com.jarvis.client.net.InboxTidy.aged(
+                                        held.status,
+                                        inboxTidyClock - held.atMs,
+                                    ),
+                                    locked = privateHidden,
+                                    stale = stale || link != LinkState.CONNECTED,
+                                )
+                            },
+                            inboxTidyBusy = inboxTidyBusy,
                             memoryHidden = privateHidden,
                             swipeDecides = security.swipeDecides,
                             showPrivateBusy = ownerCheckBusy.value,
@@ -2749,6 +2770,9 @@ class MainActivity : FragmentActivity() {
                                 // question the same way.
                                 onTryCloud = { scope.launch { chat.tryCloudForLast() } },
                                 onDismissCloudOffer = { chat.dismissCloudOffer() },
+                                // "Inbox tidy by voice": Undo, one tap, no
+                                // card. Held on a stale link in the runtime.
+                                onInboxUndo = { JarvisRuntime.inboxTidyUndoDetached() },
                                 // backend/note-capture.patch. The runtime reports
                                 // how it ended, in the desktop's own words.
                                 onFileNote = { target, text ->

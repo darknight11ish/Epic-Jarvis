@@ -839,6 +839,22 @@ $PATCHES = @(
     # on any error, the banner says so and the app routes are simply not
     # there.
     'apps-in-projects.patch'
+    # "Inbox tidy by voice" (the owner's decision of 2026-09-28; JARVIS-API
+    # section 95): archive, star, mark as read or move to Trash a checked list
+    # of emails, ONE approval card listing every one, 10 minutes to Undo.
+    # Four hunks: in jarvis_gate.py the new action joins the "a no is not a
+    # standing rule" list (right after support-chat.patch's own last line),
+    # gets its _RISK line (after support-chat.patch's last entry - an
+    # outbound one: it changes the owner's mailbox on the provider's server,
+    # so its approval is a risky one) and its _TOOL_ACTIONS line (after
+    # draft-email.patch's); in jarvis_hud.py ONE install block after
+    # sky.patch's (GET /api/email/tidy and POST /api/email/tidy/undo). Its
+    # context is other patches' lines, so it goes after them - last, like
+    # every new patch (after devices.patch and apps-in-projects.patch, whose
+    # own hunks use the same gate lists as context and must see them before
+    # this one adds its lines). Needs jarvis_inbox_tidy.py copied in; without it, or on any error,
+    # the banner says so and the routes are simply not there.
+    'inbox-tidy.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -896,6 +912,7 @@ $SHIPPED = @(
     'jarvis_child_env.py'        # what the second Ollama and colibri inherit: an allowlist, so no token or key goes with them
     'jarvis_voices.py'           # voices.patch: custom voices (ZipVoice on the processor); jarvis_speech.say() asks it first
     'jarvis_f5_worker.py'        # the better voice (F5-TTS) as its own program on the second card; jarvis_voices.py starts it
+    'jarvis_kokoro.py'           # which Kokoro voice pack is installed (v0.19 or v1.0), its voices BY NAME, the pinned v1.0 download; jarvis_voices.py imports it, no patch. Upgrade: backend\README.md "Upgrade the voice pack to Kokoro v1.0"
     'jarvis_bakeoff.py'          # the voice upgrades' bake-off: the owner runs it by hand (py -3 jarvis_bakeoff.py); nothing imports it
     'jarvis_learning_switch.py'  # learning-asks.patch: turning learning on raises an approval card
     'jarvis_voicebank.py'        # other people's voices (numbers only): the voice check's comparison step, jarvis_voice.cohort_for
@@ -935,6 +952,7 @@ $SHIPPED = @(
     'jarvis_mail_mask.py'        # hides one-time codes and sign-in links in everything jarvis_email.py reads
     'jarvis_email_send.py'       # tool "send_email": ONE email per approval card; email-send.patch
     'jarvis_email_draft.py'      # tool "draft_email": ONE draft per approval card, saved to Drafts only, never sent; draft-email.patch
+    'jarvis_inbox_tidy.py'       # tool "tidy_inbox": archive, star, mark as read or move to Trash, ONE card listing every email, 10 minutes to Undo, no permanent delete; inbox-tidy.patch
     'jarvis_notes.py'            # tool "notes_search"; carries the token-in-an-error fix
     'jarvis_home.py'             # tools "home_read" and "home_control": Home Assistant
     'jarvis_search.py'           # tool "web_search" (SearXNG, DuckDuckGo, Exa, Tavily or Brave) and its settings; web-search.patch

@@ -276,13 +276,15 @@ def t_the_one_moment_clip_follows_it():
 def t_the_speaker_choices_come_from_the_pc():
     reset()
     view = V.speaker_view()
-    check("eleven choices, in order, ids '0'..'10'",
-          [c["id"] for c in view["choices"]] == [str(i) for i in range(11)], view)
-    check("voice 0 by default, and speaker() is 0",
-          view["choice"] == "0" and V.speaker() == 0 and not view["note"], view)
-    check("only the two the repo's own file comment confirms are named the same way",
-          V.SPEAKER_LABEL["0"] == "American (female)"
-          and V.SPEAKER_LABEL["9"] == "British (male) - George")
+    check("nine choices on the old pack (no Sky, no Adam), by NAME, in order",
+          [c["id"] for c in view["choices"]] == ["af", "af_bella", "af_nicole", "af_sarah",
+                                                "am_michael", "bf_emma", "bf_isabella",
+                                                "bm_george", "bm_lewis"], view)
+    check("the default voice, and speaker() is its number 0",
+          view["choice"] == "af" and V.speaker() == 0 and not view["note"], view)
+    check("the labels are the words the apps show",
+          view["choices"][0]["label"] == "American (female)"
+          and view["choices"][7]["label"] == "British (male) - George")
     check("the title and the detail say what it is",
           view["title"] == "Jarvis's built-in voice" and "Kokoro" in view["detail"])
     check("GET /api/voice/voices carries it", V.status()["speaker"] == V.speaker_view())
@@ -295,31 +297,34 @@ def t_the_speaker_choices_come_from_the_pc():
           / "client" / "ui" / "screens" / "VoicesScreen.kt").read_text(encoding="utf-8")
     check("the detail says the recorded voices are under \"Voices\" below, and on both "
           "screens they are",
-          view["detail"].endswith('stays under "Voices" below.')
+          'stays under "Voices" below.' in view["detail"]
           and html.index('id="cv-speaker"') < html.index('<h3 class="subhead">Voices</h3>')
-          and kt.index("SpeakerPlate(sk") < kt.index('Text("Voices"'), view["detail"])
+          and kt.index("SpeakerPlate(\n") < kt.index('Text("Voices"'), view["detail"])
 
 
 def t_setting_the_speaker_asks_nothing_and_says_so():
     reset()
-    code, out = V.handle_post("/api/voice/voices/speaker", {"speaker": "9"})
+    code, out = V.handle_post("/api/voice/voices/speaker", {"speaker": "bm_george"})
     check("POST speaker: 200, at once", code == 200 and out["ok"] is True, (code, out))
     check("no card was raised", not CARDS)
-    check("it is kept, and speaker() follows it",
-          V._read_state()["speaker"] == "9" and V.speaker() == 9)
+    check("it is kept BY NAME, and speaker() follows it",
+          V._read_state()["speaker"] == "bm_george" and V.speaker() == 9
+          and V.speaker_name() == "bm_george")
     check("the answer names the voice and carries the new view",
           out["message"] == "Jarvis's built-in voice is now British (male) - George."
-          and out["speaker"]["choice"] == "9")
+          and out["speaker"]["choice"] == "bm_george")
     check("both apps are told to read again (a `voices` event, no words)",
           EVENTS == [{"what": "speaker", "outcome": "set"}], EVENTS)
     check("the audit line has the choice only",
-          AUDIT == [("voices.speaker", {"speaker": "9"})], AUDIT)
+          AUDIT == [("voices.speaker", {"speaker": "bm_george"})], AUDIT)
 
 
 def t_bad_speaker_bodies_are_refused():
     reset()
-    for bad in ({"speaker": "11"}, {"speaker": 9}, {}, {"speaker": "9", "x": 1}, "9",
-                None, {"speaker": None}, {"speaker": ["9"]}, {"speaker": "-1"}):
+    for bad in ({"speaker": "11"}, {"speaker": 9}, {}, {"speaker": "bm_george", "x": 1},
+                "bm_george", None, {"speaker": None}, {"speaker": ["bm_george"]},
+                {"speaker": "-1"}, {"speaker": "9"}, {"speaker": "af_sky"},
+                {"speaker": "zf_xiaobei"}, {"speaker": "grandpa"}):
         code, out = V.set_speaker(bad)
         check(f"refused: {bad!r}", code == 400 and out["ok"] is False, (code, out))
     check("and nothing was kept", V._read_state()["speaker"] is None and V.speaker() == 0)
@@ -330,8 +335,8 @@ def t_the_old_speaker_setting_applies_until_a_choice():
     CFG["tts_speaker_id"] = 9
     check("[voice] tts_speaker_id is used before any choice", V.speaker() == 9)
     view = V.speaker_view()
-    check("shown as that named voice, with no choice ticked yet",
-          view["choice"] == "9" and not view["note"], view)
+    check("shown as that named voice (the old numbering), with no choice ticked yet",
+          view["choice"] == "bm_george" and not view["note"], view)
     CFG["tts_speaker_id"] = 40
     check("a hand-set value with no name of its own: shown as custom, said plainly",
           V.speaker_view()["choice"] == "custom" and "40" in V.speaker_view()["note"]
@@ -339,7 +344,7 @@ def t_the_old_speaker_setting_applies_until_a_choice():
     CFG["tts_speaker_id"] = -1
     check("an impossible hand-set value is ignored", V.speaker() == 0)
     CFG["tts_speaker_id"] = 9
-    V.set_speaker({"speaker": "3"})
+    V.set_speaker({"speaker": "af_sarah"})
     check("the owner's choice wins over the file", V.speaker() == 3)
     V._state_path().write_text(json.dumps({"active": "builtin", "speaker": "warp"}))
     check("a damaged choice in state.json is no choice", V._read_state()["speaker"] is None)
@@ -347,7 +352,7 @@ def t_the_old_speaker_setting_applies_until_a_choice():
 
 def t_the_built_in_voice_uses_the_chosen_speaker():
     reset()
-    V.set_speaker({"speaker": "6"})
+    V.set_speaker({"speaker": "am_michael"})
     S.say("Of course. I have added the dentist to Tuesday at ten.")
     check("the built-in voice (Kokoro) is given the owner's chosen speaker",
           S._tts_cache.sids == [6], S._tts_cache.sids)
@@ -357,7 +362,7 @@ def t_the_built_in_voice_uses_the_chosen_speaker():
 def t_the_one_moment_clip_follows_the_speaker_too():
     reset()
     k1 = F.moment_key()[0]
-    V.set_speaker({"speaker": "7"})
+    V.set_speaker({"speaker": "bf_emma"})
     k2 = F.moment_key()[0]
     check("a new built-in voice makes a new \"One moment.\" clip (its key changes)",
           k1 != k2, (k1, k2))
@@ -378,7 +383,8 @@ def t_face_voice_needs_an_animal_face():
     check("off by default (the owner's 2026-09-28 decision)",
           V.face_voice_on() is False and V.FACE_VOICE_DEFAULT is False)
     check("the sea otter does not start on Kokoro's \"Sky\" voice",
-          V.FACE_VOICES["seaotter"]["speaker"] != "4")
+          V.FACE_VOICES["seaotter"]["speaker"] != "af_sky"
+          and all(r["speaker"] not in V.K.NEVER_FOR_ANIMALS for r in V.FACE_VOICES.values()))
     V._write_state(face_voice=True)  # the rest of this test is about it switched on
     check("no appearance.json: no face, so the owner's built-in voice as before",
           V.face_voice() is None and V.builtin_voice() == (0, 1.0, 0.0, ""))
@@ -419,7 +425,7 @@ def t_each_animal_speaks_in_its_own_voice():
     _show_face(d, "pygmyowl")
     check("the owner's speaking speed still applies on top of the animal's pace",
           abs(V.builtin_voice()[1] - 0.85 * 1.15) < 1e-9, V.builtin_voice())
-    V.set_speaker({"speaker": "9"})
+    V.set_speaker({"speaker": "bm_george"})
     check("the owner's built-in choice does not override the face's voice",
           V.builtin_voice()[0] == 2)
     check("... and its row says why picking a voice there changes nothing now",
@@ -653,7 +659,7 @@ def t_each_animal_keeps_its_own_answer():
     V.set_face_voice({"enabled": True})
     check("switched back on, the owl speaks again without asking",
           V.face_voice()["face"] == "pygmyowl" and V.face_voice_view()["offer"] is None)
-    code, out = V.set_face_animal({"face": "redpanda", "speaker": "3", "semitones": 1.0,
+    code, out = V.set_face_animal({"face": "redpanda", "speaker": "af_sarah", "semitones": 1.0,
                                    "pace": "normal"})
     check("changing a kept animal's voice says plainly that it is not used",
           code == 200 and "keep your voice for the Red Panda" in out["message"], out)
@@ -689,7 +695,7 @@ def t_the_one_moment_clip_and_the_echo_check_follow_the_face():
 def t_each_animal_voice_can_be_changed():
     d = reset()
     _show_face(d, "redpanda")
-    body = {"face": "redpanda", "speaker": "3", "semitones": -1.5, "pace": "faster"}
+    body = {"face": "redpanda", "speaker": "af_sarah", "semitones": -1.5, "pace": "faster"}
     code, out = V.handle_post("/api/voice/voices/face_animal", body)
     check("POST face_animal: 200, at once, no card", code == 200 and out["ok"] is True
           and not CARDS, (code, out))
@@ -701,18 +707,18 @@ def t_each_animal_voice_can_be_changed():
     check("... and jarvis_speech reads the same, deeper pitch included",
           S.tts_voice() == (3, 1.15, -1.5) and S.tts_pitch() == -1.5, S.tts_voice())
     check("kept in state.json, only for the animal that changed",
-          V._read_state()["face_animals"] == {"redpanda": {"speaker": "3", "semitones": -1.5,
+          V._read_state()["face_animals"] == {"redpanda": {"speaker": "af_sarah", "semitones": -1.5,
                                                             "pace": "faster"}})
     check("both apps are told to read again; the audit line has the choice only",
           EVENTS == [{"what": "face_animal", "outcome": "set"}]
-          and AUDIT == [("voices.face_animal", {"face": "redpanda", "speaker": "3",
+          and AUDIT == [("voices.face_animal", {"face": "redpanda", "speaker": "af_sarah",
                                                 "semitones": -1.5, "pace": "faster"})],
           (EVENTS, AUDIT))
     rows = {r["face"]: r for r in out["face_voice"]["animals"]}
     check("the view lists all four animals and the robot, the panda marked changed",
           list(rows) == ["redpanda", "pygmyowl", "seaotter", "monkey", "robot"] and rows["redpanda"]["changed"]
           and not rows["pygmyowl"]["changed"] and rows["redpanda"]["voice"] == "Sarah"
-          and rows["redpanda"]["own"] == {"speaker": "1", "semitones": 2.0, "pace": "normal"},
+          and rows["redpanda"]["own"] == {"speaker": "af_bella", "semitones": 2.0, "pace": "normal"},
           rows)
     check("each row has a line in words",
           rows["redpanda"]["line"] == "Sarah, 1.5 steps deeper, a little faster."
@@ -721,8 +727,10 @@ def t_each_animal_voice_can_be_changed():
           and rows["robot"]["line"] == "Emma, 2 steps higher, a little faster.",
           [r["line"] for r in rows.values()])
     ch = out["face_voice"]["animal_choices"]
-    check("the choices come from the PC: the 11 voices, three paces, the pitch range",
-          len(ch["voices"]) == 11 and [p["id"] for p in ch["paces"]] == ["slower", "normal",
+    check("the choices come from the PC: the pack's voices by name (never Sky or Adam), "
+          "three paces, the pitch range",
+          [v["id"] for v in ch["voices"]] == list(V.K.pickable(V.pack_kind())) and
+          not {"af_sky", "am_adam"} & {v["id"] for v in ch["voices"]} and [p["id"] for p in ch["paces"]] == ["slower", "normal",
                                                                          "faster"]
           and ch["pitch"] == {"min": -3.0, "max": 4.0, "step": 0.5}, ch)
     check("the switch's line says deeper, not higher",
@@ -744,7 +752,7 @@ def t_each_animal_voice_can_be_changed():
     _show_face(d, "redpanda")
     check("switch off: the owner's single built-in voice for every face, choices kept",
           V.builtin_voice() == (0, 0.85, 0.0, "") and "redpanda" in V._read_state()["face_animals"])
-    code, out = V.set_face_animal({"face": "seaotter", "speaker": "10", "semitones": 0,
+    code, out = V.set_face_animal({"face": "seaotter", "speaker": "bm_lewis", "semitones": 0,
                                    "pace": "normal"})
     check("changing an animal while the switch is off says it is heard once that is on",
           code == 200 and out["message"] == "The Sea Otter's voice is now Lewis, normal pitch, "
@@ -755,7 +763,7 @@ def t_each_animal_voice_can_be_changed():
 def t_reset_and_its_own_voice():
     d = reset()
     _show_face(d, "seaotter")
-    V.set_face_animal({"face": "seaotter", "speaker": "9", "semitones": 4, "pace": "slower"})
+    V.set_face_animal({"face": "seaotter", "speaker": "bm_george", "semitones": 4, "pace": "slower"})
     EVENTS.clear(); AUDIT.clear()
     code, out = V.handle_post("/api/voice/voices/face_animal", {"face": "seaotter", "reset": True})
     check("reset: 200, at once, no card, its own voice back",
@@ -766,7 +774,7 @@ def t_reset_and_its_own_voice():
           and EVENTS == [{"what": "face_animal", "outcome": "reset"}]
           and AUDIT == [("voices.face_animal", {"face": "seaotter", "reset": True})],
           (EVENTS, AUDIT))
-    V.set_face_animal({"face": "seaotter", "speaker": "3", "semitones": 3.0, "pace": "faster"})
+    V.set_face_animal({"face": "seaotter", "speaker": "af_sarah", "semitones": 3.0, "pace": "faster"})
     check("choosing exactly its own voice keeps no choice (so it is not marked changed)",
           V._read_state()["face_animals"] == {}
           and not V.face_voice_view()["animals"][2]["changed"])
@@ -774,15 +782,16 @@ def t_reset_and_its_own_voice():
 
 def t_bad_animal_bodies_are_refused():
     reset()
-    good = {"face": "redpanda", "speaker": "3", "semitones": 1.5, "pace": "normal"}
+    good = {"face": "redpanda", "speaker": "af_sarah", "semitones": 1.5, "pace": "normal"}
     bads = [None, True, [], {}, dict(good, face="nucleus"), dict(good, face=1),
             {k: v for k, v in good.items() if k != "pace"}, dict(good, extra=1),
-            dict(good, speaker="99"), dict(good, speaker=3), dict(good, semitones=4.5),
+            dict(good, speaker="99"), dict(good, speaker=3), dict(good, speaker="af_sky"),
+            dict(good, speaker="4"), dict(good, semitones=4.5),
             dict(good, semitones=-3.5), dict(good, semitones=1.25), dict(good, semitones=True),
             dict(good, semitones="1"), dict(good, semitones=float("nan")),
             dict(good, semitones=float("inf")), dict(good, pace="fast"), dict(good, pace=1.0),
             {"face": "redpanda", "reset": False}, {"face": "redpanda", "reset": 1},
-            {"face": "redpanda", "reset": True, "speaker": "3"}]
+            {"face": "redpanda", "reset": True, "speaker": "af_sarah"}]
     for bad in bads:
         code, out = V.set_face_animal(bad)
         check(f"refused: {bad!r}", code == 400 and out["ok"] is False
@@ -795,12 +804,12 @@ def t_bad_animal_bodies_are_refused():
     check("every half step in range is taken",
           all(V.set_face_animal(dict(good, semitones=x / 2))[0] == 200 for x in range(-6, 9)))
     V._state_path().write_text(json.dumps({"active": "builtin", "face_animals": {
-        "redpanda": {"speaker": "99", "semitones": 1.0, "pace": "normal"},
-        "pygmyowl": {"speaker": "5", "semitones": 9, "pace": "normal"},
-        "seaotter": {"speaker": "5", "semitones": -2, "pace": "faster"},
-        "orbit": {"speaker": "5", "semitones": 0, "pace": "normal"}}}))
+        "redpanda": {"speaker": "warp", "semitones": 1.0, "pace": "normal"},
+        "pygmyowl": {"speaker": "am_adam", "semitones": 9, "pace": "normal"},
+        "seaotter": {"speaker": "am_michael", "semitones": -2, "pace": "faster"},
+        "orbit": {"speaker": "am_michael", "semitones": 0, "pace": "normal"}}}))
     check("a damaged entry in state.json is no choice; a good one is kept",
-          V._read_state()["face_animals"] == {"seaotter": {"speaker": "5", "semitones": -2.0,
+          V._read_state()["face_animals"] == {"seaotter": {"speaker": "am_michael", "semitones": -2.0,
                                                            "pace": "faster"}},
           V._read_state()["face_animals"])
 
@@ -828,7 +837,7 @@ def t_the_one_moment_clip_and_the_echo_check_follow_the_animal_choice():
     d = reset()
     _show_face(d, "redpanda")
     k_own = F.moment_key()[0]
-    V.set_face_animal({"face": "redpanda", "speaker": "1", "semitones": -2, "pace": "normal"})
+    V.set_face_animal({"face": "redpanda", "speaker": "af_bella", "semitones": -2, "pace": "normal"})
     k_deep = F.moment_key()[0]
     check("a new pitch for the showing animal makes a new \"One moment.\" clip",
           k_own != k_deep)
@@ -844,7 +853,7 @@ def t_the_one_moment_clip_and_the_echo_check_follow_the_animal_choice():
 def t_try_it_plays_the_animal_as_it_is_now():
     d = reset()
     _show_face(d, "nucleus")
-    V.set_face_animal({"face": "pygmyowl", "speaker": "6", "semitones": -1, "pace": "faster"})
+    V.set_face_animal({"face": "pygmyowl", "speaker": "am_michael", "semitones": -1, "pace": "faster"})
     EVENTS.clear(); AUDIT.clear()
     before = V._state_path().read_bytes()
     S._tts_cache = FakeKokoro()
@@ -1285,7 +1294,7 @@ def t_shipped_and_pinned():
           '"/api/voice/voices/face_offer"' in routes)
     check("voices.patch routes each animal's voice and its Try it (a WAV)",
           '"/api/voice/voices/face_animal"' in routes
-          and 'route == "/api/voice/voices/face_animal/try"' in routes
+          and '"/api/voice/voices/face_animal/try", "/api/voice/voices/sample"' in routes
           and 'ctype="audio/wav"' in routes)
 
 

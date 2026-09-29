@@ -37,6 +37,13 @@ pub(crate) const SEND_EMAIL_ACTION: &str = "send_email";
 /// only in the Jarvis bar, never from the widget's one line.
 pub(crate) const DRAFT_EMAIL_ACTION: &str = "draft_email";
 
+/// The gate action every inbox tidy is asked under (jarvis_inbox_tidy.ACTION;
+/// JARVIS-API.md section 95). Its card lists every email that will be
+/// touched - sender and subject, words from outside - so like an email's it
+/// is shown verbatim (never Markdown) and approved only in the Jarvis bar,
+/// where the whole list can be read, never from the widget's one line.
+pub(crate) const TIDY_INBOX_ACTION: &str = "tidy_inbox";
+
 /// What a backend without `jarvis_email_send.py` is told to do about it. The
 /// phone says the same (`EmailSending.MISSING`).
 pub(crate) const SENDING_MISSING: &str =
@@ -45,7 +52,7 @@ pub(crate) const SENDING_MISSING: &str =
 /// What the widget is told when its Approve is pressed on an email: the
 /// Jarvis bar opens on the card instead. The widget says the same
 /// (`EMAIL_APPROVE` in widget.js).
-pub(crate) const EMAIL_APPROVES_IN_BAR: &str = "An email is approved in the Jarvis bar, where \
+pub(crate) const EMAIL_APPROVES_IN_BAR: &str = "This card is approved in the Jarvis bar, where \
      all of it can be read - it has been opened for you. Nothing was approved here.";
 
 const UNREADABLE: &str = "Jarvis answered, but not in a way this app can read. Update the \
@@ -93,13 +100,15 @@ pub async fn get_email_sending(app: AppHandle) -> Result<serde_json::Value, Stri
     sending_answer(status, &body)
 }
 
-/// Whether a waiting approval row is an email - sent, or a draft. Such a
-/// card is approved only in the Jarvis bar, where all of it can be read -
-/// never from the widget, which shows one line (see
-/// `commands::answer_approval`).
+/// Whether a waiting approval row is an email - sent, or a draft - or a
+/// tidy of the owner's inbox (a list of emails). Such a card is approved only
+/// in the Jarvis bar, where all of it can be read - never from the widget,
+/// which shows one line (see `commands::answer_approval`).
 pub(crate) fn is_email(item: &serde_json::Value) -> bool {
     let action = item.get("action").and_then(|a| a.as_str());
-    action == Some(SEND_EMAIL_ACTION) || action == Some(DRAFT_EMAIL_ACTION)
+    action == Some(SEND_EMAIL_ACTION)
+        || action == Some(DRAFT_EMAIL_ACTION)
+        || action == Some(TIDY_INBOX_ACTION)
 }
 
 #[cfg(test)]
@@ -149,6 +158,11 @@ mod tests {
         // approve treatment.
         assert!(is_email(
             &serde_json::json!({ "id": "a", "action": "draft_email" })
+        ));
+        // A tidy of the inbox lists every email it will touch (JARVIS-API.md
+        // section 95): the same never-Markdown, never-widget-approve rule.
+        assert!(is_email(
+            &serde_json::json!({ "id": "a", "action": "tidy_inbox" })
         ));
         assert!(!is_email(
             &serde_json::json!({ "id": "a", "action": "email_read" })

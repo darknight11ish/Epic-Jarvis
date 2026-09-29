@@ -408,9 +408,14 @@ def t_the_hunk_comes_before_every_token_ok():
     # Last but for patches whose context is ITS lines (apps-in-projects.patch
     # anchors on register_approval_key's risk line, 2026-09-29).
     after_it = order[order.index("devices.patch") + 1:] if "devices.patch" in order else None
+    # inbox-tidy.patch goes last (2026-09-29): it leaves devices.patch's lines
+    # alone (checked by the second condition), and apps-in-projects.patch's
+    # hunks need the gate lists as they stand before it adds its own.
     check("devices.patch is in apply-patches.ps1's list, and only "
-          "apps-in-projects.patch (which builds on its lines) comes after it",
-          after_it is not None and set(after_it) <= {"apps-in-projects.patch"}, order[-3:])
+          "apps-in-projects.patch (which builds on its lines) and inbox-tidy.patch "
+          "(which leaves them alone) come after it",
+          after_it is not None and set(after_it) <= {"apps-in-projects.patch", "inbox-tidy.patch"}
+          and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")
     check("the stacked jarvis_hud.py builds", text is not None, "\n".join(log[-3:]))
     if text is None:

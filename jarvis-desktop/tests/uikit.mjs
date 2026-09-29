@@ -1006,6 +1006,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "set_voice_animal":
           case "reset_voice_animal":
           case "try_voice_animal":
+          case "hear_voice_sample":
           case "answer_face_voice_offer": {
             const v = window.__vt;
             if (cmd !== "voice_sample_level") v.calls.push([cmd, JSON.parse(JSON.stringify(args || {}))]);
@@ -1068,6 +1069,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               case "reset_voice_animal":
                 return JSON.parse(JSON.stringify(v.animalReset));
               case "try_voice_animal":
+                return JSON.parse(JSON.stringify(v.animalTry));
+              // "Hear it" for one built-in voice: the same tiny silent WAV.
+              case "hear_voice_sample":
                 return JSON.parse(JSON.stringify(v.animalTry));
               // The one-time animal voice question (voice_training.rs
               // answer_face_voice_offer). The test builds its own answer
@@ -2611,7 +2615,7 @@ export async function open(browser, base, file, data, viewport) {
       betterOn: TRAINING.answer(TRAINING.voice_posts.better_on_pending),
       betterOff: TRAINING.answer(TRAINING.voice_posts.better_off),
       speed: TRAINING.answer(TRAINING.voice_posts.speed_faster),
-      speaker: TRAINING.answer(TRAINING.voice_posts.speaker_9),
+      speaker: TRAINING.answer(TRAINING.voice_posts.speaker_george),
       faceOn: TRAINING.answer(TRAINING.voice_posts.face_on),
       faceOff: TRAINING.answer(TRAINING.voice_posts.face_off),
       animalSet: TRAINING.answer(TRAINING.voice_posts.animal_set),

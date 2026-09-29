@@ -31,6 +31,14 @@ export const SEND_EMAIL_ACTION = "send_email";
  */
 export const DRAFT_EMAIL_ACTION = "draft_email";
 
+/**
+ * The gate action every inbox tidy is asked under (jarvis_inbox_tidy.ACTION;
+ * JARVIS-API.md section 95). Its card lists every email that will be touched
+ * (sender, subject, date - words from outside), so it too is shown verbatim
+ * and approved only in the Jarvis bar, where the whole list can be read.
+ */
+export const TIDY_INBOX_ACTION = "tidy_inbox";
+
 export const TITLE = "Sending email";
 
 /** Settings' explanation, the same words as the phone's. */
@@ -45,13 +53,21 @@ export const MISSING = "Your PC's Jarvis cannot send email yet - run apply-patch
 /** The widget's line for an email card, and its Approve button. */
 export const EMAIL_DETAIL = "An email - open the Jarvis bar to read all of it before approving.";
 export const EMAIL_APPROVE = "Read it in the Jarvis bar";
+/** The widget's line for an inbox tidy's card (the same button). */
+export const TIDY_DETAIL = "Emails to tidy - open the Jarvis bar to read every one before approving.";
 
-/** Whether a card is an email - sent, or a draft (both show the whole text
- * word for word and must never be Markdown-rendered or approved from the
- * widget's one line). */
+/** Whether a card is an email - sent, or a draft - or a tidy of the inbox
+ * (all show the whole text word for word and must never be Markdown-rendered
+ * or approved from the widget's one line). */
 export function isEmailCard(approval) {
   return Boolean(approval)
-    && (approval.action === SEND_EMAIL_ACTION || approval.action === DRAFT_EMAIL_ACTION);
+    && (approval.action === SEND_EMAIL_ACTION || approval.action === DRAFT_EMAIL_ACTION
+      || approval.action === TIDY_INBOX_ACTION);
+}
+
+/** The widget's one line for such a card. */
+export function emailDetail(approval) {
+  return approval && approval.action === TIDY_INBOX_ACTION ? TIDY_DETAIL : EMAIL_DETAIL;
 }
 
 /**
