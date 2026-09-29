@@ -825,9 +825,30 @@ that moment**. Three numbers make a shape, each 0 to 1:
 
 | Number | Panda and otter | Owl |
 |---|---|---|
-| **open** | the jaw drops: the little smile under the nose stays as the upper lip, and a lower lip curves down away from it, with dark red inside and a muted pink tongue low down; the chin and the cream muzzle patch move down with it | the lower half of the beak drops (quickly at first, so half-open speech already shows a clear gap) and tucks back toward the face, showing the dark inside |
-| **wide** ("ee", "s", teeth) | the corners pull out and up and the opening gets thinner, with a pale row of teeth under the upper lip | the lower half gets wider and flatter, and gapes a little less |
+| **open** | the jaw drops: the little smile under the nose stays as the upper lip, and a lower lip curves down away from it, with dark red inside and a muted pink tongue low down; the chin and the cream muzzle patch move down with it | the lower half of the beak drops (very quickly at first: from about a fifth open it is nearly at its full drop, so everyday speech shows a clear gap; louder words gape about as far as before) and tucks back toward the face, showing the dark inside |
+| **wide** ("ee", "s", teeth) | the corners pull out and up and the opening gets thinner, with a pale row of teeth under the upper lip | the lower half gets wider and flatter, and gapes a little less (about 15% each for wide and for round) |
 | **round** ("oo", "o", "w") | narrower, taller and pushed a little forward | a slightly smaller gape |
+
+**The owl's beak opens wider on ordinary speech (owner, 2026-09-29).** The
+two halves of the beak overlap when it is shut, so no gap shows until the
+lower half has dropped about half way - and the old curve only got there at
+open 0.5, so at 96 px most speech (open 0.3 to 0.5) looked as if the beak
+barely moved, and at 400 px it showed a 2 to 4 pixel gap. The drop is now
+`1 - (1 - open)^7` (`gape()` in `pygmyowl.sksl`): 0.2 gives 79% of the full
+drop, 0.3 gives 92%, 0.5 gives 99%, and 1 is exactly the old full drop. The
+"a little less" for a wide or round sound is now about 15% each, taken
+before and after the curve, so it still shows at moderate opens. Shut is
+exactly as before: the closed beak, in any wide or round, and the owl at rest
+are pixel-for-pixel unchanged (checked on 120 resting poses and 9 shapes at
+96 and 400 px), so an "m", "b" or "p" still shuts it fully. Pictures, before
+above after, for opens 0 to 1, plain, "ee" and "oo":
+`docs/critters/owl-beak-96px.png` and `docs/critters/owl-beak-400px.png`.
+Nothing else depended on the old curve (no test or golden reads it). The
+opening moves smoothly and steadily (checked in steps of 0.01): the steepest
+part is the first few hundredths, where the lower half moves under one pixel
+at 400 px per hundredth of open, and it never opens wider than the old full
+open. The owl's shader grew from 48,916 to 51,937 (the curve is worked out
+where the beak is drawn, in every march step); the limit is 60,000.
 
 **One mouth, not two drawings.** For the panda and the otter the shut
 mouth - a short stem down from the nose and a small smile - is the same

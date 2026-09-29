@@ -109,11 +109,20 @@ float partEyes(float3 h) {
     return sdEllipsoid(ep, float3(0.118, max(0.010, 0.118 * open), 0.075));
 }
 // How far the beak gapes: uMouth's open, a little less for a round sound
-// and flatter for a wide one - eased out (quick at first, gentle at the
-// top), so the everyday half-open of speech already shows a clear gap.
+// and flatter for a wide one - eased out steeply (very quick at first, flat
+// at the top): the lower half of the beak starts to overlap the upper one, so
+// no gap shows until it has dropped about half way, and an everyday vowel
+// (open 0.3 to 0.5) has to be there already or the beak seems to barely
+// move - at 96 pixels the whole full-open gap is under two pixels.
+// 1 - (1 - open)^7: 0.2 gives 0.79 of the full gape, 0.3 gives 0.92 and
+// 0.5 gives 0.99; louder words gape about as far as before (1 is 1, as
+// it was). Shut is 0, exactly as before.
 float gape() {
-    float e = uMouth.x * (1.0 - 0.3 * uMouth.z) * (1.0 - 0.3 * uMouth.y);
-    return e * (2.0 - e);
+    float k = (1.0 - 0.15 * uMouth.z) * (1.0 - 0.15 * uMouth.y);
+    float q = 1.0 - uMouth.x * k;
+    float q2 = q * q;
+    float q4 = q2 * q2;
+    return k * (1.0 - q4 * q2 * q);
 }
 // A small hooked beak: an upper half, and a lower half that drops to speak -
 // wider and flatter for a wide sound - with the dark of the open mouth
