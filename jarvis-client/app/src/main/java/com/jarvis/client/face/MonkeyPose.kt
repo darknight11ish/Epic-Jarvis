@@ -127,7 +127,9 @@ object MonkeyPose {
     private const val ASLEEP = 53
     private const val A_EY = 54
     private const val A_EZ = 55
-    private const val N = 56
+    private const val LID = 56
+    private const val LID_SLOPE = 57
+    private const val N = 58
 
     // Where the hand holds the vine, and the vine's height there while it hangs.
     private const val GRIP_X = 0.46f
@@ -574,6 +576,7 @@ object MonkeyPose {
         }
         farewell(p, state, o)
 
+        CritterPose.lidSet(p, LID, state)
         // The banana rides in the hand holding it.
         val off = apply(banFrame(p), BAN_AT[0], BAN_AT[1], BAN_AT[2])
         p[ORB_X] = p[B_HX] + off[0]; p[ORB_Y] = p[B_HY] + off[1]; p[ORB_Z] = p[B_HZ] + off[2]
@@ -660,6 +663,7 @@ object MonkeyPose {
             val lids = (1f - 0.35f * ease((x - 0.1f) / 0.6f)) * (1f - ease((x - 1.9f) / 0.9f))
             val lid = k * toward(eyesClose(x), lids, ex)
             p[EYE_L] = f[EYE_L] * lid; p[EYE_R] = f[EYE_R] * lid
+            CritterPose.lidNod(p, f, LID, 1f - lid)   // the painted lid comes down as the eyes close
             p[GRIP] += e * f[GRIP] * settled(x, 0.75f) * (1f - ease((x - 1.0f) / 0.7f))
             hold(p, f, LEGS, e * settled(x, 1.1f) * (1f - ease((x - 1.0f) / 1.4f)))
             hold(p, f, TAILK, e * settled(x, 1.1f) * (1f - ease((x - 1.4f) / 1.4f)))
@@ -673,6 +677,7 @@ object MonkeyPose {
         val lids = eyesOpen(x) * (1f - ex * bump((x - 0.75f) / 0.45f))
         val fe = 1f - k * (1f - lids)
         p[EYE_L] *= fe; p[EYE_R] *= fe
+        CritterPose.lidWake(p, LID, x, k)   // ...and lifts a little after they open
         val s = e * envAHR(x - 1.2f, 0.35f, 0.2f, 0.45f)
         p[LEG_LF] += 0.25f * s; p[LEG_RF] += 0.25f * s; p[LEG_LK] -= 0.2f * s; p[LEG_RK] -= 0.2f * s
         p[BREATH] += 0.012f * s; p[HEAD_PITCH] += 0.06f * s
@@ -688,6 +693,7 @@ object MonkeyPose {
             BAN_YAW, BAN_ROLL, BAN_PITCH, GRIP,
         ),
         intArrayOf(EAR_L, EAR_R, LEG_LF, LEG_LO, LEG_LK, LEG_RF, LEG_RO, LEG_RK, TAIL_1, TAIL_2, TAIL_3, TAIL_4, TAIL_CURL, TAIL_WRAP),
+        LID,
     ).also { h ->
         // (banRoll is an angle: twirled right round, it settles the short way.)
         h.cut[BAN_ROLL] = PI.toFloat()
@@ -803,6 +809,7 @@ object MonkeyPose {
         out["uNeck"] = toWorld(NECK[0], NECK[1], NECK[2])
         out["uHeadR0"] = invRow(hm, 0); out["uHeadR1"] = invRow(hm, 1); out["uHeadR2"] = invRow(hm, 2)
         out["uFace"] = floatArrayOf(clamp(p[EYE_L], 0f, 1.2f), clamp(p[EYE_R], 0f, 1.2f), p[BROW])
+        out["uLid"] = floatArrayOf(clamp(p[LID], 0f, 1f), clamp(p[LID_SLOPE], -1f, 1f))
         out["uMouth"] = CritterPose.mouthOf(p[SPEAK], mouth)
         out["uLook"] = floatArrayOf(clamp(p[LOOK_X], -1f, 1f), clamp(p[LOOK_Y], -1f, 1f))
         out["uEars"] = floatArrayOf(clamp(p[EAR_L], -0.6f, 0.6f), clamp(p[EAR_R], -0.6f, 0.6f))

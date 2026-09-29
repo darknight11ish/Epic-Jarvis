@@ -850,6 +850,8 @@ class CritterPoseTest {
         var worst = 0f
         for ((name, v) in a) for (i in v.indices) {
             if (name == "uFace" && i < 2) continue
+            // (The painted eyelid, uLid, is the eyes' too: the lid lifts as they open.)
+            if (name == "uLid") continue
             // (The robot's eyes are all of uEyes and uEyes2, where they look
             // (uLook: painted on its visor, not a turning eyeball) and the
             // light they throw, uOrbGlow: their shape and glow are the eyes too.)

@@ -61,6 +61,8 @@ object CritterPose {
     internal const val HL_LIMB = 0.15f
     internal const val HL_BODY = 0.18f
     internal const val HL_TRAIL = 0.22f
+    // The painted eyelid (uLid) arrives after the eyes' own squash and the head: a look, not a movement.
+    internal const val HL_LID = 0.25f
 
     // The pose as a flat array so two can be blended element by element.
     // Same order as the desktop's KEYS.
@@ -99,7 +101,9 @@ object CritterPose {
     private const val TAIL_4 = 32
     private const val TAIL_5 = 33
     private const val ASLEEP = 34
-    private const val N = 35
+    private const val LID = 35
+    private const val LID_SLOPE = 36
+    private const val N = 37
 
     private const val TAU = (2.0 * PI).toFloat()
     private const val PI_F = PI.toFloat()
@@ -1226,6 +1230,7 @@ object CritterPose {
         }
         farewell(p, state, o)
 
+        lidSet(p, LID, state)
         val q = 1f - o.quiet
         val k = eyeK * (1f - q * max(if (blinks) blinkAt(t, S_BLINK, blinkSlow, 2f, 10f) else 0f, turnBlink))
         p[EYE_L] *= k
@@ -1319,6 +1324,40 @@ object CritterPose {
     /** The plain nodding-off's eyes: close slowly over 1.8 s. */
     internal fun eyesClose(x: Float): Float = 1f - ease(x / 1.8f)
 
+    // --- the painted eyelids (the desktop's LID table and lidSet/lidNod/lidWake) ---
+    // A lid is a SETTLED LOOK, not a movement: the state sets a number, the pose's
+    // ordinary settling eases it. [li] is the index of an animal's lid number; its
+    // slope is the next one.
+    /** The heavy lid of sleep: what a wake-up lifts and a nodding off lowers. */
+    internal const val LID_SLEEP = 0.55f
+    /** Waiting on you: a level, attentive lid; something wrong: a worried (sloped) one; dozing and asleep: heavy and level. */
+    internal fun lidSet(p: FloatArray, li: Int, state: FaceState) {
+        when (state) {
+            FaceState.APPROVAL -> { p[li] = 0.2f; p[li + 1] = 0f }
+            FaceState.ERROR -> { p[li] = 0.42f; p[li + 1] = 1f }
+            FaceState.BANKED, FaceState.STANDBY -> { p[li] = LID_SLEEP; p[li + 1] = 0f }
+            else -> { p[li] = 0f; p[li + 1] = 0f }
+        }
+    }
+    /** Nodding off: from the lid the old state had ([f]) to the sleeping one, as the eyes close ([close] 0..1). */
+    internal fun lidNod(p: FloatArray, f: FloatArray, li: Int, close: Float) {
+        p[li] = toward(f[li], p[li], close)
+        p[li + 1] = toward(f[li + 1], p[li + 1], close)
+    }
+    /** Waking, [x] seconds in: the sleeping lid lifts a little after the eyes open (from 0.25 s, done by 1.15 s). */
+    internal fun lidUp(x: Float): Float = ease((x - 0.25f) / 0.9f)
+    /** Waking ([k]: how asleep it was, 1 fully): from the sleeping lid to the state's own. */
+    internal fun lidWake(p: FloatArray, li: Int, x: Float, k: Float) {
+        val s = k * (1f - lidUp(x))
+        p[li] = toward(p[li], LID_SLEEP, s)
+        p[li + 1] = toward(p[li + 1], 0f, s)
+    }
+    /** A crisis-help moment ([Opts.serious], a weight the host eases) leaves the animal neutral: no lid. [li] < 0: this pose has none. */
+    internal fun lidCalm(p: FloatArray, li: Int, o: Opts): FloatArray {
+        if (li >= 0) { val w = 1f - o.serious; p[li] *= w; p[li + 1] *= w }
+        return p
+    }
+
     /** The panda's waking up and nodding off - the desktop's wakeSleep, and its notes. */
     private fun wakeSleep(p: FloatArray, state: FaceState, x: Float, k: Float, ex: Float, t: Float, f: FloatArray?) {
         val e = ex * k
@@ -1329,6 +1368,7 @@ object CritterPose {
                 0.50f * ease((x - 2.1f) / 0.5f)) * (1f - bump((x - 0.55f) / 0.45f)) * (1f - bump((x - 1.85f) / 0.35f))
             val lid = k * toward(eyesClose(x), lids, ex)
             p[EYE_L] = f[EYE_L] * lid; p[EYE_R] = f[EYE_R] * lid
+            lidNod(p, f, LID, 1f - lid)   // the painted lid comes down as the eyes close
             val down = 0.2f * ease(x / 0.9f) + 0.35f * ease((x - 0.95f) / 0.6f) - 0.2f * ease((x - 1.55f) / 0.45f) +
                 0.65f * ease((x - 2.0f) / 1.0f)
             val up = e * (1f - down)
@@ -1344,6 +1384,7 @@ object CritterPose {
         val lids = eyesOpen(x) * (1f - ex * bump((x - 0.75f) / 0.45f)) * (1f - 0.85f * ex * bump((x - 1.25f) / 0.4f))
         val fe = 1f - k * (1f - lids)
         p[EYE_L] *= fe; p[EYE_R] *= fe
+        lidWake(p, LID, x, k)   // ...and lifts a little after they open
         p[HEAD_PITCH] += 0.05f * e * bump((x - 0.2f) / 1.2f)
         val s = e * envAHR(x - 0.55f, 0.5f, 0.35f, 0.6f)
         p[LEAN] -= 0.05f * s; p[HEAD_PITCH] += 0.08f * s; p[BREATH] += 0.012f * s
@@ -1398,10 +1439,12 @@ object CritterPose {
         val cut: FloatArray = FloatArray(hl.size) { Float.NaN },
         val own: BooleanArray = BooleanArray(hl.size),
     ) {
+        /** Index of the painted lid's number (its slope is the next); -1: this pose has no lid. */
+        var lid: Int = -1
         // Worked out on use, so a table adjusted after it is made (the owl's orb) counts.
         val longest: Float get() = 8f * (hl.maxOrNull() ?: HL_BODY)
     }
-    internal fun halfLives(n: Int, eyes: IntArray, mouth: IntArray, head: IntArray, limbs: IntArray, trail: IntArray): HalfLives {
+    internal fun halfLives(n: Int, eyes: IntArray, mouth: IntArray, head: IntArray, limbs: IntArray, trail: IntArray, lid: Int = -1): HalfLives {
         val hl = FloatArray(n) { HL_BODY }
         val bouncy = BooleanArray(n)
         for (i in eyes) hl[i] = HL_EYES
@@ -1409,13 +1452,15 @@ object CritterPose {
         for (i in head) hl[i] = HL_HEAD
         for (i in limbs) hl[i] = HL_LIMB
         for (i in trail) { hl[i] = HL_TRAIL; bouncy[i] = true }
-        return HalfLives(hl, bouncy)
+        if (lid >= 0) { hl[lid] = HL_LID; hl[lid + 1] = HL_LID }
+        return HalfLives(hl, bouncy).also { it.lid = lid }
     }
     internal val HALF = halfLives(
         N,
         intArrayOf(EYE_L, EYE_R, LOOK_X, LOOK_Y), intArrayOf(SPEAK), intArrayOf(HEAD_YAW, HEAD_PITCH, HEAD_ROLL, BROW),
         intArrayOf(PAW_LX, PAW_LY, PAW_LZ, PAW_RX, PAW_RY, PAW_RZ, ORB_X, ORB_Y, ORB_Z),
         intArrayOf(EAR_L, EAR_R, EAR_TW_L, EAR_TW_R, TAIL_SWING, TAIL_CURL, TAIL_2, TAIL_3, TAIL_4, TAIL_5),
+        LID,
     )
 
     /** The pose shown: the new state's, plus what is left of the changes before it (see [blend]). */
@@ -1531,10 +1576,10 @@ object CritterPose {
         // The state's pose at clock tt, sn seconds into it, dx seconds after now.
         fun at(tt: Float, sn: Float, dx: Float): FloatArray {
             val x = if (cr != null) cr.x + dx else len
-            if (x >= len || moves == null) return targets(state, tt, amp, look, sn, o)
+            if (x >= len || moves == null) return lidCalm(targets(state, tt, amp, look, sn, o), half.lid, o)
             val p = targets(state, tt, amp, look, sn, o.copy(quiet = if (state == FaceState.STANDBY) 0f else quietOf(x)))
             moves(p, state, x, far, ex, tt, from)
-            return p
+            return lidCalm(p, half.lid, o)
         }
         val cur = at(t, since, 0f)
         val curB = if (both) at(t - FD, since - FD, -FD) else null
@@ -1669,6 +1714,7 @@ object CritterPose {
         out["uEarL0"] = invRow(el, 0); out["uEarL1"] = invRow(el, 1); out["uEarL2"] = invRow(el, 2)
         out["uEarR0"] = invRow(er, 0); out["uEarR1"] = invRow(er, 1); out["uEarR2"] = invRow(er, 2)
         out["uFace"] = floatArrayOf(clamp(p[EYE_L], 0f, 1.2f), clamp(p[EYE_R], 0f, 1.2f), p[BROW])
+        out["uLid"] = floatArrayOf(clamp(p[LID], 0f, 1f), clamp(p[LID_SLOPE], -1f, 1f))
         out["uMouth"] = mouthOf(p[SPEAK], mouth)
         out["uLook"] = floatArrayOf(clamp(p[LOOK_X], -1f, 1f), clamp(p[LOOK_Y], -1f, 1f))
         out["uShL"] = toWorld(-0.24f, 0.48f, -0.10f)
