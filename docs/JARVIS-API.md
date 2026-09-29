@@ -1868,6 +1868,15 @@ Omitting it (an older client) works exactly as before; the phrase check
 above needs no such wiring at all, since it reads the turn it is already
 answering.
 
+**Never for a crisis-help answer** (owner's go-ahead, 2026-09-29): a
+thumbs-down on the answer to a crisis message (the turn `X-Jarvis-Route`
+flags `"wellbeing": "crisis"`, section 38) is not counted, the same as the
+other two signs already skip a crisis turn. The backend keeps a short,
+bounded, in-memory list of crisis turn ids for this (ids only - no words, no
+conversation id; never written anywhere; gone on restart); a turn id not on it
+counts as normal. The route's request and answer are unchanged. The mark
+itself is saved in `feedback.db` as always.
+
 ---
 
 ## 13. The wiki builder (added 2026-09-24)

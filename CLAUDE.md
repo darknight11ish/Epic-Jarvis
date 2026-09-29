@@ -478,14 +478,15 @@ here rather than patched blind:
   checked the fixture against the app, never the app against the fixture -
   a phrase added straight to the phone's list, in neither direction, would
   have passed silently.
-- **Written down, not fixed:** marking a crisis answer "wrong" (the thumbs-
-  down button) still counts toward "suggest the bigger model" - the crisis
-  exclusion above only covers the live phrase-based signal and the
-  struggle count. Fixing it needs the turn's crisis flag and its id joined
-  across two separate patches (`chat-stream.patch`, which has the flag, and
-  `second-card-suggest.patch`, which has the id) - mechanical, but not done
-  without the owner's go-ahead given how carefully this project already
-  treats crisis handling.
+- **Written down, then fixed (owner's go-ahead, 2026-09-29):** marking a
+  crisis answer "wrong" (the thumbs-down button) used to count toward
+  "suggest the bigger model". Now `jarvis_agent.py` keeps a small,
+  in-memory, bounded list of crisis turn ids (handed over by
+  `second-card-suggest.patch`, where the turn's id and its crisis flag are
+  both known), and a thumbs-down on one is not counted. The list holds only
+  random ids - no words, nothing on disk or in a log. The thumbs-down itself
+  is still saved in `feedback.db` (an id and a mark), as before. Nothing else
+  about crisis handling changed.
 
 Decided 2026-09-27, when the owner asked for a 3D animal face (with
 Gemini's notes as input, not instructions):

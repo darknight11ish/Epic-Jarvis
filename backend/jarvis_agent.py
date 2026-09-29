@@ -104,6 +104,7 @@ those programs.
 from __future__ import annotations
 
 import ast
+import collections
 import http.client
 import json
 import operator
@@ -3454,11 +3455,19 @@ def note_correction(conversation_id, n: int = 1, turn_id=None) -> int:
     give - it is a guess about which past answer the owner's new words are
     reacting to, not a reference to one - so it always counts, same as
     before; deduplicating it against the mark signal would need knowing
-    which turn it is about, which this backend does not track today."""
+    which turn it is about, which this backend does not track today.
+
+    A `turn_id` on the crisis list (`note_crisis_turn`, above) is never
+    counted: the count is returned as it stands (owner, 2026-09-29)."""
     if turn_id is not None and not isinstance(turn_id, str):
         turn_id = None
     if not isinstance(conversation_id, str) or not _CID_OK.match(conversation_id) or n <= 0:
         return 0
+    # A thumbs-down on a crisis-help answer is never counted (owner,
+    # 2026-09-29; "Crisis turns" section above): the count is returned as it
+    # already stands, and no row is made for the conversation.
+    if turn_id is not None and is_crisis_turn(turn_id):
+        return suggest_counts(conversation_id)[1]
     try:
         with _SUGGEST_LOCK:
             row = _SUGGEST.get(conversation_id)
@@ -3479,6 +3488,61 @@ def note_correction(conversation_id, n: int = 1, turn_id=None) -> int:
             return row["correction"]
     except Exception:
         return 0
+
+
+# --------------------------------------------------------------------------
+#   Crisis turns: a thumbs-down on one is never counted (owner, 2026-09-29)
+# --------------------------------------------------------------------------
+#
+# CLAUDE.md, 2026-09-27: "a crisis turn is excluded from the 'suggest the
+# bigger model' counters too". That covered the live phrase check and the
+# struggle count (both read `_TurnWatch.crisis`), but not the wrong-mark
+# button: marking a crisis-help answer "wrong" reaches `note_correction` in a
+# LATER, separate request that knows only the turn's id, not whether it was a
+# crisis turn. The owner gave the go-ahead to close exactly that gap.
+#
+# The whole fix is this small list of turn ids: `jarvis_hud.py`
+# (second-card-suggest.patch) hands over the id of a crisis turn - the moment it knows
+# both the id and the flag - and `note_correction` skips an id that is on it.
+#
+#   - MEMORY ONLY, per process. Nothing is written to disk, to a log or to
+#     feedback.db, and it is gone when the backend restarts. It is a set of
+#     random 32-character ids (no words, no conversation id, no time), so it
+#     is not a record of who was in crisis or of what was said.
+#   - BOUNDED. Oldest id dropped first, `_CRISIS_TURNS_MAX` at most.
+#   - An id no longer on the list (or never on it) behaves as an ordinary turn.
+#   - Never raises. Nothing else about crisis handling changes here.
+_CRISIS_TURNS_MAX = 200
+_CRISIS_TURNS_LOCK = threading.Lock()
+_CRISIS_TURNS: "collections.OrderedDict[str, None]" = collections.OrderedDict()
+
+
+def note_crisis_turn(turn_id) -> bool:
+    """Remember (in memory, bounded) that this turn id was a crisis turn, so
+    a later thumbs-down on it is not counted. True if remembered; False for
+    anything that is not a usable id. Never raises."""
+    try:
+        if not isinstance(turn_id, str) or not turn_id or len(turn_id) > 128:
+            return False
+        with _CRISIS_TURNS_LOCK:
+            _CRISIS_TURNS.pop(turn_id, None)
+            _CRISIS_TURNS[turn_id] = None
+            while len(_CRISIS_TURNS) > _CRISIS_TURNS_MAX:
+                _CRISIS_TURNS.popitem(last=False)
+        return True
+    except Exception:
+        return False
+
+
+def is_crisis_turn(turn_id) -> bool:
+    """True if this turn id is on the crisis list above. Read-only; never raises."""
+    try:
+        if not isinstance(turn_id, str):
+            return False
+        with _CRISIS_TURNS_LOCK:
+            return turn_id in _CRISIS_TURNS
+    except Exception:
+        return False
 
 
 def suggest_counts(conversation_id) -> tuple:
