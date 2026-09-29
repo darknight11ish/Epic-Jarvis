@@ -1942,7 +1942,7 @@ backend routes, in both directions; the rest are listed here only.
 | Deep config editing (`/api/config`) | Out of scope on the phone (`CLAUDE.md`). The desktop does not use it either today: it is only in the Brain window's read allow-list, and no window asks for it. |
 | Fetching the look spec (`/api/visual-spec`) | The phone ships its own copy and checks it in a unit test (`SpecDriftTest`); `JARVIS-API.md` says the phone never fetches it. |
 | "Finished, or only paused?" (`/api/voice/turn`) | The phone runs the same Smart Turn model itself (`voice/SmartTurn.kt`), so its audio never leaves it just to ask. The desktop asks its own PC over loopback. |
-| Looking at the screen: the Alt+Shift+S "Look at this" key, the optional Alt+Shift+V "Watch with me" key, and the always-on-top "Jarvis is watching" badge (**rewritten 2026-09-28**) | **The old row is replaced.** It said (2026-09-24) that the phone should not capture the screen live, because Android's photo picker already offered its screenshots. The owner's decision of 2026-09-28 (`CLAUDE.md`, "Jarvis may look at the owner's screen, on the PC and the phone") replaces that: **both apps get both halves** (`docs/SCREEN-DESIGN.md` §6) - on the phone, "Look at this" through the assistant gesture and "Watch with me" through Android's own screen sharing, with Android's consent dialog every session, the phone's own "Never look at" list of apps, and the pictures sent only to the PC over Tailscale/Meshnet, never streamed. What stays on the desktop alone is the **keys and the badge**: keyboard shortcuts are PC things (like the hotkeys below), and the phone's sign is its persistent "Jarvis is watching · Stop" notification and Android's own status-bar icon instead of a floating window. Built so far: the backend's rules only (`jarvis_screen.py`, JARVIS-API §62) - neither app has either half yet. |
+| Looking at the screen: the Alt+Shift+S "Look at this" key, the optional Alt+Shift+V "Watch with me" key, and the always-on-top "Jarvis is watching" badge (**rewritten 2026-09-28**) | **The old row is replaced.** It said (2026-09-24) that the phone should not capture the screen live, because Android's photo picker already offered its screenshots. The owner's decision of 2026-09-28 (`CLAUDE.md`, "Jarvis may look at the owner's screen, on the PC and the phone") replaces that: **both apps get both halves** (`docs/SCREEN-DESIGN.md` §6) - on the phone, "Look at this" through the assistant gesture and "Watch with me" through Android's own screen sharing, with Android's consent dialog every session, the phone's own "Never look at" list of apps, and the pictures sent only to the PC over Tailscale/Meshnet, never streamed. What stays on the desktop alone is the **keys and the badge**: keyboard shortcuts are PC things (like the hotkeys below), and the phone's sign is its persistent "Jarvis is watching · Stop" notification and Android's own status-bar icon instead of a floating window. Built 2026-09-29 (JARVIS-API §62, §96): the backend, the desktop and the phone. **One-sided on purpose, and why:** (a) **the Never look at list is per device**: the PC's holds programs and websites and is refused from any other device (`/api/screen/never-look`, `deliberate` in `tools/check_parity.py`); the phone's holds Android apps, on the phone (`data/ScreenNever.kt`), because neither side can see the other's programs; (b) **the keys, the badge and the tray row are the PC's**, like the other hotkeys; the phone's signs are a Home plate (for the PC's watching, with Stop) and its own ongoing notification (for its own Watch); the PC's watching has no phone notification yet; (c) **starting, asking and extending a PC watch is the PC's alone** - the PC refuses those from any other device, and the phone only reads the sign and can Stop it (stopping only makes Jarvis look less); (d) **the phone's own screen is looked at only on the phone**: the assistant gesture (Look at this) and Android's screen sharing (Watch this phone with me) have no PC equivalent, and their words or one picture travel only inside a chat question to the PC, over Tailscale or Meshnet; (e) **the phone's Watch needs Android's Usage access and its own consent dialog every time**, which the PC has no version of. |
 | Starting a pairing, the QR code and the typed code, and watching or cancelling it (`/api/pair/start`, `/session`, `/cancel`; QR-code pairing, 2026-09-28, `docs/PAIRING-DESIGN.md` section 12) | The code is shown on the PC and the `pair_device` card is approved there with Windows Hello; the backend refuses these routes from any other device (403 `pc_only`). The phone is the device being paired, so it scans or types the code instead (the phone table below). |
 | Turning on signed approvals and the signing challenge (`/api/devices/approval-key`, `/api/approve/challenge`; pairing phase 2, 2026-09-29, `docs/PAIRING-DESIGN.md` section 11) | The signing key lives in a phone's Keystore and the fingerprint or PIN is asked on the phone; the desktop IS the PC and its risky approvals are checked by Windows Hello on the PC itself, so it has no key to register and never signs. It only reads the result: the device list's `approval_key` (`false`, `"waiting"` or `true`) beside each phone. `tools/check_parity.py` lists both routes as phone-only. |
 | "Bring it back" for the old shared key (`/api/devices/shared` with `{"retired": false}`) | A loosening: PC only, one `unretire_shared_key` card with Windows Hello, refused under Lockdown - the same rule as loosening "What asks first". The phone offers Retire (stricter, immediate), never Bring back; the backend refuses Bring back from any other device. |
@@ -2395,18 +2395,26 @@ they landed):
 
 **Still missing:**
 
-- **Looking at the screen ("Look at this", "Watch with me").** Decided
-  2026-09-28 and designed (`docs/SCREEN-DESIGN.md`). Built: the rules only -
-  `jarvis_front.py` (the front-window reader, now shared with focus
-  sessions) and `jarvis_screen.py` (session states, the pause rules, the
-  caps, the Never look at list, Stop everything), plus the router keeping a
-  screen turn on this PC (`has_screen`) and `read_screen` on the read-aloud
-  list (JARVIS-API §62), with the voice setting "Answers about your screen
-  after "Hey Jarvis"" in both apps (under "Only trust the talk button" they
-  stay on screen unless it is on). Missing: the Windows readers (password boxes,
-  capture protection, a window's own text), the chat route reading
-  `screen_text`, and everything in both apps. The preflight's `screen` check
-  says "not built on this PC yet".
+- **Looking at the screen ("Look at this", "Watch with me") - built
+  2026-09-29, with limits.** Decided 2026-09-28 and designed
+  (`docs/SCREEN-DESIGN.md`). Built: the rules (`jarvis_front.py`,
+  `jarvis_screen.py`), the PC's Windows readers (`jarvis_screen_win.py`), the
+  routes and the chat turn (`screen.patch`, `has_screen`, `read_screen`,
+  JARVIS-API §62 and §96), the desktop (the Look at this key, the bar's Watch
+  button and strip, the always-on-top badge, the tray row, the Never look at
+  list) and the phone (the assistant gesture, "Watch this phone with me", the
+  Security switch and Never look at list, the PC's sign with Stop on Home).
+  **Still missing or unproven:** (1) the Windows readers and the badge's
+  exclusion from capture have never run on Windows; (2) the phone's Kotlin
+  compiles only in CI, and what Android really hands over (the screen's text
+  on Android 14/15, GrapheneOS, Compose, Flutter and web content; whether a
+  secure app draws black into screen sharing; Usage access's completeness;
+  battery) is unmeasured; (3) **the picture path**: with one graphics card no
+  model is ever shown a picture - a phone screen picture is read for its
+  words and dropped - and it stays off until the 12 GB card is installed and
+  measured; (4) the phone's Watch cannot be asked from inside Jarvis, whose
+  own screen is never looked at - ask by voice from another app; (5) no
+  Recall-style always-on history, by the owner's decision.
 - **Obsidian daily notes in every date format.** Only formats that can be
   written out exactly are followed (YYYY, YY, MM, M, DD, D, bracketed words,
   `/` folders). A format with month or weekday names, or week numbers, is

@@ -1,6 +1,15 @@
 # Looking at the screen: "Look at this" and "Watch with me" (design)
 
-Status: **design only; nothing built.** For the owner's decision of
+Status: **built 2026-09-29 on the backend, the desktop and the phone**
+(`docs/JARVIS-API.md` sections 62 and 96 say what and how; section 62.12
+says what has not run on a real machine). Where the built version differs
+from this design: a Watch look is **used up by one question** (the design
+said held); the phone's Watch cannot be asked from inside Jarvis (its own
+screen is never looked at - ask by voice from another app); the phone's
+Watch also needs the Security switch "Let Jarvis read this phone's
+screen" on, and the PC's watching is shown on the phone's Home with Stop
+but not as a phone notification. The design below is otherwise as
+written. For the owner's decision of
 2026-09-28 in `CLAUDE.md` ("Jarvis may look at the owner's screen").
 Written by the studio's designer against
 `claude/jarvis-ai-assistant-research-ff37vy`. Anything marked

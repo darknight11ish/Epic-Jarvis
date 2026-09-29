@@ -96,7 +96,7 @@ import os
 import re
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -121,6 +121,8 @@ EXTEND_DEFAULT_MIN = 20
 WARN_BEFORE_S = 120
 #: How long "Look at this" is kept for follow-up questions, in seconds.
 FOLLOW_UP_S = 120
+#: How long a question waits for the words of a look to be read, in seconds.
+READ_WAIT_S = 35.0
 #: The cheap once-a-second check (no picture).
 TICK_S = 1.0
 #: A gap this long between two checks means the PC slept: the session ends.
@@ -199,6 +201,33 @@ END_WORDS = {
     "slept": "the PC slept",
     "stop_all": "Stop everything",
 }
+
+#: The words BOTH apps show for the sign (the desktop's badge and strip, the
+#: phone's notification and Home line) - fixed here, so an app cannot word
+#: them differently (tools/gen_screen_cases.py writes them, and `sign()`'s
+#: cases, into both apps' tests). The sign says only fixed words and minutes:
+#: never a program, a site, a title or a word from the screen.
+SEEN = {
+    "title": "Jarvis is watching",
+    "paused_title": "Jarvis is watching - paused",
+    "ended_title": "Watching ended",
+    "stop": "Stop watching",
+    "more": "20 more minutes",
+    "drop": "Forget this look",
+    "hint": ("Press the Look at this key, then ask - Jarvis reads the words on the window in "
+             "front, once, and keeps nothing."),
+    "held": ("Jarvis is holding what it read for your follow-up questions. It is thrown away "
+             "when it is two minutes old or the bar closes."),
+    "held_short": "Answered using what Jarvis read from your screen (words only).",
+    "watching_note": "Ask about your screen and Jarvis looks when you start. A picture is never saved.",
+    "link": "The link to Jarvis is catching up - Stop still works",
+    "left_under_a_minute": "under a minute left",
+}
+SIGN_DOT = " · "
+#: How long a sign keeps saying why a session ended.
+ENDED_SHOW_S = 15
+#: What the "more time" button adds.
+MORE_MINUTES = 20
 
 OFF, WATCHING, PAUSED, ENDED = "off", "watching", "paused", "ended"
 STATES = (OFF, WATCHING, PAUSED, ENDED)
@@ -637,6 +666,14 @@ class Glance:
     ocr_left: int = 0
     ui_text: str = ""
     ui_left: int = 0
+    #: Set once the picture's words have been read (or reading failed). A look
+    #: taken with wait=False is handed back the moment the picture is grabbed
+    #: and checked; Windows' text recognition then runs beside it.
+    ready: threading.Event = field(default_factory=threading.Event, repr=False, compare=False)
+    #: A "Watch with me" look belongs to the ONE question it was taken for
+    #: (the design: "handed to that question and not held"): the first turn
+    #: that uses it drops it.
+    consume: bool = False
 
 
 def model_part(g: Glance) -> str:
@@ -680,17 +717,158 @@ def label_phone_text(text: str) -> str:
     return "\n\n".join(out)
 
 
-def turn_has_screen(messages) -> bool:
-    """Does the NEWEST user message carry screen content (a `screen_text`
-    part)? For the chat route to hand jarvis_router.choose(has_screen=...)."""
+#: The marks an app puts on the newest user message (`screen`, one of
+#: jarvis_agent._CHAT_CLIENT_FIELDS - it never reaches a model):
+#:   "look"  - answer with the look this PC holds (Look at this / Watch with me)
+#:   "phone" - the phone's own screen picture(s) ride on this message; the PC
+#:             reads their words and never shows a model the picture
+MARKS = ("look", "phone")
+#: Read-through cap for a phone's screen picture: at most this many are read.
+MAX_PHONE_PICTURES = 2
+
+SCREEN_TEXT_EXPIRED = (
+    "[The owner asked about their screen, but the look at it is over: a look is kept for two "
+    "minutes and thrown away when the Jarvis bar closes. Nothing from the screen is available "
+    "now. Say so plainly and tell the owner to ask Jarvis to look again - never guess what "
+    "was on the screen.]")
+SCREEN_TEXT_SLOW = (
+    "[The owner asked about their screen, but this PC was still reading its words when the "
+    "question was sent, so nothing from the screen is available yet. Say so plainly and tell "
+    "the owner to ask again in a moment - never guess what was on the screen.]")
+
+
+def _newest_user(messages):
     if not isinstance(messages, list):
-        return False
-    for m in reversed(messages):
+        return None
+    for i in range(len(messages) - 1, -1, -1):
+        m = messages[i]
         if isinstance(m, dict) and m.get("role") == "user":
-            c = m.get("content")
-            return isinstance(c, list) and any(
-                isinstance(p, dict) and p.get("type") == "screen_text" for p in c)
-    return False
+            return i
+    return None
+
+
+def screen_mark(messages) -> str:
+    """The `screen` mark on the newest user message, or "" - read off the
+    request as the app sent it (the field is stripped before the model)."""
+    i = _newest_user(messages)
+    if i is None:
+        return ""
+    mark = messages[i].get("screen")
+    return mark if mark in MARKS else ""
+
+
+def turn_has_screen(messages) -> bool:
+    """Does the NEWEST user message carry screen content - a `screen_text`
+    part, or a `screen` mark? For the chat route to hand
+    jarvis_router.choose(has_screen=...): such a turn never leaves this PC."""
+    i = _newest_user(messages)
+    if i is None:
+        return False
+    m = messages[i]
+    if m.get("screen") in MARKS:
+        return True
+    c = m.get("content")
+    return isinstance(c, list) and any(
+        isinstance(p, dict) and p.get("type") == "screen_text" for p in c)
+
+
+def _image_bytes(part) -> Optional[bytes]:
+    try:
+        import jarvis_ocr
+        return jarvis_ocr.image_bytes(part)
+    except Exception:
+        return None
+
+
+def _is_image(part) -> bool:
+    return isinstance(part, dict) and (part.get("type") in ("image_url", "image", "input_image")
+                                       or "image_url" in part)
+
+
+def with_screen(messages: list, mark: str = "", *, engine=None,
+                read: Optional[Callable] = None) -> tuple:
+    """(messages, info): a copy of `messages` whose newest user message has
+    the screen's words as a text part of its OWN, after the owner's words,
+    labelled OUTSIDE TEXT by this PC whatever the app said - never merged
+    into what the owner typed. Handles, in that message:
+      * `screen_text` parts (the phone's assistant gesture): labelled and
+        capped (label_phone_text), the part itself removed;
+      * mark "phone": the message's picture(s) are read for their WORDS here
+        (`read`, jarvis_ocr.read_text) and removed - the picture is never
+        sent to any model, on one card or two;
+      * mark "look": the look this PC holds (`engine.take_for_turn()`), or a
+        plain line saying it is over.
+    `info`: {"read": bool (words were added), "text": the words (for the
+    planted-instruction check - never stored), "note", "mode"}. Never
+    changes `messages` itself; never raises."""
+    info = {"read": False, "text": "", "note": "", "mode": ""}
+    msgs = list(messages or [])
+    idx = _newest_user(msgs)
+    if idx is None:
+        return msgs, info
+    content = msgs[idx].get("content")
+    parts = ([{"type": "text", "text": content}] if isinstance(content, str) and content
+             else list(content) if isinstance(content, list) else [])
+    has_text_part = any(isinstance(p, dict) and p.get("type") == "screen_text" for p in parts)
+    if mark not in MARKS and not has_text_part:
+        return msgs, info
+    kept, added, words = [], [], []
+    empty_part = False
+    try:
+        for p in parts:
+            if isinstance(p, dict) and p.get("type") == "screen_text":
+                info["mode"] = info["mode"] or "phone_text"
+                t = str(p.get("text") or "")
+                if t.strip():
+                    words.append(t)
+                else:
+                    empty_part = True      # a look that read nothing: said plainly, below
+                continue
+            if mark == "phone" and _is_image(p):
+                continue                    # read below; never sent on
+            kept.append(p)
+        if mark == "phone":
+            info["mode"] = "phone"
+            texts = []
+            for p in [q for q in parts if _is_image(q)][:MAX_PHONE_PICTURES]:
+                image = _image_bytes(p)
+                got = None
+                if image:
+                    got = (read or _default_reader())(image)
+                t, _left = _ocr_words(got) if got is not None else ("", 0)
+                if t:
+                    texts.append(t)
+            if texts:
+                words.append("\n\n".join(texts))
+        if words:
+            joined = "\n\n".join(words)
+            body = label_phone_text(joined)
+            info.update(read=True, text=clip(joined, UI_MAX_CHARS * 2)[0])
+            added.append({"type": "text", "text": body})
+        elif mark == "phone" or empty_part:
+            added.append({"type": "text", "text": SCREEN_TEXT_NONE})
+        elif mark == "look":
+            info["mode"] = "look"
+            eng = engine or ENGINE
+            got = eng.take_for_turn()
+            if got.get("part"):
+                info.update(read=True, text=got["part"], note=got.get("note") or "")
+                added.append({"type": "text", "text": got["part"]})
+            else:
+                added.append({"type": "text",
+                              "text": SCREEN_TEXT_SLOW if got.get("slow") else SCREEN_TEXT_EXPIRED})
+    except Exception:
+        return list(messages or []), {"read": False, "text": "", "note": "", "mode": ""}
+    msgs[idx] = dict(msgs[idx], content=kept + added)
+    return msgs, info
+
+
+def _default_reader():
+    try:
+        import jarvis_ocr
+        return jarvis_ocr.read_text
+    except Exception:
+        return lambda image: {"ok": False}
 
 
 # --------------------------------------------------------------------------
@@ -773,6 +951,7 @@ class Screen:
             gen = self._gen
         _audit("screen.watch", {"did": "start", "minutes": m})
         self.tick()
+        self._emit()            # the apps draw the sign from this: a clean start too
         if self.run_loop:
             threading.Thread(target=self._loop, args=(gen,), name="jarvis-screen-watch",
                              daemon=True).start()
@@ -794,6 +973,8 @@ class Screen:
         self.state, self.pause, self.ended_why = ENDED, None, why
         self.ends_at, self.warned = 0.0, False
         self._gen += 1
+        if self._look is not None and self._look.mode == "watch":
+            self._look = None       # a session's own look goes with the session
 
     def stop(self, why: str = "owner") -> dict:
         with self._lock:
@@ -862,9 +1043,10 @@ class Screen:
             self._emit()
 
     # -- taking one look ---------------------------------------------------------------
-    def _take(self, mode: str, whole: bool = False) -> tuple:
-        """(Glance, None) or (None, a PAUSE_WORDS key). Check, picture,
-        window text, check again; the picture is dropped either way."""
+    def _grab(self, mode: str, whole: bool = False) -> tuple:
+        """The fast half of a look: check, picture, the window's own text,
+        check again. ((picture, items, before), None) or (None, a PAUSE_WORDS
+        key). The picture is dropped here, unread, when either check fails."""
         if not self.built():
             return None, "not_built"
         before = self._snapshot()
@@ -888,34 +1070,117 @@ class Screen:
         if why:
             picture = items = None       # thrown away, unread
             return None, why
-        try:
-            got = self.ocr(picture)
-        except Exception:
-            got = {"ok": False}
-        picture = None                   # the picture is gone from here on
-        ocr_text, ocr_left = _ocr_words(got)
-        ui_text, ui_left = ui_words(items)
+        return (picture, items, before), None
+
+    def _glance_for(self, mode: str, before: dict) -> Glance:
         site = ""
         if _exe(before) in front.BROWSERS:
             site = front.site_of(front.host_of(before.get("host") or ""))
         title, _ = clip(" ".join(str(before.get("title") or "").split()), TITLE_MAX_CHARS)
-        g = Glance(at=self.clock(), mode=mode, program=program_name(before.get("exe")),
-                   title=title, site=site, ocr_text=ocr_text, ocr_left=ocr_left,
-                   ui_text=ui_text, ui_left=ui_left)
-        _audit("screen.look", {"mode": mode, "ocr_chars": len(ocr_text),
-                               "ui_chars": len(ui_text)})
+        return Glance(at=self.clock(), mode=mode, program=program_name(before.get("exe")),
+                      title=title, site=site)
+
+    def _read(self, g: Glance, picture, items) -> None:
+        """The slow half: Windows' text recognition on the picture, then the
+        picture is gone. Always sets `g.ready`, whatever happens."""
+        try:
+            try:
+                got = self.ocr(picture)
+            except Exception:
+                got = {"ok": False}
+            picture = None               # the picture is gone from here on
+            ocr_text, ocr_left = _ocr_words(got)
+            ui_text_, ui_left = ui_words(items)
+            g.ocr_text, g.ocr_left, g.ui_text, g.ui_left = ocr_text, ocr_left, ui_text_, ui_left
+            _audit("screen.look", {"mode": g.mode, "ocr_chars": len(ocr_text),
+                                   "ui_chars": len(ui_text_)})
+        finally:
+            picture = items = None
+            g.ready.set()
+
+    def _take(self, mode: str, whole: bool = False, wait: bool = True) -> tuple:
+        """(Glance, None) or (None, a PAUSE_WORDS key). With wait=False the
+        Glance comes back as soon as the picture is grabbed and checked, and
+        its words are read beside it (`g.ready`)."""
+        got, why = self._grab(mode, whole)
+        if got is None:
+            return None, why
+        picture, items, before = got
+        g = self._glance_for(mode, before)
+        got = None
+        if wait:
+            self._read(g, picture, items)
+        else:
+            try:
+                threading.Thread(target=self._read, args=(g, picture, items),
+                                 name="jarvis-screen-read", daemon=True).start()
+            except Exception:
+                self._read(g, picture, items)
+        picture = items = None
         return g, None
 
-    def look_at_this(self, whole: bool = False) -> dict:
+    def look_at_this(self, whole: bool = False, wait: bool = True) -> dict:
         """ONE look, now. Held in memory for FOLLOW_UP_S of follow-ups.
-        {"ok": True, "part", "note"} or {"ok": False, "paused", "said"}."""
-        g, why = self._take("look", whole)
+        {"ok": True, "part", "note"} or {"ok": False, "paused", "said"}.
+        With wait=False (the route) the words may still be being read, so no
+        "part" is in the answer - it is only ever handed to a turn
+        (`take_for_turn`)."""
+        g, why = self._take("look", whole, wait)
         with self._lock:
             self._look = g          # a new look replaces the last one; a refused one clears it
         if g is None:
             return {"ok": False, "paused": why, "said": said_for(why)}
         self._emit()
-        return {"ok": True, "part": model_part(g), "note": looked_note(g)}
+        out = {"ok": True, "note": looked_note(g)}
+        if wait:
+            out["part"] = model_part(g)
+        return out
+
+    def ask(self) -> dict:
+        """"Watch with me": the owner is starting a question, so ONE fresh
+        look, held for that question only (`consume`). Not while paused or
+        not watching. {"ok", "looked", "note"} or {"ok": False, ...}."""
+        self.tick()
+        with self._lock:
+            state, pause = self.state, self.pause
+        if state == OFF or state == ENDED:
+            return {"ok": True, "looked": False, "off": True}
+        if state == PAUSED:
+            return {"ok": False, "looked": False, "paused": pause, "said": said_for(pause)}
+        g, why = self._take("watch", False, False)
+        if g is None:
+            return {"ok": False, "looked": False, "paused": why, "said": said_for(why)}
+        g.consume = True
+        with self._lock:
+            self._look = g
+        self._emit()
+        return {"ok": True, "looked": True, "note": looked_note(g)}
+
+    def take_for_turn(self) -> dict:
+        """For the chat turn (jarvis_agent, through `with_screen`): what this
+        question may read of the screen. {"part": text or None, "note",
+        "expired": bool}. Waits (a little) for the words to be read. A
+        Watch-with-me look is used by ONE question and dropped; a Look-at-this
+        look serves follow-ups until FOLLOW_UP_S is over or the bar closes."""
+        with self._lock:
+            g = self._look
+        if g is None:
+            return {"part": None, "note": "", "expired": True}
+        if self.clock() - g.at > FOLLOW_UP_S:
+            with self._lock:
+                if self._look is g:
+                    self._look = None
+            self._emit()
+            return {"part": None, "note": "", "expired": True}
+        g.ready.wait(READ_WAIT_S)
+        if not g.ready.is_set():
+            return {"part": None, "note": looked_note(g), "expired": False, "slow": True}
+        if g.consume:
+            with self._lock:
+                if self._look is g:
+                    self._look = None
+            self._emit()
+        return {"part": model_part(g), "note": looked_note(g), "expired": False}
 
     def follow_up(self) -> Optional[str]:
         """The held look's model part for a follow-up question within
@@ -943,7 +1208,8 @@ class Screen:
 
     def for_question(self) -> dict:
         """"Watch with me": the owner started a question, so ONE fresh look.
-        Not held here - the caller uses it for this question and drops it."""
+        Not held here - the caller uses it for this question and drops it.
+        (The routes use `ask()`, which holds it for the question's turn.)"""
         self.tick()
         with self._lock:
             if self.state != WATCHING:
@@ -997,6 +1263,70 @@ class Screen:
         return "The look at your screen was thrown away."
 
 
+def minutes_left(left_s) -> str:
+    """"24 min left", "under a minute left", or "" when it is not a time."""
+    if isinstance(left_s, bool) or not isinstance(left_s, (int, float)) or left_s < 0:
+        return ""
+    if left_s < 60:
+        return SEEN["left_under_a_minute"]
+    return f"{-(-int(left_s) // 60)} min left"
+
+
+def sign(status, *, stale: bool = False, ended_ago=None) -> dict:
+    """What the sign says, from a status: {"show", "on", "title", "detail",
+    "stop", "more", "tone"}. The reference the desktop's look-rules.js and the
+    phone's ScreenRules.kt are held to (tools/gen_screen_cases.py).
+    `ended_ago`: seconds since a session ended - it is shown for ENDED_SHOW_S."""
+    s = status if isinstance(status, dict) else {}
+    none = {"show": False, "on": False, "title": "", "detail": "", "stop": "", "more": "",
+            "tone": "off"}
+    if s.get("on") is True:
+        paused = s.get("state") == PAUSED
+        left = minutes_left(s.get("left_s"))
+        bits = []
+        if paused:
+            bits.append("Paused: " + (str(s.get("pause_words") or "").strip()
+                                      or "something private is in front"))
+        if s.get("ending_soon") is True and not paused:
+            bits.append("Ending soon - " + (left or "almost done"))
+        elif left:
+            bits.append(left)
+        if stale:
+            bits.append(SEEN["link"])
+        return {"show": True, "on": True,
+                "title": SEEN["paused_title"] if paused else SEEN["title"],
+                "detail": SIGN_DOT.join(bits), "stop": SEEN["stop"],
+                "more": SEEN["more"] if s.get("ending_soon") is True else "",
+                "tone": "paused" if paused else "watching"}
+    if s.get("state") == ENDED:
+        ago = ended_ago if isinstance(ended_ago, (int, float)) and not isinstance(
+            ended_ago, bool) else 0
+        if ago >= ENDED_SHOW_S:
+            return none
+        words = str(s.get("ended_words") or "").strip()
+        return {"show": True, "on": False, "title": SEEN["ended_title"],
+                "detail": f"Ended: {words}" if words else "", "stop": "", "more": "",
+                "tone": "ended"}
+    return none
+
+
+def look_line(payload) -> dict:
+    """What an app says after ONE look, from the note or the refusal the PC
+    sent: {"text", "tone"}. The reference for both apps (see `sign`)."""
+    p = payload if isinstance(payload, dict) else {}
+    if p.get("ok") is True:
+        return {"text": str(p.get("note") or "").strip() or "Looked at your screen.",
+                "tone": "ok"}
+    return {"text": str(p.get("said") or "").strip()
+            or "Jarvis could not look at your screen just now.", "tone": "warn"}
+
+
+def screen_mark(status) -> str:
+    """The mark a question carries (or "") so the PC adds the held look's
+    words to it: only while a look is held. The reference for both apps."""
+    return "look" if isinstance(status, dict) and status.get("look_held") is True else ""
+
+
 def said_for(why: Optional[str]) -> str:
     if not why:
         return ""
@@ -1019,9 +1349,36 @@ def _default_ocr():
         return None
 
 
-#: The one engine. No front reader and no capture yet (build step 3), so
-#: `built` is False and nothing can start; jarvis_ocr's reader is ready.
-ENGINE = Screen(ocr=_default_ocr())
+def _windows_readers() -> dict:
+    """The Windows readers (jarvis_screen_win.py), or {} - off Windows, or
+    without the `uiautomation` package that tells a password box from any
+    other box. Nothing is ever started without all of them."""
+    try:
+        import jarvis_screen_win as win
+        return win.readers() if win.available() else {}
+    except Exception:
+        return {}
+
+
+def not_built_words() -> str:
+    """Why nothing can start on this PC, in plain words (NOT_BUILT's better
+    half: says which part is missing)."""
+    try:
+        import jarvis_screen_win as win
+        why = win.unavailable_why()
+    except Exception:
+        why = "Jarvis's Windows screen reader (jarvis_screen_win.py) is not in the backend folder."
+    if why:
+        return "Looking at the screen is off on this PC. " + why
+    if _default_ocr() is None:
+        return ("Looking at the screen is off on this PC: the part of Jarvis that reads words "
+                "(jarvis_ocr.py) is not in the backend folder.")
+    return NOT_BUILT
+
+
+#: The one engine. Built with the Windows readers where they exist; with none
+#: (Linux, or `uiautomation` missing) `built` is False and nothing can start.
+ENGINE = Screen(ocr=_default_ocr(), **_windows_readers())
 
 
 def _stop_for_stop_all() -> Optional[str]:
@@ -1033,3 +1390,196 @@ try:
     jarvis_stop_all.register(STOP_ALL_NAME, _stop_for_stop_all)
 except Exception:
     pass    # without Stop everything on this PC, a session is stopped by "stop watching"
+
+
+# --------------------------------------------------------------------------
+#   The routes: GET/POST /api/screen and /api/screen/never-look
+#   (JARVIS-API section 62.9 and 96; installed by screen.patch)
+# --------------------------------------------------------------------------
+
+ROUTE = "/api/screen"
+ROUTE_NEVER = "/api/screen/never-look"
+#: The verbs POST /api/screen takes. "look", "ask", "start" and "extend" can
+#: only come from THIS PC; "stop" (and "drop") from anywhere, because they
+#: only ever make Jarvis look LESS.
+LOCAL_DOS = ("look", "ask", "start", "extend")
+ANY_DOS = ("stop", "drop")
+LOCAL_ONLY_SAYS = ("Jarvis can only look at the screen of the PC it runs on, and only when it "
+                   "is asked from that PC.")
+_LOOPBACK = ("127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost")
+
+
+def is_local(peer, local=None) -> bool:
+    """Is the request from this PC itself? Loopback, or one of this PC's own
+    addresses (jarvis_owner_check.from_this_pc - a program on the PC calling
+    the PC's own Tailscale address arrives from that same address). A phone
+    over Tailscale or NordVPN Meshnet, any other machine, and an address that
+    cannot be read are NOT local: unlike owner_check (where "cannot tell"
+    means "ask"), looking at a screen fails the other way - it refuses."""
+    text = str(peer or "").strip().split("%")[0]
+    if not text:
+        return False
+    try:
+        import ipaddress
+        ipaddress.ip_address(text)
+    except ValueError:
+        return text.lower() == "localhost"
+    if text in _LOOPBACK:
+        return True
+    try:
+        import jarvis_owner_check as oc
+        return bool(oc.from_this_pc(text, str(local or "").strip() or None))
+    except Exception:
+        return False
+
+
+def _flat(extra: Optional[dict] = None) -> dict:
+    st = ENGINE.status()
+    out = dict(st)
+    out.update({"available": bool(st["built"]),
+                "unavailable_why": "" if st["built"] else not_built_words(),
+                "default_minutes": DEFAULT_MINUTES, "max_minutes": MAX_MINUTES,
+                "follow_up_s": FOLLOW_UP_S})
+    if extra:
+        out.update(extra)
+    return out
+
+
+def handle_get(path: str, local: bool) -> tuple:
+    """(status code, body)."""
+    if path == ROUTE:
+        return 200, _flat()
+    if path == ROUTE_NEVER:
+        if not local:
+            return 403, {"error": LOCAL_ONLY_SAYS}
+        nl = ENGINE.never
+        return 200, {"entries": [] if nl.broken else nl.entries(), "unreadable": bool(nl.broken),
+                     "last_removal": last_removal(), "pending": sorted(
+                         f"{k}:{v}" for k, v in _PENDING)}
+    return 404, {"error": "not a screen route"}
+
+
+def _answer(out: dict, extra: Optional[dict] = None) -> dict:
+    """A verb's own answer over the fixed status. The engine's `paused` (why
+    a LOOK was refused) is sent as `why`, so it can never be mistaken for the
+    status's own `paused` (the pause of a running session)."""
+    out = dict(out)
+    out.pop("status", None)
+    if "paused" in out:
+        out["why"] = out.pop("paused")
+    flat = _flat(extra)
+    flat.update(out)
+    return flat
+
+
+def handle_post(path: str, body, local: bool) -> tuple:
+    """(status code, body). Never puts a word from the screen in the body:
+    a look's words go only to the chat turn (`with_screen`)."""
+    if not isinstance(body, dict):
+        return 400, {"ok": False, "error": "the request is not an object"}
+    do = str(body.get("do") or "")
+    if path == ROUTE_NEVER:
+        if not local:
+            return 403, {"ok": False, "error": LOCAL_ONLY_SAYS}
+        nl = ENGINE.never
+        if do == "add":
+            out = nl.add(str(body.get("kind") or ""), str(body.get("value") or ""))
+            return (200 if out.get("ok") else 400), out
+        if do == "remove":
+            out = nl.request_remove(str(body.get("kind") or ""), str(body.get("value") or ""))
+            return (202 if out.get("ok") else (409 if out.get("pending") else 400)), out
+        return 400, {"ok": False, "error": "say add or remove"}
+    if path != ROUTE:
+        return 404, {"error": "not a screen route"}
+    if do in LOCAL_DOS and not local:
+        return 403, {"ok": False, "error": LOCAL_ONLY_SAYS}
+    if do not in LOCAL_DOS + ANY_DOS:
+        return 400, {"ok": False, "error": "say look, ask, start, extend, stop or drop"}
+    if do in ("look", "start") and not ENGINE.built():
+        return 503, _answer({"ok": False, "error": not_built_words()})
+    if do == "look":
+        out = ENGINE.look_at_this(whole=body.get("whole") is True, wait=False)
+        out.pop("part", None)               # never handed to an app
+        return 200, _answer(out)
+    if do == "ask":
+        return 200, _answer(ENGINE.ask())
+    if do == "start":
+        out = ENGINE.start(body.get("minutes"))
+        return (200 if out.get("ok") else 400), _answer(out)
+    if do == "extend":
+        out = ENGINE.extend(body.get("minutes"))
+        return (200 if out.get("ok") else 400), _answer(out)
+    if do == "stop":
+        out = ENGINE.stop("owner")
+        return 200, _answer({"ok": True, "stopped": bool(out.get("stopped"))})
+    ENGINE.drop_look()                       # "drop": the bar closed
+    return 200, _answer({"ok": True})
+
+
+def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
+    """Wrap `handler_cls.do_GET` and `do_POST` so /api/screen and
+    /api/screen/never-look are answered here, after the server's own origin
+    and token checks. Every other request goes straight to the original."""
+    from urllib.parse import urlsplit
+    get0, post0 = handler_cls.do_GET, handler_cls.do_POST
+    if getattr(post0, "_jarvis_screen", False):
+        return "  screen     Look at this / Watch with me (already on)"
+
+    def _allowed(self) -> bool:
+        try:
+            if not origin_ok(self):
+                self._send(403, {"error": "cross-origin request refused"})
+                return False
+            if not token_ok(self):
+                self._send(401, {"error": "bad or missing X-Jarvis-Token"})
+                return False
+        except Exception:
+            self._send(401, {"error": "bad or missing X-Jarvis-Token"})
+            return False
+        return True
+
+    def _local(self) -> bool:
+        try:
+            try:
+                mine = self.connection.getsockname()[0]
+            except Exception:
+                mine = None
+            return is_local(self.client_address[0], mine)
+        except Exception:
+            return False
+
+    def do_GET(self):
+        route = urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/")
+        if route not in (ROUTE, ROUTE_NEVER):
+            return get0(self)
+        if not _allowed(self):
+            return None
+        try:
+            code, out = handle_get(route, _local(self))
+        except Exception as exc:
+            code, out = 503, {"available": False, "error": type(exc).__name__}
+        return self._send(code, out)
+
+    def do_POST(self):
+        route = urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/")
+        if route not in (ROUTE, ROUTE_NEVER):
+            return post0(self)
+        if not _allowed(self):
+            return None
+        try:
+            body = json.loads(read_body(self) or b"{}")
+        except Exception as exc:
+            return self._send(400, {"ok": False, "error": type(exc).__name__})
+        try:
+            code, out = handle_post(route, body, _local(self))
+        except Exception as exc:
+            code, out = 503, {"available": False, "error": type(exc).__name__}
+        return self._send(code, out)
+
+    do_GET._jarvis_screen = True
+    do_POST._jarvis_screen = True
+    handler_cls.do_GET = do_GET
+    handler_cls.do_POST = do_POST
+    if ENGINE.built():
+        return "  screen     Look at this / Watch with me: on, only when asked, from this PC"
+    return "  screen     Look at this / Watch with me: NOT ON (" + not_built_words() + ")"

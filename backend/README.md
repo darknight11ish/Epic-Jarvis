@@ -158,6 +158,7 @@ on a throwaway copy instead.
 | `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude, Gemini or DeepSeek** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
 
 | `inbox-tidy.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Inbox tidy by voice"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 95): archive, star, mark as read or move to Trash a checked list of emails, ONE approval card listing every one, 10 minutes to Undo. Four hunks: in `jarvis_gate.py` `tidy_inbox` joins "a no proposes no memory rule", gets its `_RISK` line (`"yes", "outbound"` - it changes the mailbox on a server, so approving it is a risky approval; nothing is deleted for good, and Undo puts everything back) and its `_TOOL_ACTIONS` line; in `jarvis_hud.py` ONE install block after `sky.patch`'s (`GET /api/email/tidy`, `POST /api/email/tidy/undo`). Its context is other patches' lines: after `support-chat.patch`, before `devices.patch`, which stays last. Needs `jarvis_inbox_tidy.py` - see "Inbox tidy", at the very end. |
+| `screen.patch` | `jarvis_hud.py` | **"Look at this" and "Watch with me": the routes and the chat turn** (the owner's decision of 2026-09-28; `docs/SCREEN-DESIGN.md`, `docs/JARVIS-API.md` sections 62 and 96). Three hunks: a small `_screen_turn(body)` helper (does the newest message carry the owner's screen - the `screen` mark or a `screen_text` part), `has_screen=_screen_turn(body)` in the router call, so such a turn never leaves this PC, and one `jarvis_screen.install(Handler, ...)` block after inbox tidy's, which answers `GET/POST /api/screen` and `GET/POST /api/screen/never-look`. The router call is the owner's own text; the hunk anchors on the lines `cloud-say-yes.patch` already added there (checked against the real file by that patch) and was applied only to the stand-in. Its context is `inbox-tidy.patch`'s startup block, `games-temporary.patch`'s helper lines and `cloud-say-yes.patch`'s router call, so it goes last in the list, after `inbox-tidy.patch`. Needs `jarvis_screen.py` and `jarvis_screen_win.py` copied in (`jarvis_screen_win.py` first); without them, or on any error, the banner says "screen NOT ON", the routes answer 404 and nothing can look. `temporary-chat.patch` also gained one word: `screen` in `_CHAT_CLIENT_FIELDS`, so the mark never travels onward. See "Looking at the screen", below. |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 
 ## All but two of the patches apply, and that is correct
@@ -14783,13 +14784,15 @@ cd backend; python3 test_chatbot_local.py; python3 test_reach.py; python3 test_c
   Reading your own message back off the page would close it, but the
   selectors for that are unproven, so it was not added.
 
-# Looking at the screen, steps 1 and 2: `jarvis_front.py` and `jarvis_screen.py` (2026-09-28)
+# Looking at the screen: the rules, the Windows readers, the routes and the chat turn (2026-09-28/29)
 
 The owner's decision of 2026-09-28 (`CLAUDE.md`, "Jarvis may look at the
-owner's screen"), designed in `docs/SCREEN-DESIGN.md`. This is build steps 1
-and 2 only: the rules, tested here. `docs/JARVIS-API.md` section 62 has the
-details. **Not in either app yet, and not reachable from anything** - no
-route, no key, no badge, no phone gesture.
+owner's screen"), designed in `docs/SCREEN-DESIGN.md`. `docs/JARVIS-API.md`
+section 62 has the details and section 96 the routes. **Built on the backend
+and in both apps** (the desktop's key, badge, tray row and Never look at
+list; the phone's assistant gesture, "Watch this phone with me" and Security
+switch). **The Windows readers have never run on Windows** - see the last
+list.
 
 ## In plain words
 
@@ -14829,39 +14832,59 @@ route, no key, no badge, no phone gesture.
   rules, the caps and label, the Never look at list
   (`screen-never-look.json` in the settings folder), Stop everything
   (`screen_watch`). Every Windows reader is injected; none is built.
+- `jarvis_screen_win.py` - new, shipped whole, **before `jarvis_screen.py`**:
+  the PC's readers as ctypes calls (GDI capture to an in-memory PNG, a UI
+  Automation text walk that skips password boxes, the lock check from the
+  input desktop's name, the window's capture-protection flag). Windows only;
+  on any other machine `available()` is False and nothing can start.
 - `rebuilt/jarvis_router.py` - `choose()` takes `has_screen`.
-- `jarvis_agent.py` - `STEP_READS`: a `step` event may carry
-  `read_screen` by name (nothing sends it yet).
-- `selftest.py` - a preflight `screen` check that says "not built on this
-  PC yet" (a skip).
+- `jarvis_agent.py` - `_TurnWatch.screen`, `with_screen(messages, mark)` (the
+  OUTSIDE TEXT block, the `read_screen` record and step events), a phone screen
+  picture read for its words and never shown to a model, and `choose_lane`
+  treating it as not a vision turn.
+- `jarvis_quick.py` - "watch with me", "stop watching", "watch 20 more
+  minutes", "are you watching?": no model; start, extend and the status
+  answer only from this PC.
+- `screen.patch` - the three `jarvis_hud.py` hunks above; `temporary-chat.patch`
+  - `screen` in `_CHAT_CLIENT_FIELDS`. `tools/build_patch_history.py` was re-run.
+- `selftest.py` - a preflight `screen` check: asks `GET /api/screen`, takes no
+  picture, and says PASS, or WARN when the readers are missing.
+- `tools/gen_screen_cases.py` - the words and cases both apps are held to.
 - `tools/gen_private_aloud_cases.py` and both apps' `READ_ALOUD_TOOLS` -
   `read_screen` added; the shared table regenerated.
-- `scripts/apply-patches.ps1`, `backend/_where.py` - both modules added to
-  `$SHIPPED` (`jarvis_front.py` before `jarvis_focus.py`).
+- `scripts/apply-patches.ps1`, `backend/_where.py` - the modules added to
+  `$SHIPPED` (`jarvis_front.py` before `jarvis_focus.py`, `jarvis_screen_win.py`
+  before `jarvis_screen.py`) and `screen.patch` to the patch list, last (after
+  `inbox-tidy.patch`).
 
 ## Test it
 
     python3 backend/test_screen.py
+    python3 backend/test_screen_turn.py
+    python3 backend/test_screen_win.py
     python3 backend/test_front.py
     python3 backend/test_focus.py
     python3 backend/test_router_private_terms.py
     python3 backend/test_private_aloud.py
     python3 backend/run_suites.py
 
-## Not built yet, said plainly
+## Not checked, said plainly
 
-- **The chat route does not read `screen_text` yet.** The line in the
-  owner's `jarvis_hud.py` that calls `jarvis_router.choose(...,
-  has_image=...)` is the owner's own text, not in any patch here, so a
-  patch adding `has_screen=` would have to guess its surroundings. It is
-  the next step, made against the real file; until then no app sends a
-  `screen_text` part.
-- The Windows readers (password box, capture protection, a window's own
-  text) - step 3, on the owner's PC. Until then `jarvis_screen.ENGINE` is
-  not built and nothing can start.
-- Both apps (steps 4, 5, 7 and 8) and the second card's picture route
-  (step 6).
-- Not run on the owner's PC: tested in the dev container only.
+- **The Windows readers have never run on Windows.** Only their pure parts
+  are tested here (`test_screen_win.py`: PNG encoding, the lock-desktop name,
+  clipping, the word cap). The GDI capture, the UI Automation walk, the
+  password-box check and the capture-protection flag are ctypes calls that
+  need the owner's PC - and so does "is the badge, which is hidden from
+  capture, really absent from a capture".
+- **`screen.patch` was applied only to the
+  stand-in** (`_stack.py`); its hunks, like every `jarvis_hud.py` patch, are
+  checked on the PC by `apply-patches.ps1`.
+- **No picture reaches a model** on one graphics card: a phone screen picture
+  is read for its words and dropped. The picture path waits for the 12 GB
+  card.
+- Neither app's screen code has run on a real Windows PC or phone (see
+  `docs/JARVIS-API.md` section 62.12).
+- Tested in the dev container only.
 
 # Ask several and compare, `jarvis_chatbot_compare.py` (2026-09-28)
 

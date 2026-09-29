@@ -855,6 +855,19 @@ $PATCHES = @(
     # this one adds its lines). Needs jarvis_inbox_tidy.py copied in; without it, or on any error,
     # the banner says so and the routes are simply not there.
     'inbox-tidy.patch'
+    # "Look at this" and "Watch with me" (the owner's decision of 2026-09-28;
+    # docs/SCREEN-DESIGN.md, JARVIS-API sections 62 and 96): GET/POST
+    # /api/screen and /api/screen/never-look. Three hunks in jarvis_hud.py:
+    # the startup install() block (context: inbox-tidy.patch's own block, the
+    # last one before `_loopback_companion`, so it goes after it - last, like
+    # every new patch), a small `_screen_turn` helper (context:
+    # games-temporary.patch's own lines), and `has_screen=` in the router
+    # call, so a turn carrying the owner's screen never leaves this PC
+    # (context: cloud-say-yes.patch's own lines). The message field `screen`
+    # comes off before the model in temporary-chat.patch's own list. Needs
+    # jarvis_screen.py and jarvis_screen_win.py copied in; without them, or
+    # on any error, the banner says so and the routes are simply not there.
+    'screen.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1040,8 +1053,9 @@ $SHIPPED = @(
     'jarvis_chatbot_metaai.py'   # Meta AI (www.meta.ai): a thin site file
     'jarvis_chatbot_api.py'      # the API adapters (OpenAI, DeepSeek, Mistral, xAI, OpenRouter, Groq): a key from Credential Manager, sent to that one host only; no key, no conversation
     'jarvis_chatbot_local.py'    # "a second AI on this PC": another Ollama model, loopback only, never a cloud model; one card allows only the everyday model, two cards any model on the second card
-    # --- looking at the screen, build steps 1 and 2 (2026-09-28): the session rules only; no route, no Windows readers yet ---
-    'jarvis_screen.py'           # "Look at this" and "Watch with me": session states, pause rules, caps, the Never look at list; not reachable from the apps yet
+    # --- looking at the screen (2026-09-28/29): the session rules, the Windows readers and the routes (screen.patch) ---
+    'jarvis_screen_win.py'       # the Windows half of "Look at this" and "Watch with me": what is in front (password box, capture protection, lock), the picture (in memory, never on disk) and the window's own text; copied before jarvis_screen.py
+    'jarvis_screen.py'           # "Look at this" and "Watch with me": session states, pause rules, caps, the Never look at list, GET/POST /api/screen and /api/screen/never-look (screen.patch)
     'jarvis_chatbot_compare.py'  # "Ask several and compare": 2 or more chatbots, ONE card listing every one, one after another, ONE summary; routes in jarvis_chatbot_routes.py
     # --- Jarvis Live (2026-09-28): talking back and forth; the camera off until the second card passes the photo test ---
     'jarvis_live.py'             # the Live session (start, stop, time limit, quiet, pauses), the source=live rules jarvis_speech follows, GET/POST /api/voice/live (live.patch)

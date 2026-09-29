@@ -177,7 +177,9 @@ def targets(text: str) -> dict:
             continue
         if l.startswith("+++ "):
             cur = l[4:].split("\t")[0].strip()[2:]
-            out[cur] = (created, [])
+            # A patch may name one file in several ---/+++ sections (the first
+            # screen.patch did); their hunks all belong to that file.
+            out.setdefault(cur, (created, []))
             hunk = None
             continue
         if cur is not None and l.startswith("@@"):

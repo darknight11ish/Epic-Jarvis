@@ -2129,23 +2129,31 @@ def pf_credentials(live: Live) -> list:
 @preflight_check("screen", "Can Jarvis look at your screen when you ask?")
 def pf_screen(live: Live) -> list:
     """"Look at this" and "Watch with me" (the owner's decision of
-    2026-09-28, docs/SCREEN-DESIGN.md). Build steps 1 and 2 are in
-    (jarvis_screen.py: the session rules, the pause rules, the Never look at
-    list); the Windows readers it needs - is the focused box a password box,
-    is the window protected from capture, the window's own text - are step 3,
-    and no route or app screen reaches it yet. So this says so, plainly, as
-    a skip: nothing is broken and there is nothing for the owner to fix.
-    When the readers land, this check asks the running Jarvis instead."""
+    2026-09-28, docs/SCREEN-DESIGN.md; JARVIS-API section 62). Asks the
+    running Jarvis GET /api/screen whether its Windows readers are in place
+    (jarvis_screen_win.py and the `uiautomation` package that tells a
+    password box from any other box) - and takes NO picture to find out: a
+    check that looked at the screen to see whether it could would be the
+    thing the feature promises never to do unasked. A WARN says what is
+    missing; nothing here is a FAIL, because the rest of Jarvis works
+    without it."""
+    if not live.up:
+        return _needs_backend(live, "looking at the screen")
     try:
-        import jarvis_screen  # noqa: F401
-        have = True
-    except Exception:
-        have = False
-    return [(SKIP, "looking at the screen (\"Look at this\", \"Watch with me\"), because it "
-                   "is not built on this PC yet",
-             ("Its rules are in jarvis_screen.py; " if have else
-              "jarvis_screen.py is not in the backend folder yet (apply-patches.ps1 copies it "
-              "in); ") + "the Windows readers it needs are the next step. Nothing to fix.")]
+        code, body, _r, _h = live.get("/api/screen")
+    except Exception as exc:
+        return [(WARN, "/api/screen did not answer", type(exc).__name__)]
+    if code == 404:
+        return [(WARN, "looking at the screen (\"Look at this\", \"Watch with me\") is not on",
+                 "Run apply-patches.ps1 (screen.patch, jarvis_screen.py and "
+                 "jarvis_screen_win.py), then restart Jarvis.")]
+    if code != 200 or not isinstance(body, dict):
+        return [(WARN, f"/api/screen answered {code}", "")]
+    if body.get("available") is True:
+        return [(PASS, "Jarvis can look at your screen when you ask: the Windows readers are in "
+                       "place (this check took no picture)")]
+    return [(WARN, "looking at the screen is off on this PC",
+             str(body.get("unavailable_why") or "Its Windows readers are not in place."))]
 
 
 def llama_config_files(env) -> list:

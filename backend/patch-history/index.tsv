@@ -73,6 +73,8 @@ projects.patch	projects/ef32847.patch	ef3284730bcbc4a1f9ddd20a2e57fe37c1c92888	2
 schedule.patch	schedule/344c940.patch	344c94087a901ed8751c3ef580ead344fc9da9fb	2026-09-27T05:04:58+00:00	Open or adjust any setting by voice or chat
 schedule.patch	schedule/a90e8dc.patch	a90e8dc5323269d0ed88a81271d22ad1b6acf97e	2026-09-25T04:14:33+00:00	Standby schedule (backend): standby on a timetable, every model unloaded, warm-up on waking
 schedule.patch	schedule/97885fd.patch	97885fd9027e5f7c6a3d163fd5133cf634a0562a	2026-09-25T02:17:12+00:00	Timers, alarms, reminders, a to-do list and one scheduler (backend)
+screen.patch	screen/5f4ff23.patch	5f4ff2359a78bd4d91ce02020f14a55a50a34569	2026-09-29T09:18:58+00:00	Merge studio-screen into the research branch: Look at this and Watch with me
+screen.patch	screen/2915125.patch	291512500a68410187aea64bafa68a81eff8c6d1	2026-09-29T05:23:37+00:00	Screen: the PC's Windows readers, the routes, the chat turn and Watch with me by voice
 second-card-suggest.patch	second-card-suggest/5540058.patch	55400589332bd2028eed95bc142bf3b9c57c396e	2026-09-27T14:18:45+00:00	Fix backend audit findings #6, #7, #9 and #10
 second-card-suggest.patch	second-card-suggest/ed7b4b3.patch	ed7b4b3dce2b9439e2a603591af385999cf4434b	2026-09-27T08:55:01+00:00	Fix the backend audit's six real findings, and the phone's own scroll bug
 second-card-suggest.patch	second-card-suggest/476be02.patch	476be02a5a254b7f6868f3aef75fc00288e3aa73	2026-09-27T04:50:08+00:00	Suggest the bigger model when the second card could help
@@ -84,6 +86,7 @@ second-card.patch	second-card/a0f23da.patch	a0f23dad6d3e20eee783f05a77ab4921da96
 skill-notes.patch	skill-notes/2c4f24c.patch	2c4f24cd99c3400a83e45efb2d743e8b0c4bdd0b	2026-09-15T00:20:02+00:00	Three sentences that were not true, and an ungated insight pool
 sky.patch	sky/2295491.patch	229549120176aec4a8b896feb698af7a2874e97e	2026-09-28T10:54:13+00:00	A fourth animal (the monkey), sun and moon and weather behind the animals, and two face fixes
 support-chat.patch	support-chat/d85b573.patch	d85b573f18b1bf34b3b4d966e8e9f8d9dd02db60	2026-09-28T17:46:12+00:00	Customer-support chats, backend: the details card, the support last check, offers, the window
+temporary-chat.patch	temporary-chat/5c7124b.patch	5c7124b19b248a28fc65797044f0ea352b9ce81f	2026-09-28T20:37:36+00:00	Games stay out of chat history; Live's mark never reaches a model
 temporary-chat.patch	temporary-chat/de9a768.patch	de9a768a8035e8512472b988d4579074bc527e3c	2026-09-25T01:29:50+00:00	temporary-chat.patch: re-anchor on chat-history's field list, which now includes "interrupted"
 temporary-chat.patch	temporary-chat/6173f88.patch	6173f881992a70be94ca3e77a5039378a5264e50	2026-09-25T01:17:50+00:00	Temporary chat and "Used in this answer", in both apps and on the PC
 tool-calling-wiring.patch	tool-calling-wiring/a2f0c5b.patch	a2f0c5bc31b7cd68c57c649bfdfd62418fa14f44	2026-09-18T00:52:27+00:00	backend: fix the 6 findings from the tool-calling audit

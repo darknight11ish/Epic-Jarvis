@@ -74,6 +74,19 @@
          on" notice after a restart - data/WakeResume.kt), never at boot;
          Android shows the microphone indicator for as long as it runs. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- "Watch with me" on this phone (service/ScreenWatchService.kt;
+         docs/SCREEN-DESIGN.md section 4): Android's own screen sharing, asked
+         for by the app's own screen every time. A foreground service of type
+         mediaProjection needs this on Android 14+. Never started at boot. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <!-- Usage access: the ONLY way to know which app is in front while the
+         screen is shared (screen sharing does not say). A special switch the
+         owner turns on in Android's own settings, never a dialog; it shows
+         Jarvis which app is open and nothing done inside it. Without it, Watch
+         does not start and no picture is ever taken. -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
     <!-- "Interrupt Jarvis while it talks" (Speaker.beginVoiceCall): the reply
          plays in voice-call mode so Android's echo canceller can take it back
          out of the microphone. Switching the audio mode and the call's output
@@ -396,6 +409,18 @@
             android:name=".service.LiveService"
             android:exported="false"
             android:foregroundServiceType="microphone" />
+
+        <!-- "Watch with me" on this phone (service/ScreenWatchService.kt;
+             docs/SCREEN-DESIGN.md section 4): the screen shared while the
+             owner has it on, and only then. Started from the app's own Home
+             right after Android's own screen-sharing question, never at boot;
+             START_NOT_STICKY; its notification says "Jarvis is watching this
+             phone" and has Stop. It ends after 30 minutes, when the screen
+             goes off, or when Android ends the sharing. -->
+        <service
+            android:name=".service.ScreenWatchService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection" />
 
         <!-- The Overlay path of "Floating Jarvis" (data/FloatingAvatar.kt).
              specialUse, not any of the other types: it holds a window, not

@@ -176,6 +176,25 @@
             <span class="live-toggle-label" aria-hidden="true">Live</span>
           </button>
 
+          <!-- Watch with me (look.rs, look-rules.js; docs/SCREEN-DESIGN.md): a
+               session the owner starts and stops, with a sign on screen the
+               whole time. No card; the sign is the safeguard. "Look at this"
+               is a KEY, not a button: pressing a button in this bar would
+               put Jarvis's own window in front of what it was to look at. -->
+          <button
+            id="watch-toggle"
+            class="icon-button live-toggle"
+            type="button"
+            aria-pressed="false"
+            aria-label="Watch with me"
+            title="Watch with me: Jarvis looks at your screen when you ask, and pauses on passwords. A sign stays on screen."
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="M8 3.5c-3.2 0-5.5 2.6-6.3 4.1a.8.8 0 0 0 0 .8c.8 1.5 3.1 4.1 6.3 4.1s5.5-2.6 6.3-4.1a.8.8 0 0 0 0-.8C13.5 6.1 11.2 3.5 8 3.5Zm0 1.5a3 3 0 1 1 0 6 3 3 0 0 1 0-6Zm0 1.4a1.6 1.6 0 1 0 0 3.2 1.6 1.6 0 0 0 0-3.2Z" />
+            </svg>
+            <span class="live-toggle-label" aria-hidden="true">Watch</span>
+          </button>
+
           <!-- Temporary chat (the owner's decision, 2026-09-25): while it is
                pressed, Jarvis uses and learns nothing from memory and the PC
                keeps nothing of the chat. Turning it on or off starts a new
@@ -241,6 +260,25 @@
             <button id="jarvis-live-stop-talking" class="text-button" type="button" hidden>Stop talking</button>
             <button id="jarvis-live-mute" class="text-button" type="button" hidden>Mic off</button>
             <button id="jarvis-live-end" class="text-button" type="button" hidden>End Live</button>
+          </div>
+        </section>
+        <!-- "Look at this" and "Watch with me" (look-rules.js): the sign, the
+             note after a look ("Looked at: Chrome window - words only"), and
+             the buttons. Fixed words and minutes from the PC; the note names
+             the program the owner asked about and stays on their screen. The
+             always-on-top badge (watch-badge.html) shows the sign while the
+             bar is hidden. -->
+        <section class="watch-strip" id="watch-strip" hidden aria-label="Jarvis and your screen">
+          <div class="watch-sign">
+            <span class="watch-dot" aria-hidden="true"></span>
+            <strong id="watch-title">Jarvis is watching</strong>
+            <span id="watch-detail"></span>
+          </div>
+          <p class="watch-note" id="watch-note" hidden></p>
+          <div class="watch-actions">
+            <button id="watch-more" class="text-button" type="button" hidden>20 more minutes</button>
+            <button id="watch-drop" class="text-button" type="button" hidden>Forget this look</button>
+            <button id="watch-stop" class="text-button" type="button" hidden>Stop watching</button>
           </div>
         </section>
         <!-- The marker for a whole temporary chat, and its one line while

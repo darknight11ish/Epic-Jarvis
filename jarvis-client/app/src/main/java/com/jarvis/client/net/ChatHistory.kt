@@ -204,6 +204,15 @@ object ChatHistory {
          * marker only). Never on the history, never on a typed message.
          */
         live: Boolean = false,
+        /**
+         * The look the phone holds at its screen, riding with the newest
+         * question ([ScreenLook.Attach]): the words as a `screen_text` part of
+         * their own - the PC labels them outside text and records a read of
+         * the screen - or, for a Watch-with-me picture, the mark
+         * `screen: "phone"` so the PC reads the picture's WORDS and never
+         * shows a model the picture. Never in Live, never on the history.
+         */
+        screen: ScreenLook.Attach? = null,
     ): JsonArray =
         buildJsonArray {
             for (ex in window) {
@@ -220,10 +229,41 @@ object ChatHistory {
                     val base = userTurn(u) + (if (cut != null) mapOf("interrupted" to JsonPrimitive(cut)) else emptyMap())
                     add(JsonObject(base + ("live" to JsonPrimitive(true))))
                 } else if (picture != null && i == asking.lastIndex) {
+                    val onScreen = screen?.words
                     add(
                         buildJsonObject {
                             put("role", "user")
-                            put("content", ChatPicture.userContent(u.text, picture))
+                            put(
+                                "content",
+                                if (onScreen != null) {
+                                    JsonArray(ChatPicture.userContent(u.text, picture) + screenTextPart(onScreen))
+                                } else {
+                                    ChatPicture.userContent(u.text, picture)
+                                },
+                            )
+                            put("provenance", u.provenance)
+                            if (cut != null) put("interrupted", cut)
+                            if (screen?.pictureIsScreen == true) {
+                                put(ScreenRules.SCREEN_FIELD, ScreenRules.SCREEN_PHONE)
+                            }
+                        },
+                    )
+                } else if (screen?.words != null && i == asking.lastIndex) {
+                    add(
+                        buildJsonObject {
+                            put("role", "user")
+                            put(
+                                "content",
+                                buildJsonArray {
+                                    add(
+                                        buildJsonObject {
+                                            put("type", "text")
+                                            put("text", u.text)
+                                        },
+                                    )
+                                    add(screenTextPart(screen.words))
+                                },
+                            )
                             put("provenance", u.provenance)
                             if (cut != null) put("interrupted", cut)
                         },
@@ -235,6 +275,12 @@ object ChatHistory {
                 }
             }
         }
+
+    /** The screen's words, as the part the PC labels as outside text (JARVIS-API 62.6). */
+    private fun screenTextPart(words: String) = buildJsonObject {
+        put("type", "screen_text")
+        put("text", words)
+    }
 
     /**
      * The whole `/api/chat` body. Built as JSON rather than by gluing strings,
@@ -264,9 +310,10 @@ object ChatHistory {
          */
         cloudYes: Boolean = false,
         live: Boolean = false,
+        screen: ScreenLook.Attach? = null,
     ): String =
         buildJsonObject {
-            put("messages", messages(window, asking, picture, interrupted, live))
+            put("messages", messages(window, asking, picture, interrupted, live, screen))
             put("has_image", picture != null)
             put("stream", true)
             put("auto", true)

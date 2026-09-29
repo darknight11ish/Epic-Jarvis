@@ -457,6 +457,15 @@ object JarvisRuntime {
     private val _lockdown = MutableStateFlow(false)
     val lockdown: StateFlow<Boolean> = _lockdown.asStateFlow()
 
+    /**
+     * The PC's "Watch with me" status - `{on, state, left_s, ...}`, never a
+     * word from the screen ([com.jarvis.client.net.ScreenRules], JARVIS-API
+     * section 62) - so Home can show the same "Jarvis is watching" sign the
+     * PC shows, with Stop. Null before the first read or on a PC without it.
+     */
+    private val _screenWatch = MutableStateFlow<JsonObject?>(null)
+    val screenWatch: StateFlow<JsonObject?> = _screenWatch.asStateFlow()
+
     private val _pending = MutableStateFlow<List<PendingItem>>(emptyList())
     val pending: StateFlow<List<PendingItem>> = _pending.asStateFlow()
 
@@ -1474,6 +1483,14 @@ object JarvisRuntime {
                 com.jarvis.client.face.AnimalNow.focusEvent(event.data, replayed)
                 _focusTick.update { it + 1 }
             }
+            // The PC started, paused, extended or ended "Watch with me"
+            // (the event IS the status: `{on, state, left_s, ...}`, never a
+            // word from the screen). Home's sign follows it. An event that
+            // is not that shape is a doorbell: the status is read again.
+            com.jarvis.client.net.ScreenRules.EVENT -> {
+                val status = (event.data as? JsonObject)?.takeIf { it.containsKey("state") }
+                if (status != null) _screenWatch.value = status else scope.launch { refreshScreenWatch() }
+            }
             // Jarvis Live changed (`{"state", "device", "paused", "muted"...}`
             // only - a doorbell, never anything said): read it again.
             "live" -> liveRead()
@@ -1550,6 +1567,24 @@ object JarvisRuntime {
         // only when its settings page opens (audit A2). Its own failure,
         // including a PC without the route, changes nothing.
         runCatching { phoneNotificationsSettings() }
+        // Whether the PC is watching its own screen, for Home's sign.
+        runCatching { refreshScreenWatch() }
+    }
+
+    /** Reads whether the PC is watching its screen. A PC without the route changes nothing. */
+    suspend fun refreshScreenWatch() {
+        api.screenWatch().onOk { _screenWatch.value = it }
+    }
+
+    /**
+     * "Stop watching" on the sign: ends the PC's Watch with me. **Never held
+     * on a stale link and never a card**, like Stop and Stop everything -
+     * ending it only ever makes Jarvis look at less. The status is read
+     * again afterwards, so the sign follows the PC's own answer.
+     */
+    suspend fun stopScreenWatch() {
+        api.stopScreenWatch()
+        refreshScreenWatch()
     }
 
     /**
@@ -3468,6 +3503,11 @@ object JarvisRuntime {
      */
     suspend fun stopEverything(): ApiResult<JsonObject> {
         if (::voice.isInitialized) voice.stopSpeaking()
+        // A held look at this phone's screen goes too, before the PC is asked
+        // (the owner's decision of 2026-09-28: nothing saved, and Stop means stop).
+        com.jarvis.client.net.ScreenLook.drop()
+        // ...and this phone's own Watch with me, if it is running.
+        com.jarvis.client.net.ScreenWatch.requestStop()
         val result = api.stopEverything()
         // A PC that could not be reached: the plain words and their button
         // (Try again, or Check the connection settings), like every failure.
