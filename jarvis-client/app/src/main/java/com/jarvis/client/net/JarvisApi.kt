@@ -607,6 +607,27 @@ class JarvisApi(
     suspend fun setScreenPicture(on: Boolean): ApiResult<DesktopWrite.Outcome> =
         postWrite(ScreenPicture.PATH, ScreenPicture.enabledBody(on))
 
+    // ------------------------------------------------- the headless browser ----
+    // docs/JARVIS-API.md section 97; see [BrowserEngine] for the shapes and
+    // words. Decided on the PC like every other approval-card switch here.
+
+    /** `GET /api/browser/engine`: `{"obscura", "waiting", "mode", "line", "status_line", "install_line", ...}`. */
+    suspend fun browserEngineSettings(): ApiResult<JsonObject> = probe(BrowserEngine.PATH)
+
+    /**
+     * The switch. ON answers 202 waiting while its approval card is up; OFF is
+     * immediate, and withdraws an ON card still waiting.
+     */
+    suspend fun setBrowserEngine(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(BrowserEngine.PATH, BrowserEngine.enabledBody(on))
+
+    /**
+     * Which browser Jarvis uses by default. At once, no card. Nothing but a
+     * body [BrowserEngine.modeBody] made is sent.
+     */
+    suspend fun setBrowserEngineMode(body: String): ApiResult<DesktopWrite.Outcome> =
+        postWrite(BrowserEngine.PATH, body)
+
     // ------------------------------------------------- pairing and devices ----
     // docs/PAIRING-DESIGN.md §6.2 and §6.4.
 

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-browser-engine"
+description = "Enables the browser_engine command without any pre-configured scope."
+commands.allow = ["browser_engine"]
+
+[[permission]]
+identifier = "deny-browser-engine"
+description = "Denies the browser_engine command without any pre-configured scope."
+commands.deny = ["browser_engine"]

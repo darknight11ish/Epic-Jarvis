@@ -1508,9 +1508,11 @@ def t_the_gate_lines_and_the_stack():
         for word in ("processor", "127.0.0.1", "blacked out", "instant", "downloaded by you"):
             check(f"the risk line says {word!r}", word in said, said)
     order = _stack.order()
-    check("screen-picture.patch is last in the stack, after screen.patch",
-          order[-1] == "screen-picture.patch" and order.index("screen.patch")
-          < order.index("screen-picture.patch"))
+    # browser-engine.patch (2026-09-29) goes after it: its gate hunks sit on this
+    # patch's own last lines.
+    check("screen-picture.patch is after screen.patch, and only browser-engine.patch follows it",
+          order[-2:] == ["screen-picture.patch", "browser-engine.patch"]
+          and order.index("screen.patch") < order.index("screen-picture.patch"))
     toml = (HERE / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8")
     check("the toml keeps the action at tier ask", re.search(
         r'^screen_picture_enable\s*=\s*"ask"', toml, re.M) is not None)
