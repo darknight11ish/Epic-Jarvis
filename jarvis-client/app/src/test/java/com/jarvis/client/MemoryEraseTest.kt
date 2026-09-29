@@ -112,6 +112,18 @@ class MemoryEraseTest {
     }
 
     @Test
+    fun theChatQuestionSaysWhatStaysWhenTheChatGoes() {
+        // The chat's OTHER facts stay, and older backups keep copies (the second chat audit).
+        val none = MemoryErase.chatStays(0, "chat")
+        assertTrue(none.startsWith("Facts Jarvis learned stay."))
+        assertTrue(none.contains("Copies in older backups stay until they age out."))
+        assertTrue(MemoryErase.chatStays(1, "chat").startsWith("1 other fact Jarvis learned in that chat stays."))
+        assertTrue(MemoryErase.chatStays(3, "live").startsWith("3 other facts Jarvis learned in that chat stay."))
+        assertTrue(MemoryErase.chatStays(2, "support").contains("customer-support chat"))
+        assertFalse(MemoryErase.chatStays(2, "chat").contains("customer-support"))
+    }
+
+    @Test
     fun theWiringOffersItBesideForgetAndHoldsItOnAStaleLink() {
         val main = "jarvis-client/app/src/main/java/com/jarvis/client"
         val plate = repoFile("$main/ui/screens/AutoLearnPlate.kt").readText()

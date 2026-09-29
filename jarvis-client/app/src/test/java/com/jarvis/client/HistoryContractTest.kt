@@ -84,11 +84,30 @@ class HistoryContractTest {
         assertEquals(w("new_conversation"), ChatHistory.NEW_CONVERSATION)
         assertEquals(w("chat_gone"), ChatHistory.CHAT_GONE)
         assertEquals(w("moved_here"), ChatHistory.MOVED_HERE)
-        assertEquals(w("continued_trimmed"), ChatHistory.CONTINUED_TRIMMED)
+        assertEquals(w("continued_trimmed_one"), ChatHistory.continuedTrimmed(1))
+        assertEquals(w("continued_trimmed_many").replace("{n}", "3"), ChatHistory.continuedTrimmed(3))
+        assertEquals(w("continued_skipped_one"), ChatHistory.continuedSkipped(1))
+        assertEquals(w("continued_skipped_many").replace("{n}", "2"), ChatHistory.continuedSkipped(2))
+        assertEquals(w("idle_new_temporary"), ChatHistory.IDLE_NEW_LINE_TEMPORARY)
+        assertEquals(w("thread_reads_from"), ChatHistory.THREAD_READS_FROM)
+        assertEquals(w("delete_stays"), ChatLog.DELETE_STAYS)
+        assertEquals(w("delete_stays_ticked"), ChatLog.DELETE_STAYS_TICKED)
+        assertEquals(w("taint_support"), ChatLog.TAINT_SUPPORT)
+        assertEquals(w("taint_chatbot"), ChatLog.TAINT_CHATBOT)
+        assertEquals(w("open_in_history"), ChatLog.OPEN_IN_HISTORY)
+        assertEquals(w("open_in_history_title"), ChatLog.OPEN_IN_HISTORY_TITLE)
+        assertEquals(w("chat_facts_taught_one"), ChatLog.chatFactsTaught(1))
+        assertEquals(w("chat_facts_taught_many").replace("{n}", "4"), ChatLog.chatFactsTaught(4))
+        assertEquals(w("chat_facts_taught_none"), ChatLog.chatFactsTaught(0))
+        assertEquals(
+            w("chat_facts_taught_hidden").replace("{n}", "2").replace("{facts}", "facts"),
+            ChatLog.chatFactsTaughtHidden(2),
+        )
         assertEquals(w("continued_tainted"), ChatHistory.CONTINUED_TAINTED)
         assertEquals(w("continued_nothing"), ChatHistory.CONTINUED_NOTHING)
         assertEquals(w("continued_temporary_off"), ChatHistory.CONTINUED_TEMPORARY_OFF)
         assertEquals(w("continue_busy"), ChatHistory.CONTINUE_BUSY)
+        assertEquals(w("continue_live"), ChatHistory.CONTINUE_LIVE)
         assertEquals(w("continued").replace("{title}", "Dentist"), ChatHistory.continuedLine("Dentist"))
         assertEquals(w("thread_one"), ChatHistory.threadSummary(1))
         assertEquals(w("thread_many").replace("{n}", "3"), ChatHistory.threadSummary(3))
@@ -153,7 +172,8 @@ class HistoryContractTest {
                     answerKept = t["answer_kept"]?.jsonPrimitive?.content != "false",
                 )
             }
-            val (window, trimmed) = ChatHistory.continueWindow(turns)
+            val got = ChatHistory.continueWindow(turns)
+            val window = got.window
             val want = c["window"]!!.jsonArray.map { it.jsonObject }.map { x ->
                 Triple(
                     x["question"]!!.jsonPrimitive.content,
@@ -165,7 +185,9 @@ class HistoryContractTest {
                 )
             }
             assertEquals(name, want, window.map { Triple(it.question, it.answer, it.asked.last().provenance) })
-            assertEquals(name, c["trimmed"]!!.jsonPrimitive.content == "true", trimmed)
+            assertEquals(name, c["trimmed"]!!.jsonPrimitive.content == "true", got.trimmed)
+            assertEquals(name, c["trimmed_count"]!!.jsonPrimitive.content.toInt(), got.trimmedCount)
+            assertEquals(name, c["skipped"]!!.jsonPrimitive.content.toInt(), got.skipped)
         }
     }
 
@@ -200,6 +222,12 @@ class HistoryContractTest {
         thread = ChatHistory.addToThread(thread, two, "Then this.")
         assertEquals(listOf("hi"), ChatHistory.threadBefore(thread, "and then?", streaming = false).map { it.question })
         assertEquals(2, ChatHistory.threadBefore(thread, "a new one", streaming = true).size)
+        // The same question asked again that got no answer: the pair before it is an older one
+        // with the same words, and it stays (the second chat audit, phone B3).
+        assertEquals(
+            listOf("hi", "and then?"),
+            ChatHistory.threadBefore(thread, "and then?", streaming = false, answered = false).map { it.question },
+        )
         // Past the model's re-send window, the thread keeps going (only capped).
         var long = emptyList<ChatHistory.Exchange>()
         repeat(ChatHistory.MAX_EXCHANGES + 5) { long = ChatHistory.addToThread(long, one, "Hello.") }
@@ -207,6 +235,51 @@ class HistoryContractTest {
         repeat(ChatHistory.THREAD_MAX) { long = ChatHistory.addToThread(long, one, "Hello.") }
         assertEquals(ChatHistory.THREAD_MAX, long.size)
         assertEquals("a blank answer is not a pair", long, ChatHistory.addToThread(long, one, " "))
+    }
+
+    @Test
+    fun `where Jarvis reads from is drawn above the newest pairs the model gets`() {
+        assertEquals(5, ChatHistory.pairsAboveReadLine(12, 7))
+        assertEquals("all of it is read: no line", 0, ChatHistory.pairsAboveReadLine(3, 3))
+        assertEquals(0, ChatHistory.pairsAboveReadLine(3, 9))
+        assertEquals(0, ChatHistory.pairsAboveReadLine(0, 0))
+    }
+
+    @Test
+    fun `the words about a game or a temporary chat never point to a chat in History`() {
+        assertFalse(ChatHistory.IDLE_NEW_LINE_TEMPORARY.contains("History"))
+        assertFalse(ChatHistory.IDLE_NEXT_LINE_TEMPORARY.contains("History"))
+        assertTrue(ChatHistory.IDLE_NEXT_LINE.contains("The last one is in History."))
+        assertTrue(ChatHistory.NEW_CONVERSATION_KEPT.startsWith(ChatHistory.NEW_CONVERSATION))
+    }
+
+    @Test
+    fun `a search asks for the kind chosen in Show, and only a real one`() {
+        assertEquals("/api/history/search?q=dentist&limit=20", ChatLog.searchPath("dentist"))
+        assertEquals("/api/history/search?q=dentist&limit=20&kind=live", ChatLog.searchPath("dentist", kind = "live"))
+        assertEquals("/api/history/search?q=dentist&limit=20", ChatLog.searchPath("dentist", kind = "imported"))
+        assertEquals("/api/history/search?q=dentist&limit=20", ChatLog.searchPath("dentist", kind = ""))
+        assertEquals(null, ChatLog.searchPath("a", kind = "live"))
+        assertTrue(ChatLog.FILTERS.any { it == ("chat" to "Just chats") })
+    }
+
+    @Test
+    fun `every delete dialog says what stays`() {
+        assertTrue(ChatLog.DELETE_CONFIRM.contains(ChatLog.DELETE_STAYS.substringAfter("Facts Jarvis learned stay. ")))
+        assertTrue(ChatLog.deleteAndForgetConfirm(0).contains(ChatLog.DELETE_STAYS))
+        assertTrue(ChatLog.deleteAndForgetConfirm(2).contains(ChatLog.DELETE_STAYS_TICKED))
+        assertTrue(ChatLog.keepConfirm(30).contains(ChatLog.DELETE_STAYS))
+        assertTrue(ChatLog.DELETE_KEEPS_FACTS.contains("Copies in older backups stay until they age out."))
+    }
+
+    @Test
+    fun `a fact's chat carries its kind, so a support record still asks its own question`() {
+        val body = Json.parseToJsonElement(
+            "{\"conversation\":{\"id\":\"conv-00000001\",\"title\":\"Refund\",\"updated\":5,\"kind\":\"support\"}}",
+        ) as JsonObject
+        assertEquals("support", ChatLog.factChat(body).second?.kind)
+        val older = Json.parseToJsonElement("{\"conversation\":{\"id\":\"conv-00000001\"}}") as JsonObject
+        assertEquals("chat", ChatLog.factChat(older).second?.kind)
     }
 
     @Test

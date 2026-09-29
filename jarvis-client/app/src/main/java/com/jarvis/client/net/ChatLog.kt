@@ -26,7 +26,7 @@ import java.util.Locale
  *
  * THE PHONE STORES NO HISTORY. Everything on the History screen is read from
  * the PC when it is opened and dropped when it is left, like every other
- * list on Mind. Nothing here is written to the phone's disk.
+ * list on Brain. Nothing here is written to the phone's disk.
  *
  * The routes, all with the pairing token like every other:
  * - `GET /api/history?limit=30&before=<updated>` - the switch, why nothing is
@@ -69,7 +69,7 @@ object ChatLog {
      *  (2026-09-28) it points to "Forget a time frame", not to forgetting one by one. */
     const val DELETE_KEEPS_FACTS =
         "Deleting a chat does not forget facts Jarvis learned from it. To forget what Jarvis learned " +
-            "over some days, use Forget a time frame."
+            "over some days, use Forget a time frame. Copies in older backups stay until they age out."
     const val DELETE_CONFIRM = "Delete this conversation from your PC? This cannot be undone. $DELETE_KEEPS_FACTS"
     /**
      * The search box (the owner's answer of 2026-09-27: "shown on screen
@@ -123,10 +123,13 @@ object ChatLog {
      * or more than [SEARCH_MAX_CHARS] once the spaces are tidied. The words
      * are URL-encoded, so nothing typed can add a second parameter.
      */
-    fun searchPath(query: String, limit: Int = 20): String? {
+    fun searchPath(query: String, limit: Int = 20, kind: String? = null): String? {
         val words = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
         if (words.length < SEARCH_MIN || words.length > SEARCH_MAX_CHARS) return null
-        return "$SEARCH_PATH?q=${URLEncoder.encode(words, "UTF-8")}&limit=${limit.coerceIn(1, 50)}"
+        // The kind chosen in "Show" narrows the search too, so "Live only" and
+        // a typed search combine (the second chat audit, 2026-09-28, finding 8).
+        return "$SEARCH_PATH?q=${URLEncoder.encode(words, "UTF-8")}&limit=${limit.coerceIn(1, 50)}" +
+            (kind?.takeIf { it in KINDS }?.let { "&kind=$it" } ?: "")
     }
 
     fun deleteBody(id: String): String = buildJsonObject { put("id", id) }.toString()
@@ -496,7 +499,7 @@ object ChatLog {
 
     fun keepConfirm(to: Int): String =
         "Delete every conversation older than ${keepLabel(to).lowercase(Locale.US)} from your PC now, " +
-            "and from then on? This cannot be undone."
+            "and from then on? This cannot be undone. $DELETE_STAYS"
 
     /**
      * What to say after a `keep_days` change. The PC's own sentence first;
@@ -587,8 +590,8 @@ object ChatLog {
 
     /** "Show": "" is every kind. */
     val FILTERS = listOf(
-        "" to "All chats", "live" to "Live only", "support" to "Support chats",
-        "chatbot" to "Chats with other AIs", "compare" to "Comparisons",
+        "" to "All chats", "chat" to "Just chats", "live" to "Live only",
+        "support" to "Support chats", "chatbot" to "Chats with other AIs", "compare" to "Comparisons",
     )
 
     const val FILTER_NONE = "No conversations of that kind are kept."
@@ -606,6 +609,70 @@ object ChatLog {
 
     const val CONTINUE = "Continue this chat"
     const val CONTINUE_TITLE = "Carry on this conversation on Home."
+
+    /** What every delete dialog says stays (the second chat audit, 2026-09-28) - the desktop's words. */
+    const val DELETE_STAYS = "Facts Jarvis learned stay. Copies in older backups stay until they age out."
+
+    /** The same, when the owner is also ticking facts to forget. */
+    const val DELETE_STAYS_TICKED =
+        "Facts you did not tick stay. Copies in older backups stay until they age out."
+
+    /** The note under an opened record of outside words, when it is not an ordinary chat. */
+    const val TAINT_SUPPORT =
+        "This record holds the company's words, which are outside text: Jarvis never learns from " +
+            "them or acts on them."
+    const val TAINT_CHATBOT =
+        "This record holds another AI's replies, which are outside text: Jarvis never learns from " +
+            "them or acts on them."
+    /**
+     * Said on an opened chat that is the one Home is in (the second chat
+     * audit, phone C5): Delete and Continue act on the chat on screen there.
+     */
+    const val HOME_CHAT_LINE =
+        "This is the chat you are in on Home. Deleting it starts a new conversation there."
+
+    /** The "History is on/off" line's button at the top: opens the settings at the bottom. */
+    const val STATUS_CHANGE = "Change"
+    const val STATUS_CHANGE_TITLE = "Change chat history settings."
+    const val SETTINGS_SHOW_TITLE = "Show chat history settings"
+    const val SETTINGS_HIDE_TITLE = "Hide chat history settings"
+
+    /** Which note goes above an opened record that read outside text, by its kind. */
+    fun taintNote(kind: String): String = when (kind) {
+        "support" -> TAINT_SUPPORT
+        "chatbot", "compare" -> TAINT_CHATBOT
+        else -> TAINT_LINE
+    }
+
+    /**
+     * Which turns carry "read outside text": the ANSWER that read it, not the
+     * owner's own question beside "You" (the second chat audit, the desktop's
+     * C1 - the same rule): each user turn that read outside text marks the
+     * answer after it, or itself when there is none.
+     */
+    fun outsideMarks(turns: List<Turn>): Set<Int> {
+        val out = mutableSetOf<Int>()
+        turns.forEachIndexed { i, t ->
+            if (t.role == "user" && t.readOutside) {
+                out += if (turns.getOrNull(i + 1)?.role == "assistant") i + 1 else i
+            }
+        }
+        return out
+    }
+
+    const val OPEN_IN_HISTORY = "Open in History"
+    const val OPEN_IN_HISTORY_TITLE = "Read it, or delete it, in History."
+
+    /** What an opened chat says about the facts it taught (section 79): read only. */
+    fun chatFactsTaught(n: Int): String = when {
+        n <= 0 -> "Jarvis is not using any fact it learned from this chat."
+        n == 1 -> "Jarvis learned 1 fact from this chat, and still uses it:"
+        else -> "Jarvis learned $n facts from this chat, and still uses them:"
+    }
+
+    fun chatFactsTaughtHidden(n: Int): String =
+        "Jarvis learned $n ${if (n == 1) "fact" else "facts"} from this chat. " +
+            "Your memory lists are hidden, so they are not shown here."
 
     /** Why a kind cannot be continued - jarvis_chat_log.CONTINUE_WHY, for an older PC. */
     val CONTINUE_WHY = mapOf(
@@ -674,8 +741,8 @@ object ChatLog {
 
     fun factChatPath(id: Long): String? = if (id > 0) "$FACT_CHAT_PATH?id=$id" else null
 
-    /** The chat a fact came from: its id, title and last change. */
-    data class FactChat(val id: String, val title: String?, val updated: Long?)
+    /** The chat a fact came from: its id, title, last change and kind. */
+    data class FactChat(val id: String, val title: String?, val updated: Long?, val kind: String = "chat")
 
     /**
      * `GET /api/memory/fact-chat`: [Pair.first] false from a PC that cannot
@@ -684,7 +751,7 @@ object ChatLog {
     fun factChat(body: JsonObject): Pair<Boolean, FactChat?> {
         val c = body["conversation"] as? JsonObject ?: return true to null
         val id = c.str("id") ?: return true to null
-        return true to FactChat(id, c.str("title"), c.whole("updated"))
+        return true to FactChat(id, c.str("title"), c.whole("updated"), kindOf(c.str("kind")))
     }
 
     /**
@@ -807,10 +874,11 @@ object ChatLog {
 
     /** The "are you sure?" line above Yes, with how many ticked facts go. */
     fun deleteAndForgetConfirm(n: Int): String = if (n <= 0) {
-        "Delete this conversation from your PC? This cannot be undone. The facts it taught are kept."
+        "Delete this conversation from your PC? This cannot be undone. $DELETE_STAYS"
     } else {
         "Delete this conversation and forget $n ${if (n == 1) "fact" else "facts"}? The chat cannot be " +
-            "brought back. A forgotten fact is not used again; it stays in Jarvis's history until you erase its words."
+            "brought back. A forgotten fact is not used again; it stays in Jarvis's history until you erase its words. " +
+            DELETE_STAYS_TICKED
     }
 
     /** What happened, in one sentence: [chatSaid] is the delete's own sentence. */

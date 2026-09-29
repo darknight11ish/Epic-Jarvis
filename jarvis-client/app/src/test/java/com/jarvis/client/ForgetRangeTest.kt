@@ -93,8 +93,10 @@ class ForgetRangeTest {
             p.chats.map { it.title to it.spills })
         assertEquals("2 facts and 2 chats from 1 to 15 September 2026.", p.said)
         val all = ForgetRange.allTicked(p)
-        assertEquals(4, ForgetRange.tickedCount(p, all))
-        val some = all - "fact:${p.facts[0].id}" - "chat:conv-poem-00002"
+        // A chat that spills outside the days starts UNticked (the second chat audit).
+        assertEquals(3, ForgetRange.tickedCount(p, all))
+        assertFalse("chat:conv-poem-00002" in all)
+        val some = all - "fact:${p.facts[0].id}"
         val sent = json.parseToJsonElement(ForgetRange.forgetBody(p, some)).jsonObject
         assertEquals("2026-09-01", sent["from"]!!.jsonPrimitive.content)
         assertEquals("2026-09-15", sent["to"]!!.jsonPrimitive.content)

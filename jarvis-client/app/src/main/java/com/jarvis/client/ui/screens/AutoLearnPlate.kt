@@ -236,6 +236,17 @@ internal fun SavedAutomaticallySection(
         val id = confirmEraseId ?: return@LaunchedEffect
         eraseChat = JarvisRuntime.factChat(id)
     }
+    // How many OTHER facts the chat taught: deleting the chat forgets none of them.
+    var otherFacts by remember { mutableStateOf(0) }
+    LaunchedEffect(confirmEraseId, eraseChat) {
+        otherFacts = 0
+        val id = confirmEraseId ?: return@LaunchedEffect
+        val chatId = eraseChat?.second?.id ?: return@LaunchedEffect
+        val got = JarvisRuntime.chatFacts(chatId)
+        if (got.available) {
+            otherFacts = if (got.hiddenCount > 0) (got.hiddenCount - 1).coerceAtLeast(0) else got.facts.count { it.id != id }
+        }
+    }
     var busyId by remember { mutableStateOf<Long?>(null) }
     // Which of the four the busy row is doing, for its label.
     var erasing by remember { mutableStateOf(false) }
@@ -383,6 +394,13 @@ internal fun SavedAutomaticallySection(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = chrome.textMid,
                                     modifier = Modifier.weight(1f),
+                                )
+                            }
+                            if (named != null) {
+                                Text(
+                                    MemoryErase.chatStays(otherFacts, named.kind),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = chrome.textMid,
                                 )
                             }
                         }

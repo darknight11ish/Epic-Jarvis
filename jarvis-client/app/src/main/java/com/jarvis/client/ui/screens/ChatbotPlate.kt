@@ -71,6 +71,7 @@ import kotlinx.coroutines.launch
 internal fun ChatbotSection(
     canAct: Boolean,
     privateHidden: Boolean = false,
+    onOpenHistory: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
@@ -240,6 +241,7 @@ internal fun ChatbotSection(
                     if (showCompare && c != null) {
                         ComparePart(
                             c = c, canAct = canAct, busy = busy, privateHidden = privateHidden,
+                            onOpenHistory = onOpenHistory,
                             onAction = { action ->
                                 perform {
                                     when (action) {
@@ -253,6 +255,7 @@ internal fun ChatbotSection(
                     } else if (s != null) {
                         SessionPart(
                             v = v, s = s, canAct = canAct, busy = busy, privateHidden = privateHidden,
+                            onOpenHistory = onOpenHistory,
                             newMessages = newMessages, newMinutes = newMinutes, newNever = newNever,
                             onNewMessages = { newMessages = it.filter(Char::isDigit).take(3) },
                             onNewMinutes = { newMinutes = it.filter(Char::isDigit).take(3) },
@@ -370,6 +373,7 @@ private fun SessionPart(
     onNewNever: (String) -> Unit,
     onAction: (String) -> Unit,
     onLimits: () -> Unit,
+    onOpenHistory: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     Text(
@@ -477,6 +481,7 @@ private fun SessionPart(
                 Pill("outside text", color = chrome.warnInk)
             }
             Text(Chatbot.SUMMARY_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            HistoryLine(s.history, onOpenHistory)
             if (summary.answer.isNotEmpty()) {
                 Text(summary.answer, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
             }
@@ -527,6 +532,21 @@ private fun TurnPart(name: String, t: Chatbot.Turn) {
 }
 
 /** A small heading and its bullet lines, inside the comparison's summary. */
+/**
+ * "Kept in your encrypted chat history" - or why not - and, when kept, a way
+ * to it (the second chat audit, phone C5). Nothing when the PC did not say.
+ */
+@Composable
+internal fun HistoryLine(h: Chatbot.HistoryAnswer?, onOpenHistory: (() -> Unit)?) {
+    val chrome = LocalChrome.current
+    val line = Chatbot.historyLine(h)
+    if (line.isEmpty()) return
+    Text(line, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    if (h != null && h.kept && onOpenHistory != null) {
+        Quiet(Chatbot.HISTORY_OPEN, onClick = onOpenHistory)
+    }
+}
+
 @Composable
 private fun SummaryLines(title: String, lines: List<String>) {
     if (lines.isEmpty()) return
@@ -543,6 +563,7 @@ private fun ComparePart(
     busy: Boolean,
     privateHidden: Boolean,
     onAction: (String) -> Unit,
+    onOpenHistory: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     Text(
@@ -610,6 +631,7 @@ private fun ComparePart(
                 Pill("outside text", color = chrome.warnInk)
             }
             Text(Chatbot.COMPARE_SUMMARY_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            HistoryLine(c.history, onOpenHistory)
             if (sm.answer.isNotEmpty()) {
                 Text(sm.answer, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
             }

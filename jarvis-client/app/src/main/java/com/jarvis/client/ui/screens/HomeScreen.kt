@@ -47,6 +47,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -349,6 +350,19 @@ data class HomeState(
      * TalkBack ([com.jarvis.client.net.ChatSession.chatNote]).
      */
     val chatNote: String? = null,
+    /**
+     * This conversation read outside text (a chat carried on that did, or one
+     * that read a page or an email since): a line under the reply says so for
+     * as long as the conversation lasts, not only until the next question
+     * (the second chat audit, phone C4).
+     */
+    val readOutside: Boolean = false,
+    /**
+     * Set once the chat has gone quiet for 30 minutes: "your next question
+     * starts a new conversation", instead of "follows on from the last 3"
+     * (the second chat audit, phone C1).
+     */
+    val idleNextLine: String? = null,
     /**
      * What the answer on its way is waiting on, in words - "Waiting for your
      * approval…" while a card is up on the desktop - or null. Shown in place
@@ -882,6 +896,16 @@ fun HomeScreen(
         // Driven by the list's own layout rather than by the reply text: the
         // layout is what says how far the reply's bottom edge overhangs, and
         // reading the text here would recompose this whole screen per token.
+        // "Continue this chat" lands on the reply plate, where the carried-on
+        // chat and its note are (the second chat audit, phone C7); nothing is
+        // scrolled when a notification has sent the owner to a card.
+        val carriedOn = state.thread.isNotEmpty() && state.lastUserText == null
+        LaunchedEffect(carriedOn, state.chatNote) {
+            if (carriedOn && state.focusApproval == null) {
+                listState.animateScrollToItem((listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
+            }
+        }
+
         LaunchedEffect(state.streaming, state.followReply, state.focusApproval) {
             if (!state.streaming || !state.followReply || state.focusApproval != null) {
                 return@LaunchedEffect
@@ -1171,7 +1195,11 @@ private fun ConversationList(
                 onMark = actions.onMarkAnswer,
                 conversationTurns = state.conversationTurns,
                 onNewConversation = actions.onNewConversation,
-                thread = state.thread,
+                // Hidden while "Hide memory lists and chat history" hides the lists:
+                // the thread is the chat's own words (the owner, 2026-09-28).
+                thread = if (state.memoryHidden) emptyList() else state.thread,
+                readOutside = state.readOutside,
+                idleNextLine = state.idleNextLine,
                 waiting = state.chatWaiting,
                 note = state.answerNote,
                 crisis = state.crisisAnswer,
@@ -2230,6 +2258,8 @@ private fun Reply(
     conversationTurns: Int = 0,
     onNewConversation: () -> Unit = {},
     thread: List<com.jarvis.client.net.ChatHistory.Exchange> = emptyList(),
+    readOutside: Boolean = false,
+    idleNextLine: String? = null,
     waiting: String? = null,
     note: String? = null,
     used: UsedAnswer? = null,
@@ -2428,7 +2458,9 @@ private fun Reply(
             if (!streaming && conversationTurns > 0) {
                 Gap(4)
                 Text(
-                    if (conversationTurns == 1) {
+                    // After 30 quiet minutes the next question is a new conversation
+                    // and the line says so (the second chat audit, phone C1).
+                    idleNextLine ?: if (conversationTurns == 1) {
                         "Your next question follows on from this one."
                     } else {
                         "Your next question follows on from the last $conversationTurns."
@@ -2436,6 +2468,13 @@ private fun Reply(
                     style = MaterialTheme.typography.labelSmall,
                     color = chrome.textLo,
                 )
+                if (readOutside) {
+                    Text(
+                        com.jarvis.client.net.ChatHistory.CONTINUED_TAINTED,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.warnInk,
+                    )
+                }
                 Quiet("New conversation", color = chrome.textMid, onClick = onNewConversation)
             }
         }
@@ -2452,21 +2491,53 @@ private fun Reply(
 @Composable
 private fun ThreadFold(thread: List<com.jarvis.client.net.ChatHistory.Exchange>, startOpen: Boolean) {
     val chrome = LocalChrome.current
-    var open by remember { mutableStateOf(startOpen) }
+    val words = com.jarvis.client.net.ChatHistory
+    // Kept over a rotation (the second chat audit, phone accessibility).
+    var open by rememberSaveable { mutableStateOf(startOpen) }
+    var showAll by rememberSaveable { mutableStateOf(false) }
     Quiet(
-        com.jarvis.client.net.ChatHistory.threadSummary(thread.size),
+        words.threadSummary(thread.size),
         color = chrome.textMid,
+        modifier = Modifier.semantics {
+            // Whether it is open, said in words.
+            stateDescription = if (open) "Expanded" else "Collapsed"
+        },
         onClick = { open = !open },
     )
     if (!open) return
-    Column(
+    // The newest 20 pairs, with "Show older" for the rest: a long chat used
+    // to compose up to 100 answers at once (phone worst-three #3).
+    val shown = if (showAll || thread.size <= THREAD_NEWEST) thread else thread.takeLast(THREAD_NEWEST)
+    val skipped = thread.size - shown.size
+    if (skipped > 0) {
+        Quiet("Show $skipped older", color = chrome.textMid, onClick = { showAll = true })
+    }
+    // The line where what Jarvis reads back begins: only the newest pairs go
+    // to the model (the same numbers Jarvis itself uses), so the owner is not
+    // left thinking it read the whole thread.
+    val above = words.pairsAboveReadLine(thread.size, words.MAX_EXCHANGES)
+    val listState = rememberLazyListState()
+    // Lands on the newest pair, not the oldest (phone worst-three #3).
+    LaunchedEffect(shown.size, open) {
+        if (shown.isNotEmpty()) listState.scrollToItem(shown.lastIndex)
+    }
+    LazyColumn(
         Modifier
             .fillMaxWidth()
-            .heightIn(max = 360.dp)
-            .verticalScroll(rememberScrollState()),
+            .heightIn(max = 360.dp),
+        state = listState,
     ) {
-        thread.forEachIndexed { index, pair ->
+        itemsIndexed(shown) { local, pair ->
+            val index = skipped + local
             if (index > 0) Gap(12)
+            if (above > 0 && index == above) {
+                Text(
+                    words.THREAD_READS_FROM,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textMid,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
             Kicker("You")
             Gap(2)
             Text(pair.question, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
@@ -2480,6 +2551,9 @@ private fun ThreadFold(thread: List<com.jarvis.client.net.ChatHistory.Exchange>,
         }
     }
 }
+
+/** How many pairs the thread draws before "Show older". */
+private const val THREAD_NEWEST = 20
 
 /** What "Used 2 memories" under the answer needs - see [UsedFactsList]. */
 @Immutable
@@ -2642,14 +2716,26 @@ private fun Composer(
     // The one quiet line about the chat itself (the chat audit, 2026-09-28):
     // read out by TalkBack as it appears, dismissed by a tap.
     state.chatNote?.let { line ->
+        // Two lines, then "More": a long note used to crowd Home out at large text.
+        var more by remember(line) { mutableStateOf(false) }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 line,
                 style = MaterialTheme.typography.labelSmall,
                 color = chrome.textMid,
+                maxLines = if (more) Int.MAX_VALUE else 2,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).liveStatus(),
             )
-            Quiet("Dismiss", color = chrome.textLo, onClick = actions.onDismissChatNote)
+            if (line.length > 110) {
+                Quiet(if (more) "Less" else "More", color = chrome.textLo, onClick = { more = !more })
+            }
+            Quiet(
+                "Dismiss",
+                color = chrome.textLo,
+                modifier = Modifier.semantics { contentDescription = "Dismiss this note about the chat" },
+                onClick = actions.onDismissChatNote,
+            )
         }
     }
     // A temporary chat: the marker for the whole chat, and the way in and

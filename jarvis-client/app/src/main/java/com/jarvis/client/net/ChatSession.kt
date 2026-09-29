@@ -178,6 +178,34 @@ class ChatSession(
      */
     val thread: StateFlow<List<ChatHistory.Exchange>> = _thread.asStateFlow()
 
+    private val _game = MutableStateFlow(false)
+
+    /**
+     * The PC made this conversation temporary by itself, because it is a
+     * game or role-play (the route header said so). Nothing of it is kept, so
+     * the notes about "the last one is in History" are not said for it. Ends
+     * with the conversation (the second chat audit, 2026-09-28, phone B1).
+     */
+    val game: StateFlow<Boolean> = _game.asStateFlow()
+
+    private val _readOutside = MutableStateFlow(false)
+
+    /**
+     * This conversation has read outside text (a chat carried on from History
+     * that did, or one that read a page or an email since): the line about it
+     * stays on Home for as long as the conversation does, instead of vanishing
+     * with the next question (the second chat audit, phone C4). Set by
+     * [continueFrom]; cleared by [newConversation].
+     */
+    val readOutside: StateFlow<Boolean> = _readOutside.asStateFlow()
+
+    /** Is there a chat here that was kept on the PC - so a new one can say where it went? */
+    fun hasKeptChat(): Boolean = _history.value.isNotEmpty() && !_temporary.value && !_game.value
+
+    /** Has the chat gone quiet for 30 minutes - so the next question starts a new one? */
+    fun idleNow(): Boolean =
+        ChatHistory.idleExpired(lastTurnAt, System.currentTimeMillis(), _history.value.isNotEmpty())
+
     private val _chatNote = MutableStateFlow<String?>(null)
 
     /**
@@ -266,18 +294,43 @@ class ChatSession(
     fun setTemporary(on: Boolean): String? {
         if (on == _temporary.value) return null
         if (on && !canTemporary()) return TemporaryChat.UNAVAILABLE
+        // The chat this ends was kept, unless it was itself temporary: say
+        // where it went (the second chat audit, phone C6 - it used to go silently).
+        val kept = hasKeptChat()
         newConversation()
         _temporary.value = on
         // Said on Home too (the chat audit, 2026-09-28, phone B5: the phone
         // dropped this sentence, and the chat on screen went without a word).
-        return (if (on) TemporaryChat.STARTED else TemporaryChat.ENDED).also { _chatNote.value = it }
+        val said = (if (on) TemporaryChat.STARTED else TemporaryChat.ENDED) +
+            (if (kept) ChatHistory.LAST_IN_HISTORY else "")
+        return said.also { _chatNote.value = it }
     }
 
     /** "New conversation", pressed by the owner: [newConversation], and Home
      *  says so (read out by TalkBack - the chat audit, 2026-09-28). */
     fun newConversationSaid() {
+        // Says where the old chat went, as the desktop does ("Chat ended.
+        // Kept chats are in Brain > History") - only when it was kept.
+        val kept = hasKeptChat()
         newConversation()
-        _chatNote.value = ChatHistory.NEW_CONVERSATION
+        _chatNote.value = if (kept) ChatHistory.NEW_CONVERSATION_KEPT else ChatHistory.NEW_CONVERSATION
+    }
+
+    /**
+     * Jarvis Live started here with a fresh conversation (a spoken "let's
+     * talk", or a session with no chat to carry on): Home's chat goes, and
+     * says so - it used to go without a word (the second chat audit,
+     * 2026-09-28, phone worst-three #1).
+     */
+    fun startLiveConversation() {
+        val kept = hasKeptChat()
+        newConversation()
+        if (kept) _chatNote.value = ChatHistory.LIVE_STARTED_NOTE
+    }
+
+    /** Jarvis Live ended here: its session is its own chat in History. */
+    fun noteLiveEnded() {
+        _chatNote.value = ChatHistory.LIVE_ENDED_NOTE
     }
 
     /** The owner dismissed the line about the chat. */
@@ -351,12 +404,16 @@ class ChatSession(
         // chat" brings it back. Said once, quietly, above the new question.
         _chatNote.value = null
         if (!live && ChatHistory.idleExpired(lastTurnAt, System.currentTimeMillis(), _history.value.isNotEmpty())) {
+            // A temporary chat or a game was never kept: no "last one in History".
+            val kept = hasKeptChat()
             conversation++
             conversationId = ChatHistory.newConversationId()
             _history.value = emptyList()
             _thread.value = emptyList()
+            _game.value = false
+            _readOutside.value = false
             lastTurnAt = 0L
-            _chatNote.value = ChatHistory.IDLE_NEW_LINE
+            _chatNote.value = if (kept) ChatHistory.IDLE_NEW_LINE else ChatHistory.IDLE_NEW_LINE_TEMPORARY
         }
         _reply.value = ""
         _error.value = null
@@ -528,6 +585,7 @@ class ChatSession(
                     // memories" - none on a temporary one - and what the PC
                     // said about a temporary question (TemporaryChat.notes).
                     if (call === c) {
+                        if (TemporaryChat.isGame(asTemporary, routeHeader)) _game.value = true
                         _usedIds.value = if (asTemporary) emptyList() else MemoryUsed.idsFromRouteHeader(routeHeader)
                         // The crisis help line (jarvis_wellbeing.py): the
                         // one flag that says whether the answer arriving is
@@ -799,6 +857,8 @@ class ChatSession(
         conversationId = ChatHistory.newConversationId()
         lastTurnAt = 0L
         _chatNote.value = null
+        _game.value = false
+        _readOutside.value = false
         cancel()
         _history.value = emptyList()
         _thread.value = emptyList()
@@ -825,12 +885,18 @@ class ChatSession(
      * What was on screen goes, as with [newConversation]; [note] is said in
      * its place. False for an id the PC could never have made.
      */
-    fun continueFrom(id: String, window: List<ChatHistory.Exchange>, note: String?): Boolean {
+    fun continueFrom(
+        id: String,
+        window: List<ChatHistory.Exchange>,
+        note: String?,
+        readOutside: Boolean = false,
+    ): Boolean {
         if (!ChatHistory.validConversationId(id)) return false
         newConversation()
         conversationId = id
         _history.value = window
         _thread.value = window
+        _readOutside.value = readOutside
         lastTurnAt = System.currentTimeMillis()
         _chatNote.value = note
         return true

@@ -3542,8 +3542,16 @@ object JarvisRuntime {
                 .also { (gone, _) ->
                     // An erased fact leaves "Always keep in mind" too.
                     if (gone) _profileTick.update { it + 1 }
-                    if (chatId != null && com.jarvis.client.net.MemoryErase.chatDeleted(r.value)) {
-                        chatsGone(listOf(chatId))
+                    if (com.jarvis.client.net.MemoryErase.chatDeleted(r.value)) {
+                        if (chatId != null) {
+                            chatsGone(listOf(chatId))
+                        } else {
+                            // The phone did not know which chat the PC would delete
+                            // (the lookup was slow or an older PC could not say): ask
+                            // whether Home's own chat is still there (the second chat
+                            // audit, phone B6).
+                            homeChatGoneIfMissing()
+                        }
                     }
                 }
             is ApiResult.Failed -> false to ("Not erased. " + describe(r.error))
@@ -4081,7 +4089,12 @@ object JarvisRuntime {
                 } else {
                     when {
                         theirs != null -> carryOnMoved(theirs)
-                        !(resume && !move) -> chat.continueFrom(cid, emptyList(), null)
+                        // Home's chat goes when a new Live session starts: say where it went.
+                        !(resume && !move) -> chat.continueFrom(
+                            cid,
+                            emptyList(),
+                            if (chat.hasKeptChat()) com.jarvis.client.net.ChatHistory.LIVE_STARTED_NOTE else null,
+                        )
                     }
                     (body["status"] as? JsonObject)?.let { takeLiveStatus(it) }
                     clearLiveMove()
@@ -4103,19 +4116,32 @@ object JarvisRuntime {
         }
     }
 
+    /** "Hide memory lists and chat history" is hiding them now - set by MainActivity, read here. */
+    @Volatile var privateListsHidden: Boolean = false
+
     /**
      * "Move it here": Home takes over the other device's Live chat - its
      * kept messages read back from History when there are any (history on,
      * an answer kept), else just its id, so what follows is filed with it.
      */
     private suspend fun carryOnMoved(id: String) {
-        val t = (api.historyConversation(id) as? ApiResult.Ok)?.let { com.jarvis.client.net.ChatLog.transcript(it.value) }
+        // Lists hidden: nothing is read back (the id alone carries on, as with history off).
+        val t = if (privateListsHidden) {
+            null
+        } else {
+            (api.historyConversation(id) as? ApiResult.Ok)?.let { com.jarvis.client.net.ChatLog.transcript(it.value) }
+        }
         val window = if (t != null && t.continuable) {
-            com.jarvis.client.net.ChatHistory.continueWindow(t.turns).first
+            com.jarvis.client.net.ChatHistory.continueWindow(t.turns).window
         } else {
             emptyList()
         }
-        chat.continueFrom(id, window, com.jarvis.client.net.ChatHistory.MOVED_HERE)
+        chat.continueFrom(
+            id,
+            window,
+            com.jarvis.client.net.ChatHistory.MOVED_HERE,
+            readOutside = t != null && t.continuable && t.tainted,
+        )
     }
 
     /**
@@ -4128,7 +4154,12 @@ object JarvisRuntime {
     suspend fun liveStop(why: String = "owner"): String? {
         endLiveHere()
         voice.endLiveTurn()
-        if (liveOnHere()) takeLiveStatus(endedLocally(why))
+        val wasHere = liveOnHere()
+        if (wasHere) {
+            takeLiveStatus(endedLocally(why))
+            // Home says where the session went (the second chat audit).
+            chat.noteLiveEnded()
+        }
         val body = com.jarvis.client.voice.LiveRules.stopBody(why)
         return when (val r = api.liveWrite(body)) {
             is ApiResult.Ok -> {
@@ -4323,7 +4354,7 @@ object JarvisRuntime {
                     return
                 }
                 scope.launch {
-                    chat.newConversation()
+                    chat.startLiveConversation()
                     // Started by voice: the session has no chat yet - this
                     // phone names its fresh one, once, so "Move it here" on
                     // the PC carries it on (the chat audit, 2026-09-28).
@@ -5363,6 +5394,10 @@ object JarvisRuntime {
     /** The chats on the last card this phone raised, until it is decided. */
     @Volatile private var forgetRangeChats: List<String> = emptyList()
 
+    /** When the PC last ended a "forget" before this card was raised: an ending
+     *  no newer than this is not this card's answer. */
+    @Volatile private var forgetRangeBase: Double = 0.0
+
     /**
      * "Forget a time frame" approved: the chats it deleted are gone, and if
      * Home was in one of them its words must stop going to the model (the
@@ -5374,7 +5409,7 @@ object JarvisRuntime {
         if (pending.isEmpty()) return
         // Null while the card still waits (or this was a list, not a
         // status); once it is decided, only "done" removed anything.
-        val outcome = com.jarvis.client.net.ForgetRange.decided(reply) ?: return
+        val outcome = com.jarvis.client.net.ForgetRange.decided(reply, forgetRangeBase) ?: return
         forgetRangeChats = emptyList()
         if (outcome == "done") chatsGone(pending)
     }
@@ -5395,12 +5430,17 @@ object JarvisRuntime {
             actionBlocker()?.let { return com.jarvis.client.net.ForgetRange.Outcome(false, false, it) }
         }
         val path = if (action == "undo") fr.UNDO_PATH else fr.PATH
+        // Read before the card is raised, so an older ending cannot be mistaken for its answer.
+        val before = if (action == "undo") 0.0 else (api.forgetRangeCall(fr.PATH, null) as? ApiResult.Ok)?.let { fr.lastEndedAt(it.value) } ?: 0.0
         return when (val r = api.forgetRangeCall(path, json)) {
             is ApiResult.Ok -> fr.said(r.value, if (action == "undo") "Put back." else fr.w("waiting")).also {
                 if (it.waiting) refreshPending()
                 // The chats on the card, for Home once it is approved (the
                 // chat audit, 2026-09-28): see [forgetRangeSaw].
-                if (action != "undo" && it.waiting) forgetRangeChats = fr.chatsIn(json)
+                if (action != "undo" && it.waiting) {
+                    forgetRangeChats = fr.chatsIn(json)
+                    forgetRangeBase = before
+                }
                 _forgetRangeTick.update { n -> n + 1 }
                 // Undo put facts back: "Always keep in mind" reads itself again.
                 if (action == "undo" && it.done) _profileTick.update { n -> n + 1 }
@@ -5419,6 +5459,9 @@ object JarvisRuntime {
     suspend fun history(before: Long? = null, kind: String? = null): ApiResult<JsonObject> =
         api.history(before, kind)
 
+    /** The chat Home is in, when it was kept on the PC (so History can say "this is the one you are in"). */
+    fun homeKeptChatId(): String? = if (chat.hasKeptChat()) chat.conversationIdNow() else null
+
     /** Home's quiet line about the chat itself ([com.jarvis.client.net.ChatSession.chatNote]). */
     val chatNote: StateFlow<String?> get() = chat.chatNote
 
@@ -5434,22 +5477,28 @@ object JarvisRuntime {
     suspend fun continueChat(id: String): String? {
         val words = com.jarvis.client.net.ChatHistory
         if (chat.streaming.value) return words.CONTINUE_BUSY
+        // A Live session files its words in its own chat: another one cannot be
+        // carried on under it.
+        if (liveOnHere()) return words.CONTINUE_LIVE
+        if (!words.validConversationId(id)) return words.CONTINUE_INVALID
         val t = when (val r = api.historyConversation(id)) {
             is ApiResult.Ok -> com.jarvis.client.net.ChatLog.transcript(r.value)
                 ?: return "Your PC sent something this app could not read."
             is ApiResult.Failed -> return com.jarvis.client.net.ChatLog.failure(r.error) ?: noticeFor(r.error)
         }
         if (!t.continuable) return t.continueWhy ?: com.jarvis.client.net.ChatLog.CONTINUE_WHY.getValue("support")
-        val (window, trimmed) = words.continueWindow(t.turns)
+        val got = words.continueWindow(t.turns)
+        val window = got.window
         val lines = mutableListOf(words.continuedLine(t.title))
         if (window.isEmpty()) lines += words.CONTINUED_NOTHING
-        if (trimmed) lines += words.CONTINUED_TRIMMED
+        if (got.skipped > 0 && window.isNotEmpty()) lines += words.continuedSkipped(got.skipped)
+        if (got.trimmed) lines += words.continuedTrimmed(got.trimmedCount)
         if (t.tainted) lines += words.CONTINUED_TAINTED
         if (chat.temporary.value) {
             chat.setTemporary(false)
             lines += words.CONTINUED_TEMPORARY_OFF
         }
-        return if (chat.continueFrom(id, window, lines.joinToString(" "))) null else words.CHAT_GONE
+        return if (chat.continueFrom(id, window, lines.joinToString(" "), readOutside = t.tainted)) null else words.CHAT_GONE
     }
 
     /**
@@ -5460,6 +5509,19 @@ object JarvisRuntime {
      */
     fun chatsGone(ids: Collection<String>) {
         if (ids.isNotEmpty()) chat.chatsGone(ids)
+    }
+
+    /**
+     * After something deleted chats the phone could not name (a shorter
+     * "keep for" limit, an erase whose chat the phone did not know): if the
+     * chat Home is in was kept and the PC no longer has it, Home starts a new
+     * conversation and says so. A read; anything but a clear "not found" leaves Home alone.
+     */
+    private suspend fun homeChatGoneIfMissing() {
+        if (!chat.hasKeptChat()) return
+        val cid = chat.conversationIdNow()
+        val again = api.historyConversation(cid)
+        if (again is ApiResult.Failed && again.error == ApiError.NotFound) chatsGone(listOf(cid))
     }
 
     /**
@@ -5485,8 +5547,8 @@ object JarvisRuntime {
      * not here, not there. Null when there is nothing worth sending (fewer
      * than two letters, or too long): the screen then filters titles.
      */
-    suspend fun historySearch(query: String): ApiResult<JsonObject>? {
-        val path = com.jarvis.client.net.ChatLog.searchPath(query) ?: return null
+    suspend fun historySearch(query: String, kind: String? = null): ApiResult<JsonObject>? {
+        val path = com.jarvis.client.net.ChatLog.searchPath(query, kind = kind) ?: return null
         return api.historySearch(path)
     }
 
@@ -5515,19 +5577,18 @@ object JarvisRuntime {
         val body = com.jarvis.client.net.ChatLog.keepDaysBody(days)
             ?: return "Not changed. Pick Never, 30 days, 90 days or 1 year."
         return when (val r = api.setHistoryKeepDays(body)) {
-            is ApiResult.Ok -> com.jarvis.client.net.ChatLog.keepSaid(days, r.value)
+            is ApiResult.Ok -> {
+                // A shorter limit deletes at once: if Home's chat was one of them,
+                // its words must stop going to the model (the second chat audit).
+                val deleted = (r.value["deleted"] as? JsonPrimitive)?.content?.toLongOrNull() ?: 0L
+                if (deleted > 0) homeChatGoneIfMissing()
+                com.jarvis.client.net.ChatLog.keepSaid(days, r.value)
+            }
             is ApiResult.Failed -> "Not changed. " +
                 (com.jarvis.client.net.ChatLog.failure(r.error) ?: describe(r.error))
         }
     }
 
-    /**
-     * Deletes ONE conversation from the PC, after the History screen's
-     * confirm. Held on a stale link (rule 4), the same as the desktop's
-     * History and its Forget: it cannot be undone, and it acts on a list read
-     * over a link that cannot be confirmed live. One already gone counts as
-     * deleted. @return whether it is gone now, and the sentence to show.
-     */
     /**
      * "Facts this chat taught" (docs/JARVIS-API.md section 79): a read, never
      * held - it changes nothing. History, and so this, is not shown while
@@ -5545,6 +5606,13 @@ object JarvisRuntime {
         }
     }
 
+    /**
+     * Deletes ONE conversation from the PC, after the History screen's
+     * confirm. Held on a stale link (rule 4), the same as the desktop's
+     * History and its Forget: it cannot be undone, and it acts on a list read
+     * over a link that cannot be confirmed live. One already gone counts as
+     * deleted. @return whether it is gone now, and the sentence to show.
+     */
     suspend fun deleteHistory(id: String): Pair<Boolean, String> {
         actionBlocker()?.let { return false to it }
         return when (val r = api.deleteHistory(id)) {

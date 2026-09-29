@@ -118,6 +118,9 @@ fun HistoryScreen(
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     var reads by remember { mutableIntStateOf(0) }
+    // The list keeps its place when a conversation is opened and closed again
+    // (the second chat audit, phone C8: Back used to land at the top).
+    val mainList = rememberLazyListState()
     // "Show": one kind of conversation, or "" for every kind (the owner's
     // decision, 2026-09-28: History can be filtered to Live sessions only).
     var kind by rememberSaveable { mutableStateOf("") }
@@ -153,7 +156,7 @@ fun HistoryScreen(
     // Each change of the words (or of the hidden state) starts one search
     // after a short pause; a newer change cancels the older one, answer and
     // all. Nothing is asked while the lists are hidden.
-    LaunchedEffect(search, privateHidden, oldPc) {
+    LaunchedEffect(search, privateHidden, oldPc, kind) {
         found = null
         searchError = null
         if (privateHidden || !wordSearch) {
@@ -162,11 +165,15 @@ fun HistoryScreen(
         }
         searching = true
         delay(350)
-        val r = JarvisRuntime.historySearch(search)
+        val r = JarvisRuntime.historySearch(search, kind.ifEmpty { null })
         searching = false
         when (r) {
             null -> Unit
-            is ApiResult.Ok -> found = ChatLog.search(r.value)
+            // The chosen kind narrows the words too; an older PC that ignores
+            // `kind` is narrowed here (the second chat audit, phone B2).
+            is ApiResult.Ok -> found = ChatLog.search(r.value).let { s ->
+                if (kind.isEmpty()) s else s.copy(found = s.found.filter { it.row.kind == kind })
+            }
             is ApiResult.Failed -> if (ChatLog.searchMissing(r.error)) {
                 oldPc = true
             } else {
@@ -238,9 +245,46 @@ fun HistoryScreen(
 
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
+            state = mainList,
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            // Whether History is on, at the TOP: "waiting for your approval" and
+            // "nothing new is being kept" used to sit under the folded settings
+            // at the very bottom (the second chat audit, phone worst-three #2).
+            // It says nothing about what was said, so it shows while hidden too.
+            item(key = "status") {
+                val switch = ChatLog.switchState(status, cardInQueue)
+                if (status != null) {
+                    val warn = switch == ChatLog.Switch.WAITING ||
+                        (switch == ChatLog.Switch.ON && status?.recording == false)
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            ChatLog.stateLine(switch, status),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (warn) chrome.warnInk else chrome.textMid,
+                            modifier = Modifier.weight(1f).liveStatus(),
+                        )
+                        Quiet(
+                            ChatLog.STATUS_CHANGE,
+                            color = chrome.textMid,
+                            modifier = Modifier.semantics { contentDescription = ChatLog.STATUS_CHANGE_TITLE },
+                            onClick = {
+                                settingsOpen = true
+                                scope.launch {
+                                    delay(80)
+                                    val last = mainList.layoutInfo.totalItemsCount - 2
+                                    if (last > 0) mainList.animateScrollToItem(last)
+                                }
+                            },
+                        )
+                    }
+                }
+            }
             if (privateHidden) {
                 item(key = "hidden") {
                     HiddenSection("Conversations", busy = showPrivateBusy, onShow = onShowPrivate)
@@ -285,7 +329,10 @@ fun HistoryScreen(
                                             kind = value
                                             rows = null
                                             mayHaveOlder = false
-                                            search = ""
+                                            // A stale error from the other kind is dropped, and
+                                            // the words typed stay: the search runs again for
+                                            // this kind (the second chat audit, phone B2, C9).
+                                            readError = null
                                         }
                                     },
                                 )
@@ -431,6 +478,10 @@ fun HistoryScreen(
                     Quiet(
                         if (settingsOpen) "Hide" else "Show",
                         color = chrome.textMid,
+                        // What it shows or hides, for TalkBack and Voice Access.
+                        modifier = Modifier.semantics {
+                            contentDescription = if (settingsOpen) ChatLog.SETTINGS_HIDE_TITLE else ChatLog.SETTINGS_SHOW_TITLE
+                        },
                         onClick = { settingsOpen = !settingsOpen },
                     )
                     if (settingsOpen) Plate {
@@ -646,7 +697,8 @@ private fun Conversation(
     val context = LocalContext.current
     // "Continue this chat": busy while Home takes it over; why not, if not.
     var continuing by remember(id) { mutableStateOf(false) }
-    var continueSaid by remember(id) { mutableStateOf<String?>(null) }
+    // Kept over a rotation: a plain sentence, no words of the chat.
+    var continueSaid by rememberSaveable(id) { mutableStateOf<String?>(null) }
     val zone = remember { ZoneId.systemDefault() }
     val today = LocalDate.now(zone)
     var loaded by remember(id) { mutableStateOf<ChatLog.Transcript?>(null) }
@@ -665,6 +717,17 @@ private fun Conversation(
             taught = JarvisRuntime.chatFacts(id)
         }
     }
+    // Is this the chat Home is in? Read once when it opens.
+    val homeChat = remember(id) { JarvisRuntime.homeKeptChatId() == id }
+    // What this chat taught and Jarvis still uses (section 79): a read, shown
+    // under the head for chats and Live sessions (the second chat audit).
+    var facts by remember(id) { mutableStateOf<ChatLog.Taught?>(null) }
+    val loadedKind = loaded?.kind
+    LaunchedEffect(id, loadedKind) {
+        facts = null
+        if (loadedKind == "chat" || loadedKind == "live") facts = JarvisRuntime.chatFacts(id)
+    }
+    val outside = remember(loaded) { loaded?.let { ChatLog.outsideMarks(it.turns) }.orEmpty() }
     var find by remember(id) { mutableStateOf(initialFind) }
     var current by remember(id) { mutableIntStateOf(0) }
     val matches = remember(loaded, find) {
@@ -705,7 +768,25 @@ private fun Conversation(
                 )
                 if (t != null && t.tainted) {
                     Gap(4)
-                    Text(ChatLog.TAINT_LINE, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
+                    Text(ChatLog.taintNote(t.kind), style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
+                }
+                if (t != null && homeChat) {
+                    Gap(4)
+                    Text(ChatLog.HOME_CHAT_LINE, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                }
+                // The facts this chat taught, read-only (Delete offers to forget them).
+                facts?.takeIf { it.available }?.let { got ->
+                    Gap(4)
+                    if (got.hiddenCount > 0) {
+                        Text(ChatLog.chatFactsTaughtHidden(got.hiddenCount),
+                            style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                    } else {
+                        Text(ChatLog.chatFactsTaught(got.facts.size),
+                            style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                        got.facts.forEach { f ->
+                            Text("• " + f.text, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
+                        }
+                    }
                 }
                 // What kind of record it is, when it is not an ordinary chat.
                 if (t != null && t.kind != "chat") {
@@ -906,12 +987,18 @@ private fun Conversation(
                     }
                     if (mine) {
                         ChatLog.provenanceMark(turn.provenance)?.let { Pill(it) }
-                        if (turn.readOutside) Pill(ChatLog.TAINT_MARK, color = chrome.warnInk)
                     }
+                    // "read outside text" belongs to the answer that read it, not to
+                    // the owner's own question beside "You".
+                    if (i in outside && !support && !chatbot) Pill(ChatLog.TAINT_MARK, color = chrome.warnInk)
                 }
                 Gap(2)
                 val here = matches.filter { it.turn == i }
                 val now = matches.getOrNull(current)
+                // Worked out once per message, not on every redraw.
+                val plain = remember(turn.text) {
+                    if (answer || chatbot) ChatLog.plainAnswer(turn.text) else turn.text
+                }
                 Text(
                     if (here.isEmpty()) {
                         // Jarvis's answers (and a chatbot record's lines)
@@ -919,9 +1006,7 @@ private fun Conversation(
                         // chat audit, 2026-09-28). While "Find in this chat"
                         // has words, the words are shown exactly as kept, so
                         // the marks land on the right letters.
-                        AnnotatedString(
-                            if ((answer || chatbot) && find.isBlank()) ChatLog.plainAnswer(turn.text) else turn.text,
-                        )
+                        AnnotatedString(if ((answer || chatbot) && find.isBlank()) plain else turn.text)
                     } else {
                         buildAnnotatedString {
                             append(turn.text)

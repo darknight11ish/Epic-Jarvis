@@ -69,6 +69,16 @@ object TemporaryChat {
     const val FIELD = "temporary"
 
     /**
+     * True when the PC made this chat temporary by itself - a game or
+     * role-play - although the phone did not ask: the header says
+     * `"temporary": true` on a question sent as an ordinary one (the second
+     * chat audit, 2026-09-28: the 30-minute line, "New conversation" and the
+     * rest must not point to a chat in History that was never kept).
+     */
+    fun isGame(sentTemporary: Boolean, header: String?): Boolean =
+        !sentTemporary && MemoryUsed.route(header)?.flag("temporary") == true
+
+    /**
      * The lines to show under an answer, from its `X-Jarvis-Route` header:
      * [NOT_CONFIRMED] when the question went as temporary and the header
      * does not say `"temporary": true`, and [REMEMBER_OFF] when it says

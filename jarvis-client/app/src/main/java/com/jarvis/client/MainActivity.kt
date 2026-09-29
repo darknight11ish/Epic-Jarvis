@@ -29,6 +29,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -778,6 +779,9 @@ class MainActivity : FragmentActivity() {
         val lockVersion = lockTick.intValue
         val locked = remember(lockVersion, security) { lockSession.locked(security) }
         val privateHidden = remember(lockVersion, security) { lockSession.privateHidden(security) }
+        // The runtime reads no chat history for "Move it here" while the lists are
+        // hidden (the second chat audit, phone C12): the desktop refuses in Rust.
+        SideEffect { JarvisRuntime.privateListsHidden = privateHidden }
         // While App lock or "Hide memory lists and chat history" is on, Jarvis
         // cannot be screenshotted, screen-recorded or cast, and its
         // recent-apps picture is blank rather than a snapshot of what the
@@ -957,6 +961,22 @@ class MainActivity : FragmentActivity() {
         // audit 2026-09-28), and its one quiet line. Memory only.
         val thread by chat.thread.collectAsState()
         val chatNote by chat.chatNote.collectAsState()
+        // Whether this conversation read outside text, and whether the chat is a
+        // game (the PC made it temporary) - both from the chat, memory only.
+        val readOutsideChat by chat.readOutside.collectAsState()
+        val gameChat by chat.game.collectAsState()
+        // The chat has gone quiet for 30 minutes: re-read every 30 seconds
+        // while there is a conversation, so the line under the reply is true
+        // without waiting for the next redraw (the second chat audit, phone C1).
+        val idleQuiet by produceState(false, conversation.size) {
+            while (true) {
+                value = chat.idleNow()
+                delay(30_000)
+            }
+        }
+        // Did the question on screen get an answer? Read as a boolean so a
+        // streamed word does not redraw the screen.
+        val answeredNow by remember { derivedStateOf { replyState.value.isNotBlank() } }
         // What a turn is waiting on ("Waiting for your approval…"), and the
         // one line under a finished answer (cut short / from a cloud model).
         val chatWaiting by chat.waiting.collectAsState()
@@ -2366,8 +2386,20 @@ class MainActivity : FragmentActivity() {
                             answerFeedback = Feedback.viewFor(answerTurnId, answerMark),
                             conversationTurns = conversation.size,
                             // The pairs above the one on screen.
-                            thread = com.jarvis.client.net.ChatHistory.threadBefore(thread, lastQuestion, streaming),
+                            thread = com.jarvis.client.net.ChatHistory.threadBefore(
+                                thread, lastQuestion, streaming, answered = answeredNow,
+                            ),
                             chatNote = chatNote,
+                            readOutside = readOutsideChat,
+                            idleNextLine = if (idleQuiet && !streaming) {
+                                if (temporaryChat || gameChat) {
+                                    com.jarvis.client.net.ChatHistory.IDLE_NEXT_LINE_TEMPORARY
+                                } else {
+                                    com.jarvis.client.net.ChatHistory.IDLE_NEXT_LINE
+                                }
+                            } else {
+                                null
+                            },
                             chatWaiting = chatWaiting,
                             answerNote = answerNote,
                             quickNoteOpen = quickNoteOpen.value,

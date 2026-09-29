@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
@@ -104,7 +105,8 @@ object ForgetRange {
 
     data class Asked(val id: String, val from: String, val to: String, val said: String, val kinds: List<String>)
 
-    data class Last(val outcome: String, val message: String)
+    /** [at]: when the PC ended it, by the PC's clock (0 when it did not say). */
+    data class Last(val outcome: String, val message: String, val at: Double = 0.0)
 
     data class Status(
         val available: Boolean,
@@ -200,7 +202,13 @@ object ForgetRange {
                 Undo(it.whole("seconds_left"), it.whole("minutes_left"), it.whole("facts"), it.whole("chats"),
                     it.text("said").orEmpty())
             },
-            last = l?.let { Last(it.text("outcome").orEmpty(), it.text("message").orEmpty()) },
+            last = l?.let {
+                Last(
+                    it.text("outcome").orEmpty(),
+                    it.text("message").orEmpty(),
+                    (it["at"] as? JsonPrimitive)?.takeIf { p -> !p.isString }?.doubleOrNull ?: 0.0,
+                )
+            },
             asked = a?.takeIf { isWhen(it.text("from")) && isWhen(it.text("to")) }?.let {
                 Asked(it.text("id").orEmpty(), it.text("from")!!, it.text("to")!!, it.text("said").orEmpty(),
                     it.words("kinds").filter { k -> k == "facts" || k == "chats" })
@@ -339,12 +347,20 @@ object ForgetRange {
      * (or the answer was not a status), else how the last one ended -
      * `last.outcome` ("done" when approved and carried out).
      */
-    fun decided(reply: Reply): String? {
+    fun decided(reply: Reply, since: Double = 0.0): String? {
         if (reply.code !in 200..299) return null
         val s = parseStatus(reply.body)
         if (!s.available || s.waiting) return null
-        return s.last?.outcome?.takeIf { it.isNotEmpty() }
+        val last = s.last ?: return null
+        // An ending older than the card being waited for is an earlier
+        // "forget" (the second chat audit, phone B7): not this one's answer.
+        if (since > 0.0 && last.at <= since) return null
+        return last.outcome.takeIf { it.isNotEmpty() }
     }
+
+    /** The PC-clock time of the last ending in this status read, 0 when none. */
+    fun lastEndedAt(reply: Reply): Double =
+        if (reply.code in 200..299) parseStatus(reply.body).last?.at ?: 0.0 else 0.0
 
     /** Reads a "forget" or "undo" answer: the PC's own sentence either way. */
     fun said(reply: Reply, done: String): Outcome {

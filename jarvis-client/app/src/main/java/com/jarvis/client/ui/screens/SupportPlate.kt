@@ -61,6 +61,7 @@ import kotlinx.coroutines.launch
 internal fun SupportSection(
     canAct: Boolean,
     privateHidden: Boolean = false,
+    onOpenHistory: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
@@ -168,6 +169,7 @@ internal fun SupportSection(
                     val c = v.chat
                     if (c != null) {
                         ChatPart(c, canAct, busy, privateHidden, sayOpen, sayText,
+                            onOpenHistory = onOpenHistory,
                             onSayText = { sayText = it },
                             onAction = { action ->
                                 when (action) {
@@ -251,6 +253,7 @@ private fun ChatPart(
     sayText: String,
     onSayText: (String) -> Unit,
     onAction: (String) -> Unit,
+    onOpenHistory: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     Text(
@@ -392,6 +395,10 @@ private fun ChatPart(
         val saved = Support.savedLine(c)
         if (saved.isNotEmpty()) {
             Text(saved, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            // A way to the kept record (the second chat audit, phone C5).
+            if (c.saved == "yes" && !privateHidden && onOpenHistory != null) {
+                Quiet(Chatbot.HISTORY_OPEN, onClick = onOpenHistory)
+            }
         }
     }
     if (c.transcript.isNotEmpty()) {

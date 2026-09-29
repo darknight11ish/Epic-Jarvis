@@ -84,6 +84,28 @@ object MemoryErase {
         "Also delete the chat it came from: \"${title?.trim()?.ifEmpty { null } ?: "its title is hidden"}\" " +
             "(${whenWords?.ifEmpty { null } ?: "date unknown"})?"
 
+    /**
+     * What stays when the chat goes too, under the checkbox (the second chat
+     * audit, 2026-09-28): the chat's OTHER facts stay - how many - and what
+     * older backups keep; a support record says what it is. The desktop's
+     * second question says the same.
+     */
+    fun chatStays(others: Int, kind: String?): String {
+        val backups = ChatLog.DELETE_STAYS.removePrefix("Facts Jarvis learned stay. ")
+        val stays = if (others > 0) {
+            (if (others == 1) "1 other fact" else "$others other facts") +
+                " Jarvis learned in that chat ${if (others == 1) "stays" else "stay"}. $backups"
+        } else {
+            ChatLog.DELETE_STAYS
+        }
+        return if (kind == "support") {
+            "$stays This is the record of a customer-support chat - what the company said and what was " +
+                "sent in your name."
+        } else {
+            stays
+        }
+    }
+
     /** A 404 that said "no such fact": nothing left to erase. */
     const val ALREADY_GONE = "Jarvis had no such fact any more."
 
