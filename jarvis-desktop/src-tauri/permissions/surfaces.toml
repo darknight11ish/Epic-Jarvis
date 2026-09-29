@@ -1049,6 +1049,16 @@ identifier = "screen-never-look"
 description = "Read the Never look at list, add a program or website to it at once, or ask to take one off (one approval card on this PC)."
 permissions = ["allow-screen-never"]
 
+# Picture mode's switch (look.rs screen_picture; backend/jarvis_screen_picture.py;
+# the owner's decision of 2026-09-29): a slow picture model on the processor
+# for "Look at this" and "Watch with me" on a one-card PC. Read it, turn it on
+# (ONE approval card on this PC, held on a stale link) or off (at once). Only
+# Settings shows it; it carries a switch position and words, never a picture.
+[[set]]
+identifier = "screen-picture"
+description = "Read picture mode's setting, ask to turn it on (one approval card on this PC) or turn it off at once."
+permissions = ["allow-screen-picture"]
+
 [[set]]
 identifier = "focus"
 description = "Read the focus session (a countdown, booleans and counts - never what was in front) and do ONE thing to it: pause, resume, +10 minutes, stop, or lock on where the owner lands. No card; resume, extend and lock are held on a stale link."

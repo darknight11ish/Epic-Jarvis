@@ -593,6 +593,20 @@ class JarvisApi(
     suspend fun setWatchNotify(on: Boolean): ApiResult<DesktopWrite.Outcome> =
         postWrite(WatchNotify.PATH, WatchNotify.enabledBody(on))
 
+    // ------------------------------------------------- picture mode for the screen ----
+    // docs/JARVIS-API.md section 96.1; see [ScreenPicture] for the shapes and
+    // words. Decided on the PC like every other approval-card switch here.
+
+    /** `GET /api/screen/picture`: `{"enabled", "waiting", "line", "measured_words", "install_line", ...}`. */
+    suspend fun screenPictureSettings(): ApiResult<JsonObject> = probe(ScreenPicture.PATH)
+
+    /**
+     * The switch. ON answers 202 waiting while its approval card is up; OFF is
+     * immediate, and withdraws an ON card still waiting.
+     */
+    suspend fun setScreenPicture(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(ScreenPicture.PATH, ScreenPicture.enabledBody(on))
+
     // ------------------------------------------------- pairing and devices ----
     // docs/PAIRING-DESIGN.md §6.2 and §6.4.
 

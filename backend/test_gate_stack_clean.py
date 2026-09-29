@@ -30,6 +30,7 @@ ON_EARLIER_LINES = (
     "forget-range.patch",
     "devices.patch",
     "apps-in-projects.patch",
+    "screen-picture.patch",
 )
 
 failures = 0

@@ -65,6 +65,212 @@
     "follow_up_s": 120,
     "warn_before_s": 120
   },
+  "picture": {
+    "words": {
+      "title": "Read pictures of my screen (slow, on the processor)",
+      "detail": "With one graphics card Jarvis reads only the WORDS on your screen. This lets a small picture model also look at the picture itself, so it can tell what a chart, a button or a photo shows. It runs on this PC's processor, not on your graphics card, so your everyday chat model is not disturbed - but it is SLOW, and how slow depends on your PC. Anything that looks like a key, a card number or a password is blacked out first, and if that part is missing no picture is used. Nothing leaves this PC and nothing is saved. Off by default. Turning it on asks first, because a model has to be downloaded.",
+      "switch": "Let Jarvis look at pictures of my screen (slow)",
+      "off_line": "Off. Jarvis reads the words on your screen only.",
+      "waiting_line": "Waiting for your yes on the card. Nothing has changed yet.",
+      "unread": "Could not read this setting.",
+      "missing": "This PC's Jarvis does not have picture mode yet. Run scripts\\apply-patches.ps1 on the PC to add it.",
+      "steps_title": "To set it up, paste this one line into PowerShell on your PC:",
+      "steps_note": "It downloads the picture model from Ollama (ollama.com; how big it is has not been checked), then measures how many seconds one look takes on your PC and saves the number. Jarvis never downloads the model by itself."
+    },
+    "why_words": {
+      "not_installed": "The picture model ({model}) is not installed on this PC yet.",
+      "unknown_install": "Jarvis could not tell whether the picture model is installed (is Ollama running?).",
+      "no_ollama": "Ollama was not found on this PC, so the picture reader could not start.",
+      "start_failed": "The picture reader could not start.",
+      "no_cleaner": "The part of Jarvis that blacks out secrets in a picture is not installed, so no picture was used.",
+      "clean_failed": "Blacking out secrets in the picture did not work, so no picture was used.",
+      "slow": "The picture reader took longer than {n} seconds.",
+      "error": "The picture reader ran into an error.",
+      "empty": "The picture reader had nothing to say about it.",
+      "on_graphics_card": "The picture reader ended up on the graphics card, which is not what you switched on, so Jarvis stopped it.",
+      "changed": "The picture model's file has changed since it was measured, so Jarvis will not use it until it is measured again.",
+      "cloud": "The picture model's name looks like a cloud model, which would send your screen off this PC, so nothing was sent.",
+      "switched_off": "Picture reading was turned off.",
+      "superseded": "A newer look replaced this one.",
+      "cancelled": "The look was thrown away before the picture was read."
+    },
+    "short_words": {
+      "not_installed": "the picture model is not installed",
+      "unknown_install": "could not tell if the picture model is installed",
+      "no_ollama": "Ollama was not found",
+      "start_failed": "the picture reader could not start",
+      "no_cleaner": "no way to black out secrets yet",
+      "clean_failed": "blacking out secrets failed",
+      "slow": "the picture reader was too slow",
+      "error": "the picture reader failed",
+      "empty": "the picture reader had nothing to say",
+      "on_graphics_card": "the picture reader was on the graphics card, so it was stopped",
+      "changed": "the picture model changed since it was measured",
+      "cloud": "the picture model looks like a cloud model",
+      "switched_off": "picture reading was turned off",
+      "superseded": "a newer look replaced it",
+      "cancelled": "the look was thrown away"
+    },
+    "panels": [
+      {
+        "name": "off, never measured",
+        "payload": {
+          "enabled": false,
+          "waiting": false,
+          "line": "Off. Jarvis reads the words on your screen only.",
+          "measured_words": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
+          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+        },
+        "want": {
+          "available": true,
+          "enabled": false,
+          "waiting": false,
+          "checked": false,
+          "line": "Off. Jarvis reads the words on your screen only.",
+          "measured": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
+          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+        }
+      },
+      {
+        "name": "its card is waiting",
+        "payload": {
+          "enabled": false,
+          "waiting": true,
+          "line": "Waiting for your yes on the card. Nothing has changed yet.",
+          "measured_words": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
+          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+        },
+        "want": {
+          "available": true,
+          "enabled": false,
+          "waiting": true,
+          "checked": true,
+          "line": "Waiting for your yes on the card. Nothing has changed yet.",
+          "measured": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
+          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+        }
+      },
+      {
+        "name": "on but the model is not installed",
+        "payload": {
+          "enabled": true,
+          "waiting": false,
+          "line": "On, but not working yet: The picture model (minicpm-v:4.6) is not installed on this PC yet. Jarvis reads the words only until then.",
+          "measured_words": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
+          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+        },
+        "want": {
+          "available": true,
+          "enabled": true,
+          "waiting": false,
+          "checked": true,
+          "line": "On, but not working yet: The picture model (minicpm-v:4.6) is not installed on this PC yet. Jarvis reads the words only until then.",
+          "measured": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
+          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+        }
+      },
+      {
+        "name": "on, working, not measured yet",
+        "payload": {
+          "enabled": true,
+          "waiting": false,
+          "line": "On. When you ask Jarvis to look, the picture model also looks at the picture.",
+          "measured_words": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
+          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+        },
+        "want": {
+          "available": true,
+          "enabled": true,
+          "waiting": false,
+          "checked": true,
+          "line": "On. When you ask Jarvis to look, the picture model also looks at the picture.",
+          "measured": "Not measured yet: nobody knows how slow this is on your PC. Run the line below before you rely on it.",
+          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+        }
+      },
+      {
+        "name": "on, measured, and a real look took 41 seconds",
+        "payload": {
+          "enabled": true,
+          "waiting": false,
+          "line": "On. When you ask Jarvis to look, the picture model also looks at the picture. Your last look took 41 seconds.",
+          "measured_words": "Measured on 29 Sep 2026: about 41 seconds for one look (a made-up test picture - a busy real screen may take longer).",
+          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+        },
+        "want": {
+          "available": true,
+          "enabled": true,
+          "waiting": false,
+          "checked": true,
+          "line": "On. When you ask Jarvis to look, the picture model also looks at the picture. Your last look took 41 seconds.",
+          "measured": "Measured on 29 Sep 2026: about 41 seconds for one look (a made-up test picture - a busy real screen may take longer).",
+          "install_line": "ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_screen_picture.py --measure; Pop-Location"
+        }
+      },
+      {
+        "name": "a card is waiting while it is somehow already on",
+        "payload": {
+          "enabled": true,
+          "waiting": true,
+          "line": "",
+          "measured_words": "",
+          "install_line": ""
+        },
+        "want": {
+          "available": true,
+          "enabled": true,
+          "waiting": false,
+          "checked": true,
+          "line": "",
+          "measured": "",
+          "install_line": ""
+        }
+      },
+      {
+        "name": "off and the PC sent no words",
+        "payload": {
+          "enabled": false
+        },
+        "want": {
+          "available": true,
+          "enabled": false,
+          "waiting": false,
+          "checked": false,
+          "line": "Off. Jarvis reads the words on your screen only.",
+          "measured": "",
+          "install_line": ""
+        }
+      },
+      {
+        "name": "an answer that is not a status",
+        "payload": {
+          "waiting": true
+        },
+        "want": {
+          "available": false,
+          "enabled": false,
+          "waiting": false,
+          "checked": false,
+          "line": "Could not read this setting.",
+          "measured": "",
+          "install_line": ""
+        }
+      },
+      {
+        "name": "not an object",
+        "payload": null,
+        "want": {
+          "available": false,
+          "enabled": false,
+          "waiting": false,
+          "checked": false,
+          "line": "Could not read this setting.",
+          "measured": "",
+          "install_line": ""
+        }
+      }
+    ]
+  },
   "statuses": {
     "off": {
       "state": "off",

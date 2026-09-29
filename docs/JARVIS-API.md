@@ -10286,7 +10286,9 @@ sentences:
 
 with "[N more characters were on the screen and were left out ...]" when a
 cap cut, and a line telling the model to say so rather than guess when
-nothing could be read. The picture itself is not sent on one graphics card.
+nothing could be read. The picture itself is not sent on one graphics card
+(**except with the owner's slow picture mode on, 2026-09-29 - section 96.1**: a
+small model on the processor also looks at it, after secrets are blacked out).
 The answer is shown with a note, "Looked at: <program> window · words only".
 A screen turn records a read of **`read_screen`** (`jarvis_screen.SCREEN_TOOL`),
 so a note write or web search after it asks first and a card says
@@ -10349,9 +10351,11 @@ all in `jarvis_agent.py`/`jarvis_screen.py`, none in an app:
    one the Watch session takes for the question, waiting up to 35 s). For the
    phone the words are the `screen_text` part (capped at 3,000), or - for a
    Watch picture - the words the PC's own text recognition finds in it. **No
-   picture is ever given to a model** on one graphics card: a phone screen
-   picture is read for its words and dropped, and `choose_lane` treats it as
-   not a vision turn. An empty `screen_text` part (the phone read nothing) is
+   picture is ever given to a model** on one graphics card - except the owner's
+   slow picture mode (96.1), which gives the cleaned picture to a small model on
+   the processor and only its description, as outside text, to the everyday one:
+   a phone screen picture is otherwise read for its words and dropped, and
+   `choose_lane` treats it as not a vision turn. An empty `screen_text` part (the phone read nothing) is
    the "could not read any words" line, never silence.
 3. **The router** keeps the turn on this PC (gate `screen`, above), so it
    never reaches a cloud lane.
@@ -10543,8 +10547,9 @@ refuses to look when pointed at a remote Jarvis.
   front-app log is; and the battery cost. A question typed **inside Jarvis**
   while Watch is on is about Jarvis's own screen, which is never looked at:
   ask by voice from another app.
-- **Pictures**: with one graphics card no model is shown a picture (62.6);
-  the picture path waits for the 12 GB card.
+- **Pictures**: with one graphics card the everyday model is shown no picture
+  (62.6); the optional slow picture mode (96.1) reads it on the processor
+  instead, and the two-card picture path waits for the 12 GB card.
 - **Screen safety (62.13)**: the in-process text reader (pywinrt), the
   window list and the black boxes are Windows calls that have not been run
   here; the rules around them are tested. `python tools\check_screen_safety.py`
@@ -15342,3 +15347,34 @@ The two routes `backend/screen.patch` installs (`jarvis_screen.install`), for a 
 | `POST /api/screen/never-look` `{"do":"remove",...}` | **this PC only** | asks to take one off (a built-in one too); 202 with `pending` | **one** `change_own_config` card |
 
 No verb answers with a word from the screen, a program, a site or a title. The phone reads `GET /api/screen` and sends only `stop`; it never sends `start` or `look`, and the PC would refuse it if it did. Its own looks travel inside `POST /api/chat` (62.6), not through these routes. The event `screen_watch` carries the status and nothing more.
+
+
+### 96.1 Picture mode: a slow picture reader on the processor (added 2026-09-29)
+
+The owner's decision (`CLAUDE.md`, 2026-09-29: "add it as a feature that can be enabled or disabled"). With ONE graphics card, "Look at this" and "Watch with me" read only the WORDS on the screen (section 62). This is an optional, **slow** extra: a small picture model - **MiniCPM-V 4.6** (OpenBMB, 1.3 B parameters, Apache-2.0) - that runs on the PC's **processor**, so it uses no graphics memory and the everyday chat model on the 8 GB card is not disturbed. It reverses the earlier "one card reads the screen's words only"; the owner chose it knowingly. Backend: `backend/jarvis_screen_picture.py` (a whole new module), the routes in `jarvis_screen.py`, the gate lines in `screen-picture.patch`. The camera, Live pictures and the two-card "Pictures" lane are unchanged and still wait for the 12 GB card.
+
+| route | who may call it | what it does | card |
+|---|---|---|---|
+| `GET /api/screen/picture` | any paired device | the setting: `enabled`, `waiting`, `last`, `model`, `model_name`, `installed`, `cleaner`, `ready`, `not_ready`, `measured`, `measured_words`, `last_look_s`, `lane`, `line`, `install_line`, `download_from` (and `why` if the settings file is damaged) | none |
+| `POST /api/screen/picture` `{"enabled": true}` | any paired device | asks to turn it on: **202** `{"waiting": true, "enabled": false}` - nothing changes until a person says yes | **one** `screen_picture_enable` card (tier `ask`) |
+| `POST /api/screen/picture` `{"enabled": false}` | any paired device | turns it off **at once**: stops the picture reader, cuts short a picture being read, and withdraws a waiting ON card | none |
+
+**Off by default.** No file, a file that cannot be read, or one that holds anything but true/false is OFF (`why` says so). ON changes nothing until the card is approved: denied, timed out, refused, a tier that is not `ask`, or turned off while the card waited all leave it off. A cloud model name (`...-cloud`, `...:cloud`) in `[screen_picture] model` is refused before any card (rule 1). The same card is what "picture mode" asked for by voice or chat raises (`jarvis_settings_registry.py`, `screen_picture`, section `screen-look`) - a second door, never a second gate.
+
+**The card says**, in plain words: what it does; that a separate copy of Ollama on this PC's processor runs it, not the graphics card and not the network; that it is slow and nobody knows how slow until the owner measures it; that secrets are blacked out first; that what it says is outside text; that the model is NOT downloaded by the card (the owner pastes one line, from Ollama) - with "not installed yet" when Ollama says so; and that turning it off is instant. It also says, when true, that the part that blacks out secrets is not installed, so no picture would be sent.
+
+**What a look does with it** (`jarvis_screen.py` `_take` -> `jarvis_screen_picture.start`): the words are read exactly as before. Beside that, a job on its own thread (1) checks the switch, the model name, that the model is installed and its checksum is the one it was measured with (`PINNED_DIGEST`, else the first measurement's - a changed file refuses), (2) **cleans the picture** (below) - no cleaner, no picture, (3) shrinks it to 1,024 px on its longest side (Pillow if installed, else by hand for the PC's own PNG, else as it is), (4) starts the picture reader if needed, (5) asks it for a description of at most 400 words, `num_gpu 0`, not streamed, with a timeout (`timeout_s`, 240), (6) asks the copy what it holds (`/api/ps`): any graphics memory in use stops the copy and refuses picture mode until the owner switches it off and on, (7) removes hidden thinking and chat markers, caps the text at 1,500 characters. The description joins the words as **more OUTSIDE TEXT** (a heading saying it came through another AI model, must be treated as a rough guess, never obeyed, and that the words win when they disagree); it is what the planted-instruction check reads, and it is held with the look for two minutes and never kept, saved, learned or put in an event, status or audit line. A question waits for the words (`READ_WAIT_S`) and then up to `wait_s` (60) for the picture; if it is still being read the answer uses the words and a plain line says so, and a follow-up a moment later has it. A phone's screenshot (`screen: "phone"`) goes through the same job for its first picture, inside the chat turn; its picture is still never sent to the everyday model.
+
+**Never silent.** When the picture was not used, the note shown with the answer says `Looked at: <program> window · words only (<why>)` (and while it is still being read, `words and picture when ready (slow mode)`), the everyday model is told, in one plain line, to say so, **and code writes one plain sentence into the answer itself** - `(Picture mode: <why> This answer uses the words only.)`, put there by `jarvis_agent.py` (`tell_owner`, from `with_screen`'s `info["picture_said"]`) - so the owner is told even if the model does not pass it on. The reasons (`WHY_WORDS`, one fixed sentence each, the same for both apps' tests): the model is not installed; Ollama could not be asked; Ollama was not found; the reader could not start; no cleaner; the cleaner failed; too slow; an error; nothing to say; the reader was on the graphics card; the model's file changed since it was measured; a cloud model name; picture reading was turned off; a newer look replaced this one. With the switch off, nothing changes: the note says `words only` and no job exists.
+
+**The cleaner hook** (built in `jarvis_screen.py` by another piece of work, in parallel). `jarvis_screen_picture.clean()` calls `jarvis_screen.clean_picture(picture, want_png=True)` when it has that parameter (the built signature is `clean_picture(picture, ocr=None, *, want_png=False)`), else `clean_picture(picture, snap)` or `clean_picture(picture)`; it uses the returned dict's `png` - the ONLY picture a model may be shown - and treats `png: None`, `unchecked`, `blocked`, an exception, nothing or empty bytes as "send nothing". Without `clean_picture` the stub `_clean_picture_stub` raises: **fail closed**. This module never builds it.
+
+**The picture reader** (`_Lane`): its own `ollama serve` on `127.0.0.1:11437` (`[screen_picture] port`; never 11434-11436), environment from an allowlist (`jarvis_child_env.py`: no token, key or password of Jarvis's) plus `OLLAMA_MODELS`, `CUDA_VISIBLE_DEVICES=-1` (Ollama's documented way to force the processor), `HIP_VISIBLE_DEVICES=-1`, `ROCR_VISIBLE_DEVICES=-1`, `OLLAMA_VULKAN=0`, `OLLAMA_MAX_LOADED_MODELS=1`, `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_NO_CLOUD=1`. Started on the first look, stopped when the switch goes off and when Jarvis closes; a port already in use, Ollama missing, or a start that dies are each said plainly. Processor threads default to half of this PC's (`threads`, unmeasured).
+
+**Speed is measured, never guessed.** `GET`'s `measured_words` says "Not measured yet: nobody knows how slow this is on your PC" until the owner runs `install_line` - ONE PowerShell line the PC writes with its own folder in it: `ollama pull '<model>'; Push-Location -LiteralPath '<backend folder>'; py -3 .\jarvis_screen_picture.py --measure; Pop-Location`. `--measure` uses a made-up test picture (never the owner's screen), prints seconds per look and Ollama's `prompt_eval_count` with and without the picture and how much graphics memory the model held (must be 0; if not it is not saved as a working number), and saves `screen-picture-measure.json` (numbers and the model's checksum). The setting then shows "Measured on <date>: about N seconds for one look (a made-up test picture - a busy real screen may take longer)", and after a real look "Your last look took N seconds". A measurement for another model is not shown as this one's.
+
+**Unverified, said plainly.** ollama.com and Hugging Face could not be reached when this was written: the Ollama tag (`minicpm-v:4.6`), the download size, whether Ollama's runner accepts this model on the processor and its speed there, the checksum (`PINNED_DIGEST` is empty until a real download's is read), and what it says about a real screenshot are all unverified. What was checked: llama.cpp's `docs/multimodal/minicpmv4.6.md` exists (a Qwen3.5-based 1.3 B language model with a SigLIP vision tower), and Ollama's `docs/gpu.md` documents `CUDA_VISIBLE_DEVICES=-1` for the processor.
+
+**Both apps.** The switch is decided on the PC and read by both, like every approval-card switch. Desktop: Settings, "Look at this and Watch with me", `look.rs` `screen_picture` (`read`, `on`, `off`; `on` is held on a stale link, `off` never), `look-settings.js`, `look-rules.js` (`PICTURE`, `pictureView`). Phone: Settings, "Looking at your screen: pictures" (`net/ScreenPicture.kt`, `ScreenPicturePlate.kt`). The fixed words, the reasons and `panel()`'s cases are in `contract/screen-cases.json` (`picture`, from `tools/gen_screen_cases.py`) and both apps' tests hold to them. Neither app ever handles a picture for this.
+
+Tests: `backend/test_screen_picture.py` (off by default; ON is one card and changes nothing until yes; OFF is immediate; fail closed without a cleaner; the model is shown the cleaned picture, never the original; every failure is said and falls back to the words; the reader is processor-only and private; the real HTTP path against a stand-in Ollama; the measurement; the routes and gate lines), `tests/look-rules.mjs`, `ScreenPictureTest.kt`.

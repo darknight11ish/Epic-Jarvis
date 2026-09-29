@@ -1038,6 +1038,9 @@ pub fn run() {
             look::screen_status,
             look::screen_watch,
             look::screen_never,
+            // Picture mode's switch (look.rs): read it, turn it on (ONE
+            // approval card) or off (at once). Settings only.
+            look::screen_picture,
             // Interrupting by talking and "One moment." (voice_flow.rs).
             voice_flow::judge_barge_in,
             voice_flow::get_voice_flow,

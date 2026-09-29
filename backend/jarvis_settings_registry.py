@@ -68,6 +68,7 @@ choice function, picked because each already has a proven `handle_*`/
   * ask_before_every_search - jarvis_search.request_ask_every_time()
   * smartwatch_notifications - jarvis_watch_notify.request()
   * phone_notifications   - jarvis_phone_notifications.request() (2026-09-28)
+  * screen_picture        - jarvis_screen_picture.request() (2026-09-29): ON is one card
   * briefing_senders      - jarvis_briefing.handle_senders()
   * loosen_asks_first     - jarvis_asks_first.handle_tier()   (PC_ONLY_ACTIONS)
   * enable_reading_tool   - jarvis_asks_first.handle_tools()  (PC_ONLY_ACTIONS)
@@ -186,6 +187,11 @@ SECTIONS: tuple = (
             app="phone"),
     Section("phone-notify", ("phone notifications", "reading phone notifications",
                             "notifications on my phone"), app="phone"),
+    # "Look at this and Watch with me" (2026-09-29: its own card on the
+    # desktop, holding the Never look at list and picture mode; on the phone
+    # its own Settings row for picture mode).
+    Section("screen-look", ("look at this and watch with me", "looking at my screen",
+                            "watch with me settings", "the screen settings")),
 )
 
 #: id -> Section, for a direct lookup once a name has matched.
@@ -315,6 +321,17 @@ def set_phone_notifications(on: bool, *, peer=None, local=None) -> Outcome:
     except Exception:
         return _missing("reading phone notifications")
     code, out = PN.request(bool(on), PN.set_enabled)
+    return _say(code, out)
+
+
+# --- picture mode for the screen (jarvis_screen_picture.py) ----------------
+
+def set_screen_picture(on: bool, *, peer=None, local=None) -> Outcome:
+    try:
+        import jarvis_screen_picture as SP
+    except Exception:
+        return _missing("picture mode for the screen")
+    code, out = SP.request(bool(on), SP.set_enabled)
     return _say(code, out)
 
 
@@ -485,6 +502,10 @@ BOOL_SETTINGS: tuple = (
                ("phone notifications", "reading phone notifications",
                 "notifications on my phone"),
                "phone-notify", set_phone_notifications),
+    BoolSetting("screen_picture",
+               ("picture mode", "picture mode for my screen", "reading pictures of my screen",
+                "looking at pictures of my screen"),
+               "screen-look", set_screen_picture),
     BoolSetting("briefing_senders",
                ("senders in my briefing", "showing senders in my briefing",
                 "email senders in the morning briefing"),

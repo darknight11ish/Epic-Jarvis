@@ -59,7 +59,13 @@ IN PLAIN WORDS, WHAT HAPPENS
     OUTSIDE TEXT label JARVIS-API section 36 uses for the words in a picture
     (SCREEN_TEXT_HEAD), and all with anything that looks like a key, a
     password or a card number HIDDEN first ("[hidden]", see SCREEN SAFETY
-    below). The picture itself is not sent on one graphics card.
+    below). The picture itself is not sent on one graphics card -
+    EXCEPT with the owner's slow "picture mode" switched on (2026-09-29,
+    jarvis_screen_picture.py): then the picture, with secrets blacked out
+    first, also goes to a small picture model that runs on the PROCESSOR, and
+    what it says joins the words as more outside text. Off by default; if it
+    is missing, slow or fails, the note and the model say so and the words
+    alone are used.
     The turn records a read of `read_screen` (SCREEN_TOOL), so a note write
     or web search after it asks first, as after any reading tool.
 
@@ -803,6 +809,11 @@ class Glance:
     #: (the design: "handed to that question and not held"): the first turn
     #: that uses it drops it.
     consume: bool = False
+    #: Picture mode (jarvis_screen_picture.py, the owner's decision of
+    #: 2026-09-29): the job reading this look's PICTURE on the processor, or
+    #: None when the switch was off for this look. Its description is more
+    #: OUTSIDE TEXT beside the words; it is never kept past the look.
+    picture: object = field(default=None, repr=False, compare=False)
 
 
 def model_part(g: Glance) -> str:
@@ -818,8 +829,11 @@ def model_part(g: Glance) -> str:
     if g.unchecked:
         out.append(SCREEN_TEXT_UNCHECKED)
         return "\n\n".join(out)
+    extra = _picture_lines(g)
     if not g.ocr_text and not g.ui_text:
         out.append(SCREEN_TEXT_NONE)
+        if extra:
+            out.append(extra)
         return "\n\n".join(out)
     if g.ocr_text:
         out.append(OCR_LINE + "\n" + g.ocr_text)
@@ -831,13 +845,121 @@ def model_part(g: Glance) -> str:
             out.append(SCREEN_TEXT_CUT.format(n=g.ui_left))
     if g.hidden:
         out.append(SCREEN_TEXT_HIDDEN.format(n=g.hidden))
+    if extra:
+        out.append(extra)
     return "\n\n".join(out)
+
+
+def _picture_module():
+    """jarvis_screen_picture.py (the slow picture mode), or None without it."""
+    try:
+        import jarvis_screen_picture as SP
+        return SP
+    except Exception:
+        return None
+
+
+def _picture_lines(g: Glance) -> str:
+    """The picture reader's description (OUTSIDE TEXT), or one plain line saying
+    it was not used - "" when picture mode was off for this look."""
+    if g.picture is None:
+        return ""
+    SP = _picture_module()
+    return SP.model_lines(g) if SP is not None else ""
+
+
+def _picture_said(g: Glance) -> str:
+    """The plain sentence the answer itself carries when picture mode was on and
+    its picture was not used (jarvis_screen_picture.owner_line) - "" otherwise."""
+    if g.picture is None:
+        return ""
+    SP = _picture_module()
+    return SP.owner_line(g) if SP is not None else ""
+
+
+def _picture_note(g: Glance) -> str:
+    """What follows "words" in the note: " only" - or, with picture mode on,
+    " and picture (slow mode)" / " only (why)"."""
+    if g.picture is None:
+        return " only"
+    SP = _picture_module()
+    return SP.note_suffix(g) if SP is not None else " only"
+
+
+def _start_picture(g: Glance, picture, snap) -> None:
+    """Hands the look's picture to picture mode if the owner switched it on
+    (jarvis_screen_picture.start): the cleaner blacks out secrets FIRST, there.
+    Never raises; with the switch off nothing else sees the picture."""
+    try:
+        SP = _picture_module()
+        g.picture = SP.start(g, picture, snap) if SP is not None else None
+    except Exception:
+        g.picture = None
+
+
+class _Held:
+    """A stand-in with a `.picture`, so a phone screenshot's picture job can be
+    read with the same helpers as a look's."""
+
+    def __init__(self, picture):
+        self.picture = picture
+
+
+def _phone_picture_start(image: bytes):
+    """Picture mode for the FIRST screenshot the phone sent: a job reading it on
+    the processor (the cleaner blacks out secrets first, there), or None with
+    the switch off. Only one, so a slow reader is waited for once. Never raises."""
+    try:
+        SP = _picture_module()
+        return SP.start(None, image, None, supersede=False) if SP is not None else None
+    except Exception:
+        return None
+
+
+def _phone_picture_lines(jobs) -> str:
+    """The picture reader's description of the phone's screenshot as OUTSIDE
+    TEXT - or one plain line saying it was not used - "" with the switch off."""
+    SP = _picture_module()
+    if SP is None:
+        return ""
+    out = []
+    for job in jobs:
+        if job is None:
+            continue
+        held = _Held(job)
+        SP.wait_for(held)
+        out.append(SP.model_lines(held))
+    return "\n\n".join(x for x in out if x)
+
+
+def _phone_picture_said(jobs) -> str:
+    SP = _picture_module()
+    if SP is None:
+        return ""
+    return " ".join(x for x in (SP.owner_line(_Held(j)) for j in jobs if j is not None) if x)
+
+
+def _cancel_picture(g: Optional[Glance]) -> None:
+    """A look is thrown away: its picture read is cut short."""
+    if g is not None and g.picture is not None:
+        SP = _picture_module()
+        if SP is not None:
+            SP.cancel(g)
+
+
+def _wait_picture(g: Glance) -> None:
+    """Waits (a little) for a look's picture to be read; whatever is ready
+    then is used, and the rest is said to be still being read."""
+    if g.picture is not None:
+        SP = _picture_module()
+        if SP is not None:
+            SP.wait_for(g)
 
 
 def looked_note(g: Glance) -> str:
     """The note shown WITH the answer in the Jarvis bar ("Looked at: Chrome
     window · words only"). Part of the answer, never of status or an event."""
-    return f"Looked at: {g.program} window · words only"
+    return f"Looked at: {g.program} window · words{_picture_note(g)}"
 
 
 def label_phone_text(text: str) -> str:
@@ -941,7 +1063,7 @@ def with_screen(messages: list, mark: str = "", *, engine=None,
     `info`: {"read": bool (words were added), "text": the words (for the
     planted-instruction check - never stored), "note", "mode"}. Never
     changes `messages` itself; never raises."""
-    info = {"read": False, "text": "", "note": "", "mode": ""}
+    info = {"read": False, "text": "", "note": "", "mode": "", "picture_said": ""}
     msgs = list(messages or [])
     idx = _newest_user(msgs)
     if idx is None:
@@ -954,6 +1076,7 @@ def with_screen(messages: list, mark: str = "", *, engine=None,
         return msgs, info
     kept, added, words = [], [], []
     empty_part = False
+    pic_jobs: list = []
     try:
         for p in parts:
             if isinstance(p, dict) and p.get("type") == "screen_text":
@@ -975,9 +1098,11 @@ def with_screen(messages: list, mark: str = "", *, engine=None,
                 got = None
                 if image:
                     # Through the one door: secrets in the words are hidden
-                    # before anything is used (the picture itself never goes
-                    # on from here).
+                    # before anything is used (the picture itself goes on only
+                    # through picture mode below, which cleans it again).
                     got = clean_picture(image, ocr=read)
+                    if not pic_jobs:
+                        pic_jobs.append(_phone_picture_start(image))
                 t, _left = _ocr_words(got) if got is not None else ("", 0)
                 if t:
                     texts.append(t)
@@ -995,11 +1120,17 @@ def with_screen(messages: list, mark: str = "", *, engine=None,
             eng = engine or ENGINE
             got = eng.take_for_turn()
             if got.get("part"):
-                info.update(read=True, text=got["part"], note=got.get("note") or "")
+                info.update(read=True, text=got["part"], note=got.get("note") or "",
+                            picture_said=got.get("picture_said") or "")
                 added.append({"type": "text", "text": got["part"]})
             else:
                 added.append({"type": "text",
                               "text": SCREEN_TEXT_SLOW if got.get("slow") else SCREEN_TEXT_EXPIRED})
+        extra = _phone_picture_lines(pic_jobs)     # picture mode, when the owner turned it on
+        if extra:
+            info["text"] = (info["text"] + "\n\n" + extra).strip()
+            added.append({"type": "text", "text": extra})
+            info["picture_said"] = _phone_picture_said(pic_jobs)
     except Exception:
         return list(messages or []), {"read": False, "text": "", "note": "", "mode": ""}
     msgs[idx] = dict(msgs[idx], content=kept + added)
@@ -1117,6 +1248,7 @@ class Screen:
         self.ends_at, self.warned = 0.0, False
         self._gen += 1
         if self._look is not None and self._look.mode == "watch":
+            _cancel_picture(self._look)
             self._look = None       # a session's own look goes with the session
 
     def stop(self, why: str = "owner") -> dict:
@@ -1256,8 +1388,13 @@ class Screen:
         picture, items, before = got
         g = self._glance_for(mode, before)
         got = None
+        # Picture mode (jarvis_screen_picture.py) reads the PICTURE beside the
+        # words, if the owner switched it on: the cleaner blacks out secrets
+        # first, there. With the switch off this does nothing.
+        _start_picture(g, picture, before)
         if wait:
             self._read(g, picture, items)
+            _wait_picture(g)
         else:
             try:
                 threading.Thread(target=self._read, args=(g, picture, items),
@@ -1275,7 +1412,9 @@ class Screen:
         (`take_for_turn`)."""
         g, why = self._take("look", whole, wait)
         with self._lock:
-            self._look = g          # a new look replaces the last one; a refused one clears it
+            old, self._look = self._look, g   # a new look replaces the last one; a refused one clears it
+        if old is not g:
+            _cancel_picture(old)
         if g is None:
             return {"ok": False, "paused": why, "said": said_for(why)}
         self._emit()
@@ -1300,7 +1439,9 @@ class Screen:
             return {"ok": False, "looked": False, "paused": why, "said": said_for(why)}
         g.consume = True
         with self._lock:
-            self._look = g
+            old, self._look = self._look, g
+        if old is not g:
+            _cancel_picture(old)
         self._emit()
         return {"ok": True, "looked": True, "note": looked_note(g)}
 
@@ -1318,17 +1459,20 @@ class Screen:
             with self._lock:
                 if self._look is g:
                     self._look = None
+            _cancel_picture(g)
             self._emit()
             return {"part": None, "note": "", "expired": True}
         g.ready.wait(READ_WAIT_S)
         if not g.ready.is_set():
             return {"part": None, "note": looked_note(g), "expired": False, "slow": True}
+        _wait_picture(g)        # picture mode: a little longer for the picture, never more
         if g.consume:
             with self._lock:
                 if self._look is g:
                     self._look = None
             self._emit()
-        return {"part": model_part(g), "note": looked_note(g), "expired": False}
+        return {"part": model_part(g), "note": looked_note(g), "expired": False,
+                "picture_said": _picture_said(g)}
 
     def follow_up(self) -> Optional[str]:
         """The held look's model part for a follow-up question within
@@ -1338,6 +1482,7 @@ class Screen:
             if g is None:
                 return None
             if self.clock() - g.at > FOLLOW_UP_S:
+                _cancel_picture(g)
                 self._look = None
                 dropped = True
             else:
@@ -1349,7 +1494,9 @@ class Screen:
     def drop_look(self) -> bool:
         """The bar closed: the held look is thrown away now."""
         with self._lock:
-            had, self._look = self._look is not None, None
+            old, self._look = self._look, None
+        had = old is not None
+        _cancel_picture(old)
         if had:
             self._emit()
         return had
@@ -1401,6 +1548,7 @@ class Screen:
             had = self._look is not None
             if was:
                 self._end("stop_all")
+            _cancel_picture(self._look)
             self._look = None
         if not (was or had):
             return None
@@ -1549,6 +1697,11 @@ except Exception:
 
 ROUTE = "/api/screen"
 ROUTE_NEVER = "/api/screen/never-look"
+#: Picture mode's switch (jarvis_screen_picture.py, JARVIS-API section 96.1):
+#: GET from any paired device; POST {"enabled": bool} - ON is ONE card, OFF at once.
+ROUTE_PICTURE = "/api/screen/picture"
+PICTURE_MISSING = ("This PC's Jarvis does not have picture mode: jarvis_screen_picture.py is not "
+                   "in the backend folder. Run apply-patches.ps1 again.")
 #: The verbs POST /api/screen takes. "look", "ask", "start" and "extend" can
 #: only come from THIS PC; "stop" (and "drop") from anywhere, because they
 #: only ever make Jarvis look LESS.
@@ -1599,6 +1752,11 @@ def handle_get(path: str, local: bool) -> tuple:
     """(status code, body)."""
     if path == ROUTE:
         return 200, _flat()
+    if path == ROUTE_PICTURE:
+        SP = _picture_module()
+        if SP is None:
+            return 503, {"available": False, "error": PICTURE_MISSING}
+        return SP.handle_get()
     if path == ROUTE_NEVER:
         if not local:
             return 403, {"error": LOCAL_ONLY_SAYS}
@@ -1627,6 +1785,11 @@ def handle_post(path: str, body, local: bool) -> tuple:
     a look's words go only to the chat turn (`with_screen`)."""
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "the request is not an object"}
+    if path == ROUTE_PICTURE:
+        SP = _picture_module()
+        if SP is None:
+            return 503, {"ok": False, "error": PICTURE_MISSING}
+        return SP.handle_post(body)
     do = str(body.get("do") or "")
     if path == ROUTE_NEVER:
         if not local:
@@ -1700,7 +1863,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 
     def do_GET(self):
         route = urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/")
-        if route not in (ROUTE, ROUTE_NEVER):
+        if route not in (ROUTE, ROUTE_NEVER, ROUTE_PICTURE):
             return get0(self)
         if not _allowed(self):
             return None
@@ -1712,7 +1875,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 
     def do_POST(self):
         route = urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/")
-        if route not in (ROUTE, ROUTE_NEVER):
+        if route not in (ROUTE, ROUTE_NEVER, ROUTE_PICTURE):
             return post0(self)
         if not _allowed(self):
             return None

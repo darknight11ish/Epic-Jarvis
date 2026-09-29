@@ -1,0 +1,26 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -168,6 +168,7 @@
+     "support_offer",  # jarvis_support.py acts only on tier "ask": ONE card per offer; nothing is accepted without it (support-chat.patch)
+     "app_merge_change",  # jarvis_apps.py acts only on tier "ask": ONE card per change added to an app (apps-in-projects.patch)
+     "tidy_inbox",  # jarvis_inbox_tidy.py / jarvis_agent.py acts only on tier "ask": ONE card per tidy, listing every email (inbox-tidy.patch)
++    "screen_picture_enable",  # jarvis_screen_picture.py acts only on tier "ask": ONE card to turn on slow picture reading (screen-picture.patch)
+ })
+ 
+ 
+@@ -814,6 +815,15 @@
+     # Windows Hello on the PC, a screen lock on the phone) - but nothing is
+     # deleted for good and one tap on Undo puts it all back for 10 minutes.
+     "tidy_inbox": ("yes", "outbound", "archives, stars, marks as read or moves to Trash exactly the emails listed on the card, in your own mailbox on your mail provider's server; nothing is deleted for good, and for 10 minutes one tap on Undo puts every one back"),
++    # screen-picture.patch (jarvis_screen_picture.py, the owner's decision of
++    # 2026-09-29: "add it as a feature that can be enabled or disabled"). ONE
++    # card to let "Look at this" and "Watch with me" also look at the PICTURE
++    # of the screen, slowly, with a small model that runs on the processor
++    # (never the graphics card) in its own copy of Ollama that only this PC can
++    # reach. The picture is blacked out for secrets first and is never saved;
++    # nothing leaves this PC; the model itself is downloaded by the owner's own
++    # pasted line, never by this card. Turning it off again is instant.
++    "screen_picture_enable": ("yes", "local", "lets \"Look at this\" and \"Watch with me\" also look at the picture of your screen, slowly, using a small model in a separate copy of Ollama that runs on this PC's processor (never the graphics card) and only this PC can reach (127.0.0.1); secrets in the picture are blacked out first, nothing is saved or sent anywhere, the model is downloaded by you, not by this card, and turning it off again is instant"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",

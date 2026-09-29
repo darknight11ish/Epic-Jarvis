@@ -69,6 +69,10 @@ const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
 pub(crate) const WATCH_ACTIONS: &[&str] = &["start", "stop", "extend", "drop"];
 /// The verbs `screen_never` takes.
 pub(crate) const NEVER_ACTIONS: &[&str] = &["list", "add", "remove"];
+/// The verbs `screen_picture` takes: read the setting, turn picture mode on
+/// (ONE approval card on the PC - nothing changes until it is approved) or
+/// off (at once).
+pub(crate) const PICTURE_ACTIONS: &[&str] = &["read", "on", "off"];
 /// How a session may say it was started (for the audit trail only).
 pub(crate) const STARTS: &[&str] = &["button", "tray", "hotkey", "voice"];
 
@@ -77,6 +81,8 @@ static ON_HERE: AtomicBool = AtomicBool::new(false);
 
 pub(crate) const MISSING: &str = "This PC's Jarvis does not have \"Look at this\" and \"Watch \
      with me\" yet. Run scripts\\apply-patches.ps1 on the PC to add them.";
+pub(crate) const PICTURE_MISSING: &str = "This PC's Jarvis does not have picture mode yet. Run \
+     scripts\\apply-patches.ps1 on the PC to add it.";
 const STALE_HELD: &str = "The connection to Jarvis is catching up, so looking at the screen is \
      held until it does - try again in a moment.";
 pub(crate) const APP_LOCK_HELD: &str = "Jarvis is locked (App lock). Open the Jarvis bar and \
@@ -159,6 +165,19 @@ pub(crate) fn never_body(
         );
     }
     Ok(serde_json::json!({ "do": action, "kind": kind, "value": value }))
+}
+
+/// The body of one picture-mode verb, or why it is not one. Only a switch
+/// position goes in - nothing else.
+pub(crate) fn picture_body(action: &str) -> Result<serde_json::Value, String> {
+    if !PICTURE_ACTIONS.contains(&action) {
+        return Err(format!("Picture mode cannot {action:?}"));
+    }
+    Ok(match action {
+        "on" => serde_json::json!({ "enabled": true }),
+        "off" => serde_json::json!({ "enabled": false }),
+        _ => serde_json::json!({}),
+    })
 }
 
 /// The PC's answer, as a value or the reason in words.
@@ -370,6 +389,34 @@ pub async fn screen_never(
         return Err(STALE_HELD.to_string());
     }
     post(&app, "/api/screen/never-look", body, WRITE_TIMEOUT).await
+}
+
+/// Picture mode's switch, for Settings (backend/jarvis_screen_picture.py; the
+/// owner's decision of 2026-09-29): "read" gets the setting - on or off,
+/// whether it would work now, the measured seconds per look (never a guess)
+/// and the one PowerShell line that installs and measures the model; "on" asks
+/// for it to be turned on, which raises ONE approval card on this PC and
+/// changes nothing until a person says yes (held on a stale link); "off" is
+/// at once and never held. The picture itself never passes through this app.
+#[tauri::command]
+pub async fn screen_picture(app: AppHandle, action: String) -> Result<serde_json::Value, String> {
+    let body = picture_body(&action)?;
+    if action == "on" && stale(&app) {
+        return Err(STALE_HELD.to_string());
+    }
+    let out = if action == "read" {
+        get(&app, "/api/screen/picture").await
+    } else {
+        post(&app, "/api/screen/picture", body, WRITE_TIMEOUT).await
+    };
+    // A PC with the screen routes but not this one answers 404: say which.
+    out.map_err(|why| {
+        if why == MISSING {
+            PICTURE_MISSING.to_string()
+        } else {
+            why
+        }
+    })
 }
 
 /// The Look at this key: look now, THEN bring up the bar. A refusal is the
@@ -662,6 +709,19 @@ mod tests {
     }
 
     #[test]
+    fn picture_mode_verbs_carry_only_a_switch_position() {
+        assert_eq!(picture_body("read").unwrap(), json!({}));
+        assert_eq!(picture_body("on").unwrap(), json!({ "enabled": true }));
+        assert_eq!(picture_body("off").unwrap(), json!({ "enabled": false }));
+        for bad in ["", "toggle", "enable", "on ", "ON", "measure", "download"] {
+            assert!(picture_body(bad).is_err(), "{bad:?}");
+        }
+        for verb in PICTURE_ACTIONS {
+            assert!(picture_body(verb).is_ok(), "{verb}");
+        }
+    }
+
+    #[test]
     fn the_pcs_answers_become_a_value_or_plain_words() {
         assert_eq!(
             answer(200, r#"{"ok":true}"#).unwrap(),
@@ -721,7 +781,14 @@ mod tests {
 
     #[test]
     fn the_words_are_plain() {
-        for words in [MISSING, STALE_HELD, APP_LOCK_HELD, NOT_THIS_PC, NO_LOOK] {
+        for words in [
+            MISSING,
+            PICTURE_MISSING,
+            STALE_HELD,
+            APP_LOCK_HELD,
+            NOT_THIS_PC,
+            NO_LOOK,
+        ] {
             assert!(!words.contains("::") && !words.contains('{'), "{words}");
         }
     }

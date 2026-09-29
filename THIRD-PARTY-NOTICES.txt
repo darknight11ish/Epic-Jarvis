@@ -292,6 +292,20 @@ Memory ideas 1 and 4 (2026-09-26, docs/MEMORY-RESEARCH-2026-09-26.md). No
   fact against the one it would invalidate by their valid-from dates
   (backend/rebuilt/jarvis_memory.py, add()).
 
+PICTURE MODE'S MODEL (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+MiniCPM-V 4.6 (OpenBMB, https://github.com/OpenBMB/MiniCPM-V,
+  https://huggingface.co/openbmb/MiniCPM-V-4_6), reported as Apache-2.0
+  (the licence was not re-checked when this was written - Hugging Face could
+  not be reached from where it was built). Used by backend/jarvis_screen_picture.py
+  as the small picture model that runs on the PC's processor when the owner
+  turns on "Read pictures of my screen (slow)". It is NOT distributed with
+  Jarvis: the owner downloads it themselves with one pasted PowerShell line
+  (`ollama pull`, from Ollama's own library - its tag and size are unverified),
+  and Ollama (MIT, https://github.com/ollama/ollama) runs it in a separate
+  copy of itself that only this PC can reach. Anything that looks like a key,
+  a card number or a password is blacked out of a picture before it reaches it.
+
 WEB SEARCH (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 ddgs (deedy5), MIT - https://github.com/deedy5/ddgs

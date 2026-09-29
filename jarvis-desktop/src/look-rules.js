@@ -197,6 +197,65 @@ export const SETTINGS = Object.freeze({
   thisPcOnly: "The list can only be seen and changed on the PC Jarvis runs on.",
 });
 
+/* ── Settings: picture mode (slow, on the processor) ───────────────────── */
+
+/**
+ * The words of Settings -> "Picture mode" (the owner's decision of 2026-09-29;
+ * backend/jarvis_screen_picture.py; JARVIS-API section 96.1). Fixed on the PC
+ * (`WORDS` there) and held here to the same text by tests/look-rules.mjs, so
+ * the phone (net/ScreenPicture.kt) says exactly the same.
+ */
+export const PICTURE = Object.freeze({
+  title: "Read pictures of my screen (slow, on the processor)",
+  detail:
+    "With one graphics card Jarvis reads only the WORDS on your screen. This lets a small picture model also look at " +
+    "the picture itself, so it can tell what a chart, a button or a photo shows. It runs on this PC's processor, not on " +
+    "your graphics card, so your everyday chat model is not disturbed - but it is SLOW, and how slow depends on your PC. " +
+    "Anything that looks like a key, a card number or a password is blacked out first, and if that part is missing no " +
+    "picture is used. Nothing leaves this PC and nothing is saved. Off by default. Turning it on asks first, because a " +
+    "model has to be downloaded.",
+  switch: "Let Jarvis look at pictures of my screen (slow)",
+  offLine: "Off. Jarvis reads the words on your screen only.",
+  waitingLine: "Waiting for your yes on the card. Nothing has changed yet.",
+  unread: "Could not read this setting.",
+  missing: "This PC's Jarvis does not have picture mode yet. Run scripts\\apply-patches.ps1 on the PC to add it.",
+  stepsTitle: "To set it up, paste this one line into PowerShell on your PC:",
+  stepsNote:
+    "It downloads the picture model from Ollama (ollama.com; how big it is has not been checked), then measures how " +
+    "many seconds one look takes on your PC and saves the number. Jarvis never downloads the model by itself.",
+  copy: "Copy the line",
+  copied: "Copied. Paste it into PowerShell.",
+  asking: "Asking...",
+  turningOff: "Turning it off...",
+  askedCard: "A card is waiting for your yes in the Jarvis bar. Picture mode stays off until you say yes.",
+  off: "Picture mode is off. Jarvis reads the words on your screen only.",
+});
+
+/**
+ * What Settings shows for one GET /api/screen/picture answer. The reference is
+ * `panel()` in backend/jarvis_screen_picture.py (tools/gen_screen_cases.py
+ * writes its cases): the switch looks ON while its card waits, so it can be
+ * turned back off, but the line says it is only waiting.
+ * -> {available, enabled, waiting, checked, line, measured, installLine}
+ */
+export function pictureView(out) {
+  const o = out && typeof out === "object" && !Array.isArray(out) ? out : {};
+  if (typeof o.enabled !== "boolean") {
+    return { available: false, enabled: false, waiting: false, checked: false, line: PICTURE.unread, measured: "", installLine: "" };
+  }
+  const enabled = o.enabled;
+  const waiting = o.waiting === true && !enabled;
+  return {
+    available: true,
+    enabled,
+    waiting,
+    checked: enabled || waiting,
+    line: words(o.line) || (waiting ? PICTURE.waitingLine : !enabled ? PICTURE.offLine : ""),
+    measured: words(o.measured_words),
+    installLine: words(o.install_line),
+  };
+}
+
 /** One row of the list, in words: {name, kind, tag, builtIn}. */
 export function neverRow(entry) {
   const e = entry && typeof entry === "object" ? entry : {};

@@ -6212,6 +6212,12 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # "Proposed after Jarvis read: your screen".
         if watch.screen or _has_screen_text_part(convo):
             convo, screen_info = with_screen(convo, watch.screen)
+            if screen_info.get("picture_said"):
+                # Picture mode (the owner's decision of 2026-09-29) was on and
+                # the picture was not used: said in the answer itself, by code,
+                # never left to the model to pass on.
+                tell_owner(screen_info["picture_said"])
+                said["gap"] = True           # the model's own words start a new paragraph
             if screen_info.get("read"):
                 screen_read = True
                 say_step("tool_started", SCREEN_TOOL)

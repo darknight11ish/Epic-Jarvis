@@ -139,7 +139,7 @@ def t_rows_and_order():
     for want in ("cloud_model", "web_search", "calendar", "email_read", "email_send",
                  "home_read", "home_control", "notes_read", "notes_write", "github",
                  "phone_push", "computer", "browser", "phone_control", "second_card",
-                 "big_model"):
+                 "big_model", "screen_picture"):
         check(f"there is a row for {want}", want in ids)
     check("with nothing set up, nothing is on", v["on"] == 0 and v["tools"] == [], v["on"])
     check("the view says it was written by code", v["written_by"] == "code"
