@@ -505,7 +505,7 @@ class CustomVoicesTest {
         assertEquals("Jarvis is busy talking or listening. Try it again in a moment.", CustomVoices.TRY_BUSY)
         assertEquals("Stopped, because Jarvis is talking or listening now.", CustomVoices.TRY_STOPPED)
         assertEquals(
-            "Your PC cannot play an animal's voice yet. Run the patch script on the PC first.",
+            "Your PC cannot play an animal's voice yet. In PowerShell on the PC, in the Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.",
             CustomVoices.TRY_UPDATE,
         )
         // A second Try it while the PC is still making one: its own words.
@@ -605,7 +605,7 @@ class CustomVoicesTest {
         assertEquals("Jarvis is busy talking or listening. Try again in a moment.", CustomVoices.HEAR_BUSY)
         assertEquals("Jarvis is locked right now. Unlock it, then try again.", CustomVoices.HEAR_LOCKED)
         assertEquals(
-            "Your PC cannot play voice samples yet. Run the patch script on the PC first.",
+            "Your PC cannot play voice samples yet. In PowerShell on the PC, in the Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.",
             CustomVoices.HEAR_UPDATE,
         )
         assertEquals("Playing American (female) - Bella.", CustomVoices.hearPlaying("American (female) - Bella"))
