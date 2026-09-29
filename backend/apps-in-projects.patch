@@ -1,0 +1,52 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3417,6 +3417,23 @@
+     except Exception as exc:
+         print(f"  projects   NOT ON ({type(exc).__name__}) - Projects is off")
+         print("             until jarvis_projects.py is back: run apply-patches.ps1 again")
++    # apps-in-projects.patch (the owner's decision of 2026-09-28, "The app
++    # builder's projects join Projects", and his answers of 2026-09-29;
++    # docs/APPS-IN-PROJECTS-DESIGN.md, JARVIS-API section 92): an app inside a
++    # project - GET /api/projects/<id>/app/tasks/<task>, POST .../app/tasks
++    # (start one), .../files (paste a change in - THIS PC only), .../merge
++    # (ONE risky approval card, app_merge_change, showing every file and the
++    # whole change) and .../discard. Nothing here runs a program or writes a
++    # model's code: the model tools and running commands are later steps.
++    # Wrapped round Handler here, before anything listens, like projects
++    # above; every rule is in jarvis_apps.py.
++    try:
++        import jarvis_apps
++        print(jarvis_apps.install(Handler, origin_ok=_origin_ok,
++                                  token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  apps       NOT ON ({type(exc).__name__}) - App projects are off")
++        print("             until jarvis_apps.py is back: run apply-patches.ps1 again")
+     # chatbot-routes.patch ("Talk to a chatbot for me", the owner's decisions of
+     # 2026-09-27 and 2026-09-28; docs/CHATBOT-DRIVER-DESIGN.md, JARVIS-API
+     # section 87): GET /api/chatbot/status, POST /api/chatbot/start (ONE
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -164,6 +164,7 @@
+     "phone_notifications_read",  # jarvis_phone_notifications.py acts only on tier "ask" (phone-notifications.patch)
+     "chatbot_session",  # jarvis_chatbot.py acts only on tier "ask": ONE card per conversation (chatbot.patch)
+     "memory_forget_range",  # jarvis_forget_range.py acts only on tier "ask": ONE card per time frame (forget-range.patch)
++    "app_merge_change",  # jarvis_apps.py acts only on tier "ask": ONE card per change added to an app (apps-in-projects.patch)
+ })
+ 
+ 
+@@ -622,6 +623,15 @@
+     # phone. Removing the device drops it again, so "yes" and "local";
+     # also PC only, always with Windows Hello (PC_ONLY_ACTIONS).
+     "register_approval_key": ("yes", "local", "lets the phone named on the card approve risky actions with its own fingerprint or PIN, checked here on this PC; you can remove the device any time in Settings, Devices, and that drops the key again"),
++    # apps-in-projects.patch (jarvis_apps.py, docs/APPS-IN-PROJECTS-DESIGN.md
++    # section 2.2; the owner's answers of 2026-09-29). Adding a task's change
++    # to an app's files: nothing leaves this PC ("local") and nothing is run,
++    # but Jarvis has no Undo button for a merge yet - git keeps the old version,
++    # and the merged files are the code a later step will build - so "no": this
++    # card is RISKY (Windows Hello on the PC, the screen lock on the phone) and
++    # heavy (a widget's Approve opens the full card). Not PC-only: the owner
++    # reads the whole change first, on either device.
++    "app_merge_change": ("no", "local", "adds the change shown on the card to your app's files, exactly as shown; nothing is run; the older version stays in the app's git history, but there is no Undo button for it yet"),
+     # note-capture.patch (jarvis_note_capture.py). All three stay on this PC:
+     # the Logseq journal and the Obsidian daily note are files here, and
+     # Joplin's service must be at 127.0.0.1 or the plan refuses. All only ADD

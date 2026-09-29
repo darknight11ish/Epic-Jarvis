@@ -278,6 +278,13 @@
        "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
        "says": "Asks when Jarvis made the mark",
        "title": "Take a private mark off a benchmark"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:app_tasks",
+       "note": "Nothing runs, and nothing reaches your app until you approve the merge card (\"Add its change to one of your apps\" - it asks every time). Pasting a change in is done on the PC only.",
+       "says": "Does it without asking",
+       "title": "Start an app task, throw one away, or paste a change in on the PC"
       }
      ],
      "title": "Projects"
@@ -502,7 +509,7 @@
        "action": "app_merge_change",
        "fixed": false,
        "id": "app_merge_change",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add its change to one of your apps"
@@ -1199,6 +1206,13 @@
        "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
        "says": "Asks when Jarvis made the mark",
        "title": "Take a private mark off a benchmark"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:app_tasks",
+       "note": "Nothing runs, and nothing reaches your app until you approve the merge card (\"Add its change to one of your apps\" - it asks every time). Pasting a change in is done on the PC only.",
+       "says": "Does it without asking",
+       "title": "Start an app task, throw one away, or paste a change in on the PC"
       }
      ],
      "title": "Projects"
@@ -1423,7 +1437,7 @@
        "action": "app_merge_change",
        "fixed": false,
        "id": "app_merge_change",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add its change to one of your apps"
@@ -2117,6 +2131,13 @@
        "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
        "says": "Asks when Jarvis made the mark",
        "title": "Take a private mark off a benchmark"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:app_tasks",
+       "note": "Nothing runs, and nothing reaches your app until you approve the merge card (\"Add its change to one of your apps\" - it asks every time). Pasting a change in is done on the PC only.",
+       "says": "Does it without asking",
+       "title": "Start an app task, throw one away, or paste a change in on the PC"
       }
      ],
      "title": "Projects"
@@ -2340,7 +2361,7 @@
        "action": "app_merge_change",
        "fixed": false,
        "id": "app_merge_change",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add its change to one of your apps"
@@ -3028,6 +3049,13 @@
        "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
        "says": "Asks when Jarvis made the mark",
        "title": "Take a private mark off a benchmark"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:app_tasks",
+       "note": "Nothing runs, and nothing reaches your app until you approve the merge card (\"Add its change to one of your apps\" - it asks every time). Pasting a change in is done on the PC only.",
+       "says": "Does it without asking",
+       "title": "Start an app task, throw one away, or paste a change in on the PC"
       }
      ],
      "title": "Projects"
@@ -3251,7 +3279,7 @@
        "action": "app_merge_change",
        "fixed": false,
        "id": "app_merge_change",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add its change to one of your apps"
@@ -3939,6 +3967,13 @@
        "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
        "says": "Asks when Jarvis made the mark",
        "title": "Take a private mark off a benchmark"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:app_tasks",
+       "note": "Nothing runs, and nothing reaches your app until you approve the merge card (\"Add its change to one of your apps\" - it asks every time). Pasting a change in is done on the PC only.",
+       "says": "Does it without asking",
+       "title": "Start an app task, throw one away, or paste a change in on the PC"
       }
      ],
      "title": "Projects"
@@ -4162,7 +4197,7 @@
        "action": "app_merge_change",
        "fixed": false,
        "id": "app_merge_change",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add its change to one of your apps"
@@ -4862,6 +4897,13 @@
        "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
        "says": "Asks when Jarvis made the mark",
        "title": "Take a private mark off a benchmark"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:app_tasks",
+       "note": "Nothing runs, and nothing reaches your app until you approve the merge card (\"Add its change to one of your apps\" - it asks every time). Pasting a change in is done on the PC only.",
+       "says": "Does it without asking",
+       "title": "Start an app task, throw one away, or paste a change in on the PC"
       }
      ],
      "title": "Projects"
@@ -5086,7 +5128,7 @@
        "action": "app_merge_change",
        "fixed": false,
        "id": "app_merge_change",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add its change to one of your apps"
@@ -5780,6 +5822,13 @@
        "note": "A mark you added yourself comes off at once. Afterwards its numbers may be read aloud.",
        "says": "Asks when Jarvis made the mark",
        "title": "Take a private mark off a benchmark"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:app_tasks",
+       "note": "Nothing runs, and nothing reaches your app until you approve the merge card (\"Add its change to one of your apps\" - it asks every time). Pasting a change in is done on the PC only.",
+       "says": "Does it without asking",
+       "title": "Start an app task, throw one away, or paste a change in on the PC"
       }
      ],
      "title": "Projects"
@@ -6003,7 +6052,7 @@
        "action": "app_merge_change",
        "fixed": false,
        "id": "app_merge_change",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Add its change to one of your apps"

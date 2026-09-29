@@ -310,7 +310,7 @@ MUST_ASK = frozenset({
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
     "restore_backup", "check_tool_updates", "run_plan", "phone_notifications_read",
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
-    "register_approval_key",
+    "register_approval_key", "app_merge_change",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -328,7 +328,8 @@ GROUPS = (
     # Projects (the owner's decision of 2026-09-28; jarvis_projects.py). Its
     # two cards are change_own_config cards, decided in the code; these rows
     # say so in plain words (the Projects feature audit, 2026-09-28).
-    ("Projects", ["fixed:projects", "fixed:project_share", "fixed:project_unmark"]),
+    ("Projects", ["fixed:projects", "fixed:project_share", "fixed:project_unmark",
+                  "fixed:app_tasks"]),
     ("Email and calendar", ["draft_email", "send_email", "edit_calendar_event",
                             "delete_calendar_event"]),
     ("The internet", ["search_the_web", "web_research", "research_authenticated",
@@ -372,6 +373,14 @@ FIXED = {
                              "Asks when Jarvis made the mark",
                              "A mark you added yourself comes off at once. Afterwards its "
                              "numbers may be read aloud."),
+    # An app Jarvis builds, inside a project (jarvis_apps.py): everything short
+    # of adding the change is a copy of the app that nothing runs. Adding it is
+    # the card "Add its change to one of your apps" (app_merge_change, above).
+    "fixed:app_tasks": ("Start an app task, throw one away, or paste a change in on the PC",
+                        SAYS_NO_CARD,
+                        "Nothing runs, and nothing reaches your app until you approve the "
+                        "merge card (\"Add its change to one of your apps\" - it asks every "
+                        "time). Pasting a change in is done on the PC only."),
     "fixed:timers": ("Set a timer, or a reminder or alarm that goes off once", SAYS_NO_CARD,
                      "Your own words only; deleting is immediate."),
     "fixed:repeats": ("Set up a repeating reminder or alarm, or the standby schedule",

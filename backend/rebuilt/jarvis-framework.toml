@@ -369,6 +369,14 @@ pair_device               = "ask"
 unretire_shared_key       = "ask"
 register_approval_key     = "ask"
 
+# Adding a task's change to a Jarvis-built app inside Projects (jarvis_apps.py,
+# apps-in-projects.patch, docs/APPS-IN-PROJECTS-DESIGN.md): ONE card per
+# change, showing every file and the whole change. A RISKY card (Windows Hello
+# on the PC, the screen lock on the phone), decided on either device; it never
+# becomes a standing rule. Must stay "ask": anything else and jarvis_apps.py
+# refuses to raise the card at all, so no change is added.
+app_merge_change          = "ask"
+
 
 # ------------------------------------------------------------------------
 # 3. SELF-MODIFICATION RULES

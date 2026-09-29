@@ -513,8 +513,10 @@ def discard(name: str, task: str) -> dict:
     with _LOCK:
         if tdir.is_dir():
             _git(["worktree", "remove", "--force", str(tdir)], proj)
-        _git(["branch", "-D", _branch(task)], proj, check=False)
+        # Prune FIRST: a copy deleted by hand still counts as "checked out"
+        # until then, and git will not delete a branch that is.
         _git(["worktree", "prune"], proj, check=False)
+        _git(["branch", "-D", _branch(task)], proj, check=False)
         try:
             _task_meta_path(name, task).unlink()
         except FileNotFoundError:
