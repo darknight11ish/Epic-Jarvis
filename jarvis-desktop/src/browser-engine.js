@@ -73,6 +73,7 @@ function paint() {
   el.stepsTitle.textContent = BROWSER.stepsTitle;
   el.stepsNote.textContent = BROWSER.stepsNote;
   el.copy.textContent = BROWSER.copy;
+  el.sw.indeterminate = false;
   el.sw.checked = view.checked;
   // Turning it ON needs a live link (a card is raised); turning it OFF never
   // waits (rule 4 only holds what loosens). While a card waits the switch stays
@@ -104,12 +105,17 @@ async function load() {
   try {
     view = browserView(await TAURI.core.invoke("browser_engine", { action: "read" }));
   } catch (error) {
-    // An older backend has no headless browser: say so in the PC's own words.
+    // Either an older backend has no headless browser, or this read failed while
+    // it may well be ON: say so in the PC's own words and do NOT show the switch
+    // as off (that would be a claim). It is shown as "not known" (indeterminate)
+    // and cannot be pressed until a read works.
+    view = null;
     el.body.hidden = false;
     el.detail.textContent = "";
     el.line.textContent = refusedWords(error);
+    el.status.hidden = true;
+    el.sw.indeterminate = true;
     el.sw.disabled = true;
-    el.sw.checked = false;
     el.mode.disabled = true;
     return;
   }

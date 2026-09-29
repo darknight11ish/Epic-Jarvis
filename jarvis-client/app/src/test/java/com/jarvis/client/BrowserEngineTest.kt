@@ -1,6 +1,7 @@
 package com.jarvis.client
 
 import com.jarvis.client.net.ApiError
+import com.jarvis.client.net.Approvals
 import com.jarvis.client.net.BrowserEngine
 import com.jarvis.client.net.DesktopWrite
 import com.jarvis.client.net.JarvisJson
@@ -135,10 +136,15 @@ class BrowserEngineTest {
 
     @Test
     fun `what is said after the switch is pressed or a mode picked`() {
+        // The PC's own waiting words come first (never a line the phone made up), then where to approve.
         assertTrue(
             BrowserEngine.said(true, DesktopWrite.Outcome.Waiting(null)).startsWith(
-                "Waiting for your approval to turn on the headless browser.",
+                BrowserEngine.WAITING_LINE,
             ),
+        )
+        assertEquals(
+            "${BrowserEngine.WAITING_LINE} ${Approvals.WHERE}",
+            BrowserEngine.waitingLine(),
         )
         assertEquals("Not changed. no", BrowserEngine.said(true, DesktopWrite.Outcome.Refused("no")))
         assertEquals(
@@ -158,7 +164,10 @@ class BrowserEngineTest {
         assertTrue(s.contains("does not solve captchas"))
         assertTrue(s.contains("block or ban"))
         assertTrue(s.contains("account closed"))
-        assertTrue(s.contains("never signs in"))
+        assertTrue(s.contains("never types a password"))
+        assertFalse(s.contains("never signs in"))
+        assertTrue(s.contains("may not be recognised"))
+        assertTrue(BrowserEngine.STEPS_NOTE.contains("does not run the program"))
         assertTrue(BrowserEngine.DETAIL.contains("uses no proxy"))
         assertTrue(BrowserEngine.DETAIL.contains("Off by default"))
         assertTrue(BrowserEngine.STEPS_NOTE.contains("never downloads it by itself"))

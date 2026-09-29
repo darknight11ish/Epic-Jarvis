@@ -13,15 +13,15 @@
     "mode_help": {
       "auto": "Jarvis picks per task: the visible window whenever you might need to sign in or take over, the headless browser for plain reading.",
       "visible": "Jarvis always opens the browser window you can see and take over.",
-      "headless": "Jarvis uses the headless browser whenever it can run, but never for a sign-in. If it cannot run, Jarvis says so and uses the visible browser."
+      "headless": "Jarvis uses the headless browser whenever it can run, except when the task looks like a sign-in, a payment or a captcha. If it cannot run, Jarvis says so and uses the visible browser."
     },
-    "stealth": "Stealth is always on for the headless browser. It makes the browser look like an ordinary Chrome. It does not solve captchas, and sites can still block or ban it. Signing in to a real account with it could get that account closed under a site's terms, so Jarvis never signs in with it and never solves a captcha: at one it stops and hands the job to the visible browser.",
+    "stealth": "Stealth is always on for the headless browser. It makes the browser look like an ordinary Chrome. It does not solve captchas, and sites can still block or ban it. Signing in to a real account with it could get that account closed under a site's terms, so Jarvis never types a password with it and never solves a captcha: when it sees a captcha or a sign-in page it stops and hands the job to the visible browser. A sign-in that starts with only a username or email box may not be recognised.",
     "off_line": "Off. Jarvis uses the visible browser window only.",
     "waiting_line": "Waiting for your yes on the card. Nothing has changed yet.",
     "unread": "Could not read this setting.",
     "missing": "This PC's Jarvis does not have the headless browser yet. Run scripts\\apply-patches.ps1 on the PC to add it.",
     "steps_title": "To install it, paste this one line into PowerShell on your PC:",
-    "steps_note": "It downloads Obscura's Windows program from its GitHub releases (github.com/h4ckf0r0day/obscura, Apache-2.0), unpacks it into Jarvis's own folder and checks it: version, stealth on, and that it refuses to visit your own network. Jarvis never downloads it by itself."
+    "steps_note": "It downloads one named release of Obscura's Windows program from its GitHub releases (github.com/h4ckf0r0day/obscura, Apache-2.0), unpacks it into Jarvis's own folder and prints its checksums for you to compare with the release page. It does not run the program. The line then prints a second command that checks it: version, stealth on, and that it refuses to visit your own network. Jarvis never downloads it by itself."
   },
   "modes": [
     "auto",
@@ -37,7 +37,7 @@
         "waiting": false,
         "mode": "auto",
         "status_line": "Obscura is not installed on this PC yet.",
-        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_obscura.py --check --accept-new; Pop-Location",
+        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash",
         "line": "Off. Jarvis uses the visible browser window only."
       },
       "want": {
@@ -48,7 +48,7 @@
         "mode": "auto",
         "line": "Off. Jarvis uses the visible browser window only.",
         "status": "Obscura is not installed on this PC yet.",
-        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_obscura.py --check --accept-new; Pop-Location"
+        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash"
       }
     },
     {
@@ -58,7 +58,7 @@
         "waiting": true,
         "mode": "auto",
         "status_line": "Obscura is not installed on this PC yet.",
-        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_obscura.py --check --accept-new; Pop-Location",
+        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash",
         "line": "Waiting for your yes on the card. Nothing has changed yet."
       },
       "want": {
@@ -69,7 +69,7 @@
         "mode": "auto",
         "line": "Waiting for your yes on the card. Nothing has changed yet.",
         "status": "Obscura is not installed on this PC yet.",
-        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_obscura.py --check --accept-new; Pop-Location"
+        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash"
       }
     },
     {
@@ -79,7 +79,7 @@
         "waiting": false,
         "mode": "auto",
         "status_line": "Obscura is not installed on this PC yet.",
-        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_obscura.py --check --accept-new; Pop-Location",
+        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash",
         "line": "On, but not working yet: Obscura (the headless browser) is not installed on this PC yet. Settings shows the one line that installs it. Jarvis uses the visible browser until then."
       },
       "want": {
@@ -90,7 +90,7 @@
         "mode": "auto",
         "line": "On, but not working yet: Obscura (the headless browser) is not installed on this PC yet. Settings shows the one line that installs it. Jarvis uses the visible browser until then.",
         "status": "Obscura is not installed on this PC yet.",
-        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_obscura.py --check --accept-new; Pop-Location"
+        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash"
       }
     },
     {
@@ -100,7 +100,7 @@
         "waiting": false,
         "mode": "auto",
         "status_line": "Installed and checked (version 0.1.0, last checked 29 Sep 2026).",
-        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_obscura.py --check --accept-new; Pop-Location",
+        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash",
         "line": "On. Jarvis picks the headless browser for plain reading and the visible one when you might need to take over."
       },
       "want": {
@@ -111,7 +111,7 @@
         "mode": "auto",
         "line": "On. Jarvis picks the headless browser for plain reading and the visible one when you might need to take over.",
         "status": "Installed and checked (version 0.1.0, last checked 29 Sep 2026).",
-        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_obscura.py --check --accept-new; Pop-Location"
+        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash"
       }
     },
     {
@@ -121,7 +121,7 @@
         "waiting": false,
         "mode": "headless",
         "status_line": "Installed and checked (version 0.1.0, last checked 29 Sep 2026).",
-        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_obscura.py --check --accept-new; Pop-Location",
+        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash",
         "line": "On. Jarvis picks the headless browser for plain reading and the visible one when you might need to take over."
       },
       "want": {
@@ -132,7 +132,7 @@
         "mode": "headless",
         "line": "On. Jarvis picks the headless browser for plain reading and the visible one when you might need to take over.",
         "status": "Installed and checked (version 0.1.0, last checked 29 Sep 2026).",
-        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_obscura.py --check --accept-new; Pop-Location"
+        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash"
       }
     },
     {
@@ -142,8 +142,8 @@
         "waiting": false,
         "mode": "visible",
         "status_line": "Installed, but the file has changed since it was checked - Jarvis will not start it until you run the install line again.",
-        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_obscura.py --check --accept-new; Pop-Location",
-        "line": "On, but not working yet: Obscura's file has changed since it was checked, so Jarvis will not start it. If you updated it yourself, run the install line in Settings again. Jarvis uses the visible browser until then."
+        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash",
+        "line": "On, but not working yet: Obscura's file has changed since it was checked, so Jarvis will not start it. If you updated it yourself, run the install line in Settings again, compare the checksum, then run the check command with --accept-new. Jarvis uses the visible browser until then."
       },
       "want": {
         "available": true,
@@ -151,9 +151,9 @@
         "waiting": false,
         "checked": true,
         "mode": "visible",
-        "line": "On, but not working yet: Obscura's file has changed since it was checked, so Jarvis will not start it. If you updated it yourself, run the install line in Settings again. Jarvis uses the visible browser until then.",
+        "line": "On, but not working yet: Obscura's file has changed since it was checked, so Jarvis will not start it. If you updated it yourself, run the install line in Settings again, compare the checksum, then run the check command with --accept-new. Jarvis uses the visible browser until then.",
         "status": "Installed, but the file has changed since it was checked - Jarvis will not start it until you run the install line again.",
-        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_obscura.py --check --accept-new; Pop-Location"
+        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash"
       }
     },
     {
@@ -163,7 +163,7 @@
         "waiting": true,
         "mode": "auto",
         "status_line": "",
-        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_obscura.py --check --accept-new; Pop-Location",
+        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash",
         "line": ""
       },
       "want": {
@@ -174,7 +174,7 @@
         "mode": "auto",
         "line": "",
         "status": "",
-        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_obscura.py --check --accept-new; Pop-Location"
+        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash"
       }
     },
     {
@@ -184,7 +184,7 @@
         "waiting": false,
         "mode": "stealthy",
         "status_line": "",
-        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_obscura.py --check --accept-new; Pop-Location",
+        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash",
         "line": ""
       },
       "want": {
@@ -195,7 +195,7 @@
         "mode": "auto",
         "line": "Off. Jarvis uses the visible browser window only.",
         "status": "",
-        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; Push-Location -LiteralPath 'C:\\Jarvis'; py -3 .\\jarvis_obscura.py --check --accept-new; Pop-Location"
+        "install_line": "$d = \"$env:USERPROFILE\\.openjarvis\\obscura\"; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -Uri 'https://example.invalid/obscura.zip' -OutFile \"$d\\obscura.zip\"; (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash"
       }
     },
     {

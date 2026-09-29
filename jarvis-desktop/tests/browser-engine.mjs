@@ -77,13 +77,29 @@ await check("the words are honest: stealth is on, it does not solve captchas, it
   assert.match(R.BROWSER.stealth, /does not solve captchas/i);
   assert.match(R.BROWSER.stealth, /block or ban/i);
   assert.match(R.BROWSER.stealth, /account closed/i);
-  assert.match(R.BROWSER.stealth, /never signs in/i);
+  assert.match(R.BROWSER.stealth, /never types a password/i);
+  assert.doesNotMatch(R.BROWSER.stealth, /never signs in/i);
+  assert.match(R.BROWSER.stealth, /may not be recognised/i);
+  assert.match(R.BROWSER.stepsNote, /does not run the program/i);
   assert.match(R.BROWSER.detail, /Off by default/);
   assert.match(R.BROWSER.detail, /asks first/i);
   assert.match(R.BROWSER.detail, /outside text/i);
   assert.match(R.BROWSER.detail, /no proxy/i);
   assert.match(R.BROWSER.stepsNote, /never downloads it by itself/i);
   assert.match(R.BROWSER.askedCard, /stays off until you say yes/i);
+});
+
+await check("a failed read never shows the switch as OFF: it is shown as unknown (indeterminate) and cannot be pressed", () => {
+  const src = read("src/browser-engine.js");
+  const start = src.indexOf("} catch (error) {\n    // Either an older backend");
+  const end = src.indexOf("el.body.hidden = false;\n  paint();");
+  assert.ok(start > 0 && end > start, "the read's error branch is there");
+  const branch = src.slice(start, end);
+  assert.match(branch, /el\.sw\.indeterminate = true/);
+  assert.match(branch, /el\.sw\.disabled = true/);
+  assert.match(branch, /el\.mode\.disabled = true/);
+  assert.doesNotMatch(branch, /el\.sw\.checked = false/);
+  assert.match(src, /el\.sw\.indeterminate = false;\n\s+el\.sw\.checked = view\.checked;/);
 });
 
 /* ── 2. Wiring, and what must not be there ───────────────────────────── */

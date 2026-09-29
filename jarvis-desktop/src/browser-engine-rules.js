@@ -31,21 +31,25 @@ export const BROWSER = Object.freeze({
     auto: "Jarvis picks per task: the visible window whenever you might need to sign in or take over, the headless browser for plain reading.",
     visible: "Jarvis always opens the browser window you can see and take over.",
     headless:
-      "Jarvis uses the headless browser whenever it can run, but never for a sign-in. If it cannot run, Jarvis says so and uses the visible browser.",
+      "Jarvis uses the headless browser whenever it can run, except when the task looks like a sign-in, a payment or " +
+      "a captcha. If it cannot run, Jarvis says so and uses the visible browser.",
   }),
   stealth:
-    "Stealth is always on for the headless browser. It makes the browser look like an ordinary Chrome. It does not " +
-    "solve captchas, and sites can still block or ban it. Signing in to a real account with it could get that account " +
-    "closed under a site's terms, so Jarvis never signs in with it and never solves a captcha: at one it stops and " +
-    "hands the job to the visible browser.",
+    "Stealth is always on for the headless browser. It makes the browser look like an ordinary Chrome. It " +
+    "does not solve captchas, and sites can still block or ban it. Signing in to a real account with it " +
+    "could get that account closed under a site's terms, so Jarvis never types a password with it and " +
+    "never solves a captcha: when it sees a captcha or a sign-in page it stops and hands the job to the " +
+    "visible browser. A sign-in that starts with only a username or email box may not be recognised.",
   offLine: "Off. Jarvis uses the visible browser window only.",
   waitingLine: "Waiting for your yes on the card. Nothing has changed yet.",
   unread: "Could not read this setting.",
   missing: "This PC's Jarvis does not have the headless browser yet. Run scripts\\apply-patches.ps1 on the PC to add it.",
   stepsTitle: "To install it, paste this one line into PowerShell on your PC:",
   stepsNote:
-    "It downloads Obscura's Windows program from its GitHub releases (github.com/h4ckf0r0day/obscura, Apache-2.0), " +
-    "unpacks it into Jarvis's own folder and checks it: version, stealth on, and that it refuses to visit your own " +
+    "It downloads one named release of Obscura's Windows program from its GitHub releases " +
+    "(github.com/h4ckf0r0day/obscura, Apache-2.0), unpacks it into Jarvis's own folder and prints its " +
+    "checksums for you to compare with the release page. It does not run the program. The line then " +
+    "prints a second command that checks it: version, stealth on, and that it refuses to visit your own " +
     "network. Jarvis never downloads it by itself.",
   copy: "Copy the line",
   copied: "Copied. Paste it into PowerShell.",

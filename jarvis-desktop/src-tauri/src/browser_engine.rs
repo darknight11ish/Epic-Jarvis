@@ -4,8 +4,8 @@
 //!
 //! ONE command, `browser_engine`, Settings only:
 //!  * "read"  - the setting: on or off, which browser Jarvis uses by default,
-//!    the install status, and the one PowerShell line that installs and checks
-//!    Obscura. A read.
+//!    the install status, and the one PowerShell line that downloads one named
+//!    release of Obscura and prints its checksums (it does not run it). A read.
 //!  * "on"    - asks for the headless browser to be turned on. That raises ONE
 //!    approval card on this PC and changes nothing until a person says yes;
 //!    held on a stale link (rule 4).

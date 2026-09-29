@@ -60,9 +60,10 @@ object BrowserEngine {
     const val STEALTH =
         "Stealth is always on for the headless browser. It makes the browser look like an " +
             "ordinary Chrome. It does not solve captchas, and sites can still block or ban it. " +
-            "Signing in to a real account with it could get that account closed under a site's " +
-            "terms, so Jarvis never signs in with it and never solves a captcha: at one it stops " +
-            "and hands the job to the visible browser."
+            "Signing in to a real account with it could get that account closed under a site's terms, " +
+            "so Jarvis never types a password with it and never solves a captcha: when it sees a " +
+            "captcha or a sign-in page it stops and hands the job to the visible browser. A sign-in " +
+            "that starts with only a username or email box may not be recognised."
     const val OFF_LINE = "Off. Jarvis uses the visible browser window only."
     const val WAITING_LINE = "Waiting for your yes on the card. Nothing has changed yet."
     const val UNREAD = "Could not read this setting."
@@ -71,10 +72,11 @@ object BrowserEngine {
             "scripts\\apply-patches.ps1 on the PC to add it."
     const val STEPS_TITLE = "To install it, paste this one line into PowerShell on your PC:"
     const val STEPS_NOTE =
-        "It downloads Obscura's Windows program from its GitHub releases " +
-            "(github.com/h4ckf0r0day/obscura, Apache-2.0), unpacks it into Jarvis's own folder " +
-            "and checks it: version, stealth on, and that it refuses to visit your own network. " +
-            "Jarvis never downloads it by itself."
+        "It downloads one named release of Obscura's Windows program from its GitHub releases " +
+            "(github.com/h4ckf0r0day/obscura, Apache-2.0), unpacks it into Jarvis's own folder and " +
+            "prints its checksums for you to compare with the release page. It does not run the " +
+            "program. The line then prints a second command that checks it: version, stealth on, and " +
+            "that it refuses to visit your own network. Jarvis never downloads it by itself."
     const val COPY = "Copy the line"
 
     /** What each mode is called, and the one line that says what it does. */
@@ -87,8 +89,9 @@ object BrowserEngine {
         "auto" to "Jarvis picks per task: the visible window whenever you might need to sign in " +
             "or take over, the headless browser for plain reading.",
         "visible" to "Jarvis always opens the browser window you can see and take over.",
-        "headless" to "Jarvis uses the headless browser whenever it can run, but never for a " +
-            "sign-in. If it cannot run, Jarvis says so and uses the visible browser.",
+        "headless" to "Jarvis uses the headless browser whenever it can run, except when the task looks like a " +
+            "sign-in, a payment or a captcha. If it cannot run, Jarvis says so and uses the visible " +
+            "browser.",
     )
 
     fun enabledBody(on: Boolean): String = "{\"obscura\":$on}"
@@ -169,6 +172,6 @@ object BrowserEngine {
         is DesktopWrite.Outcome.Done -> outcome.said ?: "Saved."
     }
 
-    fun waitingLine(): String =
-        "Waiting for your approval to turn on the headless browser. ${Approvals.WHERE}"
+    /** The PC's own words ([WAITING_LINE]) and where to approve it - never a line the phone made up. */
+    fun waitingLine(): String = "$WAITING_LINE ${Approvals.WHERE}"
 }
