@@ -41,8 +41,11 @@ import {
   memberLine,
   pickLine,
   formProblem,
+  historyLine,
   limitOf,
   neverWords,
+  readHistoryAnswer,
+  readSession,
   progressLine,
   readChatbot,
   statusLine,
@@ -79,6 +82,27 @@ await check("the words are the PC's and the phone's, word for word", async () =>
   assert.ok(html.includes(`>${WORDS.compare_detail}</p>`));
   assert.ok(html.includes(`>${WORDS.compare_limits_note}</p>`));
   assert.ok(read("src-tauri/src/brain/chatbot.rs").includes(`"${WORDS.missing}"`));
+});
+
+await check("a finished conversation says whether it was kept in History, and no more than the PC said", async () => {
+  // The second chat audit (2026-09-28), phone B4: the apps promised History
+  // whatever happened; now they read the PC's own answer.
+  assert.deepEqual(readHistoryAnswer({ kept: true, why: "" }), { kept: true, why: "" });
+  assert.deepEqual(readHistoryAnswer({ kept: false, why: "chat history is off" }),
+    { kept: false, why: "chat history is off" });
+  assert.equal(readHistoryAnswer(null), null);
+  assert.equal(readHistoryAnswer({ kept: "yes" }), null, "only a real true or false counts");
+  assert.equal(historyLine(null), "", "nothing promised when the PC did not say");
+  assert.equal(historyLine({ kept: true, why: "" }), WORDS.history_kept);
+  assert.equal(historyLine({ kept: false, why: "chat history is off" }),
+    "Not kept in your chat history: chat history is off.");
+  assert.equal(historyLine({ kept: false, why: "chat history is off." }),
+    "Not kept in your chat history: chat history is off.", "a full stop is not doubled");
+  const s = readSession({ id: "s1", state: "done", history: { kept: true, why: "" } });
+  assert.deepEqual(s.history, { kept: true, why: "" });
+  assert.equal(readSession({ id: "s2", state: "done" }).history, null);
+  assert.doesNotMatch(WORDS.summary_note, /kept in History/, "the summary still promises History");
+  assert.doesNotMatch(WORDS.compare_summary_note, /kept in History/);
 });
 
 await check("every real answer reads: version, conversation, buttons", async () => {

@@ -52,7 +52,10 @@ body {
 
 .brain {
   display: grid;
-  grid-template-columns: 168px 1fr;
+  /* 168px at normal size; wider with the text, so at 200% the labels are not
+     squeezed into a rail sized for small ones (the second chat audit,
+     2026-09-28, desktop A5). */
+  grid-template-columns: clamp(168px, 11em, 240px) minmax(0, 1fr);
   height: 100%;
 }
 
@@ -105,9 +108,13 @@ body {
   gap: 2px;
   flex: 1;
   min-height: 0;
+  /* The tabs scroll when they do not fit, instead of running over the
+     "Advanced" line beneath them at large text sizes. */
+  overflow-y: auto;
 }
 
 .rail-item {
+  flex-shrink: 0;
   width: 100%;
   display: flex;
   align-items: center;
@@ -206,6 +213,8 @@ body {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  /* Content wider than the window scrolls sideways rather than being cut. */
+  overflow-x: auto;
 }
 
 .topbar {

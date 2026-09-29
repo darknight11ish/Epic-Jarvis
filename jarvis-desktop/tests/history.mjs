@@ -251,11 +251,19 @@ await check("History's new words are the contract's, word for word", async () =>
   assert.equal(CH.EARLIER_CHATS, w.earlier_chats);
   assert.equal(CH.EARLIER_CHATS_TITLE, w.earlier_chats_title);
   assert.equal(CH.IDLE_NEW_LINE, w.idle_new);
-  assert.equal(CH.CONTINUED_TRIMMED, w.continued_trimmed);
+  assert.equal(CH.continuedTrimmed(1), w.continued_trimmed_one);
+  assert.equal(CH.continuedTrimmed(3), w.continued_trimmed_many.replace("{n}", "3"));
+  assert.equal(CH.continuedSkipped(1), w.continued_skipped_one);
+  assert.equal(CH.continuedSkipped(2), w.continued_skipped_many.replace("{n}", "2"));
+  assert.equal(CH.IDLE_NEW_LINE_TEMPORARY, w.idle_new_temporary);
+  assert.equal(CH.THREAD_READS_FROM, w.thread_reads_from);
+  assert.equal(CH.DELETE_STAYS, w.delete_stays);
+  assert.equal(CH.DELETE_STAYS_TICKED, w.delete_stays_ticked);
   assert.equal(CH.CONTINUED_TAINTED, w.continued_tainted);
   assert.equal(CH.CONTINUED_NOTHING, w.continued_nothing);
   assert.equal(CH.CONTINUED_TEMPORARY_OFF, w.continued_temporary_off);
   assert.equal(CH.CONTINUE_BUSY, w.continue_busy);
+  assert.equal(CH.CONTINUE_LIVE, w.continue_live);
   assert.equal(CH.CHAT_GONE, w.chat_gone);
   assert.equal(CH.MOVED_HERE, w.moved_here);
   assert.equal(CH.ESC_LABEL, w.esc_label);
@@ -298,6 +306,8 @@ await check("Continue this chat loads the kept messages the worked examples load
     const want = c.window.map((p) => (p.provenance ? p : { question: p.question, answer: p.answer }));
     assert.deepEqual(got.window, want, c.name);
     assert.equal(got.trimmed, c.trimmed, c.name);
+    assert.equal(got.trimmedCount, c.trimmed_count, c.name);
+    assert.equal(got.skipped, c.skipped, c.name);
   }
   // ...and the same from turns as history-view.js reads them (answerKept).
   const read2 = readConversation({ id: "c1", kind: "chat", turns: [
@@ -758,8 +768,8 @@ await check("a shorter keep period asks first, in both apps' words; a no sends n
   const afterLonger = await page.evaluate(() => window.__history.settings);
   await page.close();
   assert.equal(asked,
-    "Delete every conversation older than 30 days from your PC now, and from then on? This cannot be undone." +
-    `\n\n${KEEP_SUPPORT_NOTE}`);
+    "Delete every conversation older than 30 days from your PC now, and from then on? This cannot be undone. " +
+    `${CH.DELETE_STAYS}\n\n${KEEP_SUPPORT_NOTE}`);
   assert.deepEqual(afterNo, [], "a no still changed the period");
   assert.equal(shown, "90", "the choice moved although nothing was sent");
   assert.equal(askedAgain, false, "a longer period asked");
@@ -768,7 +778,8 @@ await check("a shorter keep period asks first, in both apps' words; a no sends n
   assert.deepEqual([[0, 30], [0, 365], [90, 30], [365, 90], [30, 90], [30, 0], [90, 90], [null, 30]]
     .map(([f, t]) => keepNeedsConfirm(f, t)), [true, true, true, true, false, false, false, true]);
   assert.equal(keepConfirm(365),
-    "Delete every conversation older than 1 year from your PC now, and from then on? This cannot be undone.");
+    "Delete every conversation older than 1 year from your PC now, and from then on? This cannot be undone. " +
+    "Facts Jarvis learned stay. Copies in older backups stay until they age out.");
 });
 
 await check("the 15-second re-read keeps the older pages and the open conversation", async () => {
@@ -835,7 +846,7 @@ await check("dates say the weekday; an answer not kept and a delete say so, in t
     " facts from this chat. They are kept unless you tick them - each ticked fact is forgotten, like Forget in the Brain.",
     "Your memory lists are hidden, so they are kept. To forget any, show the memory lists first.",
     "Delete the chat and forget ",
-    "The facts it taught are kept.",
+    "Facts Jarvis learned stay. Copies in older backups stay until they age out.",
     "could not be forgotten - try Forget on ",
   ]) {
     assert.ok(chatFactsIntro(1).includes(w) || chatFactsIntro(2).includes(w)
@@ -858,7 +869,9 @@ await check("the words: none ticked, how many, what is forgotten, what happened"
   assert.match(q, /^Delete this conversation and forget 1 fact\?/);
   assert.match(q, /- Owner likes tea/);
   assert.match(q, /cannot be brought back/);
-  assert.match(deleteAndForgetQuestion({ title: "D" }, []), /The facts it taught are kept\./);
+  assert.match(deleteAndForgetQuestion({ title: "D" }, []),
+    /Facts Jarvis learned stay\. Copies in older backups stay until they age out\./);
+  assert.match(q, /Facts you did not tick stay\. Copies in older backups stay until they age out\./);
   assert.equal(deleteDoneWords({}), "Deleted from this PC.");
   assert.equal(deleteDoneWords({ forgot: 2 }), "Deleted from this PC. Forgot 2 facts.");
   assert.match(deleteDoneWords({ gone: true, forgot: 1, failed: 1 }),
@@ -930,7 +943,7 @@ await check("nothing ticked: the chat goes, every fact stays; Cancel keeps both"
   const writes = await page.evaluate(() => window.__memoryWrites.filter((w) => w.cmd === "brain_memory_forget"));
   await page.close();
   assert.deepEqual(afterCancel, [], "Cancel deleted the chat");
-  assert.match(asked, /The facts it taught are kept/);
+  assert.match(asked, /Facts Jarvis learned stay\. Copies in older backups stay until they age out\./);
   assert.deepEqual(deleted, ["conv-0000"]);
   assert.deepEqual(writes, [], "a fact was forgotten with nothing ticked");
 });
@@ -1163,7 +1176,8 @@ await check("the bar: Continue this chat loads the kept turns into the thread, t
   await page.waitForTimeout(500);
   const sent = await page.evaluate(() => (window.__calls || []).filter((c) => c[0] === "stream_chat").map((c) => c[1]));
   await page.close();
-  assert.equal(note, `Carrying on "Dentist on Tuesday". ${CASES.words.continued_tainted}`);
+  assert.equal(note, `Carrying on "Dentist on Tuesday". ${CASES.words.continued_skipped_one} ` +
+    CASES.words.continued_tainted);
   assert.match(thread, /when is the dentist\?[\s\S]*Tuesday at 3\./);
   assert.doesNotMatch(thread, /ask the cloud/, "a question whose answer was not kept came back");
   assert.equal(summary, "Earlier in this chat · 1 question");

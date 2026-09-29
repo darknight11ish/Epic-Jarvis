@@ -1921,6 +1921,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             h.continued.push(args.id);
             return null;
           }
+          // Is "Hide memory lists and chat history" on? (brain/history.rs
+          // chat_thread_hidden - yes or no; the bar hides its thread with it.)
+          case "chat_thread_hidden": {
+            const sec = window.__security || {};
+            return Boolean(sec.hidden && !sec.revealed);
+          }
           case "chat_continue_open": {
             const h = window.__history;
             const sec = window.__security;
@@ -1959,6 +1965,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "brain_history_search": {
             const h = window.__history;
             h.searches.push(args.query);
+            h.searchKinds = h.searchKinds || [];
+            h.searchKinds.push(args.kind || null);
             const sec = window.__security;
             if (sec.hidden && !sec.revealed) {
               throw new Error("Your chat history is hidden. Press Show on the Brain's History tab " +
@@ -1974,6 +1982,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const found = [];
             const all = [...h.conversations].sort((a, b) => b.updated - a.updated);
             for (const c of all) {
+              // The kind chosen in "Show" narrows the search too (finding 8).
+              if (args.kind && (c.kind || "chat") !== args.kind) continue;
               const turns = (h.transcripts[c.id] && h.transcripts[c.id].turns) || [];
               if (!words.every((w) => has(c.title, w) || turns.some((t) => has(t.text, w)))) continue;
               const hitTurns = turns.filter((t) => words.some((w) => has(t.text, w)));

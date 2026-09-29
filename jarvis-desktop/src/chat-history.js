@@ -176,24 +176,50 @@ export const IDLE_NEW_MS = 30 * 60 * 1000;
 /** Said, quietly, when it happens. */
 export const IDLE_NEW_LINE =
   "It's been a while, so this is a new conversation. The last one is in History.";
+/** The same, for a temporary chat or a game: there is no "last one in
+ *  History" - it was never kept (the second chat audit, 2026-09-28). */
+export const IDLE_NEW_LINE_TEMPORARY = "It's been a while, so this is a new conversation.";
+/** The button beside the line above: the chat that just ended, back. */
+export const CARRY_ON_LAST = "Carry on the last chat";
+export const CARRY_ON_LAST_TITLE = "Carry on the conversation that ended after 30 quiet minutes.";
 
 /* The Jarvis bar's words for the chat it is in - the phone's Home says the
    same (tools/gen_history_cases.py). */
 export const EARLIER_CHATS = "Earlier chats";
 export const EARLIER_CHATS_TITLE = "Your kept chats, in History.";
-export const CONTINUED_TRIMMED =
-  "Older messages were not loaded - Jarvis reads back only the newest ones.";
+/** "3 older questions were not loaded - ..." - with the count (the second
+ *  chat audit, 2026-09-28: it used to say "Older messages" and no number). */
+export function continuedTrimmed(n) {
+  const count = Number.isInteger(n) && n > 0 ? n : 0;
+  return `${count === 1 ? "1 older question was" : `${count} older questions were`} not loaded ` +
+    "- Jarvis reads back only the newest ones.";
+}
+/** "2 earlier questions were left out: ..." - a pair whose answer was not
+ *  kept is not carried on, and now says so. */
+export function continuedSkipped(n) {
+  const count = Number.isInteger(n) && n > 0 ? n : 0;
+  return count === 1
+    ? "1 earlier question was left out: its answer was not kept."
+    : `${count} earlier questions were left out: their answers were not kept.`;
+}
 export const CONTINUED_TAINTED =
   "Jarvis read outside text earlier in this chat, so writing notes and some other actions ask " +
   "you first.";
-export const CONTINUED_NOTHING = "Nothing in this chat can be carried on: no answer of it was kept.";
+export const CONTINUED_NOTHING =
+  "None of its answers were kept, so Jarvis has nothing to read back. New questions are still " +
+  "filed with this chat.";
 export const CONTINUED_TEMPORARY_OFF = "Temporary chat is off: a continued chat is kept.";
 export const CONTINUE_BUSY = "Wait for the answer to finish, then continue the chat.";
+/** Jarvis Live is on here: its words are filed in its own chat. */
+export const CONTINUE_LIVE = "Jarvis Live is on here. End Live first, then continue the chat.";
 export const CHAT_GONE =
   "That chat was deleted, so this is a new conversation. Nothing from it is sent to Jarvis again.";
 export const MOVED_HERE = "Carrying on the same chat here.";
 export const ESC_LABEL = "Esc: end chat";
 export const ENDED_SAVED = "Chat ended. Kept chats are in Brain > History.";
+/** A temporary chat or a game ends: nothing was kept, so it does not point
+ *  to History (the second chat audit, 2026-09-28). */
+export const ENDED_TEMPORARY = "Chat ended. It was a temporary chat, so nothing was kept.";
 export const NEW_CONVERSATION = "New conversation.";
 
 /** "Carrying on "<title>"." */
@@ -214,6 +240,29 @@ export function addToThread(thread, question, answer) {
   if (!q.trim() || !a.trim()) return Array.isArray(thread) ? thread : [];
   return [...(Array.isArray(thread) ? thread : []), { question: q, answer: a }].slice(-THREAD_MAX);
 }
+
+/** The line drawn in the thread where what Jarvis reads back begins: the
+ *  thread shows the whole conversation, but only the newest questions go to
+ *  the model with the next one (the second chat audit, 2026-09-28). Both apps. */
+export const THREAD_READS_FROM = "Jarvis reads from here down. What is above stays on screen only.";
+
+/** How many of the thread's first pairs are above the line: the thread
+ *  holds `threadLen` pairs and the model is re-sent the newest `windowLen`
+ *  of them. 0 means all of it is read, so no line is drawn. */
+export function pairsAboveReadLine(threadLen, windowLen) {
+  const t = Number.isInteger(threadLen) && threadLen > 0 ? threadLen : 0;
+  const w = Number.isInteger(windowLen) && windowLen > 0 ? windowLen : 0;
+  return Math.max(0, t - Math.min(t, w));
+}
+
+/** What the facts a chat taught, and the backups, are told when a chat is
+ *  deleted (the second chat audit, 2026-09-28): the same sentences in every
+ *  delete dialog, on both apps. */
+export const DELETE_STAYS =
+  "Facts Jarvis learned stay. Copies in older backups stay until they age out.";
+/** The same, when the owner is also ticking facts to forget. */
+export const DELETE_STAYS_TICKED =
+  "Facts you did not tick stay. Copies in older backups stay until they age out.";
 
 /** The thread's fold: "Earlier in this chat · 3 questions". */
 export function threadSummary(n) {
@@ -276,29 +325,41 @@ function sideTalk(answer) {
 export function continueWindow(turns) {
   const pairs = [];
   let pending = null;
+  let skipped = 0;
+  // Shared text right before the owner's own question is never a question
+  // of its own (outside text goes back only with the answer it got).
+  const unanswered = (p) => p !== null && p.provenance !== "shared";
   for (const t of Array.isArray(turns) ? turns : []) {
     if (!t || typeof t !== "object") continue;
     const words = typeof t.text === "string" ? t.text : "";
     if (t.role === "user") {
+      // A question with no answer after it (the next turn is a question, or
+      // the chat ends) was never answered: left out, and counted.
+      if (unanswered(pending)) skipped += 1;
       const notKept = t.answer_kept === false || t.answerKept === false;
+      if (notKept && words.trim()) skipped += 1;
       pending = !notKept && words.trim() ? t : null;
     } else if (t.role === "assistant") {
       if (pending && words.trim() && !sideTalk(words)) {
         const tag = knownProvenance(pending.provenance);
         pairs.push(tag ? { question: pending.text, answer: words, provenance: tag }
           : { question: pending.text, answer: words });
+      } else if (unanswered(pending) && !words.trim()) {
+        skipped += 1;
       }
       pending = null;
     } else {
+      if (unanswered(pending)) skipped += 1;
       pending = null;
     }
   }
-  let trimmed = false;
+  if (unanswered(pending)) skipped += 1;
+  let trimmedCount = 0;
   while (pairs.length && !fits(pairs, MAX_EXCHANGES, MAX_CHARS)) {
     pairs.shift();
-    trimmed = true;
+    trimmedCount += 1;
   }
-  return { window: pairs, trimmed };
+  return { window: pairs, trimmed: trimmedCount > 0, trimmedCount, skipped };
 }
 
 /**

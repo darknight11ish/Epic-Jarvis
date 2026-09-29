@@ -54,6 +54,7 @@ import { whenLine } from "./history-view.js";
 import {
   eraseAlsoChatNamedConfirm,
   ERASED_NO_CHAT,
+  otherFactsInChat,
   readFactChat,
   ERASE_ALSO_CHAT_CONFIRM,
   ERASE_LABEL,
@@ -66,6 +67,11 @@ import {
   forgetQuestion,
 } from "./auto-learn.js";
 import { DONE_LINE } from "./coming-up.js";
+
+/** The strip's line: the label beside it already says "Temporary chat". */
+const TEMPORARY_STRIP_LINE = TEMPORARY_LINE.replace(/^Temporary chat:\s*/, "");
+/** A game or role-play the PC made temporary by itself. */
+const GAME_STRIP_LINE = "This looks like a game, so nothing in it is kept or learned.";
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -96,7 +102,15 @@ export function createTemporaryToggle({ button, strip, line, refused, root, chec
   busy, announce, onChange }) {
   const t = {
     on: false,
+    /** The PC made this conversation temporary by itself: a game or
+     *  role-play (the route header said so). The strip says so too - it used
+     *  to be one small quiet line under the answer. */
+    game: false,
     checking: false,
+    setGame(value) {
+      t.game = Boolean(value);
+      t.paint(t.game ? false : true);
+    },
     async toggle() {
       if (t.checking || busy()) return;
       if (t.on) {
@@ -144,8 +158,14 @@ export function createTemporaryToggle({ button, strip, line, refused, root, chec
       if (t.on) {
         strip.dataset.state = "on";
         strip.hidden = false;
-        line.textContent = empty ? TEMPORARY_LINE : "";
+        // The label already says "Temporary chat": the line does not repeat it.
+        line.textContent = empty ? TEMPORARY_STRIP_LINE : "";
         line.hidden = !empty;
+      } else if (t.game) {
+        strip.dataset.state = "game";
+        strip.hidden = false;
+        line.textContent = GAME_STRIP_LINE;
+        line.hidden = false;
       } else if (refused.hidden) {
         strip.hidden = true;
         line.textContent = "";
@@ -171,6 +191,7 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     ids: [],
     count: 0,
     sentTemporary: false,
+    game: false,
     route: null,
     done: false,
     open: false,
@@ -299,8 +320,10 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     } catch {
       chat = undefined;
     }
+    const others = chat ? await otherFactsInChat(invoke, chat, f.id) : 0;
     const alsoChat = chat === undefined ? window.confirm(ERASE_ALSO_CHAT_CONFIRM)
-      : chat ? window.confirm(eraseAlsoChatNamedConfirm(chat, whenLine(chat.updated))) : false;
+      : chat ? window.confirm(eraseAlsoChatNamedConfirm(chat, whenLine(chat.updated), others))
+        : false;
     await sendWrite(button, "brain_memory_erase",
       { id: Number(f.id), also_delete_conversation: alsoChat },
       (out) => {
@@ -511,6 +534,7 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     },
     route(route) {
       a.route = route && typeof route === "object" ? route : null;
+      a.game = temporaryOutcome(a.sentTemporary, a.route) === "game";
       a.ids = usedIds(a.route);
       // The facts the line opens: the ones with an id. (A fact from the
       // older word list over the jsonl has none, and cannot be listed.)
@@ -545,7 +569,7 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     /** For tests and main.js: what is shown. */
     get state() {
       return { ids: [...a.ids], open: a.open, sentTemporary: a.sentTemporary,
-        turnId: a.turnId, srcOpen: a.srcOpen };
+        game: a.game, turnId: a.turnId, srcOpen: a.srcOpen };
     },
   };
 }

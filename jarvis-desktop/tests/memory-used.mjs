@@ -157,7 +157,10 @@ await check("on: a marker for the whole chat, the one line while it is empty, an
   assert.equal(pressed, "true");
   assert.equal(marked, "true");
   assert.match(empty, new RegExp(`^${TEMPORARY_LABEL}`));
-  assert.ok(empty.includes(TEMPORARY_LINE), empty);
+  // The label beside the line already says "Temporary chat", so the strip
+  // does not say it twice (the second chat audit, desktop C8).
+  assert.ok(empty.includes(TEMPORARY_LINE.replace(/^Temporary chat:\s*/, "")), empty);
+  assert.ok(!empty.includes("Temporary chat: "), empty);
   assert.equal(strip.trim(), TEMPORARY_LABEL, "the marker went, or the empty-chat line stayed");
   assert.deepEqual(sent.map((s) => s.temporary), [true, true]);
   assert.equal(sent[1].conversationId, sent[0].conversationId);

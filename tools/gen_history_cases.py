@@ -64,7 +64,8 @@ WORDS = {
                     "outside text: never learned from, never read aloud. Read-only."),
     },
     "filter_label": "Show",
-    "filters": [["", "All chats"], ["live", "Live only"], ["support", "Support chats"],
+    "filters": [["", "All chats"], ["chat", "Just chats"], ["live", "Live only"],
+                ["support", "Support chats"],
                 ["chatbot", "Chats with other AIs"], ["compare", "Comparisons"]],
     "filter_none": "No conversations of that kind are kept.",
     "messages_one": "1 message",
@@ -74,25 +75,47 @@ WORDS = {
                     "chatbot_note": "Note",
                     "chatbot_summary": "Summary (outside text)"},
     "no_title": "(no title)",
+    # The note under an opened record whose words are outside text: the
+    # ordinary chat's note names a web page, a file, an email or a tool; a
+    # support record's and a chatbot record's are about the other side.
+    "taint_support": ("This record holds the company's words, which are outside text: Jarvis "
+                      "never learns from them or acts on them."),
+    "taint_chatbot": ("This record holds another AI's replies, which are outside text: Jarvis "
+                      "never learns from them or acts on them."),
+    # What an opened chat says about the facts it taught (JARVIS-API section 79).
+    "chat_facts_taught_one": "Jarvis learned 1 fact from this chat, and still uses it:",
+    "chat_facts_taught_many": "Jarvis learned {n} facts from this chat, and still uses them:",
+    "chat_facts_taught_none": "Jarvis is not using any fact it learned from this chat.",
+    "chat_facts_taught_hidden": ("Jarvis learned {n} {facts} from this chat. Your memory lists "
+                                 "are hidden, so they are not shown here."),
+    "open_in_history": "Open in History",
+    "open_in_history_title": "Read it, or delete it, in History.",
     # -- opening one --------------------------------------------------------
     "continue": "Continue this chat",
     "continue_title_desktop": "Carry on this conversation in the Jarvis bar.",
     "continue_title_phone": "Carry on this conversation on Home.",
     "continue_why": dict(H.CONTINUE_WHY),
     "continued": "Carrying on \"{title}\".",
-    "continued_trimmed": "Older messages were not loaded - Jarvis reads back only the newest ones.",
+    "continued_trimmed_one": "1 older question was not loaded - Jarvis reads back only the newest ones.",
+    "continued_trimmed_many": ("{n} older questions were not loaded - Jarvis reads back only "
+                               "the newest ones."),
+    "continued_skipped_one": "1 earlier question was left out: its answer was not kept.",
+    "continued_skipped_many": "{n} earlier questions were left out: their answers were not kept.",
     "continued_tainted": ("Jarvis read outside text earlier in this chat, so writing notes and "
                           "some other actions ask you first."),
-    "continued_nothing": "Nothing in this chat can be carried on: no answer of it was kept.",
+    "continued_nothing": ("None of its answers were kept, so Jarvis has nothing to read back. "
+                          "New questions are still filed with this chat."),
     "continued_temporary_off": "Temporary chat is off: a continued chat is kept.",
     "continue_busy": "Wait for the answer to finish, then continue the chat.",
+    "continue_live": "Jarvis Live is on here. End Live first, then continue the chat.",
     "copy": "Copy",
     "copy_title": "Copy this answer.",
     "copied": "Copied.",
     "forget_range_link": "Forget a time frame…",
     "forget_range_link_title": "Forget what Jarvis learned, and delete chats, from some days.",
     "delete_keeps_facts": ("Deleting a chat does not forget facts Jarvis learned from it. To forget "
-                           "what Jarvis learned over some days, use Forget a time frame."),
+                           "what Jarvis learned over some days, use Forget a time frame. Copies "
+                           "in older backups stay until they age out."),
     "delete_support": ("This is the record of a customer-support chat - what the company "
                        "said and what was sent in your name. Delete it anyway?"),
     "keep_support_note": H.SUPPORT_KEPT_NOTE,
@@ -108,6 +131,12 @@ WORDS = {
     "thread_one": "Earlier in this chat · 1 question",
     "thread_many": "Earlier in this chat · {n} questions",
     "idle_new": "It's been a while, so this is a new conversation. The last one is in History.",
+    "idle_new_temporary": "It's been a while, so this is a new conversation.",
+    "thread_reads_from": "Jarvis reads from here down. What is above stays on screen only.",
+    "delete_stays": ("Facts Jarvis learned stay. Copies in older backups stay until they age "
+                     "out."),
+    "delete_stays_ticked": ("Facts you did not tick stay. Copies in older backups stay until "
+                            "they age out."),
     "new_conversation": "New conversation.",
     "chat_gone": ("That chat was deleted, so this is a new conversation. Nothing from it is "
                   "sent to Jarvis again."),
@@ -177,27 +206,44 @@ def continue_window(turns: list) -> dict:
     and MAX_CHARS - the same limits as a live chat. `trimmed`: some older
     pairs were left out. A provenance neither app knows is sent as none
     ("unknown" on the PC - never the owner's own words)."""
-    pairs, pending = [], None
+    pairs, pending, skipped = [], None, 0
+
+    def unanswered(p):
+        # Shared text right before the owner's own question is not a
+        # question of its own: outside text goes back only with its answer.
+        return p is not None and p.get("provenance") != "shared"
+
     for t in turns:
         role = t.get("role")
+        text = str(t.get("text") or "")
         if role == "user":
-            pending = t if t.get("answer_kept") is not False and str(t.get("text") or "").strip() \
-                else None
+            if unanswered(pending):
+                skipped += 1
+            not_kept = t.get("answer_kept") is False
+            if not_kept and text.strip():
+                skipped += 1
+            pending = t if not not_kept and text.strip() else None
         elif role == "assistant":
-            answer = str(t.get("text") or "")
-            if pending is not None and answer.strip() and not _SIDE_TALK.match(answer):
+            if pending is not None and text.strip() and not _SIDE_TALK.match(text):
                 prov = pending.get("provenance")
-                pairs.append({"question": pending["text"], "answer": answer,
+                pairs.append({"question": pending["text"], "answer": text,
                               "provenance": prov if prov in _KNOWN else None})
+            elif unanswered(pending) and not text.strip():
+                skipped += 1
             pending = None
         else:
+            if unanswered(pending):
+                skipped += 1
             pending = None
-    trimmed = False
+    if unanswered(pending):
+        skipped += 1
+    trimmed = 0
     while pairs and (len(pairs) > MAX_EXCHANGES
                      or sum(len(p["question"]) + len(p["answer"]) for p in pairs) > MAX_CHARS):
         pairs.pop(0)
-        trimmed = True
-    return {"window": pairs, "trimmed": trimmed}
+        trimmed += 1
+    return {"window": pairs, "trimmed": trimmed > 0, "trimmed_count": trimmed,
+            "skipped": skipped}
 
 
 _MD = [
@@ -262,6 +308,14 @@ CONTINUE_CASES = [
     ("only the newest that fit in 18,000 characters",
      [x for i in range(3) for x in (_t("user", f"q{i}", provenance="typed"),
                                    _t("assistant", "x" * 7000))]),
+    ("shared text answered on its own is loaded with its shared tag, and counted when dropped",
+     [_t("user", "Dear customer...", provenance="shared"), _t("assistant", "It is a bill."),
+      _t("user", "Dear customer 2...", provenance="shared"),
+      _t("user", "what does it say", provenance="typed"), _t("assistant", "It says.")]),
+    ("a question that was never answered, and an empty answer, are counted",
+     [_t("user", "first", provenance="typed"), _t("user", "second", provenance="typed"),
+      _t("assistant", "   "), _t("user", "third", provenance="typed"), _t("assistant", "Done."),
+      _t("user", "fourth", provenance="typed")]),
     ("support and chatbot rows are never loaded",
      [_t("support", "We can refund", provenance="support_company"),
       _t("chatbot", "Gemini: X2", provenance="chatbot_reply")]),

@@ -27,6 +27,7 @@
  */
 import { isSideTalk, SEEN } from "./live-rules.js";
 import { renderAnswer } from "./deep.js";
+import { DELETE_STAYS, DELETE_STAYS_TICKED } from "./chat-history.js";
 
 /* ==========================================================================
    The chat audit (2026-09-28; docs/studio-2026-09-28/chat-audit-*.md) and
@@ -59,7 +60,7 @@ export const CONTINUABLE = Object.freeze(["chat", "live"]);
 /** The filter over the list: "" is every kind. */
 export const FILTER_LABEL = "Show";
 export const FILTERS = Object.freeze([
-  ["", "All chats"], ["live", "Live only"], ["support", "Support chats"],
+  ["", "All chats"], ["chat", "Just chats"], ["live", "Live only"], ["support", "Support chats"],
   ["chatbot", "Chats with other AIs"], ["compare", "Comparisons"],
 ]);
 export const FILTER_NONE = "No conversations of that kind are kept.";
@@ -96,6 +97,30 @@ export const KEEP_SUPPORT_NOTE =
   "Customer-support chat records are not deleted by this - delete one yourself in History if " +
   "you want it gone.";
 export const NO_TITLE = "(no title)";
+/** The note under an opened record whose words are outside text, when it is
+ *  a customer-support record or a chat with another AI (the second chat
+ *  audit, 2026-09-28: the ordinary note named "a web page, a file, an
+ *  email" on a record that is none of those). */
+export const TAINT_SUPPORT =
+  "This record holds the company's words, which are outside text: Jarvis never learns from " +
+  "them or acts on them.";
+export const TAINT_CHATBOT =
+  "This record holds another AI's replies, which are outside text: Jarvis never learns from " +
+  "them or acts on them.";
+export const OPEN_IN_HISTORY = "Open in History";
+export const OPEN_IN_HISTORY_TITLE = "Read it, or delete it, in History.";
+
+/** What an opened chat says about the facts it taught (section 79), read
+ *  only: the ticking and forgetting stay with Delete and the Brain's Memory. */
+export function chatFactsTaught(n) {
+  if (!n) return "Jarvis is not using any fact it learned from this chat.";
+  return n === 1 ? "Jarvis learned 1 fact from this chat, and still uses it:"
+    : `Jarvis learned ${n} facts from this chat, and still uses them:`;
+}
+export function chatFactsTaughtHidden(n) {
+  return `Jarvis learned ${n} ${n === 1 ? "fact" : "facts"} from this chat. `
+    + "Your memory lists are hidden, so they are not shown here.";
+}
 
 /** "1 message", "12 messages" - the same word in both apps (never "turns"). */
 export function messagesWords(n) {
@@ -225,7 +250,7 @@ export const NOT_KEPT_LINE =
  *  forgetting "one by one". */
 export const DELETE_KEEPS_FACTS =
   "Deleting a chat does not forget facts Jarvis learned from it. To forget what Jarvis learned " +
-  "over some days, use Forget a time frame.";
+  "over some days, use Forget a time frame. Copies in older backups stay until they age out.";
 
 /* ── Deleting a chat offers to forget the facts it taught (2026-09-28) ──
  * JARVIS-API.md section 79; the phone's ChatLog, word for word. The list
@@ -258,12 +283,13 @@ export function deleteAndForgetQuestion(c, facts) {
   const n = facts.length;
   if (!n) {
     return `Delete this conversation?\n\n${c.title || "(no title)"}\n\n`
-      + "It is removed from this PC. This cannot be undone. The facts it taught are kept.";
+      + `It is removed from this PC. This cannot be undone. ${DELETE_STAYS}`;
   }
   const list = facts.map((f) => `- ${f.text}`).join("\n");
   return `Delete this conversation and forget ${n} ${n === 1 ? "fact" : "facts"}?\n\n`
     + `${c.title || "(no title)"}\n\nForget:\n${list}\n\n`
-    + "The chat is removed from this PC and cannot be brought back. A forgotten fact is not used again; it stays in Jarvis's history until you erase its words.";
+    + "The chat is removed from this PC and cannot be brought back. A forgotten fact is not used again; it stays in Jarvis's history until you erase its words. "
+    + DELETE_STAYS_TICKED;
 }
 
 /** What happened, in one sentence. */
@@ -322,7 +348,7 @@ export function keepNeedsConfirm(from, to) {
 /** The question asked (`window.confirm`) before such a change. Both apps. */
 export function keepConfirm(to) {
   return `Delete every conversation older than ${keepLabel(to).toLowerCase()} from your PC now, ` +
-    "and from then on? This cannot be undone.";
+    `and from then on? This cannot be undone. ${DELETE_STAYS}`;
 }
 
 /**
@@ -607,6 +633,11 @@ export function readSearch(answer) {
           device: text(c.device),
           hasVoice: c.has_voice === true,
           tainted: c.tainted === true,
+          // The kind, so a search result is tagged like a list row, and
+          // deleting a support record from one still asks its own question
+          // (the second chat audit, 2026-09-28, desktop worst-three #2).
+          kind: readKind(c.kind),
+          project: text(c.project) || null,
           hits: num(c.hits) ?? 0,
           snippet: {
             role: ["user", "assistant", "title"].includes(s.role) ? s.role : "user",
@@ -701,13 +732,26 @@ function markedText(el, s, matches, current) {
  */
 export function renderTranscript(box, conv, { el, onCopy = null }, find = null) {
   box.replaceChildren();
-  if (conv.tainted) box.append(el("p", "history-taint-note", TAINT_TITLE));
+  if (conv.tainted) {
+    box.append(el("p", "history-taint-note",
+      conv.kind === "support" ? TAINT_SUPPORT
+        : conv.kind === "chatbot" || conv.kind === "compare" ? TAINT_CHATBOT : TAINT_TITLE));
+  }
   if (!conv.turns.length) {
     box.append(el("p", "empty", "Nothing was kept from this conversation."));
     return;
   }
   const matches = find && Array.isArray(find.matches) ? find.matches : [];
   const current = matches.length ? matches[Math.max(0, Math.min(matches.length - 1, find.current || 0))] : null;
+  // "read outside text" belongs to the ANSWER that read it, not to the
+  // owner's own question beside "You" (desktop C1): each user turn that read
+  // outside text marks the answer after it, or itself when there is none.
+  const markAt = new Set();
+  conv.turns.forEach((t, i) => {
+    if (t.role === "user" && t.readOutside) {
+      markAt.add(conv.turns[i + 1] && conv.turns[i + 1].role === "assistant" ? i + 1 : i);
+    }
+  });
   const list = el("ol", "history-turns");
   conv.turns.forEach((t, index) => {
     const item = el("li", "history-turn");
@@ -728,7 +772,8 @@ export function renderTranscript(box, conv, { el, onCopy = null }, find = null) 
     // chatbot record's replies and summary.
     const marked = support ? t.provenance === "support_company"
       : chatbot ? t.provenance === "chatbot_reply" || t.provenance === "chatbot_summary" : true;
-    if (t.readOutside && marked) {
+    const outsideHere = support || chatbot ? t.readOutside && marked : markAt.has(index);
+    if (outsideHere) {
       const mark = el("span", "history-mark history-mark-taint", "read outside text");
       mark.title = TAINT_TITLE;
       head.append(mark);

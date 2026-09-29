@@ -78,6 +78,7 @@ import {
   memberLine as chatbotMemberLine,
   pickLine as chatbotPickLine,
   formProblem as chatbotFormProblem,
+  historyLine as chatbotHistoryLine,
   limitOf as chatbotLimitOf,
   neverWords,
   POLL_MS as CHATBOT_POLL_MS,
@@ -223,6 +224,8 @@ import {
   findCountWords,
   findMatches,
   hitsWords,
+  chatFactsTaught,
+  chatFactsTaughtHidden,
   keepConfirm,
   keepLabel,
   keepNeedsConfirm,
@@ -259,6 +262,7 @@ import {
   CANCEL_TITLE,
   EMPTY as AUTO_EMPTY,
   ERASE_ALSO_CHAT_CONFIRM,
+  otherFactsInChat,
   ERASE_LABEL,
   ERASE_TITLE,
   ERASED,
@@ -2830,6 +2834,9 @@ const chats = {
   openId: null,
   open: null,
   openError: "",
+  /** What the open chat taught (readChatFacts), or null while it is read or
+   *  when this PC cannot say (the second chat audit, 2026-09-28, finding 9). */
+  openFacts: null,
   /** `{ cardId, gone }` while an ON card waits (like `learningAsk`). */
   ask: null,
   /**
@@ -2923,11 +2930,13 @@ async function toggleConversation(id, needle = "") {
   if (chats.openId === id) {
     chats.openId = null;
     chats.open = null;
+    chats.openFacts = null;
     paintHistory();
     return;
   }
   chats.openId = id;
   chats.open = null;
+  chats.openFacts = null;
   chats.openError = "";
   chats.find = { needle: String(needle || ""), current: 0, total: 0 };
   paintHistory();
@@ -2938,6 +2947,41 @@ async function toggleConversation(id, needle = "") {
     if (chats.openId === id) chats.openError = errorText(error);
   }
   paintHistory();
+  if (chats.openId === id && chats.open && CONTINUABLE_KINDS.includes(chats.open.kind)) {
+    loadOpenFacts(id);
+  }
+}
+
+const CONTINUABLE_KINDS = ["chat", "live"];
+
+/** The facts an opened chat taught and Jarvis still uses (section 79), read
+ *  only - Delete offers to forget them, the Memory tab has Forget. */
+async function loadOpenFacts(id) {
+  let got = null;
+  try {
+    got = readChatFacts(await invoke("brain_conversation_facts", { conversationId: id }));
+  } catch {
+    got = null;
+  }
+  if (chats.openId !== id) return;
+  chats.openFacts = got && got.available ? got : null;
+  paintHistory();
+}
+
+/** Under an opened chat: what it taught, or that nothing it taught is in use. */
+function factsTaughtNode(got) {
+  const box = el("div", "history-facts-taught");
+  if (got.hiddenCount) {
+    box.append(el("p", "hint", chatFactsTaughtHidden(got.hiddenCount)));
+    return box;
+  }
+  box.append(el("p", "hint", chatFactsTaught(got.facts.length)));
+  if (got.facts.length) {
+    const list = el("ul", "history-taught-list");
+    for (const f of got.facts) list.append(el("li", "", f.text));
+    box.append(list);
+  }
+  return box;
 }
 
 /**
@@ -3148,7 +3192,10 @@ async function runHistorySearch(q, seq) {
   let v = null;
   let error = "";
   try {
-    v = readSearch(await invoke("brain_history_search", { query: q, limit: null }));
+    // The kind chosen in "Show" narrows the search too, so "Live only" and
+    // a typed search combine (the second chat audit, 2026-09-28, finding 8).
+    v = readSearch(await invoke("brain_history_search",
+      { query: q, limit: null, kind: chats.kind || null }));
   } catch (e) {
     error = errorText(e);
   }
@@ -3242,6 +3289,7 @@ function transcriptNode() {
   else if (!chats.open) t.append(el("p", "empty", "Reading…"));
   else {
     t.append(continueNode(chats.open));
+    if (chats.openFacts) t.append(factsTaughtNode(chats.openFacts));
     t.append(findBar());
     const turns = el("div", "history-transcript-turns");
     turns.id = "history-transcript-turns";
@@ -3309,6 +3357,12 @@ function conversationRow(c, { needle = "", snippet = null } = {}) {
   });
   item.dataset.id = c.id;
   if (device.words) item.querySelector(".row-tag").title = device.words;
+  // Every row's buttons say WHICH chat they are for (the second chat audit,
+  // 2026-09-28, desktop A1): "Open" ten times over names nothing.
+  const named = c.title || NO_TITLE;
+  const buttons = item.querySelectorAll(".row-actions button");
+  if (buttons[0]) buttons[0].setAttribute("aria-label", `${open ? "Close" : "Open"} ${named}`);
+  if (buttons[1]) buttons[1].setAttribute("aria-label", `Delete ${named}`);
   const main = item.querySelector(".row-main");
   if (snippet) {
     const p = el("p", "search-snippet");
@@ -3534,6 +3588,9 @@ function paintHistoryListNow(box) {
       : "Hidden until Windows Hello confirms it is you."));
     hidden.append(button("Show", revealHistory,
       { title: "Asks Windows Hello - your PIN, fingerprint or face - then shows this list." }));
+    // The search box above does nothing while the list is hidden, and used to
+    // say nothing about it (the second chat audit, 2026-09-28, desktop C6).
+    hidden.append(el("p", "hint", "Searching, and Continue this chat, work again after you press Show."));
     box.append(hidden);
     return;
   }
@@ -3615,9 +3672,12 @@ function paintHistoryTools() {
     chats.more = false;
     chats.openId = null;
     chats.open = null;
+    chats.openFacts = null;
     chats.view = chats.view ? { ...chats.view, conversations: [] } : null;
     paintHistoryList();
     loadHistory();
+    // A typed search runs again for the kind now chosen.
+    if (chats.search.query.length >= SEARCH_MIN) onHistorySearch();
   });
   label.append(select);
   const link = button(FORGET_RANGE_LINK, () => openForgetRange(), { title: FORGET_RANGE_LINK_TITLE });
@@ -3811,8 +3871,9 @@ async function eraseFact(f) {
   } catch {
     chat = undefined;
   }
+  const others = chat ? await otherFactsInChat(invoke, chat, f.id) : 0;
   const alsoChat = chat === undefined ? window.confirm(ERASE_ALSO_CHAT_CONFIRM)
-    : chat ? window.confirm(eraseAlsoChatNamedConfirm(chat, whenLine(chat.updated)))
+    : chat ? window.confirm(eraseAlsoChatNamedConfirm(chat, whenLine(chat.updated), others))
       : false;
   const out = await memoryWrite(
     "brain_memory_erase",
@@ -4907,6 +4968,20 @@ function chatbotTurn(t, name) {
   return item;
 }
 
+/** "Kept in your encrypted chat history" - or why not - and, when kept, a
+ *  way to it (the second chat audit, 2026-09-28, desktop C5). Nothing when
+ *  the PC did not say. */
+function historyNote(h) {
+  const line = chatbotHistoryLine(h);
+  if (!line) return null;
+  const p = el("p", "note chatbot-history-line", line);
+  if (h && h.kept) {
+    p.append(" ", button(CHATBOT.history_open, () => showView("history"),
+      { title: CHATBOT.history_open_title }));
+  }
+  return p;
+}
+
 function chatbotSummary(s) {
   const box = el("div", "chatbot-summary chatbot-outside");
   const head = el("div", "chatbot-turn-head");
@@ -4914,6 +4989,8 @@ function chatbotSummary(s) {
   head.append(el("span", "history-mark history-mark-taint", "outside text"));
   box.append(head);
   box.append(el("p", "note", CHATBOT.summary_note));
+  const kept = historyNote(s.history);
+  if (kept) box.append(kept);
   if (s.summary.answer) box.append(el("p", "chatbot-text", s.summary.answer));
   if (s.summary.claims.length) {
     const list = el("ul", "chatbot-claims");
@@ -5022,7 +5099,7 @@ function paintChatbotLog(s) {
   const box = dom.chatbotLog;
   if (!box) return;
   const shown = s && !s.hidden ? s : null;
-  const key = shown ? "s" + JSON.stringify([shown.id, shown.summary, shown.transcript]) : "";
+  const key = shown ? "s" + JSON.stringify([shown.id, shown.summary, shown.transcript, shown.history]) : "";
   if (key === cb.logKey) return;
   cb.logKey = key;
   const out = [];
@@ -5054,6 +5131,8 @@ function compareSummary(c) {
   head.append(el("span", "history-mark history-mark-taint", "outside text"));
   box.append(head);
   box.append(el("p", "note", CHATBOT.compare_summary_note));
+  const kept = historyNote(c.history);
+  if (kept) box.append(kept);
   if (sm.answer) box.append(el("p", "chatbot-text", sm.answer));
   summaryList(box, CHATBOT.agree_title, sm.agree, "chatbot-agree");
   summaryList(box, CHATBOT.disagree_title, sm.disagree.map((d) => {
@@ -5076,7 +5155,7 @@ function paintCompareLog(c) {
   const box = dom.chatbotLog;
   if (!box) return;
   const shown = c && !c.hidden ? c : null;
-  const key = shown ? "c" + JSON.stringify([shown.id, shown.summary,
+  const key = shown ? "c" + JSON.stringify([shown.id, shown.summary, shown.history,
     shown.members.map((m) => m.transcript)]) : "";
   if (key === cb.logKey) return;
   cb.logKey = key;
@@ -5619,7 +5698,15 @@ function paintSupportLog(c) {
         SUPPORT.reference_line.replace("{reference}", shown.reference)));
     }
     const saved = supportSavedLine(shown);
-    if (saved) out.push(el("p", "note support-saved", saved));
+    if (saved) {
+      const p = el("p", "note support-saved", saved);
+      // Kept: a way to it (the second chat audit, 2026-09-28, desktop C5).
+      if (shown.saved === "yes") {
+        p.append(" ", button(CHATBOT.history_open, () => showView("history"),
+          { title: CHATBOT.history_open_title }));
+      }
+      out.push(p);
+    }
   }
   if (shown && shown.transcript.length) {
     const tr = el("div", "chatbot-transcript");

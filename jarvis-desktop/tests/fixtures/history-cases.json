@@ -22,6 +22,10 @@
         "All chats"
       ],
       [
+        "chat",
+        "Just chats"
+      ],
+      [
         "live",
         "Live only"
       ],
@@ -48,6 +52,14 @@
       "chatbot_summary": "Summary (outside text)"
     },
     "no_title": "(no title)",
+    "taint_support": "This record holds the company's words, which are outside text: Jarvis never learns from them or acts on them.",
+    "taint_chatbot": "This record holds another AI's replies, which are outside text: Jarvis never learns from them or acts on them.",
+    "chat_facts_taught_one": "Jarvis learned 1 fact from this chat, and still uses it:",
+    "chat_facts_taught_many": "Jarvis learned {n} facts from this chat, and still uses them:",
+    "chat_facts_taught_none": "Jarvis is not using any fact it learned from this chat.",
+    "chat_facts_taught_hidden": "Jarvis learned {n} {facts} from this chat. Your memory lists are hidden, so they are not shown here.",
+    "open_in_history": "Open in History",
+    "open_in_history_title": "Read it, or delete it, in History.",
     "continue": "Continue this chat",
     "continue_title_desktop": "Carry on this conversation in the Jarvis bar.",
     "continue_title_phone": "Carry on this conversation on Home.",
@@ -57,17 +69,21 @@
       "compare": "A comparison can't be continued here: its replies are outside text, not a conversation with Jarvis."
     },
     "continued": "Carrying on \"{title}\".",
-    "continued_trimmed": "Older messages were not loaded - Jarvis reads back only the newest ones.",
+    "continued_trimmed_one": "1 older question was not loaded - Jarvis reads back only the newest ones.",
+    "continued_trimmed_many": "{n} older questions were not loaded - Jarvis reads back only the newest ones.",
+    "continued_skipped_one": "1 earlier question was left out: its answer was not kept.",
+    "continued_skipped_many": "{n} earlier questions were left out: their answers were not kept.",
     "continued_tainted": "Jarvis read outside text earlier in this chat, so writing notes and some other actions ask you first.",
-    "continued_nothing": "Nothing in this chat can be carried on: no answer of it was kept.",
+    "continued_nothing": "None of its answers were kept, so Jarvis has nothing to read back. New questions are still filed with this chat.",
     "continued_temporary_off": "Temporary chat is off: a continued chat is kept.",
     "continue_busy": "Wait for the answer to finish, then continue the chat.",
+    "continue_live": "Jarvis Live is on here. End Live first, then continue the chat.",
     "copy": "Copy",
     "copy_title": "Copy this answer.",
     "copied": "Copied.",
     "forget_range_link": "Forget a time frame…",
     "forget_range_link_title": "Forget what Jarvis learned, and delete chats, from some days.",
-    "delete_keeps_facts": "Deleting a chat does not forget facts Jarvis learned from it. To forget what Jarvis learned over some days, use Forget a time frame.",
+    "delete_keeps_facts": "Deleting a chat does not forget facts Jarvis learned from it. To forget what Jarvis learned over some days, use Forget a time frame. Copies in older backups stay until they age out.",
     "delete_support": "This is the record of a customer-support chat - what the company said and what was sent in your name. Delete it anyway?",
     "keep_support_note": "Customer-support chat records are not deleted by this - delete one yourself in History if you want it gone.",
     "search_label": "Search what was said in your chats",
@@ -80,6 +96,10 @@
     "thread_one": "Earlier in this chat · 1 question",
     "thread_many": "Earlier in this chat · {n} questions",
     "idle_new": "It's been a while, so this is a new conversation. The last one is in History.",
+    "idle_new_temporary": "It's been a while, so this is a new conversation.",
+    "thread_reads_from": "Jarvis reads from here down. What is above stays on screen only.",
+    "delete_stays": "Facts Jarvis learned stay. Copies in older backups stay until they age out.",
+    "delete_stays_ticked": "Facts you did not tick stay. Copies in older backups stay until they age out.",
     "new_conversation": "New conversation.",
     "chat_gone": "That chat was deleted, so this is a new conversation. Nothing from it is sent to Jarvis again.",
     "moved_here": "Carrying on the same chat here.",
@@ -186,7 +206,9 @@
           "provenance": "voice"
         }
       ],
-      "trimmed": false
+      "trimmed": false,
+      "trimmed_count": 0,
+      "skipped": 0
     },
     {
       "name": "a question whose answer was not kept is skipped",
@@ -214,7 +236,9 @@
           "provenance": "typed"
         }
       ],
-      "trimmed": false
+      "trimmed": false,
+      "trimmed_count": 0,
+      "skipped": 1
     },
     {
       "name": "shared text before a question is not sent back, and an odd tag is none",
@@ -241,7 +265,9 @@
           "provenance": null
         }
       ],
-      "trimmed": false
+      "trimmed": false,
+      "trimmed_count": 0,
+      "skipped": 0
     },
     {
       "name": "a Live side remark's marker is never loaded",
@@ -272,7 +298,9 @@
           "provenance": "voice"
         }
       ],
-      "trimmed": false
+      "trimmed": false,
+      "trimmed_count": 0,
+      "skipped": 0
     },
     {
       "name": "only the newest ten fit",
@@ -438,7 +466,9 @@
           "provenance": "typed"
         }
       ],
-      "trimmed": true
+      "trimmed": true,
+      "trimmed_count": 2,
+      "skipped": 0
     },
     {
       "name": "only the newest that fit in 18,000 characters",
@@ -483,7 +513,95 @@
           "provenance": "typed"
         }
       ],
-      "trimmed": true
+      "trimmed": true,
+      "trimmed_count": 1,
+      "skipped": 0
+    },
+    {
+      "name": "shared text answered on its own is loaded with its shared tag, and counted when dropped",
+      "turns": [
+        {
+          "role": "user",
+          "text": "Dear customer...",
+          "provenance": "shared"
+        },
+        {
+          "role": "assistant",
+          "text": "It is a bill."
+        },
+        {
+          "role": "user",
+          "text": "Dear customer 2...",
+          "provenance": "shared"
+        },
+        {
+          "role": "user",
+          "text": "what does it say",
+          "provenance": "typed"
+        },
+        {
+          "role": "assistant",
+          "text": "It says."
+        }
+      ],
+      "window": [
+        {
+          "question": "Dear customer...",
+          "answer": "It is a bill.",
+          "provenance": "shared"
+        },
+        {
+          "question": "what does it say",
+          "answer": "It says.",
+          "provenance": "typed"
+        }
+      ],
+      "trimmed": false,
+      "trimmed_count": 0,
+      "skipped": 0
+    },
+    {
+      "name": "a question that was never answered, and an empty answer, are counted",
+      "turns": [
+        {
+          "role": "user",
+          "text": "first",
+          "provenance": "typed"
+        },
+        {
+          "role": "user",
+          "text": "second",
+          "provenance": "typed"
+        },
+        {
+          "role": "assistant",
+          "text": "   "
+        },
+        {
+          "role": "user",
+          "text": "third",
+          "provenance": "typed"
+        },
+        {
+          "role": "assistant",
+          "text": "Done."
+        },
+        {
+          "role": "user",
+          "text": "fourth",
+          "provenance": "typed"
+        }
+      ],
+      "window": [
+        {
+          "question": "third",
+          "answer": "Done.",
+          "provenance": "typed"
+        }
+      ],
+      "trimmed": false,
+      "trimmed_count": 0,
+      "skipped": 3
     },
     {
       "name": "support and chatbot rows are never loaded",
@@ -500,7 +618,9 @@
         }
       ],
       "window": [],
-      "trimmed": false
+      "trimmed": false,
+      "trimmed_count": 0,
+      "skipped": 0
     }
   ],
   "plain_cases": [
