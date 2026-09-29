@@ -17263,9 +17263,16 @@ Hz** - each blend between its parents. Average spectrum, in decibels apart:
 Ashby is 1.8 from George and 3.0 from Michael (George and Michael are 3.7 apart);
 Clara is 2.8 from Emma and 4.3 from Heart (Emma and Heart are 6.1 apart) - and
 two runs of the same blend are only 0.3 to 0.4 apart, so those gaps are real. Ashby at
-0.95 came out 3.8% longer than at 1.0. **Nobody has listened.** The voice check
-against a real voice print was run with a stand-in in the tests, not with your
-print.
+0.95 came out 3.8% longer than at 1.0. **Nobody has listened.** The whole path
+was also run through the PC's own code with the real pack (make the file, load it,
+choose Ashby, Hear it, speak an answer): it worked, and Ashby's answer at "faster"
+came out shorter than at "normal", as it should. **The voice check was run once
+against a print made from Ashby's own sound**, using the fallback voice-ID model
+(`spectral-v1` - the container has no ONNX speaker model): it refused Ashby (score
+0.996 against a bar of 0.25) and also Clara (0.836) - so the check does refuse, but
+that fallback model is coarse and did not tell the two voices apart at all. On your
+PC, with the real speaker model, the scores will be different; nobody has run it
+there, so if Ashby or Clara is refused for no good reason, tell us.
 
 ## What is different, said plainly
 

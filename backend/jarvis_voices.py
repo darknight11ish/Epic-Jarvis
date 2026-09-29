@@ -564,7 +564,10 @@ def speaker_view() -> dict:
             why = (blend_verdict(now["chosen"]) or {}).get("why", "")
             note = f"{why} {K.label_of(now['name'])} speaks instead.".strip()
         elif now["chosen"] in K.MIX and K.family(kind) == K.V1:
-            note = (f"You chose {chose}, which is not made yet (see below). Until it is, "
+            made = K.blend_state(_voices_file()) == "ready"
+            note = (f"You chose {chose}, which Jarvis has not loaded yet (see below). Until it "
+                    f"does, {K.label_of(now['name'])} speaks." if made else
+                    f"You chose {chose}, which is not made yet (see below). Until it is, "
                     f"{K.label_of(now['name'])} speaks.")
         else:
             note = (f"You chose {chose}, which needs the newer voice pack (Kokoro v1.0). "

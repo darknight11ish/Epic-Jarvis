@@ -14246,7 +14246,10 @@ the difference.
 
 `speaker.choices` is `[{"id": "<name>", "label": "<words>"}]` - the voices the
 pack offers, best rated first, then (only when it is not one of them) the
-owner's current choice, labelled "... (your current choice)". Ids are voice
+owner's current choice, labelled "... (your current choice)". **A row may carry
+one more field, `detail`** (added 2026-09-29): the PC's one plain line under the
+name. Only Ashby and Clara (section 91.7) have one; the apps show it when it is
+there and draw nothing for a row without it. Ids are voice
 NAMES (`af_heart`, `bm_george`), never numbers; `speaker.choice` is one of
 them (or `"custom"`), `speaker.default` the pack's own default (`af_heart` on
 v1.0, `af` on the old pack; an old pack's `af` and v1.0's `af_heart` stand in
@@ -14340,8 +14343,108 @@ anything: the owner pastes the line.
 - **Nobody has listened** to a v1.0 voice or the British accent. The four
   animals keep their four names; pitch and pace were measured to be close
   (docs/CRITTERS.md), not judged by ear.
-- **No blended voices** (the studio's "Ashby"/"Clara"): they need a changed
-  `voices.bin`; not built.
+- **Blended voices are built** (the studio's "Ashby"/"Clara", section 91.7),
+  but only in a copy of `voices.bin` that one more owner-run line makes.
+
+### 91.7 Ashby and Clara: two voices blended for Jarvis (added 2026-09-29)
+
+The owner's decision of 2026-09-29, after the studio's line-up
+(`docs/studio-2026-09-27/voice-lineup.md`). Two extra voices at the TOP of
+`speaker.choices`, each with its `detail` line, made only from Jarvis's own
+sources - two Kokoro voices, a blend and a pace - never a real person's voice
+and never the owner's:
+
+| id | Label | Blend | Spoken as | Pace |
+|---|---|---|---|---|
+| `mix_ashby` | "Ashby (made for Jarvis)" - "A warm British butler, calm and a little slower. Blended from two Kokoro voices; not modelled on anyone." | 70% `bm_george` + 30% `am_michael` | British English (`en-gb-x-rp`) | 0.95 times the owner's speaking speed |
+| `mix_clara` | "Clara (made for Jarvis)" - "A warm woman's voice that leans British. Blended from two Kokoro voices; not modelled on anyone." | 60% `bf_emma` + 40% `af_heart` | British English (`en-gb-x-rp`) | the owner's speed |
+
+A Kokoro voice is a table of 510 rows of 256 numbers (one row per length of
+sentence); a blend is the weighted sum of two voices' whole tables with weights
+that add up to 1 - the way kokoro-onnx's README blends voices. **How the PC
+gets them** (`backend/jarvis_kokoro.py`, `backend/README.md` "Make Ashby and
+Clara"): sherpa-onnx refuses a voices file of any size but the model's own
+("Corrupted --kokoro-voices ... Expected #floats: 7050240, actual: 7311360",
+seen with 1.13.8 when two rows were appended), so the blends are written over
+two voices Jarvis never uses (the Spanish and Portuguese "Santa", slots 53 and
+44) in a COPY of the pack's file, `voices-jarvis.bin`, 28 MB, beside it. The
+owner runs one line once (`py -3 jarvis_kokoro.py --make-blends`); the pack's
+own `voices.bin` is never written. Both ends are pinned (`V1_VOICES_SHA256` for
+the pack's file, `BLEND_SHA256` for the result - the sums are done in double
+precision and stored as 32-bit numbers, the same on every machine) and nothing
+is written unless both match. jarvis_speech loads the copy **only when it is
+exactly the pinned file** and `[voice] tts_voices` names no other; a file of
+that name that is not the pinned one is never loaded.
+
+**What the picker says** (`speaker.note`, `speaker.choices`; `speaker.pack`
+stays `{"kind": "v1", ...}` - the copy is Kokoro v1.0 too):
+
+| State | Rows | `note` (added to any other) |
+|---|---|---|
+| Copy made and loaded by the engine | Ashby, Clara, then the eleven | nothing about them |
+| Kokoro v1.0, not made yet | the eleven | "Ashby and Clara, two voices made for Jarvis, are not made yet. To make them, run the one line under \"Make Ashby and Clara\" in backend\README.md on your PC, then restart Jarvis." |
+| A file of that name that is not the pinned one | the eleven | "The file that holds Ashby and Clara is not the one expected, so they are not offered. Run the one line ... again, then restart Jarvis." |
+| Made while Jarvis runs (the engine loaded the pack's own file) | the eleven | "Ashby and Clara are made. Restart Jarvis to hear them." |
+| The old pack (v0.19) | the nine | "... two voices made for Jarvis, need the newer voice pack (Kokoro v1.0)." |
+| The voice check refused one (below) | without it | "Ashby sounds too much like your own voice, so Jarvis will not use it." |
+
+A saved `mix_ashby` while it cannot be spoken (old pack, not made yet, refused)
+is never spoken by another slot's number: the pack's default speaks and the
+note says "You chose Ashby (made for Jarvis), which is not made yet ..." /
+"... which Jarvis has not loaded yet ..." (made while Jarvis runs) / "... needs
+the newer voice pack ..." / the refusal above. Saved by name like
+every voice (the carry-over of section 91.2 is unchanged).
+
+**Speaking.** `speaker.value` is the copy's number (Ashby 53, Clara 44). British
+English is asked for like `bf_`/`bm_` voices (section 91.4). Ashby's 0.95 is
+`jarvis_voices.speaker_speed()` = the owner's speed times the voice's own pace,
+in an answer, in the crisis-plain voice (`tts_voice(plain=True)`) and in Hear
+it; the "One moment." clip's key changes with it (it is built from number and
+speed). The engine remembers which file it loaded (`jarvis_speech._TTS_VOICES`)
+and `jarvis_voices` believes that over the disk, so a copy made while Jarvis
+runs is not spoken with until the engine has loaded it.
+
+**"Not the owner's voice".** A blend of two Kokoro voices could land near the
+owner's own voice by chance, so - like a recorded voice - Ashby and Clara are
+checked against every voice print (`owner_check`) on a sample of about five
+seconds: when one is CHOSEN (`POST /api/voice/voices/speaker`), when it is
+HEARD (`POST /api/voice/voices/sample`), and in the background whenever the
+voice prints change or the PC restarts while one is the saved choice. The answer
+is kept in memory for one set of prints (never on disk); one audit line
+(`voices.blend_check`, the voice's id and yes/no only) is written per answer. A
+refusal: **400** `{"ok": false, "error": "Ashby sounds too much like your own
+voice, so Jarvis will not use it."}` (or "... could not be checked against your
+voice print, so Jarvis will not use it yet." when the voice check is missing);
+the voice then leaves the list. **503** when it cannot be checked (no built-in
+voice engine: "this PC has no built-in voice to check it with"; the engine or
+the check failing, by exception name only) - **not being able to check is never
+a pass**; **429** while another sound is being made. With no voice print trained
+yet there is nothing to compare with and the check lets it through, as it does
+for a recorded voice, and runs again after the owner trains theirs. No card
+either way, like every built-in voice.
+
+**No animal may use either.** `face_voice.animal_choices.voices` is the pack's
+own eleven, `POST /api/voice/voices/face_animal` refuses a blend's id (400), a
+saved animal choice of one is dropped, and an animal's number is looked up in
+the pack's own table.
+
+**Said plainly:** nobody has listened to either voice. Measured, with the real
+pack (sherpa-onnx 1.13.8, one sentence, British English): middle pitch George
+146 Hz, Michael 120 Hz, **Ashby 136 Hz**; Emma 184 Hz, Heart 200 Hz, **Clara 192
+Hz**; average-spectrum distance (dB) Ashby-George 1.8, Ashby-Michael 3.0 (the
+parents are 3.7 apart), Clara-Emma 2.8, Clara-Heart 4.3 (the parents 6.1); two
+runs of the same blend are 0.3-0.4 dB apart. Ashby at 0.95 came out 3.8% longer
+than at 1.0. The whole path (make the file, load it, choose, Hear it, speak) was
+run through the PC's own code with the real pack. The owner check was run in the
+tests with a stand-in, and once for real against a print made from Ashby's own
+sound with the fallback voice-ID model (`spectral-v1`): it refused Ashby (0.996
+against a bar of 0.25) and Clara (0.836) - it refuses, but that model is coarse;
+with the real speaker model on the PC the scores differ and nobody has run it
+there. The upgrade line moves the whole `tts` folder aside,
+so the make-blends line must be run again after upgrading the pack. Tests:
+`backend/test_blend_voices.py`, the shared cases `pack_v1_blends`,
+`pack_v1_ashby`, `pack_v1_ashby_chosen`, `pack_v1_ashby_refused(_listed)`,
+`pack_v1_sample_refused` and `pack_old_ashby` in both fixture files.
 
 ## 92. Inbox tidy by voice: archive, star, mark as read, or move to Trash (added 2026-09-28)
 

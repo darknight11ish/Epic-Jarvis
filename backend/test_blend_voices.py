@@ -102,11 +102,25 @@ def stand_in_table(seed=7) -> np.ndarray:
     return np.random.default_rng(seed).standard_normal((54, 510, 256)).astype(np.float32)
 
 
+_STAND = {}
+
+
+def stand_in():
+    """The stand-in pack's bytes, the blend file the real code makes from it, and
+    both hashes - made once (each is 28 MB)."""
+    if not _STAND:
+        pack = stand_in_table().tobytes()
+        (TMP / "stand-in.bin").write_bytes(pack)
+        made = K.make_blend_table(K._read_table(TMP / "stand-in.bin")).tobytes()
+        _STAND.update(pack=pack, pack_sha=hashlib.sha256(pack).hexdigest(), blend=made,
+                      blend_sha=hashlib.sha256(made).hexdigest())
+    return _STAND
+
+
 def write_pack(dir_: Path, table=None) -> Path:
     """A stand-in v1.0 pack: voices.bin of the real size."""
     dir_.mkdir(parents=True, exist_ok=True)
-    t = stand_in_table() if table is None else table
-    (dir_ / "voices.bin").write_bytes(t.tobytes())
+    (dir_ / "voices.bin").write_bytes(stand_in()["pack"] if table is None else table.tobytes())
     return dir_ / "voices.bin"
 
 
@@ -116,9 +130,8 @@ def sha(path) -> str:
 
 def pin_to(pack_dir: Path):
     """Point the pins at the stand-in pack and the file made from it."""
-    K.V1_VOICES_SHA256 = sha(pack_dir / "voices.bin")
-    made = K.make_blend_table(K._read_table(pack_dir / "voices.bin"))
-    K.BLEND_SHA256 = hashlib.sha256(made.tobytes()).hexdigest()
+    K.V1_VOICES_SHA256 = stand_in()["pack_sha"]
+    K.BLEND_SHA256 = stand_in()["blend_sha"]
 
 
 def reset(pack="v1", blends="none", engine_loaded="path"):
@@ -170,8 +183,7 @@ def reset(pack="v1", blends="none", engine_loaded="path"):
         write_pack(tts)
         pin_to(tts)
         if blends == "ready":
-            ok, words = K.build_blends(str(tts))
-            assert ok, words
+            (tts / K.BLEND_FILE).write_bytes(stand_in()["blend"])
         elif blends == "bad":
             (tts / K.BLEND_FILE).write_bytes(b"\0" * V1_SIZE)
     elif pack == "v019":
@@ -661,6 +673,13 @@ def t_a_saved_choice_that_cannot_be_spoken_is_never_a_wrong_voice():
           and view["note"].endswith(K.BLENDS_TO_MAKE), view)
     check("... it does NOT speak the pack's own slot 53 (Spanish Santa)",
           S.tts_voice()[0] == 3)
+    reset("v1", "ready", engine_loaded="plain")
+    V._write_state(speaker="mix_ashby")
+    view = V.speaker_view()
+    check("chose Ashby, made while Jarvis runs: the default speaks until the restart, and the "
+          "note says Jarvis has not loaded it yet (not that it is not made)",
+          V.speaker() == 3 and "which Jarvis has not loaded yet" in view["note"]
+          and view["note"].endswith(K.BLENDS_RESTART), view)
     reset("v019")
     V._write_state(speaker="mix_clara")
     view = V.speaker_view()

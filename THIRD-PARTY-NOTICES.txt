@@ -163,7 +163,10 @@ sherpa-onnx (k2-fsa), Apache-2.0 - https://github.com/k2-fsa/sherpa-onnx
   LICENSE file is the Apache-2.0 text; it also carries espeak-ng-data
   (GPL-3, see espeak-ng below), English and Chinese pronunciation lists and
   Chinese text rules that Jarvis does not use, each under its own licence;
-  nothing of it is shipped here), Silero VAD (MIT), 3D-Speaker
+  nothing of it is shipped here; "Ashby" and "Clara" (backend/jarvis_kokoro.py,
+  2026-09-29) are two weighted averages of that pack's own voice tables, made
+  on the owner's PC from the installed file - no new voice data is shipped),
+  Silero VAD (MIT), 3D-Speaker
   CAM++ (Apache-2.0), and - for "very strict" - NVIDIA NeMo TitaNet-Large
   (the licence its NGC model card states).
   Custom voices (backend/jarvis_voices.py, 2026-09-24) add two more
