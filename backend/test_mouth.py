@@ -14,6 +14,12 @@ the sample against sherpa-onnx, and espeak-ng's sounds checked against
 piper-phonemize when that is installed. `--make-fixtures` rebuilds the
 fixtures from that model.
 
+With JARVIS_KOKORO_V1_DIR pointing at an unpacked kokoro-multi-lang-v1_0 folder
+(the pinned Kokoro v1.0 download; 2026-09-29) it runs the same thing on v1.0:
+the pin, the one-time step (which also proves the copy gives the model's own
+second output), and every sentence in five voices - British ones too - checked
+to the sample against sherpa-onnx.
+
 What it proves:
 
   - sherpa-onnx's pause shortening, copied exactly (against a line-for-line
@@ -469,11 +475,14 @@ class FakeEngine:
     callback) as jarvis_mouth asks: raw pieces, one per sentence."""
 
     def __init__(self, pieces):
-        self.pieces, self.calls = pieces, []
+        self.pieces, self.calls, self.extras, self.refuse_extra = pieces, [], [], False
 
     def generate(self, text, *args, **kw):
         if args and hasattr(args[0], "silence_scale"):
             cfg, cb = args[0], args[1]
+            self.extras.append(getattr(cfg, "extra", None))
+            if self.refuse_extra and getattr(cfg, "extra", None):
+                raise RuntimeError("no such language")
             self.calls.append(("config", cfg.silence_scale, cfg.sid, round(cfg.speed, 4)))
             for p in self.pieces:
                 if not cb(np.asarray(p, np.float32), 1.0):
@@ -547,6 +556,60 @@ def t_say():
     check("status(): tts.mouth is there, says whether mouths are ready and why not",
           set(st) >= {"available", "status", "made", "skipped", "last_skip_why"}
           and isinstance(st["available"], bool))
+
+
+def t_say_v1_british():
+    """Kokoro v1.0 (2026-09-29): the mouth is asked for on v1.0 too, and a British
+    voice's own espeak voice goes both to the timing and to sherpa-onnx, the
+    way _kokoro_generate asks for it."""
+    rng = np.random.default_rng(12)
+    labels = ["", "m", "ˈ", "u", "n", ",", " ", "b", "i", "."]
+    frames = np.array([4, 3, 1, 6, 3, 14, 0, 2, 5, 12])
+    raw = _synthetic([frames], rng)
+    orig_begin = J.begin
+    s_orig = {n: getattr(S, n) for n in ("_tts_engine", "tts_voice", "accent_lang")}
+    real_sherpa = sys.modules.get("sherpa_onnx")
+    fake_sherpa = types.SimpleNamespace(GenerationConfig=lambda: types.SimpleNamespace(
+        sid=0, speed=1.0, silence_scale=0.2))
+    seen = []
+    try:
+        sys.modules["sherpa_onnx"] = fake_sherpa
+        eng = FakeEngine(raw)
+        S._tts_engine = lambda: eng
+        S.tts_voice = lambda *a: (26, 1.0, 0.0)
+        S.accent_lang = lambda sid: "en-gb-x-rp"
+        J.begin = lambda text, sid, speed, lang="en-us", paths=None: (
+            seen.append(lang) or _fake_job([(labels, frames)]))
+        wav = S.say("Moon, bee.")
+        check("v1.0 British voice: the mouth is made, the timing is asked for in the British "
+              "espeak voice, and sherpa-onnx is given that language for the call",
+              wav is not None and J.read_chunk(wav) is not None and seen == ["en-gb-x-rp"]
+              and eng.extras == [{"lang": "en-gb-x-rp"}], str((seen, eng.extras)))
+        eng.extras.clear()
+        seen.clear()
+        S.accent_lang = lambda sid: None
+        wav = S.say("Moon, bee.")
+        check("an American voice (or the old pack): no per-call language is set, the timing "
+              "is read with the engine's own (en-us) - exactly as before",
+              J.read_chunk(wav) is not None and eng.extras == [None] and seen == ["en-us"],
+              str((seen, eng.extras)))
+        # sherpa-onnx refuses the accent: the ordinary path (with its own fallback) speaks
+        S.accent_lang = lambda sid: "en-gb-x-rp"
+        eng.refuse_extra = True
+        eng.calls.clear()
+        wav = S.say("Moon, bee.")
+        check("sherpa-onnx will not take the accent while a mouth is made -> spoken the "
+              "ordinary way (no mouth block, never silence)",
+              wav is not None and J.read_chunk(wav) is None and eng.calls
+              and eng.calls[-1][0] == "old", str(eng.calls))
+    finally:
+        J.begin = orig_begin
+        for n, v in s_orig.items():
+            setattr(S, n, v)
+        if real_sherpa is not None:
+            sys.modules["sherpa_onnx"] = real_sherpa
+        else:
+            sys.modules.pop("sherpa_onnx", None)
 
 
 def t_ready_words():
@@ -644,6 +707,214 @@ def t_prepare_toy_model():
 
 
 # ---------------------------------------------------------------------------
+#   Kokoro v1.0: its front end, its lengths, the pin (2026-09-29)
+# ---------------------------------------------------------------------------
+
+def t_multilang_text():
+    got = J.multilang_text("Note: a  b\n\nc\t d")
+    check("v1.0 front end, step one: ':' becomes ',', runs of white space one space, the wide "
+          "Chinese marks their plain twins (in sherpa-onnx's order)",
+          got == "Note, a b c d"
+          and J.multilang_text("，：；、。？！") == ",:;,.?!"
+          and J.multilang_text("  x  ") == " x ", got)
+    check("... a no-break space is not white space to std::regex, so it stays",
+          J.multilang_text("a b") == "a b")
+
+
+def _piece(n, base=50):
+    ids = [0] + [base + i for i in range(n)] + [0]
+    return ids, [""] + [f"s{base + i}" for i in range(n)] + [""]
+
+
+def t_join_short_pieces():
+    one = J.join_short_pieces([_piece(5), _piece(4, 70)])
+    check("a short piece (10 sounds or fewer) is joined onto the one before it when together "
+          "they are under 50: the earlier closing 0 becomes the short one's first sound",
+          len(one) == 1 and one[0][0] == [0, 50, 51, 52, 53, 54, 70, 71, 72, 73, 0]
+          and one[0][1][6] == "s70" and one[0][1][-1] == "" and len(one[0][0]) == len(one[0][1]),
+          str(one))
+    check("a piece of 11 sounds or more stands alone",
+          len(J.join_short_pieces([_piece(5), _piece(11, 70)])) == 2)
+    check("the first piece, however short, is a piece of its own",
+          len(J.join_short_pieces([_piece(1)])) == 1)
+    check("too long together (47 + 10 is not under 50) and not tiny -> its own piece",
+          len(J.join_short_pieces([_piece(45), _piece(8, 70)])) == 2)
+    tiny = J.join_short_pieces([_piece(45), _piece(2, 70)])
+    check("... but a piece of under 5 pad-and-sound tokens (2 sounds) is always joined on",
+          len(tiny) == 1 and len(tiny[0][0]) == 47 + 4 - 2, str([len(t[0]) for t in tiny]))
+    three = J.join_short_pieces([_piece(12), _piece(3, 70), _piece(3, 80)])
+    check("several short ones chain onto the same piece",
+          len(three) == 1 and three[0][0][-1] == 0 and len(three[0][0]) == 14 + 3 + 3,
+          str([len(t[0]) for t in three]))
+    given = _piece(5)
+    J.join_short_pieces([given, _piece(3, 70)])
+    check("it does not change the pieces it was given", given[0] == _piece(5)[0])
+
+
+def _loader_dir():
+    try:
+        import espeakng_loader
+        return espeakng_loader.get_data_path()
+    except Exception:
+        return None
+
+
+def t_multilang_pieces():
+    toks = {" ": 16, ".": 4, ",": 3, "?": 6, "h": 50, "ə": 83, "l": 54, "ˈ": 156, "o": 57, "ʊ": 135}
+    check("a bare punctuation mark stands alone as [0, mark, 0] (sherpa-onnx's IsPunctuation)",
+          J.multilang_pieces(".", toks, 510, "nowhere") == [([0, 4, 0], ["", ".", ""])])
+    check("Chinese characters -> None (that text is read from the pack's Chinese lexicon)",
+          J.multilang_pieces("hello 你好", toks, 510, "nowhere") is None)
+    check("nothing to say -> no pieces", J.multilang_pieces("", toks, 510, "nowhere") == [])
+    d = _loader_dir()
+    if d is None:
+        print("skip: espeakng-loader is not installed (the pieces above need no espeak-ng)")
+        return
+    # the sounds espeak-ng gives these words, numbered in any order
+    tk = {c: i for i, c in enumerate(" ;:,.!?-hɛloʊəjsnaɪɑeɹwɔɐðz\"()")}
+    pieces = J.multilang_pieces("Hello. Hi. Yes. No.", tk, 510, d)
+    check("with espeak-ng: 'Hello. Hi. Yes. No.' is ONE piece on v1.0 (four with the v0.19 "
+          "front end): the short sentences are joined on",
+          pieces is not None and len(pieces) == 1
+          and len(J.token_pieces(J.phonemize("Hello. Hi. Yes. No.", d), tk, 510)) == 4,
+          str(pieces and [len(p[0]) for p in pieces]))
+    check("... each piece still starts and ends with the 0 pad, ids and sounds in step",
+          all(p[0][0] == 0 and p[0][-1] == 0 and len(p[0]) == len(p[1]) for p in pieces))
+    a = J.multilang_pieces("One: two.", tk, 510, d)
+    b = J.multilang_pieces("One, two.", tk, 510, d)
+    check("':' is read as ',' (the same pieces for 'One: two.' and 'One, two.')",
+          a is not None and a == b, str((a, b)))
+
+
+def _toy_v1_model(onnx):
+    """A tiny model shaped like Kokoro v1.0: the sound lengths are its SECOND,
+    declared output - Squeeze <- Cast(int64) <- Clip <- Round - with a
+    decoy node called "/Cast_output_0" that is not the lengths, as in the
+    real v1.0 graph (a Cast of a ReduceMax)."""
+    h, T = onnx.helper, onnx.TensorProto
+    nodes = [
+        h.make_node("Cast", ["tokens"], ["tf"], to=T.FLOAT),
+        h.make_node("ReduceMean", ["style"], ["sm"], keepdims=0),
+        h.make_node("Mul", ["tf", "speed"], ["t2"]),
+        h.make_node("Add", ["t2", "sm"], ["t3"]),
+        h.make_node("Mul", ["t3", "k"], ["scaled"]),
+        h.make_node("Round", ["scaled"], ["/Round_output_0"]),
+        h.make_node("Clip", ["/Round_output_0", "lo"], ["/Clip_output_0"]),
+        h.make_node("Cast", ["/Clip_output_0"], ["/Cast_3_output_0"], to=T.INT64),
+        h.make_node("Squeeze", ["/Cast_3_output_0", "ax"], ["onnx::Shape_3411"]),
+        h.make_node("ReduceMax", ["tf"], ["/ReduceMax_output_0"], keepdims=0),
+        h.make_node("Cast", ["/ReduceMax_output_0"], ["/Cast_output_0"], to=T.INT64),
+        h.make_node("Cast", ["/Cast_output_0"], ["mx"], to=T.FLOAT),
+        h.make_node("ReduceSum", ["t3"], ["ssum"], keepdims=0),
+        h.make_node("Add", ["ssum", "mx"], ["audio"]),
+    ]
+    g = h.make_graph(nodes, "toy1", [
+        h.make_tensor_value_info("tokens", T.INT64, [1, None]),
+        h.make_tensor_value_info("style", T.FLOAT, [1, 256]),
+        h.make_tensor_value_info("speed", T.FLOAT, [1])],
+        [h.make_tensor_value_info("audio", T.FLOAT, None),
+         h.make_tensor_value_info("onnx::Shape_3411", T.INT64, None)],
+        initializer=[h.make_tensor("k", T.FLOAT, [], [0.1]), h.make_tensor("lo", T.FLOAT, [], [1.0]),
+                     h.make_tensor("ax", T.INT64, [1], [0])])
+    m = h.make_model(g, opset_imports=[h.make_opsetid("", 17)])
+    m.ir_version = 8
+    for k, v in (("style_dim", "510,1,256"), ("sample_rate", "24000"), ("version", "2")):
+        m.metadata_props.add(key=k, value=v)
+    return m
+
+
+def t_prepare_v1_pinned():
+    try:
+        import onnx
+        import onnxruntime  # noqa: F401
+    except Exception:
+        print("skip prepare() for v1.0: onnx / onnxruntime not installed here")
+        return
+    import hashlib
+    import jarvis_kokoro as K
+    d = TMP / "toy_v1"
+    d.mkdir()
+    onnx.save(_toy_v1_model(onnx), str(d / "model.onnx"))
+    np.zeros((27, 510, 256), np.float32).tofile(d / "voices.bin")
+    (d / "tokens.txt").write_text("$ 0\n  16\n. 4\n", encoding="utf-8")
+    before = (d / "model.onnx").read_bytes()
+    paths = {"model": str(d / "model.onnx"), "voices": str(d / "voices.bin"),
+             "tokens": str(d / "tokens.txt"), "data_dir": str(d)}
+    said = []
+    out = J.prepare(paths, say=said.append)
+    check("prepare() on a Kokoro v1.0 model that is not the pinned file: makes nothing, "
+          "and says so in plain words with the way to put it right",
+          not out["ok"] and not (d / J.DURATIONS_FILE).exists()
+          and "not the Kokoro v1.0 model file" in out["why"] and "README" in out["why"]
+          and "Nothing was changed" in out["why"], out["why"])
+    pin_before = dict(K.V1_MODEL)
+    try:
+        K.V1_MODEL.update(bytes=len(before), sha256=hashlib.sha256(before).hexdigest())
+        out = J.prepare(paths, say=said.append)
+        check("... with the file pinned it makes the copy beside the model, model untouched",
+              out["ok"] and out["did"] == "made" and (d / J.DURATIONS_FILE).is_file()
+              and (d / "model.onnx").read_bytes() == before, str(out))
+        sub = onnx.load(str(d / J.DURATIONS_FILE))
+        meta = {p.key: p.value for p in sub.metadata_props}
+        produced = {o for n in sub.graph.node for o in n.output}
+        check("... cut at the DECLARED second output (the lengths), not the decoy "
+              "'/Cast_output_0' that only shares v0.19's name; no audio in it",
+              [o.name for o in sub.graph.output] == ["onnx::Shape_3411"]
+              and "audio" not in produced and "/ReduceMax_output_0" not in produced
+              and sorted(i.name for i in sub.graph.input) == ["speed", "style", "tokens"],
+              str(sorted(produced)))
+        check("... the copy notes the model's size AND its fingerprint, and the model's own notes",
+              meta.get("jarvis_source_size") == str(len(before))
+              and meta.get("jarvis_source_sha256") == hashlib.sha256(before).hexdigest()
+              and meta.get("version") == "2" and meta.get("style_dim") == "510,1,256")
+        check("ready(): nothing stale when the copy fits", J._stale_copy(paths) == "")
+        J.reset()
+        m = J._Model(paths)
+        check("_Model: a v1.0 copy is read with v1.0's front end", m.frontend == "multilang")
+        # the pin moves (another model.onnx is 'installed'): the copy is refused
+        K.V1_MODEL.update(sha256="0" * 64)
+        J._STALE_CACHE.clear()
+        check("a copy made from a model that is not the pinned one is stale (status says so)",
+              J._stale_copy(paths) == J.STALE_COPY)
+        try:
+            J._Model(paths)
+            refused = False
+        except ValueError as exc:
+            refused = "pinned Kokoro v1.0" in str(exc)
+        check("... and _Model refuses to load it (the apps use the sound analysis)", refused)
+    finally:
+        K.V1_MODEL.clear()
+        K.V1_MODEL.update(pin_before)
+        J.reset()
+        J._STALE_CACHE.clear()
+    # a copy made for the OTHER pack's model size, beside this model
+    o = TMP / "toy_mix"
+    o.mkdir()
+    onnx.save(_toy_model(onnx), str(o / "model.onnx"))
+    np.zeros((1, 511, 256), np.float32).tofile(o / "voices.bin")
+    p2 = {"model": str(o / "model.onnx"), "voices": str(o / "voices.bin"),
+          "tokens": str(d / "tokens.txt"), "data_dir": str(o)}
+    J.prepare(p2, say=lambda s: None)
+    check("a v0.19 copy is not stale beside its own model", J._stale_copy(p2) == "")
+    (o / "model.onnx").write_bytes((o / "model.onnx").read_bytes() + b"\0")
+    J._STALE_CACHE.clear()
+    check("... and is stale once the model beside it is another file (an old copy left "
+          "beside a new pack can never be paired with it)", J._stale_copy(p2) == J.STALE_COPY)
+    J._STALE_CACHE.clear()
+
+
+def t_pin_is_written_down_once():
+    import jarvis_kokoro as K
+    pin = K.V1_MODEL
+    check("jarvis_kokoro.V1_MODEL: a 64-digit SHA-256 and a size, the model inside V1_PACK",
+          len(pin["sha256"]) == 64 and int(pin["sha256"], 16) >= 0 and pin["bytes"] == 325_560_556
+          and pin["file"] == "model.onnx")
+    check("... and it is not the checksum of the archive itself",
+          pin["sha256"] != K.V1_PACK["sha256"])
+    check("jarvis_mouth reads the pin from there (one place)", J._v1_pin()["sha256"] == pin["sha256"])
+
+
+# ---------------------------------------------------------------------------
 #   The real model (only with JARVIS_KOKORO_DIR)
 # ---------------------------------------------------------------------------
 
@@ -660,8 +931,8 @@ VOICES = {"default": (0, 1.0, 0.0), "panda": (1, 1.0, 2.0), "owl": (2, 0.85, 1.0
           "deep": (9, 1.15, -3.0)}
 
 
-def _real_paths():
-    d = os.environ.get("JARVIS_KOKORO_DIR")
+def _real_paths(env="JARVIS_KOKORO_DIR"):
+    d = os.environ.get(env)
     if not d:
         return None
     d = Path(d)
@@ -704,6 +975,75 @@ def t_real_model():
     check(f"real model: every sentence in every voice (a deeper one too) got its mouth - the timing "
           f"matched sherpa-onnx to the sample ({made}/{len(VOICES) * len(REAL_SENTENCES)})",
           made == len(VOICES) * len(REAL_SENTENCES), J.status()["last_skip_why"])
+
+
+V1_SENTENCES = REAL_SENTENCES + [
+    "Yes. No. Maybe so. Okay then, I will.",              # short sentences, joined on v1.0
+    "Note: this has a colon; and a semicolon - and a dash.",  # ':' is read as ','
+    "Hi.",
+    "Line one.\n\nLine two after a blank line.",           # white space is folded
+    "The quick brown fox jumps over the lazy dog, and then it goes to sleep for a while.",
+]
+#: name: (sid, speed, semitones, the British espeak voice or None)
+V1_VOICES = {"default": (3, 1.0, 0.0, None), "panda": (2, 1.0, 2.0, None),
+             "george": (26, 1.0, 0.0, "en-gb-x-rp"), "emma-deep": (21, 1.15, -3.0, "en-gb-x-rp"),
+             "michael": (16, 0.85, 1.0, None)}
+
+
+def t_real_model_v1():
+    p = _real_paths("JARVIS_KOKORO_V1_DIR")
+    if p is None:
+        print("skip the real Kokoro v1.0 model: set JARVIS_KOKORO_V1_DIR to a "
+              "kokoro-multi-lang-v1_0 folder to run it")
+        return
+    import hashlib
+    import jarvis_kokoro as K
+    check("real v1.0: the model file is the pinned one (size and SHA-256 in jarvis_kokoro.V1_MODEL)",
+          Path(p["model"]).stat().st_size == K.V1_MODEL["bytes"]
+          and hashlib.sha256(Path(p["model"]).read_bytes()).hexdigest() == K.V1_MODEL["sha256"])
+    out = J.prepare(p, force=True, say=lambda s: None)
+    check("real v1.0: the one-time step works (it also proved the copy gives the model's own "
+          "second output)", out["ok"], out["why"])
+    ok, why = J.ready(p)
+    check("real v1.0: ready()", ok, why)
+    m = J._model(p)
+    check("real v1.0: read with the v1.0 front end, 510 sounds at most",
+          m is not None and m.frontend == "multilang" and m.max_len == 510, J._MODEL["why"])
+    import sherpa_onnx
+    k = sherpa_onnx.OfflineTtsKokoroModelConfig(model=p["model"], voices=p["voices"],
+                                                tokens=p["tokens"], data_dir=p["data_dir"],
+                                                lang="en-us")
+    cfg = sherpa_onnx.OfflineTtsConfig(model=sherpa_onnx.OfflineTtsModelConfig(kokoro=k, num_threads=2))
+    eng = sherpa_onnx.OfflineTts(cfg)
+    made, total, missed = 0, 0, []
+    for name, (sid, speed, semis, accent) in V1_VOICES.items():
+        for t in V1_SENTENCES:
+            total += 1
+            got = J.speak(eng, t, sid, speed, semis, pitch_up=S.pitch_up,
+                          silence_scale=cfg.silence_scale, paths=p, wait=10.0,
+                          lang=accent or "en-us", extra_lang=accent)
+            if got is not None and got[2] is not None:
+                made += 1
+            else:
+                missed.append((name, t[:30], J.status(p)["last_skip_why"]))
+    check(f"real v1.0: every sentence in every voice (British and deeper ones too) got its mouth - "
+          f"each piece is exactly as long as the timing says, to the sample ({made}/{total})",
+          not missed, repr(missed[:3]))
+    got = J.speak(eng, "Hello \u4f60\u597d there.", 3, 1.0, 0.0, pitch_up=S.pitch_up,
+                  silence_scale=cfg.silence_scale, paths=p, wait=10.0)
+    check("real v1.0: a sentence with Chinese in it is spoken and simply has no mouth block",
+          got is not None and got[2] is None)
+    # The sound is what sherpa-onnx makes on its own. Kokoro's graph adds random
+    # noise, so two runs of the real model differ by a few hundred samples in
+    # where a pause is cut (docs/LIPSYNC.md) - the check is the length, within 1%.
+    cfg1 = sherpa_onnx.GenerationConfig()
+    cfg1.sid, cfg1.speed = 3, 1.0
+    plain = eng.generate("Hello, my name is Jarvis. Yes. No.", cfg1)
+    got = J.speak(eng, "Hello, my name is Jarvis. Yes. No.", 3, 1.0, 0.0, pitch_up=S.pitch_up,
+                  silence_scale=cfg.silence_scale, paths=p, wait=10.0)
+    check("real v1.0: the sound is the one sherpa-onnx makes on its own (same length, within 1%)",
+          got is not None and abs(len(got[0]) - len(plain.samples)) <= 0.01 * len(plain.samples),
+          str((None if got is None else len(got[0]), len(plain.samples))))
 
 
 FIXTURE_CASES = [
