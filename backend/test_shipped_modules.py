@@ -131,6 +131,8 @@ NOT_SHIPPED = {
     "_ollama_wire.py": "test fixture: Ollama's real /v1 stream format, for the chat tests",
     "_voice_test.py": "test plumbing: a stand-in speaker model for the voice suites",
     "fake_mcp_server.py": "test fixture: a badly behaved plug-in program, for test_mcp.py",
+    "_fake_obscura.py": "test fixture: a stand-in for `obscura --stealth mcp`, run as a real "
+                        "child process by test_obscura.py and test_browser_engine.py",
 }
 
 

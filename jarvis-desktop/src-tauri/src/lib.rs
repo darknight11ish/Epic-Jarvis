@@ -27,6 +27,7 @@ pub mod attention;
 pub mod autostart;
 pub mod backup;
 pub mod brain;
+pub mod browser_engine;
 pub mod clipboard_privacy;
 pub mod commands;
 pub mod crash_notes;
@@ -1041,6 +1042,7 @@ pub fn run() {
             // Picture mode's switch (look.rs): read it, turn it on (ONE
             // approval card) or off (at once). Settings only.
             look::screen_picture,
+            browser_engine::browser_engine,
             // Interrupting by talking and "One moment." (voice_flow.rs).
             voice_flow::judge_barge_in,
             voice_flow::get_voice_flow,

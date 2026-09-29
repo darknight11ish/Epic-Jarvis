@@ -34,7 +34,8 @@ pre-chat email box inside the chat (not a sign-in page), the page sent
 elsewhere, close() from another thread; a whole support chat through
 jarvis_support.run() with the real window; the owner's read-only check
 (nothing typed, sent or pressed). Without a browser: the openness checks
-over this module (no stealth, no launch or address-opening of its own,
+over this module (no proxy, no captcha solving, no spoofing of its own, no
+launch or address-opening of its own,
 three click places, every send selector names send or submit).
 
 SKIPS the browser half (exit 0) when Playwright or a browser is missing.
@@ -118,15 +119,16 @@ def _code_only(src: str) -> str:
                     if t.type != tokenize.COMMENT and t.start[0] not in doc)
 
 
-def t_openness():
+def t_still_true_no_proxy_no_captcha_solving():
     sites = (HERE / "test_chatbot_sites.py").read_text(encoding="utf-8")
     m = re.search(r"FORBIDDEN = \((.*?)\n\)", sites, re.S)
     forbidden = ast.literal_eval("(" + m.group(1) + "\n)") if m else ()
     check("the chatbot sites' forbidden list was read", len(forbidden) > 20)
     code = _code_only(SRC).lower()
     found = [w for w in forbidden if w in code]
-    check("no stealth, fingerprint, webdriver-hiding, proxy or captcha-solving code",
-          not found, found)
+    check("no proxy, no captcha-solving code, and no spoofing code of its own in the "
+          "visible real browser (the owner reversed 'driven openly' on 2026-09-29; "
+          "these three still hold)", not found, found)
     check("no randomness, nothing headless", "random" not in code and "headless" not in code)
     tree = ast.parse(SRC)
     calls = {n.func.attr for n in ast.walk(tree) if isinstance(n, ast.Call)
@@ -148,8 +150,9 @@ def t_openness():
     risky = [s for v in SW.VENDORS for s in SW.vendor_roles(v, "send")
              if not re.search(r"send|submit", s, re.I)]
     check("every Send selector names send or submit", not risky, risky)
-    check("its docstring says what it never does, and how a cross-host frame is handled",
-          "No stealth plug-in" in SRC and "captcha solving" in SRC
+    check("its docstring records the reversal and what still holds, and how a cross-host "
+          "frame is handled",
+          "2026-09-29" in SRC and "captcha solving" in " ".join(SRC.split())
           and "A CHAT IN A FRAME FROM ANOTHER HOST" in SRC and "NOT VERIFIED" in SRC)
     check("the six makers the design names, and an unbranded fallback",
           [v.id for v in SW.VENDORS] == ["zendesk", "intercom", "liveperson", "gorgias",
@@ -650,7 +653,7 @@ def _run(fn):
 def main():
     xvfb = None
     try:
-        _run(t_openness)
+        _run(t_still_true_no_proxy_no_captcha_solving)
         skip = ""
         if not W.playwright_installed():
             skip = "playwright is not installed"

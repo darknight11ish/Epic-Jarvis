@@ -61,6 +61,8 @@ object OpenPlace {
         "phone-notify" to Where.Go(Screen.SETTINGS, "phone-notify"),
         // "Look at this and Watch with me": picture mode's switch (2026-09-29).
         "screen-look" to Where.Go(Screen.SETTINGS, "screen-look"),
+        // The headless browser (Obscura): its switch, default and install line (2026-09-29).
+        "browser-engine" to Where.Go(Screen.SETTINGS, "browser-engine"),
         // Settings -> Devices (docs/PAIRING-DESIGN.md section 7.2).
         "devices" to Where.Go(Screen.SETTINGS, "devices"),
         // "Platform checks": its Connection card, and "This app" with the

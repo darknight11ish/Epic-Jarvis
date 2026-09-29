@@ -263,6 +263,9 @@ class Ctx:
     # Picture mode for the screen (jarvis_screen_picture.py): {"enabled": bool,
     # "model": tag}; None: read the switch file.
     screen_picture: Optional[dict] = None
+    # The headless browser (jarvis_browser_engine.py): {"enabled": bool,
+    # "ready": bool, "mode": str}; None: read it.
+    browser_engine: Optional[dict] = None
 
 
 def _gate_action(lookup: str) -> Optional[str]:
@@ -704,26 +707,46 @@ _shell = _control("shell_exec", "shell", "Commands on this PC",
                   "Can run a command on this PC after you say yes to that exact command.")
 
 
+def _browser_engine_status() -> dict:
+    try:
+        import jarvis_browser_engine as BE
+        return BE.reach_status()
+    except Exception:
+        return {"enabled": False, "ready": False, "mode": "auto", "missing": True}
+
+
 def _browser(ctx: Ctx) -> dict:
     name = "Browser control"
     sw = ctx.second_card if ctx.second_card is not None else _second_card_switches()
     feats = sw.get("features") or {}
     lane_on = bool(sw.get("master") and feats.get("browser_control")
                    and feats.get("long_context"))
+    eng = ctx.browser_engine if ctx.browser_engine is not None else _browser_engine_status()
+    headless_on = bool(eng.get("enabled") and eng.get("ready"))
     if "browser_control" not in ctx.enabled:
         return _row("browser", name, "off", "", ASK_NA,
                     _off_line("browser_control"))
-    if not lane_on:
+    if not lane_on and not headless_on:
         return _row("browser", name, "off", "", ASK_NA,
-                    "Off: it also needs the second graphics card's \"Browser control\" switch, "
-                    "which is off.")
+                    "Off: it needs the second graphics card's \"Browser control\" switch (a "
+                    "browser window you can see), or the headless browser (Obscura, no window), "
+                    "and both are off.")
     tier, words = asks("browser_control", ctx)
     if tier == "never":
         return _row("browser", name, "blocked", "websites", words,
                     "Switched on, but your settings say never, so it never runs.")
+    if lane_on and headless_on:
+        how = ("in a browser window you can see or in the headless browser (Obscura, no "
+               "window, stealth on). Jarvis picks per task and names which on the card")
+    elif headless_on:
+        how = ("in the headless browser (Obscura, no window, stealth on), for plain reading "
+               "only. A task that needs you to sign in or take over needs the visible browser, "
+               "which needs the second graphics card")
+    else:
+        how = "in a browser window you can see, only while the second graphics card is working"
     return _row("browser", name, "on", "the websites on each approved plan", words,
-                "Can work a web page in a browser, one approved step at a time - only while "
-                "the second graphics card is working. What it types there reaches that website.")
+                f"Can work a web page {how}. Each step is approved first, one at a time. What "
+                f"it types there reaches that website.")
 
 
 def _second_card_switches() -> dict:

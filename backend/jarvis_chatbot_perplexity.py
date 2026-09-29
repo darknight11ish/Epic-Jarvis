@@ -13,15 +13,18 @@ docs/JARVIS-API.md section 87) once its window has been signed in.
 NOT yet tried against the real site.
 
 THE OWNER'S DECISION (CLAUDE.md, 2026-09-28, "The chatbot driver becomes
-versatile"): more chatbot websites, driven OPENLY like Gemini, each with its
+versatile"): more chatbot websites, driven in a visible window like Gemini, each with its
 own SPARE account used only by Jarvis.
   * Perplexity's terms restrict automated access (not read word for word
     for this file).
-    The account may be blocked or closed; Jarvis will not work around a block.
-  * No stealth plug-in, no change to how the browser presents itself, nothing
-    that hides that a program is driving, no proxy, no captcha solving (the
-    shared base does all the driving; test_chatbot_sites.py reads this file
-    and the base for any such code).
+    The account may be blocked or closed; the owner accepted that risk (2026-09-29).
+  * REVERSED 2026-09-29 (owner): the old "driven openly, nothing that hides
+    the automation" rule is gone - the ban risk was explained and accepted.
+    THIS window is still a real, visible browser (a real browser), and this
+    file adds no spoofing of its own to it. Still true: no proxy, no captcha
+    solving (a captcha is handed to the owner), nothing private typed into
+    the chat (the shared base does all the driving; test_chatbot_sites.py
+    reads this file and the base for any such code).
 
 WHAT IT OPENS: only a new question at www.perplexity.ai/ (it becomes
 .../search/<slug>). Any other host is refused. A sign-in page is reached

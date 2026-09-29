@@ -15,11 +15,13 @@ docs/CHATBOT-DRIVER-DESIGN.md, "The owner's answers (2026-09-28)")
     owner sets. This loosens rule 4 and the "ask each time" cloud rule
     (ARCHITECTURE section 11) for this feature only. Rule 1 is unchanged:
     nothing private (email, files, credentials, memory) goes into the chat.
-  * Gemini first, through its WEBSITE, driven openly: a visible browser
-    window, a person's pace, nothing that hides the automation from Google
-    or dodges its bot checks, no captcha solving. At a captcha, a sign-in
-    page or an "unusual activity" page Jarvis stops and asks the owner. A
-    spare Google account used only by Jarvis.
+  * Gemini first, through its WEBSITE: a visible browser window, a
+    person's pace, no captcha solving. At a captcha, a sign-in page or an
+    "unusual activity" page Jarvis stops and asks the owner. A spare Google
+    account used only by Jarvis. (REVERSED 2026-09-29, owner: the old
+    "driven openly - nothing that hides the automation or dodges the
+    site's bot checks" rule is gone; the headless browser runs with stealth on and the visible browser is a plain real browser,
+    the ban risk is accepted. Never solving a captcha stays.)
   * VERSATILE: one driver (this file) and a separate ADAPTER per chatbot
     website. Each new chatbot is a new named way out of the PC and gets the
     owner's OK first.
@@ -219,8 +221,9 @@ MAX_REPLY_CHARS = 20000
 MAX_NEVER_SEND = 50
 MAX_NEVER_SEND_CHARS = 60
 MAX_NOTES_CHARS = 800
-#: At least this long between two messages: a person's pace, not a
-#: program's (the owner's "driven openly").
+#: At least this long between two messages: a person's pace, so the site
+#: is not flooded (the 2026-09-28 "driven openly" rule is reversed, this
+#: pause is not).
 PACE_SECONDS = 8.0
 #: The longest wait for one reply, looked at in REPLY_SLICE pieces so a stop
 #: lands while waiting.
@@ -438,9 +441,8 @@ register_adapter(AdapterInfo(
     "gemini_web", "Gemini", "gemini.google.com", _gemini_not_built, built=False,
     how=("through its website, in a browser window you can see, signed in with the "
          "spare Google account used only by Jarvis"),
-    card_note=("Jarvis types at a person's pace and never hides that it is a program, "
-               "never changes how the browser looks to Google, and never solves or skips "
-               "a captcha. Google's terms forbid automated use of its services, so the "
+    card_note=("Jarvis types at a person's pace, in a window you can see, and never "
+               "solves or skips a captcha. Google's terms forbid automated use of its services, so the "
                "spare account could be closed.")))
 register_adapter(AdapterInfo(
     "fake", FakeChatbot.name, FakeChatbot.host, FakeChatbot, test_only=True,

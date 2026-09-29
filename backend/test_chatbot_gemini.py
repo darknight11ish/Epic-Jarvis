@@ -5,11 +5,14 @@ ever opens gemini.google.com.
 
     python3 backend/test_chatbot_gemini.py
 
-The owner's decisions (CLAUDE.md, 2026-09-28): Gemini through its website,
-driven OPENLY - a visible window, a person's pace, nothing that hides the
-automation or dodges Google's bot checks, no captcha solving; at a captcha,
-a sign-in page or an "unusual activity" page it stops and asks the owner;
-a spare Google account, signed in once by hand.
+The owner's decisions (CLAUDE.md, 2026-09-28 and 2026-09-29): Gemini through
+its website, in a visible window at a person's pace, no captcha solving; at a
+captcha, a sign-in page or an "unusual activity" page it stops and asks the
+owner; a spare Google account, signed in once by hand. REVERSED 2026-09-29:
+the old "driven openly - nothing that hides the automation or dodges Google's
+bot checks" rule is gone (the headless browser runs with stealth on and the visible browser is a plain real browser; the ban risk is
+accepted). Still tested here: no proxy, no captcha solving, no spoofing code
+of Jarvis's own in the visible real browser.
 
 The fake page mimics Gemini's shape: a message box (a contenteditable
 role="textbox"), a "Send message" button, a <model-response> that grows word
@@ -43,9 +46,9 @@ What it proves:
   - the sign-in helper waits while the owner signs in, types and clicks
     nothing, and stops when the window is closed;
   - the owner's self-check prints PASS for every step against the fake;
-  - the module has no stealth, fingerprint, webdriver-hiding, proxy or
-    captcha-solving code, launches a visible window, and clicks only the
-    message box and the send button.
+  - the module has no proxy and no captcha-solving code, writes no
+    fingerprint-spoofing of its own for the visible real browser, launches a
+    visible window, and clicks only the message box and the send button.
 
 SKIPS (exit 0) when Playwright is not installed or no Chromium can be
 started (it is an optional dependency). Here, with a browser already
@@ -135,33 +138,54 @@ def _code_only(src: str) -> str:
     return " ".join(out)
 
 
+# CHANGED 2026-09-29 (owner): the old rule "driven openly - nothing that hides
+# it, nothing that dodges bot detection" was REVERSED (the headless browser runs with
+# stealth on and the visible browser is a plain real browser; the ban risk is accepted). This list is NOT that old rule
+# any more. It holds what is still true for THIS code (the chatbot driver's
+# visible, real browser):
+#   * never a proxy and never captcha solving (Jarvis hands a captcha to the
+#     owner - PC or phone "Solve it here");
+#   * a real browser that Jarvis writes no fingerprint-spoofing of its own
+#     for (the headless engine's stealth lives in jarvis_browser_engine*.py,
+#     not in the chatbot driver, which stays visible so the owner can take
+#     over at a captcha or sign-in).
 FORBIDDEN = (
-    # stealth kits and patched drivers
+    # no spoofing kits or patched drivers in the visible-browser code
     "stealth", "undetected", "puppeteer_extra", "selenium_stealth", "playwright_extra",
-    # changing how the browser presents itself
+    # no changing how the visible, real browser presents itself
     "user_agent", "useragent", "user-agent", "fingerprint", "extra_http_headers",
     "set_extra_http_headers", "locale", "timezone_id", "geolocation", "device_scale_factor",
     "--disable-blink-features", "automationcontrolled", "enable-automation",
     "ignore_default_args", "excludeswitches",
-    # hiding that a program is driving
+    # no scripts injected into the page
     "webdriver", "defineproperty", "add_init_script", "addinitscript",
     "__proto__", "navigator.",
-    # going round limits or blocks
+    # STILL TRUE: no proxy, no rotating addresses, no getting past a limit
     "proxy", "rotate_", "socks5", "bypass",
-    # solving captchas
+    # STILL TRUE: Jarvis never solves a captcha
     "2captcha", "twocaptcha", "anticaptcha", "anti-captcha", "capsolver", "capmonster",
     "deathbycaptcha", "solve_", "solve(", "solver", "recaptcha_token", "g-recaptcha-response",
 )
+PROXY_WORDS = ("proxy", "rotate_", "socks5", "bypass")
+CAPTCHA_WORDS = ("2captcha", "twocaptcha", "anticaptcha", "anti-captcha", "capsolver",
+                 "capmonster", "deathbycaptcha", "solve_", "solve(", "solver",
+                 "recaptcha_token", "g-recaptcha-response")
+SPOOF_WORDS = tuple(w for w in FORBIDDEN if w not in PROXY_WORDS + CAPTCHA_WORDS)
 
 
-def t_openly_no_stealth_code():
+def t_still_true_no_proxy_no_captcha_solving_code():
     code = " ".join(_code_only(s) for s in SOURCES).lower()
-    found = [w for w in FORBIDDEN if w in code]
-    check("the module has no stealth, fingerprint, webdriver-hiding, proxy or "
-          "captcha-solving code", not found, found)
-    check("... and its docstring still says what it never does (the check reads code, "
-          "not words)", all("No stealth plug-in" in s and "captcha solving" in s
-                            for s in SOURCES))
+    check("the module has no proxy code (still true after the 2026-09-29 reversal)",
+          not [w for w in PROXY_WORDS if w in code], [w for w in PROXY_WORDS if w in code])
+    check("the module has no captcha-solving code (Jarvis never solves a captcha)",
+          not [w for w in CAPTCHA_WORDS if w in code], [w for w in CAPTCHA_WORDS if w in code])
+    check("the visible real browser gets no fingerprint-spoofing of Jarvis's own (the "
+          "headless engine's stealth lives in jarvis_browser_engine*.py, not here)",
+          not [w for w in SPOOF_WORDS if w in code], [w for w in SPOOF_WORDS if w in code])
+    check("... and its docstring records the reversal and what still holds (the check "
+          "reads code, not words)",
+          all("REVERSED 2026-09-29" in s and "captcha solving" in " ".join(s.split())
+              and "proxy" in s for s in SOURCES))
     trees = [ast.parse(s) for s in SOURCES]
     launches = [n for tree in trees for n in ast.walk(tree) if isinstance(n, ast.Call)
                 and isinstance(n.func, ast.Attribute)
@@ -194,8 +218,8 @@ def t_openly_no_stealth_code():
     check("the only address it opens by itself is Gemini's new chat",
           G.START_URL == "https://gemini.google.com/app" and G.GeminiWeb().chat_hosts
           == ("gemini.google.com",))
-    check("a fixed typing pace, not a random one (the point is the site's load, not a "
-          "disguise)", "random" not in code and G.TYPE_DELAY_MS > 0)
+    check("a fixed typing pace, not a random one (the point is the site's load)",
+          "random" not in code and G.TYPE_DELAY_MS > 0)
     check("every selector is in the one table, with fallbacks",
           all(len(G.SELECTORS[r]) >= 2 for r in ("input", "send", "stop", "reply",
                                                  "reply_text", "captcha")))
@@ -209,8 +233,10 @@ def t_registry_and_ready():
     check("the factory makes the adapter and opens nothing",
           isinstance(a, G.GeminiWeb) and a._worker is None and a._ctx is None)
     a.close()
-    check("the card note says it is open about being a program and stops at captchas",
-          "never hides that it is a program" in info.card_note
+    check("the card note stops at captchas, names the terms risk, and no longer promises "
+          "to hide nothing (the owner reversed that on 2026-09-29)",
+          "never hides that it is a program" not in info.card_note
+          and "never changes how the browser looks" not in info.card_note
           and "captcha" in info.card_note and "spare account could be closed" in info.card_note)
     check("the profile is its own folder under the Jarvis settings folder",
           G.profile_dir() == _TMP / "chatbot" / "gemini-profile")
@@ -886,7 +912,7 @@ def _screen():
 
 
 def main():
-    code_only = [t_openly_no_stealth_code, t_registry_and_ready, t_shipped_and_listed]
+    code_only = [t_still_true_no_proxy_no_captcha_solving_code, t_registry_and_ready, t_shipped_and_listed]
     browser = [t_full_turn, t_waits_for_the_message_box, t_a_new_chat_gets_its_own_address,
                t_another_chat_during_the_first_reply, t_waits_for_stop_button, t_needs_owner_pages,
                t_captcha_after_send, t_never_goes_elsewhere, t_close, t_through_the_driver,

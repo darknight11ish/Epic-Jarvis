@@ -3878,6 +3878,53 @@ object JarvisRuntime {
         }
     }
 
+    // ----------------------------------- the headless browser (Obscura) ----
+    // docs/JARVIS-API.md section 97; see [com.jarvis.client.net.BrowserEngine]
+    // and ui/screens/BrowserEnginePlate.kt. OFF by default, ON is one approval
+    // card on the PC. Nothing is cached on this phone: the PC decides, and the
+    // phone only shows what the PC says. It never runs a browser.
+
+    /** `GET /api/browser/engine`. */
+    suspend fun browserEngineSettings(): ApiResult<JsonObject> = api.browserEngineSettings()
+
+    /**
+     * The switch. ON is held on a stale link (rule 4) and raises an approval
+     * card on the PC; OFF is never held. @return the sentence to show under
+     * the switch.
+     */
+    suspend fun setBrowserEngine(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setBrowserEngine(on) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.BrowserEngine.said(on, r.value)
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.BrowserEngine.missing(r.error)) {
+                    com.jarvis.client.net.BrowserEngine.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
+    /**
+     * Which browser Jarvis uses by default: "auto", "visible" or "headless".
+     * No approval card (both browsers still ask on every plan), but held on a
+     * stale link like every change sent to the PC ([actionBlocker], rule 4).
+     */
+    suspend fun setBrowserEngineMode(mode: String): String {
+        actionBlocker()?.let { return it }
+        val body = com.jarvis.client.net.BrowserEngine.modeBody(mode)
+            ?: return "That is not one of the three choices."
+        return when (val r = writeNoticingCards { api.setBrowserEngineMode(body) }) {
+            is ApiResult.Ok -> com.jarvis.client.net.BrowserEngine.saidMode(r.value)
+            is ApiResult.Failed ->
+                if (com.jarvis.client.net.BrowserEngine.missing(r.error)) {
+                    com.jarvis.client.net.BrowserEngine.MISSING
+                } else {
+                    "Not changed. " + describe(r.error)
+                }
+        }
+    }
+
     /**
      * Read by [com.jarvis.client.service.PhoneNotificationListenerService]
      * to decide whether to store anything at all - the cached last-known

@@ -287,8 +287,8 @@ SHIPPED = (
     # Projects, build steps 1 and 2: projects, life benchmarks and their
     # numbers in projects.db; GET/POST /api/projects (projects.patch)
     "jarvis_projects.py",
-    # ... and its Gemini website adapter: a visible browser window, driven
-    # openly, stopping at any captcha or sign-in page (chatbot.patch gives
+    # ... and its Gemini website adapter: a visible browser window,
+    # stopping at any captcha or sign-in page (chatbot.patch gives
     # the gate its _RISK line)
     "jarvis_chatbot_gemini.py",
     # ...and its routes, /api/chatbot/* (chatbot-routes.patch)
@@ -296,7 +296,7 @@ SHIPPED = (
     # ... what every chatbot website adapter shares (the visible window, the
     # typing, the host lock, every "needs the owner" page, sign-in and
     # self-check), and the other chatbot websites, each a thin site file
-    # driven the same open way (2026-09-28, "the chatbot driver becomes
+    # in a visible window the same way (2026-09-28, "the chatbot driver becomes
     # versatile")
     "jarvis_chatbot_web.py",
     "jarvis_chatbot_chatgpt.py",
@@ -323,6 +323,12 @@ SHIPPED = (
     # a small picture model on the processor, off by default, ON is one card
     # (screen-picture.patch adds the gate lines); the routes are jarvis_screen.py's
     "jarvis_screen_picture.py",
+    # The headless browser, Obscura (2026-09-29): the driver (started over
+    # standard input/output, --stealth always, no port, no proxy) and the
+    # engine choice, the switch (off by default, ON is one card) and its
+    # routes (browser-engine.patch adds the gate lines and the install block)
+    "jarvis_obscura.py",
+    "jarvis_browser_engine.py",
     # "Ask several and compare": several of the conversations above, ONE
     # card, ONE summary. No patch of its own: jarvis_chatbot.py loads it and
     # chatbot-routes.patch already installs the routes that reach it.

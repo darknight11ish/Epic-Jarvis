@@ -538,12 +538,17 @@ testers, scouts and integration scouts; `.claude/agents/`):
   Rule 1 is unchanged: nothing private (email, files, credentials, memory)
   goes into those chats.
   Owner's answers, 2026-09-28: **Gemini first, through its website
-  (gemini.google.com), driven openly** - at human pace, in a visible
+  (gemini.google.com)**, ~~driven openly - at human pace, in a visible
   browser window, with nothing that hides it from or dodges Google's bot
   detection, and no captcha-solving. The owner chose this knowing Google's
   terms forbid automated access and that the account could be closed. A
   request to add "tactics that help avoid bans" was declined: getting round
-  a site's bot protection is not something this project builds.
+  a site's bot protection is not something this project builds.~~
+  **Reversed 2026-09-29 (owner): "driven openly" and the refusal of
+  "tactics that help avoid bans" are gone** - see "Stealth on for
+  everything" below. What stays: Jarvis never solves a captcha (it hands it
+  to the owner), and the owner chose this knowing Google's terms forbid
+  automated access and that the account could be closed.
   **A spare Google account used only by Jarvis**, not the owner's main
   one (owner, 2026-09-28): a ban cannot touch the owner's Gmail, and the
   owner's email and Gemini's memory of them stay out of these chats.
@@ -634,8 +639,9 @@ testers, scouts and integration scouts; `.claude/agents/`):
 - **The chatbot driver becomes versatile** (owner, 2026-09-28): (1) **an
   API adapter** - one adapter speaking the common OpenAI-style API, so a key
   reaches ChatGPT, DeepSeek, Mistral, Grok, OpenRouter and similar (keys
-  under rule 3; each host a named way out); (2) **more websites, driven
-  openly like Gemini**, each with its own spare account - **ChatGPT, Claude,
+  under rule 3; each host a named way out); (2) **more websites, in a
+  visible window like Gemini** (~~driven openly~~ - reversed 2026-09-29, see
+  "Stealth on for everything"), each with its own spare account - **ChatGPT, Claude,
   Microsoft Copilot, Perplexity, and other commonly used chatbot websites**;
   (3) **a second AI on the owner's own PC** (another local model, best on
   the 12 GB card; nothing leaves the PC); and (4) **compare**: ask several
@@ -678,7 +684,8 @@ testers, scouts and integration scouts; `.claude/agents/`):
   whether they are talking to a bot, Jarvis never claims to be human: it
   pauses and hands that question to the owner**, who answers in the window. Designed in `docs/CHATBOT-DRIVER-DESIGN.md` before it is built.
   Owner's answers to the design (2026-09-28): **Jarvis sends the messages
-  itself**, at human speed (and never hiding from the site's bot detection),
+  itself**, at human speed (~~and never hiding from the site's bot
+  detection~~ - reversed 2026-09-29, see "Stealth on for everything"),
   and **each card names that
   company's terms risk** before the owner approves (the real account could
   be closed); **identity checks** (last digits of a card, security
@@ -1614,6 +1621,45 @@ instructions):
   pattern can see. Emails and IP addresses are hidden too (a list in
   `jarvis_secrets.PII_KINDS`). Nothing ran on Windows yet: the owner's check is
   `tools\check_screen_safety.py`.
+
+Decided 2026-09-29, the owner REVERSED the 2026-09-28 "driven openly" rule
+(asked several times, after being told the ban risk each time; "get rid of
+the rule blocking it"):
+- **Stealth on for everything (owner, 2026-09-29): the ban risk was
+  explained and accepted; Obscura (Apache-2.0) is integrated as a headless
+  engine with `--stealth` always on; the visible Playwright browser stays the
+  default wherever the owner may have to take over (captcha, sign-in) and for
+  the chatbot driver; Jarvis writes no fingerprint-spoofing of its own for
+  the visible browser (it is a real browser); no proxy service; no captcha
+  solving.**
+- **What this replaces:** "driven openly - at human pace, in a visible
+  browser window, with nothing that hides it from or dodges Google's bot
+  detection" and the declined request for "tactics that help avoid bans"
+  (2026-09-28, struck through above), and the support chats' "never hiding
+  from the site's bot detection". The backend's approval-card notes (both
+  apps just show them) no longer promise "never hides that it is a program" or "never changes
+  how the browser looks" - a card note that said so would now be untrue.
+- **What does NOT change:** Jarvis itself never solves a captcha - it hands
+  it to the owner (the PC window, or "Solve it here" on the phone); no proxy
+  or residential-proxy service; nothing private (email, files, credentials,
+  memory) goes into a web chat or page (rule 1); every card and approval
+  rule; identity checks in support chats are handed to the owner; and **if
+  the other side asks directly whether it is talking to a bot, Jarvis never
+  claims to be human** - it pauses and hands the question to the owner.
+- **The ban risk is real and accepted:** an account on Gemini, ChatGPT and
+  the others could be blocked or closed, and each card still names the
+  company's terms risk. A spare account used only by Jarvis stays as
+  **advice** (a ban then cannot touch the owner's own account), not a rule.
+- The typing pause in the chatbot driver (a fixed few milliseconds a
+  character, and a pause between messages) stays: it is there so a site is
+  not flooded, and nothing in the owner's decision asked to change it.
+- **Tests:** the checks that used to fail on any "stealth" or user-agent
+  word now say what is still true - no proxy code, no captcha-solving code,
+  no spoofing code of Jarvis's own in the visible browser's files
+  (`backend/test_chatbot_gemini.py`, `test_chatbot_sites.py`,
+  `test_support_widget.py`, `test_handoff.py`). The engine that carries the
+  stealth lives in its own files (`backend/jarvis_browser_engine*.py`), not
+  in the chatbot driver's.
 
 ## Every new feature gets its own audit, without being asked
 

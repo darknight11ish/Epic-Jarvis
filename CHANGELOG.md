@@ -6,6 +6,51 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **The "driven openly" rule is gone (2026-09-29, your decision).** You asked
+  several times, after being told the risk each time, for stealth to be on for everything the
+  new headless browser runs, so the old rule "nothing that hides that a
+  program is driving, nothing that dodges a site's bot checks" no longer
+  exists. The approval cards for chatbot websites no longer say "never hides
+  that it is a program". What did not change: Jarvis never solves a captcha
+  (it hands it to you, on the PC or with "Solve it here" on the phone), there
+  is no proxy service, nothing private (email, files, passwords, memory) goes
+  into a chat or a web page, every approval card still asks, and if someone
+  asks Jarvis whether it is a bot it never says it is a person. The risk is
+  real: a Gemini, ChatGPT or similar account could still be closed, and each
+  card still says so; a spare account used only by Jarvis stays as advice. The
+  browser window you see stays a plain, real browser (Jarvis adds no disguise
+  to it) so you can take over at a captcha or sign-in. The new invisible
+  browser (Obscura) with stealth is in the next entry. Where it is
+  written: `CLAUDE.md` ("Stealth on for everything"), `docs/CHATBOT-DRIVER-DESIGN.md`.
+- **A second browser with no window: the headless browser, Obscura (2026-09-29,
+  both apps).** Jarvis's browser tool used to open only a browser window you
+  can watch. It can now also choose **Obscura**, a small open-source browser with
+  no window, for plain reading and quick lookups - per task: the visible window
+  whenever you might need to sign in, pay or take over, the headless browser
+  for simple reading (Settings, "Headless browser", picks which Jarvis prefers:
+  Automatic, Always visible, or Headless). **Stealth is on for everything it
+  runs** (your decision): it looks like an ordinary Chrome. That does **not**
+  solve captchas, a site can still block or ban it, and signing in to a real
+  account with any automated browser can get the account closed - so Jarvis
+  never types a password with it and never solves a captcha, and at a captcha
+  or a sign-in page it recognises it stops and tells you to ask again with the
+  visible browser (a sign-in that starts with only a username or email box may
+  not be recognised). **Off to
+  start; turning it on is one approval card**; off is instant. Every page it
+  opens and every click and box it fills is still listed on the same approval
+  card as the visible browser's, and what it reads counts as outside text. It
+  cannot reach your own network, uses no proxy, keeps no cookies, saves no files
+  and opens no network port. You install it with **one PowerShell line** shown in
+  Settings (Jarvis never downloads it itself): it downloads one named release,
+  prints its checksums for you to compare and does not run it; a second command
+  it prints checks it, and its checksum is then remembered and a different file
+  is refused. It stops itself after 3 idle minutes, and the words it types and
+  the addresses it opens are checked first. **A real Obscura has not been run yet** (nothing here
+  could run a Windows program): `py -3 tools\check_obscura.py` is the real check.
+  The chatbot driver and the support chats still use the visible browser, because
+  they must hand a captcha to you in a window. Needs the new backend files
+  (apply-patches.ps1 copies them) and the new desktop and phone builds.
+
 - **Secrets in pictures you attach to a chat are covered with black too
   (2026-09-29, both apps).** Until now only "Look at this" and "Watch with me"
   had anything that looks like a key, password, card number, IBAN, crypto
@@ -499,8 +544,8 @@ number as the last part - `0.2.57` is a build of 0.2.
 - **The chatbot driver's Gemini part is written - still not usable from
   either app.** Jarvis can now open its own Gemini window (gemini.google.com,
   in a browser window you can see), type a question at a steady pace, and
-  read back only the answer to it. It never hides that it is a program, and
-  at a captcha, a sign-in page or an "unusual activity" page it stops and
+  read back only the answer to it. (It used to promise it never hides that
+  it is a program; you reversed that on 2026-09-29, see above.) At a captcha, a sign-in page or an "unusual activity" page it stops and
   asks you instead of trying to get past it. It uses its own browser profile,
   which you sign in to once, by hand, with the spare Google account. Before
   real use, run the one-line self-check on the PC (`backend/README.md`) - it

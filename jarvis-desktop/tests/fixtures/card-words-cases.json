@@ -191,6 +191,10 @@
       "title": "Jarvis wants to search your notes"
     },
     {
+      "action": "obscura_enable",
+      "title": "Jarvis wants to use a headless browser (Obscura) for plain web reading"
+    },
+    {
       "action": "open_public_tunnel",
       "title": "Jarvis wants to open this PC to the internet"
     },

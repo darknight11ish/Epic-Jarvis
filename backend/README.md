@@ -141,7 +141,7 @@ on a throwaway copy instead.
 | `answer-sources.patch` | `jarvis_hud.py` | **"Where this came from", and the quote check** (feasibility I42/I132, `docs/CUTTING-EDGE-2026-09-26-round3-knowledge.md` detail 1). Two hunks. The first, like every install()-shaped patch, adds one call at start-up - `jarvis_sources.install(Handler, ...)`, answering `GET /api/chat/sources?turn_id=<id>` - and its context is `tool-updates.patch`'s own new route block, so it goes after it, last like every new patch. The second sits right after `chat-history.patch`'s `_history["turn"] = _turn` line (nothing later in the stack touches `_turn`): it hands `jarvis_sources.record()` this turn's `tool_sources` and `unverified_quotes` (both new fields on `run_local_turn`'s own return dict, `jarvis_agent.py`, no patch needed there) under the SAME `turn_id` `feedback.patch` already put in `X-Jarvis-Route` - which has to happen AFTER `run_local_turn` returns, since the header (turn_id included) is sent to the app before that loop even starts. Needs `jarvis_sources.py` - without it, or on any error, the banner says so, the route answers 503, and nothing about an ordinary chat turn changes: no tool result is read a second time, and this adds no new fetch of anything (docs/ARCHITECTURE.md §4). See "Where this came from", at the very end. |
 | `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Two more small hunks (the owner, 2026-09-28) hand a crisis turn's `turn_id` to `jarvis_agent.note_crisis_turn` - right after `feedback.patch` makes the id, on `wellbeing.patch`'s flag, and again after `run_local_turn` on its own crisis check - so a "wrong" mark on a crisis answer is never counted. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
 | `projects.patch` | `jarvis_hud.py` | **Projects, build steps 1 and 2** (the owner's decision of 2026-09-28, `docs/PROJECTS-DESIGN.md`). One hunk, like every install()-shaped patch: `jarvis_projects.install(Handler, ...)` at start-up, answering `GET`/`POST /api/projects` and its benchmarks (`docs/JARVIS-API.md` §88). Its context is `answer-sources.patch`'s own install block, so it goes after it - last, like every new patch. **When the continuation branch merges:** `goals.patch` there anchors on the very same lines, so whichever lands second is re-anchored on the other's block. Needs `jarvis_projects.py`; without it, or on any error, the banner says so and the routes are not there. See "Projects", at the very end. |
-| `chatbot.patch` | `jarvis_gate.py` | **Talking to an AI chatbot for you: the gate's words for it** (the owner's decisions of 2026-09-27/28). Two hunks: `chatbot_session` gets its `_RISK` line (`"no", "outbound"` - it leaves this PC and cannot be taken back, so approving it is a risky approval: Windows Hello on the PC, a screen lock on the phone) and joins the list of actions whose "no" proposes no standing rule (it always asks, one card per conversation). Before this, the gate already treated it as risky, as an unclassified action. Last in the list; its context is `backup.patch`'s own lines. The feature itself is `jarvis_chatbot.py`, `jarvis_chatbot_gemini.py` and the other website adapters (`jarvis_chatbot_web.py` and a site file each), shipped whole - see "Talking to an AI chatbot for you, step 2: Gemini's window" and "... more chatbot websites, the same open way", at the very end. |
+| `chatbot.patch` | `jarvis_gate.py` | **Talking to an AI chatbot for you: the gate's words for it** (the owner's decisions of 2026-09-27/28). Two hunks: `chatbot_session` gets its `_RISK` line (`"no", "outbound"` - it leaves this PC and cannot be taken back, so approving it is a risky approval: Windows Hello on the PC, a screen lock on the phone) and joins the list of actions whose "no" proposes no standing rule (it always asks, one card per conversation). Before this, the gate already treated it as risky, as an unclassified action. Last in the list; its context is `backup.patch`'s own lines. The feature itself is `jarvis_chatbot.py`, `jarvis_chatbot_gemini.py` and the other website adapters (`jarvis_chatbot_web.py` and a site file each), shipped whole - see "Talking to an AI chatbot for you, step 2: Gemini's window" and "... more chatbot websites, the same visible window", at the very end. |
 | `live.patch` | `jarvis_hud.py` | **Jarvis Live: talking back and forth** (the owner's decision and answers of 2026-09-28, `docs/LIVE-DESIGN.md`). One call at start-up, `jarvis_live.install(Handler, ...)`, answers `GET`/`POST /api/voice/live` (JARVIS-API section 63): start (no card; refused until your voice is trained), stop, more time, carry on, mute. Last in the list; its context is `chatbot-routes.patch`'s install block. Needs `jarvis_live.py` - without it, or on any error, the banner says so. See "Jarvis Live", at the very end. |
 | `rules-first-relay.patch` | `jarvis_hud.py` | **The Jarvis rules stay first on a turn with no tools enabled** (the owner's 2026-09-25 decision: the rules are never dropped). One hunk in the relay's `_open()`, right after `chat-history.patch`'s `_chat_client_fields_off` lines: for the local model only, `jarvis_agent.keep_rules_first()` - the same call the tool loop already makes. Last in the list. Needs nothing new copied in. See "The rules on a turn with no tools", at the very end. |
 | `cloud-say-yes.patch` | `jarvis_hud.py` | **"Try the cloud model" - the owner's yes for one question** (the owner's "yes, build it now", 2026-09-27; `docs/ARCHITECTURE.md` "Cloud / API keys"). One line added to the chat turn's already-existing `jarvis_router.choose()` call: `owner_said_yes=bool(body.get("cloud_yes"))`. Every gate in `choose()` still runs first and in the same order - private, tainted, a picture, no lane, no budget - so this can only ever turn THIS question's own gate 6 from `"offer"` into `"escalate"`, for a question that had already cleared every other gate on its own merits; a yes never carries a private, tainted or picture turn out. Both apps' "Try the cloud model" button (`docs/JARVIS-API.md` §18.1, §4 "`offer` in `X-Jarvis-Route`") sends `cloud_yes: true` only when the owner actually pressed it, resending the exact same question and nothing else. **Real, verified against the owner's own `jarvis_hud.py` by hand, not a `_stack.py` stand-in**: no earlier patch's hunk had ever touched this call site before, so `_stack.stand_in()` could not check it against the real file (it would have materialised the hunk's own claimed pre-image instead of failing) - see the patch's own comment, and `test_cloud_say_yes.py`, which round-trips it against the real, hand-verified lines instead of a derived fixture. Its context is the router call itself, `second-card-suggest.patch`'s own new code above it in this table notwithstanding (that patch touches a different, unrelated part of `jarvis_hud.py`). `goals.patch`, after it in this table, touches a third, separate part again (the startup install() block), so the two never interact. Needs no new module - `jarvis_router.py`'s `owner_said_yes` parameter has accepted this since 2026-09-24, unused until now. |
@@ -162,6 +162,7 @@ on a throwaway copy instead.
 | `inbox-tidy.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Inbox tidy by voice"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 95): archive, star, mark as read or move to Trash a checked list of emails, ONE approval card listing every one, 10 minutes to Undo. Four hunks: in `jarvis_gate.py` `tidy_inbox` joins "a no proposes no memory rule", gets its `_RISK` line (`"yes", "outbound"` - it changes the mailbox on a server, so approving it is a risky approval; nothing is deleted for good, and Undo puts everything back) and its `_TOOL_ACTIONS` line; in `jarvis_hud.py` ONE install block after `sky.patch`'s (`GET /api/email/tidy`, `POST /api/email/tidy/undo`). Its context is other patches' lines: after `support-chat.patch`, before `devices.patch`, which stays last. Needs `jarvis_inbox_tidy.py` - see "Inbox tidy", at the very end. |
 | `screen.patch` | `jarvis_hud.py` | **"Look at this" and "Watch with me": the routes and the chat turn** (the owner's decision of 2026-09-28; `docs/SCREEN-DESIGN.md`, `docs/JARVIS-API.md` sections 62 and 96). Three hunks: a small `_screen_turn(body)` helper (does the newest message carry the owner's screen - the `screen` mark or a `screen_text` part), `has_screen=_screen_turn(body)` in the router call, so such a turn never leaves this PC, and one `jarvis_screen.install(Handler, ...)` block after inbox tidy's, which answers `GET/POST /api/screen` and `GET/POST /api/screen/never-look`. The router call is the owner's own text; the hunk anchors on the lines `cloud-say-yes.patch` already added there (checked against the real file by that patch) and was applied only to the stand-in. Its context is `inbox-tidy.patch`'s startup block, `games-temporary.patch`'s helper lines and `cloud-say-yes.patch`'s router call, so it goes last in the list, after `inbox-tidy.patch`. Needs `jarvis_screen.py` and `jarvis_screen_win.py` copied in (`jarvis_screen_win.py` first); without them, or on any error, the banner says "screen NOT ON", the routes answer 404 and nothing can look. `temporary-chat.patch` also gained one word: `screen` in `_CHAT_CLIENT_FIELDS`, so the mark never travels onward. See "Looking at the screen", below. |
 | `screen-picture.patch` | `jarvis_gate.py` | **Picture mode for "Look at this" and "Watch with me" on a one-card PC** (the owner's decision of 2026-09-29; `docs/JARVIS-API.md` section 96.1). Two hunks, both right after `inbox-tidy.patch`'s own last lines: `screen_picture_enable` joins "a no proposes no memory rule" (turning it on is ONE card, tier `ask`, only), and gets its `_RISK` line (`"yes", "local"` - a small picture model on this PC's processor in a separate copy of Ollama that only this PC can reach; secrets blacked out first; nothing saved or sent anywhere; the owner downloads the model, not the card; off again is instant). Goes last in the list, after `screen.patch`. Needs `jarvis_screen_picture.py` copied in; the routes are `jarvis_screen.py`'s, so no `jarvis_hud.py` hunk. See "Picture mode for the screen", at the very end. |
+| `browser-engine.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **The headless browser, Obscura** (the owner's decision of 2026-09-29; `docs/JARVIS-API.md` section 97). Three hunks: in `jarvis_gate.py`, `obscura_enable` joins "a no proposes no memory rule" (turning it on is ONE card, tier `ask`, only) and gets its `_RISK` line (`"yes", "outbound"` - a new program on this PC and a new way onto the web, so a risky approval; stealth is on; each step is still its own card; it never types a password or solves a captcha and stops at a captcha or sign-in page it recognises; it cannot open your own network; off again is instant) - both right after `screen-picture.patch`'s own lines - and in `jarvis_hud.py` ONE install block right after `screen.patch`'s, the last before `_loopback_companion`. Goes last in the list. Needs `jarvis_obscura.py` and `jarvis_browser_engine.py` copied in. See "The headless browser (Obscura)", at the very end. |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 
 ## All but two of the patches apply, and that is correct
@@ -14249,9 +14250,10 @@ real gemini.google.com yet. Shipped whole, like the core.
 
 Jarvis can now work its own Gemini window: it opens gemini.google.com in a
 browser window you can see, starts a new chat, types the question at a
-steady pace, and reads back only Gemini's answer to it. It does this
-**openly**, as you decided: nothing hides that a program is typing, and
-nothing changes how the browser looks to Google. At a captcha (a "prove you
+steady pace, and reads back only Gemini's answer to it. (Until 2026-09-29
+this said it was done "openly", with nothing hiding that a program is typing.
+**You reversed that on 2026-09-29**, after being told the ban risk: the headless browser runs with stealth on. This window is still a plain, real browser and
+Jarvis adds no disguise of its own to it, so you can take over.) At a captcha (a "prove you
 are a person" check), a sign-in page, or an "unusual activity" / "verify
 it's you" page, it **stops and asks you** - it never tries to get past one.
 You deal with it in the window, then press Resume.
@@ -14386,9 +14388,11 @@ Linux machine with none) against a fake Gemini page on 127.0.0.1: a full
 turn, a reply that pauses before it finishes, each "needs you" page, no
 navigation away, close. It skips its browser half, and says so, where
 Playwright or a browser is missing. Its first half also reads the module's
-own code and fails on any stealth, fingerprint, webdriver-hiding, proxy or
-captcha-solving code, on any headless launch, and on a click anywhere but
-the message box and the send button.
+own code and fails on any proxy code, any captcha-solving code, any
+spoofing code of Jarvis's own for the visible real browser, any headless
+launch, and on a click anywhere but the message box and the send button.
+(Until 2026-09-29 it was worded as "no stealth" - the owner reversed that
+rule; what is left is what is still true.)
 
 ## Not checked, said plainly
 
@@ -14396,9 +14400,10 @@ the message box and the send button.
   best guess from how Gemini's page is known to be built (a
   `role="textbox"` message box, "Send message" and "Stop response"
   buttons, `<model-response>` answers). The self-check above is the proof.
-- **Google may block it anyway.** Driving the site openly is exactly what
-  Google's terms forbid; the spare account could be closed. Jarvis will
-  not work around a block.
+- **Google may block it anyway.** Automated use of the site is exactly what
+  Google's terms forbid; the spare account could be closed, and you accepted
+  that risk (2026-09-29). Jarvis never solves a captcha: it stops and asks
+  you.
 - A notice laid over the page (a welcome or "what's new" box) counts as
   "needs you": Jarvis stops rather than guess which button closes it.
 - If the send button is not found, it stops - it does not press Enter
@@ -14429,12 +14434,14 @@ node jarvis-desktop/tests/chatbot.mjs
   running conversation, and keeping the transcript in the encrypted chat
   history (it is in memory only, lost on a backend restart).
 
-# Talking to an AI chatbot for you: more chatbot websites, the same open way (2026-09-28)
+# Talking to an AI chatbot for you: more chatbot websites, the same visible window (2026-09-28)
 
 The owner's decision "the chatbot driver becomes versatile" (`CLAUDE.md`,
 2026-09-28): ChatGPT, Claude, Microsoft Copilot, Perplexity and other
-commonly used chatbot websites, each driven **openly like Gemini**, each
-with **its own spare account** used only by Jarvis. `docs/JARVIS-API.md`
+commonly used chatbot websites, each in a **visible window like Gemini**
+(the word "openly" was dropped when the owner reversed that rule on
+2026-09-29), each with **its own spare account** used only by Jarvis (advice,
+not a rule, since then). `docs/JARVIS-API.md`
 section 87.5. ~~Still not usable from either app: no route and no app
 screen yet.~~ **Corrected 2026-09-28:** the routes and both apps' screens
 (`chatbot-routes.patch`) take any chatbot id, so this is reachable
@@ -14445,10 +14452,11 @@ real sites yet.
 
 Jarvis can now work eight more chatbot websites the same way it works
 Gemini: a browser window you can see, a new chat, the question typed at a
-steady pace, and only the answer read back. Nothing hides that a program is
-typing, nothing changes how the browser looks to the site, and at a
+steady pace, and only the answer read back. (This used to promise that
+nothing hides that a program is typing; you reversed that on 2026-09-29. The
+window is still a plain, real browser with no disguise added by Jarvis.) At a
 captcha, a sign-in page or an "unusual activity" / "verify you are human"
-page it **stops and asks you**. Each website has its own browser profile
+page it **stops and asks you** - Jarvis never solves a captcha. Each website has its own browser profile
 (its own folder under `.openjarvis\chatbot\`) and you sign in to each one
 **once, by hand**, with a spare account made only for Jarvis.
 
@@ -14658,8 +14666,8 @@ with no screen): a full turn, a reply that pauses before it finishes, the
 new chat's own address, every "needs you" page, another host refused,
 close from another thread, the sign-in helper, the self-check, and
 Perplexity's sources through the whole driver. Without a browser it still
-reads the shared base and every site file for any stealth, fingerprint,
-webdriver-hiding, proxy or captcha-solving code, checks that only the base
+reads the shared base and every site file for any proxy code, captcha-solving
+code or spoofing code of Jarvis's own, checks that only the base
 drives the browser (one visible launch, one host-checked address, clicks
 only on the message box and the send button), and that every send selector
 names "send" or "submit". Pass site names to run just those
@@ -14672,7 +14680,8 @@ names "send" or "submit". Pass site names to run just those
   adapter and its table fit together, not that the table matches the real
   page. The self-checks above are the proof.
 - **Any of these sites may block it anyway**, and its spare account may be
-  closed. Jarvis will not work around a block.
+  closed - the owner accepted that risk on 2026-09-29. Jarvis never solves a
+  captcha: it stops and asks you.
 - A cookie box or "what's new" box over the page counts as "needs you":
   Jarvis stops rather than guess which button closes it (some of these
   sites show a cookie box in some countries).
@@ -17740,4 +17749,162 @@ model away with `ollama rm minicpm-v:4.6`.
 
 ```
 python3 backend/test_screen_picture.py
+```
+
+# The headless browser (Obscura): `jarvis_obscura.py`, `jarvis_browser_engine.py`, `browser-engine.patch` (2026-09-29)
+
+Jarvis's browser tool opens a real browser window you can watch and take over.
+This adds a **second browser with no window**, **Obscura** (open source,
+Apache-2.0, https://github.com/h4ckf0r0day/obscura), that Jarvis can choose
+*per task* for plain reading and quick lookups. It is your decision of
+2026-09-29, given several times after the risk was explained: **stealth is on
+for everything it runs**. That makes the browser look like an ordinary Chrome;
+it **does not solve captchas, a site can still block or ban it, and signing in
+to a real account with any automated browser can get that account closed** - so
+Jarvis never types a password with it and never solves a captcha, and at a captcha
+or a sign-in page it recognises it **stops and tells you to ask again with the
+visible browser**, where you can take over (a sign-in that starts with only a
+username or email box may not be recognised). **It is off**, turning it on is
+**one approval card**, and turning it off is instant.
+
+**Which browser Jarvis picks.** Settings, "Headless browser" (both apps) has the
+switch and a list: *Automatic (recommended)* - the visible window whenever you
+might need to sign in, pay or take over, the headless browser for plain reading;
+*Always the visible browser*; *The headless browser when it can run*. The first
+line of every browser card says which one it will use and why. If the headless
+one cannot run (switched off, not installed, the file changed) Jarvis says so;
+it never quietly opens the other browser. The chatbot driver and the support
+chats are not changed: they need a window you can take over.
+
+**Every step is still a card.** The headless browser uses the SAME plan card as
+the visible one: one card listing every page, click and box, each re-checked just
+before it runs, on the sites the card named. What it reads is outside text.
+It cannot reach this PC, your home network, Tailscale or Meshnet; it uses no
+proxy; it keeps no cookies and saves no files; running a page's own script,
+cookies, tabs and key presses are not reachable at all; and it opens no network
+port (Jarvis talks to it over standard input and output). It is stopped after 3
+idle minutes and after 10 minutes in all, and it starts only while the switch is on.
+What it types and the addresses it opens are checked first (a password, key or
+token, or words that repeat something you told Jarvis, are refused); a link or
+button is checked before it is clicked, but a redirect or a page that moves itself
+can only be noticed after that page has loaded; text a page hides with its own
+markup is left out of what Jarvis reads, and a warning says some hidden text may
+remain (JARVIS-API section 97.3 says exactly what is and is not covered).
+
+## Owner steps
+
+**1. Put the new code on the PC** (copies `jarvis_obscura.py` and
+`jarvis_browser_engine.py`, applies `browser-engine.patch`), from this
+repository's folder, then quit Jarvis from the tray icon and start it again:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**2. Install Obscura - one line, then a check.** This line **downloads Obscura's
+Windows program** (about 70 MB, from its GitHub releases - the `-stealth` archive of
+ONE named release, `v0.2.3`, never "the latest"), unpacks it into
+`%USERPROFILE%\.openjarvis\obscura`, and **prints two checksums (SHA-256)**: of the zip and
+of `obscura.exe`. **It does not run the program.** Jarvis's backend never downloads
+it. Settings shows this line too, with your folder in it, and a "Copy the line"
+button:
+
+```powershell
+$ProgressPreference = 'SilentlyContinue'; $d = 'C:\Users\pcadmin\.openjarvis\obscura'; New-Item -ItemType Directory -Force -Path $d | Out-Null; Invoke-WebRequest -ErrorAction Stop -Uri 'https://github.com/h4ckf0r0day/obscura/releases/download/v0.2.3/obscura-x86_64-windows-stealth.zip' -OutFile "$d\obscura.zip"; $z = (Get-FileHash -Algorithm SHA256 -LiteralPath "$d\obscura.zip").Hash; $w = '4d7311c69c3263bb8376055f9cb846968b75c77c444d4b5efa74b1018b456fb9'; if ($z -ne $w) { Remove-Item -LiteralPath "$d\obscura.zip"; throw "STOP: the download's SHA-256 ($z) is not the one expected ($w). Nothing was unpacked or run." }; Expand-Archive -ErrorAction Stop -Force -LiteralPath "$d\obscura.zip" -DestinationPath $d; Remove-Item -LiteralPath "$d\obscura.zip"; $e = (Get-FileHash -Algorithm SHA256 -LiteralPath "$d\obscura.exe").Hash; $h = 'C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program'; Write-Host "Downloaded Obscura v0.2.3. Nothing has been run yet."; Write-Host "SHA-256 of the zip: $z"; Write-Host "SHA-256 of obscura.exe: $e"; Write-Host "The zip matched the checksum this line expected ($w). Compare it ONCE with the SHA-256 GitHub shows for that file on https://github.com/h4ckf0r0day/obscura/releases/tag/v0.2.3 . If they are the same, run this second command to check the program: Set-Location -LiteralPath '$h'; py -3 .\jarvis_obscura.py --check   (add --accept-new only if you are replacing a file you checked before)"
+```
+
+Then **compare** the zip's checksum with the one GitHub shows for that file on the
+release page (the line prints the address). If they match, run the **second command
+the line prints** - it starts Obscura for the first time, checks it (its version, that
+stealth is on, that it starts, that it reads a made-up page **inside the check
+itself** - no real website is visited - and that it **refuses** a page on this PC),
+and remembers its checksum:
+
+```powershell
+py -3 .\jarvis_obscura.py --check
+```
+
+(Run from the folder the line printed. Add `--accept-new` **only** when you are
+replacing a file you checked before - it tells Jarvis to trust the new file's
+checksum. Jarvis remembers the first checked file's checksum and refuses a different
+file later until then.) Nobody could read an official checksum from where this was
+built; if you send the checksum back it can be pinned in the code.
+
+**3. Turn it on** (or leave it off). Settings, "Headless browser", the switch - or
+ask Jarvis "turn on the headless browser". A card explains it; nothing changes until
+you say yes. Then pick which browser Jarvis uses by default (Automatic is a good
+start).
+
+**4. The half-hour check on the real machine** (nothing here has run on your PC or
+with a real Obscura yet): ask Jarvis to "read the headline on example.com with the
+headless browser". The card's first line should say `Browser: HEADLESS (Obscura, no
+window)`; approve it, and the answer should quote the page. Then ask it to read a
+page that asks you to sign in: it should stop and say to ask again with the visible
+browser. Watch that no window opens, and that the graphics card does not move.
+`py -3 tools\check_obscura.py` runs the check again by hand.
+
+To stop it: the switch (instant), "Stop everything", or delete the folder
+`%USERPROFILE%\.openjarvis\obscura`.
+
+## What the code does
+
+- `jarvis_obscura.py` (new, shipped whole): the driver. Starts `obscura --stealth
+  mcp` on demand, one program at a time, over standard input and output (no port);
+  an allow-list of its tools (navigate, snapshot, click, fill, select, links,
+  markdown, screenshot, ...) - evaluate, cookies, storage, tabs, the network log,
+  key presses and PDF are refused before anything is sent; hard limits (10 minutes
+  a run, 3 idle, 15 page changes, 45 seconds a call, enforced by a watchdog thread as
+  well as at each call); it starts only while the switch is on (a start gate); the
+  one tool that runs a script in a page, `browser_extract`, takes only Jarvis's own
+  fixed argument; an allow-listed environment (none of Jarvis's keys or tokens, no
+  proxy variable, the private-address guard held ON); the install line; the owner's
+  check (`--check`); the file's checksum (`PINNED_DIGEST` is empty, so the first
+  checked file's is remembered). Its error output goes to `obscura.log`, plain text.
+- `jarvis_browser_engine.py` (new, shipped whole): the switch and its one card
+  (`obscura_enable`, tier `ask`), the mode rule (`choose()`), the engine interface
+  with a headless and a visible implementation (acting only inside an approved plan),
+  the captcha / sign-in hand-over, the fence before a click, `GET/POST
+  /api/browser/engine`, and Stop everything's hook.
+- `jarvis_browser_control.py`: a plan carries its `engine`; `plan()`/`run()` use the
+  headless engine's read/act/observe when it is chosen (a run that cannot run stops in
+  words); the card's first line names the engine; `read_new` and `<secret>` steps are
+  refused at plan time for headless.
+- `jarvis_agent.py`: the browser tool takes `mode`; the tool is offered when the headless
+  browser is ready even without the second graphics card; a refusal is told to the model
+  with no card.
+- `browser-engine.patch` (new, last): two lines' worth in `jarvis_gate.py`, one install
+  block in `jarvis_hud.py`.
+- `rebuilt/jarvis-framework.toml`: `obscura_enable = "ask"` and an optional `[obscura]
+  path`. No proxy setting exists.
+- What asks first, What Jarvis can reach, the card words and "the headless browser" by
+  voice all list it; both apps show the switch, the default and the install line.
+
+## Not checked, said plainly
+
+- **A real Obscura was never run.** This was built on Linux; the program is Windows,
+  and its release could not be downloaded here. The tests use a stand-in program that
+  speaks the same protocol over a real child process. What Obscura's tools print is what
+  its source says (read on 2026-09-29), not what was seen. `tools\check_obscura.py` is
+  the real check; if a step of it does not pass on your PC, tell me which line.
+- **The checksum and the release.** `PINNED_DIGEST` is empty. The install line names
+  release `v0.2.3` (the newest tag the repository shows); its release PAGE could not be
+  read from here, so that it carries the archive is read from its workflow, not seen.
+- **What the fence and the hidden-text filter cannot do.** A redirect out of the
+  allowed sites is caught from Obscura's reply, but the page has already been fetched;
+  a page that moves itself after loading is caught at the next look; text hidden by a
+  style sheet, off screen or in the page's own colour still reaches the model, with a
+  warning. This Obscura release has no tool that leaves hidden text out (its newer,
+  unreleased code has a rendered-aware text). JARVIS-API section 97.3.
+- **Stealth's real effect.** Whether a real site treats it as an ordinary Chrome, and
+  how long it stays that way, is unknown; the documentation says it does not handle
+  Cloudflare's interactive challenges, Datadome, Akamai or captchas.
+- The install line and `apply-patches.ps1`'s new entries were written by hand and read,
+  not run on Windows PowerShell 5.1.
+
+## Test it
+
+```
+python3 backend/test_obscura.py
+python3 backend/test_browser_engine.py
+node jarvis-desktop/tests/browser-engine.mjs
 ```
