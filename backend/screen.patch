@@ -21,9 +21,8 @@
      except Exception:
          return False
  
-@@ -2831,6 +2845,22 @@
+@@ -2832,5 +2846,21 @@
          # the end, read it. `_history` is what that record needs.
-         messages = _chat_client_fields_off(messages)
          _history = {"turn": None, "at": time.time()}
 +        # screen.patch: a `screen: "look"` mark uses up the look THIS PC holds,
 +        # so it counts only when the request comes from this PC. From any
