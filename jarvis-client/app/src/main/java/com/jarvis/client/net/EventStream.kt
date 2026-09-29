@@ -5,9 +5,11 @@ import android.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.buffer
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -224,12 +226,12 @@ class EventStream(private val api: JarvisApi) {
                             trySend(Signal.Open(hello))
                         }
                         // The resume point advances only for frames the
-                        // collector actually accepted. `trySend` drops silently
-                        // when the 64-deep buffer is full — which happens on a
-                        // replay after time offline, because each event costs
-                        // the collector an HTTP round trip — and advancing the
-                        // id past a dropped frame made it unrecoverable on
-                        // every future resume.
+                        // collector actually accepted. The buffer below is
+                        // unbounded now, so a full buffer no longer drops
+                        // frames; `trySend` can still fail once the flow is
+                        // closed, and advancing the id past a frame nobody
+                        // took would make it unrecoverable on every future
+                        // resume.
                         if (trySend(Signal.Event(event)).isSuccess) {
                             event.id?.let { id ->
                                 resumeFrom = id
@@ -270,6 +272,13 @@ class EventStream(private val api: JarvisApi) {
 
         awaitClose { runCatching { live.getAndSet(null)?.cancel() } }
     }
+        // UNLIMITED, not the default 64: a long replay after time offline hands
+        // over hundreds of events while the collector spends an HTTP round trip
+        // on each, so the 64-deep buffer filled, `trySend` dropped frames, and an
+        // `approval` event lost that way was never re-read - its card only
+        // showed up at the next event or reconnect (bug audit 2026-09-29).
+        // Events are a few hundred bytes each, so holding them all is cheap.
+        .buffer(Channel.UNLIMITED)
 
     /** Saturating, so a large `retry` cannot overflow into a negative delay. */
     private fun backoff(attempt: Int, retryMs: Long): Long {
