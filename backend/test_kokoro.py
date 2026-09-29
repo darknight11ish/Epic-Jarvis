@@ -1,6 +1,6 @@
 """Kokoro v1.0: the voice pack, voices BY NAME, "Hear it", the carry-over of the
 owner's old choice, and the pinned download (the owner's decision of
-2026-09-28, built 2026-09-29; docs/JARVIS-API.md section 91).
+2026-09-28, built 2026-09-29; docs/JARVIS-API.md section 93).
 
     python3 test_kokoro.py
 

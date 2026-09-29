@@ -51,6 +51,7 @@ use crate::commands::{
 };
 
 pub(crate) const LIST_PATH: &str = "/api/devices";
+const VERSION_PATH: &str = "/api/version";
 const REMOVE_PATH: &str = "/api/devices/remove";
 const SHARED_PATH: &str = "/api/devices/shared";
 const PAIR_START_PATH: &str = "/api/pair/start";
@@ -466,6 +467,18 @@ pub(crate) fn list_answer(status: u16, body: &str) -> Result<serde_json::Value, 
     Ok(v)
 }
 
+/// Whether `GET /api/version` says this backend has signed approvals
+/// (`capabilities.pairing.signed_approvals` is `true`, docs/PAIRING-DESIGN.md
+/// section 11). Anything else - an older backend, an unreadable answer, an
+/// error status - is "no", so the page then shows nothing extra.
+pub(crate) fn signed_approvals_in_version(status: u16, body: &str) -> bool {
+    (200..300).contains(&status)
+        && serde_json::from_str::<serde_json::Value>(body)
+            .ok()
+            .and_then(|v| v["capabilities"]["pairing"]["signed_approvals"].as_bool())
+            .unwrap_or(false)
+}
+
 /// `GET /api/pair/session`, cut down to the design's fields.
 pub(crate) fn session_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
     if status == 404 {
@@ -705,7 +718,15 @@ pub async fn pair_cancel(app: AppHandle) -> Result<serde_json::Value, String> {
 #[tauri::command]
 pub async fn devices_list(app: AppHandle) -> Result<serde_json::Value, String> {
     let (status, text) = get_raw(&app, LIST_PATH).await?;
-    list_answer(status, &text)
+    let mut out = list_answer(status, &text)?;
+    // Whether the rows' `approval_key` means anything: asked of the version
+    // page, best effort. A failed read is "no", never an error.
+    let signed = match get_raw(&app, VERSION_PATH).await {
+        Ok((code, body)) => signed_approvals_in_version(code, &body),
+        Err(_) => false,
+    };
+    out["signed_approvals"] = serde_json::json!(signed);
+    Ok(out)
 }
 
 /// Removes ONE device (never a list - there is no "remove all"). Immediate,
@@ -973,6 +994,37 @@ mod tests {
         assert_eq!(missing["why"], PAIRING_MISSING);
         assert!(list_answer(200, "{}").is_err());
         assert!(list_answer(500, r#"{"error": "boom"}"#).is_err());
+    }
+
+    #[test]
+    fn signed_approvals_are_read_from_the_version_only_when_true() {
+        let yes = r#"{"capabilities": {"pairing": {"signed_approvals": true}}}"#;
+        assert!(signed_approvals_in_version(200, yes));
+        for body in [
+            r#"{"capabilities": {"pairing": {"signed_approvals": false}}}"#,
+            r#"{"capabilities": {"pairing": {"signed_approvals": "true"}}}"#,
+            r#"{"capabilities": {"pairing": {}}}"#,
+            r#"{"capabilities": {"pairing": true}}"#,
+            r#"{"capabilities": {}}"#,
+            "not json",
+        ] {
+            assert!(!signed_approvals_in_version(200, body), "{body}");
+        }
+        assert!(!signed_approvals_in_version(500, yes));
+    }
+
+    #[test]
+    fn the_approval_key_state_reaches_the_page_untouched() {
+        let body = r#"{"devices": [
+            {"id": "a", "name": "A", "kind": "phone", "approval_key": true},
+            {"id": "b", "name": "B", "kind": "phone", "approval_key": "waiting"},
+            {"id": "c", "name": "C", "kind": "phone", "approval_key": false},
+            {"id": "d", "name": "D", "kind": "phone"}]}"#;
+        let v = list_answer(200, body).unwrap();
+        assert_eq!(v["devices"][0]["approval_key"], true);
+        assert_eq!(v["devices"][1]["approval_key"], "waiting");
+        assert_eq!(v["devices"][2]["approval_key"], false);
+        assert!(v["devices"][3].get("approval_key").is_none());
     }
 
     #[test]

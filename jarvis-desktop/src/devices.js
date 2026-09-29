@@ -36,7 +36,9 @@ import {
   problemWords,
   removeQuestion,
   sessionLine,
+  sharedSignedLine,
   sharedView,
+  signedLine,
   wordsLine,
 } from "./devices-words.js";
 
@@ -70,6 +72,7 @@ const el = {
   list: $("dv-list"),
   status: $("dv-status"),
   sharedLine: $("dv-shared-line"),
+  sharedSigned: $("dv-shared-signed"),
   retire: $("dv-retire"),
   bringBack: $("dv-bring-back"),
   sharedStatus: $("dv-shared-status"),
@@ -154,12 +157,23 @@ function placeOldKey(where) {
 
 /* ── The device list ─────────────────────────────────────────────────── */
 
+/** Only when the backend says it has signed approvals (older: nothing extra). */
+function signedOn() {
+  return Boolean(view && view.signed_approvals === true);
+}
+
 function deviceRow(d) {
   const li = node("li", "sc-gpu dv-device");
   li.dataset.id = d.id;
   const name = node("span", "sc-gpu-name", d.name || d.id);
   if (d.this_device) name.append(node("span", "hint", " (this app)"));
   li.append(name, node("span", "sc-gpu-role", deviceLine(d)));
+  const signed = signedLine(d, signedOn());
+  if (signed) {
+    const line = node("span", "sc-gpu-role dv-signed", signed);
+    line.dataset.approvalKey = String(d.approval_key === true ? "on" : d.approval_key === "waiting" ? "waiting" : "off");
+    li.append(line);
+  }
   if (d.removable) {
     const row = node("div", "row");
     const remove = node("button", "btn small", "Remove…");
@@ -202,6 +216,9 @@ function paint() {
 
   const shared = sharedView(view.shared);
   el.sharedLine.textContent = shared.line;
+  const sharedSigned = sharedSignedLine(view.shared, signedOn());
+  el.sharedSigned.textContent = sharedSigned;
+  el.sharedSigned.hidden = !sharedSigned;
   el.retire.hidden = !shared.retire;
   el.retire.disabled = busy;
   el.bringBack.hidden = !shared.bringBack;

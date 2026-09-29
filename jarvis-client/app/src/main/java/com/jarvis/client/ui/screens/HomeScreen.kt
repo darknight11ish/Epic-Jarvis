@@ -404,7 +404,7 @@ data class HomeState(
     val cloudOffer: String? = null,
     /**
      * The Undo strip for the newest inbox tidy still open to it ("Inbox tidy
-     * by voice", 2026-09-28; docs/JARVIS-API.md section 92), or null when
+     * by voice", 2026-09-28; docs/JARVIS-API.md section 94), or null when
      * there is none. Counts and the PC's own words - never a sender or a
      * subject. See [com.jarvis.client.net.InboxTidy.strip] for what it says
      * while the lists are hidden and on a stale link.
@@ -530,6 +530,15 @@ private fun HomeNotice(state: HomeState, actions: HomeActions) {
             actions.onDismissNotice,
             actionLabel = SecurityRules.OPEN_LOCK_SETTINGS,
             onAction = actions.onOpenLockSettings,
+        )
+        return
+    }
+    if (problem == null && com.jarvis.client.net.SignedApproval.offersTurnOn(text)) {
+        Notice(
+            text,
+            actions.onDismissNotice,
+            actionLabel = com.jarvis.client.net.SignedApproval.TURN_ON,
+            onAction = actions.onTurnOnSignedApprovals,
         )
         return
     }
@@ -662,6 +671,12 @@ data class HomeActions(
      * risky approval", 2026-09-25).
      */
     val onOpenLockSettings: () -> Unit = {},
+    /**
+     * The one button beside the notice "Risky approvals from this phone need
+     * to be signed...": makes the approval key and asks the PC for its card
+     * ([com.jarvis.client.net.SignedApproval.offersTurnOn]).
+     */
+    val onTurnOnSignedApprovals: () -> Unit = {},
     /**
      * Start or end a temporary chat - a new conversation either way
      * ([com.jarvis.client.JarvisRuntime.setTemporaryChat]).
@@ -2102,7 +2117,7 @@ private fun PcMediaPlate(canAct: Boolean, actions: HomeActions) {
 
 /**
  * The Undo strip under an inbox tidy ("Inbox tidy by voice", the owner's
- * decision of 2026-09-28; docs/JARVIS-API.md section 92): what was done, how
+ * decision of 2026-09-28; docs/JARVIS-API.md section 94): what was done, how
  * long Undo lasts, and one button. The words are the PC's own and the
  * desktop's strip says the same ([com.jarvis.client.net.InboxTidy], checked
  * against contract/inbox-tidy-cases.json). It approves nothing and raises no

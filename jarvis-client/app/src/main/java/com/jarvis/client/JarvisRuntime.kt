@@ -32,6 +32,7 @@ import com.jarvis.client.net.Hardware
 import com.jarvis.client.net.InboxTidy
 import com.jarvis.client.net.PcHelp
 import com.jarvis.client.net.SecondCard
+import com.jarvis.client.net.SignedApproval
 import com.jarvis.client.net.StatusInfo
 import com.jarvis.client.net.VersionInfo
 import com.jarvis.client.platform.UpdateChecker
@@ -746,7 +747,7 @@ object JarvisRuntime {
             }
         }
 
-        // Inbox tidy (docs/JARVIS-API.md section 92): the newest tidy still
+        // Inbox tidy (docs/JARVIS-API.md section 94): the newest tidy still
         // open to Undo, read every POLL_MS while connected - a tiny read of
         // counts and words, never a sender or a subject. The clock ticks even
         // while the link is down, so an Undo whose ten minutes are up goes.
@@ -3145,11 +3146,23 @@ object JarvisRuntime {
      * undecided and a second tap sent it again. This scope outlives every
      * screen, so the answer is always collected and the card always follows.
      */
-    fun decideDetached(item: PendingItem, approve: Boolean) {
-        scope.launch { decide(item, approve) }
+    fun decideDetached(
+        item: PendingItem,
+        approve: Boolean,
+        signature: SignedApproval.Signature? = null,
+    ) {
+        scope.launch { decide(item, approve, signature) }
     }
 
-    suspend fun decide(item: PendingItem, approve: Boolean): ApiResult<Unit> {
+    /**
+     * [signature]: a risky approval from a phone with signed approvals on
+     * carries the fingerprint-made signature (docs/PAIRING-DESIGN.md §11).
+     */
+    suspend fun decide(
+        item: PendingItem,
+        approve: Boolean,
+        signature: SignedApproval.Signature? = null,
+    ): ApiResult<Unit> {
         // Checked here rather than only in [ApprovalCard]'s `canApprove`: this
         // is the one function that actually sends the decision, the same
         // reason the staleness check lives in [decisionBlocker] and not in
@@ -3185,7 +3198,7 @@ object JarvisRuntime {
         // latched and every later attempt at it refused.
         _deciding.update { it + item.id }
         try {
-            val result = if (approve) api.approve(item.id) else api.deny(item.id)
+            val result = if (approve) api.approve(item.id, signature) else api.deny(item.id)
             when (result) {
                 is ApiResult.Ok -> {
                     refreshPending()
@@ -3198,7 +3211,15 @@ object JarvisRuntime {
                         _notice.value = "Already handled on the desktop."
                         refreshPending()
                     } else {
-                        _notice.value = describe(result.error)
+                        // A signature refusal the PC explained is its own
+                        // sentence - never "your key was refused", which
+                        // would send the owner to the pairing screen.
+                        val signedWords = if (approve) {
+                            SignedApproval.refusalWords(com.jarvis.client.net.ApprovalRefusal.take())
+                        } else {
+                            null
+                        }
+                        _notice.value = signedWords ?: describe(result.error)
                     }
                 }
             }
@@ -3708,6 +3729,101 @@ object JarvisRuntime {
             is ApiResult.Ok -> com.jarvis.client.net.Devices.retireSaid(r.value.first, r.value.second)
             is ApiResult.Failed -> "Not changed. " + describe(r.error)
         }
+
+    // ------------------------------------------------ signed approvals ----
+    // docs/PAIRING-DESIGN.md §11; the words and rules are in [SignedApproval].
+
+    /** What this phone knows about its signed approvals. [device] is this phone's id on the PC. */
+    data class SignedApprovalRead(val state: SignedApproval.State, val device: String?)
+
+    /**
+     * Reads `GET /api/devices` and this phone's Keystore, fresh, or null
+     * when the PC could not be read (then an approval takes today's way and
+     * the PC says `no_approval_key` if it needed one). A read: not held on a
+     * stale link.
+     */
+    suspend fun signedApprovalRead(): SignedApprovalRead? {
+        val r = api.devices()
+        if (r !is ApiResult.Ok) return null
+        val view = com.jarvis.client.net.Devices.parse(r.value)
+        val mine = view.devices.firstOrNull { it.thisDevice }
+        return SignedApprovalRead(
+            state = SignedApproval.stateOf(view.usesOwnKey, mine?.approvalKey, approvalKeyLocal()),
+            device = view.you?.takeIf { view.usesOwnKey },
+        )
+    }
+
+    /** What the Keystore holds, read off the main thread. */
+    suspend fun approvalKeyLocal(): SignedApproval.Local =
+        kotlinx.coroutines.withContext(Dispatchers.IO) { com.jarvis.client.platform.ApprovalKey.state() }
+
+    /**
+     * Step one of a signed approval: asks the PC for a nonce and checks that the
+     * card it means is the card this phone showed. Null after putting the reason
+     * in the notice.
+     */
+    suspend fun beginSignedApproval(item: PendingItem): SignedApproval.ChallengeAnswer.Got? {
+        decisionBlocker(item)?.let {
+            _notice.value = it
+            return null
+        }
+        val post = api.approvalPost(SignedApproval.CHALLENGE_PATH, SignedApproval.challengeBody(item.id))
+        if (post !is ApiResult.Ok) {
+            _notice.value = describe((post as ApiResult.Failed).error)
+            return null
+        }
+        val (code, body) = post.value
+        when (val answer = SignedApproval.challengeAnswer(code, body)) {
+            is SignedApproval.ChallengeAnswer.Got -> {
+                if (SignedApproval.wordsMatch(item, answer.wordsSha256)) return answer
+                _notice.value = SignedApproval.CARD_CHANGED
+                refreshPending()
+            }
+            SignedApproval.ChallengeAnswer.NoApprovalKey -> _notice.value = SignedApproval.OFFER_WORDS
+            SignedApproval.ChallengeAnswer.CardGone -> {
+                _notice.value = "That request is no longer pending."
+                refreshPending()
+            }
+            is SignedApproval.ChallengeAnswer.Refused -> _notice.value = answer.words
+        }
+        return null
+    }
+
+    /**
+     * "Turn on signed approvals": makes the key on this phone and sends its
+     * public half; the PC then raises ONE card (Windows Hello). Held on a
+     * stale link, like every loosening. @return the sentence to show.
+     */
+    suspend fun turnOnSignedApprovals(): String {
+        actionBlocker()?.let { return it }
+        val context = appContext ?: return SignedApproval.KEY_NOT_MADE
+        val der = try {
+            kotlinx.coroutines.withContext(Dispatchers.IO) { com.jarvis.client.platform.ApprovalKey.create(context) }
+        } catch (e: Exception) {
+            return SignedApproval.KEY_NOT_MADE
+        }
+        return when (val r = api.approvalPost(SignedApproval.KEY_PATH, SignedApproval.registerBody(der))) {
+            is ApiResult.Ok -> {
+                val (ok, words) = SignedApproval.registerAnswer(r.value.first, r.value.second)
+                if (!ok) com.jarvis.client.platform.ApprovalKey.delete()
+                words
+            }
+            is ApiResult.Failed -> {
+                com.jarvis.client.platform.ApprovalKey.delete()
+                "Not turned on. " + describe(r.error)
+            }
+        }
+    }
+
+    /**
+     * "Turn off": deletes this phone's key, so risky approvals from this
+     * phone are held until it is turned on again. The PC still lists the
+     * phone until it is removed there, and the sentence says so.
+     */
+    suspend fun turnOffSignedApprovals(): String {
+        kotlinx.coroutines.withContext(Dispatchers.IO) { com.jarvis.client.platform.ApprovalKey.delete() }
+        return SignedApproval.TURNED_OFF
+    }
 
     /**
      * `GET /api/notifications/phone`. Updates the cache on success; leaves
@@ -5985,7 +6101,7 @@ object JarvisRuntime {
     }
 
     // -------------------------------------------------- inbox tidy ----
-    // docs/JARVIS-API.md section 92 (the owner's decision of 2026-09-28) -
+    // docs/JARVIS-API.md section 94 (the owner's decision of 2026-09-28) -
     // see [com.jarvis.client.net.InboxTidy] and the Undo strip on Home
     // (ui/screens/HomeScreen.kt, InboxTidyPlate). The tidy itself is asked
     // for in chat and decided on an ordinary approval card; this only shows

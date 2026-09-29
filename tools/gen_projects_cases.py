@@ -28,10 +28,21 @@ does not send:
 The ids are counted (not random) and the clock is fixed, so the file only
 changes when the backend's answer does. The folder is a made-up Windows
 path, accepted here without looking at the disk.
+
+APPS (docs/APPS-IN-PROJECTS-DESIGN.md, JARVIS-API section 92). The file also
+carries what a project that is a Jarvis-built app answers - the `app` object,
+its tasks, a task's whole change, the merge card, every refusal - from a REAL
+run of jarvis_apps.py against real git in a temporary settings folder. git's
+dates, the author, the task ids and the clock are fixed, so the commit
+hashes in it do not change from run to run. Needs git installed (the same as
+the app workspace's own tests). `app_words` holds the sentences both apps
+must say the same way and the PC sends (how a merge ended), kept apart from
+`words` on purpose: `words` is compared key for key with each app's own list.
 """
 import json
 import os
 import sys
+import shutil
 import tempfile
 import types
 from pathlib import Path
@@ -52,6 +63,8 @@ fw.audit_log = lambda event, detail=None: None
 fw.action_tier = lambda action: "ask"
 sys.modules.setdefault("jarvis_framework", fw)
 
+import jarvis_app_workspace as W  # noqa: E402
+import jarvis_apps as A  # noqa: E402
 import jarvis_projects as P  # noqa: E402
 
 DESKTOP = ROOT / "jarvis-desktop" / "tests" / "fixtures" / "projects-cases.json"
@@ -166,6 +179,7 @@ class _Ids:
 
 def _store():
     P._reset_for_tests()
+    A._reset_for_tests()
     P._new_id = _Ids()
     P.check_folder = lambda path, allowed=None: str(path)
     path = _CONF / "projects.db"
@@ -177,6 +191,183 @@ def _store():
 def _held(fn):
     """A card that is raised and never answered: the waiting state."""
     return None
+
+
+GIT_DATE = "1790000000 +0000"
+
+
+class _Uuid:
+    """Counted task ids: 000000000001, 000000000002 ..."""
+
+    def __init__(self):
+        self.n = 0
+
+    def uuid4(self):
+        self.n += 1
+        return types.SimpleNamespace(hex=f"{self.n:012x}" + "0" * 20)
+
+
+def _fixed_git():
+    """git's environment with the dates fixed, so a commit hash is the same on
+    every run and every machine; the clock and the task ids as well."""
+    real = W.git_env
+
+    def env():
+        e = real()
+        e.update({"GIT_AUTHOR_DATE": GIT_DATE, "GIT_COMMITTER_DATE": GIT_DATE})
+        return e
+
+    W.git_env = env
+    W.uuid = _Uuid()
+    W.time = types.SimpleNamespace(time=lambda: AT)
+    return real
+
+
+def _blocks(*files):
+    return "".join(f"<<<FILE {path}>>>\n{body}\n<<<END>>>\n" for path, body in files)
+
+
+class _Said:
+    """What the approval gate hands back after the owner answers."""
+
+    def __init__(self, outcome):
+        self.allowed = outcome == "approved"
+        self.outcome = outcome
+        self.tier = "ask"
+        self.reason = outcome
+
+
+def _app_cases() -> tuple:
+    """The `app` part of the contract, from a real run. Returns (cases, posts,
+    merge_card)."""
+    s = _store()
+    shutil.rmtree(W.root(), ignore_errors=True)
+    real_env, real_uuid, real_time, real_a_time = W.git_env, W.uuid, W.time, A.time
+    _fixed_git()
+    A.time = W.time
+    out, posts = {}, {}
+    try:
+        def post(route, body=None, **kw):
+            code, answer = A.handle_post(route, body or {}, store=s, **kw) \
+                if A.parse_route(route) else P.handle_post(route, body or {}, store=s, **kw)
+            return {"status": code, "body": answer}
+
+        def note(name, route, body=None, **kw):
+            posts[name] = post(route, body, **kw)
+            return posts[name]["body"]
+
+        def yes(gate_outcome="approved"):
+            return dict(gate=lambda *a: _Said(gate_outcome), tier_of=lambda a: "ask",
+                        spawn=lambda fn: fn())
+
+        held = dict(gate=lambda *a: None, tier_of=lambda a: "ask", spawn=lambda fn: None)
+
+        # An app folder that has no project yet: an offer inside Projects.
+        W.create_project("old-notes", "android", "Old notes")
+        made = note("create_app", "/api/projects",
+                    {"name": "Notes app", "kind": "coding", "app": {"type": "web"}})
+        pid = made["project"]["id"]
+        out["list_app"] = P.handle_get("/api/projects", store=s)[1]
+        out["app_fresh"] = P.handle_get(f"/api/projects/{pid}", store=s)[1]
+
+        base = f"/api/projects/{pid}/app/tasks"
+        first = note("task_start", base, {"title": "Add a dark mode"})["task"]["task"]
+        second = note("task_start_second", base, {"title": "Try a login page"})["task"]["task"]
+        note("task_start_no_title", base, {"title": "  "})
+        note("task_start_long_title", base, {"title": "x" * 121})
+
+        note("paste_from_phone", f"{base}/{first}/files",
+             {"blocks": _blocks(("a.txt", "x"))}, here=False)
+        note("paste_no_blocks", f"{base}/{first}/files", {"blocks": "just words"}, here=True)
+        note("paste_bad_path", f"{base}/{first}/files",
+             {"blocks": _blocks(("../escape.txt", "x"))}, here=True)
+        note("paste_nothing_changed", f"{base}/{first}/files",
+             {"blocks": _blocks((".env", "SECRET=1"))}, here=True)
+        note("paste", f"{base}/{first}/files", {"blocks": _blocks(
+            ("src/App.tsx", "export default function App() {\n  return <h1>Notes</h1>;\n}"),
+            ("src/theme.css", ":root { color-scheme: dark; }"))}, here=True)
+        out["app_tasks"] = P.handle_get(f"/api/projects/{pid}", store=s)[1]
+        out["task_pasted"] = A.handle_get(f"{base}/{first}", store=s)[1]
+        out["task_empty"] = A.handle_get(f"{base}/{second}", store=s)[1]
+        note("merge_empty", f"{base}/{second}/merge", {}, **held)
+        posts["task_no_such"] = {"status": A.handle_get(f"{base}/{'f' * 12}", store=s)[0],
+                                 "body": A.handle_get(f"{base}/{'f' * 12}", store=s)[1]}
+
+        # Too big for one card: the whole change is not sent, and no card.
+        big = note("task_start_big", base, {"title": "A huge change"})["task"]["task"]
+        note("paste_big", f"{base}/{big}/files",
+             {"blocks": _blocks(("big.txt", "\n".join("line %d %s" % (i, "y" * 40)
+                                                       for i in range(1400))))}, here=True)
+        out["task_too_big"] = A.handle_get(f"{base}/{big}", store=s)[1]
+        note("merge_too_big", f"{base}/{big}/merge", {}, **held)
+        note("discard", f"{base}/{big}/discard", {})
+        note("discard_again", f"{base}/{big}/discard", {})
+
+        # A card waiting: one at a time; the task cannot change under it.
+        note("merge_card_raised", f"{base}/{first}/merge", {}, **held)
+        out["app_waiting"] = P.handle_get(f"/api/projects/{pid}", store=s)[1]
+        note("merge_card_twice", f"{base}/{first}/merge", {}, **held)
+        note("paste_while_waiting", f"{base}/{first}/files",
+             {"blocks": _blocks(("b.txt", "x"))}, here=True)
+        merge_card = W.describe(W.plan_merge("notes-app", first))
+        A.withdraw_card("notes-app")
+
+        # The card answered yes: exactly what was shown lands.
+        note("merge_yes", f"{base}/{first}/merge", {}, **yes())
+        out["app_merged"] = P.handle_get(f"/api/projects/{pid}", store=s)[1]
+
+        # ... and no: the change is kept aside.
+        note("paste_second", f"{base}/{second}/files",
+             {"blocks": _blocks(("login.html", "<form></form>"))}, here=True)
+        note("merge_no", f"{base}/{second}/merge", {}, **yes("denied"))
+        out["app_denied"] = P.handle_get(f"/api/projects/{pid}", store=s)[1]
+
+        # Adopting a folder that already exists, and the refusals around it.
+        note("adopt", "/api/projects", {"kind": "coding", "app": {"adopt": "old-notes"}})
+        out["list_adopted"] = P.handle_get("/api/projects", store=s)[1]
+        note("adopt_again", "/api/projects",
+             {"name": "Again", "kind": "coding", "app": {"adopt": "old-notes"}})
+        note("adopt_missing", "/api/projects",
+             {"name": "Ghost", "kind": "coding", "app": {"adopt": "ghost"}})
+        note("app_and_folder", "/api/projects",
+             {"name": "Both", "kind": "coding", "folder": FOLDER, "app": {"type": "web"}},
+             here=True)
+        note("app_on_life", "/api/projects",
+             {"name": "Run", "kind": "life", "app": {"type": "web"}})
+        note("app_bad_type", "/api/projects",
+             {"name": "Odd", "kind": "coding", "app": {"type": "ios"}})
+        note("update_app", f"/api/projects/{pid}", {"app": {"type": "android"}})
+        note("update_folder_on_app", f"/api/projects/{pid}", {"folder": FOLDER}, here=True)
+        life = note("create_life_for_app", "/api/projects",
+                    {"name": "Half marathon", "kind": "life"})["project"]["id"]
+        note("task_on_life", f"/api/projects/{life}/app/tasks", {"title": "x"})
+
+        # Deleting the project keeps the folder: it is offered again.
+        note("delete_app", f"/api/projects/{pid}/delete", {})
+        out["list_after_delete"] = P.handle_get("/api/projects", store=s)[1]
+
+        # No git on this PC.
+        keep = A._git_present, W._git
+        A._git_present = lambda: False
+        again = note("adopt_after_delete", "/api/projects",
+                     {"name": "Notes app", "kind": "coding", "app": {"adopt": "notes-app"}})
+        out["app_no_git"] = P.handle_get(f"/api/projects/{again['project']['id']}", store=s)[1]
+        note("task_start_no_git", f"/api/projects/{again['project']['id']}/app/tasks",
+             {"title": "x"})
+
+        def _gone(*a, **k):
+            raise W.GitUnavailable("git is not installed on this PC (https://git-scm.com), so "
+                                   "Jarvis cannot keep app projects yet")
+
+        A._git_present, W._git = keep[0], _gone
+        note("create_app_no_git", "/api/projects",
+             {"name": "Second app", "kind": "coding", "app": {"type": "web"}})
+        A._git_present, W._git = keep
+    finally:
+        W.git_env, W.uuid, W.time, A.time = real_env, real_uuid, real_time, real_a_time
+        P._reset_for_tests()
+        A._reset_for_tests()
+    return out, posts, merge_card
 
 
 def cases() -> dict:
@@ -274,6 +465,10 @@ def cases() -> dict:
     posts["delete"] = {"status": code, "body": body}
     P._reset_for_tests()
 
+    app_out, app_posts, merge_card = _app_cases()
+    out.update(app_out)
+    posts.update(app_posts)
+
     numbers = [{"value": v, "unit": u, "text": P._with_unit(v, u)}
                for v, u in ((5, "km"), (72.5, "kg"), (10000, "steps"), (200, "$"), (12.5, "%"),
                             (0.125, ""), (26.75, "min"), (-3, "°C"), (21.1, "km"), (1e6, ""))]
@@ -286,6 +481,24 @@ def cases() -> dict:
             "missing": {"status": 404, "body": {"error": "not found"}},
             "words": WORDS, "numbers": numbers, "scales": scales,
             "share_card": P.share_card("Half marathon"),
+            # The apps' shared sentences (JARVIS-API section 92): how a merge
+            # ended (the PC sends them in `app.merge.last.message`), and the
+            # words both apps say themselves.
+            "app_words": {
+                "outcomes": dict(A.OUTCOME_WORDS),
+                "cant_run": "Jarvis cannot run this yet. Run it yourself and log the number.",
+                "pasted_line": W.PASTED_LINE,
+                "card_waiting": A.CARD_WAITING,
+                "delete_app_project_q": ("Delete the project \"{name}\"? Its benchmarks and "
+                                         "every number logged go with it. The app's files stay "
+                                         "on this PC and can be added back later. This cannot "
+                                         "be undone."),
+                "deleted_app_kept": ("Deleted. The app's files stay on this PC and can be "
+                                     "added back."),
+            },
+            "app_limits": {"open_tasks": W.MAX_OPEN_TASKS, "task_title": A.MAX_TITLE,
+                           "blocks": A.MAX_BLOCKS_CHARS, "card_diff": W.MAX_CARD_DIFF_CHARS},
+            "app_merge_card": merge_card,
             "unmark_card": P.unmark_card("5k time", "Half marathon", "money", "min"),
             "limits": {"projects": P.MAX_PROJECTS, "name": P.MAX_NAME,
                        "instructions": P.MAX_INSTRUCTIONS, "notes": P.MAX_NOTES,
@@ -298,6 +511,10 @@ def render() -> str:
 
 
 def main(argv) -> int:
+    if shutil.which("git") is None:
+        print("git is not installed here, and the app answers in this file come from a real "
+              "run of it - install git (https://git-scm.com) and run this again.")
+        return 1
     text = render()
     if "--check" in argv:
         stale = []

@@ -1468,6 +1468,26 @@ Decided 2026-09-28, the owner's answers after the post-change audits
 - **The update guide is kept true after each merge** (owner, 2026-09-28): it
   said QR pairing was "for later" after it was built; it now says what is on
   `main`, which of its steps are old, and adds the half-hour pairing test.
+- **Build phase 2 of pairing and the app builder joining Projects now**
+  (owner, 2026-09-29, "go ahead and build this"). Phase 2 is
+  `docs/PAIRING-DESIGN.md` section 11: the phone signs each risky approval
+  with a key locked in its security chip, made fresh by a fingerprint or PIN
+  every time; the PC checks the signature. **The owner chose how a phone
+  turns it on:** the first time a risky approval is tried on a paired phone
+  that has not, the phone offers one button, "Turn on signed approvals", and
+  the PC raises one card (Windows Hello); a paired phone without it cannot
+  approve risky cards until then, while an unpaired phone on the old shared
+  key keeps working as today. The app builder joining Projects (an app is a
+  coding project whose tests are its benchmarks) is designed first
+  (`docs/APP-BUILDER-DESIGN.md`), then built.
+  **Owner's answers to that design (2026-09-29):** the first slice ships the
+  screens, the merge card and pasting a change in on the PC - **Jarvis
+  writing app code waits for the 12 GB card**, as decided 2026-09-28 (model
+  tools B2, and running commands, milestone C, are not part of it). **The
+  phone may approve an app merge**, after the whole change has been shown,
+  with the screen lock or fingerprint like other risky cards (never from the
+  approval widget or a notification). The design is
+  `docs/APPS-IN-PROJECTS-DESIGN.md`.
 
 ## Every new feature gets its own audit, without being asked
 

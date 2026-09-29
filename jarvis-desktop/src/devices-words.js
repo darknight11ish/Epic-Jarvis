@@ -103,6 +103,35 @@ export function deviceLine(d, now = Date.now()) {
   return bits.join(" · ");
 }
 
+/**
+ * A paired device's signed-approvals line (design section 11), or "" when
+ * nothing should be said: the PC's own row, an older backend (`enabled`
+ * false - the list carries `signed_approvals` only when the backend reports
+ * the capability), or a row that is not a phone or other paired device.
+ * `approval_key` is "waiting", true, or false (absent counts as false).
+ */
+export function signedLine(d, enabled) {
+  if (!enabled || !d || d.kind === "pc") return "";
+  if (d.approval_key === true) return "Signed approvals: on";
+  if (d.approval_key === "waiting") {
+    return "Signed approvals: waiting for your yes (approve the card)";
+  }
+  return "Signed approvals: off - risky approvals from this phone are refused until it " +
+    "turns them on";
+}
+
+/** The design's own sentence (11.4) for the old shared key's row: a device
+ * still on the shared key cannot sign. Only while the key is not retired
+ * and another device has used it. */
+export const SHARED_UNSIGNED = "Risky approvals from this device are not yet signed - " +
+  "pair it and turn on signed approvals.";
+
+export function sharedSignedLine(shared, enabled) {
+  const s = shared && typeof shared === "object" ? shared : {};
+  if (!enabled || s.retired || typeof s.last_other_seen !== "number") return "";
+  return SHARED_UNSIGNED;
+}
+
 const THIRTY_DAYS = 30 * 24 * 3600;
 
 /**

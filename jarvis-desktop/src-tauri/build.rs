@@ -475,7 +475,7 @@ fn main() {
             "forget_range_read",
             "forget_range_write",
             // "Inbox tidy by voice" (backend/inbox-tidy.patch; JARVIS-API
-            // section 92; the owner's decision of 2026-09-28): the Undo
+            // section 94; the owner's decision of 2026-09-28): the Undo
             // strip under the Jarvis bar's input. Read whether a tidy is
             // open to Undo (counts and the PC's words, taken out in Rust
             // while Jarvis is locked or the lists are hidden) and Undo it -

@@ -1,6 +1,6 @@
 /**
  * "Inbox tidy by voice" on the desktop (the owner's decision of 2026-09-28;
- * JARVIS-API.md section 92; src/inbox-tidy.js, src/main.js, src/index.html,
+ * JARVIS-API.md section 94; src/inbox-tidy.js, src/main.js, src/index.html,
  * src-tauri/src/brain/inbox_tidy.rs).
  *
  * What must hold:

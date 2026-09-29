@@ -19,6 +19,12 @@
  * - Every change is greyed while the link is stale or down (rule 4; Rust
  *   refuses it too), except turning Shareable OFF.
  * - Deleting a project or a benchmark asks "are you sure?" first.
+ * - An app Jarvis builds (docs/APPS-IN-PROJECTS-DESIGN.md) is a coding
+ *   project with an App section: its latest saved version, its open tasks,
+ *   and a Task view that shows the WHOLE change as text (never cut, never
+ *   stored or logged here). Merge asks the PC, which raises ONE card in the
+ *   Jarvis bar; this page shows how it ended, in the PC's own sentence.
+ *   Discard asks "are you sure?". Pasting a change in is this PC only.
  * - The PC decides what asks first. This page never approves anything:
  *   a card it causes shows in the Jarvis bar like any other.
  *
@@ -27,19 +33,29 @@
 
 import { announce, currentLink, linkWords, onLink, onQueue } from "./jarvis-link.js";
 import {
+  APP_WORDS,
+  appProjectBody,
+  appTypeWords,
   benchBody,
   chartGeometry,
   chartSummary,
+  diffLineKind,
   fill,
+  mergeOffer,
   notesFrom,
   numberWords,
+  pasteBody,
   projectMeta,
   readBench,
   readList,
   readProject,
+  readTask,
   shortDate,
+  taskChange,
+  taskTitleBody,
   unmarkOffer,
   valueFrom,
+  versionLines,
   withUnit,
   WORDS,
 } from "./projects.js";
@@ -52,10 +68,15 @@ const state = {
   /** The open project's id, or null for the list. */
   open: null,
   project: null,
+  /** The open task's id (an app project), or null; `taskData` is its detail. */
+  task: null,
+  taskData: null,
   /** bench id -> its view with chart points. */
   points: {},
   /** project id -> {instructions, notes} typed but not saved yet. */
   drafts: {},
+  /** task id -> the text pasted but not sent yet. */
+  pastes: {},
   error: "",
   said: "",
   reading: false,
@@ -162,6 +183,7 @@ async function readProjectNow(id) {
     if (out && out.hidden === true) {
       state.project = { hidden: true };
       state.points = {};
+      state.taskData = null;
       return;
     }
     const p = readProject(out && out.project);
@@ -182,8 +204,27 @@ async function readProjectNow(id) {
     }));
     state.points = points;
     state.error = "";
+    await readTaskNow(id);
   } catch (error) {
     state.error = errorText(error);
+  }
+}
+
+/** The open task, if any. A task that is gone (merged, discarded) closes its view. */
+async function readTaskNow(projectId) {
+  state.taskData = null;
+  if (!state.task) return;
+  try {
+    const got = await invoke("projects_read", { project: projectId, task: state.task });
+    if (got && got.hidden === true) {
+      state.task = null;
+      return;
+    }
+    const t = readTask(got);
+    if (t.task) state.taskData = t;
+    else state.task = null;
+  } catch {
+    state.task = null;
   }
 }
 
@@ -238,15 +279,80 @@ async function createProject(nameField, kindField) {
     nameField.focus();
     return;
   }
-  const out = await write("create", { body: { name, kind: kindField.value } }, { done: "Created." });
+  const body = appProjectBody(name, kindField.value) || { name, kind: kindField.value };
+  const out = await write("create", { body }, { done: "Created." });
   if (out && out.project && out.project.id) {
     state.open = out.project.id;
     await showProjects();
   }
 }
 
+/** "Add an app I already have": link a folder that has no project. */
+async function adoptApp(a) {
+  const out = await write("create", { body: appProjectBody("", `adopt:${a.name}`) },
+    { done: "Added." });
+  if (out && out.project && out.project.id) {
+    state.open = out.project.id;
+    await showProjects();
+  }
+}
+
+async function openTask(id) {
+  state.task = id;
+  await showProjects();
+  const heading = document.getElementById("projects-task-heading");
+  if (heading) heading.focus();
+}
+
+async function backToProject() {
+  state.task = null;
+  state.taskData = null;
+  await showProjects();
+  const heading = document.getElementById("projects-heading");
+  if (heading) heading.focus();
+}
+
+async function startTask(p, field) {
+  const got = taskTitleBody(field.value);
+  if (got.error) {
+    say(got.error, "bad");
+    field.focus();
+    return;
+  }
+  const out = await write("app_task_start", { project: p.id, body: got.body }, { done: "Task started." });
+  if (out && out.task && out.task.task) await openTask(out.task.task);
+}
+
+async function pasteChange(p, t, area) {
+  const got = pasteBody(area.value);
+  if (got.error) {
+    say(got.error, "bad");
+    area.focus();
+    return;
+  }
+  const out = await write("app_task_files", { project: p.id, task: t.task, body: got.body },
+    { done: "Added to this task." });
+  if (out) delete state.pastes[t.task];
+}
+
+/** Merge: ONE request; the PC raises the card, this page never decides it. */
+async function mergeTask(p, t) {
+  await write("app_task_merge", { project: p.id, task: t.task, body: {} }, { done: "Merge asked." });
+}
+
+async function discardTask(p, t) {
+  const q = t.waiting || (p.app && p.app.mergeWaiting === t.task)
+    ? APP_WORDS.discard_waiting_q : APP_WORDS.discard_q;
+  if (!window.confirm(q)) return;
+  const out = await write("app_task_discard", { project: p.id, task: t.task, body: {} },
+    { done: "Thrown away." });
+  if (out) await backToProject();
+}
+
 async function openProject(id) {
   state.open = id;
+  state.task = null;
+  state.taskData = null;
   state.project = null;
   state.points = {};
   await showProjects();
@@ -256,6 +362,8 @@ async function openProject(id) {
 
 async function backToList() {
   state.open = null;
+  state.task = null;
+  state.taskData = null;
   state.project = null;
   state.points = {};
   await showProjects();
@@ -270,8 +378,10 @@ async function saveText(p, instructions, notes) {
 }
 
 async function deleteProject(p) {
-  if (!window.confirm(fill(WORDS.delete_project_q, { name: p.name }))) return;
-  const out = await write("delete", { project: p.id }, { done: "Deleted." });
+  const q = p.app ? APP_WORDS.delete_app_project_q : WORDS.delete_project_q;
+  if (!window.confirm(fill(q, { name: p.name }))) return;
+  const out = await write("delete", { project: p.id },
+    { done: p.app ? APP_WORDS.deleted_app_kept : "Deleted." });
   if (out) await backToList();
 }
 
@@ -331,7 +441,9 @@ function paint() {
   if (!box) return;
   live.clear();
   const out = [];
-  if (state.open && state.project) out.push(state.project.hidden ? hiddenCard() : projectCard(state.project));
+  if (state.open && state.project && state.task && state.taskData && !state.project.hidden) {
+    out.push(taskCard(state.project, state.taskData));
+  } else if (state.open && state.project) out.push(state.project.hidden ? hiddenCard() : projectCard(state.project));
   else out.push(listCard());
   const said = el("p", "pj-said", state.said);
   said.id = "projects-said";
@@ -394,7 +506,8 @@ function listCard() {
     for (const p of v.projects) {
       const item = el("div", "row-item");
       item.dataset.id = p.id;
-      item.append(el("span", "row-tag", p.kind === "coding" ? WORDS.coding : WORDS.life));
+      item.append(el("span", "row-tag", p.app ? APP_WORDS.app_project
+        : (p.kind === "coding" ? WORDS.coding : WORDS.life)));
       const main = el("div", "row-main");
       main.append(el("span", "row-title", p.name));
       for (const line of projectMeta(p)) main.append(el("span", "row-meta", line));
@@ -421,7 +534,8 @@ function listCard() {
   const kind = el("select", "field");
   kind.id = "projects-new-kind";
   kind.setAttribute("aria-label", "Kind of project");
-  for (const [value, label] of [["life", WORDS.kind_life], ["coding", WORDS.kind_coding]]) {
+  for (const [value, label] of [["life", WORDS.kind_life], ["coding", WORDS.kind_coding],
+    ["app-web", APP_WORDS.new_app_web], ["app-android", APP_WORDS.new_app_android]]) {
     const o = el("option", "", label);
     o.value = value;
     kind.append(o);
@@ -441,6 +555,29 @@ function listCard() {
     syncLive(create);
     card.append(el("p", "note", `There are already ${v.max} projects - delete one first.`));
   }
+  if (v.unlinked && v.unlinked.length) {
+    card.append(el("h3", "subhead", APP_WORDS.adopt_title), el("p", "note", APP_WORDS.adopt_under));
+    const rows = el("div", "rows pj-unlinked");
+    for (const a of v.unlinked) {
+      const item = el("div", "row-item");
+      item.dataset.app = a.name;
+      item.append(el("span", "row-tag", APP_WORDS.app_project));
+      const main = el("div", "row-main");
+      main.append(el("span", "row-title", a.title), el("span", "row-meta", appTypeWords(a.type)));
+      item.append(main);
+      const actions = el("div", "row-actions");
+      const add = button(APP_WORDS.adopt, () => adoptApp(a));
+      add.setAttribute("aria-label", `${APP_WORDS.adopt} ${a.title}`);
+      if (v.projects.length >= v.max) {
+        add.dataset.off = "true";
+        syncLive(add);
+      }
+      actions.append(add);
+      item.append(actions);
+      rows.append(item);
+    }
+    card.append(rows);
+  }
   return card;
 }
 
@@ -454,7 +591,8 @@ function projectCard(p) {
   h.id = "projects-heading";
   h.tabIndex = -1;
   card.append(h);
-  card.append(el("p", "note", p.kind === "coding" ? WORDS.kind_coding : WORDS.kind_life));
+  card.append(el("p", "note", p.app ? APP_WORDS.new_app
+    : (p.kind === "coding" ? WORDS.kind_coding : WORDS.kind_life)));
   if (state.error) card.append(el("p", "empty failed", `Could not read it again: ${state.error}.`));
 
   // How Jarvis should work on this, and the notes.
@@ -479,8 +617,11 @@ function projectCard(p) {
   saveRow.append(button(WORDS.save, () => saveText(p, instructions, notes)));
   card.append(saveRow);
 
+  // An app Jarvis builds: its version, its tasks. It has no folder.
+  if (p.app) card.append(appSection(p));
+
   // The folder: coding projects, chosen on this PC with the picker.
-  if (p.kind === "coding") {
+  if (p.kind === "coding" && !p.app) {
     card.append(el("h3", "subhead", WORDS.folder));
     card.append(el("p", "pj-line", p.folder ? p.folder.path : WORDS.folder_none));
     if (p.folder && !p.folder.listed) card.append(el("p", "pj-warn", p.folder.said));
@@ -531,6 +672,175 @@ function projectCard(p) {
   return card;
 }
 
+/** An app project's App section: version, open tasks, Start a task. */
+function appSection(p) {
+  const app = p.app;
+  const box = el("section", "pj-app");
+  box.setAttribute("aria-label", APP_WORDS.section);
+  box.append(el("h3", "subhead", APP_WORDS.section));
+  box.append(el("p", "pj-line", `${appTypeWords(app.type)}${app.title ? ` - ${app.title}` : ""}`));
+  for (const line of versionLines(app)) {
+    const l = el("p", app.gitOk ? "pj-line" : "pj-warn", line);
+    if (app.gitOk) l.classList.add("pj-version");
+    box.append(l);
+  }
+  box.append(el("p", "note", APP_WORDS.files_where), el("p", "note", APP_WORDS.only_here));
+  if (app.mergeWaiting) box.append(el("p", "pj-warn pj-merge-waiting", WORDS.waiting_card));
+  else if (app.last && app.last.message) {
+    const l = el("p", "pj-line pj-merge-last", app.last.message);
+    l.dataset.outcome = app.last.outcome;
+    box.append(l);
+  }
+  box.append(el("h4", "pj-bench-name", APP_WORDS.tasks));
+  if (!app.tasks.length) box.append(el("p", "empty", APP_WORDS.tasks_empty));
+  else {
+    const rows = el("div", "rows pj-tasks");
+    for (const t of app.tasks) {
+      const item = el("div", "row-item");
+      item.dataset.task = t.task;
+      const main = el("div", "row-main");
+      main.append(el("span", "row-title", t.title), el("span", "row-meta", taskChange(t)));
+      if (t.olderMain) main.append(el("span", "row-meta pj-older", APP_WORDS.task_older));
+      if (t.waiting || app.mergeWaiting === t.task) {
+        main.append(el("span", "row-meta pj-warn", APP_WORDS.task_waiting));
+      }
+      item.append(main);
+      const actions = el("div", "row-actions");
+      const open = button(APP_WORDS.task_open, () => openTask(t.task), { isLive: false });
+      open.setAttribute("aria-label", `${APP_WORDS.task_open}: ${t.title}`);
+      actions.append(open);
+      item.append(actions);
+      rows.append(item);
+    }
+    box.append(rows);
+  }
+  if (app.gitOk) {
+    const form = el("form", "todo-form pj-start");
+    form.autocomplete = "off";
+    const title = el("input", "field todo-text");
+    title.type = "text";
+    title.maxLength = 120;
+    title.id = "projects-task-title";
+    title.placeholder = APP_WORDS.start_title;
+    title.setAttribute("aria-label", APP_WORDS.start_title);
+    const go = el("button", "btn small", APP_WORDS.start_task);
+    go.type = "submit";
+    live.add(go);
+    syncLive(go);
+    form.append(title, go);
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      startTask(p, title);
+    });
+    box.append(form, el("p", "note", APP_WORDS.start_under));
+  }
+  return box;
+}
+
+/**
+ * One task: its files, the WHOLE change (added lines green, removed red, all
+ * text), Merge, Discard, and the paste box. The change is set with
+ * textContent, line by line, and nothing else keeps it.
+ */
+function taskCard(p, t) {
+  const card = el("div", "card card-wide pj-card pj-task");
+  card.dataset.id = p.id;
+  card.dataset.task = t.task;
+  const top = el("div", "pj-top");
+  top.append(button(`← ${APP_WORDS.back_project}`, backToProject, { isLive: false, ghost: true }));
+  card.append(top);
+  const h = el("h2", "", t.title);
+  h.id = "projects-task-heading";
+  h.tabIndex = -1;
+  card.append(h);
+  card.append(el("p", "note", `${p.name} - ${taskChange(t)}`));
+  if (state.error) card.append(el("p", "empty failed", `Could not read it again: ${state.error}.`));
+  if (t.source === "pasted") card.append(el("p", "pj-line", APP_WORDS.merge_pasted));
+  if (t.olderMain) card.append(el("p", "pj-warn pj-older", `This task was ${APP_WORDS.task_older}.`));
+  const app = p.app || { mergeWaiting: "", tasks: [] };
+  const offer = mergeOffer(app, t);
+  if (offer.waiting) card.append(el("p", "pj-warn", WORDS.waiting_card));
+  else if (app.last && app.last.task === t.task && app.last.message) {
+    card.append(el("p", "pj-line pj-merge-last", app.last.message));
+  }
+
+  card.append(el("h3", "subhead", APP_WORDS.task_files_title));
+  if (!t.list.length) card.append(el("p", "empty", APP_WORDS.task_diff_empty));
+  else {
+    const rows = el("div", "rows pj-task-files");
+    for (const f of t.list) {
+      const item = el("div", "row-item");
+      const main = el("div", "row-main");
+      main.append(el("span", "row-title pj-path", f.path),
+        el("span", "row-meta", `+${f.added} -${f.removed}`));
+      item.append(main);
+      rows.append(item);
+    }
+    card.append(rows);
+  }
+
+  card.append(el("h3", "subhead", APP_WORDS.task_diff_title));
+  if (t.diff) {
+    card.append(el("p", "note", APP_WORDS.task_diff_under));
+    card.append(diffBlock(t.diff));
+  } else card.append(el("p", "empty", t.refused || APP_WORDS.task_diff_empty));
+  if (t.refused && t.diff) card.append(el("p", "pj-warn", t.refused));
+
+  const row = el("div", "row pj-task-actions");
+  const merge = button(APP_WORDS.merge, () => mergeTask(p, t), { title: offer.ok ? APP_WORDS.merge_how : offer.why });
+  merge.id = "projects-task-merge";
+  if (!offer.ok) {
+    merge.dataset.off = "true";
+    syncLive(merge);
+  }
+  const discard = button(APP_WORDS.discard, () => discardTask(p, t), { danger: true });
+  discard.id = "projects-task-discard";
+  row.append(merge, discard);
+  card.append(row);
+  card.append(el("p", "note", offer.ok ? APP_WORDS.merge_how : offer.why));
+
+  // Paste a change in: this PC only (the phone has no such box).
+  card.append(el("h3", "subhead", APP_WORDS.paste));
+  const area = el("textarea", "field pj-text pj-paste");
+  area.id = "projects-paste";
+  area.rows = 6;
+  area.spellcheck = false;
+  area.setAttribute("aria-label", APP_WORDS.paste);
+  area.value = state.pastes[t.task] || "";
+  area.addEventListener("input", () => {
+    state.pastes[t.task] = area.value;
+  });
+  card.append(area, el("p", "note", APP_WORDS.paste_under));
+  const prow = el("div", "row");
+  const add = button(APP_WORDS.paste_button, () => pasteChange(p, t, area));
+  add.id = "projects-paste-go";
+  if (offer.waiting) {
+    add.dataset.off = "true";
+    syncLive(add);
+  }
+  prow.append(add);
+  card.append(prow);
+  return card;
+}
+
+/** The whole change as text: one span per line, coloured by its first character. */
+function diffBlock(diff) {
+  const pre = el("pre", "pj-diff");
+  pre.id = "projects-diff";
+  pre.tabIndex = 0;
+  pre.setAttribute("role", "region");
+  pre.setAttribute("aria-label", APP_WORDS.task_diff_title);
+  const lines = String(diff).split("\n");
+  const frag = document.createDocumentFragment();
+  lines.forEach((line, i) => {
+    const span = el("span", `pj-d pj-d-${diffLineKind(line)}`);
+    span.textContent = i < lines.length - 1 ? `${line}\n` : line;
+    frag.append(span);
+  });
+  pre.append(frag);
+  return pre;
+}
+
 function benchBlock(p, b) {
   const box = el("section", "pj-bench");
   box.dataset.id = b.id;
@@ -548,6 +858,7 @@ function benchBlock(p, b) {
   if (b.kind === "command") {
     box.append(el("code", "pj-command", b.command));
     box.append(el("p", "note", b.notRunnableWhy));
+    if (p.app) box.append(el("p", "note pj-cant-run", APP_WORDS.cant_run));
   }
 
   if (b.latest) {
@@ -751,7 +1062,8 @@ onQueue((queue) => {
   const changed = lastQueue !== null && n !== lastQueue;
   lastQueue = n;
   const p = state.project;
-  const waiting = p && !p.hidden && (p.shareableWaiting || p.benchList.some((b) => b.unmarkWaiting));
+  const waiting = p && !p.hidden && (p.shareableWaiting || p.benchList.some((b) => b.unmarkWaiting)
+    || (p.app && p.app.mergeWaiting));
   const visible = root() && !root().closest("[hidden]");
   if (changed && waiting && visible) showProjects();
 });

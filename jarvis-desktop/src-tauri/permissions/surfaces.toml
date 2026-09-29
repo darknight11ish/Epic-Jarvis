@@ -942,7 +942,7 @@ permissions = [
   "allow-forget-range-write",
 ]
 
-# "Inbox tidy by voice" (backend/inbox-tidy.patch; JARVIS-API section 92; the
+# "Inbox tidy by voice" (backend/inbox-tidy.patch; JARVIS-API section 94; the
 # owner's decision of 2026-09-28). The tidy itself is an ordinary approval
 # card, decided in the Jarvis bar (never by voice, never from the widget's
 # one line). This set is only the Undo strip under the bar's input: reading

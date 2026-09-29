@@ -1189,9 +1189,14 @@ def t_the_patch_and_the_tables():
           hud.index("jarvis_sky.install") < hud.index("jarvis_inbox_tidy.install")
           < hud.index("_loopback_companion(bind, HUD_PORT, Handler)"))
     names = _stack.order()
-    check("apply-patches.ps1 lists it, after support-chat.patch and before devices.patch",
+    # It goes last (after devices.patch and apps-in-projects.patch, whose hunks
+    # need the gate lists as they stand before this one adds its lines); what
+    # matters is that it follows support-chat.patch and nothing after it
+    # rewrites its lines.
+    check("apply-patches.ps1 lists it, after support-chat.patch, and no later patch rewrites its lines",
           "inbox-tidy.patch" in names and names.index("support-chat.patch")
-          < names.index("inbox-tidy.patch") < names.index("devices.patch"), names[-5:])
+          < names.index("inbox-tidy.patch")
+          and not _stack.later_rewriting("inbox-tidy.patch", "tidy_inbox"), names[-5:])
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     check("... and ships the module whole", "'jarvis_inbox_tidy.py'" in ps1)
     import _where

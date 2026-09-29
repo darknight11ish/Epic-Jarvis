@@ -9,7 +9,7 @@ import kotlinx.serialization.json.intOrNull
 
 /**
  * "Inbox tidy by voice" - the owner's decision of 2026-09-28, and
- * docs/JARVIS-API.md section 92 (`/api/email/tidy`).
+ * docs/JARVIS-API.md section 94 (`/api/email/tidy`).
  *
  * The owner says "archive the newsletters from last week" (or "mark all from
  * Sam as read", "move the promos to Trash"). Jarvis finds the emails on the

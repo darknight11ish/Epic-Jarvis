@@ -666,7 +666,7 @@ two Kokoro frames, not a share of each sound - and m/b/p energy troughs
   onnxruntime brings into the process first. If it cannot load, status
   says so and nothing else changes.
 - **Kokoro v0.19 only** (2026-09-29): with the v1.0 pack installed
-  (`docs/JARVIS-API.md` section 91) `jarvis_speech` does not ask
+  (`docs/JARVIS-API.md` section 93) `jarvis_speech` does not ask
   `jarvis_mouth` at all - `--prepare` builds its timing from the v0.19 model's
   graph and refuses v1.0's, in words - so every mouth is analysed from the
   sound, as for a custom voice. Timing for v1.0 is not built.

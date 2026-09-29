@@ -2325,7 +2325,7 @@ but held on a stale link like every change.
 built-in voices"): the `FACE_VOICES` rows are only where each animal
 starts. For each of the four the owner may pick **any of the built-in
 voices the pack offers** (`speaker.choices`, without the current-choice extra;
-by name since 2026-09-29, section 91), a **pitch** from 3 steps deeper to 4
+by name since 2026-09-29, section 93), a **pitch** from 3 steps deeper to 4
 steps higher in half steps (a step is a semitone; below 0 the sound is
 played slower, so it is deeper and longer - Kokoro is asked for faster
 speech first, so the pace still comes out as chosen), and a **pace**
@@ -2457,7 +2457,7 @@ request.
              "value": 3,                  sherpa-onnx's own `sid` in the installed pack
              "default": "af_heart",       the pack's own default voice ("af" on the old pack)
              "title": "Jarvis's built-in voice", "detail": str, "note": str,
-             "choices": [{"id": "af_heart", "label": "American (female) - Heart"}, ...],   9-12 by pack: section 91
+             "choices": [{"id": "af_heart", "label": "American (female) - Heart"}, ...],   9-12 by pack: section 93
              "pack": {"kind": "v1" | "v019" | "", "name": "Kokoro v1.0", "voices": 54}},   absent on an older PC: show nothing
  "face_voice": {"enabled": bool,          the switch, the master (off unless turned on; off = no animal voice)
                 "default": false,
@@ -14041,14 +14041,16 @@ pairing by QR code, with a short typed code as the backup, confirmed by an
 approval card on the PC before any key is handed over", built together with
 a key per device, "listed in both apps with its own Remove". The design,
 with every reason, is `docs/PAIRING-DESIGN.md` - phase 1 (this section).
-Phase 2, a fingerprint-signed yes for risky cards from the phone, is not
-built.
+Phase 2, a fingerprint-signed yes for risky cards from the phone, is
+section 91 (backend half built 2026-09-29).
 
 `backend/jarvis_devices.py`, shipped whole; `devices.patch` adds one block to
 `jarvis_hud.py` BEFORE every module is handed `_token_ok` (so the device-key
 check reaches every route), and the two cards' lines to `jarvis_gate.py`.
-`GET /api/version` says `capabilities.pairing: {"version": 1}` once it is
-running (absent or `false` on an older PC); both apps show pairing and
+`GET /api/version` says `capabilities.pairing: {"version": 1,
+"signed_approvals": true}` once it is running (`signed_approvals` is phase 2,
+section 91, and additive - `version` stays 1; absent or `false` on an older
+PC); both apps show pairing and
 Devices only then. A PC without `jarvis_devices.py` answers 404 on every
 route below.
 
@@ -14219,8 +14221,296 @@ shared cases file); without `key`, today's words.
 - Retire never touches this PC, and cannot be pressed by the device that
   still depends on the shared key.
 
+---
 
-## 91. Kokoro v1.0 voices: saved by name, and "Hear it" (added 2026-09-29)
+## 91. Signed approvals: a fingerprint-signed yes from the phone (added 2026-09-29)
+
+Phase 2 of pairing (`docs/PAIRING-DESIGN.md` section 11; the owner's
+go-ahead and choice of 2026-09-29: the phone offers "Turn on signed
+approvals" the first time a risky approval is tried; a paired phone without
+it cannot approve risky cards until then; an unpaired phone on the old shared
+key keeps working as today until that key is retired). Backend:
+`jarvis_devices.py` (the key, the challenge, the check) and
+`jarvis_owner_check.approve_check`; one new card and no new file. Needs the
+`cryptography` package on the PC. `GET /api/version`:
+`capabilities.pairing.signed_approvals: true`. The shared cases file both
+apps' tests read is `tools/gen_approval_sign_cases.py`
+(`approval-sign-cases.json`).
+
+Every route needs a **device key** (section 90.1), never the old shared key
+and never the PC's: `403 {"ok": false, "reason": "device_key_needed",
+"error": ...}` otherwise.
+
+### 91.1 Turning it on: `POST /api/devices/approval-key`
+
+Body `{"public_key": "<SPKI DER of an EC P-256 key, base64url, no padding>"}`
+and nothing else. The phone makes the key in its Keystore (a fresh
+fingerprint or PIN for every use) and sends only the public half.
+
+| Answer | Means |
+|---|---|
+| `202 {"waiting": true}` | ONE `register_approval_key` card is up on the PC (tier `ask`, in `PC_ONLY_ACTIONS`: approved on the PC only, always with Windows Hello). Its title is the shared fixed phrase ("Jarvis wants to let a phone approve risky actions with its fingerprint or PIN"); the phone's name and what approving does are in its text. Never the key.  If the phone already has a key on this PC, the card's text says it REPLACES that key and that denying keeps the current one (a stolen device key could ask for a swap, so the words say so); a denial changes nothing, so the phone can then hold a key the PC does not - its next signature is refused as `bad_signature`, and the phone offers "Turn on signed approvals" to make a fresh key. |
+| `400 {"reason": "bad_key" \| "bad_request"}` | not an EC P-256 public key (an RSA or P-384 key, junk, padding, too long), or a body with anything else in it - plain words in the cases file. No card. |
+| `403 device_key_needed` | the shared key, the PC's key, or a removed device. |
+| `503` | `cryptography` is missing ("Risky approvals from the phone need the cryptography package on your PC."), the tier is not `ask`, the PC is not checking approvals itself, or the device list cannot be read. |
+
+The key is stored in that device's registry row (`approval_key`, the SPKI,
+base64url) **only after the card is approved**. Denied, timed out, or
+withdrawn (a newer request replaced this one, or the device was removed
+while the card waited): nothing is stored. A new request while one waits
+replaces it - the old card, if approved later, stores nothing. Removing the
+device drops its key. The key is kept out of every audit line, event and
+error (an audit line `devices.approval_key` carries the device id and a
+state only). `GET /api/devices` rows (the caller's own included) read
+`"approval_key": false | "waiting" | true`.
+
+### 91.2 The challenge: `POST /api/approve/challenge`
+
+Body `{"id": "<card id>"}` (a number is read as its text).
+
+`200 {"nonce": "<22 chars>", "words_sha256": "<64 hex>", "expires_in": 120}`.
+The nonce is 16 random bytes, base64url, kept **in the backend's memory only**,
+tied to that card and that device, single use, valid 120 s; a device keeps at
+most 6 outstanding (the oldest is dropped). `404 {"reason": "no_such_card"}`
+when no such card is waiting; `403 {"owner_check": "no_approval_key"}` for a
+device that has not turned signed approvals on; `400` for a malformed body;
+`503` when the approval queue cannot be read.
+
+**The words hash** is how the phone and the PC agree on what was shown:
+lowercase hex SHA-256 (UTF-8) of `id`, `action`, `title` and `text` joined by
+the byte `0x1F`. `title` is the title the apps display: `notice.title` of the
+pending row, else the shared fallback (`jarvis_card_words.title_for(action)`,
+the phone's `CardWords.fallbackTitle`). `text` is `detail.text` when `detail`
+is an object with a `text` string, `detail` itself when it is plain text,
+else `""`. The phone works it out from what it **showed** and refuses if it
+differs from `words_sha256` ("The card changed on your PC. Look at it
+again."); the PC works it out again from the card it holds **now**, when the
+approval arrives. The frozen test vectors:
+
+| id, action, title, text | SHA-256 |
+|---|---|
+| `a1`, `send_email`, `Jarvis wants to send an email`, `To: sam@example.com\nSubject: Lunch\n\nSee you at noon.` | `9f37085786f66802d4749c0d8ee5d12416ef264ac438efb4c071c3b25a907145` |
+| `b2`, `lockdown_off`, `Jarvis wants to turn Lockdown off`, `` (empty) | `b6def5b9c7862ccb21bd2989ede743136284ef9147e1c14abbe21434e63e758c` |
+
+### 91.3 The signed approval: `POST /api/approve` with `signature`
+
+```json
+{"id": "a1", "signature": {"device": "d3f9a1c2e", "nonce": "AAECAwQFBgcICQoLDA0ODw", "sig": "<DER, base64url>"}}
+```
+
+`sig` is an ECDSA-SHA256 signature (DER, base64url, no padding) over the bytes
+`"jarvis-approve-v1"`, `0x00`, `id`, `0x00`, `action`, `0x00`, `nonce`,
+`0x00`, `words_sha256` (ASCII hex), made with the key registered in 91.1.
+
+What `jarvis_owner_check.approve_check` now requires, for a **risky** card
+(`is_risky`, the one rule) approved **not from this PC**:
+
+- a request made with a **device key that has an approval key**: a valid
+  signature over that card, `signature.device` equal to the request's own
+  device, a nonce that is this device's, for this card, unused and under 120 s
+  old, and the words hash re-worked on the PC now (so a card changed after the
+  challenge fails). Otherwise `403 {"ok": false, "owner_check": "no_signature"
+  | "bad_signature", "error": <plain words>}`. **A used nonce is burnt whether
+  the signature was good or not.**
+- a request made with a **device key that has no approval key**: `403
+  {"ok": false, "owner_check": "no_approval_key", "error": "Turn on signed
+  approvals for this phone first."}` - the phone offers the button.
+- a request made with the **old shared key** from another device: as today
+  (allowed until the owner retires it, section 90.5).
+- `503 {"owner_check": "cannot_check"}` if the signature cannot be checked
+  (`cryptography` gone) - refused, never waved through.
+
+Unchanged: Deny; a card that is not risky; an approval from this PC (Windows
+Hello, no signature); a PC-only card from another device (`pc_only`). Failing
+safe never locks out the PC itself: the shared key from this PC keeps working.
+
+### 91.4 Said plainly
+
+- It closes "a stolen device key used from another device approves a risky
+  card". It does not stop someone holding the phone who also knows its screen
+  lock, or a program on the PC (ARCHITECTURE section 3).
+- The card's title cannot carry the phone's name (a title is built from the
+  action's name only, never the payload), so the name is in the card text.
+- The words hash is worked out from the row `jarvis_gate.pending()` returns;
+  the owner's `/api/pending` must show the phone the same `notice.title` and
+  `detail` - one real card should be checked on the PC (`backend/README.md`).
+- Registering an approval key is a PC-only, Windows Hello card, like pairing:
+  on a PC without Windows Hello it is refused until that is set up.
+
+## 92. An app inside a project: its tasks and the merge card (added 2026-09-29)
+
+The app builder joins Projects (the owner, 2026-09-28: *an app is a coding
+project whose tests are its benchmarks - one list, not two*; go-ahead and
+answers 2026-09-29). Designed in `docs/APPS-IN-PROJECTS-DESIGN.md` (its
+section 7.1 is the frozen API this section follows; it called this section 91,
+which pairing phase 2 took first). Backend: `jarvis_apps.py` (shipped whole),
+`jarvis_projects.py` and `jarvis_app_workspace.py` (both shipped whole,
+extended), `apps-in-projects.patch` (the routes' install block, the gate's
+risk line and the "a no is not a standing rule" line). Contract file both
+apps' tests read: `tools/gen_projects_cases.py` (`projects-cases.json`) - the
+app answers in it come from a **real run** of this code against real git.
+
+**What this first slice is:** the screens, the merge card and pasting a
+change in on the PC. **Not built:** a model tool that writes app code (waits
+for the 12 GB card; the owner, 2026-09-29) and running any command (npm,
+Gradle - a later milestone). Nothing here starts a program but git.
+
+All routes: the server's token and origin checks first (like section 88).
+Errors are `{"ok": false, "error": "<a plain sentence>"}` with `400` (a bad
+field, nothing to merge, too big), `403` (`"pc_only": true`), `404` (no such
+project / app / task), `409` (a limit, a name in use, a card already waiting),
+`503` (git missing or stuck; the tier is not `ask`). A git problem inside a
+request is a plain sentence, never a stack trace.
+
+### 92.1 Who may do what, and which ask first
+
+| What | Card? | From |
+|---|---|---|
+| Make an app project (new, or adopt an app folder that has no project) | no (an empty folder in Jarvis's own folder; nothing runs) | either app's API; the screens offer it on the desktop |
+| Start a task (an empty separate copy of the app) | no | either app's API; the screens offer it on the desktop |
+| Paste a change into a task (`<<<FILE>>>` blocks) | no (it lands only in the task's copy) | **PC only** - `403 pc_only` |
+| **Merge** a task into the app | **ONE card, `app_merge_change`, every time** - risky (Windows Hello on the PC, the screen lock on the phone) | either app; approved on either; never from a widget or notification |
+| Discard a task | no (the apps ask "are you sure?") | either app |
+| Delete an app project | as any project (section 88) - and **the folder is never deleted** | either app |
+
+### 92.2 Existing routes, changed
+
+| Route | Change |
+|---|---|
+| `POST /api/projects` | body may add `"app": {"type": "web" \| "android"}` (new) or `"app": {"adopt": "<folder name>"}`. Only with `kind: "coding"` and no `folder` (`400` "A project has a folder or an app, not both."); `here` is not needed. The folder name is made from the project's name (lower-case, runs of other characters one dash, at most 40, `app` if nothing is left, then `-2`, `-3`... if taken). Adopting takes the app's own title as the name when none is sent; `404` "There is no app folder with that name." for a name `list_projects()` does not report, `409` "That app already has a project." If saving the project fails, the folder **this call just made** is removed - never another. |
+| `GET /api/projects` | adds `"unlinked_apps": [{"name", "type", "title"}]` (app folders no project uses - an offer inside Projects, no separate list) and, on each summary, `"app": null \| {"name", "type", "tasks": <open count>, "merge_waiting": bool}` |
+| `GET /api/projects/<id>` | the project adds `"app"` (92.4) - `null` for a life project or a folder project |
+| `POST /api/projects/<id>` | `"app"` in the body: `400` "An app is chosen when the project is made."; a `folder` on an app project: `400` "This project's files are its app." |
+| `POST /api/projects/<id>/delete` | an app project also answers `"app_kept": "<folder name>"`; the folder is untouched (it shows up again under `unlinked_apps`); a card waiting for it is withdrawn and leaves no outcome behind |
+
+A coding project has a `folder` (the owner's own repository) **or** an `app`
+(Jarvis's own folder), never both, and neither can be added later.
+
+### 92.3 New routes (`<task>` is 12 hex characters)
+
+| Route | Method | Body | Answers |
+|---|---|---|---|
+| `/api/projects/<id>/app/tasks` | POST | `{"title"}` (one line, at most 120 characters; at most 10 open tasks per app) | `{"ok", "task": <summary>}`; `409` at 10 open tasks |
+| `/api/projects/<id>/app/tasks/<task>` | GET | - | `{"ok", "task": <detail>}` |
+| `/api/projects/<id>/app/tasks/<task>/files` | POST | `{"blocks": "<<<FILE p>>>...<<<END>>>"}` (at most 2,000,000 characters); **PC only** | `{"ok", "task": <detail>}`; `400` "No <<<FILE>>> blocks were found."; `409` while a card waits for this task |
+| `/api/projects/<id>/app/tasks/<task>/merge` | POST | `{}` | `202 {"ok", "waiting": true, "message"}` and ONE card; or `400` with why there is no card |
+| `/api/projects/<id>/app/tasks/<task>/discard` | POST | `{}` | `{"ok", "discarded": true}`; withdraws a card waiting for this task |
+
+The `files` route checks PC-only **first**, before anything else about the
+request. Each path in a paste is checked before anything is written (no
+`..`, nothing in `.git`, no device names, nothing pointing outside the task's
+copy; at most 200 files of 512 KB each); one bad path refuses the whole
+paste. A file git keeps out (`.env`, `dist/`, a signing key) is written but
+is not part of the change, and does not count: a paste in which nothing
+would change the app is `400` "Nothing in that paste would change the app:
+files git keeps out (such as .env) and files that are already the same are
+left out." A paste always makes the whole task `"source": "pasted"`.
+
+### 92.4 Shapes
+
+```
+app (in a project; null when it is not an app):
+{"name": "notes", "type": "web", "title": "Notes app",
+ "git_ok": true, "said": "",
+ "main": {"head": "a1b2c3d", "subject": "Jarvis: Add a dark mode", "at": 1759000000.0, "versions": 7},
+ "tasks": [ <summary>, ... ],          // open tasks, oldest first
+ "merge": {"waiting": "<task>" | null,
+           "last": {"task": "...", "outcome": "merged", "message": "...", "at": 1759000100.0} | null}}
+ // git missing (or the app's folder gone): "git_ok": false, "said": "<a sentence>", "tasks": [], "main": null
+
+task summary:
+{"task": "a1b2c3d4e5f6", "title": "...", "started": 1759000000.0,
+ "source": "jarvis" | "pasted" | "empty", "files": 3, "added": 41, "removed": 2,
+ "older_main": false,    // main has moved since the task began
+ "waiting": false}       // a card is waiting for THIS task
+
+task detail = summary plus
+{"list": [{"path", "added": "40", "removed": "2"}, ...],   // as the workspace gives them (strings)
+ "diff": "diff --git ...",   // the whole comparison; "" when too big
+ "too_big": false,           // over 60,000 characters
+ "refused": ""}              // why no card can be raised ("This task has not changed anything yet.", ...), or ""
+```
+
+`type` is the app's own kind from `.jarvis-app.json` (`web` = React + Vite,
+`android` = native Kotlin); `title` is there too. `said` and `refused` are
+sentences (capital letter, full stop). The list's `app` has no git calls in
+it; the whole one asks git for the latest version and each open task's
+files.
+
+### 92.5 The merge card
+
+`POST .../merge`, in this order: no such project/app/task `404`; a card
+already waiting for this app `409` "A card for this app is already waiting -
+answer it first."; nothing to merge `400` ("This task has not changed
+anything yet."; a change over 60,000 characters: "This change is too big to
+show on one card (N files) - ask Jarvis to split it into smaller steps.") -
+**no card in either case**; the settings file's tier for `app_merge_change` is
+not `ask` `503`; git missing `503`. Then `202` and ONE card:
+
+- **Gate action `app_merge_change`, tier `ask`, RISKY** - the gate's risk
+  table says `("no", "local", ...)`: nothing leaves this PC, but Jarvis has no
+  Undo button for a merge yet, and the merged files are the code a later step
+  will build. So `jarvis_owner_check.is_risky` is true: Windows Hello on the
+  PC, the screen lock (or a signed approval, section 91) on the phone. It is
+  **not** in `PC_ONLY_ACTIONS`: the phone may approve it, after the whole
+  change has been shown (the owner, 2026-09-29). The card is "heavy": a
+  widget's Approve opens the full card instead of approving.
+- **Words** = `jarvis_app_workspace.describe(plan)`: the title, "You pasted this
+  change in on your PC." when it was pasted, every file with `(+added
+  -removed)`, "Nothing is run: this only changes the app's files. Saying no
+  keeps the change aside, and your app stays as it is.", then **the whole
+  change**. **Detail** to the gate: `{"text", "what": "add one change to
+  your app", "project": <project name>, "app": <folder name>, "files": n,
+  "leaves_this_pc": false}`. A denial never becomes a standing rule.
+- **One card at a time per app.** After the answer, only a person's yes at
+  tier `ask` counts (`jarvis_projects._person_said_yes`); then, holding the
+  module's lock, the card is checked not to be withdrawn and the workspace
+  merges **exactly what was shown** - it refuses if the task or `main` moved,
+  if the app's own folder has unsaved changes, or on a conflict.
+
+`merge.last.outcome` and its fixed sentence (`jarvis_apps.OUTCOME_WORDS`;
+the same table is `app_words.outcomes` in the contract file):
+
+| outcome | message |
+|---|---|
+| `merged` | "Added to your app." |
+| `denied` | "Not added - you said no. The change is kept aside." |
+| `timed_out` | "Not added - the card timed out. The change is kept aside." |
+| `stale` | "Not added - the app or the change moved after the card was shown. Look at the new card." |
+| `unsaved` | "Not added - the app's own folder has changes that are not saved in git." |
+| `conflict` | "Not added - the change did not fit the app's newer version. Nothing was changed; discard it and ask again." |
+| `withdrawn` | "Not added - the change was thrown away before you answered." |
+| `refused` | "Not added." and the gate's reason (at most 200 characters) |
+| `failed` | "Not added - something went wrong. Nothing was changed." |
+
+The outcome is kept **in memory only** (a restart drops a waiting card and
+the outcome; the task stays and can be merged again with a new card).
+Nothing about what the card held is kept; the audit log gets counts.
+Discarding the task a card waits for withdraws that card (outcome
+`withdrawn`); deleting the project withdraws it silently.
+
+### 92.6 Said plainly
+
+- **A merge is an approval of code that will one day run.** Nothing runs it
+  in this slice. The card is risky for that reason.
+- **Not checked on the real PC:** that the owner's real `jarvis_gate.pending()`
+  keeps a card of up to 60,000 characters whole (the stack's stand-in cuts
+  the doorbell's text at 500, which is a notification, not the card) - merge
+  one large test task and look; if the row cuts it, lower
+  `MAX_CARD_DIFF_CHARS` to what fits. That a phone widget or notification
+  treats this "heavy" card like the desktop's does. That `git worktree` works
+  on the owner's Windows paths (`apps\.tasks\<name>-<id>` under a long
+  settings path). See `backend/README.md`, "Apps in Projects".
+- **An app's code is only on this PC.** `projects.db` is in the locked backup;
+  the `apps/` git folders are not. Deleting a project does not delete its
+  files; there is no "delete the app's files" yet.
+- The phone can read, merge and discard but not create, adopt, start or
+  paste (ARCHITECTURE section 8, "One-sided on purpose"). Merge, Discard,
+  Start and Paste are held on a stale link by the apps themselves (rule 4);
+  the backend cannot know the stream's state.
+
+
+## 93. Kokoro v1.0 voices: saved by name, and "Hear it" (added 2026-09-29)
 
 The owner's decision of 2026-09-28: "the best rated voices, real British
 pronunciation, and a 'Hear it' sample button for every voice in both apps.
@@ -14232,7 +14522,7 @@ sound block, and a "Hear it" button in both apps. Everything in section 15
 that says a voice is a number ("0".."10") now says a name; this section is
 the difference.
 
-### 91.1 Two packs, voices by name
+### 93.1 Two packs, voices by name
 
 `status().speaker.pack` says which pack is installed - found from
 `voices.bin`'s SIZE alone (no model is loaded to answer `GET
@@ -14271,7 +14561,7 @@ for each other - MEASURED alike, middle pitch 205 Hz and 203 Hz).
   arrays kokoro-onnx publishes under names - v1.0's order is alphabetical
   with `em_santa` last (index 53).
 
-### 91.2 The carry-over (once)
+### 93.2 The carry-over (once)
 
 A choice saved before this change is a number. The first `GET
 /api/voice/voices` after it rewrites `voices/state.json`: `speaker` and each
@@ -14286,7 +14576,7 @@ and shown as `"custom"`. **The apps store no voice choice of their own**
 migrate on a phone or in the desktop app: they only stop assuming an id is a
 number.
 
-### 91.3 "Hear it"
+### 93.3 "Hear it"
 
 | Route | Body | Answers | Notes |
 |---|---|---|---|
@@ -14309,7 +14599,7 @@ it short: "Stopped, because Jarvis is talking or listening now." (`HEAR_*` and
 `TRY_*` in `custom-voices.js` and `net/CustomVoices.kt`, held together by the
 desktop's `tests/custom-voices.mjs`).
 
-### 91.4 The accent
+### 93.4 The accent
 
 On Kokoro v1.0 the British voices (`bf_*`, `bm_*`) are asked for espeak-ng's
 British English, `en-gb-x-rp` (one `lang` per sentence, `[voice]
@@ -14320,7 +14610,7 @@ Applies to every way the built-in voice speaks (an answer, the "One moment."
 clip, the talk-over reference, "Try it", "Hear it"): they all go through
 `jarvis_speech.kokoro_speak`.
 
-### 91.5 The pinned download
+### 93.5 The pinned download
 
 `jarvis_kokoro.V1_PACK` is the ONE place the v1.0 download is written down
 (URL, size 349,906,910 bytes, SHA-256, the folder it unpacks to).
@@ -14332,7 +14622,7 @@ The line refuses to install a file whose SHA-256 differs, keeps the old pack
 as `tts-old-<time>`, and asks for a restart. Nothing in the backend downloads
 anything: the owner pastes the line.
 
-### 91.6 Said plainly
+### 93.6 Said plainly
 
 - **The animals' mouths fall back to "analysed from the sound" on v1.0.**
   `jarvis_mouth`'s timing is built from the v0.19 model's own graph;
@@ -14343,7 +14633,7 @@ anything: the owner pastes the line.
 - **No blended voices** (the studio's "Ashby"/"Clara"): they need a changed
   `voices.bin`; not built.
 
-## 92. Inbox tidy by voice: archive, star, mark as read, or move to Trash (added 2026-09-28)
+## 94. Inbox tidy by voice: archive, star, mark as read, or move to Trash (added 2026-09-28)
 
 The owner's decision of 2026-09-28 (`CLAUDE.md`, "Inbox tidy by voice: yes"),
 with the owner's queue answer that Undo lasts 10 minutes. Backend:
@@ -14355,7 +14645,7 @@ mail server `backend/_fake_imap.py`, `jarvis-desktop/tests/inbox-tidy.mjs`,
 (`tools/gen_inbox_tidy_cases.py`). ARCHITECTURE §4 has the row for this way
 out of the PC.
 
-### 92.1 What the owner says, and what happens
+### 94.1 What the owner says, and what happens
 
 "Archive the newsletters from last week." "Mark all from Sam as read." "Move
 the promos to Trash." In ordinary chat, typed or spoken. The local model
@@ -14398,7 +14688,7 @@ and archive the newsletters" is the ordinary way to use it, and a tidy of
 what the owner is looking at is undoable. The stricter variant (refuse when
 outside text was read) is a one-line change, and a question for the owner.
 
-### 92.2 The four actions, and the one that is not there
+### 94.2 The four actions, and the one that is not there
 
 | `action` | What it does | Listed emails are exactly the ones that change |
 |---|---|---|
@@ -14419,7 +14709,7 @@ server with neither is refused before anything is touched. Gmail is done by
 labels. Jarvis never empties Trash - the mail provider does, on its own
 schedule.
 
-### 92.3 The tool (what the model may say)
+### 94.3 The tool (what the model may say)
 
 `tidy_inbox {"action", "from"?, "subject"?, "words"?, "newsletters"?,
 "since_days"?, "older_than_days"?, "unread_only"?}`. `from`, `subject` and
@@ -14438,7 +14728,7 @@ counts and a sentence of ours ("Archived 12 emails. The owner can undo this
 for 10 minutes with the Undo button on screen."), never a sender or a
 subject; that answer is not "outside text" (`_NOT_READING`).
 
-### 92.4 The routes
+### 94.4 The routes
 
 Both behind the token and origin checks like every route, installed by
 `inbox-tidy.patch` (`jarvis_inbox_tidy.install`).
@@ -14453,7 +14743,7 @@ A PC without the module or the patch answers **404** (an older backend) or
 **503** `{"available": false}` (the module missing); both apps say "Your PC's
 Jarvis cannot tidy your inbox yet - run apply-patches.ps1 on the PC.".
 
-### 92.5 Undo: exactly what changed, ten minutes, memory only
+### 94.5 Undo: exactly what changed, ten minutes, memory only
 
 Recorded at the moment each email is changed, only for the ones that really
 changed: a move by Message-ID plus the server's own `COPYUID` answer and the
@@ -14466,7 +14756,7 @@ stops, whichever comes first. Whatever was changed is recorded even when the
 server dropped part-way, so a half-done tidy can be undone. Undo needs no
 card: it only puts back what the owner had ten minutes ago.
 
-### 92.6 The apps
+### 94.6 The apps
 
 - **Desktop:** a strip under the Jarvis bar's input (`src/inbox-tidy.js`,
   `index.html` `#inbox-tidy`, Rust `brain/inbox_tidy.rs` `inbox_tidy_read` /
@@ -14492,7 +14782,7 @@ card: it only puts back what the owner had ten minutes ago.
   `strip` - what the strip says for each status when ordinary, locked and
   stale (`gen_inbox_tidy_cases.py` writes the rule once).
 
-### 92.7 Not done, and not tried
+### 94.7 Not done, and not tried
 
 - **Not tried against a real mail server.** Every step is proved against a
   stand-in that fails loudly on a plain `EXPUNGE`, a `CLOSE`, or a

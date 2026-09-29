@@ -41,6 +41,12 @@ anything tries):
     and friends parse (and near misses do not); a sentence is ours only
     when a life benchmark fits it; the answer is private for a sensitive
     benchmark; with no projects.db nothing is created;
+  - apps (docs/APPS-IN-PROJECTS-DESIGN.md, real git): a coding project may
+    be a Jarvis-built app - new or adopted - never with a folder and never
+    changed afterwards; an older projects.db gains the `app` column; the
+    projects limit counts them; deleting one keeps the folder and lists it
+    again as an unlinked app; a save that fails removes only the folder that
+    call just made;
   - the routes, install() and the patch on the stack of earlier patches;
   - the audit log never carries a name, a note or a number.
 
@@ -636,6 +642,203 @@ def t_an_older_projects_db_gains_the_new_column():
           b["sensitive"] is True and b["unmark"] == "card")
 
 
+def _git_here() -> bool:
+    if shutil.which("git") is None:
+        print("SKIP  git is not installed here - the app tests below need it")
+        return False
+    # Every app test starts with no app folders at all.
+    import jarvis_app_workspace as W
+    shutil.rmtree(W.root(), ignore_errors=True)
+    return True
+
+
+def t_an_older_projects_db_gains_the_app_column():
+    import sqlite3
+    path = _TMP / "older-projects.db"
+    c = sqlite3.connect(str(path))
+    c.executescript(P._SCHEMA.replace("    changed REAL NOT NULL,\n    app TEXT\n",
+                                      "    changed REAL NOT NULL\n"))
+    cols = {r[1] for r in c.execute("PRAGMA table_info(projects)").fetchall()}
+    check("the test's old file really has no app column", "app" not in cols)
+    c.execute("INSERT INTO projects (id, name, kind, created, changed) VALUES "
+              "('" + "a" * 32 + "', 'Before apps', 'coding', 1, 1)")
+    c.commit()
+    c.close()
+    s = P.Projects(path)
+    old = s.get("a" * 32)
+    check("a projects.db from before apps opens; its project has no app", old["app"] is None)
+    c = sqlite3.connect(str(path))
+    cols = {r[1] for r in c.execute("PRAGMA table_info(projects)").fetchall()}
+    idx = [r[1] for r in c.execute("PRAGMA index_list(projects)").fetchall()]
+    c.close()
+    check("... and gains the app column and the one-project-per-app index",
+          "app" in cols and "projects_by_app" in idx, (cols, idx))
+
+
+def t_apps_new_and_adopted():
+    if not _git_here():
+        return
+    import jarvis_app_workspace as W
+    s = fresh()
+    code, body = P.handle_post("/api/projects", {"name": "Notes app!", "kind": "coding",
+                                                 "app": {"type": "web"}}, store=s)
+    p = body.get("project") or {}
+    check("a new app project: 200, a coding project with an app and no folder",
+          code == 200 and p.get("kind") == "coding" and p.get("folder") is None
+          and (p.get("app") or {}).get("name") == "notes-app"
+          and (p["app"]["type"], p["app"]["title"]) == ("web", "Notes app!"), body)
+    check("its folder is a real app under apps/, made by the workspace",
+          [a["name"] for a in W.list_projects()] == ["notes-app"])
+    check("the list shows the short form: no git, a task count, no card waiting",
+          s.list()[0]["app"] == {"name": "notes-app", "type": "web", "tasks": 0,
+                                 "merge_waiting": False}, s.list())
+    code, body = P.handle_post("/api/projects", {"name": "Notes app?", "kind": "coding",
+                                                 "app": {"type": "android"}}, store=s)
+    check("a second project whose name makes the same folder name gets -2",
+          code == 200 and body["project"]["app"]["name"] == "notes-app-2", body)
+    code, body = P.handle_post("/api/projects", {"name": "???", "kind": "coding",
+                                                 "app": {"type": "web"}}, store=s)
+    check("a name with nothing to make a folder name from gives `app`",
+          code == 200 and body["project"]["app"]["name"] == "app", body)
+    check("no app is unlinked while every one has a project", s.unlinked_apps() == [])
+
+    # Adopt
+    W.create_project("old-notes", "android", "Old notes")
+    check("an app folder with no project is offered as unlinked",
+          s.unlinked_apps() == [{"name": "old-notes", "type": "android", "title": "Old notes"}])
+    code, body = P.handle_post("/api/projects", {"kind": "coding",
+                                                 "app": {"adopt": "old-notes"}}, store=s)
+    check("adopting: the project takes the app's own title as its name",
+          code == 200 and body["project"]["name"] == "Old notes"
+          and body["project"]["app"]["name"] == "old-notes"
+          and body["project"]["app"]["type"] == "android", body)
+    check("... and it is no longer offered", s.unlinked_apps() == [])
+    code, body = P.handle_post("/api/projects", {"name": "Twice", "kind": "coding",
+                                                 "app": {"adopt": "old-notes"}}, store=s)
+    check("an app that already has a project cannot be adopted again: 409",
+          code == 409 and "already has a project" in body["error"], body)
+    code, body = P.handle_post("/api/projects", {"name": "Ghost", "kind": "coding",
+                                                 "app": {"adopt": "ghost"}}, store=s)
+    check("a name that is not an app folder: 404, in its own words",
+          code == 404 and body["error"] == "There is no app folder with that name.", body)
+    code, body = P.handle_post("/api/projects", {"name": "Bad", "kind": "coding",
+                                                 "app": {"adopt": "../x"}}, store=s)
+    check("a path is not a folder name: 400", code == 400, body)
+    (W.root() / "not-git").mkdir()
+    code, body = P.handle_post("/api/projects", {"name": "Plain", "kind": "coding",
+                                                 "app": {"adopt": "not-git"}}, store=s)
+    check("a folder that is not a git app cannot be adopted: 404", code == 404, body)
+
+
+def t_apps_never_with_a_folder():
+    if not _git_here():
+        return
+    s = fresh()
+    code, body = P.handle_post("/api/projects", {"name": "Both", "kind": "coding",
+                                                 "folder": "C:\\x", "app": {"type": "web"}},
+                               store=s, here=True)
+    check("an app and a folder together: 400, said plainly",
+          code == 400 and body["error"] == "A project has a folder or an app, not both.", body)
+    code, body = P.handle_post("/api/projects", {"name": "Life", "kind": "life",
+                                                 "app": {"type": "web"}}, store=s)
+    check("a life project cannot be an app: 400", code == 400, body)
+    for bad in ({"type": "ios"}, {}, "web", {"adopt": 5}):
+        code, body = P.handle_post("/api/projects", {"name": "Odd", "kind": "coding",
+                                                     "app": bad}, store=s)
+        check(f"a bad app request {bad!r} is a 400, not a folder", code == 400, body)
+    check("none of those left a project or a folder behind",
+          s.list() == [] and not (P._workspace().root().is_dir()
+                                  and [a for a in P._workspace().list_projects()
+                                       if a["name"] in ("both", "life", "odd")]))
+    made = P.handle_post("/api/projects", {"name": "Mine", "kind": "coding",
+                                           "app": {"type": "web"}}, store=s)[1]["project"]
+    code, body = P.handle_post(f"/api/projects/{made['id']}", {"app": {"type": "android"}},
+                               store=s)
+    check("`app` cannot be edited afterwards: 400",
+          code == 400 and body["error"] == "An app is chosen when the project is made.", body)
+    code, body = P.handle_post(f"/api/projects/{made['id']}", {"folder": "C:\\x"}, store=s,
+                               here=True)
+    check("a folder cannot be given to an app project, even on the PC: 400",
+          code == 400 and body["error"] == "This project's files are its app.", body)
+    code, body = P.handle_post(f"/api/projects/{made['id']}", {"folder": ""}, store=s)
+    check("clearing a folder an app project never had is harmless", code == 200, body)
+    code, body = P.handle_post(f"/api/projects/{made['id']}", {"name": "Renamed"}, store=s)
+    check("an app project can still be renamed; its app stays",
+          code == 200 and body["project"]["app"]["name"] == "mine", body)
+    life = P.handle_post("/api/projects", {"name": "Run", "kind": "life"}, store=s)[1]["project"]
+    code, body = P.handle_post(f"/api/projects/{life['id']}", {"app": {"type": "web"}}, store=s)
+    check("a project that is not an app cannot become one: 400", code == 400, body)
+
+
+def t_apps_count_toward_the_limit_and_failed_saves_clean_up():
+    if not _git_here():
+        return
+    import jarvis_app_workspace as W
+    s = fresh()
+    keep = P.MAX_PROJECTS
+    P.MAX_PROJECTS = 1
+    try:
+        P.handle_post("/api/projects", {"name": "First", "kind": "coding",
+                                        "app": {"type": "web"}}, store=s)
+        code, body = P.handle_post("/api/projects", {"name": "Second", "kind": "coding",
+                                                     "app": {"type": "web"}}, store=s)
+        check("an app project counts toward the projects limit: 409, and no folder made",
+              code == 409 and [a["name"] for a in W.list_projects()] == ["first"], body)
+    finally:
+        P.MAX_PROJECTS = keep
+    code, body = P.handle_post("/api/projects", {"name": "first", "kind": "coding",
+                                                 "app": {"type": "web"}}, store=s)
+    check("a name used twice: 409, and no second folder is made",
+          code == 409 and [a["name"] for a in W.list_projects()] == ["first"], body)
+
+    # A save that fails AFTER the folder was made removes that folder, and
+    # only that one. The id already in use makes the insert fail.
+    s2 = fresh()
+    W.create_project("precious", "web", "Precious")
+    (W.project_dir("precious") / "keep.txt").write_text("mine\n")
+    first_id = P.handle_post("/api/projects", {"name": "Existing", "kind": "coding",
+                                               "app": {"adopt": "precious"}},
+                             store=s2)[1]["project"]["id"]
+    real_id = P._new_id
+    P._new_id = lambda: first_id
+    try:
+        code, body = P.handle_post("/api/projects", {"name": "Doomed", "kind": "coding",
+                                                     "app": {"type": "web"}}, store=s2)
+    finally:
+        P._new_id = real_id
+    names = [a["name"] for a in W.list_projects()]
+    check("a failed save answers with an error, not a stack trace", code >= 400
+          and body.get("ok") is False, (code, body))
+    check("... removes the folder that call just made", "doomed" not in names, names)
+    check("... and never another: the earlier app and its files survive",
+          "precious" in names and (W.project_dir("precious") / "keep.txt").is_file(), names)
+
+
+def t_apps_delete_keeps_the_folder():
+    if not _git_here():
+        return
+    import jarvis_app_workspace as W
+    s = fresh()
+    pid = P.handle_post("/api/projects", {"name": "Keeper", "kind": "coding",
+                                          "app": {"type": "web"}}, store=s)[1]["project"]["id"]
+    s.add_benchmark(pid, {"name": "Bundle size", "unit": "KB"}, here=False)
+    (W.project_dir("keeper") / "extra.txt").write_text("still here\n")
+    code, body = P.handle_post(f"/api/projects/{pid}/delete", {}, store=s)
+    check("deleting an app project answers app_kept with the folder's name",
+          code == 200 and body == {"ok": True, "deleted": True, "app_kept": "keeper"}, body)
+    check("... the folder and its files are still there",
+          (W.project_dir("keeper") / "extra.txt").is_file())
+    check("... and it is offered again as an unlinked app",
+          s.unlinked_apps() == [{"name": "keeper", "type": "web", "title": "Keeper"}])
+    life = P.handle_post("/api/projects", {"name": "Run", "kind": "life"}, store=s)[1]["project"]
+    code, body = P.handle_post(f"/api/projects/{life['id']}/delete", {}, store=s)
+    check("a project that is not an app: no app_kept in the answer",
+          body == {"ok": True, "deleted": True}, body)
+    other = P.handle_post("/api/projects", {"name": "Walk", "kind": "life"},
+                          store=s)[1]["project"]["id"]
+    check("the store's own delete() still answers True", s.delete(other) is True)
+
+
 # --------------------------------------------------------------------------
 #   The quick command
 # --------------------------------------------------------------------------
@@ -954,6 +1157,10 @@ def t_the_patch():
 
 
 def t_both_apps_read_the_current_contract():
+    if shutil.which("git") is None:
+        print("SKIP  git is not installed here - the contract file's app answers come from "
+              "a real run of it")
+        return
     r = subprocess.run([sys.executable, str(REPO / "tools" / "gen_projects_cases.py"), "--check"],
                        capture_output=True, text=True, timeout=120,
                        env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))

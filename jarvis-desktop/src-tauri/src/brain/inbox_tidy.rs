@@ -1,6 +1,6 @@
 //! "Inbox tidy by voice" - the Undo strip (the owner's decision of
 //! 2026-09-28; backend `jarvis_inbox_tidy.py`, inbox-tidy.patch;
-//! JARVIS-API.md section 92).
+//! JARVIS-API.md section 94).
 //!
 //! The owner says "archive the newsletters from last week". Jarvis finds the
 //! emails on this PC and raises ONE approval card that lists every email it

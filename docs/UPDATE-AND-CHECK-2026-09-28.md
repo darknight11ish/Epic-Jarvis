@@ -158,6 +158,10 @@ first (each fails safe if wrong):
    to the front (not hidden behind another window).
 4. The phone connects through Tailscale or NordVPN Meshnet (not home
    Wi-Fi); pairing over plain home Wi-Fi is refused with a plain message.
+5. Signed approvals: after turning them on (checklist below), the PC really
+   accepts a signature from the phone's fingerprint or PIN. This is the one
+   thing that could not be tried without a real phone; if the PC says "did
+   not accept" every time, tell me and do not retire the old shared key.
 
 If any fail, do not press **Retire the old shared key**; send back what you
 saw. Not built yet: the fingerprint-signed "yes" for risky cards on the
@@ -237,6 +241,21 @@ happen, write down which line and what you saw instead.
 - [ ] **QR pairing and Devices** (both apps): see "New pairing?" above; the
   Devices list on both apps shows each device with **Remove**, and marks
   this one.
+- [ ] **Signed approvals** (needs a phone paired the new way): on the phone,
+  try to approve a risky card (say, "send an email to yourself"). It says
+  signed approvals are not on and offers **Turn on signed approvals**; press
+  it, and approve the card that appears on the PC (Windows Hello). Now try a
+  risky card again: the phone asks for your fingerprint or PIN, and the PC
+  accepts it. Deny, and cards that are not risky, work as before. Removing
+  the phone in the PC's Devices list stops it approving anything.
+- [ ] **An app in Projects** (PC, then phone): Projects, **New project**,
+  **An app Jarvis builds**, then **Start a task**, and **Paste a change in**
+  (blocks that start with `<<<FILE name>>>` and end with `<<<END>>>`). Open
+  the task and read the whole change, then **Merge**. One card appears with
+  every file and the whole change; say no first (nothing changes), then merge
+  again and say yes (Windows Hello). On the phone the same project shows the
+  app and its tasks; **Merge** opens only after you have paged to the end of
+  the change. Jarvis does not write the code or run any commands yet.
 - [ ] **Inbox tidy (only after you add `"tidy_inbox"` to `[tools].enabled`;
   not tried on a real mailbox yet):** send yourself three emails with
   "tidytest" in the subject and follow the seven steps in

@@ -697,7 +697,7 @@ const answerMemory = createAnswerMemory({
 let inboxTidyView = null;
 
 /**
- * "Inbox tidy by voice" (inbox-tidy.js; JARVIS-API.md section 92): ten
+ * "Inbox tidy by voice" (inbox-tidy.js; JARVIS-API.md section 94): ten
  * minutes of Undo after a tidy card was approved. The card itself is decided
  * above, in this bar; this strip only offers Undo - one tap, no card, held on
  * a stale link, and waiting for the unlock while Jarvis is locked (Rust).

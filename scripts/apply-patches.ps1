@@ -799,21 +799,6 @@ $PATCHES = @(
     # are at other lines. No route of its own: chatbot-routes.patch already
     # installs jarvis_chatbot_routes.py, which reaches jarvis_support.py.
     'support-chat.patch'
-    # "Inbox tidy by voice" (the owner's decision of 2026-09-28; JARVIS-API
-    # section 92): archive, star, mark as read or move to Trash a checked list
-    # of emails, ONE approval card listing every one, 10 minutes to Undo.
-    # Four hunks: in jarvis_gate.py the new action joins the "a no is not a
-    # standing rule" list (right after support-chat.patch's own last line),
-    # gets its _RISK line (after support-chat.patch's last entry - an
-    # outbound one: it changes the owner's mailbox on the provider's server,
-    # so its approval is a risky one) and its _TOOL_ACTIONS line (after
-    # draft-email.patch's); in jarvis_hud.py ONE install block after
-    # sky.patch's (GET /api/email/tidy and POST /api/email/tidy/undo). Its
-    # context is other patches' lines, so it goes after them - last, like
-    # every new patch, but before devices.patch, which must stay the very
-    # last. Needs jarvis_inbox_tidy.py copied in; without it, or on any error,
-    # the banner says so and the routes are simply not there.
-    'inbox-tidy.patch'
     # Pairing a phone by QR code, with a key per device (the owner's
     # decisions of 2026-09-24 and 2026-09-28; docs/PAIRING-DESIGN.md phase 1,
     # docs/JARVIS-API.md section 90). Three hunks: two in jarvis_gate.py - the
@@ -829,6 +814,38 @@ $PATCHES = @(
     # in; without it, or on any error, nothing is replaced - only the shared
     # key works, exactly as before - and the banner says so.
     'devices.patch'
+    # An app inside a Jarvis project (the owner's decisions of 2026-09-28 and
+    # 2026-09-29; docs/APPS-IN-PROJECTS-DESIGN.md, docs/JARVIS-API.md section
+    # 92): an app's tasks, a task's whole change, and ONE risky approval card
+    # (app_merge_change) before a change is added to the app; a change is
+    # pasted in on the PC only. Three hunks: the startup install() block in
+    # jarvis_hud.py, right after projects.patch's own block (and before
+    # chatbot-routes.patch's, whose first lines are its context); and two in
+    # jarvis_gate.py - the "a no is not a standing rule" list, after
+    # forget-range.patch's own last line, and the _RISK entry, after
+    # devices.patch's register_approval_key line. So it goes after
+    # projects.patch, chatbot-routes.patch, forget-range.patch and
+    # devices.patch - last, like every new patch. Needs jarvis_apps.py (and
+    # jarvis_app_workspace.py, jarvis_projects.py) copied in; without it, or
+    # on any error, the banner says so and the app routes are simply not
+    # there.
+    'apps-in-projects.patch'
+    # "Inbox tidy by voice" (the owner's decision of 2026-09-28; JARVIS-API
+    # section 94): archive, star, mark as read or move to Trash a checked list
+    # of emails, ONE approval card listing every one, 10 minutes to Undo.
+    # Four hunks: in jarvis_gate.py the new action joins the "a no is not a
+    # standing rule" list (right after support-chat.patch's own last line),
+    # gets its _RISK line (after support-chat.patch's last entry - an
+    # outbound one: it changes the owner's mailbox on the provider's server,
+    # so its approval is a risky one) and its _TOOL_ACTIONS line (after
+    # draft-email.patch's); in jarvis_hud.py ONE install block after
+    # sky.patch's (GET /api/email/tidy and POST /api/email/tidy/undo). Its
+    # context is other patches' lines, so it goes after them - last, like
+    # every new patch (after devices.patch and apps-in-projects.patch, whose
+    # own hunks use the same gate lists as context and must see them before
+    # this one adds its lines). Needs jarvis_inbox_tidy.py copied in; without it, or on any error,
+    # the banner says so and the routes are simply not there.
+    'inbox-tidy.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -966,7 +983,8 @@ $SHIPPED = @(
     # --- "Where this came from" and the quote check (answer-sources.patch) ---
     'jarvis_sources.py'          # answer-sources.patch: each reading tool's own result this turn, by reference; the quote check; GET /api/chat/sources
     # --- the app builder's workspace (2026-09-28, docs/APP-BUILDER-DESIGN.md milestone A) ---
-    'jarvis_app_workspace.py'    # app projects, a separate copy per task, one card with the full diff before a merge; runs nothing; no patch or tool yet
+    'jarvis_app_workspace.py'    # app projects, a separate copy per task, one card with the full diff before a merge; runs nothing; no tool yet
+    'jarvis_apps.py'             # apps-in-projects.patch: an app inside Projects - its tasks, a task's whole change, Merge (ONE risky card) and Discard; a change is pasted in on the PC only; runs nothing
     # --- "Goals with one card per step" (goals.patch) ---
     'jarvis_goals.py'            # goals.patch: a goal's own plan and weekly check-in; accepting raises one card, like a repeating reminder; every acting step still asks through ordinary chat
     # --- "One card, several steps" (plan-gate.patch) ---
