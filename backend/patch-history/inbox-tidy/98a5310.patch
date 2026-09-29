@@ -1,0 +1,60 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -165,6 +165,7 @@
+     "memory_forget_range",  # jarvis_forget_range.py acts only on tier "ask": ONE card per time frame (forget-range.patch)
+     "support_chat",  # jarvis_support.py acts only on tier "ask": ONE card per support chat, listing every detail it may give (support-chat.patch)
+     "support_offer",  # jarvis_support.py acts only on tier "ask": ONE card per offer; nothing is accepted without it (support-chat.patch)
++    "tidy_inbox",  # jarvis_inbox_tidy.py / jarvis_agent.py acts only on tier "ask": ONE card per tidy, listing every email (inbox-tidy.patch)
+ })
+ 
+ 
+@@ -788,6 +789,15 @@
+     # gate had not classified; these lines give them their words.
+     "support_chat": ("no", "outbound", "chats with a company's customer support for you, in your name, on your own account there, in a browser window you can see - giving only the details listed on the card; every offer gets its own card, identity checks and \"are you a bot?\" are handed to you, and what is sent cannot be taken back"),
+     "support_offer": ("no", "outbound", "accepts the offer shown on the card, in your name, by sending exactly the reply shown; what you agree to binds you, like any message you send yourself, and cannot be taken back"),
++    # inbox-tidy.patch (jarvis_inbox_tidy.py, jarvis_agent.py; the owner's
++    # decision of 2026-09-28, "inbox tidy by voice"). ONE card listing every
++    # email that will be archived, starred, marked as read or moved to Trash
++    # in the owner's own mailbox - the senders and subjects are on the card,
++    # never here: this line is what a lock screen may show. It changes the
++    # mailbox on the mail provider's server, so "outbound" (a risky approval:
++    # Windows Hello on the PC, a screen lock on the phone) - but nothing is
++    # deleted for good and one tap on Undo puts it all back for 10 minutes.
++    "tidy_inbox": ("yes", "outbound", "archives, stars, marks as read or moves to Trash exactly the emails listed on the card, in your own mailbox on your mail provider's server; nothing is deleted for good, and for 10 minutes one tap on Undo puts every one back"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",
+@@ -824,6 +834,9 @@
+     # draft-email.patch: jarvis_agent.py's draft_email tool, under the action
+     # name jarvis-framework.toml gives a tier ("ask", and it must stay so).
+     "draft_email": "draft_email",
++    # inbox-tidy.patch: jarvis_agent.py's tidy_inbox tool, under the action
++    # name jarvis-framework.toml gives a tier ("ask", and it must stay so).
++    "tidy_inbox": "tidy_inbox",
+     # plan.patch (jarvis_plan.py): propose_plan builds and describes a Plan
+     # only - it reads nothing, sends nothing, and is auto for the same
+     # reason browser_axtree and jarvis_ui_control_plan are: nothing has
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3487,6 +3487,21 @@
+     except Exception as exc:
+         print(f"  sky        NOT ON ({type(exc).__name__}) - the sun, moon and weather are off")
+         print("             until jarvis_sky.py is back: run apply-patches.ps1 again")
++    # inbox-tidy.patch ("Inbox tidy by voice", the owner's decision of
++    # 2026-09-28; JARVIS-API section 94): GET /api/email/tidy (whether it is
++    # set up, and the newest tidy still open to Undo - counts only, never a
++    # sender or a subject) and POST /api/email/tidy/undo (one tap, no card,
++    # for 10 minutes). The tidy itself is asked for in chat: the model's
++    # tidy_inbox tool raises ONE approval card listing every email. Wrapped
++    # round Handler here, before anything listens, like sky above; every
++    # rule is in jarvis_inbox_tidy.py.
++    try:
++        import jarvis_inbox_tidy
++        print(jarvis_inbox_tidy.install(Handler, origin_ok=_origin_ok,
++                                        token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  inbox      NOT ON ({type(exc).__name__}) - Inbox tidy is off")
++        print("             until jarvis_inbox_tidy.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")
