@@ -1,8 +1,14 @@
 # The app builder - design and milestones (2026-09-28)
 
-**Status: milestone A is built (`backend/jarvis_app_workspace.py`), and
-nothing is switched on.** It has no tool, no API route and no screen yet,
-so the owner cannot use it until milestone B.
+**Status (2026-09-29): milestone A is built (`backend/jarvis_app_workspace.py`).
+Milestone B is split in two: B1 - an app is a project in Projects; its
+tasks, the ONE merge card, and pasting a change in on the PC - is built on
+the backend (`backend/jarvis_apps.py`, `apps-in-projects.patch`, JARVIS-API
+section 92; the two apps' screens are built against it, see
+`docs/APPS-IN-PROJECTS-DESIGN.md`). B2 - the model tools that let Jarvis
+write the code - is NOT built: it waits for the 12 GB card (the owner,
+2026-09-29). Milestone C (running commands) is not built either.** Nothing
+here runs a program: git is the only program started.
 
 ## What the owner decided (2026-09-28)
 
@@ -58,11 +64,19 @@ can see (B) gets the usual new-feature audit (`CLAUDE.md`).
   card that shows the whole change and refuses if anything moved since. It
   runs nothing. git gets no secrets and none of the owner's own git settings.
   Tested by `backend/test_app_workspace.py`.
-- **B. Wiring.** The gate actions (`app_merge_change`, later
-  `app_run_command`) in `jarvis_gate.py`'s risk table, through a patch;
-  local-lane tools in `jarvis_agent.py`; API routes; and an "Apps" screen in
-  both apps showing projects, tasks and the merge card. This is the first
-  milestone the owner can see.
+- **B. Wiring - split (2026-09-29).** The owner decided an app is a coding
+  project, so there is **no separate "Apps" screen**: it is the Projects
+  screen that already exists (`docs/APPS-IN-PROJECTS-DESIGN.md`).
+  - **B1 - BUILT (backend).** The gate action `app_merge_change` in
+    `jarvis_gate.py`'s risk table, through `apps-in-projects.patch` (a risky
+    card: cannot be undone yet, stays on this PC); API routes
+    (`jarvis_apps.py`, JARVIS-API section 92); an app as a project with its
+    open tasks and the merge card in both apps' Projects pages; a change
+    pasted in on the PC. Tested by `backend/test_apps.py`.
+  - **B2 - NOT built.** The gate action `app_run_command` stays later
+    (milestone C). Local-lane tools in `jarvis_agent.py` (`app_read`,
+    `app_propose_change`) that let Jarvis write the code wait for the 12 GB
+    card, as the owner decided on 2026-09-28 and again on 2026-09-29.
 - **C. Running commands.** A short list of allowed commands per kind of app,
   each on its own card: `npm install --ignore-scripts`, `npm run build`,
   `npx cap sync android`, `gradlew assembleDebug`. It runs only in a task's

@@ -151,7 +151,8 @@ on a throwaway copy instead.
 | `forget-range.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Forget a time frame"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 64). Adds `GET /api/memory/forget_range` and `/preview` (what Jarvis learned and the chats from some days, as a list the owner unticks), `POST /api/memory/forget_range` (ONE approval card, `memory_forget_range`, listing every item - nothing changes before a person approves) and `/undo` (10 minutes, no card), and the gate's risk line for the new action (local, not reversible: a risky approval). Last in the list: its context is `chatbot.patch`'s gate lines and `live.patch`'s install block. Needs `jarvis_forget_range.py` - see "Forget a time frame", at the very end. |
 | `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
 | `sky.patch` | `jarvis_hud.py` | **The sun, the moon and the weather behind the animal faces** (the owner's decisions of 2026-09-28). Adds `GET /api/sky` and `POST /api/sky` (ONE change: show on or off, the town - this PC only - forget the town, or the weather source; Open-Meteo ON is ONE approval card). Its context is `answer-sources.patch`'s own startup `install()` block, so it goes last. Needs `jarvis_sky.py` and `jarvis_sky_places.py` copied in; without them, or on any error, the banner says so and the route answers 503 - the faces are drawn exactly as before. See "The sky behind the animals", at the very end. |
-| `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Three lines in `jarvis_gate.py`: the cards `pair_device`, `unretire_shared_key` and (phase 2, 2026-09-29, signed approvals from the phone) `register_approval_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; all three are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
+| `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Three lines in `jarvis_gate.py`: the cards `pair_device`, `unretire_shared_key` and (phase 2, 2026-09-29, signed approvals from the phone) `register_approval_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; all three are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list but for `apps-in-projects.patch`, which builds on its lines: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
+| `apps-in-projects.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **An app inside a Jarvis project: its tasks and the merge card** (the owner's decisions of 2026-09-28 and 2026-09-29; `docs/APPS-IN-PROJECTS-DESIGN.md`, `docs/JARVIS-API.md` section 92). One block in `jarvis_hud.py` right after `projects.patch`'s own: `jarvis_apps.install(...)` adds `GET /api/projects/<id>/app/tasks/<task>` and `POST .../app/tasks`, `.../files` (a change pasted in - PC only), `.../merge` (ONE risky approval card) and `.../discard`. Two lines in `jarvis_gate.py`: `app_merge_change` joins `_NO_RULE_FROM_DENIAL` (a no is never a standing rule) and `_RISK` as `("no", "local", ...)` - it cannot be undone yet, so it is a RISKY card (Windows Hello on the PC, the screen lock on the phone), approved on either device. Last in the list: its context is `projects.patch`'s, `forget-range.patch`'s and `devices.patch`'s lines. Needs `jarvis_apps.py` (with `jarvis_projects.py` and `jarvis_app_workspace.py`); without it, or on any error, the banner says "apps NOT ON" and the app routes are simply not there. See "Apps in Projects", at the very end. |
 | `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude, Gemini or DeepSeek** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
 
 ## All but two of the patches apply, and that is correct
@@ -15408,9 +15409,9 @@ branch. When the work is ready, a merge card lists every file and shows the
 whole change before anything reaches the app. **It runs nothing:** no npm, no
 Gradle, no build.
 
-**Not switched on.** There is no patch, no model tool, no API route and no
-screen yet (milestone B), so nothing calls it. `apply-patches.ps1` copies it in
-so the later milestones find it there.
+**Switched on for Projects since 2026-09-29** (`jarvis_apps.py`,
+`apps-in-projects.patch`; see "Apps in Projects", at the very end). There is
+still no model tool and no command runs (milestones B2 and C).
 
 **Needs** git on the PC (<https://git-scm.com>). Without it, every call answers
 "git is not installed" and nothing else happens.
@@ -15423,7 +15424,7 @@ anything is written: no `..`, nothing in `.git`, no Windows device names, and
 nothing that points outside the task's copy. A merge is refused if the task or
 the app changed after its card was built.
 
-**Tested by** `test_app_workspace.py` (36 checks, real git in a temporary
+**Tested by** `test_app_workspace.py` (62 checks, real git in a temporary
 folder).
 # Watches: a search, a price, GitHub, and a watch that breaks: `jarvis_tellme.py` (2026-09-28)
 
@@ -16730,3 +16731,65 @@ and `py -3 backend\test_approval_sign.py`
   agree word for word; EFF's own page could not be reached from here, so its
   licence (CC BY 3.0 US) is as EFF has published it elsewhere - re-read it
   on EFF's page when convenient.
+
+# Apps in Projects: `jarvis_apps.py`, `apps-in-projects.patch` (2026-09-29)
+
+## In plain words
+
+An app Jarvis builds is now a coding project (the owner, 2026-09-28: one
+list, not two). Its files sit in Jarvis's own `apps` folder, each app a git
+folder; the project is the record you see. On the project's page you see the
+app's latest saved version and its open **tasks** - a task is one change,
+kept as a separate copy of the app until you have read all of it. **Merge**
+raises ONE approval card that lists every file and shows the whole change;
+approve it (Windows Hello on the PC, your fingerprint or PIN on the phone) and
+exactly that is added to the app. **Discard** throws the task away. On the PC
+you can also paste a change in (blocks that start `<<<FILE name>>>` and end
+`<<<END>>>`). **Nothing runs**, and Jarvis does not write the code yet - that
+waits for the 12 GB graphics card.
+
+## Owner steps
+
+Nothing to install but git (<https://git-scm.com>): `apply-patches.ps1`
+copies `jarvis_apps.py`, `jarvis_projects.py` and `jarvis_app_workspace.py`
+and applies `apps-in-projects.patch`. Without git, the app's page says so.
+A change that is too big for one card (over 60,000 characters) is refused
+with "ask Jarvis to split it" - there is no card to answer.
+
+## What the code does
+
+- `projects.db` gains an `app` column (the folder name under `apps/`) and a
+  unique index, the first time it is opened. An app project has no `folder`;
+  the two never coexist and neither can be added later.
+- Deleting an app project keeps the folder; it comes back as an "unlinked
+  app" you can add again.
+- The card's words are `jarvis_app_workspace.describe()`; the merge lands
+  exactly what was shown and refuses if the task or the app moved, if the
+  app's own folder has unsaved changes, or on a conflict. Each outcome has a
+  fixed sentence (`jarvis_apps.OUTCOME_WORDS`).
+- One card at a time per app. A restart drops a waiting card (the task
+  stays). Discarding a task withdraws its card; git never sees a token.
+
+## Test it
+
+`py -3 backend\test_apps.py`, `py -3 backend\test_app_workspace.py` and
+`py -3 backend\test_projects.py` (real git in a temporary folder, no
+network, no model); `python3 tools/gen_projects_cases.py --check` for the file
+both apps read; `python3 backend/test_gate_stack_clean.py` for the patch.
+
+## Not checked, said plainly
+
+- **A 60,000-character card on your real gate.** The stack's stand-in cannot
+  show it. Merge one large test task on your PC and look at the card; if the
+  queue row cuts the text, lower `MAX_CARD_DIFF_CHARS` in
+  `jarvis_app_workspace.py` to what fits - never cut silently.
+- **The phone's widget and notification** treating this "heavy" card like the
+  desktop's (Approve opens the full card). Only a phone test proves it.
+- **`git worktree` on your Windows paths** (`apps\.tasks\<name>-<id>` under
+  your settings folder): one PowerShell line after the first task - start a
+  task in Projects and check `apps\.tasks` has its copy.
+- **Your real `jarvis_hud.py`'s startup block.** The patch's place was
+  checked on the stacked file only (`backend/_stack.py`); the first start is
+  the real test. If it fails the banner says "apps NOT ON" and Projects
+  works as before.
+- **An app's code is not in the locked backup** (only `projects.db` is).
