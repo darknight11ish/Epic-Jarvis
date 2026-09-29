@@ -23,9 +23,11 @@ import {
   approvalPlainText,
   EMAIL_APPROVE,
   EMAIL_DETAIL,
+  emailDetail,
   isEmailCard,
   MISSING,
   readSending,
+  TIDY_DETAIL,
 } from "../src/email-sending.js";
 import * as K from "./uikit.mjs";
 
@@ -71,6 +73,12 @@ await check("readSending passes the PC's own line on, and a PC without it says s
   // A draft's card shows the same whole-email shape (JARVIS-API.md section
   // 40) and needs the same never-Markdown, never-widget-approve treatment.
   assert.equal(isEmailCard({ action: "draft_email" }), true);
+  // An inbox tidy's card lists every email it will touch (JARVIS-API.md
+  // section 92): words from outside, so the same never-Markdown,
+  // never-widget-approve treatment, with its own one line for the widget.
+  assert.equal(isEmailCard({ action: "tidy_inbox" }), true);
+  assert.equal(emailDetail({ action: "tidy_inbox" }), TIDY_DETAIL);
+  assert.equal(emailDetail({ action: "send_email" }), EMAIL_DETAIL);
   assert.equal(isEmailCard({ action: "email_read" }), false);
   assert.equal(approvalPlainText({ detail: { text: "x\ny" } }), "x\ny");
 });

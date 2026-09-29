@@ -922,6 +922,8 @@ pub fn run() {
             brain::projects::projects_choose_folder,
             brain::forget_range::forget_range_read,
             brain::forget_range::forget_range_write,
+            brain::inbox_tidy::inbox_tidy_read,
+            brain::inbox_tidy::inbox_tidy_undo,
             brain::brain_model,
             attention::mark_digest_seen,
             attention::set_attention_muted,
