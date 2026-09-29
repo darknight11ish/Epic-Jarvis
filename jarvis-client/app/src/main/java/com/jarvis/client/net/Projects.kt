@@ -171,6 +171,8 @@ object Projects {
         val benchmarks: Int,
         val benchList: List<Bench>,
         val maxInstructions: Int,
+        /** A Jarvis-built app's part (the list's short form or the full one), or null. */
+        val app: AppInfo? = null,
     )
 
     data class ListView(
@@ -269,6 +271,7 @@ object Projects {
             benchmarks = o.whole("benchmarks") ?: benches.size,
             benchList = benches,
             maxInstructions = o.obj("max")?.whole("instructions") ?: 1500,
+            app = parseApp(o.obj("app")),
         )
     }
 
@@ -399,6 +402,287 @@ object Projects {
     /** The notes box: one note per line, blanks dropped. */
     fun notesFrom(text: String): List<String> = text.split('\n').map { it.trim() }.filter { it.isNotEmpty() }
 
+    // ------------------------------------------------------------ apps ------
+    // docs/APPS-IN-PROJECTS-DESIGN.md sections 5 and 7.1: a coding project
+    // may be a Jarvis-built app. The phone reads it, merges and discards; it
+    // never creates an app, starts a task or pastes a change in (the PC only).
+
+    /** The screens' words for apps (design 5 and 7.1). Kept apart from [WORDS] until the shared fixture carries them. */
+    val APP_WORDS: Map<String, String> = mapOf(
+        "app" to "App",
+        "app_type_web" to "Web app",
+        "app_type_android" to "Android app",
+        "app_where" to "Files: kept on this PC in Jarvis's apps folder. This app's files are only on this PC.",
+        "app_latest" to "Latest version",
+        "app_versions" to "{n} saved versions",
+        "app_no_version" to "No saved version yet.",
+        "app_tasks" to "Open tasks",
+        "app_no_tasks" to "No open tasks.",
+        "app_start_on_pc" to "Starting a task, and pasting a change into one, is done on your PC.",
+        "app_create_on_pc" to "An app Jarvis builds is made on your PC: New project, then \"An app Jarvis builds\".",
+        "app_older" to "Made before another change - may not fit.",
+        "app_waiting" to "Waiting for your card.",
+        "app_open" to "Open",
+        "task_back" to "All tasks",
+        "task_files" to "Files in this change",
+        "task_from_jarvis" to "Jarvis wrote this change.",
+        "task_from_paste" to "You pasted this change in on your PC.",
+        "task_from_empty" to "Nothing in this task yet.",
+        "task_read" to "Read the whole change. Merge opens on the last page.",
+        "task_page" to "Page {n} of {total}",
+        "task_prev" to "Previous page",
+        "task_next" to "Next page",
+        "task_none" to "This task has no changes to show.",
+        "task_too_big" to "This change is too big to show on one card. Ask Jarvis to split it into smaller steps.",
+        "merge" to "Merge",
+        "merge_hint" to "Approve the card that appears - it needs your fingerprint or PIN.",
+        "merge_locked" to "Merge opens once you have reached the last page.",
+        "merge_card_up" to "A card for this app is already waiting - answer it first.",
+        "discard" to "Discard",
+        "discard_q" to "Throw away the task \"{title}\"? Nothing reaches your app. This cannot be undone.",
+        "discard_yes" to "Discard",
+        "discard_no" to "Keep it",
+    )
+
+    /** One of [APP_WORDS]. */
+    fun aw(key: String): String = APP_WORDS.getValue(key)
+
+    /** merge.last.outcome -> its fixed sentence (design 7.1, word for word). */
+    val MERGE_OUTCOMES: Map<String, String> = mapOf(
+        "merged" to "Added to your app.",
+        "denied" to "Not added - you said no. The change is kept aside.",
+        "timed_out" to "Not added - the card timed out. The change is kept aside.",
+        "stale" to "Not added - the app or the change moved after the card was shown. Look at the new card.",
+        "unsaved" to "Not added - the app's own folder has changes that are not saved in git.",
+        "conflict" to "Not added - the change did not fit the app's newer version. Nothing was changed; discard it and ask again.",
+        "withdrawn" to "Not added - the change was thrown away before you answered.",
+        "refused" to "Not added.",
+        "failed" to "Not added - something went wrong. Nothing was changed.",
+    )
+
+    data class AppMain(val head: String, val subject: String, val at: Double?, val versions: Int)
+
+    data class MergeLast(val task: String, val outcome: String, val message: String, val at: Double?)
+
+    data class TaskSummary(
+        val task: String,
+        val title: String,
+        val started: Double?,
+        /** "jarvis" | "pasted" | "empty" (anything else reads as empty). */
+        val source: String,
+        val files: Int,
+        val added: Int,
+        val removed: Int,
+        val olderMain: Boolean,
+        val waiting: Boolean,
+    )
+
+    data class FileChange(val path: String, val added: String, val removed: String)
+
+    data class TaskDetail(
+        val summary: TaskSummary,
+        val list: List<FileChange>,
+        val diff: String,
+        val tooBig: Boolean,
+        /** The sentence the PC gives for "no card can be raised", or "". */
+        val refused: String,
+    )
+
+    /**
+     * The app part of a project. The list gives a short form (`tasks` a
+     * count, `merge_waiting` a flag); the full read gives everything.
+     */
+    data class AppInfo(
+        val name: String,
+        /** "web" | "android" | "" */
+        val type: String,
+        val title: String,
+        val gitOk: Boolean,
+        val said: String,
+        val main: AppMain?,
+        val tasks: List<TaskSummary>,
+        val openTasks: Int,
+        /** The task id a merge card waits for, or null. */
+        val waitingTask: String?,
+        val mergeWaiting: Boolean,
+        val last: MergeLast?,
+    )
+
+    fun parseTask(o: JsonObject?): TaskSummary? {
+        if (o == null) return null
+        val id = o.text("task")?.takeIf { it.isNotBlank() } ?: return null
+        return TaskSummary(
+            task = id,
+            title = o.text("title").orEmpty(),
+            started = o.number("started"),
+            source = o.text("source")?.takeIf { it == "jarvis" || it == "pasted" } ?: "empty",
+            files = o.whole("files") ?: 0,
+            added = o.whole("added") ?: 0,
+            removed = o.whole("removed") ?: 0,
+            olderMain = o.flag("older_main"),
+            waiting = o.flag("waiting"),
+        )
+    }
+
+    fun parseTaskDetail(o: JsonObject?): TaskDetail? {
+        if (o == null) return null
+        val summary = parseTask(o) ?: return null
+        val list = (o["list"] as? JsonArray)?.mapNotNull { el ->
+            val f = el as? JsonObject ?: return@mapNotNull null
+            val path = f.text("path")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            FileChange(path, f.text("added").orEmpty(), f.text("removed").orEmpty())
+        }.orEmpty()
+        return TaskDetail(
+            summary = summary,
+            list = list,
+            diff = o.text("diff").orEmpty(),
+            tooBig = o.flag("too_big"),
+            refused = o.text("refused").orEmpty(),
+        )
+    }
+
+    /** `app` from a project's summary or full view; null when it is not an app project. */
+    fun parseApp(o: JsonObject?): AppInfo? {
+        if (o == null) return null
+        val name = o.text("name")?.takeIf { it.isNotBlank() } ?: return null
+        val rawTasks = o["tasks"]
+        val tasks = (rawTasks as? JsonArray)?.mapNotNull { parseTask(it as? JsonObject) }.orEmpty()
+        val count = (rawTasks as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull ?: tasks.size
+        val main = o.obj("main")?.let { m ->
+            AppMain(
+                head = m.text("head").orEmpty(),
+                subject = m.text("subject").orEmpty(),
+                at = m.number("at"),
+                versions = m.whole("versions") ?: 0,
+            )
+        }
+        val merge = o.obj("merge")
+        val waitingTask = merge?.text("waiting")?.takeIf { it.isNotBlank() }
+        val last = merge?.obj("last")?.let { l ->
+            MergeLast(
+                task = l.text("task").orEmpty(),
+                outcome = l.text("outcome").orEmpty(),
+                message = l.text("message").orEmpty(),
+                at = l.number("at"),
+            )
+        }
+        return AppInfo(
+            name = name,
+            type = o.text("type")?.takeIf { it == "web" || it == "android" }.orEmpty(),
+            title = o.text("title").orEmpty(),
+            gitOk = (o["git_ok"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull != false,
+            said = o.text("said").orEmpty(),
+            main = main,
+            tasks = tasks,
+            openTasks = count,
+            waitingTask = waitingTask,
+            mergeWaiting = waitingTask != null || o.flag("merge_waiting"),
+            last = last,
+        )
+    }
+
+    /** The task inside `GET .../app/tasks/<task>` (`{"ok", "task": detail}`). */
+    fun taskOf(reply: Reply): TaskDetail? = parseTaskDetail(reply.body?.obj("task"))
+
+    /** The sentence for a finished merge: the fixed one, or the PC's own for "refused" and unknowns. */
+    fun mergeSentence(last: MergeLast): String = when (last.outcome) {
+        "refused" -> last.message.ifBlank { MERGE_OUTCOMES.getValue("refused") }
+        else -> MERGE_OUTCOMES[last.outcome] ?: last.message
+    }
+
+    fun typeWords(app: AppInfo): String = when (app.type) {
+        "web" -> aw("app_type_web")
+        "android" -> aw("app_type_android")
+        else -> aw("app")
+    }
+
+    fun sourceWords(source: String): String = when (source) {
+        "jarvis" -> aw("task_from_jarvis")
+        "pasted" -> aw("task_from_paste")
+        else -> aw("task_from_empty")
+    }
+
+    /** "3 files, +41 -2" */
+    fun changeCounts(t: TaskSummary): String =
+        "${t.files} ${if (t.files == 1) "file" else "files"}, +${t.added} -${t.removed}"
+
+    // -- the whole change, in pages --------------------------------------------
+
+    /** How a diff line is drawn: added, removed, a hunk header, file header lines, or plain. */
+    enum class DiffKind { ADDED, REMOVED, HUNK, META, CONTEXT }
+
+    /** [continued] is true for the second and later pieces of one very long line. */
+    data class DiffLine(val text: String, val kind: DiffKind, val continued: Boolean)
+
+    const val DIFF_LINES_PER_PAGE = 120
+    const val DIFF_PIECE = 300
+
+    private fun kindOf(line: String): DiffKind = when {
+        line.startsWith("+++") || line.startsWith("---") || line.startsWith("diff --git") ||
+            line.startsWith("index ") -> DiffKind.META
+        line.startsWith("@@") -> DiffKind.HUNK
+        line.startsWith("+") -> DiffKind.ADDED
+        line.startsWith("-") -> DiffKind.REMOVED
+        else -> DiffKind.CONTEXT
+    }
+
+    /**
+     * The whole diff as lines, none dropped: a line longer than [DIFF_PIECE]
+     * becomes several pieces, so nothing is ever a giant single `Text`.
+     */
+    fun diffLines(diff: String): List<DiffLine> {
+        if (diff.isEmpty()) return emptyList()
+        val out = ArrayList<DiffLine>()
+        for (line in diff.split('\n')) {
+            val kind = kindOf(line)
+            if (line.length <= DIFF_PIECE) {
+                out.add(DiffLine(line, kind, false))
+            } else {
+                line.chunked(DIFF_PIECE).forEachIndexed { i, piece -> out.add(DiffLine(piece, kind, i > 0)) }
+            }
+        }
+        return out
+    }
+
+    fun diffPages(diff: String, perPage: Int = DIFF_LINES_PER_PAGE): List<List<DiffLine>> =
+        diffLines(diff).chunked(perPage.coerceAtLeast(1))
+
+    /** The pages put back together - equals the diff they were made from. */
+    fun diffText(pages: List<List<DiffLine>>): String {
+        val sb = StringBuilder()
+        var first = true
+        for (l in pages.flatten()) {
+            if (!l.continued && !first) sb.append('\n')
+            sb.append(l.text)
+            first = false
+        }
+        return sb.toString()
+    }
+
+    /** Merge may be tapped only after the last page has been shown. */
+    fun readToEnd(pageCount: Int, furthestShown: Int): Boolean = pageCount > 0 && furthestShown >= pageCount - 1
+
+    /**
+     * Why Merge cannot be tapped now (a plain sentence), or null when it can.
+     * The card itself is raised by the PC and decided in the approval queue;
+     * this only decides whether the button on this page is usable.
+     */
+    fun mergeBlock(
+        detail: TaskDetail,
+        pageCount: Int,
+        furthestShown: Int,
+        cardWaitingForApp: Boolean,
+        canAct: Boolean,
+    ): String? = when {
+        !canAct -> w("stale")
+        detail.refused.isNotBlank() -> detail.refused
+        detail.tooBig -> aw("task_too_big")
+        pageCount == 0 -> aw("task_none")
+        cardWaitingForApp || detail.summary.waiting -> aw("merge_card_up")
+        !readToEnd(pageCount, furthestShown) -> aw("merge_locked")
+        else -> null
+    }
+
     // ------------------------------------------------------------ routes ----
 
     private val ID = Regex("[0-9a-f]{32}")
@@ -407,6 +691,15 @@ object Projects {
     fun isId(s: String): Boolean = ID.matches(s)
 
     fun projectPath(id: String): String? = if (isId(id)) "/api/projects/$id" else null
+
+    private val TASK_ID = Regex("[0-9a-f]{12}")
+
+    /** Only a real task id (12 lower-case hex digits) ever reaches a URL. */
+    fun isTaskId(s: String): Boolean = TASK_ID.matches(s)
+
+    /** `GET` one open task of an app project. */
+    fun taskPath(pid: String, task: String): String? =
+        if (isId(pid) && isTaskId(task)) "/api/projects/$pid/app/tasks/$task" else null
 
     fun benchPath(pid: String, bid: String, points: Int = 365): String? =
         if (isId(pid) && isId(bid)) "/api/projects/$pid/benchmarks/$bid?points=${points.coerceIn(1, 1000)}" else null
@@ -417,8 +710,15 @@ object Projects {
      * unknown action or a bad id. The phone never sends a folder or a
      * command: those are the PC's ([PC_ONLY]).
      */
-    fun writePath(action: String, pid: String? = null, bid: String? = null, rid: String? = null): String? {
+    fun writePath(
+        action: String,
+        pid: String? = null,
+        bid: String? = null,
+        rid: String? = null,
+        task: String? = null,
+    ): String? {
         val p = pid?.takeIf { isId(it) }
+        val t = task?.takeIf { isTaskId(it) }
         val b = bid?.takeIf { isId(it) }
         val r = rid?.takeIf { isId(it) }
         return when (action) {
@@ -436,14 +736,21 @@ object Projects {
                 null
             }
             "unmark" -> if (p != null && b != null) "/api/projects/$p/benchmarks/$b/unmark" else null
+            // An app's task: merge (one card) and discard. Starting a task and
+            // pasting a change in are the PC's ([PC_ONLY]) - no path here.
+            "app_task_merge" -> if (p != null && t != null) "/api/projects/$p/app/tasks/$t/merge" else null
+            "app_task_discard" -> if (p != null && t != null) "/api/projects/$p/app/tasks/$t/discard" else null
             else -> null
         }
     }
 
     /** What the phone leaves to the PC (the PC refuses them from here too). */
-    val PC_ONLY: Set<String> = setOf("folder", "command")
+    val PC_ONLY: Set<String> = setOf("folder", "command", "app_create", "app_task_start", "app_task_files")
 
-    /** Whether a change waits for a live link: all do, except Shareable OFF. */
+    /**
+     * Whether a change waits for a live link: all do, except Shareable OFF.
+     * That includes an app task's Merge and Discard (rule 4).
+     */
     fun heldOnStale(action: String, on: Boolean? = null): Boolean = !(action == "shareable" && on == false)
 
     // ------------------------------------------------------------ bodies ----
