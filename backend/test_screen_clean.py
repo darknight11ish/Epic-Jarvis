@@ -44,7 +44,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from _where import require_shipped  # noqa: E402
+from _where import REPO, require_shipped  # noqa: E402
 
 require_shipped("jarvis_screen.py", "jarvis_picture.py", "jarvis_secrets.py",
                 "jarvis_secret_rules.py", "jarvis_screen_win.py", "jarvis_front.py",
@@ -430,7 +430,7 @@ def t_rules():
     check("the pause has plain words the apps show",
           SC.PAUSE_WORDS["private_window"] == "a private browser window" and "private" in SC.PAUSE_SAID["private_window"])
     check("the words are in both apps' shared table", all(
-        "private_window" in (Path(SC.__file__).resolve().parent.parent / p).read_text(encoding="utf-8")
+        "private_window" in (REPO / p).read_text(encoding="utf-8")
         for p in ("jarvis-desktop/tests/fixtures/screen-cases.json",
                   "jarvis-client/app/src/test/resources/contract/screen-cases.json")))
     for site in ("netflix.com", "primevideo.com", "disneyplus.com", "hulu.com", "tv.apple.com"):
