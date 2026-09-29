@@ -97,6 +97,8 @@ const ID_MUTE: &str = "mute";
 const ID_STOP_EVERYTHING: &str = "stop-everything";
 /// Jarvis Live (live.rs): start or end the voice conversation on this PC.
 const ID_LIVE: &str = "jarvis-live";
+/// Watch with me (look.rs): start or stop the session on this PC.
+const ID_WATCH: &str = "jarvis-watch";
 const ID_POWER_ACTIVE: &str = "power-active";
 const ID_POWER_QUIET: &str = "power-quiet";
 const ID_POWER_STANDBY: &str = "power-standby";
@@ -131,6 +133,7 @@ struct Rows {
     mute: MenuItem<tauri::Wry>,
     /// "Start Jarvis Live" / "End Jarvis Live".
     live: MenuItem<tauri::Wry>,
+    watch: MenuItem<tauri::Wry>,
     backend: MenuItem<tauri::Wry>,
     /// Shown only while a newer version is known to exist.
     update: MenuItem<tauri::Wry>,
@@ -138,7 +141,7 @@ struct Rows {
 
 /// What was last painted: the two colours, the notch count, the state, and
 /// whether Jarvis Live's mark was on it.
-type PaintKey = (Rgb, Rgb, u32, &'static str, bool);
+type PaintKey = (Rgb, Rgb, u32, &'static str, bool, bool);
 
 /// The colour last pushed to the shell, so an unchanged frame costs nothing.
 ///
@@ -253,6 +256,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
     // Jarvis Live: never greyed - starting is refused with a reason (a stale
     // link, App lock, no voice print), and ending always works.
     let live = MenuItem::with_id(app, ID_LIVE, live_label(), true, None::<&str>)?;
+    let watch = MenuItem::with_id(app, ID_WATCH, watch_label(), true, None::<&str>)?;
 
     // One row that is status and action at once: it says what the backend is
     // and, when there is something to do about it, does it.
@@ -344,6 +348,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             // Jarvis Live on its own line, away from "Stop everything" (the
             // review of 2026-09-28: a click one row off started or ended it).
             &live,
+            &watch,
             &PredefinedMenuItem::separator(app)?,
             // Windows, everyday ones first — the two with hotkeys are the two
             // reached most often, and a hotkey printed beside a row is how the
@@ -380,6 +385,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             waiting,
             mute,
             live,
+            watch,
             backend,
             update,
         });
@@ -658,6 +664,9 @@ fn draw(a: Rgb, b: Rgb, filled: bool, notches: Option<(usize, usize, Rgb)>) -> I
     if crate::live::on_here() {
         mark_live(&mut pixels);
     }
+    if crate::look::on_here() {
+        mark_watching(&mut pixels);
+    }
     Image::new_owned(pixels, ICON_SIZE, ICON_SIZE)
 }
 
@@ -713,6 +722,50 @@ fn mark_live(pixels: &mut [u8]) {
             pixels[at] = mix(pixels[at], LIVE_DOT.r);
             pixels[at + 1] = mix(pixels[at + 1], LIVE_DOT.g);
             pixels[at + 2] = mix(pixels[at + 2], LIVE_DOT.b);
+            let alpha = f64::from(pixels[at + 3]);
+            pixels[at + 3] = (alpha + (255.0 - alpha) * cover).round().clamp(0.0, 255.0) as u8;
+        }
+    }
+}
+
+/// Watch with me's mark on the icon: a small light "eye" (a ring with a dark
+/// pupil) in the upper right - "the eye on the tray icon" of the design - so
+/// the sign that Jarvis is watching is there whatever window is in front.
+fn mark_watching(pixels: &mut [u8]) {
+    let size = ICON_SIZE as f64;
+    let (cx, cy) = (size - 7.0, 7.0);
+    let ring = 6.4f64;
+    let pupil = 2.4f64;
+    for y in 0..ICON_SIZE {
+        for x in 0..ICON_SIZE {
+            let mut white = 0.0f64;
+            let mut dark = 0.0f64;
+            for sy in 0..3 {
+                for sx in 0..3 {
+                    let px = x as f64 + (sx as f64 + 0.5) / 3.0;
+                    let py = y as f64 + (sy as f64 + 0.5) / 3.0;
+                    let d = ((px - cx).powi(2) + (py - cy).powi(2)).sqrt();
+                    if d <= pupil {
+                        dark += 1.0 / 9.0;
+                    } else if d <= ring {
+                        white += 1.0 / 9.0;
+                    }
+                }
+            }
+            let cover = (white + dark).clamp(0.0, 1.0);
+            if cover <= 0.0 {
+                continue;
+            }
+            let at = ((y * ICON_SIZE + x) * 4) as usize;
+            let mix = |old: u8, light: f64, ink: f64| {
+                let want = (light * white + ink * dark) / (white + dark);
+                (f64::from(old) * (1.0 - cover) + want * cover)
+                    .round()
+                    .clamp(0.0, 255.0) as u8
+            };
+            pixels[at] = mix(pixels[at], 236.0, f64::from(INK_DARK.r));
+            pixels[at + 1] = mix(pixels[at + 1], 240.0, f64::from(INK_DARK.g));
+            pixels[at + 2] = mix(pixels[at + 2], 245.0, f64::from(INK_DARK.b));
             let alpha = f64::from(pixels[at + 3]);
             pixels[at + 3] = (alpha + (255.0 - alpha) * cover).round().clamp(0.0, 255.0) as u8;
         }
@@ -927,6 +980,7 @@ fn repaint(app: &AppHandle, link: &LinkState) {
             link.attention.pending,
             state,
             crate::live::on_here(),
+            crate::look::on_here(),
         );
         if *slot == Some(key) {
             return;
@@ -1076,6 +1130,34 @@ fn live_label() -> &'static str {
     }
 }
 
+/// The Watch with me row's words: what clicking it does.
+fn watch_label() -> &'static str {
+    if crate::look::on_here() {
+        "Stop Watch with me"
+    } else {
+        "Start Watch with me"
+    }
+}
+
+/// Watch with me started or ended here: the row, the tooltip and the icon's
+/// eye follow.
+pub fn watch_changed(app: &AppHandle) {
+    if let Some(rows) = app
+        .state::<TrayHandles>()
+        .inner
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .as_ref()
+    {
+        let _ = rows.watch.set_text(watch_label());
+    }
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let link = app.state::<crate::stream::StreamState>().link();
+        let _ = tray.set_tooltip(Some(tooltip(app, &link)));
+        repaint(app, &link);
+    }
+}
+
 /// Jarvis Live started or ended here: the row, the tooltip and the icon's
 /// Live mark follow.
 pub fn live_changed(app: &AppHandle) {
@@ -1103,6 +1185,9 @@ fn tooltip(app: &AppHandle, link: &LinkState) -> String {
     }];
     if crate::live::on_here() {
         parts.push("Jarvis Live is on".to_string());
+    }
+    if crate::look::on_here() {
+        parts.push("Jarvis is watching your screen".to_string());
     }
     // Not while stale: power, approvals and the brief would be last-known
     // facts presented as current ones - the phone drops the same extras.
@@ -1268,6 +1353,8 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
 
         // Start or end Jarvis Live on this PC (live.rs).
         ID_LIVE => crate::live::toggle_from_tray(app),
+        // Start or stop Watch with me on this PC (look.rs).
+        ID_WATCH => crate::look::toggle_from_tray(app),
 
         ID_SHOW_HUD => {
             if let Err(err) = windows::show_hud(app) {

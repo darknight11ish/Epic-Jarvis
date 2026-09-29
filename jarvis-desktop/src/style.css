@@ -2507,6 +2507,65 @@ html[data-state="approval"] .pulse {
   letter-spacing: 0.02em;
 }
 
+/* -- Look at this / Watch with me (look-rules.js): the sign in the bar ----- */
+.watch-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-accent);
+  border-radius: 10px;
+  background: var(--surface-1);
+}
+.watch-strip[hidden] {
+  display: none;
+}
+.watch-sign {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--text);
+}
+#watch-detail {
+  color: var(--text-muted);
+}
+.watch-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+.watch-note[hidden] {
+  display: none;
+}
+.watch-note[data-tone="warn"] {
+  color: var(--text);
+}
+.watch-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  align-self: center;
+}
+.watch-strip[data-tone="paused"] .watch-dot,
+.watch-strip[data-tone="ended"] .watch-dot,
+.watch-strip[data-tone="off"] .watch-dot {
+  background: var(--text-faint);
+}
+.watch-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.watch-actions button[hidden] {
+  display: none;
+}
+#watch-toggle[aria-pressed="true"] {
+  color: var(--accent);
+}
+
 /* "Photo to reminder" (photo-reminder.js): the PC's proposal for a capture.
    The words came from a picture - outside text - and are shown only. */
 .photo-box {

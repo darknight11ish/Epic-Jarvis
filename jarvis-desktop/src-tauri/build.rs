@@ -580,6 +580,15 @@ fn main() {
             "live_act",
             "live_mute",
             "live_hold",
+            // "Look at this" and "Watch with me" (look.rs): read the session
+            // (fixed words and minutes, never a word from the screen), one
+            // verb on it (start - no card, held on a stale link and under App
+            // lock; stop and drop never held), and the Never look at list
+            // (add at once, remove is ONE card). The Jarvis bar and the
+            // Watch badge hold the first two; only Settings holds the list.
+            "screen_status",
+            "screen_watch",
+            "screen_never",
             // Interrupting by talking and "One moment." (voice_flow.rs):
             // ask for one utterance to be checked, read the status's `flow`
             // block, fetch the clip. Quickbar only; none records anything.

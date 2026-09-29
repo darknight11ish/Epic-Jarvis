@@ -39,6 +39,7 @@ pub mod hud_proxy;
 pub mod live;
 pub mod lock;
 pub mod logfile;
+pub mod look;
 pub mod plain_errors;
 pub mod proctree;
 pub mod pyfind;
@@ -418,27 +419,6 @@ fn ingest_clipboard(app: &AppHandle) {
             commands::notify(app, "Jarvis", &format!("Clipboard unavailable: {err}"));
         }
     }
-}
-
-/// Captures the primary display off the UI thread and streams the result to the
-/// quickbar. Encoding a 4K frame to JPEG takes tens of milliseconds — long
-/// enough that doing it inline would visibly stall the hotkey.
-#[cfg(desktop)]
-fn capture_desktop(app: &AppHandle) {
-    let handle = app.clone();
-    std::thread::spawn(move || match commands::capture_primary_display() {
-        Ok(payload) => {
-            if let Err(err) = windows::show_quickbar(&handle) {
-                eprintln!("[jarvis] unable to show the quickbar: {err}");
-            }
-            emit_quickbar(&handle, events::SCREEN_CAPTURED, payload);
-        }
-        Err(err) => {
-            eprintln!("[jarvis] desktop capture failed: {err}");
-            emit_quickbar(&handle, events::CAPTURE_FAILED, err.clone());
-            commands::notify(&handle, "Jarvis", &format!("Capture failed: {err}"));
-        }
-    });
 }
 
 /// The route lane last seen on a stream, mirrored into the widget's pill.
@@ -1053,6 +1033,11 @@ pub fn run() {
             live::live_act,
             live::live_mute,
             live::live_hold,
+            // "Look at this" and "Watch with me" (look.rs): read the session,
+            // one verb on it, and the Never look at list.
+            look::screen_status,
+            look::screen_watch,
+            look::screen_never,
             // Interrupting by talking and "One moment." (voice_flow.rs).
             voice_flow::judge_barge_in,
             voice_flow::get_voice_flow,
@@ -1130,7 +1115,10 @@ pub fn run() {
                     }
 
                     match action {
-                        "toggle_quickbar" => match windows::toggle_quickbar(app) {
+                        // With Watch with me on, a fresh look is taken first,
+                        // while the program the owner is in is still in front
+                        // (look.rs).
+                        "toggle_quickbar" => match look::toggle_bar_with_look(app) {
                             Ok(visible) => {
                                 if visible {
                                     // `toggle_quickbar` has already centred and
@@ -1142,7 +1130,11 @@ pub fn run() {
                             Err(err) => eprintln!("[jarvis] quickbar toggle failed: {err}"),
                         },
                         "ingest_clipboard" => ingest_clipboard(app),
-                        "capture_screen" => capture_desktop(app),
+                        // "Look at this" (the key that used to attach a screen
+                        // capture): the PC looks - checks first, throws the picture
+                        // away, keeps only the words for this question - and THEN
+                        // the bar comes up (look.rs).
+                        "capture_screen" => look::look_from_hotkey(app),
                         "quick_note" => summon_quick_note(app),
                         "toggle_widget" => {
                             if let Err(err) = windows::toggle_widget(app) {
@@ -1163,6 +1155,10 @@ pub fn run() {
                         // held on a stale link and under App lock, exactly
                         // as the tray's row; End never is.
                         "toggle_live" => crate::live::toggle(app, "hotkey"),
+                        // Watch with me's own key, OFF until the owner picks
+                        // one. Start is held on a stale link and under App lock,
+                        // like the tray's row; stopping never is.
+                        "toggle_watch" => look::toggle(app, "hotkey"),
                         other => eprintln!("[jarvis] no handler for hotkey action `{other}`"),
                     }
                 })
@@ -1324,6 +1320,10 @@ pub fn run() {
             // the tray colour, the approval queue in all three windows, the
             // online pill — is fed from here and nowhere else.
             stream::spawn(handle.clone());
+
+            // A Watch with me session that was on when this app started gets
+            // its sign back (look.rs).
+            look::adopt(&handle);
 
             // Windows Hello's app lock: hides the Jarvis bar, the Brain and
             // Settings once the owner has been away longer than "Lock again

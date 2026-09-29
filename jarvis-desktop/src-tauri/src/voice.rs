@@ -2277,6 +2277,11 @@ fn run_vad_loop(
                             // Barge-in: "hey Jarvis" stops a reply that is
                             // still being spoken.
                             let _ = app.emit(VOICE_SPEECH_STARTED, ());
+                            // Watch with me: a question is starting, so ONE
+                            // fresh look now, before the answer - the program
+                            // the owner is in is still in front (look.rs). No
+                            // session, no request.
+                            crate::look::ask_blocking(&app);
                             let _ = app.emit(VOICE_HEARD, reply);
                         }
                         Ok(reply) if !reply.live_elsewhere.is_empty() => {

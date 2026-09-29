@@ -201,6 +201,14 @@ fun SecurityScreen(
                 }
             }
 
+            // "Look at this" on the phone (the owner's decision of 2026-09-28):
+            // the assistant gesture reading the screen's words, and the
+            // Never look at list. Off by default; turning it on and taking an
+            // app off the list ask for the fingerprint or PIN like the rest.
+            item(key = "look") {
+                LookSection(security, busy, onChange)
+            }
+
             item(key = "method") {
                 Section("What counts as you") {
                     Plate {

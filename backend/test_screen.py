@@ -639,8 +639,112 @@ def t_not_built_yet():
     look = e.look_at_this()
     check("... nor look", look["ok"] is False and look["paused"] == "not_built", look)
     check("status says built: false", e.status()["built"] is False)
-    check("the module's own engine is not built on this PC yet (step 3)",
+    check("off Windows the module's own engine has no readers, so it is not built",
           SC.ENGINE.built() is False and SC.ENGINE.front is None and SC.ENGINE.capture is None)
+
+
+# ------------------------------------------------- a look for the routes and the turn
+
+def t_a_look_without_waiting():
+    """The route's look (wait=False): the picture is grabbed and checked at
+    once, its words are read beside it, and a question waits for them."""
+    import threading
+    w = World()
+    gate = threading.Event()
+    real_ocr = w.ocr
+
+    def slow_ocr(picture):
+        gate.wait(5)
+        return real_ocr(picture)
+    w.engine.ocr = slow_ocr
+    out = w.engine.look_at_this(wait=False)
+    check("the look is answered before the words are read: a note, no words",
+          out["ok"] is True and "part" not in out and out["note"].startswith("Looked at: "), out)
+    check("... one picture, and it is held for a follow-up",
+          w.captures == 1 and w.engine.status()["look_held"] is True)
+    got = []
+    t = threading.Thread(target=lambda: got.append(w.engine.take_for_turn()))
+    t.start()
+    t.join(0.3)
+    check("a question waits for the words to be read", t.is_alive() and not got)
+    gate.set()
+    t.join(5)
+    check("... and gets them, labelled, with the note",
+          got and got[0]["part"] and FAKE_WORDS in got[0]["part"]
+          and got[0]["part"].startswith(SC.SCREEN_TEXT_HEAD) and got[0]["note"], got)
+    check("a Look-at-this look serves the next follow-up too",
+          w.engine.take_for_turn()["part"] is not None)
+    w.clock.t += SC.FOLLOW_UP_S + 1
+    late = w.engine.take_for_turn()
+    check("after two minutes: nothing, and it says the look is over",
+          late["part"] is None and late["expired"] is True and w.engine.status()["look_held"] is False,
+          late)
+    w2 = World()
+    w2.ui_items = []
+    w2.engine.ocr = lambda picture: (_ for _ in ()).throw(RuntimeError("text recognition broke"))
+    out = w2.engine.look_at_this(wait=False)
+    got = w2.engine.take_for_turn()
+    check("text recognition failing never hangs a question: it says there were no words",
+          out["ok"] is True and got["part"] and SC.SCREEN_TEXT_NONE in got["part"], got)
+
+
+def t_watch_looks_belong_to_one_question():
+    w = World()
+    w.engine.start(30)
+    out = w.engine.ask()
+    check("ask: one fresh look, held for the question it was taken for",
+          out["ok"] and out["looked"] and w.captures == 1 and w.engine.status()["look_held"], out)
+    first = w.engine.take_for_turn()
+    check("the question gets the words", first["part"] and FAKE_WORDS in first["part"])
+    check("... and the look is used up", w.engine.status()["look_held"] is False
+          and w.engine.take_for_turn()["expired"] is True)
+    w.front_now = snap(password_focused=True)
+    w.clock.t += 2
+    out = w.engine.ask()
+    check("paused: no look, the reason in fixed words",
+          out["ok"] is False and out["paused"] == "password_box" and w.captures == 1, out)
+    w.front_now = snap()
+    w.clock.t += 2
+    w.engine.ask()
+    w.engine.stop()
+    check("stopping the session throws its own look away", w.engine.status()["look_held"] is False)
+    w.engine.look_at_this()
+    w.engine.start(30)
+    w.engine.stop()
+    check("... but not a Look-at-this look, which is not the session's",
+          w.engine.status()["look_held"] is True)
+    off = World()
+    check("ask with no session: nothing looked at, no error",
+          off.engine.ask() == {"ok": True, "looked": False, "off": True} and off.captures == 0)
+
+
+def t_the_sign_and_the_shared_table():
+    import json as _json
+    sys.path.insert(0, str(REPO / "tools"))
+    import gen_screen_cases as G
+    doc = G.document()
+    for p in G.COPIES:
+        check(f"{p.relative_to(REPO)} is current (python3 tools/gen_screen_cases.py)",
+              p.exists() and p.read_text(encoding="utf-8") == doc)
+    table = _json.loads(doc)
+    check("every status the table names has only the fixed keys",
+          all(set(v) == set(SC.STATUS_KEYS) for v in table["statuses"].values()))
+    for status in table["statuses"].values():
+        for key in ("state", "pause_words", "ended_words"):
+            v = status.get(key)
+            check(f"a status's {key} is a fixed word or nothing ({v!r})",
+                  v is None or v in set(SC.STATES) | set(SC.PAUSE_WORDS.values())
+                  | set(SC.END_WORDS.values()))
+    sign = SC.sign(table["statuses"]["watching"])
+    check("the sign says the title, the minutes and Stop",
+          sign["title"] == "Jarvis is watching" and sign["detail"] == "24 min left"
+          and sign["stop"] == "Stop watching" and sign["more"] == "")
+    check("... 20 more minutes only near the end",
+          SC.sign(table["statuses"]["watching_short"])["more"] == "20 more minutes")
+    check("... a session that ended long ago has no sign",
+          SC.sign(table["statuses"]["ended_time"], ended_ago=SC.ENDED_SHOW_S)["show"] is False)
+    check("the sign never carries a word that is not fixed",
+          all(SC.PAUSE_WORDS.get(k) or True for k in SC.PAUSE_WORDS))
 
 
 # ---------------------------------------------------------------- hygiene
@@ -678,9 +782,13 @@ def t_the_module_keeps_to_itself():
 
 def t_shipped():
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
-    for name in ("jarvis_screen.py", "jarvis_front.py"):
+    for name in ("jarvis_screen.py", "jarvis_front.py", "jarvis_screen_win.py"):
         check(f"{name} is shipped (apply-patches.ps1 $SHIPPED and _where.SHIPPED)",
               f"'{name}'" in ps1 and name in SHIPPED)
+    check("jarvis_screen_win.py is copied before jarvis_screen.py, which imports it",
+          ps1.index("'jarvis_screen_win.py'") < ps1.index("'jarvis_screen.py'"))
+    check("screen.patch is applied after inbox-tidy.patch, whose startup block is its context",
+          ps1.index("'screen.patch'") > ps1.index("'inbox-tidy.patch'"))
     check("jarvis_front.py is copied before jarvis_focus.py, which imports it",
           ps1.index("'jarvis_front.py'") < ps1.index("'jarvis_focus.py'"))
     check("the front reader is the one focus uses",

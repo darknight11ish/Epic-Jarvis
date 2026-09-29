@@ -799,6 +799,12 @@ async fn dispatch(app: &AppHandle, base: &str, event: Event) {
             ));
         }
 
+        // "Watch with me" changed (backend jarvis_screen.py): the same fixed
+        // words and numbers as GET /api/screen - never a program, a site, a
+        // title or a word from the screen. The sign (the badge, the tray's
+        // row, the bar's strip) follows it (look.rs). Fanned out below too.
+        "screen_watch" => crate::look::on_event(app, &event.data),
+
         // finding | persona | model | voice — nothing here consumes them, and
         // nothing here should: they are fanned out below like everything else,
         // and the surface that renders one owns what it means.

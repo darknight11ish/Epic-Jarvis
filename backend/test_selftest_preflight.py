@@ -559,17 +559,33 @@ def t_folders_and_instant_email():
     check("connected: PASS", _rows(rows, "instant_email")[0][0] == S.PASS)
 
 
-def t_screen_says_not_built_yet():
-    """"Look at this" and "Watch with me" (2026-09-28): build steps 1 and 2
-    are the rules only, so the check says plainly that it is not built on
-    this PC yet - a skip, never a PASS it has not earned, never a FAIL."""
-    live, _fake, _ollama = _live()
-    _p, f, _w, _s, rows, text = _run(live, only={"backend", "screen"})
+def t_screen():
+    """"Look at this" and "Watch with me" (2026-09-29): asks GET /api/screen,
+    takes no picture, and says what is missing - a WARN, never a FAIL and
+    never a PASS it has not earned."""
+    fake = FakeJarvis()
+    live, _f, _o = _live(fake)
+    _p, f, _w, _s, rows, _t = _run(live, only={"backend", "screen"})
     sc = _rows(rows, "screen")
-    check("one screen row, a skip", len(sc) == 1 and sc[0][0] == S.SKIP, sc)
-    check("... that says it is not built on this PC yet",
-          sc and "not built on this PC yet" in sc[0][1], sc)
-    check("... and that there is nothing to fix", sc and "Nothing to fix" in sc[0][2], sc)
+    check("no screen.patch (404): a WARN that says how to add it, never a FAIL",
+          len(sc) == 1 and sc[0][0] == S.WARN and "apply-patches.ps1" in sc[0][2] and f == 0, sc)
+    fake.routes[("GET", "/api/screen")] = (200, {"available": False, "state": "off",
+                                                 "unavailable_why": "The 'uiautomation' package "
+                                                                    "is missing."})
+    live, _f, _o = _live(fake)
+    _p, f, _w, _s, rows, _t = _run(live, only={"backend", "screen"})
+    sc = _rows(rows, "screen")
+    check("readers missing: a WARN with the route's own reason",
+          sc[0][0] == S.WARN and "uiautomation" in sc[0][2] and f == 0, sc)
+    fake.routes[("GET", "/api/screen")] = (200, {"available": True, "state": "off"})
+    live, _f, _o = _live(fake)
+    _p, f, _w, _s, rows, _t = _run(live, only={"backend", "screen"})
+    sc = _rows(rows, "screen")
+    check("readers in place: a PASS that says no picture was taken",
+          sc[0][0] == S.PASS and "no picture" in sc[0][1], sc)
+    posted = [c for c in fake.calls if c[0] != "GET"] if hasattr(fake, "calls") else []
+    check("only GET /api/screen was asked - nothing posted, so nothing looked",
+          not posted, posted)
 
 
 def t_data_health():

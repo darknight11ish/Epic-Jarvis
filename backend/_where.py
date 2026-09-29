@@ -308,9 +308,11 @@ SHIPPED = (
     # of their own: jarvis_chatbot.py loads both.
     "jarvis_chatbot_api.py",
     "jarvis_chatbot_local.py",
-    # "Look at this" and "Watch with me", build steps 1 and 2: the session
-    # rules, pause rules, caps and the Never look at list (no route yet, no
-    # patch; the Windows readers are step 3)
+    # "Look at this" and "Watch with me": the session rules, pause rules,
+    # caps, the Never look at list and the routes (screen.patch installs
+    # them); jarvis_screen_win.py is the Windows half - what is in front,
+    # the picture, the window's own text (2026-09-29)
+    "jarvis_screen_win.py",
     "jarvis_screen.py",
     # "Ask several and compare": several of the conversations above, ONE
     # card, ONE summary. No patch of its own: jarvis_chatbot.py loads it and

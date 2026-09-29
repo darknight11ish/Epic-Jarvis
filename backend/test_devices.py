@@ -411,10 +411,13 @@ def t_the_hunk_comes_before_every_token_ok():
     # inbox-tidy.patch goes last (2026-09-29): it leaves devices.patch's lines
     # alone (checked by the second condition), and apps-in-projects.patch's
     # hunks need the gate lists as they stand before it adds its own.
+    # screen.patch goes after those two (2026-09-29): its startup block is
+    # anchored on inbox-tidy.patch's own lines and it touches no gate list.
     check("devices.patch is in apply-patches.ps1's list, and only "
-          "apps-in-projects.patch (which builds on its lines) and inbox-tidy.patch "
-          "(which leaves them alone) come after it",
-          after_it is not None and set(after_it) <= {"apps-in-projects.patch", "inbox-tidy.patch"}
+          "apps-in-projects.patch (which builds on its lines), inbox-tidy.patch "
+          "and screen.patch (which leave them alone) come after it",
+          after_it is not None
+          and set(after_it) <= {"apps-in-projects.patch", "inbox-tidy.patch", "screen.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")
     check("the stacked jarvis_hud.py builds", text is not None, "\n".join(log[-3:]))
