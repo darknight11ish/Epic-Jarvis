@@ -608,6 +608,19 @@ Decided 2026-09-29, the owner's answers on the small animal leftovers:
   2026-09-27 "written down, not fixed" note. Nothing else about crisis
   handling changes; no crisis content is stored, counted or logged.
 
+Decided 2026-09-29, after the skeptical review of all five faces (the
+owner kept the ray-marched drawing; the review found expression, motion and
+one state bug to fix, not a new approach):
+- **An error gets a still mark on every face:** a thin ring with a gap at
+  the bottom, drawn by the apps over the face, never moving. It must not be
+  mistaken for the waiting-on-you clock or the not-connected ring.
+- **Fewer small idle moves when Jarvis is not being used:** breathing and
+  looking around stay; the small happenings (a tail flick, an ear turn, a
+  stretch) drop to about a quarter unless the owner has talked to Jarvis
+  lately or their pointer is on the face.
+- **A focus session no longer shows a sleeping animal:** the focus buddy
+  shows, not standby (a manual Quiet stays asleep).
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
