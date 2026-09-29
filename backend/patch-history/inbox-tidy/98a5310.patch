@@ -1,9 +1,9 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -167,6 +167,7 @@
+@@ -165,6 +165,7 @@
+     "memory_forget_range",  # jarvis_forget_range.py acts only on tier "ask": ONE card per time frame (forget-range.patch)
      "support_chat",  # jarvis_support.py acts only on tier "ask": ONE card per support chat, listing every detail it may give (support-chat.patch)
      "support_offer",  # jarvis_support.py acts only on tier "ask": ONE card per offer; nothing is accepted without it (support-chat.patch)
-     "app_merge_change",  # jarvis_apps.py acts only on tier "ask": ONE card per change added to an app (apps-in-projects.patch)
 +    "tidy_inbox",  # jarvis_inbox_tidy.py / jarvis_agent.py acts only on tier "ask": ONE card per tidy, listing every email (inbox-tidy.patch)
  })
  
