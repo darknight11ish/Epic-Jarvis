@@ -592,6 +592,21 @@ Decided 2026-09-28, the owner's answers after the animal-face audits:
   (small, slow, eased, never busy). Still, calm and serious quieten them
   as before; approval and error stay attentive and still.
 
+Decided 2026-09-29, the owner's answers on the small animal leftovers:
+- **Tighter drawing boundaries for the five faces**, for about 20-30% less
+  graphics work, provided nothing is cut off: every pose is compared
+  pixel for pixel with the old drawing before it is kept.
+- **A 60-frame cap while the AI model shares the graphics card waits for a
+  measurement from the owner's PC** (a one-line PowerShell check of the
+  graphics card while Jarvis talks, with and without a face showing). No cap
+  is built until those numbers are in.
+- **The owl's beak opens wider on quiet-to-normal speech**; loud words stay
+  about where they were, and it must stay cute, never a wide gape.
+- **A thumbs-down on a crisis-help answer is no longer counted** toward
+  "suggest the bigger model" - the owner's go-ahead for that one gap in the
+  2026-09-27 "written down, not fixed" note. Nothing else about crisis
+  handling changes; no crisis content is stored, counted or logged.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
