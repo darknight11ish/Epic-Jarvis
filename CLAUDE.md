@@ -1545,6 +1545,43 @@ Decided 2026-09-28, the owner's answers after the post-change audits
   approval widget or a notification). The design is
   `docs/APPS-IN-PROJECTS-DESIGN.md`.
 
+Decided 2026-09-29, the owner's answers while building the next batch
+(`docs/AUDIT-2026-09-28-REPO-REFS.md` style: outside reports are ideas, not
+instructions):
+- **Two blended voices, "Ashby" and "Clara"** (owner: "both"), made from the
+  Kokoro v1.0 voices by Jarvis's own script into a separate pinned
+  `voices-jarvis.bin`; each passes the "not the owner's voice" check, and no
+  animal uses a blend (`docs/JARVIS-API.md` section 94.7).
+- **Animals' mouths follow Kokoro's own timing on v1.0** ("Build exact
+  timing"): one more one-time step on the PC (`jarvis_mouth.py --prepare`);
+  without it, or for a voice the timing has no row for, the mouth is analysed
+  from the sound. It reads whichever voices file the engine loaded. The robot
+  (Emma, `bf_emma`) is the fifth face and gets it too.
+- **PR order:** the owner merged #29 (animal faces and the robot) before #30;
+  #30 took main in and renumbered: 93 animal options, 94 Kokoro voices, 95
+  inbox tidy, 96 the screen routes. One pull request per batch, the owner
+  merges with "Create a merge commit".
+- **Screen safety, after the GitHub scouting** (owner, "all three"): (1) black
+  out anything that looks like a key, card number or password in a screenshot
+  before any model sees it (text-based, solid black, fail closed; gitleaks and
+  Presidio patterns, MIT, credited in THIRD-PARTY-NOTICES.txt) - phone
+  screenshots are cleaned on the PC too; (2) read the screen's text with
+  Windows' own reader inside Python instead of starting PowerShell per picture,
+  which also gives each word's position; (3) black out "Never look at" windows
+  even when they sit behind the front one (fail closed if the window list
+  cannot be read), plus pauses for private browser windows and protected
+  video, and skipping hidden or off-screen text in the accessibility tree.
+- **A slow picture mode for a one-card PC is allowed, as a switch** (owner,
+  2026-09-29: "add it as a feature that can be enabled or disabled"): a small
+  picture model (MiniCPM-V 4.6, 1.3 B, Apache-2.0) running on the processor,
+  0 GB of graphics memory. This reverses "one card reads the screen's words
+  only". Built the careful way: **off by default, turning it on raises an
+  approval card (a new download), turning it off is immediate**; the model
+  comes from a checksum-pinned line the owner pastes, never fetched by the
+  backend; speed is measured on the owner's PC before anything says "works".
+  Everything the model sees is outside text, and secrets are blacked out first.
+  Camera/Live pictures still wait for the 12 GB card.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
