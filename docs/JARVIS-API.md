@@ -13540,7 +13540,7 @@ fingerprint or PIN for every use) and sends only the public half.
 
 | Answer | Means |
 |---|---|
-| `202 {"waiting": true}` | ONE `register_approval_key` card is up on the PC (tier `ask`, in `PC_ONLY_ACTIONS`: approved on the PC only, always with Windows Hello). Its title is the shared fixed phrase ("Jarvis wants to let a phone approve risky actions with its fingerprint or PIN"); the phone's name and what approving does are in its text. Never the key. |
+| `202 {"waiting": true}` | ONE `register_approval_key` card is up on the PC (tier `ask`, in `PC_ONLY_ACTIONS`: approved on the PC only, always with Windows Hello). Its title is the shared fixed phrase ("Jarvis wants to let a phone approve risky actions with its fingerprint or PIN"); the phone's name and what approving does are in its text. Never the key.  If the phone already has a key on this PC, the card's text says it REPLACES that key and that denying keeps the current one (a stolen device key could ask for a swap, so the words say so); a denial changes nothing, so the phone can then hold a key the PC does not - its next signature is refused as `bad_signature`, and the phone offers "Turn on signed approvals" to make a fresh key. |
 | `400 {"reason": "bad_key" \| "bad_request"}` | not an EC P-256 public key (an RSA or P-384 key, junk, padding, too long), or a body with anything else in it - plain words in the cases file. No card. |
 | `403 device_key_needed` | the shared key, the PC's key, or a removed device. |
 | `503` | `cryptography` is missing ("Risky approvals from the phone need the cryptography package on your PC."), the tier is not `ask`, the PC is not checking approvals itself, or the device list cannot be read. |

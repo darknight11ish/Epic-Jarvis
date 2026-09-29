@@ -687,3 +687,14 @@ approve it?
   change on the phone first.
 - **PC only:** the phone can look and discard, but only the PC (Windows Hello)
   approves a change.
+
+
+## Addendum, 2026-09-29 - what the audit of the build found
+
+- **A `.gitattributes` line such as `* -diff` or `binary` in an app's `main` made
+  git print "Binary files differ" for every later change, so the merge card
+  showed no text while Merge still landed the files.** Fixed:
+  `jarvis_app_workspace.diff()` uses `--text --no-textconv`, `diff_stat()` counts
+  from that text when git says "-", and a file that still cannot be counted
+  refuses the card. `test_app_workspace.py` has the case.
+- `.jarvis-app.json` is protected whatever the letter case (Windows ignores it).

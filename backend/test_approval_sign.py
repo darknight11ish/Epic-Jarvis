@@ -198,6 +198,29 @@ def t_a_good_key_is_stored_only_after_the_card_is_approved():
           and ("devices", {}) in T.EVENTS)
 
 
+def t_replacing_a_key_says_so_on_the_card_and_a_denial_keeps_the_old_one():
+    dev, _tok, priv = phone()               # registered through an approved card
+    old = D.approval_key_of(dev)
+    cards = T.Gate(T.DENY)
+    other = new_key()
+    code, out = D.register_key({"public_key": spki_of(other)}, you=dev, gate=cards, tier_of=ASK,
+                               spawn=T.now_spawn, armed=ARMED)
+    check("a second request is accepted as a request: 202", (code, out) == (202, {"waiting": True}))
+    _action, _detail, prompt = cards.cards[0]
+    check("the card says it REPLACES the key this phone has, and that denying keeps it",
+          "REPLACE" in prompt and "already has a signed-approvals key" in prompt
+          and "Denying keeps the key this PC has now" in prompt, prompt)
+    check("the first-time words are not used for a swap", "Approve only if you just pressed" in prompt
+          and "for example because" in prompt)
+    check("denied: the PC still holds the OLD key", D.approval_key_of(dev) == old)
+    first = T.Gate(T.DENY)
+    dev2, _t2, _ = phone(register=False)
+    D.register_key({"public_key": spki_of(new_key())}, you=dev2, gate=first, tier_of=ASK,
+                   spawn=T.now_spawn, armed=ARMED)
+    check("a FIRST key's card has the ordinary words (no 'REPLACE')",
+          "REPLACE" not in first.cards[0][2] and "wants to approve risky actions" in first.cards[0][2])
+
+
 def t_denied_timed_out_or_refused_stores_nothing():
     for name, verdict in (("denied", T.DENY), ("timed out", T.TIMEOUT),
                           ("wrong tier", T.Verdict(True, "auto", "approved"))):

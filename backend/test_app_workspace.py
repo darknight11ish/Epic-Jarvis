@@ -183,6 +183,31 @@ def main():
               r == {"ok": True, "changed": 0}, repr(r))
         W.discard("notes", tg)
 
+        # --- git attributes must not hide a change from the card -----------
+        # (audit 2026-09-29: with `* -diff` in main, git printed "Binary files
+        # differ" for every later change, so the card showed no content.)
+        check("Jarvis's own note is protected whatever the letter case (Windows)",
+              refused(W.apply_change, "notes", W.start_task("notes", "Case")["task"],
+                      [("write", ".Jarvis-App.json", "{}")], "case"))
+        for tt in [x["task"] for x in W.list_tasks("notes")]:
+            W.discard("notes", tt)
+        tw = W.start_task("notes", "Attributes")["task"]
+        W.apply_change("notes", tw, [("write", ".gitattributes", "* -diff\n*.js binary\n")], "Attrs")
+        W.plan_merge("notes", tw)
+        W.run_merge(W.plan_merge("notes", tw), approved=True)
+        tb = W.start_task("notes", "Hidden by attributes")["task"]
+        W.apply_change("notes", tb, [("write", "app.js", "console.log('secret plan');\n"),
+                                     ("write", "note.txt", "plain words\n")], "Two files")
+        planb = W.plan_merge("notes", tb)
+        cardb = W.describe(planb)
+        check("with `* -diff` and `binary` in main, the card still shows the whole text",
+              "console.log('secret plan');" in cardb and "plain words" in cardb
+              and "Binary files" not in cardb and not planb.refused, cardb[:300])
+        check("... and the counts are real numbers, not dashes",
+              all(f["added"].isdigit() and f["removed"].isdigit() for f in planb.files),
+              repr(planb.files))
+        W.discard("notes", tb)
+
         # --- the latest saved version --------------------------------------
         info = W.main_info("notes")
         check("main_info: a short commit, the subject, a time, a count of versions",
