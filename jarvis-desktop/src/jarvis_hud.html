@@ -815,6 +815,10 @@ const S = {
   // The PC's power mode ("active", "quiet", "standby"): read at boot from
   // /api/status and kept by the `power` event. Only the face reads it.
   power: "active",
+  // Who set it ("focus" for a focus session, "override" for the owner, ...),
+  // from the shell's link push. Only "focus" matters here: a focus session's
+  // Quiet shows the focus buddy, not a sleeping animal.
+  powerBy: "",
   graph: null,
   traces: [],
   activeTrace: null,
@@ -1032,7 +1036,8 @@ const reactor = (() => {
   const faceState = () => {
     if (!S.online) return "standby";
     const st = FACE_STATE[S.state] || "idle";
-    return st === "idle" && (S.power === "standby" || S.power === "quiet") ? "standby" : st;
+    const focusQuiet = S.power === "quiet" && S.powerBy === "focus";
+    return st === "idle" && !focusQuiet && (S.power === "standby" || S.power === "quiet") ? "standby" : st;
   };
 
   // A serious moment (docs/JARVIS-API.md section 38.1): the `wellbeing`
@@ -1162,9 +1167,12 @@ const reactor = (() => {
       post();
     },
     /** The PC's power mode: "active", "quiet" or "standby". */
-    setPower(mode){
-      if (typeof mode !== "string" || !mode || mode === S.power) return;
+    setPower(mode, by){
+      if (typeof mode !== "string" || !mode) return;
+      const setBy = typeof by === "string" ? by : S.powerBy;
+      if (mode === S.power && setBy === S.powerBy) return;
       S.power = mode;
+      S.powerBy = setBy;
       post();
     }
   };
@@ -2492,5 +2500,11 @@ function subscribe(){
 // The safety net. Deliberately slow: if the stream is working this is nearly
 // free, and if it is not, this is what keeps the page usable.
 setInterval(() => { apprPoll(); initPoll(); }, 30000);
+// The shell's link push carries who set the power mode (hud_bootstrap.js
+// powerChanged); the `power` event carries only the mode. Registered once,
+// here, not in subscribe(), which runs again on every reconnect.
+const onPower = (e) => { const d = e.detail || {}; reactor.setPower(d.power, d.set_by || ""); };
+window.addEventListener("jarvis-power", onPower);
+if (window.__jarvisPower) onPower({ detail: window.__jarvisPower });
 subscribe();
 </script>

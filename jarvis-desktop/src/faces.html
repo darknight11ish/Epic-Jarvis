@@ -6738,6 +6738,9 @@ function specState(link) {
   if (link.approvals > 0 && !link.stale) return "approval";
   const composed = faceStateFromActivity(link.activity, Boolean(link.attention && link.attention.banked));
   if (composed !== "idle") return composed;
+  // A focus session's Quiet is awake (the focus buddy), not asleep: the same
+  // rule as tray.rs spec_state and jarvis-link.js restingAsleep.
+  if (link.power === "quiet" && link.powerSetBy === "focus") return "idle";
   return link.power === "standby" || link.power === "quiet" ? "standby" : "idle";
 }
 

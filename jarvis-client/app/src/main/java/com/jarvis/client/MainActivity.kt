@@ -681,6 +681,7 @@ class MainActivity : FragmentActivity() {
         val activity by JarvisRuntime.activity.collectAsState()
         val faceState by JarvisRuntime.face.collectAsState()
         val faceOffline by JarvisRuntime.faceOffline.collectAsState()
+        val faceFocusQuiet by JarvisRuntime.faceFocusQuiet.collectAsState()
         val faceSerious by JarvisRuntime.faceSerious.collectAsState()
         val power by JarvisRuntime.power.collectAsState()
         val status by JarvisRuntime.status.collectAsState()
@@ -1972,6 +1973,7 @@ class MainActivity : FragmentActivity() {
                             activity = activity,
                             faceState = faceState,
                             faceOffline = faceOffline,
+                            faceFocusQuiet = faceFocusQuiet,
                             faceSerious = faceSerious,
                             power = power,
                             status = status,

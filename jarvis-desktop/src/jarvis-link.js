@@ -470,8 +470,25 @@ export function surfaceState(state = link, now = Date.now()) {
   if (live && Number((state && state.approvals) || 0) > 0) return "approval";
   const face = faceState(state);
   if (face !== "idle") return face;
+  return restingAsleep(state) ? "standby" : "idle";
+}
+
+/**
+ * Whether a resting Jarvis is asleep (standby) rather than awake.
+ *
+ * Standby, and Quiet, read as asleep - with one exception (owner,
+ * 2026-09-29): a focus session puts Jarvis on Quiet, and it must show the
+ * focus buddy, awake and working beside the owner, not a sleeping animal that
+ * wakes to say "YouTube can wait" and dozes off again. `powerSetBy` is
+ * "focus" only while Quiet is the focus session's own (stream.rs
+ * `power_set_by`, from the backend's `why`); a Quiet the owner sets by hand
+ * replaces it and stays asleep. The tray follows the same rule
+ * (tray.rs `spec_state`), and the phone's (FaceShellRules.kt `RestingFace`).
+ */
+export function restingAsleep(state = link) {
   const power = String((state && state.power) || "active");
-  return power === "standby" || power === "quiet" ? "standby" : "idle";
+  if (power === "quiet" && state && state.powerSetBy === "focus") return false;
+  return power === "standby" || power === "quiet";
 }
 
 /**

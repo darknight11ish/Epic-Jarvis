@@ -446,7 +446,14 @@ fn spec_state(link: &LinkState) -> &'static str {
     // "things are waiting silently" is more worth a glance than "asleep", and
     // the two never contradict each other because a banked system with budget
     // to spend is not a state the arbiter can produce.
+    //
+    // One exception (owner, 2026-09-29): a focus session puts Jarvis on Quiet,
+    // and the animal then shows its focus buddy, awake and working beside the
+    // owner - so the icon reads "idle", the same as the faces
+    // (jarvis-link.js surfaceState). Only that Quiet: a Quiet the owner set by
+    // hand, and standby of any kind, still read as asleep.
     match link.power.as_str() {
+        "quiet" if link.power_set_by.as_deref() == Some("focus") => "idle",
         "standby" | "quiet" => "standby",
         _ => "idle",
     }
@@ -857,6 +864,7 @@ fn power_label(link: &LinkState) -> String {
         Some("schedule") => " · quiet hours",
         Some("idle") => " · idle timer",
         Some("standby_schedule") => " · standby schedule",
+        Some("focus") => " · focus session",
         _ => "",
     };
     // The "· read-only" that used to end this row is gone: the submenu
@@ -1355,6 +1363,34 @@ mod tests {
         // An error outranks everything.
         l.activity = "error".into();
         assert_eq!(spec_state(&l), "error");
+    }
+
+    /// A focus session's Quiet is not asleep (owner, 2026-09-29): the faces
+    /// show the focus buddy, so the icon reads idle. A Quiet set by hand, or
+    /// any standby, still reads as asleep. CONTROL: without the `focus` arm in
+    /// `spec_state` the first assertion says "standby".
+    #[test]
+    fn a_focus_sessions_quiet_is_awake_and_a_hand_set_one_is_asleep() {
+        let mut l = link();
+        l.power = "quiet".into();
+        l.power_set_by = Some("focus".into());
+        assert_eq!(spec_state(&l), "idle", "focus Quiet shows the buddy");
+        assert_eq!(power_label(&l), "Power: quiet · focus session");
+        l.power_set_by = Some("override".into());
+        assert_eq!(spec_state(&l), "standby", "a hand-set Quiet stays asleep");
+        l.power_set_by = None;
+        assert_eq!(spec_state(&l), "standby");
+        l.power = "standby".into();
+        l.power_set_by = Some("focus".into());
+        assert_eq!(
+            spec_state(&l),
+            "standby",
+            "only Quiet is the focus session's"
+        );
+        l.power = "quiet".into();
+        l.power_set_by = Some("focus".into());
+        l.connected = false;
+        assert_eq!(spec_state(&l), "standby", "not connected is asleep");
     }
 
     /// Never the approval colour while acting is blocked, and not connected

@@ -155,6 +155,12 @@ fun FaceView(
      * The other faces ignore it.
      */
     stillMotion: Boolean = false,
+    /**
+     * The face is IDLE because a focus session put Jarvis on Quiet
+     * (`JarvisRuntime.faceFocusQuiet`): the focus buddy shows, awake, not a
+     * sleeping animal. Only TalkBack's words differ ([FaceWords.spoken]).
+     */
+    focusQuiet: Boolean = false,
 ) {
     val host = remember { FaceHost() }
     var frame by remember { mutableStateOf(host.snapshot()) }
@@ -507,7 +513,7 @@ fun FaceView(
     // While Jarvis cannot be reached it says so, whatever pose is showing:
     // the old link-down ladder ended in BANKED and read "Jarvis has notes
     // saved for later" about a PC this phone could not hear (FaceWords).
-    val spoken = FaceWords.spoken(state, offline)
+    val spoken = FaceWords.spoken(state, offline, focusQuiet)
     // The offline ring's colour: the shown state's own bound colour, dimmed
     // toward the ground by that state's `dim` - fixed, not the pattern's
     // colour of the moment, so the ring never breathes or pulses.

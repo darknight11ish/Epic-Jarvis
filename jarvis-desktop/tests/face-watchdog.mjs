@@ -464,6 +464,58 @@ await check("faceSignal and surfaceState: the rules in one place", async () => {
   assert.equal(L.surfaceState(live), "approval");
 });
 
+/* ── A focus session is not a sleeping animal (owner, 2026-09-29) ────────── */
+
+await check("a focus session's Quiet shows the focus buddy (idle); a hand-set Quiet, or any standby, stays asleep", async () => {
+  const L = await import("../src/jarvis-link.js");
+  const rest = { connected: true, stale: false, activity: "idle", approvals: 0, power: "active",
+                 attention: { pending: 0, banked: false } };
+  // The bug: this said "standby" (Quiet is asleep), so the animal slept through its own focus session.
+  assert.equal(L.surfaceState({ ...rest, power: "quiet", powerSetBy: "focus" }), "idle");
+  assert.equal(L.faceSignal({ ...rest, power: "quiet", powerSetBy: "focus" }).state, "idle");
+  assert.equal(L.restingAsleep({ ...rest, power: "quiet", powerSetBy: "focus" }), false);
+  // Control: everything else that was asleep still is.
+  assert.equal(L.surfaceState({ ...rest, power: "quiet", powerSetBy: "override" }), "standby", "a Quiet set by hand");
+  assert.equal(L.surfaceState({ ...rest, power: "quiet", powerSetBy: null }), "standby");
+  assert.equal(L.surfaceState({ ...rest, power: "quiet", powerSetBy: "schedule" }), "standby");
+  assert.equal(L.surfaceState({ ...rest, power: "standby", powerSetBy: "focus" }), "standby", "only Quiet is the session's");
+  assert.equal(L.surfaceState({ ...rest, power: "standby", powerSetBy: "override" }), "standby");
+  assert.equal(L.surfaceState({ ...rest, power: "active", powerSetBy: "focus" }), "idle");
+  // Not connected is asleep whatever the reason (the stream keeps the last power).
+  assert.equal(L.surfaceState({ ...rest, connected: false, stale: true, power: "quiet", powerSetBy: "focus" }), "standby");
+  // Busy still wins over resting, as before.
+  assert.equal(L.surfaceState({ ...rest, activity: "speaking", power: "quiet", powerSetBy: "focus" }), "speaking");
+});
+
+await check("the floating face shows idle for a focus session's Quiet and standby for a hand-set one", async () => {
+  const page = await K.open(browser, base, "floating.html", {}, { width: 240, height: 240 });
+  const frame = await faceFrame(page);
+  const state = () => frame.evaluate(() => LIVE_STATE);
+  await page.evaluate((l) => window.__emit("jarvis-link", { ...l, power: "quiet", power_set_by: "focus" }), LIVE);
+  await page.waitForTimeout(300);
+  const focus = await state();
+  await page.evaluate((l) => window.__emit("jarvis-link", { ...l, power: "quiet", power_set_by: "override" }), LIVE);
+  await page.waitForTimeout(300);
+  const byHand = await state();
+  await page.close();
+  assert.equal(focus, "idle", "the animal slept through a focus session");
+  assert.equal(byHand, "standby", "a Quiet set by hand must stay asleep");
+});
+
+await check("faces.html's own specState (its fallback port of the tray rule) agrees", async () => {
+  const page = await editor();
+  const got = await page.evaluate(() => {
+    const base = { connected: true, stale: false, activity: "idle", approvals: 0, attention: { banked: false } };
+    return [
+      specState({ ...base, power: "quiet", powerSetBy: "focus" }),
+      specState({ ...base, power: "quiet", powerSetBy: "override" }),
+      specState({ ...base, power: "standby", powerSetBy: "focus" }),
+    ];
+  });
+  await page.close();
+  assert.deepEqual(got, ["idle", "standby", "standby"]);
+});
+
 await browser.close();
 close();
 if (fails.length) { console.log(`\n${fails.length} failed`); process.exit(1); }

@@ -59,6 +59,16 @@ data class VersionInfo(
 
     /** The sub-object for a capability that reports detail rather than a flag. */
     fun detail(name: String): JsonObject? = capabilities[name] as? JsonObject
+
+    /**
+     * Why the PC is in its power mode, in the PC's own sentence
+     * (`capabilities.power.why`: "the owner, from this PC", "the focus
+     * session", ...), or null when the server sends only a flag. The face
+     * reads it for one thing: a Quiet that a focus session set shows the
+     * focus buddy, not a sleeping animal ([com.jarvis.client.face.RestingFace]).
+     */
+    fun powerWhy(): String? =
+        (detail("power")?.get("why") as? JsonPrimitive)?.takeIf { it.isString }?.content
 }
 
 @Serializable
