@@ -203,3 +203,67 @@
 .pj-log .todo-text {
   max-width: 260px;
 }
+
+/* An app Jarvis builds (docs/APPS-IN-PROJECTS-DESIGN.md): its section, tasks
+   and the whole change as text. Colours come from the theme's own tokens. */
+.pj-app {
+  margin: 4px 0 8px;
+}
+
+.pj-start {
+  margin-top: 8px;
+}
+
+.pj-older {
+  color: var(--warn);
+}
+
+.pj-path {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.pj-diff {
+  margin: 6px 0 10px;
+  padding: 8px 0;
+  max-height: 60vh;
+  overflow: auto;
+  white-space: pre;
+  tab-size: 4;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.pj-diff:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.pj-d {
+  display: block;
+  padding: 0 10px;
+  min-width: max-content;
+}
+
+.pj-d-add {
+  background: color-mix(in srgb, var(--ok) 22%, transparent);
+}
+
+.pj-d-del {
+  background: color-mix(in srgb, var(--bad) 22%, transparent);
+}
+
+.pj-d-hunk,
+.pj-d-meta {
+  color: var(--text-muted);
+}
+
+.pj-paste {
+  font-family: var(--font-mono);
+  white-space: pre;
+  overflow: auto;
+}

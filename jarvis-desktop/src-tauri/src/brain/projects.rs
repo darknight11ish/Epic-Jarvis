@@ -2,6 +2,13 @@
 //! Claude's Projects and more"; docs/PROJECTS-DESIGN.md build step 3;
 //! backend/jarvis_projects.py, projects.patch; JARVIS-API.md section 88).
 //!
+//! (2026-09-29, docs/APPS-IN-PROJECTS-DESIGN.md sections 5 and 7.3: an app
+//! Jarvis builds is a coding project; four more changes - start a task, paste
+//! a change into it, merge it, discard it - and reading one task. A merge
+//! raises ONE heavy, risky approval card that the Jarvis bar decides; this
+//! window never approves anything, and the whole change text (`diff`) is never
+//! logged or kept here.)
+//!
 //! Three commands, Brain window only (permissions/surfaces.toml,
 //! `brain-projects`):
 //!
@@ -67,7 +74,20 @@ pub(crate) const ACTIONS: &[&str] = &[
     "log",
     "result_delete",
     "unmark",
+    "app_task_start",
+    "app_task_files",
+    "app_task_merge",
+    "app_task_discard",
 ];
+
+/// The most characters a pasted change may hold (design 7.1).
+const MAX_BLOCKS: usize = 2_000_000;
+
+/// The longest task title (design 7.1).
+const MAX_TITLE: usize = 120;
+
+/// Which kinds of app the PC can start (design 7.1: `app.type`).
+const APP_TYPES: &[&str] = &["web", "android"];
 
 /// A project, benchmark or number id: 32 lower-case hex digits, exactly what
 /// jarvis_projects makes. Anything else never reaches a URL.
@@ -77,6 +97,31 @@ pub(crate) fn is_id(s: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
+/// A task id: 12 lower-case hex digits (design 7.1). Anything else never
+/// reaches a URL.
+pub(crate) fn is_task_id(s: &str) -> bool {
+    s.len() == 12
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+/// An app's folder name under `apps/`: `^[a-z0-9][a-z0-9-]{0,39}$`.
+pub(crate) fn is_app_name(s: &str) -> bool {
+    let b = s.as_bytes();
+    !b.is_empty()
+        && b.len() <= 40
+        && (b[0].is_ascii_lowercase() || b[0].is_ascii_digit())
+        && b.iter()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'-')
+}
+
+fn task_id(v: Option<&str>) -> Result<&str, String> {
+    match v {
+        Some(s) if is_task_id(s) => Ok(s),
+        _ => Err("no such task".to_string()),
+    }
+}
+
 fn id<'a>(v: Option<&'a str>, what: &str) -> Result<&'a str, String> {
     match v {
         Some(s) if is_id(s) => Ok(s),
@@ -84,13 +129,24 @@ fn id<'a>(v: Option<&'a str>, what: &str) -> Result<&'a str, String> {
     }
 }
 
-/// The GET path for a read: the list, one project, or one benchmark (with
-/// how many chart points, at most 1000).
+/// The GET path for a read: the list, one project, one benchmark (with how
+/// many chart points, at most 1000), or one app task.
 pub(crate) fn read_path(
     project: Option<&str>,
     bench: Option<&str>,
     points: Option<u32>,
+    task: Option<&str>,
 ) -> Result<String, String> {
+    if task.is_some() {
+        if bench.is_some() {
+            return Err("ask for a benchmark or a task, not both".to_string());
+        }
+        return Ok(format!(
+            "/api/projects/{}/app/tasks/{}",
+            id(project, "project")?,
+            task_id(task)?
+        ));
+    }
     match (project, bench) {
         (None, None) => Ok(PROJECTS_PATH.to_string()),
         (Some(_), None) => Ok(format!("/api/projects/{}", id(project, "project")?)),
@@ -112,6 +168,7 @@ pub(crate) fn write_path(
     project: Option<&str>,
     bench: Option<&str>,
     result: Option<&str>,
+    task: Option<&str>,
 ) -> Result<String, String> {
     if !ACTIONS.contains(&action) {
         return Err(format!("not a projects change: {action}"));
@@ -134,12 +191,22 @@ pub(crate) fn write_path(
             id(result, "number")?
         ),
         "unmark" => format!("/api/projects/{}/benchmarks/{}/unmark", p()?, b()?),
+        "app_task_start" => format!("/api/projects/{}/app/tasks", p()?),
+        "app_task_files" => format!("/api/projects/{}/app/tasks/{}/files", p()?, task_id(task)?),
+        "app_task_merge" => format!("/api/projects/{}/app/tasks/{}/merge", p()?, task_id(task)?),
+        "app_task_discard" => format!(
+            "/api/projects/{}/app/tasks/{}/discard",
+            p()?,
+            task_id(task)?
+        ),
         _ => return Err(format!("not a projects change: {action}")),
     })
 }
 
 /// Whether a change waits for a live event stream: every one does, except
-/// Shareable OFF - it only lets less out, like removing a folder.
+/// Shareable OFF - it only lets less out, like removing a folder. The four
+/// app-task changes (start, paste, merge, discard) are all held: each acts on
+/// a task the window drew from a read that may be old (design 2.3).
 pub(crate) fn held_on_stale(action: &str, body: &serde_json::Value) -> bool {
     !(action == "shareable" && body.get("on") == Some(&serde_json::Value::Bool(false)))
 }
@@ -163,7 +230,66 @@ pub(crate) fn checked_body(
             }
         }
     }
+    match action {
+        "create" => check_app_choice(obj)?,
+        "app_task_start" => {
+            let title = obj
+                .get("title")
+                .and_then(|t| t.as_str())
+                .unwrap_or("")
+                .trim();
+            if title.is_empty() {
+                return Err("Give the task a title.".to_string());
+            }
+            if title.chars().count() > MAX_TITLE {
+                return Err(format!("A task title is at most {MAX_TITLE} characters."));
+            }
+            return Ok(serde_json::json!({ "title": title }));
+        }
+        "app_task_files" => {
+            let blocks = obj.get("blocks").and_then(|t| t.as_str()).unwrap_or("");
+            if blocks.trim().is_empty() {
+                return Err("Paste the change first.".to_string());
+            }
+            if blocks.chars().count() > MAX_BLOCKS {
+                return Err("That paste is too big - split it into smaller changes.".to_string());
+            }
+            return Ok(serde_json::json!({ "blocks": blocks }));
+        }
+        // Merge and discard carry nothing: the task is in the path.
+        "app_task_merge" | "app_task_discard" => return Ok(serde_json::json!({})),
+        _ => {}
+    }
     Ok(body)
+}
+
+/// A new project's `app` choice (design 7.1): `{"type": "web"|"android"}` for
+/// an app Jarvis builds, or `{"adopt": "<folder name>"}` for one that is
+/// already on this PC - and nothing else.
+fn check_app_choice(obj: &serde_json::Map<String, serde_json::Value>) -> Result<(), String> {
+    let Some(app) = obj.get("app") else {
+        return Ok(());
+    };
+    let Some(app) = app.as_object() else {
+        return Err("Choose web or Android for the app.".to_string());
+    };
+    if app.len() != 1 {
+        return Err("Choose web or Android, or an app you already have.".to_string());
+    }
+    if let Some(t) = app.get("type") {
+        if !t.as_str().is_some_and(|t| APP_TYPES.contains(&t)) {
+            return Err("Choose web or Android for the app.".to_string());
+        }
+        return Ok(());
+    }
+    if app
+        .get("adopt")
+        .and_then(|a| a.as_str())
+        .is_some_and(is_app_name)
+    {
+        return Ok(());
+    }
+    Err("Choose web or Android, or an app you already have.".to_string())
 }
 
 fn parsed(body: &str) -> Option<serde_json::Value> {
@@ -243,7 +369,7 @@ pub(crate) fn redact(mut answer: serde_json::Value) -> serde_json::Value {
 /// said (`ok`, `message`, `waiting`, `http`) stays.
 pub(crate) fn redact_change(mut answer: serde_json::Value) -> serde_json::Value {
     if let Some(obj) = answer.as_object_mut() {
-        for key in ["project", "benchmark"] {
+        for key in ["project", "benchmark", "task"] {
             if obj.remove(key).is_some() {
                 obj.insert("hidden".into(), serde_json::json!(true));
             }
@@ -281,8 +407,14 @@ pub async fn projects_read(
     project: Option<String>,
     bench: Option<String>,
     points: Option<u32>,
+    task: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let path = read_path(project.as_deref(), bench.as_deref(), points)?;
+    let path = read_path(
+        project.as_deref(),
+        bench.as_deref(),
+        points,
+        task.as_deref(),
+    )?;
     let base = commands::jarvis_base(&app);
     let response = commands::jarvis_client(Some(READ_TIMEOUT))?
         .get(format!("{base}{path}"))
@@ -308,6 +440,7 @@ pub async fn projects_write(
     project: Option<String>,
     bench: Option<String>,
     result: Option<String>,
+    task: Option<String>,
     body: Option<serde_json::Value>,
 ) -> Result<serde_json::Value, String> {
     let path = write_path(
@@ -315,6 +448,7 @@ pub async fn projects_write(
         project.as_deref(),
         bench.as_deref(),
         result.as_deref(),
+        task.as_deref(),
     )?;
     let body = checked_body(&action, body)?;
     if held_on_stale(&action, &body) && stale(&app) {
@@ -335,7 +469,7 @@ pub async fn projects_choose_folder(
     app: AppHandle,
     project: String,
 ) -> Result<serde_json::Value, String> {
-    let path = write_path("update", Some(&project), None, None)?;
+    let path = write_path("update", Some(&project), None, None, None)?;
     if stale(&app) {
         return Err(STALE.to_string());
     }
@@ -418,34 +552,37 @@ mod tests {
     fn only_real_ids_reach_a_url() {
         let p = "0".repeat(31) + "a";
         let b = "f".repeat(32);
-        assert_eq!(read_path(None, None, None).unwrap(), "/api/projects");
+        assert_eq!(read_path(None, None, None, None).unwrap(), "/api/projects");
         assert_eq!(
-            read_path(Some(&p), None, None).unwrap(),
+            read_path(Some(&p), None, None, None).unwrap(),
             format!("/api/projects/{p}")
         );
         assert_eq!(
-            read_path(Some(&p), Some(&b), Some(5000)).unwrap(),
+            read_path(Some(&p), Some(&b), Some(5000), None).unwrap(),
             format!("/api/projects/{p}/benchmarks/{b}?points=1000")
         );
         for bad in ["", "../config", "ABCDEF0123456789ABCDEF0123456789", "a b"] {
-            assert!(read_path(Some(bad), None, None).is_err(), "{bad}");
+            assert!(read_path(Some(bad), None, None, None).is_err(), "{bad}");
             assert!(
-                write_path("update", Some(bad), None, None).is_err(),
+                write_path("update", Some(bad), None, None, None).is_err(),
                 "{bad}"
             );
         }
-        assert!(read_path(None, Some(&b), None).is_err());
+        assert!(read_path(None, Some(&b), None, None).is_err());
         assert_eq!(
-            write_path("result_delete", Some(&p), Some(&b), Some(&b)).unwrap(),
+            write_path("result_delete", Some(&p), Some(&b), Some(&b), None).unwrap(),
             format!("/api/projects/{p}/benchmarks/{b}/results/{b}/delete")
         );
         assert_eq!(
-            write_path("unmark", Some(&p), Some(&b), None).unwrap(),
+            write_path("unmark", Some(&p), Some(&b), None, None).unwrap(),
             format!("/api/projects/{p}/benchmarks/{b}/unmark")
         );
-        assert!(write_path("run", Some(&p), Some(&b), None).is_err());
+        assert!(write_path("run", Some(&p), Some(&b), None, None).is_err());
         for a in ACTIONS {
-            assert!(write_path(a, Some(&p), Some(&b), Some(&b)).is_ok(), "{a}");
+            assert!(
+                write_path(a, Some(&p), Some(&b), Some(&b), Some(&"a".repeat(12))).is_ok(),
+                "{a}"
+            );
         }
     }
 
@@ -497,5 +634,170 @@ mod tests {
         assert_eq!(hidden["hidden"], true);
         assert_eq!(hidden["http"], 200);
         assert!(!hidden.to_string().contains("26.75"));
+    }
+
+    fn app_ids() -> (String, String) {
+        ("0".repeat(31) + "a", "a1b2c3d4e5f6".to_string())
+    }
+
+    #[test]
+    fn app_task_paths_and_only_real_task_ids_reach_a_url() {
+        let (p, t) = app_ids();
+        assert_eq!(
+            write_path("app_task_start", Some(&p), None, None, None).unwrap(),
+            format!("/api/projects/{p}/app/tasks")
+        );
+        let task_path = format!("/api/projects/{p}/app/tasks/{t}");
+        for (action, tail) in [
+            ("app_task_files", "files"),
+            ("app_task_merge", "merge"),
+            ("app_task_discard", "discard"),
+        ] {
+            assert_eq!(
+                write_path(action, Some(&p), None, None, Some(&t)).unwrap(),
+                task_path.clone() + "/" + tail
+            );
+            assert!(write_path(action, Some(&p), None, None, None).is_err());
+            for bad in [
+                "",
+                "../merge",
+                "A1B2C3D4E5F6",
+                "a1b2c3d4e5f",
+                "a1b2c3d4e5f6a",
+                "a/b",
+            ] {
+                assert!(
+                    write_path(action, Some(&p), None, None, Some(bad)).is_err(),
+                    "{action} {bad}"
+                );
+            }
+        }
+        assert_eq!(
+            read_path(Some(&p), None, None, Some(&t)).unwrap(),
+            format!("/api/projects/{p}/app/tasks/{t}")
+        );
+        assert!(read_path(Some(&p), None, None, Some("nope")).is_err());
+        assert!(read_path(None, None, None, Some(&t)).is_err());
+        assert!(read_path(Some(&p), Some(&"f".repeat(32)), None, Some(&t)).is_err());
+        assert!(is_app_name("notes-2") && is_app_name("9lives"));
+        for bad in ["", "-x", "Notes", "a_b", "../x", &"a".repeat(41)] {
+            assert!(!is_app_name(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn every_app_task_change_waits_for_a_live_link() {
+        let off = serde_json::json!({ "on": false });
+        for a in [
+            "app_task_start",
+            "app_task_files",
+            "app_task_merge",
+            "app_task_discard",
+        ] {
+            assert!(ACTIONS.contains(&a), "{a}");
+            assert!(held_on_stale(a, &off), "{a}");
+        }
+    }
+
+    #[test]
+    fn app_bodies_are_checked_and_merge_and_discard_carry_nothing() {
+        let start = checked_body(
+            "app_task_start",
+            Some(serde_json::json!({ "title": "  Dark mode " })),
+        );
+        assert_eq!(start.unwrap(), serde_json::json!({ "title": "Dark mode" }));
+        assert!(checked_body("app_task_start", Some(serde_json::json!({ "title": " " }))).is_err());
+        assert!(checked_body("app_task_start", None).is_err());
+        let long = "x".repeat(121);
+        assert!(
+            checked_body("app_task_start", Some(serde_json::json!({ "title": long }))).is_err()
+        );
+        let blocks = "<<<FILE a.txt>>>\nhi\n<<<END>>>";
+        assert_eq!(
+            checked_body(
+                "app_task_files",
+                Some(serde_json::json!({ "blocks": blocks, "x": 1 }))
+            )
+            .unwrap(),
+            serde_json::json!({ "blocks": blocks })
+        );
+        assert!(checked_body(
+            "app_task_files",
+            Some(serde_json::json!({ "blocks": "  " }))
+        )
+        .is_err());
+        let huge = "y".repeat(MAX_BLOCKS + 1);
+        assert!(checked_body(
+            "app_task_files",
+            Some(serde_json::json!({ "blocks": huge }))
+        )
+        .is_err());
+        for a in ["app_task_merge", "app_task_discard"] {
+            assert_eq!(
+                checked_body(a, Some(serde_json::json!({ "sneaky": true }))).unwrap(),
+                serde_json::json!({})
+            );
+        }
+        // New project: an app choice is exactly one of the two shapes.
+        for good in [
+            serde_json::json!({ "name": "A", "kind": "coding", "app": { "type": "web" } }),
+            serde_json::json!({ "name": "A", "kind": "coding", "app": { "type": "android" } }),
+            serde_json::json!({ "kind": "coding", "app": { "adopt": "notes" } }),
+        ] {
+            assert!(checked_body("create", Some(good)).is_ok());
+        }
+        for bad in [
+            serde_json::json!({ "app": "web" }),
+            serde_json::json!({ "app": {} }),
+            serde_json::json!({ "app": { "type": "ios" } }),
+            serde_json::json!({ "app": { "type": "web", "adopt": "x" } }),
+            serde_json::json!({ "app": { "adopt": "../x" } }),
+            serde_json::json!({ "app": { "adopt": "Notes" } }),
+        ] {
+            assert!(checked_body("create", Some(bad.clone())).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn hidden_lists_also_hide_the_app_and_the_whole_change_text() {
+        let secret = "diff --git a/src/App.tsx b/src/App.tsx\n+const secretCode = 42;";
+        let one = serde_json::json!({ "ok": true, "project": { "id": "x", "name": "Notes app",
+            "app": { "name": "notes", "tasks": [ { "task": "a1b2c3d4e5f6", "title": "Dark" } ] } } });
+        let s = redact(one).to_string();
+        assert!(s.contains("hidden") && !s.contains("notes") && !s.contains("Dark"));
+        let task =
+            serde_json::json!({ "ok": true, "task": { "task": "a1b2c3d4e5f6", "diff": secret } });
+        let s = redact(task.clone()).to_string();
+        assert!(!s.contains("secretCode") && s.contains("hidden"));
+        let list = serde_json::json!({ "ok": true, "unlinked_apps": [ { "name": "old-app" } ],
+            "projects": [ { "app": { "name": "notes" } } ] });
+        let got = redact(list);
+        assert_eq!(got["hidden_count"], 1);
+        assert!(!got.to_string().contains("old-app"));
+        // A change that carries the task (paste) comes back without its text.
+        let pasted = write_answer(200, &task.to_string()).unwrap();
+        let hidden = redact_change(pasted);
+        assert_eq!(hidden["hidden"], true);
+        assert!(!hidden.to_string().contains("secretCode"));
+    }
+
+    #[test]
+    fn the_rust_side_never_logs_and_never_names_a_url() {
+        // The whole change text passes through `post` and back; nothing here
+        // may print it. (Production code only: the text before the tests.)
+        let src = include_str!("projects.rs");
+        let prod = &src[..src.find("#[cfg(test)]").unwrap()];
+        for never in [
+            "println!",
+            "eprintln!",
+            "dbg!",
+            "log::",
+            "tracing::",
+            "debug!(",
+            "info!(",
+            "warn!(",
+        ] {
+            assert!(!prod.contains(never), "projects.rs mentions {never}");
+        }
     }
 }

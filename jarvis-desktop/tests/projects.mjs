@@ -32,14 +32,26 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
+  APP_WORDS,
+  appProjectBody,
+  appTypeWords,
   benchBody,
   chartGeometry,
   chartScale,
   chartSummary,
+  diffLineKind,
+  mergeOffer,
   notesFrom,
+  pasteBody,
+  projectMeta,
+  readApp,
   readBench,
   readList,
   readProject,
+  readTask,
+  taskChange,
+  taskTitleBody,
+  versionLines,
   unmarkOffer,
   valueFrom,
   withUnit,
@@ -195,13 +207,13 @@ const SIZE = { width: 1180, height: 1000 };
  * contract file, each change is written down in `window.__pj.calls` and
  * answered with the real backend's answer (an error as Rust hands it on).
  */
-async function projectsTab({ list = C.list_two, projects = null, link = {}, answers = {} } = {}) {
+async function projectsTab({ list = C.list_two, projects = null, link = {}, answers = {}, tasks = {} } = {}) {
   const page = await K.open(browser, base, "brain.html", { link }, SIZE);
   page.on("dialog", (d) => (page.__confirm === false ? d.dismiss() : d.accept()));
-  await page.evaluate(({ list, projects, answers, POSTS, benches }) => {
+  await page.evaluate(({ list, projects, answers, POSTS, benches, tasks }) => {
     const core = window.__TAURI__.core;
     const inner = core.invoke;
-    window.__pj = { list, projects, answers, calls: [], revealed: false };
+    window.__pj = { list, projects, answers, tasks, calls: [], revealed: false };
     const ok = (p) => ({ ...p.body, http: p.status });
     const refuse = (p) => {
       const e = String(p.body.error || "");
@@ -217,6 +229,11 @@ async function projectsTab({ list = C.list_two, projects = null, link = {}, answ
         if (!args.project) return pj.revealed && pj.list.hidden ? pj.full : pj.list;
         const got = pj.projects[args.project];
         if (!got) throw "No such project, benchmark or number";
+        if (args.task) {
+          const t = pj.tasks[args.task];
+          if (!t) throw "That task is gone.";
+          return t;
+        }
         if (args.bench) return benches[args.bench] || { ok: true, benchmark:
           got.project.benchmark_list.find((b) => b.id === args.bench) };
         return got;
@@ -234,7 +251,7 @@ async function projectsTab({ list = C.list_two, projects = null, link = {}, answ
       }
       return inner(cmd, args);
     };
-  }, { list, projects: projects || { [LIFE.id]: C.life, [CODING.id]: C.coding }, answers, POSTS,
+  }, { list, projects: projects || { [LIFE.id]: C.life, [CODING.id]: C.coding }, answers, POSTS, tasks,
        benches: { [benchNamed(LIFE, "Long run").id]: C.bench_run,
                   [benchNamed(LIFE, "Weight").id]: C.bench_weight } });
   await page.locator("#tab-projects").click();
@@ -564,6 +581,477 @@ await check("a11y: on the rail's arrow keys, every control named, the chart is a
   const errors = tab.__errors;
   await tab.close();
   assert.deepEqual(bad, []);
+  assert.deepEqual(errors, []);
+});
+
+
+/* ── An app Jarvis builds (docs/APPS-IN-PROJECTS-DESIGN.md sections 5 and 7.3) ──
+ * There is no backend or shared fixture for this in this tree yet, so the
+ * answers below are built by hand, exactly to the frozen shapes of section 7.1.
+ * AFTER THE MERGE: re-point these at the shared fixture projects-cases.json
+ * (its app cases and `words`), and delete the hand-made ones.
+ */
+const APP_ID = "0000000000000000000000000000ab01";
+const T1 = "a1b2c3d4e5f6";
+const T2 = "b1b2c3d4e5f6";
+const OUTCOMES = {
+  merged: "Added to your app.",
+  denied: "Not added - you said no. The change is kept aside.",
+  timed_out: "Not added - the card timed out. The change is kept aside.",
+  stale: "Not added - the app or the change moved after the card was shown. Look at the new card.",
+  unsaved: "Not added - the app's own folder has changes that are not saved in git.",
+  conflict: "Not added - the change did not fit the app's newer version. Nothing was changed; discard it and ask again.",
+  withdrawn: "Not added - the change was thrown away before you answered.",
+  refused: "Not added. The gate said no.",
+  failed: "Not added - something went wrong. Nothing was changed.",
+};
+const summary = (task, title, extra = {}) => ({
+  task, title, started: 1759000000.0, source: "jarvis", files: 3, added: 41, removed: 2,
+  older_main: false, waiting: false, ...extra });
+const appObj = (over = {}) => ({
+  name: "notes", type: "web", title: "Notes app", git_ok: true, said: "",
+  main: { head: "a1b2c3d", subject: "Jarvis: Add a dark mode", at: 1759000000.0, versions: 7 },
+  tasks: [summary(T1, "Add a search box"), summary(T2, "Rename the header",
+    { files: 1, added: 1, removed: 1, older_main: true, source: "pasted" })],
+  merge: { waiting: null, last: null }, ...over });
+const appProject = (app, over = {}) => ({ ...JSON.parse(JSON.stringify(CODING)), name: "Notes app",
+  id: APP_ID, folder: null, benchmarks: 0, benchmark_list: [], app, ...over });
+const wrap = (project) => ({ ok: true, project });
+const appList = (extra = {}) => ({ ...C.list_two, projects: [...C.list_two.projects,
+  { ...C.list_two.projects[1], id: APP_ID, name: "Notes app", folder: null,
+    app: { name: "notes", type: "web", tasks: 2, merge_waiting: false } }],
+  unlinked_apps: [{ name: "old-game", type: "android", title: "Old game" }], ...extra });
+// A change big enough to be near the design's 60,000-character cap.
+const BIG_LINES = ["diff --git a/src/big.js b/src/big.js", "--- a/src/big.js", "+++ b/src/big.js",
+  "@@ -1,2 +1,1400 @@"];
+for (let i = 0; i < 1400; i++) {
+  BIG_LINES.push(`${i % 5 === 0 ? "-" : "+"}const line${i} = "xxxx"; // <b>${i}</b>`);
+}
+BIG_LINES.push(" unchanged tail line");
+const BIG = BIG_LINES.join("\n");
+const detail = (task, over = {}) => ({ ok: true, task: { ...summary(task, "Add a search box"),
+  list: [{ path: "src/big.js", added: "1120", removed: "280" }, { path: "src/App.tsx", added: "3", removed: "0" }],
+  diff: BIG, too_big: false, refused: "", ...over } });
+const appPage = async (app, opts = {}) => {
+  const page = await projectsTab({ list: appList(), ...opts,
+    projects: { [LIFE.id]: C.life, [CODING.id]: C.coding, [APP_ID]: wrap(appProject(app)) },
+    tasks: opts.tasks || { [T1]: detail(T1),
+      [T2]: detail(T2, { title: "Rename the header", source: "pasted", older_main: true, files: 1 }) } });
+  await page.getByRole("button", { name: "Open Notes app" }).click();
+  await page.waitForTimeout(400);
+  return page;
+};
+const openTask = async (page, title = "Add a search box") => {
+  await page.getByRole("button", { name: `${APP_WORDS.task_open}: ${title}` }).click();
+  await page.waitForTimeout(400);
+};
+
+await check("app words and readers: shapes of section 7.1, plain sentences", async () => {
+  assert.equal(APP_WORDS.merge_how, "Approve the card that appears - it needs Windows Hello.");
+  assert.equal(APP_WORDS.merge_pasted, "You pasted this change in on your PC.");
+  assert.equal(APP_WORDS.cant_run, "Jarvis cannot run this yet. Run it yourself and log the number.");
+  assert.equal(APP_WORDS.only_here, "This app's files are only on this PC.");
+  assert.equal(APP_WORDS.new_app, "An app Jarvis builds");
+  assert.equal(APP_WORDS.adopt_title, "Add an app I already have");
+  const a = readApp(appObj({ merge: { waiting: T1, last: { task: T2, outcome: "merged", message: OUTCOMES.merged, at: 1 } } }));
+  assert.equal(a.full, true);
+  assert.equal(a.tasks.length, 2);
+  assert.equal(a.mergeWaiting, T1);
+  assert.equal(a.last.outcome, "merged");
+  assert.equal(a.tasks[1].olderMain, true);
+  assert.equal(a.tasks[1].source, "pasted");
+  const short = readApp({ name: "notes", type: "android", tasks: 3, merge_waiting: true });
+  assert.equal(short.full, false);
+  assert.equal(short.taskCount, 3);
+  assert.equal(short.mergeWaiting, "yes");
+  assert.equal(readApp(null), null);
+  assert.equal(readProject(C.life.project).app, null, "a life project has no app");
+  assert.equal(readProject(C.coding.project).app, null, "a folder project has no app");
+  assert.equal(readApp(appObj({ merge: { waiting: null, last: { outcome: "odd", message: "x" } } })).last.outcome, "failed");
+  const lines = versionLines(readApp(appObj()));
+  assert.match(lines[0], /^Latest version: Jarvis: Add a dark mode, /);
+  assert.equal(lines[1], "7 saved versions");
+  assert.deepEqual(versionLines(readApp(appObj({ main: null }))), [APP_WORDS.no_versions]);
+  const nogit = versionLines(readApp(appObj({ git_ok: false, said: "git is not installed on this PC ...", main: null, tasks: [] })));
+  assert.deepEqual(nogit, ["git is not installed on this PC ..."]);
+  assert.equal(taskChange(readApp(appObj()).tasks[0]), "3 files, +41 -2");
+  assert.equal(taskChange(readApp(appObj()).tasks[1]), "1 file, +1 -1");
+  assert.equal(taskChange({ files: 0 }), APP_WORDS.task_nothing);
+  assert.equal(appTypeWords("android"), "Android app (native)");
+  const t = readTask(detail(T1));
+  assert.equal(t.diff, BIG, "the whole diff, never cut");
+  assert.equal(t.list.length, 2);
+  assert.equal(mergeOffer(a, a.tasks[0]).ok, false, "a waiting card greys Merge");
+  const idle = readApp(appObj());
+  assert.equal(mergeOffer(idle, idle.tasks[0]).ok, true);
+  assert.equal(mergeOffer(idle, { ...t, refused: "This task has not changed anything yet." }).why,
+    "This task has not changed anything yet.");
+  assert.equal(diffLineKind("+added"), "add");
+  assert.equal(diffLineKind("-gone"), "del");
+  assert.equal(diffLineKind("+++ b/x"), "meta");
+  assert.equal(diffLineKind("@@ -1 +1 @@"), "hunk");
+  assert.equal(diffLineKind(" same"), "ctx");
+  assert.deepEqual(taskTitleBody("  Dark mode ").body, { title: "Dark mode" });
+  assert.ok(taskTitleBody(" ").error);
+  assert.ok(taskTitleBody("x".repeat(121)).error);
+  assert.ok(pasteBody("  ").error);
+  assert.deepEqual(pasteBody("<<<FILE a>>>\nx\n<<<END>>>").body, { blocks: "<<<FILE a>>>\nx\n<<<END>>>" });
+  assert.deepEqual(appProjectBody("Notes", "app-web"), { name: "Notes", kind: "coding", app: { type: "web" } });
+  assert.deepEqual(appProjectBody("Game", "app-android"), { name: "Game", kind: "coding", app: { type: "android" } });
+  assert.deepEqual(appProjectBody("", "adopt:old-game"), { kind: "coding", app: { adopt: "old-game" } });
+  assert.equal(appProjectBody("x", "life"), null);
+  assert.equal(readList(appList()).unlinked[0].name, "old-game");
+  const meta = projectMeta(readList(appList()).projects[2]);
+  assert.equal(meta[0], "App · 2 benchmarks");
+  assert.equal(meta[1], "App · 2 open");
+});
+
+await check("app CONTROL: the four actions, held on a stale link, never logged, no URL on the page", async () => {
+  const rs = read("src-tauri/src/brain/projects.rs");
+  for (const a of ["app_task_start", "app_task_files", "app_task_merge", "app_task_discard"]) {
+    assert.ok(rs.includes(`"${a}"`), a);
+  }
+  const prod = rs.slice(0, rs.indexOf("#[cfg(test)]"));
+  for (const never of ["println!", "eprintln!", "dbg!", "log::", "tracing::"]) {
+    assert.ok(!prod.includes(never), `projects.rs prints with ${never}`);
+  }
+  // The one address in the page is the SVG drawing namespace (an identifier, not a request).
+  const panel = (read("src/projects-panel.js") + read("src/projects.js"))
+    .replace("http://www.w3.org/2000/svg", "");
+  assert.doesNotMatch(panel, /https?:\/\//, "the page names a URL");
+  assert.doesNotMatch(panel, /["'`]\/api\//, "the page names a route");
+  assert.doesNotMatch(panel, /console\.(log|info|warn|error|debug)/, "the page logs");
+  assert.doesNotMatch(panel, /localStorage|sessionStorage|indexedDB/, "the page keeps the change");
+  assert.doesNotMatch(panel, /invoke\("(approve|deny|decide|resolve)/, "the page answers a card");
+  assert.doesNotMatch(panel, /\.innerHTML|insertAdjacentHTML|outerHTML/, "markup from the PC");
+});
+
+await check("the list: an app carries the App tag and open tasks; New project has the app choices", async () => {
+  const page = await projectsTab({ list: appList() });
+  const rows = await page.locator("#projects-root .pj-list .row-title").allInnerTexts();
+  const meta = await page.locator("#projects-root .pj-list .row-meta").allInnerTexts();
+  const tags = await page.locator("#projects-root .pj-list .row-tag").allTextContents();
+  const options = await page.locator("#projects-new-kind option").allInnerTexts();
+  await page.locator("#projects-new-name").fill("Recipe box");
+  await page.locator("#projects-new-kind").selectOption("app-web");
+  await page.getByRole("button", { name: WORDS.create }).click();
+  await page.waitForTimeout(300);
+  const sent = await calls(page);
+  const errors = page.__errors;
+  await page.close();
+  // A created project opens, so the second choice is a fresh window.
+  const second = await projectsTab({ list: appList() });
+  await second.locator("#projects-new-name").fill("Star game");
+  await second.locator("#projects-new-kind").selectOption("app-android");
+  await second.getByRole("button", { name: WORDS.create }).click();
+  await second.waitForTimeout(300);
+  sent.push(...await calls(second));
+  await second.close();
+  assert.deepEqual(rows, ["Half marathon", "Jarvis Desktop", "Notes app"]);
+  assert.deepEqual(tags, ["Life", "Coding", "App"]);
+  assert.ok(meta.includes("App · 2 open"), meta.join(" | "));
+  assert.deepEqual(options.slice(2), [APP_WORDS.new_app_web, APP_WORDS.new_app_android]);
+  assert.deepEqual(sent, [
+    ["projects_write", { action: "create", body: { name: "Recipe box", kind: "coding", app: { type: "web" } } }],
+    ["projects_write", { action: "create", body: { name: "Star game", kind: "coding", app: { type: "android" } } }],
+  ]);
+  assert.deepEqual(errors, []);
+});
+
+await check("adopt: 'Add an app I already have' lists unlinked apps; Add sends ONE create", async () => {
+  const page = await projectsTab({ list: appList(), projects: { [LIFE.id]: C.life, [CODING.id]: C.coding,
+    [APP_ID]: wrap(appProject(appObj())) }, answers: { create: { status: 200, body: { ok: true,
+    project: appProject(appObj(), { id: "0000000000000000000000000000ab02", name: "Old game" }) } } } });
+  const text = await page.locator("#projects-root").textContent();
+  await page.getByRole("button", { name: "Add Old game" }).click();
+  await page.waitForTimeout(400);
+  const sent = await calls(page);
+  await page.close();
+  assert.ok(text.includes(APP_WORDS.adopt_title) && text.includes("Old game") && text.includes(APP_WORDS.type_android));
+  assert.deepEqual(sent, [["projects_write", { action: "create", body: { kind: "coding", app: { adopt: "old-game" } } }]]);
+  const none = await projectsTab({ list: C.list_two });
+  const t2 = await none.locator("#projects-root").textContent();
+  await none.close();
+  assert.ok(!t2.includes(APP_WORDS.adopt_title), "no unlinked apps, no offer");
+});
+
+await check("the App section: version, files kept here, open tasks, no folder picker", async () => {
+  const page = await appPage(appObj());
+  const text = await page.locator("#projects-root").innerText();
+  const rows = await page.locator(".pj-tasks .row-item").evaluateAll((els) => els.map((e) => e.innerText));
+  const folder = await page.getByRole("button", { name: WORDS.folder_choose }).count();
+  await page.close();
+  assert.match(text, /Web app - Notes app/);
+  assert.match(text, /Latest version: Jarvis: Add a dark mode, /);
+  assert.match(text, /7 saved versions/);
+  assert.ok(text.includes(APP_WORDS.files_where) && text.includes(APP_WORDS.only_here));
+  assert.equal(rows.length, 2);
+  assert.match(rows[0], /Add a search box[\s\S]*3 files, \+41 -2/);
+  assert.match(rows[1], /Rename the header[\s\S]*1 file, \+1 -1[\s\S]*made before another change - may not fit/);
+  assert.equal(folder, 0, "an app project has no folder");
+});
+
+await check("app states: no git, and no tasks yet", async () => {
+  const nogit = await appPage(appObj({ git_ok: false, said: "git is not installed on this PC - install it first.", main: null, tasks: [] }));
+  const t1 = await nogit.locator("#projects-root").innerText();
+  const start1 = await nogit.locator("#projects-task-title").count();
+  await nogit.close();
+  assert.match(t1, /git is not installed on this PC - install it first\./);
+  assert.equal(start1, 0, "no Start a task without git");
+  const none = await appPage(appObj({ tasks: [], main: { head: "", subject: "", at: null, versions: 0 } }));
+  const t2 = await none.locator("#projects-root").innerText();
+  await none.close();
+  assert.ok(t2.includes(APP_WORDS.tasks_empty) && t2.includes(APP_WORDS.no_versions));
+});
+
+await check("Start a task sends ONE app_task_start and opens the task", async () => {
+  const page = await appPage(appObj({ tasks: [] }), { answers: { app_task_start: { status: 200,
+    body: { ok: true, task: summary(T1, "Add a search box") } } } });
+  await page.locator("#projects-task-title").fill("  Add a search box ");
+  await page.getByRole("button", { name: APP_WORDS.start_task }).click();
+  await page.waitForTimeout(500);
+  const heading = await page.locator("#projects-task-heading").textContent();
+  const sent = await calls(page);
+  await page.close();
+  assert.deepEqual(sent, [["projects_write", { action: "app_task_start", project: APP_ID,
+    body: { title: "Add a search box" } }]]);
+  assert.equal(heading, "Add a search box");
+});
+
+await check("the Task view shows the WHOLE change as text, green and red; nothing becomes markup", async () => {
+  assert.ok(BIG.length > 50000 && BIG.length < 60001, `test change is ${BIG.length} characters`);
+  const page = await appPage(appObj());
+  await openTask(page);
+  const shown = await page.locator("#projects-diff").evaluate((p) => p.textContent);
+  const spans = await page.locator("#projects-diff .pj-d").count();
+  const adds = await page.locator("#projects-diff .pj-d-add").count();
+  const dels = await page.locator("#projects-diff .pj-d-del").count();
+  const markup = await page.locator("#projects-diff b").count();
+  const files = await page.locator(".pj-task-files .row-item").allInnerTexts();
+  const colours = await page.evaluate(() => ({
+    add: getComputedStyle(document.querySelector(".pj-d-add")).backgroundColor,
+    del: getComputedStyle(document.querySelector(".pj-d-del")).backgroundColor,
+  }));
+  const region = await page.locator("#projects-diff").getAttribute("role");
+  const errors = page.__errors;
+  await page.close();
+  assert.equal(shown, BIG, "the diff on screen is not the whole diff");
+  assert.equal(spans, BIG_LINES.length);
+  assert.equal(adds, 1120, "added lines (the +++ header is not one)");
+  assert.equal(dels, 280, "removed lines (the --- header is not one)");
+  assert.equal(markup, 0, "a <b> in the change became markup");
+  assert.equal(files.length, 2);
+  assert.match(files[0], /src\/big\.js[\s\S]*\+1120 -280/);
+  assert.notEqual(colours.add, colours.del, "added and removed look the same");
+  assert.equal(region, "region");
+  assert.deepEqual(errors, []);
+});
+
+await check("Merge sends ONE app_task_merge and shows the PC's words; the page never approves", async () => {
+  const say = "A card is waiting for your yes. Approve it in the Jarvis bar.";
+  const page = await appPage(appObj(), { answers: { app_task_merge: { status: 202,
+    body: { ok: true, waiting: true, message: say } } } });
+  await openTask(page);
+  const how = await page.locator(".pj-task .note").allInnerTexts();
+  await page.locator("#projects-task-merge").click();
+  await page.waitForTimeout(400);
+  const said = await page.locator("#projects-said").innerText();
+  const sent = await calls(page);
+  const approvers = await page.getByRole("button", { name: /approve/i }).count();
+  await page.close();
+  assert.ok(how.includes(APP_WORDS.merge_how));
+  assert.deepEqual(sent, [["projects_write", { action: "app_task_merge", project: APP_ID, task: T1, body: {} }]]);
+  assert.equal(said, say);
+  assert.equal(approvers, 0, "this page has an Approve button");
+});
+
+await check("a pasted task says so; pasting sends the blocks", async () => {
+  const page = await appPage(appObj());
+  await openTask(page, "Rename the header");
+  const text = await page.locator("#projects-root").innerText();
+  const blocks = "<<<FILE src/App.tsx>>>\nexport const x = 1;\n<<<END>>>\n<<<DELETE old.txt>>>";
+  await page.locator("#projects-paste").fill(blocks);
+  await page.locator("#projects-paste-go").click();
+  await page.waitForTimeout(400);
+  await page.locator("#projects-paste").fill("   ");
+  await page.locator("#projects-paste-go").click();
+  await page.waitForTimeout(300);
+  const said = await page.locator("#projects-said").innerText();
+  const sent = await calls(page);
+  await page.close();
+  assert.ok(text.includes(APP_WORDS.merge_pasted));
+  assert.deepEqual(sent, [["projects_write", { action: "app_task_files", project: APP_ID, task: T2,
+    body: { blocks } }]]);
+  assert.equal(said, APP_WORDS.paste_empty);
+});
+
+await check("merge waiting: the task says so, Merge and paste are greyed, another task's Merge too", async () => {
+  const app = appObj({ merge: { waiting: T1, last: null } });
+  app.tasks[0].waiting = true;
+  const page = await appPage(app, { tasks: { [T1]: detail(T1, { waiting: true }),
+    [T2]: detail(T2, { title: "Rename the header" }) } });
+  const list = await page.locator("#projects-root").innerText();
+  await openTask(page);
+  const merge = await page.locator("#projects-task-merge").isDisabled();
+  const paste = await page.locator("#projects-paste-go").isDisabled();
+  const discard = await page.locator("#projects-task-discard").isEnabled();
+  const text = await page.locator("#projects-root").innerText();
+  await page.getByRole("button", { name: `← ${APP_WORDS.back_project}` }).click();
+  await page.waitForTimeout(300);
+  await openTask(page, "Rename the header");
+  const other = await page.locator("#projects-task-merge").isDisabled();
+  const otherWhy = await page.locator(".pj-task .note").allInnerTexts();
+  await page.close();
+  assert.ok(list.includes(APP_WORDS.task_waiting) && list.includes(WORDS.waiting_card));
+  assert.equal(merge, true);
+  assert.equal(paste, true);
+  assert.equal(discard, true, "Discard withdraws the card, so it stays");
+  assert.ok(text.includes(WORDS.waiting_card));
+  assert.equal(other, true);
+  assert.ok(otherWhy.includes(APP_WORDS.merge_blocked_card));
+});
+
+await check("every merge outcome shows the PC's fixed sentence, in the project and in the task", async () => {
+  for (const [outcome, message] of Object.entries(OUTCOMES)) {
+    const app = appObj({ merge: { waiting: null, last: { task: T1, outcome, message, at: 1759000100.0 } } });
+    const page = await appPage(app);
+    const inProject = await page.locator(".pj-merge-last").innerText();
+    const tag = await page.locator(".pj-merge-last").getAttribute("data-outcome");
+    await openTask(page);
+    const inTask = await page.locator(".pj-task .pj-merge-last").innerText();
+    await page.close();
+    assert.equal(inProject, message, outcome);
+    assert.equal(tag, outcome);
+    assert.equal(inTask, message, outcome);
+  }
+});
+
+await check("a change that cannot be shown whole raises no card: Merge greyed with the reason", async () => {
+  const why = "This change is too big to show on one card - ask Jarvis to split it into smaller steps.";
+  const page = await appPage(appObj(), { tasks: { [T1]: detail(T1, { diff: "", too_big: true, refused: why }) } });
+  await openTask(page);
+  const merge = await page.locator("#projects-task-merge").isDisabled();
+  const text = await page.locator("#projects-root").innerText();
+  await page.close();
+  assert.equal(merge, true);
+  assert.ok(text.includes(why));
+});
+
+await check("a stale link greys Start, Merge, Discard, paste and Add; Open and Back still work", async () => {
+  const page = await appPage(appObj(), { link: { stale: true } });
+  const start = await page.getByRole("button", { name: APP_WORDS.start_task }).isDisabled();
+  const open = await page.getByRole("button", { name: `${APP_WORDS.task_open}: Add a search box` }).isEnabled();
+  await openTask(page);
+  const merge = await page.locator("#projects-task-merge").isDisabled();
+  const discard = await page.locator("#projects-task-discard").isDisabled();
+  const paste = await page.locator("#projects-paste-go").isDisabled();
+  const title = await page.locator("#projects-task-merge").getAttribute("title");
+  const back = await page.getByRole("button", { name: `← ${APP_WORDS.back_project}` }).isEnabled();
+  const sent = await calls(page);
+  await page.close();
+  assert.equal(start, true);
+  assert.equal(open, true, "opening a task is a read");
+  assert.equal(merge && discard && paste, true);
+  assert.equal(title, WORDS.stale);
+  assert.equal(back, true);
+  assert.deepEqual(sent, []);
+  const list = await projectsTab({ list: appList(), link: { stale: true } });
+  const add = await list.getByRole("button", { name: "Add Old game" }).isDisabled();
+  await list.close();
+  assert.equal(add, true);
+});
+
+await check("Discard asks \"are you sure?\" first; No sends nothing; Yes sends ONE discard and goes back", async () => {
+  const page = await appPage(appObj());
+  await openTask(page);
+  let question = "";
+  page.on("dialog", (d) => { question = d.message(); });
+  page.__confirm = false;
+  await page.locator("#projects-task-discard").click();
+  await page.waitForTimeout(300);
+  const none = await calls(page);
+  page.__confirm = true;
+  await page.locator("#projects-task-discard").click();
+  await page.waitForTimeout(500);
+  const sent = await calls(page);
+  const back = await page.locator("#projects-heading").count();
+  await page.close();
+  assert.equal(question, APP_WORDS.discard_q);
+  assert.deepEqual(none, []);
+  assert.deepEqual(sent, [["projects_write", { action: "app_task_discard", project: APP_ID, task: T1, body: {} }]]);
+  assert.equal(back, 1, "not back on the project after discarding");
+});
+
+await check("Delete on an app project: the words say the files stay, and the answer is said", async () => {
+  const page = await appPage(appObj(), { answers: { delete: { status: 200,
+    body: { ok: true, deleted: true, app_kept: "notes" } } } });
+  let question = "";
+  page.on("dialog", (d) => { question = d.message(); });
+  await page.getByRole("button", { name: WORDS.delete_project }).click();
+  await page.waitForTimeout(500);
+  const said = await page.locator("#projects-said").innerText();
+  const sent = await calls(page);
+  await page.close();
+  assert.equal(question, APP_WORDS.delete_app_project_q.replace("{name}", "Notes app"));
+  assert.match(question, /files stay on this PC and can be added back/);
+  assert.deepEqual(sent, [["projects_write", { action: "delete", project: APP_ID }]]);
+  assert.equal(said, APP_WORDS.deleted_app_kept);
+});
+
+await check("a command benchmark of an app project says Jarvis cannot run it yet", async () => {
+  const p = appProject(appObj(), { benchmarks: 1, benchmark_list: [CODING.benchmark_list.find((b) => b.kind === "command")] });
+  const page = await projectsTab({ list: appList(), projects: { [LIFE.id]: C.life, [CODING.id]: C.coding, [APP_ID]: wrap(p) },
+    tasks: {} });
+  await page.getByRole("button", { name: "Open Notes app" }).click();
+  await page.waitForTimeout(400);
+  const text = await page.locator("#projects-root").innerText();
+  await page.close();
+  assert.ok(text.includes(APP_WORDS.cant_run));
+});
+
+await check("hidden with the private lists: no app, no task, no change text on the page", async () => {
+  const page = await projectsTab({ list: { ok: true, hidden: true, hidden_count: 3 } });
+  const text = await page.locator("#projects-root").innerText();
+  await page.close();
+  assert.match(text, /3 projects, hidden until Windows Hello confirms it is you\./);
+  assert.doesNotMatch(text, /Notes app|Add a search box|const line/);
+  // A project read that comes back hidden while a task is open closes the task
+  // view and shows only "Show" (Rust redacts the answer; see projects.rs tests).
+  const open = await appPage(appObj());
+  await openTask(open);
+  await open.evaluate(() => {
+    const core = window.__TAURI__.core;
+    const inner = core.invoke;
+    core.invoke = async (cmd, args) => (cmd === "projects_read" && args.project
+      ? { ok: true, hidden: true } : inner(cmd, args));
+  });
+  await open.evaluate(() => window.__TAURI__.event && 0);
+  await open.getByRole("button", { name: `← ${APP_WORDS.back_project}` }).click();
+  await open.waitForTimeout(400);
+  const after = await open.locator("#projects-root").innerText();
+  await open.close();
+  assert.doesNotMatch(after, /Add a search box|const line|Rename the header/);
+});
+
+await check("a11y: the Task view's controls are named, the change is a named region", async () => {
+  const page = await appPage(appObj());
+  await openTask(page);
+  const bad = await page.evaluate(() => {
+    const out = [];
+    const rootEl = document.getElementById("projects-root");
+    const nameOf = (e) => (e.getAttribute("aria-label") || (e.labels && e.labels[0]
+      && e.labels[0].textContent) || e.textContent || e.title || "").trim();
+    for (const e of rootEl.querySelectorAll("button, input, select, textarea, [role=region]")) {
+      if (!nameOf(e)) out.push(e.outerHTML.slice(0, 80));
+    }
+    if (!document.getElementById("projects-task-heading")) out.push("no heading");
+    return out;
+  });
+  const focused = await page.evaluate(() => document.activeElement && document.activeElement.id);
+  const errors = page.__errors;
+  await page.close();
+  assert.deepEqual(bad, []);
+  assert.equal(focused, "projects-task-heading", "opening a task did not move focus to its heading");
   assert.deepEqual(errors, []);
 });
 
