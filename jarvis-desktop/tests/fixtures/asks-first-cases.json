@@ -392,7 +392,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Use a headless browser (Obscura) for plain web reading"
+       "title": "Read web pages with a browser that has no window (Obscura)"
       },
       {
        "action": "post_to_external_service",
@@ -1379,7 +1379,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Use a headless browser (Obscura) for plain web reading"
+       "title": "Read web pages with a browser that has no window (Obscura)"
       },
       {
        "action": "post_to_external_service",
@@ -2362,7 +2362,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Use a headless browser (Obscura) for plain web reading"
+       "title": "Read web pages with a browser that has no window (Obscura)"
       },
       {
        "action": "post_to_external_service",
@@ -3339,7 +3339,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Use a headless browser (Obscura) for plain web reading"
+       "title": "Read web pages with a browser that has no window (Obscura)"
       },
       {
        "action": "post_to_external_service",
@@ -4316,7 +4316,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Use a headless browser (Obscura) for plain web reading"
+       "title": "Read web pages with a browser that has no window (Obscura)"
       },
       {
        "action": "post_to_external_service",
@@ -5306,7 +5306,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Use a headless browser (Obscura) for plain web reading"
+       "title": "Read web pages with a browser that has no window (Obscura)"
       },
       {
        "action": "post_to_external_service",
@@ -6289,7 +6289,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Use a headless browser (Obscura) for plain web reading"
+       "title": "Read web pages with a browser that has no window (Obscura)"
       },
       {
        "action": "post_to_external_service",

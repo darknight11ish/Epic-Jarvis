@@ -251,14 +251,14 @@ def t_the_card_says_what_it_does():
         ("that it is open source Apache-2.0", "apache-2.0"),
         ("that every page/click/box still gets its own card", "still listed on its own approval card"),
         ("that what it reads is outside text", "outside text"),
-        ("that stealth is on", "stealth is on"),
-        ("that it does not solve captchas", "does not solve captchas"),
-        ("that a site can still block or ban it", "block it or ban it"),
-        ("that signing in could get an account closed", "account closed"),
+        ("that it pretends to be an ordinary Chrome", "pretends to be an ordinary chrome"),
+        ("that it never solves a captcha", "never solves a captcha"),
+        ("that a site can still block it", "does not stop a site from blocking it"),
+        ("that signing in could get an account closed", "closing an account you sign in to"),
         ("that it never types a password and stops at a sign-in page it recognises",
          "never types a password with it"),
         ("that it stops at a captcha and hands over", "hands the job to the visible browser"),
-        ("that a sign-in starting with only a username may not be recognised", "may not be recognised"),
+        ("that a sign-in starting with only a username may not be spotted", "may not be spotted"),
         ("what it checks in typed words and addresses", "looks like a password or key is refused"),
         ("that a redirect or a page that moves itself is noticed only after it has loaded",
          "can only be noticed after it has loaded"),
@@ -303,7 +303,7 @@ def t_denied_timed_out_refused_withdrawn_all_leave_it_off():
     c = Card(tier="auto")
     code, out = c.req(True)
     check("a tier that is not 'ask' raises no card, and says why",
-          code == 503 and not c.later and "must be 'ask'" in out["error"], (code, out))
+          code == 503 and not c.later and "must ask you first" in out["error"] or "It must ask you first" in out["error"], (code, out))
     check("a non-boolean is refused", Card().req("yes")[0] == 400)
     c = Card()
     c.gate = lambda *a: (_ for _ in ()).throw(RuntimeError("no queue"))
@@ -376,14 +376,14 @@ def t_the_mode_rule():
     OB.exe_path().write_bytes(b"MZ-swapped")
     r = c()
     check("a default 'headless' that cannot run (file changed) falls back to visible AND says so",
-          r["engine"] == "visible" and "cannot run right now" in r["why"] and "changed" in r["why"], r)
+          r["engine"] == "visible" and "cannot run right now" in r["why"] and "not the one Jarvis checked" in r["why"], r)
     r = c("headless")
-    check("...but an explicit headless ask with a changed file is refused", r["refused"] and "changed" in r["refused"])
+    check("...but an explicit headless ask with a changed file is refused", r["refused"] and "not the one Jarvis checked" in r["refused"])
     line = E.card_line("visible", r["why"])
-    check("the card's first line names the engine and why", line.startswith("Browser: VISIBLE")
-          and E.card_line("headless", "x").startswith("Browser: HEADLESS (Obscura, no window)"))
+    check("the card's first line names the engine and why", line.startswith("Browser: visible")
+          and E.card_line("headless", "x").startswith("Browser: no window (Obscura)"))
     check("the headless line says stealth is on, that it can still be blocked, and that it stops at captchas",
-          "Stealth is on" in E.card_line("headless", "x") and "does not stop a site blocking it"
+          "pretends to be an ordinary Chrome" in E.card_line("headless", "x") and "does not stop a site blocking it"
           in E.card_line("headless", "x") and "stops at any captcha" in E.card_line("headless", "x"))
 
 
@@ -430,8 +430,9 @@ def t_a_headless_plan_end_to_end():
     d = rig(log=log)
     p, out = run_plan("read the example site", [dict(NAV), {"action": "read_page", "value": "0", "why": "read"}])
     text = B.describe(p)
-    check("the card's FIRST line names the browser, HEADLESS, and stealth", text.split("\n\n")[1].startswith(
-        "Browser: HEADLESS (Obscura, no window)") and "Stealth is on" in text, text[:300])
+    check("the card's FIRST line names the browser, no window, and that it pretends to be Chrome",
+          text.split("\n\n")[1].startswith("Browser: no window (Obscura)")
+          and "pretends to be an ordinary Chrome" in text, text[:300])
     check("the plan is on the headless engine", p.engine == "headless")
     check("the run finished", out["ok"] is True and len(out["done"]) == 2, out)
     page = out["done"][1]["value"]
@@ -608,7 +609,7 @@ def t_a_run_that_cannot_run_stops_in_words_and_never_opens_the_other_browser():
     E.set_obscura(True)
     OB.exe_path().write_bytes(b"MZ-changed")
     out = B.run(p, approved=True)
-    check("a program that changed after the card is not started", out["ok"] is False and "changed" in out["reason"], out)
+    check("a program that changed after the card is not started", out["ok"] is False and "not the one Jarvis checked" in out["reason"], out)
     check("nothing was started", not d.alive())
 
 
@@ -652,7 +653,7 @@ def t_stop_everything_and_limits():
           E.register_stopper() and "headless_browser" in SA._stoppers)
     said = SA._stoppers["headless_browser"]()
     check("Stop everything kills the headless program and says so",
-          proc.poll() is not None and not d.alive() and said == "The headless browser was stopped.", said)
+          proc.poll() is not None and not d.alive() and said == "The windowless browser was stopped.", said)
     check("with nothing running it says nothing", SA._stoppers["headless_browser"]() is None)
     SA.unregister("headless_browser")
     d = rig()
@@ -702,10 +703,10 @@ def t_the_agent_tool():
     args = {"goal": "read the example site", "session": "s1", "requests": [dict(NAV)]}
     state, text = A._prepare_browser_control(dict(args))
     check("auto + plain reading + headless on: the plan is headless and the card says so",
-          state.engine == "headless" and "Browser: HEADLESS" in text)
+          state.engine == "headless" and "Browser: no window (Obscura)" in text)
     state, text = A._prepare_browser_control(dict(args, mode="visible", requests=[dict(NAV)]))
     check("mode 'visible' is passed through (and needs no engine hooks)", state.engine == "visible"
-          and "Browser: VISIBLE" in text, text[:200])
+          and "Browser: visible" in text, text[:200])
     E.set_obscura(False)
     state, text = A._prepare_browser_control(dict(args, mode="headless"))
     check("headless asked for but off: a refusal that carries its plain words, not a plan",
@@ -747,7 +748,7 @@ def t_view_and_panel():
     OB.exe_path().write_bytes(b"changed!")
     v = E.view()
     check("a changed file: on, but not working yet, in words",
-          v["ready"] is False and "not working yet" in v["line"] and "changed" in v["status_line"], v)
+          v["ready"] is False and "not working yet" in v["line"] and "not the one Jarvis checked" in v["status_line"], v)
     words = json.dumps(v)
     check("the view carries no word from any web page (only state and fixed words)",
           "Welcome to the example" not in words)
@@ -1031,18 +1032,18 @@ def t_what_jarvis_can_reach_says_which_browser():
     card = {"master": True, "features": {"browser_control": True, "long_context": True}}
     r = row(no_card, {"enabled": True, "ready": True})
     check("headless on and ready, no second card: the row is on, and says plain reading only, with Obscura's name",
-          r["state"] == "on" and "headless browser (Obscura" in r["line"] and "plain reading only" in r["line"], r)
+          r["state"] == "on" and "browser with no window (Obscura" in r["line"] and "plain reading only" in r["line"], r)
     check("... and that sign-in needs the visible browser, which needs the second card",
           "needs the visible browser" in r["line"] and "second graphics card" in r["line"])
     r = row(card, {"enabled": True, "ready": True})
     check("both browsers: the row says Jarvis picks per task and names which on the card",
-          r["state"] == "on" and "picks per task" in r["line"], r)
+          r["state"] == "on" and "picks for each task" in r["line"], r)
     r = row(card, {"enabled": False, "ready": False})
     check("only the visible browser: as it always said", r["state"] == "on" and "browser window you can see" in r["line"]
           and "headless" not in r["line"], r)
     r = row(no_card, {"enabled": True, "ready": False})
     check("headless on but not ready and no second card: off, naming both ways",
-          r["state"] == "off" and "headless browser (Obscura, no window)" in r["line"], r)
+          r["state"] == "off" and "browser with no window (Obscura)" in r["line"], r)
     check("a tool not listed in [tools].enabled stays off whatever else is on",
           row(card, {"enabled": True, "ready": True}, enabled=())["state"] == "off")
     check("the tools list offers browser_control when headless is ready (no second card)",
@@ -1166,7 +1167,7 @@ def t_a_redirect_or_a_page_that_moves_itself_is_stopped_but_only_after_the_load(
     p, out = run_plan("look", [{"action": "navigate", "value": "https://example.test/moved", "why": "x"}],
                       allowed=["example.test"])
     check("a redirect out of the fence is caught from the navigate's own reply, in words",
-          out["ok"] is False and "sent the headless browser on to https://other.test/x" in out["reason"]
+          out["ok"] is False and "sent the windowless browser on to https://other.test/x" in out["reason"]
           and "already been loaded" in out["reason"], out)
     check("... and the program was stopped, so nothing more can happen on that page", not d.alive())
     check("... the plain truth: the redirected-to page WAS fetched before it could be stopped "
@@ -1404,7 +1405,7 @@ def t_sign_in_wording_sends_a_task_to_the_visible_browser():
     E.set_mode("headless")
     r = E.choose(None, goal="sign into my bank and read my orders", requests=READ)
     check("a default of 'headless' with a sign-in task goes to the visible browser, and says why",
-          r["engine"] == "visible" and "your setting is the headless browser, but" in r["why"]
+          r["engine"] == "visible" and "your setting is the windowless browser, but" in r["why"]
           and "sign in" in r["why"], r)
     check("... and a plain lookup with that default stays headless",
           E.choose(None, goal="read the news page", requests=READ)["engine"] == "headless")

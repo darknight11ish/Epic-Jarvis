@@ -30,7 +30,7 @@ import com.jarvis.client.ui.theme.LocalChrome
 import kotlinx.coroutines.launch
 
 /**
- * The headless browser (Obscura) ([BrowserEngine], docs/JARVIS-API.md section
+ * The windowless browser (Obscura) ([BrowserEngine], docs/JARVIS-API.md section
  * 97; the owner's decision, 2026-09-29): let Jarvis choose a browser with no
  * window, instead of the visible one, for plain web reading. OFF by default, ON
  * is one approval card on the PC (a new program on the PC that reaches the web),
@@ -145,6 +145,7 @@ private fun EngineBody(
 ) {
     val chrome = LocalChrome.current
     Text(BrowserEngine.TITLE, style = MaterialTheme.typography.labelLarge, color = chrome.textHi)
+    Text(BrowserEngine.SUBTITLE, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
     Gap(4)
     Text(BrowserEngine.DETAIL, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
     Gap(8)
@@ -163,6 +164,14 @@ private fun EngineBody(
         },
         onChange = onChange,
     )
+    // The reason is on the screen: turning it ON waits for a fresh link to the PC.
+    if (!cardWaiting && panel != null && !panel.obscura && !canAct) {
+        Text(
+            BrowserEngine.WAITING_LINK,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.warnInk,
+        )
+    }
     Text(
         when {
             busy -> "Asking your PC…"
@@ -183,11 +192,34 @@ private fun EngineBody(
         Gap(4)
         Text(panel.status, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
     }
+    if (panel != null && panel.installLine.isNotEmpty() && panel.needsInstall) {
+        Gap(8)
+        Text(BrowserEngine.STEPS_TITLE, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
+        Gap(4)
+        SelectionContainer {
+            Text(
+                panel.installLine,
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.textMid,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        Quiet(BrowserEngine.COPY, onClick = { onCopy(panel.installLine) })
+        Gap(4)
+        Text(BrowserEngine.STEPS_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    }
     Gap(8)
     Text(BrowserEngine.STEALTH, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
     if (panel != null) {
         Gap(10)
         Text(BrowserEngine.MODE_TITLE, style = MaterialTheme.typography.labelLarge, color = chrome.textHi)
+        if (!panel.checked) {
+            Text(
+                BrowserEngine.MODE_NOTE,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo,
+            )
+        }
         BrowserEngine.MODES.forEach { id ->
             Gap(6)
             val chosen = id == panel.mode
@@ -210,22 +242,6 @@ private fun EngineBody(
                 color = chrome.textMid,
             )
         }
-    }
-    if (panel != null && panel.installLine.isNotEmpty()) {
-        Gap(8)
-        Text(BrowserEngine.STEPS_TITLE, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
-        Gap(4)
-        SelectionContainer {
-            Text(
-                panel.installLine,
-                style = MaterialTheme.typography.bodySmall,
-                color = chrome.textMid,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        Quiet(BrowserEngine.COPY, onClick = { onCopy(panel.installLine) })
-        Gap(4)
-        Text(BrowserEngine.STEPS_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
     }
     said?.let {
         Gap(4)

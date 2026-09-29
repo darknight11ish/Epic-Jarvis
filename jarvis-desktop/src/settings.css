@@ -839,6 +839,14 @@ select:focus-visible {
 .sc-command { flex-wrap: nowrap; }
 .sc-command input { flex: 1; min-width: 0; }
 .sc-command .btn.small { margin-left: 0; flex: none; }
+/* The windowless browser's install line: the whole line, wrapped. */
+#be-line-text {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: monospace;
+  overflow-wrap: anywhere;
+  resize: vertical;
+}
 
 /* --------------------------------------------------------------------------
    Hardware and models. The second graphics card's pieces again (`.sc-gpu`,

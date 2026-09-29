@@ -729,17 +729,17 @@ def _browser(ctx: Ctx) -> dict:
     if not lane_on and not headless_on:
         return _row("browser", name, "off", "", ASK_NA,
                     "Off: it needs the second graphics card's \"Browser control\" switch (a "
-                    "browser window you can see), or the headless browser (Obscura, no window), "
+                    "browser window you can see), or a browser with no window (Obscura), "
                     "and both are off.")
     tier, words = asks("browser_control", ctx)
     if tier == "never":
         return _row("browser", name, "blocked", "websites", words,
                     "Switched on, but your settings say never, so it never runs.")
     if lane_on and headless_on:
-        how = ("in a browser window you can see or in the headless browser (Obscura, no "
-               "window, stealth on). Jarvis picks per task and names which on the card")
+        how = ("in a browser window you can see or in a browser with no window (Obscura). "
+               "Jarvis picks for each task and names which on the card")
     elif headless_on:
-        how = ("in the headless browser (Obscura, no window, stealth on), for plain reading "
+        how = ("in a browser with no window (Obscura), for plain reading "
                "only. A task that needs you to sign in or take over needs the visible browser, "
                "which needs the second graphics card")
     else:

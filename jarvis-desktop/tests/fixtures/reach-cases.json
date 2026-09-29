@@ -141,7 +141,7 @@
     {
      "asks": "-",
      "id": "browser",
-     "line": "Off: it needs the second graphics card's \"Browser control\" switch (a browser window you can see), or the headless browser (Obscura, no window), and both are off.",
+     "line": "Off: it needs the second graphics card's \"Browser control\" switch (a browser window you can see), or a browser with no window (Obscura), and both are off.",
      "name": "Browser control",
      "on": false,
      "state": "off",
