@@ -3282,7 +3282,10 @@ empty and `why_not` says why.
            {"role": "assistant", "text": "...", "at": 1790000004}]}
 ```
 
-`kind`, `project`, `started`, `updated`, `continuable` and `continue_why`
+`history` (`{"enabled", "recording", "why_not"}`, since 2026-09-29, §18.7):
+whether NEW messages are being kept right now, for the "history is off"
+line on "Continue this chat". `kind`, `project`, `started`, `updated`,
+`continuable` and `continue_why`
 since 2026-09-28 (§18.6): `continuable` is true for a `chat` or a `live`
 session; otherwise `continue_why` is the sentence both apps show instead of
 "Continue this chat". A `support` record's rows are role `support`, a
@@ -3589,11 +3592,45 @@ is additive; an older PC or app simply lacks it.
   command, also allowed for the Jarvis bar); a game shows "This looks like a
   game, so nothing in it is kept or learned."; Continue is refused while Jarvis Live is on here.
 
+**The owner's answers of 2026-09-29** (CLAUDE.md, "After the second chat
+audit"; words in `tools/gen_history_cases.py` and `backend/jarvis_live.py`,
+both apps read the same generated fixtures):
+
+- **A crisis question and its answer do not stay in the thread.** A turn whose
+  `X-Jarvis-Route` carries `"wellbeing": "crisis"` (§38 - the flag the PC
+  already sends, no new field) is never added to the scrollable thread or to
+  what the model is re-sent (`ChatHistory.keepsInThread` /
+  `chat-history.js` `keepsInThread`; phone `ChatSession.send`, desktop
+  `finishStream`). The help answer shows once, as the current answer with its
+  calm panel; the next question, "New conversation", or leaving the chat
+  (Esc on the desktop) takes it off the screen, and it is never in the
+  thread. The PC still keeps the chat in History, titled "A difficult
+  moment" (§18.6) - none of that changed. Without the flag (a PC that has not
+  applied `wellbeing.patch`) the app cannot tell, and the turn is handled as
+  any other.
+- **"Continue this chat" says when history is off.** `GET
+  /api/history/conversation` now also carries `"history": {"enabled",
+  "recording", "why_not"}` - the same three words the list's status already
+  uses (§18.3), read when the conversation is opened, so no extra request.
+  `enabled: false` adds "Chat history is off, so new messages in this chat
+  will not be kept."; `enabled: true` with `recording: false` (history is on
+  but cannot keep anything, e.g. its key is missing) adds "Chat history cannot
+  keep anything right now, so new messages in this chat will not be kept.";
+  a PC that sends no `history` (an older one), or an answer that is not a
+  clear yes or no, adds nothing - the apps never guess. One line after the
+  others ("Carrying on ..."), the same words on both apps
+  (`continuedHistoryLine`). Not said for "Move it here" (Live's own chat).
+- **Live says when Temporary is on.** "Temporary is on - this Live session
+  will not be kept in History." (`jarvis_live.SEEN["temporary_on"]`, in the
+  status's `seen` table, so the apps' shared `live-cases.json` holds it).
+  Phone: a line on the Live screen while Temporary is on, before Live starts
+  as well as during it. Desktop: a line in the Jarvis bar's Live strip while
+  Live is on here and Temporary is on. Nothing changes what Temporary does.
+
 **Not built** (waiting on the owner or the second card): renaming, pinning,
 archiving, branching, editing and resending, wider chat-word search; larger
 re-send limits for two cards (the line above the thread tells the truth
-about today's limits); a warning on Continue when history is off; a sign on
-the phone's Live screen while Temporary is on.
+about today's limits).
 
 ---
 
@@ -7151,6 +7188,12 @@ that flag (today, until `wellbeing.patch` is confirmed and applied), the
 message still arrives and is shown as an ordinary answer, with its markdown
 (`**988**`, `**call 911**`) rendered the way any other bold text in an
 answer already is.
+
+**Not in the thread** (the owner, 2026-09-29; §18.7). With the flag, the
+turn's question and help answer stay on screen as the current answer only:
+neither app adds them to the scrollable thread or to what the model is
+re-sent, so the next question takes them away for good. The PC still keeps
+the chat in History as "A difficult moment".
 
 **Rules.** Rule 1: the check, the fixed texts and the note all run and stay
 on this PC; nothing about a crisis turn is sent anywhere else. Rule 4:

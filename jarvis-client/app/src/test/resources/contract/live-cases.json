@@ -33,7 +33,8 @@
     "elsewhere": "Jarvis Live is on your {device}",
     "not_for_me": "(not for Jarvis)",
     "trouble": "Heard you, but the words couldn't be made out - say it again",
-    "busy_mic": "Jarvis Live is already listening - just talk"
+    "busy_mic": "Jarvis Live is already listening - just talk",
+    "temporary_on": "Temporary is on - this Live session will not be kept in History."
   },
   "device_words": {
     "desktop": "PC",
@@ -190,7 +191,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -256,7 +258,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -322,7 +325,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -388,7 +392,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -454,7 +459,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -520,7 +526,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -586,7 +593,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -652,7 +660,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -718,7 +727,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -784,7 +794,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -850,7 +861,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -916,7 +928,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -982,7 +995,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1048,7 +1062,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1114,7 +1129,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1180,7 +1196,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1246,7 +1263,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1312,7 +1330,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1378,7 +1397,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1444,7 +1464,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1510,7 +1531,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1576,7 +1598,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1642,7 +1665,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1708,7 +1732,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1774,7 +1799,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1840,7 +1866,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {
@@ -1906,7 +1933,8 @@
         "elsewhere": "Jarvis Live is on your {device}",
         "not_for_me": "(not for Jarvis)",
         "trouble": "Heard you, but the words couldn't be made out - say it again",
-        "busy_mic": "Jarvis Live is already listening - just talk"
+        "busy_mic": "Jarvis Live is already listening - just talk",
+        "temporary_on": "Temporary is on - this Live session will not be kept in History."
       },
       "end_on": "app_lock",
       "camera": {

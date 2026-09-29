@@ -5498,6 +5498,9 @@ object JarvisRuntime {
             chat.setTemporary(false)
             lines += words.CONTINUED_TEMPORARY_OFF
         }
+        // History off (or unable to keep anything): the chat carries on, but
+        // what is said now is not kept (the owner, 2026-09-29).
+        words.continuedHistoryLine(t.keeping)?.let { lines += it }
         return if (chat.continueFrom(id, window, lines.joinToString(" "), readOutside = t.tainted)) null else words.CHAT_GONE
     }
 

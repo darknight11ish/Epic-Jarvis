@@ -106,6 +106,8 @@ class HistoryContractTest {
         assertEquals(w("continued_tainted"), ChatHistory.CONTINUED_TAINTED)
         assertEquals(w("continued_nothing"), ChatHistory.CONTINUED_NOTHING)
         assertEquals(w("continued_temporary_off"), ChatHistory.CONTINUED_TEMPORARY_OFF)
+        assertEquals(w("continued_history_off"), ChatHistory.CONTINUED_HISTORY_OFF)
+        assertEquals(w("continued_history_stuck"), ChatHistory.CONTINUED_HISTORY_STUCK)
         assertEquals(w("continue_busy"), ChatHistory.CONTINUE_BUSY)
         assertEquals(w("continue_live"), ChatHistory.CONTINUE_LIVE)
         assertEquals(w("continued").replace("{title}", "Dentist"), ChatHistory.continuedLine("Dentist"))
@@ -189,6 +191,39 @@ class HistoryContractTest {
             assertEquals(name, c["trimmed_count"]!!.jsonPrimitive.content.toInt(), got.trimmedCount)
             assertEquals(name, c["skipped"]!!.jsonPrimitive.content.toInt(), got.skipped)
         }
+    }
+
+    @Test
+    fun `Continue warns when history will not keep new messages, as the worked examples say`() {
+        val cases = doc["history_line_cases"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(7, cases.size)
+        for (c in cases) {
+            val input = c["in"]!!
+            // Through the real reader: a conversation carrying that `history`.
+            val history = if (input is JsonObject) ",\"history\":$input" else ""
+            val body = Json.parseToJsonElement(
+                "{\"id\":\"conv-00000001\",\"title\":\"t\",\"turns\":[]$history}",
+            ) as JsonObject
+            val t = ChatLog.transcript(body)!!
+            val want = (c["expect"] as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+            assertEquals(c.toString(), want, ChatHistory.continuedHistoryLine(t.keeping))
+        }
+        // An older PC sends no `history` at all: nothing to say, nothing guessed.
+        assertEquals(null, ChatHistory.continuedHistoryLine(null))
+    }
+
+    @Test
+    fun `a crisis turn stays out of the thread and out of what the model is re-sent`() {
+        for (c in doc["thread_keeps_cases"]!!.jsonArray.map { it.jsonObject }) {
+            assertEquals(
+                c.toString(),
+                c["expect"]!!.jsonPrimitive.content == "true",
+                ChatHistory.keepsInThread(c["crisis"]!!.jsonPrimitive.content == "true"),
+            )
+        }
+        // The flag it reads is the one the PC already sends (wellbeing.patch).
+        assertTrue(com.jarvis.client.net.Wellbeing.crisisFromHeader("{\"wellbeing\":\"crisis\"}"))
+        assertFalse(com.jarvis.client.net.Wellbeing.crisisFromHeader("{\"lane\":\"qwen3:8b\"}"))
     }
 
     @Test

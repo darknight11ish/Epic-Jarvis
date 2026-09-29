@@ -482,6 +482,13 @@ class ChatSession(
         // later turn. The HUD page draws the same line. A plain-text upstream
         // has no end marker, so for it the end of the body is the end.
         var cutShort = false
+        // This turn is a crisis turn (the PC's own flag in X-Jarvis-Route): its
+        // question and help answer stay on screen as the current answer, but
+        // never join the thread or what the model is re-sent - the next question
+        // takes them off the screen for good (the owner, 2026-09-29). Kept per
+        // call: `_crisis` is the shared, screen-facing copy and a newer question
+        // clears it.
+        var crisisTurn = false
         withContext(Dispatchers.IO) {
             // Cancelling this coroutine has to cancel the HTTP call, and only a
             // coroutine that is NOT parked on the socket can do it.
@@ -581,6 +588,7 @@ class ChatSession(
                     // reminder, the to-do list (`quick` in the same header;
                     // docs/JARVIS-API.md section 21): the small "done" line.
                     val quick = Schedule.quickFromRouteHeader(routeHeader)
+                    crisisTurn = Wellbeing.crisisFromHeader(routeHeader)
                     // The facts this answer used, by id, for "Used 2
                     // memories" - none on a temporary one - and what the PC
                     // said about a temporary question (TemporaryChat.notes).
@@ -825,7 +833,9 @@ class ChatSession(
             }
             return mine
         }
-        if (answer != null && answer.isNotBlank() && !cutShort && conversation == askedIn) {
+        if (answer != null && answer.isNotBlank() && !cutShort && conversation == askedIn &&
+            ChatHistory.keepsInThread(crisisTurn)
+        ) {
             _history.update { ChatHistory.commit(it, asking, answer) }
             _thread.update { ChatHistory.addToThread(it, asking, answer) }
             lastTurnAt = System.currentTimeMillis()

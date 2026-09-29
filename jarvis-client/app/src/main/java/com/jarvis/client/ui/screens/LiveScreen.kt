@@ -105,6 +105,9 @@ fun LiveScreen(
     val security by JarvisRuntime.settings.security.collectAsState()
     val voiceStatus by JarvisRuntime.voice.status.collectAsState()
     val mic by JarvisRuntime.liveMic.collectAsState()
+    // Temporary chat is on: a Live session is then not kept in History either
+    // (the owner, 2026-09-29), so this screen says so - before it starts, too.
+    val temporary by JarvisRuntime.chat.temporary.collectAsState()
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
     var typed by rememberSaveable { mutableStateOf("") }
@@ -191,6 +194,16 @@ fun LiveScreen(
                         LiveRules.SEEN.getValue("end_hint"),
                         style = MaterialTheme.typography.bodySmall,
                         color = chrome.textMid,
+                    )
+                }
+                if (temporary) {
+                    Gap(4)
+                    // Said by TalkBack when it appears, like the sign's detail.
+                    Text(
+                        LiveRules.SEEN.getValue("temporary_on"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = chrome.textHi,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                     )
                 }
                 Gap(12)

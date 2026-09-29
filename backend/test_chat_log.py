@@ -822,6 +822,19 @@ def t_list_paging_and_conversation_routes():
         check("user turns carry provenance and read_outside; answers do not",
               set(body["turns"][0]) >= {"role", "text", "at", "provenance", "read_outside"}
               and set(body["turns"][1]) == {"role", "text", "at"}, body["turns"])
+        # "Continue this chat" warns when new messages will not be kept (the
+        # owner, 2026-09-29): the conversation says whether history is keeping
+        # them, with the list's own words for it.
+        check("a conversation says history is on and recording",
+              body.get("history") == {"enabled": True, "recording": True, "why_not": ""},
+              body.get("history"))
+        w.log.set_enabled(False)
+        code, off = H.handle_get("/api/history/conversation", "id=conv-page01")
+        check("with history off it still reads, and says new messages are not kept",
+              code == 200 and off["turns"][1]["text"] == "answer 1"
+              and off["history"]["enabled"] is False and off["history"]["recording"] is False
+              and off["history"]["why_not"], off.get("history"))
+        w.log.set_enabled(True)
         code, _ = H.handle_get("/api/history/conversation", "id=conv-nothere")
         check("an unknown conversation: 404", code == 404)
         code, _ = H.handle_get("/api/history/conversation", "id=../../etc")

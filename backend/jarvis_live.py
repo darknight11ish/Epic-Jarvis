@@ -313,6 +313,10 @@ SEEN = {
     "not_for_me": "(not for Jarvis)",
     "trouble": "Heard you, but the words couldn't be made out - say it again",
     "busy_mic": "Jarvis Live is already listening - just talk",
+    # Temporary is on (the owner, 2026-09-29): a temporary chat is never in
+    # History, so a Live session started in one is not kept either. Shown by
+    # both apps while Temporary is on; the PC only supplies the words.
+    "temporary_on": "Temporary is on - this Live session will not be kept in History.",
 }
 #: How each device is named in words ("Live is on your PC") - never
 #: "desktop" in anything the owner reads or hears.

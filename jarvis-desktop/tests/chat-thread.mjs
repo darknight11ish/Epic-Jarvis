@@ -119,6 +119,33 @@ await check("the bar: the question is shown above its answer, and the thread ope
   assert.equal(tab, "0", "a scrolling region the keyboard cannot reach");
 });
 
+await check("the bar: a crisis question and its answer never join the thread or the model's history", async () => {
+  const HELP = "I'm really sorry you're going through this. In the US, call or text **988**.";
+  const page = await bar({ chatReplies: ["Tuesday at 3.", [route({ wellbeing: "crisis" }), HELP], "Fine, thanks."] });
+  await ask(page, "when is the dentist?");
+  await ask(page, "I want to hurt myself");
+  // The help answer shows once, on screen, as the current answer.
+  const shown = await page.locator("#answer").innerText();
+  const panel = await page.locator("#answer").evaluate((n) => n.classList.contains("wellbeing-crisis"));
+  const foldedNow = await page.locator("#previous-answer-body").textContent();
+  await ask(page, "how are you?");
+  const thread = await page.locator("#previous-answer-body").textContent();
+  const summary = await page.locator("#previous-answer-summary").innerText();
+  const answerNow = await page.locator("#answer").innerText();
+  const sent = await page.evaluate(() => (window.__calls || []).filter((c) => c[0] === "stream_chat").map((c) => c[1]));
+  await page.close();
+  assert.match(shown, /988/);
+  assert.equal(panel, true, "the help answer is not drawn as the calm panel");
+  assert.doesNotMatch(foldedNow, /hurt myself|988/, "the crisis pair was in the thread while it was on screen");
+  assert.match(thread, /when is the dentist\?/);
+  assert.doesNotMatch(thread, /hurt myself|988|sorry you're going through/, "the crisis pair stayed in the thread");
+  assert.equal(summary, "Earlier in this chat · 1 question");
+  assert.doesNotMatch(answerNow, /988/, "the help answer stayed on screen after the next question");
+  const third = JSON.stringify(sent.at(-1));
+  assert.ok(!third.includes("hurt myself") && !third.includes("988"), "the crisis pair was re-sent to the model");
+  assert.ok(third.includes("when is the dentist?"), "an ordinary earlier question is still re-sent");
+});
+
 await check("the bar: no thread under Hide memory lists, until Show; the answer on screen stays", async () => {
   const hidden = await bar({ chatReplies: ["One.", "Two."], security: { hidden: true } });
   await ask(hidden, "First?");
