@@ -355,11 +355,32 @@ Not on `main` yet (2026-09-29). When it is:
    in ...", then quit Jarvis from the tray and start it again. It checks the
    download first and installs nothing if it is not the expected file; your old
    pack stays beside it as `tts-old-...` so going back is a rename.
+   **Optional, after that: Ashby and Clara** (two voices blended for Jarvis; they
+   need the new pack). In `backend\README.md`, under **"Make Ashby and Clara"**,
+   copy the one line, paste it into PowerShell and wait for "OK - Ashby and Clara
+   are in ... voices-jarvis.bin"; then quit Jarvis from the tray and start it
+   again. It makes a 28 MB file beside your voice pack and touches nothing else;
+   until you do, the voice list says they are not made yet. Run the line again
+   after any later voice-pack upgrade. **Check it**: both appear at the top of
+   the voice list with a line under each; press **Hear it** on each (the first
+   time takes a few seconds - Jarvis checks it does not sound like you); choose
+   Ashby and ask Jarvis something: a calm British man, a little slower than the
+   others - **nobody has listened to either, so tell us if it sounds wrong**.
 3. **Check it** (five minutes): open the voice list, press **Hear it** on
    three voices - Heart, Bella and George - and confirm each one plays and the
    voice Jarvis uses does not change; press Hear it while Jarvis is talking (it
    should say it is busy). Pick a British voice (Emma or George) and ask
    Jarvis a question: it should sound British, not American - **nobody has
    listened to this yet, so tell us if it does not**. With an animal face on,
-   the animals still sound like themselves; their mouths follow the sound
-   rather than Kokoro's own timing on v1.0.
+   the animals still sound like themselves.
+4. **Optional, one more line: exact mouths on the new voices** (added
+   2026-09-29). After step 2, the animals' mouths follow the sound, not
+   Kokoro's own timing, until you run the same one line as for the old pack
+   (`backend\README.md`, **"Mouths that match the words"**, step 2 - it now
+   works on v1.0 too; about ten seconds, it writes one 56 MB file
+   `model.durations.onnx` next to the voice model and says where). It never
+   changes the voice pack, and if it says "this is not the Kokoro v1.0 model
+   file", nothing was made and the mouths simply stay as they are now. Then
+   restart Jarvis, turn an animal face on, ask something out loud, and watch
+   that the lips close on "m", "b" and "p" and round on "oo" and "w" - **nobody
+   has watched this on a v1.0 voice yet, so tell us how it looks**.

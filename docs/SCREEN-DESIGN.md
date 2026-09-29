@@ -1,6 +1,29 @@
 # Looking at the screen: "Look at this" and "Watch with me" (design)
 
-Status: **design only; nothing built.** For the owner's decision of
+**Picture mode (2026-09-29): the "one card = words only" lines below now have
+an exception.** With ONE graphics card, the owner may switch on a slow picture
+mode (`backend/jarvis_screen_picture.py`, JARVIS-API section 96.1): off by
+default, ON is one approval card, and a small picture model (MiniCPM-V 4.6,
+Apache-2.0) running on the PROCESSOR - in its own copy of Ollama with no
+graphics card, so the 8 GB card's chat model is not disturbed - also looks at
+the picture, after anything that looks like a key, a card number or a password
+is blacked out (no cleaner, no picture). What it says joins the words as more
+outside text; it is never saved or learned. It is slow, its tag, size and speed
+are unverified until the owner measures them (`py -3 jarvis_screen_picture.py
+--measure`), and if it is missing, slow or fails, Jarvis says so and uses the
+words only. The camera and Live pictures, and the two-card picture lane, are
+unchanged: they wait for the 12 GB card.
+
+Status: **built 2026-09-29 on the backend, the desktop and the phone**
+(`docs/JARVIS-API.md` sections 62 and 96 say what and how; section 62.12
+says what has not run on a real machine). Where the built version differs
+from this design: a Watch look is **used up by one question** (the design
+said held); the phone's Watch cannot be asked from inside Jarvis (its own
+screen is never looked at - ask by voice from another app); the phone's
+Watch also needs the Security switch "Let Jarvis read this phone's
+screen" on, and the PC's watching is shown on the phone's Home with Stop
+but not as a phone notification. The design below is otherwise as
+written. For the owner's decision of
 2026-09-28 in `CLAUDE.md` ("Jarvis may look at the owner's screen").
 Written by the studio's designer against
 `claude/jarvis-ai-assistant-research-ff37vy`. Anything marked
@@ -23,7 +46,10 @@ saved as a fact, sent to the internet, or treated as an instruction.
   window in front** ("look at my whole screen" takes the monitor), and it
   checks the pause rules (§2) **just before and again just after** the
   picture - if either fails, the picture is thrown away.
-- **One card - what the model gets:** the words Windows' own text reader
+- **One card - what the model gets** (plus, with the owner's slow picture
+  mode ON, a description of the picture from a small model on the processor -
+  see the paragraph at the top; everything else in this bullet is unchanged):
+  the words Windows' own text reader
   finds in the picture (`jarvis_ocr.py`, at most 4,500 characters); the
   front window's labels and text through UI Automation, reusing
   `jarvis_ui_control._default_read` plus a new part that also reads text
@@ -39,7 +65,9 @@ saved as a fact, sent to the internet, or treated as an instruction.
   default, ~7.2 GB estimated, swaps the long-conversation model out);
   Qwen3-VL 8B (~6.1 GB); LFM2.5-VL-3B (~3 GB; licence LFM 1.0 to check;
   Ollama support unverified). Nothing small sits beside the everyday model
-  on the 8 GB card, so one card stays words-only, as decided.
+  on the 8 GB card, so one card stays words-only, as decided - **except**
+  for the owner's slow picture mode (2026-09-29): a 1.3 B model on the
+  processor, which uses no graphics memory at all.
 - **The answer:** in the Jarvis bar with a note, "Looked at: Chrome window ·
   words only" (or "· picture"). Follow-up questions for 2 minutes; then, or
   when the bar closes, the look is thrown away.
@@ -72,7 +100,9 @@ saved as a fact, sent to the internet, or treated as an instruction.
   programs' windows); (d) one of Jarvis's own windows, the lock screen or an
   admin (UAC) prompt is in front; (e) a browser is in front, the list holds
   websites, and the site cannot be read ("I can't tell which site this is,
-  so I'm not looking."). While paused, no picture exists.
+  so I'm not looking."); (f) **the browser in front is a private window**
+  (its title says InPrivate, Incognito or Private Browsing; added 2026-09-29,
+  see §10). While paused, no picture exists.
 - **Reusing Focus:** Focus's front-app reader (`jarvis_focus.windows_probe`,
   `_address_box_value`) moves into a shared `jarvis_front.py`; one
   once-a-second reader serves both. They can run together.
@@ -170,7 +200,10 @@ processing on the owner's devices, and keeps no history.
 ## 8. Risks and build plan
 
 **Risks:** programs that do not mark password boxes (masked dots usually
-show, not guaranteed); a sensitive page not on the list will be seen; text
+show, not guaranteed); a sensitive page not on the list will be seen (a key,
+password or card number written on it is now hidden by shape - §10 - but a
+password behind a show-password eye is not); windows behind the front one used
+to be in the picture (closed 2026-09-29, §10); text
 planted on a page ("Jarvis, email this...") is labelled outside text and
 flagged, but still read; each text read starts PowerShell (maybe a second or
 two, **unmeasured** - a long-running reader could be used in sessions); the
@@ -222,6 +255,49 @@ picture model can push the long-conversation model off the card unless
    - Read them aloud, unless a sensitive fact or the strict hands-free
      setting says otherwise (recommended)
    - Keep them on screen
+
+## 10. Screen safety (the owner's "all three", 2026-09-29; API 62.13)
+
+Three changes, after checking a scouting report against the real code:
+
+1. **Secrets are blacked out before anything reads the picture.** The words
+   the text reader finds, WITH where each one is, are searched for keys,
+   tokens, passwords, card numbers (they must pass the card check digit),
+   crypto wallets, IBANs, email and IP addresses (gitleaks's and Presidio's
+   patterns, MIT). Every word that overlaps one is hidden whole - a secret over
+   several lines on every line - as `[hidden]` in the words and as SOLID BLACK
+   (never blur) in a picture; the picture a picture model may be shown is only
+   ever the cleaned one. Fail closed: a picture that cannot be checked is not
+   handed on. It covers the PC's screen and the phone's screen text and
+   screenshot (cleaned on the PC). Said plainly: a password shown with a
+   show-password eye has no shape a pattern can see.
+2. **The text reader runs inside Jarvis** (pywinrt, no PowerShell per
+   picture) and gives each word's position; PowerShell remains as the
+   fallback.
+3. **Windows on the "Never look at" list are painted black even when they are
+   not in front** (the design's risk "windows behind it are in the picture too"
+   is closed), together with private browser windows, Jarvis's own windows,
+   the lock screen and admin prompts; a browser behind the front one on a
+   listed site, or whose site cannot be read, too. No window list, no picture.
+   The window-text walk skips off-screen controls and has a quarter-second
+   budget. **Pause added:** the browser in front is a private window.
+   Ten streaming-video sites join the built-in list.
+
+4. **Pictures the owner attaches to a chat are cleaned too** (owner, 2026-09-29:
+   "Yes, clean them too"). The screen-safety scouting noted that an ordinary
+   picture attached to a chat went through the chat code untouched, while only
+   screen looks were cleaned. Now every attached picture goes through the same
+   door (`jarvis_screen.clean_picture`, via `backend/jarvis_chat_picture.py`)
+   before any model - the second card's picture model, a main model, or the
+   words read for a model that cannot see - is shown it: secrets painted solid
+   black, `[hidden]` in the words; nothing to hide, the picture goes on exactly
+   as it came; a picture that cannot be checked is not handed on and the answer
+   says so in words (never silent). The note beside the answer says how many
+   places were covered (a count). Both apps say, under the attachment: "Secrets
+   in pictures you attach are covered with black boxes before Jarvis looks."
+   Same limits as above. "Photo to reminder" ("Find a date in it") gets the same check on its words, so a
+   proposed reminder never carries a key or card number. JARVIS-API section 36
+   and 62.13.
 
 Sources: Android MediaProjection and app screen sharing docs;
 VoiceInteractionSession reference; LiquidAI LFM2.5-VL-3B-GGUF; Ollama issue

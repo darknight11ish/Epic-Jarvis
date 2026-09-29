@@ -1024,6 +1024,41 @@ identifier = "live-hold"
 description = "Jarvis Live: keep the microphone closed while the Jarvis bar shows a card or speaks an answer under \"Interrupt by tap only\", and open it again after."
 permissions = ["allow-live-hold"]
 
+# "Look at this" and "Watch with me" (look.rs; docs/SCREEN-DESIGN.md; the
+# owner's decision of 2026-09-28). Read the session (fixed words and minutes,
+# never a program, a site, a title or a word from the screen) and one verb on
+# it: start (no card - the owner's own act - but held on a stale link and
+# under App lock), more time (held on a stale link), stop and "the bar
+# closed" (never held: they only make Jarvis look less). The Jarvis bar holds
+# it, and so does the always-on-top badge, so the owner can always stop
+# watching from the sign that says Jarvis is.
+[[set]]
+identifier = "screen-watch"
+description = "Watch with me: read the session (fixed words and minutes, never a word from the screen), start it (no card; held on a stale link and under App lock), more time, stop it."
+permissions = [
+  "allow-screen-status",
+  "allow-screen-watch",
+]
+
+# The Never look at list - programs and websites Jarvis never looks at. Only
+# Settings shows it (the names are the owner's bank, among other things): read
+# it, add to it at once (stricter), and take an entry off with ONE approval
+# card on this PC (it loosens what Jarvis may see).
+[[set]]
+identifier = "screen-never-look"
+description = "Read the Never look at list, add a program or website to it at once, or ask to take one off (one approval card on this PC)."
+permissions = ["allow-screen-never"]
+
+# Picture mode's switch (look.rs screen_picture; backend/jarvis_screen_picture.py;
+# the owner's decision of 2026-09-29): a slow picture model on the processor
+# for "Look at this" and "Watch with me" on a one-card PC. Read it, turn it on
+# (ONE approval card on this PC, held on a stale link) or off (at once). Only
+# Settings shows it; it carries a switch position and words, never a picture.
+[[set]]
+identifier = "screen-picture"
+description = "Read picture mode's setting, ask to turn it on (one approval card on this PC) or turn it off at once."
+permissions = ["allow-screen-picture"]
+
 [[set]]
 identifier = "focus"
 description = "Read the focus session (a countdown, booleans and counts - never what was in front) and do ONE thing to it: pause, resume, +10 minutes, stop, or lock on where the owner lands. No card; resume, extend and lock are held on a stale link."

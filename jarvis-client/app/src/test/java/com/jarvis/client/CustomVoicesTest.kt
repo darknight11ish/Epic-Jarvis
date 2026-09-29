@@ -520,7 +520,8 @@ class CustomVoicesTest {
     @Test
     fun `the voice pack - by name, two packs, and the choice that carried over`() {
         // The old pack offers nine and says where the new one is; Kokoro v1.0
-        // offers eleven, Heart first (the best rated), and says nothing.
+        // offers eleven, Heart first (the best rated), and says how to make
+        // Ashby and Clara (they are not made yet).
         val old = requireNotNull(status("pack_old").speaker)
         assertEquals(9, old.choices.size)
         assertTrue(old.note, old.note.startsWith("Better voices are available: Kokoro v1.0 "))
@@ -533,7 +534,8 @@ class CustomVoicesTest {
             v1.choices.map { it.id },
         )
         assertEquals("af_heart", v1.choice)
-        assertEquals("", v1.note)
+        assertTrue(v1.note, v1.note.startsWith("Ashby and Clara, two voices made for Jarvis, are not made yet. To make them, run the one line "))
+        assertTrue("no plain line on a voice that is not one of the two", v1.choices.all { it.detail.isEmpty() })
         assertEquals("American (female) - Heart", v1.choices[0].label)
         assertEquals("af_heart", status("pack_v1_chosen").speaker?.choice)
         assertEquals(
@@ -553,7 +555,45 @@ class CustomVoicesTest {
         // Every id the PC sends is a voice's name, never a number.
         for (case in voices["status"]!!.jsonObject.keys) {
             val sk = status(case).speaker ?: continue
-            assertTrue(case, sk.choices.all { Regex("^[a-z]{2}(_[a-z]+)?$").matches(it.id) })
+            assertTrue(case, sk.choices.all { Regex("^([a-z]{2}|mix)(_[a-z]+)?$").matches(it.id) })
+        }
+    }
+
+    @Test
+    fun `Ashby and Clara - listed first with the PC's one plain line, chosen by name like any voice`() {
+        val st = requireNotNull(status("pack_v1_blends").speaker)
+        assertEquals(listOf("mix_ashby", "mix_clara", "af_heart"), st.choices.map { it.id }.take(3))
+        assertEquals(
+            listOf("Ashby (made for Jarvis)", "Clara (made for Jarvis)"),
+            st.choices.take(2).map { it.label },
+        )
+        assertTrue(st.choices[0].detail, st.choices[0].detail.startsWith("A warm British butler, calm and a little slower."))
+        assertTrue(st.choices[1].detail, st.choices[1].detail.startsWith("A warm woman's voice that leans British."))
+        assertTrue("only the two carry a line", st.choices.drop(2).all { it.detail.isEmpty() })
+        assertEquals("made and loaded: nothing left to say", "", st.note)
+        // Chosen by its name; the PC says so in its own words and no card is raised.
+        assertEquals("{\"speaker\":\"mix_ashby\"}", CustomVoices.speakerBody("mix_ashby"))
+        assertEquals(
+            "Jarvis's built-in voice is now Ashby (made for Jarvis).",
+            CustomVoices.answerLine(answer("pack_v1_ashby")),
+        )
+        assertEquals("mix_ashby", status("pack_v1_ashby_chosen").speaker?.choice)
+        // A voice that sounds like the owner is not listed any more, and says why.
+        val refused = requireNotNull(status("pack_v1_ashby_refused_listed").speaker)
+        assertEquals(listOf("mix_clara", "af_heart"), refused.choices.map { it.id }.take(2))
+        val why = "Ashby sounds too much like your own voice, so Jarvis will not use it."
+        assertEquals(why, refused.note)
+        assertEquals(why, CustomVoices.answerLine(answer("pack_v1_ashby_refused")))
+        assertEquals(why, CustomVoices.answerLine(answer("pack_v1_sample_refused")))
+        // The old pack: not listed, and the picker says they need the newer pack.
+        val old = requireNotNull(status("pack_old").speaker)
+        assertTrue(old.choices.none { it.id.startsWith("mix_") })
+        assertTrue(old.note, old.note.endsWith("Ashby and Clara, two voices made for Jarvis, need the newer voice pack (Kokoro v1.0)."))
+        assertEquals("Choose one of the listed voices.", CustomVoices.answerLine(answer("pack_old_ashby")))
+        // No animal is offered either: an animal's list is the pack's own eleven.
+        for (case in listOf("pack_v1_blends", "pack_v1_ashby_chosen")) {
+            val ids = requireNotNull(status(case).faceVoice).choices.voices.map { it.id }
+            assertTrue(case, ids.none { it.startsWith("mix_") })
         }
     }
 

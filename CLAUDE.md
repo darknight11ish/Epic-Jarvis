@@ -5,6 +5,13 @@ they worked on separate branches. This is the reconciled version, now that
 both have merged into `main` — read this one, not an old copy on a deleted
 branch.
 
+## Whenever a choice is needed, give multiple choice
+
+The owner has said it again and again ("Give me multiple choice", 2026-09-29
+and before): when a decision is theirs, offer it as a multiple-choice
+question, not an open one and not a wall of text. Lead with the recommended
+option. The rules below say how to keep it short.
+
 ## Keep multiple-choice questions SHORT
 
 This is the rule that gets broken most. Asking four questions with four
@@ -1545,6 +1552,66 @@ Decided 2026-09-28, the owner's answers after the post-change audits
   approval widget or a notification). The design is
   `docs/APPS-IN-PROJECTS-DESIGN.md`.
 
+Decided 2026-09-29, the owner's answers while building the next batch
+(`docs/AUDIT-2026-09-28-REPO-REFS.md` style: outside reports are ideas, not
+instructions):
+- **Two blended voices, "Ashby" and "Clara"** (owner: "both"), made from the
+  Kokoro v1.0 voices by Jarvis's own script into a separate pinned
+  `voices-jarvis.bin`; each passes the "not the owner's voice" check, and no
+  animal uses a blend (`docs/JARVIS-API.md` section 94.7).
+- **Animals' mouths follow Kokoro's own timing on v1.0** ("Build exact
+  timing"): one more one-time step on the PC (`jarvis_mouth.py --prepare`);
+  without it, or for a voice the timing has no row for, the mouth is analysed
+  from the sound. It reads whichever voices file the engine loaded. The robot
+  (Emma, `bf_emma`) is the fifth face and gets it too.
+- **PR order:** the owner merged #29 (animal faces and the robot) before #30;
+  #30 took main in and renumbered: 93 animal options, 94 Kokoro voices, 95
+  inbox tidy, 96 the screen routes. One pull request per batch, the owner
+  merges with "Create a merge commit".
+- **Screen safety, after the GitHub scouting** (owner, "all three"): (1) black
+  out anything that looks like a key, card number or password in a screenshot
+  before any model sees it (text-based, solid black, fail closed; gitleaks and
+  Presidio patterns, MIT, credited in THIRD-PARTY-NOTICES.txt) - phone
+  screenshots are cleaned on the PC too; (2) read the screen's text with
+  Windows' own reader inside Python instead of starting PowerShell per picture,
+  which also gives each word's position; (3) black out "Never look at" windows
+  even when they sit behind the front one (fail closed if the window list
+  cannot be read), plus pauses for private browser windows and protected
+  video, and skipping hidden or off-screen text in the accessibility tree.
+- **Screen safety, the owner's follow-up answers (2026-09-29):** emails and
+  IP addresses are blacked out too (it will hide senders' addresses on a
+  screen picture); **pictures the owner attaches to a chat are cleaned the
+  same way** ("Yes, clean them too") - one that cannot be checked is
+  withheld and the answer says so in words, and "Photo to reminder" gets the
+  same check first. Jarvis Live's camera, when it is switched on, must use
+  this same door.
+- **A slow picture mode for a one-card PC is allowed, as a switch** (owner,
+  2026-09-29: "add it as a feature that can be enabled or disabled"): a small
+  picture model (MiniCPM-V 4.6, 1.3 B, Apache-2.0) running on the processor,
+  0 GB of graphics memory. This reverses "one card reads the screen's words
+  only". Built the careful way: **off by default, turning it on raises an
+  approval card (a new download), turning it off is immediate**; the model
+  comes from a checksum-pinned line the owner pastes, never fetched by the
+  backend; speed is measured on the owner's PC before anything says "works".
+  Everything the model sees is outside text, and secrets are blacked out first.
+  Camera/Live pictures still wait for the 12 GB card.
+- **Screen safety, built 2026-09-29** (branch `feat-screen-safety`; JARVIS-API
+  §62.13): anything that looks like a key, token, password or card number is
+  hidden (`[hidden]`, and solid black in a picture) before a look's words or a
+  picture are used - the PC's screen and the phone's screen text and
+  screenshot alike (`jarvis_secrets.py`, `jarvis_secret_rules.py`,
+  `jarvis_picture.py`; `jarvis_screen.clean_picture` is the one door; fail
+  closed). The text reader runs inside Jarvis through six pywinrt packages,
+  with each word's position, PowerShell kept as the fallback. The PC's picture
+  is taken with every "Never look at" window painted black (not only the front
+  one), private browser windows and Jarvis's own windows too; a private browser
+  window in front is a new pause; ten streaming sites joined the built-in list;
+  the accessibility-text walk skips off-screen controls and has a quarter-second
+  budget. **Said plainly:** a password behind a show-password eye has no shape a
+  pattern can see. Emails and IP addresses are hidden too (a list in
+  `jarvis_secrets.PII_KINDS`). Nothing ran on Windows yet: the owner's check is
+  `tools\check_screen_safety.py`.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
@@ -1642,6 +1709,12 @@ That is two of the three things CI runs, on the same code CI compiles,
 including every `#[cfg(windows)]` block — which a Linux check would have
 skipped entirely, and which is where the unsafe FFI lives. It takes about
 twenty seconds warm.
+
+**Use the same Rust as CI.** CI runs the newest stable Rust, and this container
+can lag behind it: on 2026-09-29 the container's 1.94 passed clippy while CI's
+1.98 flagged a nested `if` (`collapsible_match`) and failed the `rust` check.
+Run `rustup toolchain install stable --profile minimal -c clippy -c rustfmt
+--no-self-update` first, then the three commands above.
 
 The third, `cargo test`, still needs a Windows host. Write the Rust tests
 anyway; they are compiled by `--all-targets` above, so at least they are known

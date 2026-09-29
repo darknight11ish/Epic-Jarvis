@@ -855,6 +855,28 @@ $PATCHES = @(
     # this one adds its lines). Needs jarvis_inbox_tidy.py copied in; without it, or on any error,
     # the banner says so and the routes are simply not there.
     'inbox-tidy.patch'
+    # "Look at this" and "Watch with me" (the owner's decision of 2026-09-28;
+    # docs/SCREEN-DESIGN.md, JARVIS-API sections 62 and 96): GET/POST
+    # /api/screen and /api/screen/never-look. Three hunks in jarvis_hud.py:
+    # the startup install() block (context: inbox-tidy.patch's own block, the
+    # last one before `_loopback_companion`, so it goes after it - last, like
+    # every new patch), a small `_screen_turn` helper (context:
+    # games-temporary.patch's own lines), and `has_screen=` in the router
+    # call, so a turn carrying the owner's screen never leaves this PC
+    # (context: cloud-say-yes.patch's own lines). The message field `screen`
+    # comes off before the model in temporary-chat.patch's own list. Needs
+    # jarvis_screen.py and jarvis_screen_win.py copied in; without them, or
+    # on any error, the banner says so and the routes are simply not there.
+    'screen.patch'
+    # Picture mode for "Look at this" and "Watch with me" on a PC with one
+    # graphics card (the owner's decision of 2026-09-29; JARVIS-API section
+    # 96.1): ONE card to turn it on (screen_picture_enable, tier ask). Two
+    # hunks in jarvis_gate.py, both right after inbox-tidy.patch's own last
+    # lines (the "acts only on tier ask" list and the _RISK table), so it goes
+    # after everything else - last, like every new patch. Needs
+    # jarvis_screen_picture.py copied in; the routes are answered by
+    # jarvis_screen.py, which screen.patch already installs.
+    'screen-picture.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -967,7 +989,12 @@ $SHIPPED = @(
     # --- folders Jarvis may look in (documents.patch) ---
     'jarvis_documents.py'        # "Folders Jarvis may look in": the list, the my_files tool (find, search, read PDFs and Word files in parts), the Notion import
     # --- the words in a picture (2026-09-26) ---
-    'jarvis_ocr.py'              # reads the words in a picture with Windows' own text recognition, on this PC; jarvis_agent.py marks them as outside text; no patch
+    'jarvis_ocr.py'              # reads the words in a picture (and where each one sits) with Windows' own text recognition, on this PC, inside Jarvis through the pywinrt packages or else through PowerShell; jarvis_agent.py marks them as outside text; no patch
+    # --- screen safety (2026-09-29): secrets in a picture of the screen are painted black before anything reads it ---
+    'jarvis_secret_rules.py'     # GENERATED (tools/gen_secret_rules.py): gitleaks's rule data (MIT), what a key, token or password looks like; no patch
+    'jarvis_secrets.py'          # finds secrets in the words read from a picture (gitleaks + Presidio patterns, a card must pass the check digit) and works out the black boxes; no patch
+    'jarvis_picture.py'          # paints SOLID BLACK boxes on a picture and hands on only a checked one; jarvis_screen.clean_picture is the door; no patch
+    'jarvis_chat_picture.py'     # the pictures the owner ATTACHES to a chat get the same black-out (jarvis_screen.clean_picture) before any model sees them; one that cannot be checked is withheld and the answer says so; jarvis_agent.py calls it, no patch
     # --- plug-in programs (MCP), reached only through more_tools("plugins") ---
     'jarvis_mcp.py'              # read-only tools from programs on this PC you list under [mcp]; stdio only; every call asks
     # --- the crisis help line (2026-09-27) ---
@@ -1040,8 +1067,10 @@ $SHIPPED = @(
     'jarvis_chatbot_metaai.py'   # Meta AI (www.meta.ai): a thin site file
     'jarvis_chatbot_api.py'      # the API adapters (OpenAI, DeepSeek, Mistral, xAI, OpenRouter, Groq): a key from Credential Manager, sent to that one host only; no key, no conversation
     'jarvis_chatbot_local.py'    # "a second AI on this PC": another Ollama model, loopback only, never a cloud model; one card allows only the everyday model, two cards any model on the second card
-    # --- looking at the screen, build steps 1 and 2 (2026-09-28): the session rules only; no route, no Windows readers yet ---
-    'jarvis_screen.py'           # "Look at this" and "Watch with me": session states, pause rules, caps, the Never look at list; not reachable from the apps yet
+    # --- looking at the screen (2026-09-28/29): the session rules, the Windows readers and the routes (screen.patch) ---
+    'jarvis_screen_win.py'       # the Windows half of "Look at this" and "Watch with me": what is in front (password box, capture protection, lock), the picture (in memory, never on disk) and the window's own text; copied before jarvis_screen.py
+    'jarvis_screen.py'           # "Look at this" and "Watch with me": session states, pause rules, caps, the Never look at list, GET/POST /api/screen and /api/screen/never-look (screen.patch)
+    'jarvis_screen_picture.py'   # slow picture mode for one graphics card: a small picture model on the PROCESSOR in its own copy of Ollama; off by default, ON is one card, OFF is instant; secrets blacked out first or no picture; GET/POST /api/screen/picture (routes in jarvis_screen.py, gate lines in screen-picture.patch)
     'jarvis_chatbot_compare.py'  # "Ask several and compare": 2 or more chatbots, ONE card listing every one, one after another, ONE summary; routes in jarvis_chatbot_routes.py
     # --- Jarvis Live (2026-09-28): talking back and forth; the camera off until the second card passes the photo test ---
     'jarvis_live.py'             # the Live session (start, stop, time limit, quiet, pauses), the source=live rules jarvis_speech follows, GET/POST /api/voice/live (live.patch)

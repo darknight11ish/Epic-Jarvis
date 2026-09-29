@@ -670,6 +670,15 @@
        "title": "Move a second-card feature onto a third graphics card"
       },
       {
+       "action": "screen_picture_enable",
+       "fixed": false,
+       "id": "screen_picture_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it look at pictures of your screen, slowly, on the processor"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -1639,6 +1648,15 @@
        "title": "Move a second-card feature onto a third graphics card"
       },
       {
+       "action": "screen_picture_enable",
+       "fixed": false,
+       "id": "screen_picture_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it look at pictures of your screen, slowly, on the processor"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -2603,6 +2621,15 @@
        "title": "Move a second-card feature onto a third graphics card"
       },
       {
+       "action": "screen_picture_enable",
+       "fixed": false,
+       "id": "screen_picture_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it look at pictures of your screen, slowly, on the processor"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -3562,6 +3589,15 @@
        "title": "Move a second-card feature onto a third graphics card"
       },
       {
+       "action": "screen_picture_enable",
+       "fixed": false,
+       "id": "screen_picture_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it look at pictures of your screen, slowly, on the processor"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -4519,6 +4555,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
+       "action": "screen_picture_enable",
+       "fixed": false,
+       "id": "screen_picture_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it look at pictures of your screen, slowly, on the processor"
       },
       {
        "action": "big_model_enable",
@@ -5494,6 +5539,15 @@
        "title": "Move a second-card feature onto a third graphics card"
       },
       {
+       "action": "screen_picture_enable",
+       "fixed": false,
+       "id": "screen_picture_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it look at pictures of your screen, slowly, on the processor"
+      },
+      {
        "action": "big_model_enable",
        "fixed": false,
        "id": "big_model_enable",
@@ -6456,6 +6510,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Move a second-card feature onto a third graphics card"
+      },
+      {
+       "action": "screen_picture_enable",
+       "fixed": false,
+       "id": "screen_picture_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it look at pictures of your screen, slowly, on the processor"
       },
       {
        "action": "big_model_enable",

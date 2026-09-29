@@ -21,14 +21,26 @@ jarvis_router), when that model cannot see pictures and the second card's
 picture model is not answering it. Automatic: there is no switch (the
 feasibility audit's Overwhelm guardrail) - the marking says what happened.
 
-HOW. Windows' built-in text recognition (Windows.Media.Ocr), through
-Windows PowerShell 5.1, which every Windows 10 and 11 PC has: no download,
-no Python package, nothing to pin, and nothing that can reach the internet.
-The script is FIXED text below (_SCRIPT), started by its full system path
-(never a `powershell` found on PATH), handed the picture on standard input
-- never written to disk - and it prints one line of JSON: the lines of text
-it found. It uses the languages of the owner's Windows profile; with none
-that Windows can read, it says so plainly (NO_LANGUAGE).
+HOW. Windows' built-in text recognition (Windows.Media.Ocr), no download of
+any model and nothing that can reach the internet. Two ways in, tried in this
+order:
+  1. IN THIS PROGRAM (added 2026-09-29, screen safety): the `winrt` packages
+     (pywinrt, MIT - backend/requirements.txt) call Windows' reader directly.
+     No new program is started for each picture. The idea is that of the
+     `winocr` package (MIT; a few lines: a picture goes into a Windows
+     software bitmap, which the OcrEngine reads); the package itself is NOT
+     used, above all not its `serve()`, which opens a web server open to
+     the whole network.
+  2. THROUGH WINDOWS POWERSHELL 5.1 (the way it always worked), when those
+     packages are not installed or fail: the script is FIXED text below
+     (_SCRIPT), started by its full system path (never a `powershell` found
+     on PATH).
+Either way the picture is handed over in memory - never written to disk - and
+the answer is the lines of text it found AND where each word sits in the
+picture (left, top, width, height, in pixels): the position is what lets
+jarvis_secrets.py black out a secret. It uses the languages of the owner's
+Windows profile; with none that Windows can read, it says so plainly
+(NO_LANGUAGE).
 
 HOW MUCH. At most MAX_CHARS characters - about 1,500 tokens by Jarvis's own
 counter (3 characters a token, jarvis_agent.estimate_tokens) - and when
@@ -43,6 +55,7 @@ stand-in engine (backend/test_picture_text.py).
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -76,7 +89,7 @@ TOO_SLOW = "Windows took too long to read the words in the picture."
 _SCRIPT = r"""
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-function Say($o) { [Console]::Out.Write(($o | ConvertTo-Json -Compress -Depth 3)) }
+function Say($o) { [Console]::Out.Write(($o | ConvertTo-Json -Compress -Depth 6)) }
 try {
   Add-Type -AssemblyName System.Runtime.WindowsRuntime
   $null = [Windows.Media.Ocr.OcrEngine, Windows.Foundation, ContentType = WindowsRuntime]
@@ -97,7 +110,14 @@ try {
   $bitmap = Await ($decoder.GetSoftwareBitmapAsync()) ([Windows.Graphics.Imaging.SoftwareBitmap])
   $result = Await ($engine.RecognizeAsync($bitmap)) ([Windows.Media.Ocr.OcrResult])
   $lines = @($result.Lines | ForEach-Object { $_.Text })
-  Say @{ ok = $true; lines = $lines }
+  $boxes = @()
+  try {
+    $boxes = @(foreach ($ln in $result.Lines) {
+      $ws = @(foreach ($wd in $ln.Words) { $r = $wd.BoundingRect; @{ t = $wd.Text; x = [double]$r.X; y = [double]$r.Y; w = [double]$r.Width; h = [double]$r.Height } })
+      @{ t = $ln.Text; w = $ws }
+    })
+  } catch { $boxes = @() }
+  Say @{ ok = $true; lines = $lines; boxes = $boxes; width = [int]$bitmap.PixelWidth; height = [int]$bitmap.PixelHeight }
 } catch {
   Say @{ ok = $false; why = 'failed'; error = $_.Exception.GetType().Name }
 }
@@ -118,13 +138,124 @@ def _powershell() -> Optional[str]:
 _LAST: dict = {"why": ""}
 
 
+# --------------------------------------------------------------------------
+#   The in-process reader (pywinrt) - the idea of the `winocr` package (MIT),
+#   its few lines of Windows calls, without its server. NOT RUN in the
+#   development container (no Windows): every name below is checked against
+#   the packages' own type files (winrt-Windows.Media.Ocr 3.2.1,
+#   winrt-Windows.Graphics.Imaging 3.2.1, winrt-Windows.Storage.Streams 3.2.1)
+#   and backend/test_ocr_words.py drives everything around them with
+#   stand-ins; the real calls are the owner's-PC test (backend/README.md).
+# --------------------------------------------------------------------------
+
+class _NoWinrt(Exception):
+    """The pywinrt packages are not installed (or would not load)."""
+
+
+_WINRT: dict = {}
+
+
+def _winrt_modules() -> tuple:
+    """(OcrEngine, BitmapDecoder, BitmapPixelFormat, BitmapAlphaMode,
+    InMemoryRandomAccessStream, DataWriter, Buffer), imported once. Raises
+    _NoWinrt when any of the six pywinrt packages is missing: the import of
+    winrt.windows.foundation (and .collections, .globalization) is what makes
+    Windows' asynchronous calls awaitable."""
+    if "mods" in _WINRT:
+        return _WINRT["mods"]
+    if os.name != "nt" or _WINRT.get("missing"):
+        raise _NoWinrt()
+    try:
+        from winrt.windows.media.ocr import OcrEngine
+        from winrt.windows.graphics.imaging import BitmapAlphaMode, BitmapDecoder, BitmapPixelFormat
+        from winrt.windows.storage.streams import Buffer, DataWriter, InMemoryRandomAccessStream
+        import winrt.windows.foundation  # noqa: F401
+        import winrt.windows.foundation.collections  # noqa: F401
+        import winrt.windows.globalization  # noqa: F401
+    except Exception:
+        _WINRT["missing"] = True
+        raise _NoWinrt()
+    _WINRT["mods"] = (OcrEngine, BitmapDecoder, BitmapPixelFormat, BitmapAlphaMode,
+                      InMemoryRandomAccessStream, DataWriter, Buffer)
+    return _WINRT["mods"]
+
+
+def winrt_usable() -> bool:
+    """Are the pywinrt packages here? Cached; starts nothing."""
+    try:
+        _winrt_modules()
+        return True
+    except _NoWinrt:
+        return False
+
+
+def lines_from_result(result) -> list:
+    """Windows' OcrResult (or anything shaped like it) as [{"text", "words":
+    [{"text", "left", "top", "width", "height"}]}]. Pure: tested with
+    stand-ins."""
+    out = []
+    for ln in result.lines:
+        words = []
+        for w in ln.words:
+            r = w.bounding_rect
+            words.append({"text": str(w.text), "left": float(r.x), "top": float(r.y),
+                          "width": float(r.width), "height": float(r.height)})
+        out.append({"text": str(ln.text), "words": words})
+    return out
+
+
+def _winrt_read(image: bytes, want_pixels: bool) -> dict:
+    """{"ok", "lines", "size", ["pixels": (BGRA bytes, w, h)]} or {"ok":
+    False, "why": "no_language"|"too_big"}. Raises _NoWinrt when the packages
+    are missing, asyncio.TimeoutError when Windows is too slow, anything else
+    when a Windows call fails (the caller then uses PowerShell)."""
+    (OcrEngine, BitmapDecoder, BitmapPixelFormat, BitmapAlphaMode,
+     InMemoryRandomAccessStream, DataWriter, Buffer) = _winrt_modules()
+
+    async def go() -> dict:
+        stream = InMemoryRandomAccessStream()
+        writer = DataWriter(stream.get_output_stream_at(0))
+        writer.write_bytes(image)
+        await writer.store_async()
+        writer.detach_stream()             # the writer must not close the picture's stream
+        stream.seek(0)
+        decoder = await BitmapDecoder.create_async(stream)
+        w, h = int(decoder.pixel_width), int(decoder.pixel_height)
+        limit = int(OcrEngine.max_image_dimension)
+        if w > limit or h > limit:
+            return {"ok": False, "why": "too_big"}
+        engine = OcrEngine.try_create_from_user_profile_languages()
+        if engine is None:
+            return {"ok": False, "why": "no_language"}
+        bitmap = await decoder.get_software_bitmap_converted_async(
+            BitmapPixelFormat.BGRA8, BitmapAlphaMode.PREMULTIPLIED)
+        result = await engine.recognize_async(bitmap)
+        out = {"ok": True, "lines": lines_from_result(result), "size": (w, h)}
+        if want_pixels:
+            try:
+                size = w * h * 4
+                buf = Buffer(size)
+                buf.length = size
+                bitmap.copy_to_buffer(buf)
+                out["pixels"] = (bytes(memoryview(buf))[:size], w, h)
+            except Exception:
+                pass                       # the picture then cannot be cleaned: fail closed
+        return out
+
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(asyncio.wait_for(go(), TIMEOUT_S))
+    finally:
+        loop.close()
+
+
 def status() -> dict:
     """{"available", "engine", "why"} - whether this PC can read the words in
     a picture. For the apps, through GET /api/second-card. Never raises;
     starts nothing."""
     if os.name != "nt":
         return {"available": False, "engine": ENGINE, "why": NOT_WINDOWS}
-    if _powershell() is None:
+    if _powershell() is None and not winrt_usable():
         return {"available": False, "engine": ENGINE, "why": NO_POWERSHELL}
     if _LAST["why"]:
         return {"available": False, "engine": ENGINE, "why": _LAST["why"]}
@@ -161,25 +292,121 @@ def tidy(lines) -> str:
     return "\n".join(out)
 
 
-def read_text(image: bytes, *, runner: Optional[Callable[[bytes], tuple]] = None) -> dict:
-    """{"ok", "text", "left_out", "why"}: the words in the picture, at most
-    MAX_CHARS of them, and how many characters were left out. Never raises;
-    `why` is a plain sentence when ok is False."""
+def _num(v) -> Optional[float]:
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if f == f and abs(f) < 1e7 else None
+
+
+def _one(v) -> list:
+    """A JSON value that is a list, or a lone item PowerShell 5.1 flattened
+    out of a one-item list, as a list."""
+    if isinstance(v, list):
+        return v
+    return [] if v is None else [v]
+
+
+def _pick(d: dict, *keys):
+    for k in keys:
+        if k in d and d[k] is not None:
+            return d[k]
+    return None
+
+
+def normalize_lines(lines, boxes=None) -> list:
+    """Whatever an engine or a stand-in gave, as [{"text", "words": [{"text",
+    "left", "top", "width", "height"}]}]. `lines` is a list of strings or of
+    {"text", "words"} (or a lone string). `boxes` is PowerShell's parallel
+    list [{"t", "w": [{"t", "x", "y", "w", "h"}]}], used only when it has the
+    same number of lines. Control characters are taken out of every word
+    here, so the words a secret is looked for in are the words a model
+    would have seen. A word with no usable position keeps only its text."""
+    raw = _one(lines)
+    pos = _one(boxes)
+    if len(pos) != len(raw):
+        pos = []
+    out = []
+    for i, ln in enumerate(raw):
+        words = []
+        if isinstance(ln, dict):
+            text = _pick(ln, "text", "t")
+            src = _one(ln.get("words"))
+        else:
+            text, src = ln, []
+        if not src and pos and isinstance(pos[i], dict):
+            src = _one(pos[i].get("w"))
+        for w in src:
+            if not isinstance(w, dict):
+                continue
+            t = " ".join(_CONTROL.sub(" ", str(_pick(w, "text", "t") or "")).split())
+            if not t:
+                continue
+            box = [_num(_pick(w, *k)) for k in (("left", "x"), ("top", "y"),
+                                                ("width", "w"), ("height", "h"))]
+            if None in box:
+                words.append({"text": t})
+            else:
+                words.append({"text": t, "left": box[0], "top": box[1], "width": box[2],
+                              "height": box[3]})
+        if isinstance(text, str):
+            text = " ".join(_CONTROL.sub(" ", text).split())
+        else:
+            text = " ".join(w["text"] for w in words)
+        if text or words:
+            out.append({"text": text, "words": words})
+    return out
+
+
+def _fail(why: str) -> dict:
+    return {"ok": False, "lines": [], "size": None, "why": why}
+
+
+def read_lines(image: bytes, *, runner: Optional[Callable[[bytes], tuple]] = None,
+               want_pixels: bool = False) -> dict:
+    """{"ok", "lines", "size", "why"[, "pixels"]}: every line of words in the
+    picture, each word with its position, NOT cut to any length. `lines` is
+    normalize_lines' shape; `size` is (width, height) or None; `pixels`
+    (only when asked, and only from the in-process reader) is (BGRA bytes,
+    width, height) of the very bitmap the words were read from. Never
+    raises; `why` is a plain sentence when ok is False.
+
+    With a `runner` (tests), only that stand-in for PowerShell is used."""
     if not isinstance(image, (bytes, bytearray)) or not image:
-        return {"ok": False, "text": "", "left_out": 0, "why": FAILED}
+        return _fail(FAILED)
     if len(image) > MAX_BYTES:
-        return {"ok": False, "text": "", "left_out": 0, "why": TOO_BIG}
+        return _fail(TOO_BIG)
     if runner is None:
         st = status()
         if not st["available"]:
-            return {"ok": False, "text": "", "left_out": 0, "why": st["why"]}
+            return _fail(st["why"])
+        try:
+            got = _winrt_read(bytes(image), want_pixels)
+        except _NoWinrt:
+            got = None
+        except asyncio.TimeoutError:
+            return _fail(TOO_SLOW)
+        except Exception:
+            got = None                     # a Windows call failed: PowerShell tries
+        if got is not None:
+            if got.get("ok") is True:
+                out = {"ok": True, "lines": normalize_lines(got["lines"]),
+                       "size": got.get("size"), "why": ""}
+                if got.get("pixels"):
+                    out["pixels"] = got["pixels"]
+                return out
+            if got.get("why") == "no_language":
+                _LAST["why"] = NO_LANGUAGE
+                return _fail(NO_LANGUAGE)
+            return _fail(TOO_BIG if got.get("why") == "too_big" else FAILED)
     run = runner or _run_powershell
     try:
         code, raw = run(bytes(image))
     except subprocess.TimeoutExpired:
-        return {"ok": False, "text": "", "left_out": 0, "why": TOO_SLOW}
+        return _fail(TOO_SLOW)
     except Exception:
-        return {"ok": False, "text": "", "left_out": 0, "why": FAILED}
+        return _fail(FAILED)
     out = bytes(raw or b"").decode("utf-8-sig", "replace")
     # The one JSON line, even if Windows printed something around it.
     start, end = out.find("{"), out.rfind("}")
@@ -191,15 +418,32 @@ def read_text(image: bytes, *, runner: Optional[Callable[[bytes], tuple]] = None
         why = got.get("why") if isinstance(got, dict) else ""
         if why == "no_language":
             _LAST["why"] = NO_LANGUAGE
-            return {"ok": False, "text": "", "left_out": 0, "why": NO_LANGUAGE}
-        return {"ok": False, "text": "", "left_out": 0,
-                "why": TOO_BIG if why == "too_big" else FAILED}
-    lines = got.get("lines")
-    text = tidy(lines if isinstance(lines, list) else [lines])
+            return _fail(NO_LANGUAGE)
+        return _fail(TOO_BIG if why == "too_big" else FAILED)
+    size = None
+    w, h = _num(got.get("width")), _num(got.get("height"))
+    if w and h:
+        size = (int(w), int(h))
+    return {"ok": True, "lines": normalize_lines(got.get("lines"), got.get("boxes")),
+            "size": size, "why": ""}
+
+
+def read_text(image: bytes, *, runner: Optional[Callable[[bytes], tuple]] = None) -> dict:
+    """{"ok", "text", "left_out", "why", "lines", "size"}: the words in the
+    picture, at most MAX_CHARS of them, and how many characters were left
+    out. `lines` (and `size`) are the FULL reading with each word's position,
+    for jarvis_screen.clean_picture: it looks for secrets in ALL of it before
+    anything is cut to length - the cut must never leave half a secret in.
+    Never raises; `why` is a plain sentence when ok is False."""
+    got = read_lines(image, runner=runner)
+    if not got["ok"]:
+        return {"ok": False, "text": "", "left_out": 0, "why": got["why"]}
+    text = tidy([ln["text"] for ln in got["lines"]])
     left = max(0, len(text) - MAX_CHARS)
     if left:
         text = text[:MAX_CHARS].rstrip()
-    return {"ok": True, "text": text, "left_out": left, "why": ""}
+    return {"ok": True, "text": text, "left_out": left, "why": "",
+            "lines": got["lines"], "size": got["size"]}
 
 
 _DATA_URI = re.compile(r"^data:image/(?:jpeg|jpg|png|bmp|gif|tiff);base64,([A-Za-z0-9+/=\s]+)$",

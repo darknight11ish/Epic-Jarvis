@@ -472,7 +472,7 @@ export const HOTKEYS = [
     accelerator: "Alt+Space", default: "Alt+Space", registered: true, error: null },
   { id: "ingest_clipboard", label: "Attach the clipboard", hint: "Put whatever is on the clipboard into the bar as context.",
     accelerator: "Super+Shift+J", default: "Super+Shift+J", registered: true, error: null },
-  { id: "capture_screen", label: "Attach a screen capture", hint: "Not Win+Shift+S — the Snipping Tool owns that at the shell level.",
+  { id: "capture_screen", label: "Look at this", hint: "Jarvis looks at the window in front, once, then you ask about it. Nothing is saved. Not Win+Shift+S — the Snipping Tool owns that at the shell level.",
     accelerator: "Alt+Shift+S", default: "Alt+Shift+S", registered: true, error: null },
   { id: "quick_note", label: "Quick note", hint: "Open the Jarvis bar ready to file a note - to Logseq, or else the first note app this PC is set up for.",
     accelerator: "Alt+Shift+N", default: "Alt+Shift+N", registered: true, error: null },
@@ -484,6 +484,9 @@ export const HOTKEYS = [
     accelerator: "Alt+Shift+F", default: "Alt+Shift+F", registered: true, error: null },
   { id: "talk_to_type", label: "Talk-to-type", hint: "Hold it and speak, then let go: Jarvis types what you said into the program in front. A quick tap keeps it listening until you press it again. Works once talk-to-type is on (Settings, Voice).",
     accelerator: "Alt+Shift+T", default: "Alt+Shift+T", registered: true, error: null },
+  // Watch with me's key ships OFF (the design: "unbound by default").
+  { id: "toggle_watch", label: "Start or stop Watch with me", hint: "Off until you pick a key - Alt+Shift+V is free for it. Starting is held while the connection is catching up or App lock would ask; stopping never is.",
+    accelerator: "", default: "", registered: false, error: null },
   // Jarvis Live's key ships OFF (the owner's decision of 2026-09-28).
   { id: "toggle_live", label: "Start or end Jarvis Live", hint: "Off until you pick a key - Alt+Shift+L is free for it. Starting is held while the connection is catching up or App lock would ask; ending never is.",
     accelerator: "", default: "", registered: false, error: null },
@@ -495,7 +498,7 @@ export const UPDATE_NONE = {
 };
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals,
-  folders, animal, chatbot, support, historyImport, widgets, devices }) {
+  folders, animal, chatbot, support, historyImport, widgets, devices, screen }) {
   const listeners = {};
   window.__calls = [];
   // animal.rs: GET /api/animal's answer (a scenario's, else a PC nobody has
@@ -508,6 +511,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   // sessions, removeFails, sharedFails } (devices.mjs). Unset, a PC whose
   // backend has no pairing yet - the Devices card says so and nothing else.
   window.__devices = devices || null;
+  // look.rs (docs/SCREEN-DESIGN.md): { status, never, startFails, neverFails,
+  // watchCalls } (look.mjs). Unset, a PC whose backend has no "Look at this"
+  // yet: screen_status says so, in the PC's own words.
+  window.__screen = screen ? { watchCalls: [], neverCalls: [], ...screen } : null;
   // App lock on or off, for get_app_lock (apps security audit M3).
   window.__appLock = Boolean(appLock);
   const state = {
@@ -2269,6 +2276,38 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return window.__folders && window.__folders.removeAnswer || { ok: true };
           case "import_notion":
             return window.__folders && window.__folders.importAnswer || { cancelled: true };
+          // look.rs: the Watch with me session and the Never look at list.
+          case "screen_status": {
+            const sc = window.__screen;
+            if (!sc) {
+              return { status: { state: "off", on: false, available: false, look_held: false,
+                unavailable_why: "Looking at the screen is off on this PC. This is not Windows." }, stale: false };
+            }
+            return { status: JSON.parse(JSON.stringify(sc.status)), stale: Boolean(state.stale) };
+          }
+          case "screen_watch": {
+            const sc = window.__screen;
+            if (!sc) throw new Error("This PC's Jarvis does not have \"Look at this\" and \"Watch with me\" yet.");
+            sc.watchCalls.push(args);
+            if (args.action === "start" && sc.startFails) throw new Error(sc.startFails);
+            const on = args.action === "start" || (args.action === "extend" && sc.status.on);
+            sc.status = { ...sc.status, on, state: on ? "watching" : "off", left_s: on ? 1800 : null,
+              look_held: args.action === "drop" || args.action === "stop" ? false : sc.status.look_held };
+            return { status: JSON.parse(JSON.stringify(sc.status)), stale: false };
+          }
+          case "screen_never": {
+            const sc = window.__screen;
+            if (!sc) throw new Error("This PC's Jarvis does not have \"Look at this\" and \"Watch with me\" yet.");
+            sc.neverCalls.push(args);
+            if (sc.neverFails) throw new Error(sc.neverFails);
+            if (args.action === "list") return JSON.parse(JSON.stringify(sc.never));
+            if (args.action === "add") {
+              sc.never.entries.push({ kind: args.kind, value: args.value, built_in: false });
+              return { ok: true, added: true };
+            }
+            sc.never.pending = ["x"];
+            return { ok: true, pending: true };
+          }
           // devices.rs: Settings -> Devices. The QR picture is Rust's; here a
           // scenario's `start.qr_svg` stands in for it. `sessions` answers
           // pair_session in turn (the last one repeats).

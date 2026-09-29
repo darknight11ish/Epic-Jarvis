@@ -17,8 +17,9 @@ missing module):
     jarvis_speech.say(text)                -> bytes | None  (a WAV)
         since 2026-09-28 a Kokoro WAV may end with a "jmth" chunk after its
         sound: the animals' mouth shapes from Kokoro's own timing
-        (jarvis_mouth.py, docs/LIPSYNC.md); status()'s tts.mouth says if
-        they can be made on this PC, or why not
+        (jarvis_mouth.py, docs/LIPSYNC.md) - on Kokoro v1.0 as well since
+        2026-09-29; status()'s tts.mouth says if they can be made on this
+        PC, or why not
         since 2026-09-24 in the owner's chosen custom voice when there is one
         (jarvis_voices.py: ZipVoice on the processor, or F5-TTS on the second
         card), falling back to Kokoro with the reason recorded; every call's
@@ -557,11 +558,28 @@ def _speech_span(samples, sample_rate: int, cfg=_UNSET):
 #   Text-to-speech: sherpa-onnx Kokoro.
 # --------------------------------------------------------------------------
 
+def _default_voices(default_dir) -> str:
+    """The voices file to load when `[voice] tts_voices` names none: the
+    pinned blend file (Ashby and Clara, jarvis_kokoro.BLEND_FILE) when it sits
+    beside the pack's own voices.bin and is exactly the file it should be, else
+    voices.bin itself. Never raises."""
+    plain = default_dir / "voices.bin"
+    try:
+        import jarvis_kokoro
+        blend = jarvis_kokoro.blend_file_beside(plain)
+        if jarvis_kokoro.kind_of_file(plain) == jarvis_kokoro.V1 \
+                and jarvis_kokoro.blend_ok(blend):
+            return blend
+    except Exception:
+        pass
+    return str(plain)
+
+
 def _sherpa_tts_paths():
     default_dir = _models_dir() / "tts"
     return {
         "model": str(_cfg("tts_model", "") or default_dir / "model.onnx"),
-        "voices": str(_cfg("tts_voices", "") or default_dir / "voices.bin"),
+        "voices": str(_cfg("tts_voices", "") or _default_voices(default_dir)),
         "tokens": str(_cfg("tts_tokens", "") or default_dir / "tokens.txt"),
         "data_dir": str(_cfg("tts_data_dir", "") or default_dir / "espeak-ng-data"),
         "lexicon": str(_cfg("tts_lexicon", "") or ""),
@@ -589,6 +607,10 @@ def _build_tts_engine():
         engine = sherpa_onnx.OfflineTts(config)
     except Exception:
         return None
+    # Which voices file this engine was built with: jarvis_voices reads it, so
+    # a blend file made later is not believed until an engine has loaded it.
+    global _TTS_VOICES
+    _TTS_VOICES = paths["voices"]
     # How much sherpa-onnx shortens Kokoro's pauses (its own setting, read
     # from the config it was built with): the mouth timing shortens them
     # the same way itself (jarvis_mouth.speak).
@@ -603,6 +625,9 @@ def _build_tts_engine():
 
 #: sherpa-onnx's silence_scale for the built engine (0.2 is its default).
 _TTS_SILENCE_SCALE = 0.2
+
+#: The voices file the built engine loaded ("" until one is built).
+_TTS_VOICES = ""
 
 
 def _mouth(name: str, *args, **kwargs):
@@ -627,9 +652,10 @@ def reload_engines() -> None:
     """Drop the cached STT/TTS/VAD engines (and the wake-word models) so a
     config change - a new model path - takes effect on the next call rather
     than needing a restart."""
-    global _stt_cache, _tts_cache, _vad_cache
+    global _stt_cache, _tts_cache, _vad_cache, _TTS_VOICES
     with _LOCK:
         _stt_cache = _tts_cache = _vad_cache = _UNSET
+        _TTS_VOICES = ""
     if jarvis_wakeword is not None:
         jarvis_wakeword.reload()
     if jarvis_microwake is not None:
@@ -2636,7 +2662,10 @@ def tts_voice(voices_module=None, *, plain: bool = False) -> tuple:
     if plain:
         if V is not None and hasattr(V, "speaker") and hasattr(V, "speed"):
             try:
-                return int(V.speaker()), float(V.speed()), 0.0
+                # (speaker_speed: the speaking speed times the chosen voice's
+                # own pace - Ashby's 0.95; an older jarvis_voices has speed().)
+                pace = getattr(V, "speaker_speed", V.speed)
+                return int(V.speaker()), float(pace()), 0.0
             except Exception:
                 pass
         # No jarvis_voices to ask: the config's own speaker and speed,
@@ -2725,13 +2754,18 @@ def kokoro_speak(engine, text: str, sid: int, speed: float, semitones: float = 0
     its pause-shortening off and shortens the pauses with an exact copy of
     sherpa-onnx's own (checked byte for byte, docs/LIPSYNC.md); whenever it
     cannot, this speaks exactly as it always did."""
-    if mouth is not None and not _pack_is_v1():
+    if mouth is not None:
         try:
             import jarvis_mouth
+            # Kokoro v1.0's British voices are read with (and asked of
+            # sherpa-onnx as) their own espeak voice, exactly as
+            # _kokoro_generate asks; every other voice, and all of v0.19,
+            # is read with the engine's own language as before.
+            accent = accent_lang(sid)
             got = jarvis_mouth.speak(engine, text, sid, speed, semitones, pitch_up=pitch_up,
                                      silence_scale=_TTS_SILENCE_SCALE,
-                                     lang=str(_cfg("tts_lang", "en-us") or "en-us"),
-                                     paths=_sherpa_tts_paths())
+                                     lang=accent or str(_cfg("tts_lang", "en-us") or "en-us"),
+                                     paths=_sherpa_tts_paths(), extra_lang=accent)
         except Exception:
             got = False  # anything at all: speak exactly as before
         if got is None:
@@ -2744,22 +2778,6 @@ def kokoro_speak(engine, text: str, sid: int, speed: float, semitones: float = 0
     if audio is None or len(audio.samples) == 0:
         return None
     return pitch_up(audio.samples, semitones), audio.sample_rate
-
-
-def _pack_is_v1() -> bool:
-    """Kokoro v1.0 is installed. jarvis_mouth's timing (`--prepare`) is made
-    from the v0.19 model's own graph and refuses v1.0's, so on v1.0 the
-    mouths are analysed from the sound instead (docs/LIPSYNC.md) - the
-    owner's fallback. Skipping it here means an old timing file left beside a
-    new model can never be paired with it. Never raises."""
-    V = _voices_mod()
-    fn = getattr(V, "pack_kind", None) if V is not None else None
-    if fn is None:
-        return False
-    try:
-        return fn() == "v1"
-    except Exception:
-        return False
 
 
 def accent_lang(sid: int) -> Optional[str]:

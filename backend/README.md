@@ -160,6 +160,8 @@ on a throwaway copy instead.
 | `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude, Gemini or DeepSeek** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
 
 | `inbox-tidy.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Inbox tidy by voice"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 95): archive, star, mark as read or move to Trash a checked list of emails, ONE approval card listing every one, 10 minutes to Undo. Four hunks: in `jarvis_gate.py` `tidy_inbox` joins "a no proposes no memory rule", gets its `_RISK` line (`"yes", "outbound"` - it changes the mailbox on a server, so approving it is a risky approval; nothing is deleted for good, and Undo puts everything back) and its `_TOOL_ACTIONS` line; in `jarvis_hud.py` ONE install block after `sky.patch`'s (`GET /api/email/tidy`, `POST /api/email/tidy/undo`). Its context is other patches' lines: after `support-chat.patch`, before `devices.patch`, which stays last. Needs `jarvis_inbox_tidy.py` - see "Inbox tidy", at the very end. |
+| `screen.patch` | `jarvis_hud.py` | **"Look at this" and "Watch with me": the routes and the chat turn** (the owner's decision of 2026-09-28; `docs/SCREEN-DESIGN.md`, `docs/JARVIS-API.md` sections 62 and 96). Three hunks: a small `_screen_turn(body)` helper (does the newest message carry the owner's screen - the `screen` mark or a `screen_text` part), `has_screen=_screen_turn(body)` in the router call, so such a turn never leaves this PC, and one `jarvis_screen.install(Handler, ...)` block after inbox tidy's, which answers `GET/POST /api/screen` and `GET/POST /api/screen/never-look`. The router call is the owner's own text; the hunk anchors on the lines `cloud-say-yes.patch` already added there (checked against the real file by that patch) and was applied only to the stand-in. Its context is `inbox-tidy.patch`'s startup block, `games-temporary.patch`'s helper lines and `cloud-say-yes.patch`'s router call, so it goes last in the list, after `inbox-tidy.patch`. Needs `jarvis_screen.py` and `jarvis_screen_win.py` copied in (`jarvis_screen_win.py` first); without them, or on any error, the banner says "screen NOT ON", the routes answer 404 and nothing can look. `temporary-chat.patch` also gained one word: `screen` in `_CHAT_CLIENT_FIELDS`, so the mark never travels onward. See "Looking at the screen", below. |
+| `screen-picture.patch` | `jarvis_gate.py` | **Picture mode for "Look at this" and "Watch with me" on a one-card PC** (the owner's decision of 2026-09-29; `docs/JARVIS-API.md` section 96.1). Two hunks, both right after `inbox-tidy.patch`'s own last lines: `screen_picture_enable` joins "a no proposes no memory rule" (turning it on is ONE card, tier `ask`, only), and gets its `_RISK` line (`"yes", "local"` - a small picture model on this PC's processor in a separate copy of Ollama that only this PC can reach; secrets blacked out first; nothing saved or sent anywhere; the owner downloads the model, not the card; off again is instant). Goes last in the list, after `screen.patch`. Needs `jarvis_screen_picture.py` copied in; the routes are `jarvis_screen.py`'s, so no `jarvis_hud.py` hunk. See "Picture mode for the screen", at the very end. |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 
 ## All but two of the patches apply, and that is correct
@@ -14785,13 +14787,15 @@ cd backend; python3 test_chatbot_local.py; python3 test_reach.py; python3 test_c
   Reading your own message back off the page would close it, but the
   selectors for that are unproven, so it was not added.
 
-# Looking at the screen, steps 1 and 2: `jarvis_front.py` and `jarvis_screen.py` (2026-09-28)
+# Looking at the screen: the rules, the Windows readers, the routes and the chat turn (2026-09-28/29)
 
 The owner's decision of 2026-09-28 (`CLAUDE.md`, "Jarvis may look at the
-owner's screen"), designed in `docs/SCREEN-DESIGN.md`. This is build steps 1
-and 2 only: the rules, tested here. `docs/JARVIS-API.md` section 62 has the
-details. **Not in either app yet, and not reachable from anything** - no
-route, no key, no badge, no phone gesture.
+owner's screen"), designed in `docs/SCREEN-DESIGN.md`. `docs/JARVIS-API.md`
+section 62 has the details and section 96 the routes. **Built on the backend
+and in both apps** (the desktop's key, badge, tray row and Never look at
+list; the phone's assistant gesture, "Watch this phone with me" and Security
+switch). **The Windows readers have never run on Windows** - see the last
+list.
 
 ## In plain words
 
@@ -14831,39 +14835,59 @@ route, no key, no badge, no phone gesture.
   rules, the caps and label, the Never look at list
   (`screen-never-look.json` in the settings folder), Stop everything
   (`screen_watch`). Every Windows reader is injected; none is built.
+- `jarvis_screen_win.py` - new, shipped whole, **before `jarvis_screen.py`**:
+  the PC's readers as ctypes calls (GDI capture to an in-memory PNG, a UI
+  Automation text walk that skips password boxes, the lock check from the
+  input desktop's name, the window's capture-protection flag). Windows only;
+  on any other machine `available()` is False and nothing can start.
 - `rebuilt/jarvis_router.py` - `choose()` takes `has_screen`.
-- `jarvis_agent.py` - `STEP_READS`: a `step` event may carry
-  `read_screen` by name (nothing sends it yet).
-- `selftest.py` - a preflight `screen` check that says "not built on this
-  PC yet" (a skip).
+- `jarvis_agent.py` - `_TurnWatch.screen`, `with_screen(messages, mark)` (the
+  OUTSIDE TEXT block, the `read_screen` record and step events), a phone screen
+  picture read for its words and never shown to a model, and `choose_lane`
+  treating it as not a vision turn.
+- `jarvis_quick.py` - "watch with me", "stop watching", "watch 20 more
+  minutes", "are you watching?": no model; start, extend and the status
+  answer only from this PC.
+- `screen.patch` - the three `jarvis_hud.py` hunks above; `temporary-chat.patch`
+  - `screen` in `_CHAT_CLIENT_FIELDS`. `tools/build_patch_history.py` was re-run.
+- `selftest.py` - a preflight `screen` check: asks `GET /api/screen`, takes no
+  picture, and says PASS, or WARN when the readers are missing.
+- `tools/gen_screen_cases.py` - the words and cases both apps are held to.
 - `tools/gen_private_aloud_cases.py` and both apps' `READ_ALOUD_TOOLS` -
   `read_screen` added; the shared table regenerated.
-- `scripts/apply-patches.ps1`, `backend/_where.py` - both modules added to
-  `$SHIPPED` (`jarvis_front.py` before `jarvis_focus.py`).
+- `scripts/apply-patches.ps1`, `backend/_where.py` - the modules added to
+  `$SHIPPED` (`jarvis_front.py` before `jarvis_focus.py`, `jarvis_screen_win.py`
+  before `jarvis_screen.py`) and `screen.patch` to the patch list, last (after
+  `inbox-tidy.patch`).
 
 ## Test it
 
     python3 backend/test_screen.py
+    python3 backend/test_screen_turn.py
+    python3 backend/test_screen_win.py
     python3 backend/test_front.py
     python3 backend/test_focus.py
     python3 backend/test_router_private_terms.py
     python3 backend/test_private_aloud.py
     python3 backend/run_suites.py
 
-## Not built yet, said plainly
+## Not checked, said plainly
 
-- **The chat route does not read `screen_text` yet.** The line in the
-  owner's `jarvis_hud.py` that calls `jarvis_router.choose(...,
-  has_image=...)` is the owner's own text, not in any patch here, so a
-  patch adding `has_screen=` would have to guess its surroundings. It is
-  the next step, made against the real file; until then no app sends a
-  `screen_text` part.
-- The Windows readers (password box, capture protection, a window's own
-  text) - step 3, on the owner's PC. Until then `jarvis_screen.ENGINE` is
-  not built and nothing can start.
-- Both apps (steps 4, 5, 7 and 8) and the second card's picture route
-  (step 6).
-- Not run on the owner's PC: tested in the dev container only.
+- **The Windows readers have never run on Windows.** Only their pure parts
+  are tested here (`test_screen_win.py`: PNG encoding, the lock-desktop name,
+  clipping, the word cap). The GDI capture, the UI Automation walk, the
+  password-box check and the capture-protection flag are ctypes calls that
+  need the owner's PC - and so does "is the badge, which is hidden from
+  capture, really absent from a capture".
+- **`screen.patch` was applied only to the
+  stand-in** (`_stack.py`); its hunks, like every `jarvis_hud.py` patch, are
+  checked on the PC by `apply-patches.ps1`.
+- **No picture reaches a model** on one graphics card: a phone screen picture
+  is read for its words and dropped. The picture path waits for the 12 GB
+  card.
+- Neither app's screen code has run on a real Windows PC or phone (see
+  `docs/JARVIS-API.md` section 62.12).
+- Tested in the dev container only.
 
 # Ask several and compare, `jarvis_chatbot_compare.py` (2026-09-28)
 
@@ -15390,6 +15414,20 @@ folder) prints whether mouths are ready and, after Jarvis has spoken, how
 many sentences got them and why any did not; the phone and desktop read
 the same from `/api/voice/status` (`tts.mouth`).
 
+**On the Kokoro v1.0 voice pack** (added 2026-09-29; the owner's "Build exact
+timing"): it is the **same line, run again after the new pack is installed**
+(the copy made for the old pack is never used with the new one - the check
+says so in words). It takes about ten seconds, reads the 326 MB `model.onnx`
+(never changes it), and writes one new file, `model.durations.onnx` (56 MB),
+in the same folder - normally `.openjarvis\voice-models\tts` - and the last
+line it prints says exactly where. If it says "this is not the Kokoro v1.0
+model file Jarvis's install line puts there", the file in `tts` is not the
+one the install line unpacks; nothing was made, and the mouths keep being
+worked out from the sound. Then restart Jarvis. The copy belongs to the
+model, not to one voices file: it works with the pack's `voices.bin` or a
+larger file with blended voices added, whichever Jarvis is set to use, and the
+robot (the fifth face) gets its exact timing like the four animals.
+
 ## What the code does
 
 - `jarvis_mouth.py` (new, shipped whole): `prepare()` (the one-time step);
@@ -15419,7 +15457,9 @@ the same from `/api/voice/status` (`tts.mouth`).
     python3 backend/run_suites.py
 
 With the real voice files (`JARVIS_KOKORO_DIR` = a kokoro-en-v0_19 folder)
-`test_mouth.py` also checks the real model in all four voices.
+`test_mouth.py` also checks the real model in all four voices; with
+`JARVIS_KOKORO_V1_DIR` (an unpacked kokoro-multi-lang-v1_0 folder) it checks
+Kokoro v1.0 the same way, British voices included.
 
 ## Not checked, said plainly
 
@@ -15436,6 +15476,12 @@ With the real voice files (`JARVIS_KOKORO_DIR` = a kokoro-en-v0_19 folder)
   48,424 lines (this repository's docs and the 36 test sentences) it
   matched piper-phonemize on all but 8 odd code fragments; any mismatch makes that sentence's length check
   fail, and it simply has no mouth block.
+- **Kokoro v1.0 (2026-09-29)** was checked only in the Linux dev container,
+  against the real pinned pack: 532 of 532 English sentences (an American and
+  a British voice) got a mouth exact to the sample; the two texts with
+  Chinese characters get none, by design. Nobody has watched a v1.0 animal
+  talk, and nothing was run on Windows. The full numbers and how they were
+  taken are in `docs/LIPSYNC.md`, "Kokoro v1.0: the same exact timing".
 
 ---
 
@@ -17344,15 +17390,101 @@ button or Jarvis Live has the microphone, and while App lock is locked, and
 stop it the moment a question or answer starts. The last few samples are kept
 in the PC's memory only, so the same voice twice is instant.
 
+## Make Ashby and Clara (two voices blended for Jarvis)
+
+The owner's decision of 2026-09-29. Two extra voices in the voice picker, in
+both apps, made by blending two Kokoro voices each - nothing recorded, nobody
+copied:
+
+- **Ashby** - a warm British butler, not modelled on anyone: 70% George and
+  30% Michael, spoken as British English, a little slower (0.95 times your own
+  speaking speed).
+- **Clara** - a warm woman's voice that leans British: 60% Emma and 40% Heart,
+  British English, normal pace.
+
+They need **Kokoro v1.0** (the upgrade above) and one more step, once. Paste
+this into PowerShell (any folder), then restart Jarvis:
+
+```powershell
+Push-Location "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 .\jarvis_kokoro.py --make-blends; Pop-Location
+```
+
+**Where the result lands:** `voices-jarvis.bin`, next to your voice pack, in
+`%USERPROFILE%\.openjarvis\voice-models\tts` (28 MB). Your pack's own
+`voices.bin` is never opened for writing. Running the line again says "Already
+done". It needs no download and no extra packages.
+
+What it does, in order:
+
+1. Reads `voices.bin` from your voice pack and checks it is the exact file the
+   blends were made from (SHA-256 `1c5a5b983d3d50d8586d437a51f3faa2da7919ce76a013c081e65671a3447c29`, pinned in
+   `backend\jarvis_kokoro.py` as `V1_VOICES_SHA256`). If it is not, it says so
+   and makes nothing.
+2. Works out each blend: every number of each voice's table (510 rows of 256
+   numbers - one row for each length of sentence) is `0.7 x George + 0.3 x
+   Michael` (Clara: `0.6 x Emma + 0.4 x Heart`) - a plain weighted sum, the way
+   kokoro-onnx's own README blends voices.
+3. Writes a copy of the pack's table with those two blends in two slots that
+   Jarvis never uses (the Spanish and Portuguese "Santa" voices), under the name
+   `voices-jarvis.bin`, and checks the result is exactly the pinned file
+   (SHA-256 `5916383e8542460a3e1862a4ea41623b2f1cec98d10973a4a1040662ce11b057`, `BLEND_SHA256`). If it is not, nothing is kept.
+4. Jarvis loads that file instead of `voices.bin` **only when it is exactly the
+   pinned file**, and only when `[voice] tts_voices` does not name another one.
+   A file that is not the pinned one is never loaded; the picker says so.
+
+**Why a whole copy and not a small extra file** (the first thing tried): a
+Kokoro voices file has to be exactly the size the model expects. sherpa-onnx
+1.13.8 refuses anything else ("Corrupted --kokoro-voices ... Expected #floats:
+7050240, actual: 7311360" when two voices were added at the end), so the two
+blends replace two unused voices in a copy instead.
+
+**Going back:** delete `voices-jarvis.bin` and restart Jarvis. If Ashby or
+Clara was your choice, Heart speaks and the picker says so. The upgrade line
+moves the whole `tts` folder aside, so **run the line above again after
+upgrading the pack**.
+
+**The voice check.** Like any recorded voice, Ashby and Clara are checked
+against your own voice print before they are used: when you choose one, when you
+press Hear it, and again (in the background) after your voice prints change. One
+that sounded too much like you would not be listed, chosen or spoken with, and
+the picker would say why. It cannot be checked without a working voice engine,
+and then it is not used (nothing is treated as fine because it could not be
+checked). With no voice print trained yet there is nothing to compare with, and
+it is checked as soon as you train one.
+
+**Animals keep their four voices** (Bella, Nicole, Sarah, Michael). Neither
+blend can be given to an animal.
+
+**Checked in the build container (2026-09-29), with the real pack and
+sherpa-onnx 1.13.8 - not by ear:** the file built from the real pack matches both
+pins byte for byte; sherpa-onnx loads it (still 54 speakers) and each blend
+speaks a real sentence. One sentence, British English: middle pitch George 146
+Hz, Michael 120 Hz, **Ashby 136 Hz**; Emma 184 Hz, Heart 200 Hz, **Clara 192
+Hz** - each blend between its parents. Average spectrum, in decibels apart:
+Ashby is 1.8 from George and 3.0 from Michael (George and Michael are 3.7 apart);
+Clara is 2.8 from Emma and 4.3 from Heart (Emma and Heart are 6.1 apart) - and
+two runs of the same blend are only 0.3 to 0.4 apart, so those gaps are real. Ashby at
+0.95 came out 3.8% longer than at 1.0. **Nobody has listened.** The whole path
+was also run through the PC's own code with the real pack (make the file, load it,
+choose Ashby, Hear it, speak an answer): it worked, and Ashby's answer at "faster"
+came out shorter than at "normal", as it should. **The voice check was run once
+against a print made from Ashby's own sound**, using the fallback voice-ID model
+(`spectral-v1` - the container has no ONNX speaker model): it refused Ashby (score
+0.996 against a bar of 0.25) and also Clara (0.836) - so the check does refuse, but
+that fallback model is coarse and did not tell the two voices apart at all. On your
+PC, with the real speaker model, the scores will be different; nobody has run it
+there, so if Ashby or Clara is refused for no good reason, tell us.
+
 ## What is different, said plainly
 
-- **The animals' mouths use the analysed-from-sound fallback on v1.0.**
-  `jarvis_mouth.py --prepare` builds its timing from the v0.19 model's own
-  graph and refuses v1.0's (it says so in words); `jarvis_speech` does not ask
-  it while v1.0 is installed. Your v0.19 timing file stays in `tts-old-...`.
-  Timing for v1.0 is not built.
-- **No blended voices** (the studio's "Ashby" and "Clara" idea): they need a
-  changed `voices.bin`; not built.
+- **The animals' mouths follow Kokoro's own timing on v1.0 after one more
+  step** (2026-09-29): run the line under "Mouths that match the words" again
+  once the new pack is installed - it now works on v1.0 too. Until you do, the
+  mouths are worked out from the sound, as before. Your v0.19 timing file
+  stays in `tts-old-...` and is never paired with the new pack.
+- **Ashby and Clara are built** (see "Make Ashby and Clara", above), but only
+  in a COPY of `voices.bin` that one more line makes; nobody has listened to
+  them.
 - **Speed on your PC is not measured.** In the build container, a three-second
   sentence took about 1.4 s with four threads, the same class as v0.19; the
   first sentence after starting also loads the 326 MB model.
@@ -17379,3 +17511,233 @@ unpacked: `$env:JARVIS_KOKORO_V1_DIR = "...\voice-models\tts"; py -3
 backend\test_kokoro.py` speaks in every offered voice with the real model.
 The rules both apps are tested against: `python3 tools/gen_voice_training_cases.py
 --check` and `python3 tools/gen_phone_voice_cases.py --check`.
+
+
+# Screen safety: secrets and private windows painted black (2026-09-29)
+
+The owner's "all three" of 2026-09-29 (CLAUDE.md). Route and words: no new
+route; `docs/JARVIS-API.md` section 62.13 says what it does and does not
+cover. Modules (all shipped whole, no patch): `jarvis_secrets.py` (finds
+secrets), `jarvis_secret_rules.py` (gitleaks's rule data, generated),
+`jarvis_picture.py` (paints boxes, hands on only a checked picture),
+`jarvis_screen.clean_picture` (the one door), and changes to `jarvis_ocr.py`,
+`jarvis_screen_win.py` and `jarvis_screen.py`.
+
+**Added 2026-09-29 (the owner's "Yes, clean them too"): the pictures the owner
+ATTACHES to a chat go through the same door too.** New whole module
+`jarvis_chat_picture.py` (no patch: `jarvis_agent.py`, which calls it, is itself
+a whole module; `clean_attached_pictures` and `_cleaned_reader` in
+`jarvis_agent.py`). Before ANY model sees an attached picture - the second card's
+picture model, a main model that can see, or the words read for a model that
+cannot - secrets in it are painted solid black; a picture with nothing to hide
+goes on untouched; one that cannot be checked is NOT handed on, and both the
+model's text and the answer itself say so. The note beside the answer counts the
+places covered. Both apps say, in the same words, "Secrets in pictures you attach
+are covered with black boxes before Jarvis looks." Test: `py -3
+backend\test_chat_picture.py` (a fake key and card number are blacked out at the
+right boxes; each way a picture cannot be checked is withheld; the model stub never
+receives the original bytes; no cleaner installed = withheld). JARVIS-API section
+36 ("Secrets in it are covered first") and 62.13 part 4. Not covered, same as the
+screen: a password behind a show-password eye, tiny or stylised text, a QR code, a
+photo of a card. "Photo to reminder" (`jarvis_photo_remind.scan`) gets the same
+check on its words too (`[hidden]` before a date or title is picked; unchecked =
+503, no words). **Owner step:** none beyond
+the usual `apply-patches.ps1` (it copies the new module); the picture check on your
+PC is the same `py -3 tools\check_screen_safety.py`. A JPEG (what both apps attach)
+can only be painted on where Windows can open it for the text reader; where it
+cannot, the picture is withheld and the answer says why.
+
+## In plain words
+
+Before Jarvis reads your screen, it looks for anything that looks like a key, a
+password or a card number in the words on it, and hides it - `[hidden]` in the
+words, solid black in a picture (never a blur, which can be undone). Windows on
+your "Never look at" list are painted black even when they are behind the one
+Jarvis is looking at, and so are private browser windows. If Jarvis cannot check
+a picture, it does not use it.
+
+**What it cannot do:** it guesses from how words are SHAPED. A password shown
+behind a "show password" eye, or typed in a box with nothing written beside it,
+looks like any other word and is not hidden. Text too small or too stylised for
+Windows to read, a QR code and a photo of a card are not caught. It will
+sometimes hide something harmless (a long product code, a version number that
+looks like an IP address), and a hidden thing at the end of a line may take the
+first word of the next line with it. That is the safe way round.
+
+## Owner steps
+
+Merge, pull, then ONE line in PowerShell (it installs the six new Windows
+packages and puts the new modules in place, then runs the check on a test
+picture with FAKE secrets in it; the check says whether the text reader is
+"inside Jarvis" or "PowerShell", and writes a cleaned picture to your temp folder
+for you to open):
+
+```powershell
+Push-Location "C:\Users\pcadmin\Epic-Jarvis"; .\scripts\apply-patches.ps1; py -3 .\tools\check_screen_safety.py; Pop-Location
+```
+
+Then restart Jarvis. To see the windows being painted, put a program from your
+Never look at list (or a private browser window) beside another window and run
+`py -3 .\tools\check_screen_safety.py --screen` from the same folder: it lists
+what it painted black and writes a whole-screen picture for you to open. Both
+files are yours; Jarvis itself never saves a picture.
+
+## What the code does
+
+- `jarvis_screen.clean_picture(picture, ocr=None, want_png=False)` reads the
+  words with positions, hides secrets in ALL of them (before any cut to 4,500
+  characters), returns `{"ok", "text", "left_out", "hidden", "kinds", "png",
+  "png_why", "why", "unchecked"}`. `png` is the only picture a picture model may be
+  shown, and is None whenever it could not be made safely.
+- `Screen._read` and `with_screen` (the phone's screenshot) go through it; so do
+  the window's own text (`ui_words`) and the phone's screen text
+  (`label_phone_text`).
+- `jarvis_ocr.read_lines` runs Windows' reader in this program through pywinrt
+  (six packages, `requirements.txt` and `requirements.lock`) and falls back to
+  PowerShell; both give each word's position.
+- `jarvis_screen_win.capture` lists the windows before and after the grab and
+  paints black what `must_hide` says; no window list, no picture.
+- `tools/gen_secret_rules.py --from gitleaks.toml` makes `jarvis_secret_rules.py`
+  again (a new gitleaks release); `python3 tools/gen_secret_rules.py --url`
+  downloads it first.
+
+## Not checked, said plainly
+
+- Nothing here ran on Windows: the in-process text reader (pywinrt), the window
+  list (EnumWindows), the address-box reads and the black boxes on a real
+  screen. Every name was checked against the pywinrt packages' own type files
+  and the rules around them are tested, but `tools\check_screen_safety.py` on
+  your PC is the first real run.
+- How long the whole check takes on a full screen, and how fast the reader is
+  inside Jarvis compared with PowerShell, are unmeasured (the check prints the
+  time).
+- A private window of Brave, Opera or Vivaldi is caught only if its title says
+  InPrivate, Incognito or Private Browsing.
+- Whether Windows draws copy-protected video black in this kind of screen grab
+  (or leaves a gap) is not known; the streaming sites are also on the Never look
+  at list for that reason.
+- xcap's `wgc` feature (Windows Graphics Capture) was NOT switched on: nothing
+  uses xcap for a look any more (only an unused whole-monitor grab in
+  `commands.rs` does), so it would change nothing that matters.
+
+## Test it
+
+`python3 backend/test_secrets.py`, `test_secret_rules.py`, `test_screen_clean.py`,
+`test_screen_masks.py`, `test_ocr_words.py` (no network, no model, no Windows;
+PowerShell 7 is used for one check if it is installed), and the existing
+`test_screen.py`, `test_screen_win.py`, `test_screen_turn.py`, `test_picture_text.py`.
+
+# Picture mode for the screen: `jarvis_screen_picture.py`, `screen-picture.patch` (2026-09-29)
+
+With **one graphics card**, "Look at this" and "Watch with me" read only the
+words on your screen. This adds an **optional, slow** way for Jarvis to also
+look at the *picture*: a small model, **MiniCPM-V 4.6** (OpenBMB, 1.3 B
+parameters, Apache-2.0), running on your **processor** - so it uses none of
+the graphics card's memory and your everyday chat model is not disturbed. It is
+your decision of 2026-09-29 ("add it as a feature that can be enabled or
+disabled"). **It is off**, turning it on is **one approval card**, turning it
+off is instant, and **nothing says it works until you have measured how slow it
+is on your PC.**
+
+**What you see.** Settings, then "Look at this and Watch with me" on the PC (and
+Settings, "Looking at your screen: pictures" on the phone) has a switch, one
+line saying what state it is in, the measured speed once you have one (never a
+guess), and the one PowerShell line below. When it is on and you ask Jarvis to
+look, the answer's note says `words and picture (slow mode)`. If the picture
+model is missing, too slow or breaks, the note says `words only (why)` and the
+answer itself starts with one plain sentence - `(Picture mode: ... This answer
+uses the words only.)` - written by the code, not left to the model. Jarvis
+never quietly does less.
+
+**Kept safe.** Before any picture reaches the model, anything that looks like a
+key, a card number or a password is blacked out; **if that part is not
+installed, no picture is sent at all** (Jarvis says so and reads the words
+only). What the model says about the picture is *outside text*: Jarvis never
+follows instructions in it and never saves it as a fact. Nothing is saved and
+nothing leaves this PC.
+
+## Owner steps (one line each, in PowerShell)
+
+**1. Put the new code on the PC** (copies `jarvis_screen_picture.py` and the
+updated `jarvis_screen.py`, applies `screen-picture.patch`), from this
+repository's folder, then quit Jarvis from the tray icon and start it again:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
+```
+
+**2. Install the model and measure it - one line.** This **downloads the model
+from Ollama** (ollama.com; how big it is has not been checked - the tag
+`minicpm-v:4.6` is unverified, and if Ollama says it cannot find it, tell me
+what it said). Then it measures how many seconds one look takes on your PC,
+with a made-up test picture (never your screen), and saves the number:
+
+```powershell
+ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath 'C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program'; py -3 .\jarvis_screen_picture.py --measure; Pop-Location
+```
+
+(Settings shows this line too, with your folder in it, and a "Copy the line"
+button.) It prints, in plain words: the seconds for a plain reply and for a
+look with a picture, Ollama's `prompt_eval_count` (how much of the prompt it
+read) without and with the picture, how much graphics memory the model held
+(it must be **0 bytes** - if it is not, picture mode refuses to use it), and
+that your everyday model is still on the graphics card. It saves them in
+`%USERPROFILE%\.openjarvis\screen-picture-measure.json` and ends with a
+**checksum** for the model file. If you send that checksum back, it can be pinned
+in the code so a different file under the same name is refused; until then the
+first measurement's checksum is remembered and a change refuses.
+
+**3. Turn it on** (or leave it off if the number is too slow for you). Settings,
+"Look at this and Watch with me", the switch - or ask Jarvis "turn on picture
+mode". An approval card explains it; nothing changes until you say yes.
+
+**4. The half-hour check on the real machine** (nothing here has run on your PC
+yet): with it on, press the "Look at this" key on a window with a chart or a
+picture in it and ask "what does this show?" - the note should say `words and
+picture (slow mode)` and the answer should mention what is in the picture. Then
+ask again after taking the model away (`ollama rm minicpm-v:4.6`): the note must
+say `words only (the picture model is not installed)`. Watch the graphics card in
+Task Manager while a look runs: **its memory must not move.** Tell me the
+seconds it took (Settings shows "Your last look took N seconds").
+
+To stop it: the switch, or ask "turn off picture mode" - instant. Or take the
+model away with `ollama rm minicpm-v:4.6`.
+
+## What the code does
+
+- `jarvis_screen_picture.py` (new, shipped whole): the switch and its one card
+  (`screen_picture_enable`, tier `ask`), the picture reader's own copy of Ollama
+  (processor only, this PC only), the picture job, the cleaner hook (fails
+  closed), the measuring line (`--measure`), and what the apps read
+  (`GET /api/screen/picture`).
+- `jarvis_screen.py`: a look hands its picture to the job (`_take`), a question
+  waits a little for it, the description joins the words as outside text, the
+  note says what was used, and the picture route is answered here.
+- `jarvis_agent.py`: three lines - the answer itself carries the "(Picture mode:
+  ...)" sentence when the picture was not used.
+- `screen-picture.patch` (new, last): two lines in `jarvis_gate.py` (a "no" is
+  not a standing rule; the notice's words).
+- `rebuilt/jarvis-framework.toml`: `screen_picture_enable = "ask"` and an
+  optional `[screen_picture]` section (`model`, `port`, `timeout_s`, `wait_s`,
+  `max_px`, `threads`, `keep_alive`).
+- What asks first, What Jarvis can reach, the card words and "picture mode" by
+  voice all list it; both apps show the switch.
+
+## Not checked, said plainly
+
+- **The Ollama tag, its size, its speed on a processor, whether Ollama's runner
+  accepts this model without a graphics card, and what it says about a real
+  screenshot** - ollama.com and Hugging Face could not be reached when this was
+  built. The measuring line is how you find out.
+- **The cleaner.** Another piece of work builds `jarvis_screen.clean_picture`;
+  until it is in, picture mode says "the part that blacks out secrets is not
+  installed" and sends nothing.
+- The Windows-only parts (starting `ollama serve` with no window, stopping it)
+  are written from Ollama's and Windows' documentation and tested with stand-ins
+  here, not run on Windows.
+
+## Test it
+
+```
+python3 backend/test_screen_picture.py
+```

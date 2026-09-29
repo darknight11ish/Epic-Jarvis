@@ -585,30 +585,37 @@ private fun SpeakerPlate(
         Gap(8)
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             for (c in sk.choices) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OptionChip(
-                        c.label,
-                        modifier = Modifier.weight(1f),
-                        isSelected = c.id == sk.choice,
-                        enabled = !busy && linkBlocker == null,
-                        onClick = { if (c.id != sk.choice) onSet(c.id) },
-                    )
-                    Quiet(
-                        CustomVoices.HEAR_LABEL,
-                        modifier = Modifier.semantics { contentDescription = "Hear ${c.label}" },
-                        enabled = hearing == null,
-                        onClick = {
-                            hearing = c.id
-                            said = CustomVoices.TRY_ASKING
-                            scope.launch {
-                                try {
-                                    said = onHear(c.id, c.label) { words -> said = words }
-                                } finally {
-                                    hearing = null
+                // A row, and under it the PC's one plain line when it has one
+                // (only Ashby and Clara, the voices made for Jarvis, do).
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OptionChip(
+                            c.label,
+                            modifier = Modifier.weight(1f),
+                            isSelected = c.id == sk.choice,
+                            enabled = !busy && linkBlocker == null,
+                            onClick = { if (c.id != sk.choice) onSet(c.id) },
+                        )
+                        Quiet(
+                            CustomVoices.HEAR_LABEL,
+                            modifier = Modifier.semantics { contentDescription = "Hear ${c.label}" },
+                            enabled = hearing == null,
+                            onClick = {
+                                hearing = c.id
+                                said = CustomVoices.TRY_ASKING
+                                scope.launch {
+                                    try {
+                                        said = onHear(c.id, c.label) { words -> said = words }
+                                    } finally {
+                                        hearing = null
+                                    }
                                 }
-                            }
-                        },
-                    )
+                            },
+                        )
+                    }
+                    if (c.detail.isNotBlank()) {
+                        Text(c.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                    }
                 }
             }
         }

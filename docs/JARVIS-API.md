@@ -2290,7 +2290,7 @@ way; held on a stale link; `[voice] tts_speaker_id` still applies before the
 owner first chooses. **Since 2026-09-29 the choice is a voice's NAME
 ("bm_george"), not a number, and the list is the voices the installed pack
 really has - Kokoro v0.19 or v1.0, with "Hear it" on every voice: section
-91.** The old number is carried over once, and `[voice] tts_speaker_id` keeps
+94.** The old number is carried over once, and `[voice] tts_speaker_id` keeps
 its old numbering.
 
 **Voice follows the face** (added 2026-09-27, the owner's choice): with one
@@ -7313,6 +7313,68 @@ the owner's own words to the tool loop, whatever tag the app sent - the
 backend treats them as `picture_caption`, as chat history already recorded
 them. Nothing from the picture is ever learned as a fact.
 
+**Secrets in it are covered first (2026-09-29; the owner's "Yes, clean them
+too", `CLAUDE.md`; `backend/jarvis_chat_picture.py`).** Everything above used
+to be true of an ordinary attached picture as it came. It is not any more:
+BEFORE any model sees a picture attached to a chat - the second card's picture
+model, a main model that can see, or the words read for one that cannot - it
+goes through the same door a look at the screen does (section 62.13,
+`jarvis_screen.clean_picture`): the words are read WITH each word's position,
+and anything that looks like a key, token, password, card number (it must pass
+the check digit), IBAN, crypto wallet, email or IP address is painted **SOLID
+BLACK** in the picture (never a blur) and shown as `[hidden]` in the words.
+No new route and no new field.
+
+- **Nothing needed hiding:** the picture goes on exactly as it came - the same
+  bytes, the same message part, not even re-encoded.
+- **Something was hidden:** the cleaned PNG goes on instead; the original never
+  does. The model reads, after the picture, one line saying that N
+  private-looking places were hidden (a count, never what they were). The
+  answer's note (the `activity` event, as "reading the words in your picture"
+  is) says "covered N private-looking places in your picture with black before
+  Jarvis looked", or "checked your picture for keys, passwords and card
+  numbers: nothing needed hiding". Counts only.
+- **It cannot be checked - FAIL CLOSED:** no text reader (not Windows, no
+  text-recognition language), words read without positions, a JPEG (what both
+  apps attach) that Windows cannot open to paint on, a picture whose size is
+  not the size its words were read from, a picture that is not a `data:`
+  address (a web address is never fetched), more than three pictures (the
+  newest three are checked, the older ones withheld), the check failing or
+  taking too long, or `jarvis_chat_picture.py` not installed. The picture is
+  then **not handed to any model**. Two plain lines say so: the model gets "[A
+  picture was attached to this message but was NOT shown to any model: this PC
+  could not check it for private things ... Say so plainly and never guess what
+  it showed.]" and the **answer itself** (not only the model) carries "(The
+  picture you attached was not used: this PC could not check it for keys,
+  passwords and card numbers first - <why>. Nothing was sent anywhere.)".
+  **This changes one line above:** a picture Windows cannot read used to go to
+  a model Ollama could not say about "exactly as it came"; now it is withheld.
+- **The words are read once.** The words a text-only model gets come from the
+  same reading (`jarvis_chat_picture.reader_for`), with each hidden run shown
+  as `[hidden]`; the picture is never read a second time, and never raw.
+- **Unchanged:** the picture is still outside text, still never learned from,
+  still never sent to an online model, never written to disk or logged; words
+  sent with it are still a picture's caption, not the owner's own words. On one
+  graphics card no model sees pictures anyway (the words are read as before).
+- **Both apps** say, under an attached picture, in the same words: "Secrets in
+  pictures you attach are covered with black boxes before Jarvis looks."
+  (`jarvis_chat_picture.OWNER_LINE`; the desktop's attachment chip; the phone's
+  `ChatPicture.SECRETS_COVERED`; `backend/test_chat_picture.py` checks all
+  three). Neither app keeps or re-sends the picture after the message, and
+  neither shows the cleaned copy: the PC never sends one back.
+- **Not covered, said plainly:** the same limits as section 62.13 - a password
+  behind a show-password eye, text too small or stylised for Windows to read, a
+  QR code and a photo of a card have no shape a pattern can see. **Also
+  covered:** "Photo to reminder" (`POST /api/photo/scan`, section 83), the other
+  thing done with an attached picture: it never reaches a model, but the words it
+  shows and the titles it proposes come from the same check (`[hidden]` for a key
+  or card number, before a date or title is picked; a picture that cannot be
+  checked gives a 503 and no words), so a stored reminder never carries one.
+  **Not covered yet:** Jarvis Live's camera (built switched off, section 63) - when
+  it is switched on its pictures must go through this same door. Tested by `backend/test_chat_picture.py`; not run
+  on a real Windows PC (the owner's check is `tools\check_screen_safety.py`,
+  which uses the same door).
+
 **The apps.** `GET /api/second-card`'s `picture_text` (section 12) says
 whether it works; `why` is a plain sentence when it does not ("Windows has
 no text recognition for your language installed. Settings -> Time &
@@ -10193,25 +10255,21 @@ heuristic's documented behaviour and the banking/SMS refusal - Kotlin
 compilation itself is confirmed only once CI runs (no local Android build,
 `CLAUDE.md`, "How the Android apps get built").
 
-## 62. Looking at the screen: "Look at this" and "Watch with me" (added 2026-09-28; backend only, not in the apps yet)
+## 62. Looking at the screen: "Look at this" and "Watch with me" (added 2026-09-28; built 2026-09-29 on both apps, with the limits below)
 
 The owner's decision of 2026-09-28 (`CLAUDE.md`, "Jarvis may look at the
-owner's screen"), designed in `docs/SCREEN-DESIGN.md`; this section is its
-**build steps 1 and 2 only**: `backend/jarvis_front.py` (the front-window
-reader, split out of focus sessions) and `backend/jarvis_screen.py` (the
-session rules), both shipped whole, no patch. **No route reaches them and
-neither app has the key, the badge or the phone gesture yet** - so today
-nothing can start a look from either app. (One setting is in both apps
-already: "Answers about your screen after "Hey Jarvis"", §62.7 and §16.) `tools/check_parity.py`
-has nothing to check (no route).
-
-**Not built yet, said plainly:** the Windows readers (is the focused box a
-password box, is the window protected from capture, the window's own text -
-build step 3, testable only on the owner's PC); the desktop's "Look at this"
-key, badge, tray row and phrases (steps 4 and 5); the second card's picture
-route (step 6); the phone (steps 7 and 8); and the chat route reading
-`screen_text` (below). The preflight has a `screen` check that says so: a
-skip, "not built on this PC yet".
+owner's screen"), designed in `docs/SCREEN-DESIGN.md`. Built in this order:
+the rules (`backend/jarvis_front.py`, `backend/jarvis_screen.py`, shipped
+whole), then the PC's Windows readers (`backend/jarvis_screen_win.py`, shipped
+whole), the routes and the chat turn (`backend/screen.patch`, three hunks on
+`jarvis_hud.py`, plus one word in `temporary-chat.patch`), the desktop (the
+Look at this key, the Jarvis bar's Watch button and strip, the always-on-top
+badge, the tray row, the Never look at list in Settings) and the phone (the
+assistant gesture, "Watch this phone with me", the Security switch and list).
+The routes are in section 62.9, the chat turn in 62.6, the phrases in 62.10,
+the phone in 62.11; **section 62.12 says plainly what was not run on a real
+machine.** (One setting was in both apps already: "Answers about your
+screen after "Hey Jarvis"", 62.7 and section 16.)
 
 ### 62.1 Two ways, and nothing else
 
@@ -10245,6 +10303,7 @@ look.
 | `password_box` | the focused control is a password box | "a password box" |
 | `never_look` | the program or website in front is on the owner's **Never look at** list | "something on your Never look at list" |
 | `protected` | the window asks not to be captured | "a window that asks not to be captured" |
+| `private_window` | the browser in front is a private window (its title says InPrivate, Incognito or Private Browsing) | "a private browser window" |
 | `jarvis` | one of Jarvis's own windows | "one of Jarvis's own windows" |
 | `lock_screen` | the lock screen (in a session this ENDS it) | "the lock screen" |
 | `admin_prompt` | an admin (UAC) prompt | "an admin prompt" |
@@ -10258,8 +10317,11 @@ look.
 On this PC only (`screen-never-look.json` in the settings folder). It
 starts with password managers (KeePass, KeePassXC, 1Password, Bitwarden,
 Dashlane, LastPass, NordPass, RoboForm, Enpass, Keeper, Proton Pass and
-their vault websites) and Windows sign-in prompts (`CredentialUIBroker.exe`,
-`LogonUI.exe`). Programs by file name; a website by its site, covering its
+their vault websites), Windows sign-in prompts (`CredentialUIBroker.exe`,
+`LogonUI.exe`) and, since 2026-09-29, ten copy-protected streaming-video
+sites (Netflix, Prime Video, Disney+, Hulu, Max, HBO Max, Peacock, Paramount+,
+Apple TV, Crunchyroll - taken off the list the same way as any other built-in
+entry, by one card). Programs by file name; a website by its site, covering its
 subdomains. **Adding** an entry is stricter, so it is **instant**.
 **Removing** one - a built-in one too - loosens what Jarvis may see, so it
 is **ONE approval card**, `change_own_config` at tier ask (the action
@@ -10275,7 +10337,8 @@ name.
 The words Windows' own text recognition finds in the picture (at most
 **4,500** characters, `OCR_MAX_CHARS`), the window's own labels and text
 boxes with **every password box skipped** (at most **3,000**,
-`UI_MAX_CHARS`), and the program's name, the website (the site only, never
+`UI_MAX_CHARS`) - **both with anything that looks like a key, a password or a
+card number replaced by `[hidden]` before the cut (62.13)** - and the program's name, the website (the site only, never
 the rest of the address) and the window title (at most 200). All under the
 OUTSIDE TEXT label §36 uses for the words in a picture, in the same
 sentences:
@@ -10288,13 +10351,14 @@ sentences:
 
 with "[N more characters were on the screen and were left out ...]" when a
 cap cut, and a line telling the model to say so rather than guess when
-nothing could be read. The picture itself is not sent on one graphics card.
+nothing could be read. The picture itself is not sent on one graphics card
+(**except with the owner's slow picture mode on, 2026-09-29 - section 96.1**: a
+small model on the processor also looks at it, after secrets are blacked out).
 The answer is shown with a note, "Looked at: <program> window · words only".
 A screen turn records a read of **`read_screen`** (`jarvis_screen.SCREEN_TOOL`),
 so a note write or web search after it asks first and a card says
-"Proposed after Jarvis read: your screen" - **when the chat route is wired
-(next)**. Nothing on the screen is learned, and nothing on it can start a
-look.
+"Proposed after Jarvis read: your screen" (wired in 62.6). Nothing on the
+screen is learned, and nothing on it can start a look.
 
 ### 62.5 What the apps will see
 
@@ -10314,7 +10378,7 @@ site, title and screen words and proves they reach only the model's text
 and the "Looked at" note - not the status, the events, the audit log, Stop
 everything's words or the list's file.
 
-### 62.6 Rule 1, and the chat route (`screen_text`) - next
+### 62.6 Rule 1, and the chat route (`screen`, `screen_text`)
 
 `jarvis_router.choose()` takes **`has_screen`**: a turn carrying the
 screen's words stays on this PC, gate **`screen`**, even when it is long,
@@ -10326,14 +10390,40 @@ the usual `image_url` part when there is a picture, and the backend labels
 it as outside text whatever the app says (`jarvis_screen.label_phone_text`,
 capped at 3,000; `jarvis_screen.turn_has_screen(messages)` finds it).
 
-**Not wired yet, and why:** the line in the owner's `jarvis_hud.py` that
-reads `/api/chat`'s body and calls `jarvis_router.choose(..., has_image=...)`
-is the owner's own original text - no patch in this repository holds it
-(`rebuilt/jarvis_router.py`'s header cites it as `jarvis_hud:1707`) - so a
-patch adding `has_screen=` there would guess its context and fail on the
-PC, or apply somewhere wrong. It is written down as the next step, with the
-chat route's `read_screen` record, to be made against the real file. Until
-then no app sends a `screen_text` part, so there is nothing for it to miss.
+**Wired 2026-09-29 (`backend/screen.patch`).** The call to
+`jarvis_router.choose(...)` in `jarvis_hud.py`'s chat route is the owner's own
+original text. The patch anchors on the lines `cloud-say-yes.patch` already
+added to that call (`owner_said_yes=...`), which that patch checked against the
+owner's real file, and it was applied and tested only against the stand-in
+(`_stack.py`) - so `apply-patches.ps1` on the PC is the first real check. It adds a small `_screen_turn(body)` helper and
+one argument, `has_screen=_screen_turn(body)`, to that call; `_screen_turn`
+is `jarvis_screen.turn_has_screen(messages)`, and a missing
+`jarvis_screen.py` reads as False. The chat route then does three things,
+all in `jarvis_agent.py`/`jarvis_screen.py`, none in an app:
+
+1. **What marks a turn.** The newest user message carries the owner's screen
+   when it has a `"screen": "look"` mark (the desktop: "Look at this" was
+   pressed and a look is held) or a `"screen": "phone"` mark (the phone's
+   Watch picture), or a `screen_text` part (the phone's assistant-gesture
+   words). `_CHAT_CLIENT_FIELDS` (`temporary-chat.patch`) strips the `screen`
+   field before any model or relay sees the conversation, so the mark can never
+   travel onward.
+2. **`with_screen(messages, mark)`** replaces the mark or part with the
+   OUTSIDE TEXT block in 62.4 - labelled **by the backend** whatever the app
+   said - and records a read of `read_screen` (a step event `tool_started` and
+   `tool_finished`, and `read_screen` at the front of `tools_ran`). For the
+   desktop the words come from THIS PC's own screen (the held look, or the
+   one the Watch session takes for the question, waiting up to 35 s). For the
+   phone the words are the `screen_text` part (capped at 3,000), or - for a
+   Watch picture - the words the PC's own text recognition finds in it. **No
+   picture is ever given to a model** on one graphics card - except the owner's
+   slow picture mode (96.1), which gives the cleaned picture to a small model on
+   the processor and only its description, as outside text, to the everyday one:
+   a phone screen picture is otherwise read for its words and dropped, and
+   `choose_lane` treats it as not a vision turn. An empty `screen_text` part (the phone read nothing) is
+   the "could not read any words" line, never silence.
+3. **The router** keeps the turn on this PC (gate `screen`, above), so it
+   never reaches a cloud lane.
 
 ### 62.7 Read aloud
 
@@ -10357,15 +10447,286 @@ Jarvis"" -> "Read aloud", in both apps' voice settings) allows reading
 them aloud even then; turning it on raises the voice card, turning it off
 is immediate (§16). With "Same as the talk button" (the default) nothing
 changes: screen answers are read aloud as above. The talk button's own
-questions are always treated like "Same as the talk button". Until
-something sends `read_screen` (the apps' key and gesture are not built
-yet), this has nothing to act on.
+questions are always treated like "Same as the talk button". The chat
+route's `read_screen` step (62.6) is what both apps read to know an answer
+was about the screen.
 
 ### 62.8 Chat history
 
 The question and the answer are kept like any chat (the owner's answer of
 2026-09-28); the picture and the screen's words never are - they are added
-to the one request only, as §36 does for a picture's words.
+to the one request only, as §36 does for a picture's words. The desktop
+drops a held look when the Jarvis bar closes, and the phone's marks
+(`screen_text` part, `screen: "phone"`) are on the request only: the phone's
+own record of the conversation (`ChatHistory`) keeps the owner's words and
+Jarvis's answer, never the part or the picture.
+
+### 62.9 The routes (`backend/screen.patch`, `jarvis_screen.install`)
+
+Both wrap the server's `Handler` after its own origin and token checks.
+
+- **`GET /api/screen`** - the status in 62.5, flat, with `available`,
+  `unavailable_why`, `default_minutes` (30), `max_minutes` (120) and
+  `follow_up_s` (120). Fixed words and numbers only. Any device may read it.
+- **`POST /api/screen`** `{"do": ...}`:
+  - `look` (`whole: true` for the whole desktop; default is the window in
+    front), `ask` (a question is starting: take the look now if none is
+    held), `start` (`minutes`), `extend` (`minutes`) - **refused with 403
+    from any machine but this PC** (`is_local`: loopback, or one of this PC's
+    own addresses; a phone over Tailscale or Meshnet, any other machine and
+    an address that cannot be read are NOT local - looking at a screen fails
+    closed). The words say so: "Jarvis can only look at the screen of the PC
+    it runs on, and only when it is asked from that PC."
+  - `stop` and `drop` - accepted from **anywhere**, because they only make
+    Jarvis look less. The phone's "Stop watching" on Home is `stop`.
+  - The answer is the same flat status, plus the verb's own fields: `ok`,
+    `note` (the "Looked at: ..." line, never a word from the screen), `said`
+    (the plain reason for a refusal), `why` (the pause reason of a refused
+    look - named `why` so it can never be mistaken for the status's own
+    `paused`), `stopped`. **Never a word from the screen, never a program, a
+    site or a title.** `part` (what was read) is removed before the answer
+    leaves.
+  - 503 with the words in `not_built_words()` when the PC's Windows readers
+    are not there (`available: false`): the routes still answer, so both apps
+    can say so.
+- **`GET/POST /api/screen/never-look`** - the PC's Never look at list (62.3).
+  Refused from any other device. `{"do": "add", "kind": "program"|"site",
+  "value": ...}` is instant; `{"do": "remove", ...}` raises ONE
+  `change_own_config` card and answers 202 with `pending`. The phone keeps its
+  own list of Android apps on the phone (62.11), so it never calls this; see
+  ARCHITECTURE section 8.
+- **The event** `screen_watch` carries exactly the status (62.5). Both apps
+  keep their sign in step with it; the desktop's badge, strip and tray row
+  and the phone's Home sign are drawn from it and from nothing else.
+- **The sign** is the same words on every surface: the title "Jarvis is
+  watching" / "Jarvis is watching - paused", "Watching ended" for 15 seconds,
+  "24 min left" / "under a minute left", "Paused: <fixed reason>", the
+  buttons "Stop watching" and "20 more minutes" (only while it is ending
+  soon). They come from `jarvis_screen.SEEN`/`sign()`, and
+  `tools/gen_screen_cases.py` writes them to
+  `jarvis-desktop/tests/screen-cases.json` and
+  `jarvis-client/app/src/test/resources/contract/screen-cases.json`, which
+  the desktop's `look-rules.js` and the phone's `ScreenRules.kt` are held to
+  (`tests/look-rules.mjs`, `ScreenRulesTest`).
+- **A watch look is used up by ONE question** (stricter than the "held"
+  words the design used): a look taken for a Watch question goes with that
+  question only. A "Look at this" look is held 2 minutes for follow-ups.
+- `POST /api/chat` carries a `screen` mark and a `screen_text` part (62.6),
+  not a new route.
+
+### 62.10 By voice or typing (`jarvis_quick.py`, no model)
+
+Whole sentences only, answered with no AI model like a timer:
+"watch with me", "start watching with me for 20 minutes", "watch along",
+"stop watching", "stop watching my screen", "watch 20 more minutes", "keep
+watching a bit longer", "are you watching?". **Start, extend and the status
+answer only from this PC** (they are `local` verbs, 62.9); "stop watching"
+works from anywhere. Asked on a phone, "start" answers "Watch with me looks
+at this PC's screen, so it can only be started, extended ... from the PC" -
+the phone has its own button for its own screen. "Look at this" itself has
+no phrase: it is a key (below) and the assistant gesture, because the words
+"look at this" would be about whatever is being said, not the screen.
+
+### 62.11 The apps
+
+**Desktop** (`jarvis-desktop/src-tauri/src/look.rs`, `src/look-rules.js`,
+`look-settings.js`, `watch-badge.html`): the **"Look at this" key**
+(Alt+Shift+S by default, changeable in Settings; it replaces the old "attach
+a screen capture" key, and the capture command remains only for the paths
+that attach a picture) looks BEFORE the Jarvis bar is shown - because the
+bar would otherwise be the window in front - and the bar opens with a
+"Looked at: ..." line and the question box. The bar's own **Watch** button
+starts a session, and an optional **"Watch with me" key** (off until the
+owner picks one; Alt+Shift+V is suggested). While a session runs: a strip on
+the bar, an **always-on-top badge** that is excluded from screen capture and
+never takes focus, a **tray row** ("Jarvis is watching - Stop watching") and
+a **tray eye**. Settings has a "Never look at" card (programs and websites,
+add now, remove asks). A look is only ever taken from this PC: the desktop
+refuses to look when pointed at a remote Jarvis.
+
+**Phone** (`assistant/JarvisVoiceInteractionSession.kt`, `LookGate.kt`,
+`AssistReader.kt`, `net/ScreenText.kt`, `ScreenLook.kt`, `ScreenNever.kt`,
+`ScreenWatch.kt`, `service/ScreenWatchService.kt`):
+
+- **"Look at this"** is the assistant gesture (press and hold Home, when
+  Jarvis is the phone's assistant app), **off by default**: the Security
+  switch **"Let Jarvis read this phone's screen"** (`screenRead`) - turning it
+  on asks for the fingerprint or PIN, off is instant. With it on, the session
+  waits up to 2 seconds for Android's `onHandleAssist`, checks the app in
+  front against the phone's Never look at list (Jarvis itself, password
+  managers, bank-looking apps - the same two signals phone notifications
+  use, an app the system does not name - and the owner's own list, where
+  adding is instant and taking one off asks for the fingerprint or PIN),
+  drops **password fields** (by input type, autofill hints, id and hint
+  words, and a web page's `type=password`) with everything in them, leaves
+  out masked text and views that block assistance, and keeps the words
+  **in memory for 2 minutes of follow-up questions** (`ScreenLook`; a look
+  taken behind App lock waits for the unlock and is dropped after a minute).
+  The words ride with the next question as a `screen_text` part (62.6), shown
+  as the chip "Looked at: Chrome screen - words only" with Forget it. No
+  screenshot is asked for. If Android hands the session no screen (its own
+  "Use text from screen" switch for the assistant app is off), Home says so in
+  a fixed sentence instead of nothing.
+- **"Watch this phone with me"** (Home, offered while the same switch is on):
+  Android's own screen sharing (`MediaProjection`), **Android's question
+  every time**, a foreground service of type `mediaProjection` with the
+  notification "Jarvis is watching this phone - Only when you ask a question
+  - Stop ends it", ending after **30 minutes**, when the screen goes off,
+  when Android ends the sharing, on Stop, and on Stop everything. **Nothing
+  is streamed**: when the owner asks a question, ONE picture (long side at
+  most 1,280 pixels, JPEG) is taken, checked (**every app that may be on
+  screen** - so a private app in the other half of a split screen counts -
+  from Android's **Usage access**: without it Watch does not start; the same
+  Never look at list; the screen on and unlocked; not almost all black, which
+  is how a secure app draws; the same apps still on screen after), sent inside that
+  question as an `image_url` part marked `"screen": "phone"`, and used up by
+  it. The PC reads the words in it and keeps neither. Any doubt is a refusal,
+  said in a fixed sentence (not repeated for a minute), and the question goes
+  without a picture. **Watch never starts unless the owner can see its
+  notification** - notifications for Jarvis, and this channel, must be on -
+  because that notification is the sign while another app is in front; turning
+  the Security switch off while it runs ends it at the next question.
+- **The PC's watching, on the phone**: Home shows the PC's own sign (the
+  `screen_watch` event and `GET /api/screen`) with **Stop watching**, never
+  held on a stale link. The phone never asks the PC to look or start.
+- **Stop everything** on the phone also drops a held look and ends a phone
+  Watch.
+
+### 62.12 Not verified on a real machine (said plainly)
+
+- **The Windows readers** (`jarvis_screen_win.py`): the screen capture
+  through GDI, the UI Automation text walk, the focused-password-box check,
+  the window's capture-protection flag and the lock check are ctypes calls
+  that only run on Windows. The pure parts (PNG encoding, the lock-desktop
+  name, clipping, the word cap) are tested (`test_screen_win.py`); the rest
+  is unrun until the owner's PC does it. So is whether the badge, which is
+  excluded from capture, is really absent from a GDI capture.
+- **The phone's Kotlin** compiles only in CI here. The pure files
+  (`ScreenText`, `ScreenLook`, `ScreenNever`, `ScreenWatch`, `ScreenRules`,
+  the chat body) were compiled with `kotlinc` and run with JUnit; the
+  Android-backed files compiled against the platform library with small
+  stand-ins for the parts of the app they touch, not against Gradle.
+- **What a phone really gives**: how complete `AssistStructure` is on Android
+  14 and 15, GrapheneOS, Compose, Flutter and web content; whether a secure
+  app really draws black into screen sharing; how complete Usage access's
+  front-app log is; and the battery cost. A question typed **inside Jarvis**
+  while Watch is on is about Jarvis's own screen, which is never looked at:
+  ask by voice from another app.
+- **Pictures**: with one graphics card the everyday model is shown no picture
+  (62.6); the optional slow picture mode (96.1) reads it on the processor
+  instead, and the two-card picture path waits for the 12 GB card.
+- **Screen safety (62.13)**: the in-process text reader (pywinrt), the
+  window list and the black boxes are Windows calls that have not been run
+  here; the rules around them are tested. `python tools\check_screen_safety.py`
+  is the owner's-PC check.
+
+### 62.13 Screen safety: secrets and private windows painted black (added 2026-09-29)
+
+The owner's "all three" of 2026-09-29 (`CLAUDE.md`), after a scouting report on
+open-source projects (checked against the real code first; what held and what
+did not is in the build report). Three things, no new route and no new field:
+
+**1. Secrets are hidden before anything reads or sees the picture.**
+`jarvis_screen.clean_picture(picture, ocr=None, want_png=False)` is the ONE
+door every picture of the screen goes through - the PC's own (`Screen._read`)
+and the phone's (`with_screen`, mark `phone`). It reads the words WITH each
+word's position, looks for secrets in ALL of them (before any cut to 4,500
+characters, so a cut can never leave half of one), and hides them:
+
+- the patterns are gitleaks's 221 rules (MIT; `backend/jarvis_secret_rules.py`,
+  generated by `tools/gen_secret_rules.py`; every rule kept but the one with no
+  pattern, the repairs Python needed listed in the file's header, the gitleaks
+  program not used) and Presidio's card
+  (must pass the card check digit - a made-up number that fails it is left
+  alone), crypto wallet (its own check digits), IBAN (mod 97), email and IP
+  patterns (MIT; the regular expressions only, no package, no spaCy), and two
+  of Jarvis's own (a value after "Password:" / "PIN:" / "secret", which is
+  often shorter than gitleaks's broad rule wants, and a private key that is
+  cut off before its end line). gitleaks's keyword pre-filter is NOT used
+  (it saves nothing at screen size and would let a token through whose
+  vendor's name is not on the screen);
+- every word that overlaps a secret, by even one letter, is hidden whole; a
+  secret over several lines (a wrapped token, a card with its groups on two
+  lines, a key) is hidden on EVERY line (a second pass joins the lines end to
+  end and keeps any match that crosses one). A match that ends a line may
+  also hide the first word of the next one - the safe way round;
+- the words the model gets show `[hidden]`, and a line says how many private-
+  looking things were hidden (a count, never what they were); `status()`, the
+  events and the audit log carry at most that count;
+- with `want_png` the places are painted **SOLID BLACK** (never blurred) in a
+  cleaned PNG (`jarvis_picture.py`); that PNG is the ONLY picture any picture
+  model may be shown (a second-card vision model, the CPU picture model), the
+  original is never passed on, and when nothing was hidden the original bytes
+  come back unchanged;
+- **fail closed**: the check failing or taking too long (10 s), rule data that
+  will not load, more than 80,000 characters of text, words with no position
+  for a hidden word, a picture that cannot be opened (a JPEG with no Windows
+  reader) or whose size is not the size the words were read from - each gives
+  NO picture (`png` None, with `png_why`); when the check itself cannot run,
+  no words either, and the model is told so ("could not check ... so it did
+  not read it") instead of being handed unchecked words.
+
+The same hiding is applied to the window's own text (`ui_words`) and to the
+phone's `screen_text` (`label_phone_text`). **Not covered, said plainly:** a
+pattern is a guess from the SHAPE of words - a password shown with a
+show-password eye, or typed into a box with nothing written beside it, has no
+shape and is NOT hidden (the password-box check and the Never look at list are
+the other two locks); text the reader cannot read (tiny, stylised, in a QR code
+or a photo). (An ordinary picture attached to a chat, which was not covered
+here at first, is since the owner's "Yes, clean them too" of 2026-09-29: see
+**4** below.) Emails and IP addresses are hidden
+too (the owner asked for "anything that looks like a key, card number or
+password"); to leave them visible, take `"email"` and `"ip"` out of
+`jarvis_secrets.PII_KINDS`.
+
+**2. The text reader runs inside Jarvis.** `jarvis_ocr.py` calls Windows' own
+`OcrEngine` through the pywinrt packages (six of them, in
+`backend/requirements.txt` and its hash lock: `winrt-Windows.Media.Ocr`,
+`.Graphics.Imaging`, `.Storage.Streams`, `.Foundation`, `.Foundation.Collections`,
+`.Globalization`) instead of starting Windows PowerShell for every picture, and
+returns each word's left, top, width and height. The idea is that of the
+`winocr` package (MIT); the package is not used, above all not its `serve()`,
+which opens a web server to the whole network. Windows PowerShell stays as the
+fallback (the old script now also writes the word boxes), with the old
+"no text-recognition language" sentence.
+
+**3. "Never look at" windows and private windows are painted black.**
+`jarvis_screen_win.capture` reads the list of windows on screen (top of the
+stack first) just before and just after the grab and paints black every one
+that must not be shown: a program on the Never look at list (the built-in
+password managers and sign-in prompts included) **even when it is not the one in
+front**; a private browser window; one of Jarvis's own windows; the lock
+screen and admin prompts; and a browser that is not in front on a listed site
+- or whose site cannot be read while the list holds sites. Windows hidden
+entirely behind an opaque window are not painted (nothing of them is in the
+picture); a see-through or click-through window never counts as hiding
+anything. No Never look at list, or no window list, or an unreadable one: no
+picture at all. The window's own text walk (UI Automation) skips off-screen
+controls and what is inside them, still never reads a password box, and stops
+after a quarter of a second or 700 controls. The pause `private_window` (62.2)
+covers the browser in front. Not covered: a window whose program Windows will
+not name; a private window of a browser that does not say InPrivate, Incognito
+or Private Browsing in its title (Brave, Opera and Vivaldi are not confirmed).
+
+**4. A picture the owner ATTACHES to a chat goes through the same door**
+(2026-09-29, the owner's "Yes, clean them too"; section 36 has the whole
+behaviour). `jarvis_agent.run_local_turn` calls `clean_attached_pictures`
+(`backend/jarvis_chat_picture.py`, which asks `jarvis_screen.clean_picture` with
+`want_png=True`) on every picture in the turn's messages before the second
+card's picture model, a main model or the words read for a text-only model can
+see it: nothing to hide - the original goes on untouched; something hidden - the
+black-boxed PNG goes on and the original never does; cannot be checked - no
+picture goes on, and both the model's text and the answer itself say so. Counts
+only ever leave it. Shipped whole, no patch (`jarvis_agent.py` is a whole
+module); both apps say the same sentence under the attachment.
+
+**One-sided on purpose:** the window masking, the private-window pause and the
+streaming sites are the PC's; the phone has no windows to mask, Chrome's
+Incognito windows block screenshots by default and streaming apps use copy
+protection (`FLAG_SECURE`, which gives the assist gesture no text and no
+picture - not tried here), and the phone's own list already blocks password
+managers and bank apps (`docs/ARCHITECTURE.md` section 8). The secret
+hiding covers the phone's screen text and screen picture on the PC.
 
 ## 63. Jarvis Live: talking back and forth (added 2026-09-28)
 
@@ -12512,7 +12873,14 @@ from the picture".
 ### 83.2 How it finds a date - plain code, not the model
 
 1. The words: Windows' own text recognition (`jarvis_ocr.read_text`, section
-   36's reader), the picture on standard input, never written to disk.
+   36's reader), the picture on standard input, never written to disk. **Since
+   2026-09-29** ("Yes, clean them too", section 36) the words are checked for
+   anything that looks like a key, password or card number BEFORE a date or a
+   title is picked - each such run shows as `[hidden]` in `text` and in any
+   title, so a stored reminder never carries one; a picture that cannot be
+   checked gives 503 and no words (`jarvis_photo_remind._clean_words`, which
+   uses `jarvis_picture.clean` without painting - nothing here shows the picture
+   to a model). The 503 sentence is the checker's own reason.
 2. Dates and times: every run of up to six words is tried against
    `jarvis_quick.py`'s own parser - the one "remind me at 6 to ..." uses.
    It learned calendar dates for this (2026-09-28): "12 Oct", "Sat 12th
@@ -14667,7 +15035,10 @@ the difference.
 
 `speaker.choices` is `[{"id": "<name>", "label": "<words>"}]` - the voices the
 pack offers, best rated first, then (only when it is not one of them) the
-owner's current choice, labelled "... (your current choice)". Ids are voice
+owner's current choice, labelled "... (your current choice)". **A row may carry
+one more field, `detail`** (added 2026-09-29): the PC's one plain line under the
+name. Only Ashby and Clara (section 94.7) have one; the apps show it when it is
+there and draw nothing for a row without it. Ids are voice
 NAMES (`af_heart`, `bm_george`), never numbers; `speaker.choice` is one of
 them (or `"custom"`), `speaker.default` the pack's own default (`af_heart` on
 v1.0, `af` on the old pack; an old pack's `af` and v1.0's `af_heart` stand in
@@ -14755,14 +15126,130 @@ anything: the owner pastes the line.
 
 ### 94.6 Said plainly
 
-- **The animals' mouths fall back to "analysed from the sound" on v1.0.**
-  `jarvis_mouth`'s timing is built from the v0.19 model's own graph;
-  `jarvis_speech.kokoro_speak` does not ask it while v1.0 is installed.
-- **Nobody has listened** to a v1.0 voice or the British accent. The four
-  animals keep their four names; pitch and pace were measured to be close
-  (docs/CRITTERS.md), not judged by ear.
-- **No blended voices** (the studio's "Ashby"/"Clara"): they need a changed
-  `voices.bin`; not built.
+- **The animals' mouths follow Kokoro's own timing on v1.0 too, once the
+  one-time step is done** (owner, 2026-09-29: "Build exact timing"). Kokoro
+  v1.0's model already carries the per-sound lengths as a second output;
+  `py -3 .\jarvis_mouth.py --prepare` (the same one line as before, run again
+  after the pack is installed) cuts them out into `model.durations.onnx`
+  beside `model.onnx`, only from the one pinned model file
+  (`jarvis_kokoro.V1_MODEL`), and `kokoro_speak` asks for the mouth on either
+  pack, reading v1.0's text the way sherpa-onnx does and handing a British
+  voice's accent on. Without the step, with a copy made for the other pack,
+  or for any sentence whose length is not exact to the sample, the mouth is
+  "analysed from the sound" as before (docs/LIPSYNC.md, "Kokoro v1.0: the same
+  exact timing"). Nothing in the API changed: same `jmth` chunk, same
+  `tts.mouth`.
+- **Nobody has listened** to a v1.0 voice or the British accent. The five
+  faces' voices keep their names (the robot is `bf_emma`, number 21 on v1.0,
+  and gets exact timing like the four animals); pitch and pace were measured
+  to be close (docs/CRITTERS.md), not judged by ear.
+- **The timing does not depend on one voices file**: it reads the voice styles
+  from whichever voices file the voice engine uses (the pack's `voices.bin`, or
+  a larger file with blended voices added, section 94.7) and gives a voice number that file
+  has no row for no mouth. The
+  mouth side is in docs/LIPSYNC.md, "Which voices file, and the robot".
+- **Blended voices are built** (the studio's "Ashby"/"Clara", section 94.7),
+  but only in a copy of `voices.bin` that one more owner-run line makes.
+
+### 94.7 Ashby and Clara: two voices blended for Jarvis (added 2026-09-29)
+
+The owner's decision of 2026-09-29, after the studio's line-up
+(`docs/studio-2026-09-27/voice-lineup.md`). Two extra voices at the TOP of
+`speaker.choices`, each with its `detail` line, made only from Jarvis's own
+sources - two Kokoro voices, a blend and a pace - never a real person's voice
+and never the owner's:
+
+| id | Label | Blend | Spoken as | Pace |
+|---|---|---|---|---|
+| `mix_ashby` | "Ashby (made for Jarvis)" - "A warm British butler, calm and a little slower. Blended from two Kokoro voices; not modelled on anyone." | 70% `bm_george` + 30% `am_michael` | British English (`en-gb-x-rp`) | 0.95 times the owner's speaking speed |
+| `mix_clara` | "Clara (made for Jarvis)" - "A warm woman's voice that leans British. Blended from two Kokoro voices; not modelled on anyone." | 60% `bf_emma` + 40% `af_heart` | British English (`en-gb-x-rp`) | the owner's speed |
+
+A Kokoro voice is a table of 510 rows of 256 numbers (one row per length of
+sentence); a blend is the weighted sum of two voices' whole tables with weights
+that add up to 1 - the way kokoro-onnx's README blends voices. **How the PC
+gets them** (`backend/jarvis_kokoro.py`, `backend/README.md` "Make Ashby and
+Clara"): sherpa-onnx refuses a voices file of any size but the model's own
+("Corrupted --kokoro-voices ... Expected #floats: 7050240, actual: 7311360",
+seen with 1.13.8 when two rows were appended), so the blends are written over
+two voices Jarvis never uses (the Spanish and Portuguese "Santa", slots 53 and
+44) in a COPY of the pack's file, `voices-jarvis.bin`, 28 MB, beside it. The
+owner runs one line once (`py -3 jarvis_kokoro.py --make-blends`); the pack's
+own `voices.bin` is never written. Both ends are pinned (`V1_VOICES_SHA256` for
+the pack's file, `BLEND_SHA256` for the result - the sums are done in double
+precision and stored as 32-bit numbers, the same on every machine) and nothing
+is written unless both match. jarvis_speech loads the copy **only when it is
+exactly the pinned file** and `[voice] tts_voices` names no other; a file of
+that name that is not the pinned one is never loaded.
+
+**What the picker says** (`speaker.note`, `speaker.choices`; `speaker.pack`
+stays `{"kind": "v1", ...}` - the copy is Kokoro v1.0 too):
+
+| State | Rows | `note` (added to any other) |
+|---|---|---|
+| Copy made and loaded by the engine | Ashby, Clara, then the eleven | nothing about them |
+| Kokoro v1.0, not made yet | the eleven | "Ashby and Clara, two voices made for Jarvis, are not made yet. To make them, run the one line under \"Make Ashby and Clara\" in backend\README.md on your PC, then restart Jarvis." |
+| A file of that name that is not the pinned one | the eleven | "The file that holds Ashby and Clara is not the one expected, so they are not offered. Run the one line ... again, then restart Jarvis." |
+| Made while Jarvis runs (the engine loaded the pack's own file) | the eleven | "Ashby and Clara are made. Restart Jarvis to hear them." |
+| The old pack (v0.19) | the nine | "... two voices made for Jarvis, need the newer voice pack (Kokoro v1.0)." |
+| The voice check refused one (below) | without it | "Ashby sounds too much like your own voice, so Jarvis will not use it." |
+
+A saved `mix_ashby` while it cannot be spoken (old pack, not made yet, refused)
+is never spoken by another slot's number: the pack's default speaks and the
+note says "You chose Ashby (made for Jarvis), which is not made yet ..." /
+"... which Jarvis has not loaded yet ..." (made while Jarvis runs) / "... needs
+the newer voice pack ..." / the refusal above. Saved by name like
+every voice (the carry-over of section 94.2 is unchanged).
+
+**Speaking.** `speaker.value` is the copy's number (Ashby 53, Clara 44). British
+English is asked for like `bf_`/`bm_` voices (section 94.4). Ashby's 0.95 is
+`jarvis_voices.speaker_speed()` = the owner's speed times the voice's own pace,
+in an answer, in the crisis-plain voice (`tts_voice(plain=True)`) and in Hear
+it; the "One moment." clip's key changes with it (it is built from number and
+speed). The engine remembers which file it loaded (`jarvis_speech._TTS_VOICES`)
+and `jarvis_voices` believes that over the disk, so a copy made while Jarvis
+runs is not spoken with until the engine has loaded it.
+
+**"Not the owner's voice".** A blend of two Kokoro voices could land near the
+owner's own voice by chance, so - like a recorded voice - Ashby and Clara are
+checked against every voice print (`owner_check`) on a sample of about five
+seconds: when one is CHOSEN (`POST /api/voice/voices/speaker`), when it is
+HEARD (`POST /api/voice/voices/sample`), and in the background whenever the
+voice prints change or the PC restarts while one is the saved choice. The answer
+is kept in memory for one set of prints (never on disk); one audit line
+(`voices.blend_check`, the voice's id and yes/no only) is written per answer. A
+refusal: **400** `{"ok": false, "error": "Ashby sounds too much like your own
+voice, so Jarvis will not use it."}` (or "... could not be checked against your
+voice print, so Jarvis will not use it yet." when the voice check is missing);
+the voice then leaves the list. **503** when it cannot be checked (no built-in
+voice engine: "this PC has no built-in voice to check it with"; the engine or
+the check failing, by exception name only) - **not being able to check is never
+a pass**; **429** while another sound is being made. With no voice print trained
+yet there is nothing to compare with and the check lets it through, as it does
+for a recorded voice, and runs again after the owner trains theirs. No card
+either way, like every built-in voice.
+
+**No animal may use either.** `face_voice.animal_choices.voices` is the pack's
+own eleven, `POST /api/voice/voices/face_animal` refuses a blend's id (400), a
+saved animal choice of one is dropped, and an animal's number is looked up in
+the pack's own table.
+
+**Said plainly:** nobody has listened to either voice. Measured, with the real
+pack (sherpa-onnx 1.13.8, one sentence, British English): middle pitch George
+146 Hz, Michael 120 Hz, **Ashby 136 Hz**; Emma 184 Hz, Heart 200 Hz, **Clara 192
+Hz**; average-spectrum distance (dB) Ashby-George 1.8, Ashby-Michael 3.0 (the
+parents are 3.7 apart), Clara-Emma 2.8, Clara-Heart 4.3 (the parents 6.1); two
+runs of the same blend are 0.3-0.4 dB apart. Ashby at 0.95 came out 3.8% longer
+than at 1.0. The whole path (make the file, load it, choose, Hear it, speak) was
+run through the PC's own code with the real pack. The owner check was run in the
+tests with a stand-in, and once for real against a print made from Ashby's own
+sound with the fallback voice-ID model (`spectral-v1`): it refused Ashby (0.996
+against a bar of 0.25) and Clara (0.836) - it refuses, but that model is coarse;
+with the real speaker model on the PC the scores differ and nobody has run it
+there. The upgrade line moves the whole `tts` folder aside,
+so the make-blends line must be run again after upgrading the pack. Tests:
+`backend/test_blend_voices.py`, the shared cases `pack_v1_blends`,
+`pack_v1_ashby`, `pack_v1_ashby_chosen`, `pack_v1_ashby_refused(_listed)`,
+`pack_v1_sample_refused` and `pack_old_ashby` in both fixture files.
 
 ## 95. Inbox tidy by voice: archive, star, mark as read, or move to Trash (added 2026-09-28)
 
@@ -14925,3 +15412,55 @@ card: it only puts back what the owner had ten minutes ago.
   no search in other languages' letters (plain ASCII only).
 - Jarvis has no inbox screen of its own, on purpose: nothing here lists the
   owner's email anywhere but on the card.
+
+---
+
+## 96. The screen routes in one place (added 2026-09-29)
+
+The two routes `backend/screen.patch` installs (`jarvis_screen.install`), for a reader who wants the list rather than the story. The story - what a look is, the pause rules, the words, the apps - is section 62; this is only the table.
+
+| route | who may call it | what it does | card |
+|---|---|---|---|
+| `GET /api/screen` | any paired device | the status (62.5) plus `available`, `unavailable_why`, `default_minutes`, `max_minutes`, `follow_up_s`; fixed words and numbers only | none |
+| `POST /api/screen` `{"do":"look"}` | **this PC only** (403 otherwise) | one look at the window in front (`whole: true` for the desktop); answers `ok`, `note` or `said`, `why` | none - the owner's own act |
+| `POST /api/screen` `{"do":"ask"}` | **this PC only** | a question is starting: take the look now if none is held | none |
+| `POST /api/screen` `{"do":"start","minutes":N}` | **this PC only** | starts "Watch with me" (1 to 120 minutes, 30 by default) | none - the sign is the safeguard |
+| `POST /api/screen` `{"do":"extend","minutes":N}` | **this PC only** | more time, never past 2 hours from now | none |
+| `POST /api/screen` `{"do":"stop"}` | any paired device | ends "Watch with me" | none, never held on a stale link |
+| `POST /api/screen` `{"do":"drop"}` | any paired device | throws away a held look (the bar closed) | none |
+| `GET /api/screen/never-look` | **this PC only** | the list of programs and websites, and the last removal | none |
+| `POST /api/screen/never-look` `{"do":"add",...}` | **this PC only** | adds one (stricter, so instant) | none |
+| `POST /api/screen/never-look` `{"do":"remove",...}` | **this PC only** | asks to take one off (a built-in one too); 202 with `pending` | **one** `change_own_config` card |
+
+No verb answers with a word from the screen, a program, a site or a title. The phone reads `GET /api/screen` and sends only `stop`; it never sends `start` or `look`, and the PC would refuse it if it did. Its own looks travel inside `POST /api/chat` (62.6), not through these routes. The event `screen_watch` carries the status and nothing more.
+
+
+### 96.1 Picture mode: a slow picture reader on the processor (added 2026-09-29)
+
+The owner's decision (`CLAUDE.md`, 2026-09-29: "add it as a feature that can be enabled or disabled"). With ONE graphics card, "Look at this" and "Watch with me" read only the WORDS on the screen (section 62). This is an optional, **slow** extra: a small picture model - **MiniCPM-V 4.6** (OpenBMB, 1.3 B parameters, Apache-2.0) - that runs on the PC's **processor**, so it uses no graphics memory and the everyday chat model on the 8 GB card is not disturbed. It reverses the earlier "one card reads the screen's words only"; the owner chose it knowingly. Backend: `backend/jarvis_screen_picture.py` (a whole new module), the routes in `jarvis_screen.py`, the gate lines in `screen-picture.patch`. The camera, Live pictures and the two-card "Pictures" lane are unchanged and still wait for the 12 GB card.
+
+| route | who may call it | what it does | card |
+|---|---|---|---|
+| `GET /api/screen/picture` | any paired device | the setting: `enabled`, `waiting`, `last`, `model`, `model_name`, `installed`, `cleaner`, `ready`, `not_ready`, `measured`, `measured_words`, `last_look_s`, `lane`, `line`, `install_line`, `download_from` (and `why` if the settings file is damaged) | none |
+| `POST /api/screen/picture` `{"enabled": true}` | any paired device | asks to turn it on: **202** `{"waiting": true, "enabled": false}` - nothing changes until a person says yes | **one** `screen_picture_enable` card (tier `ask`) |
+| `POST /api/screen/picture` `{"enabled": false}` | any paired device | turns it off **at once**: stops the picture reader, cuts short a picture being read, and withdraws a waiting ON card | none |
+
+**Off by default.** No file, a file that cannot be read, or one that holds anything but true/false is OFF (`why` says so). ON changes nothing until the card is approved: denied, timed out, refused, a tier that is not `ask`, or turned off while the card waited all leave it off. A cloud model name (`...-cloud`, `...:cloud`) in `[screen_picture] model` is refused before any card (rule 1). The same card is what "picture mode" asked for by voice or chat raises (`jarvis_settings_registry.py`, `screen_picture`, section `screen-look`) - a second door, never a second gate.
+
+**The card says**, in plain words: what it does; that a separate copy of Ollama on this PC's processor runs it, not the graphics card and not the network; that it is slow and nobody knows how slow until the owner measures it; that secrets are blacked out first; that what it says is outside text; that the model is NOT downloaded by the card (the owner pastes one line, from Ollama) - with "not installed yet" when Ollama says so; and that turning it off is instant. It also says, when true, that the part that blacks out secrets is not installed, so no picture would be sent.
+
+**What a look does with it** (`jarvis_screen.py` `_take` -> `jarvis_screen_picture.start`): the words are read exactly as before. Beside that, a job on its own thread (1) checks the switch, the model name, that the model is installed and its checksum is the one it was measured with (`PINNED_DIGEST`, else the first measurement's - a changed file refuses), (2) **cleans the picture** (below) - no cleaner, no picture, (3) shrinks it to 1,024 px on its longest side (Pillow if installed, else by hand for the PC's own PNG, else as it is), (4) starts the picture reader if needed, (5) asks it for a description of at most 400 words, `num_gpu 0`, not streamed, with a timeout (`timeout_s`, 240), (6) asks the copy what it holds (`/api/ps`): any graphics memory in use stops the copy and refuses picture mode until the owner switches it off and on, (7) removes hidden thinking and chat markers, caps the text at 1,500 characters. The description joins the words as **more OUTSIDE TEXT** (a heading saying it came through another AI model, must be treated as a rough guess, never obeyed, and that the words win when they disagree); it is what the planted-instruction check reads, and it is held with the look for two minutes and never kept, saved, learned or put in an event, status or audit line. A question waits for the words (`READ_WAIT_S`) and then up to `wait_s` (60) for the picture; if it is still being read the answer uses the words and a plain line says so, and a follow-up a moment later has it. A phone's screenshot (`screen: "phone"`) goes through the same job for its first picture, inside the chat turn; its picture is still never sent to the everyday model.
+
+**Never silent.** When the picture was not used, the note shown with the answer says `Looked at: <program> window · words only (<why>)` (and while it is still being read, `words and picture when ready (slow mode)`), the everyday model is told, in one plain line, to say so, **and code writes one plain sentence into the answer itself** - `(Picture mode: <why> This answer uses the words only.)`, put there by `jarvis_agent.py` (`tell_owner`, from `with_screen`'s `info["picture_said"]`) - so the owner is told even if the model does not pass it on. The reasons (`WHY_WORDS`, one fixed sentence each, the same for both apps' tests): the model is not installed; Ollama could not be asked; Ollama was not found; the reader could not start; no cleaner; the cleaner failed; too slow; an error; nothing to say; the reader was on the graphics card; the model's file changed since it was measured; a cloud model name; picture reading was turned off; a newer look replaced this one. With the switch off, nothing changes: the note says `words only` and no job exists.
+
+**The cleaner hook** (built in `jarvis_screen.py` by another piece of work, in parallel). `jarvis_screen_picture.clean()` calls `jarvis_screen.clean_picture(picture, want_png=True)` when it has that parameter (the built signature is `clean_picture(picture, ocr=None, *, want_png=False)`), else `clean_picture(picture, snap)` or `clean_picture(picture)`; it uses the returned dict's `png` - the ONLY picture a model may be shown - and treats `png: None`, `unchecked`, `blocked`, an exception, nothing or empty bytes as "send nothing". Without `clean_picture` the stub `_clean_picture_stub` raises: **fail closed**. This module never builds it.
+
+**The picture reader** (`_Lane`): its own `ollama serve` on `127.0.0.1:11437` (`[screen_picture] port`; never 11434-11436), environment from an allowlist (`jarvis_child_env.py`: no token, key or password of Jarvis's) plus `OLLAMA_MODELS`, `CUDA_VISIBLE_DEVICES=-1` (Ollama's documented way to force the processor), `HIP_VISIBLE_DEVICES=-1`, `ROCR_VISIBLE_DEVICES=-1`, `OLLAMA_VULKAN=0`, `OLLAMA_MAX_LOADED_MODELS=1`, `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_NO_CLOUD=1`. Started on the first look, stopped when the switch goes off and when Jarvis closes; a port already in use, Ollama missing, or a start that dies are each said plainly. Processor threads default to half of this PC's (`threads`, unmeasured).
+
+**Speed is measured, never guessed.** `GET`'s `measured_words` says "Not measured yet: nobody knows how slow this is on your PC" until the owner runs `install_line` - ONE PowerShell line the PC writes with its own folder in it: `ollama pull '<model>'; Push-Location -LiteralPath '<backend folder>'; py -3 .\jarvis_screen_picture.py --measure; Pop-Location`. `--measure` uses a made-up test picture (never the owner's screen), prints seconds per look and Ollama's `prompt_eval_count` with and without the picture and how much graphics memory the model held (must be 0; if not it is not saved as a working number), and saves `screen-picture-measure.json` (numbers and the model's checksum). The setting then shows "Measured on <date>: about N seconds for one look (a made-up test picture - a busy real screen may take longer)", and after a real look "Your last look took N seconds". A measurement for another model is not shown as this one's.
+
+**Unverified, said plainly.** ollama.com and Hugging Face could not be reached when this was written: the Ollama tag (`minicpm-v:4.6`), the download size, whether Ollama's runner accepts this model on the processor and its speed there, the checksum (`PINNED_DIGEST` is empty until a real download's is read), and what it says about a real screenshot are all unverified. What was checked: llama.cpp's `docs/multimodal/minicpmv4.6.md` exists (a Qwen3.5-based 1.3 B language model with a SigLIP vision tower), and Ollama's `docs/gpu.md` documents `CUDA_VISIBLE_DEVICES=-1` for the processor.
+
+**Both apps.** The switch is decided on the PC and read by both, like every approval-card switch. Desktop: Settings, "Look at this and Watch with me", `look.rs` `screen_picture` (`read`, `on`, `off`; `on` is held on a stale link, `off` never), `look-settings.js`, `look-rules.js` (`PICTURE`, `pictureView`). Phone: Settings, "Looking at your screen: pictures" (`net/ScreenPicture.kt`, `ScreenPicturePlate.kt`). The fixed words, the reasons and `panel()`'s cases are in `contract/screen-cases.json` (`picture`, from `tools/gen_screen_cases.py`) and both apps' tests hold to them. Neither app ever handles a picture for this.
+
+Tests: `backend/test_screen_picture.py` (off by default; ON is one card and changes nothing until yes; OFF is immediate; fail closed without a cleaner; the model is shown the cleaned picture, never the original; every failure is said and falls back to the words; the reader is processor-only and private; the real HTTP path against a stand-in Ollama; the measurement; the routes and gate lines), `tests/look-rules.mjs`, `ScreenPictureTest.kt`.

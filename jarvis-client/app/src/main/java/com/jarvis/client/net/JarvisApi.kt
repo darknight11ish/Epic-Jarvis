@@ -593,6 +593,20 @@ class JarvisApi(
     suspend fun setWatchNotify(on: Boolean): ApiResult<DesktopWrite.Outcome> =
         postWrite(WatchNotify.PATH, WatchNotify.enabledBody(on))
 
+    // ------------------------------------------------- picture mode for the screen ----
+    // docs/JARVIS-API.md section 96.1; see [ScreenPicture] for the shapes and
+    // words. Decided on the PC like every other approval-card switch here.
+
+    /** `GET /api/screen/picture`: `{"enabled", "waiting", "line", "measured_words", "install_line", ...}`. */
+    suspend fun screenPictureSettings(): ApiResult<JsonObject> = probe(ScreenPicture.PATH)
+
+    /**
+     * The switch. ON answers 202 waiting while its approval card is up; OFF is
+     * immediate, and withdraws an ON card still waiting.
+     */
+    suspend fun setScreenPicture(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(ScreenPicture.PATH, ScreenPicture.enabledBody(on))
+
     // ------------------------------------------------- pairing and devices ----
     // docs/PAIRING-DESIGN.md §6.2 and §6.4.
 
@@ -656,6 +670,20 @@ class JarvisApi(
 
     /** `GET /api/notifications/phone`: `{"enabled", "waiting", "last", "why"}`. */
     suspend fun phoneNotificationsSettings(): ApiResult<JsonObject> = probe(PhoneNotifications.PATH)
+
+    /**
+     * Whether the PC is watching its own screen ("Watch with me",
+     * docs/JARVIS-API.md section 62): `{on, state, left_s, ...}` and never a
+     * word from the screen. Read to show the sign on this phone too.
+     */
+    suspend fun screenWatch(): ApiResult<JsonObject> = probe(ScreenRules.PATH)
+
+    /**
+     * Ends the PC's watching. The one thing the phone may send to that route:
+     * a stop is accepted from anywhere, while starting or asking is refused
+     * unless the request comes from the PC itself. Never a card.
+     */
+    suspend fun stopScreenWatch(): ApiResult<Unit> = postJson(ScreenRules.PATH, ScreenRules.STOP_BODY)
 
     /**
      * The switch. ON answers 202 waiting while its approval card is up; OFF
@@ -2559,11 +2587,14 @@ class JarvisApi(
         /** See [ChatHistory.requestBody]'s own doc on this same parameter. */
         cloudYes: Boolean = false,
         live: Boolean = false,
+        /** The look at the phone's own screen this question carries ([ScreenLook]). */
+        screen: ScreenLook.Attach? = null,
     ): Call? {
         val target = url("/api/chat") ?: return null
         val body = ChatHistory.requestBody(
             history, asking, picture, conversationId,
             interrupted = interrupted, temporary = temporary, cloudYes = cloudYes, live = live,
+            screen = screen,
         )
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()

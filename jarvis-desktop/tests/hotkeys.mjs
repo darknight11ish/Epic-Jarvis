@@ -43,7 +43,17 @@ await check("every bindable action is listed", async () => {
   const page = await open();
   const list = await rows(page);
   await page.close();
-  assert.equal(list.length, 9, `${list.length} rows, expected 9`);
+  assert.equal(list.length, 10, `${list.length} rows, expected 10`);
+  // "Look at this" (2026-09-29): the old "Attach a screen capture" key, renamed
+  // (the owner's decision of 2026-09-28) - the same key, not a second one.
+  const look = list.find((r) => r.name === "Look at this");
+  assert.ok(look, "Look at this is not listed");
+  assert.equal(look.key, "Alt + Shift + S");
+  assert.ok(!list.some((r) => r.name === "Attach a screen capture"), "the old name is still listed");
+  // Watch with me's own key ships off, like Live's.
+  const watch = list.find((r) => r.name === "Start or stop Watch with me");
+  assert.ok(watch, "Watch with me is not listed");
+  assert.equal(watch.key, "Off - pick a key");
   assert.equal(list[0].name, "Show or hide the Jarvis bar");
   assert.equal(list[0].key, "Alt + Space");
   // "Stop everything" (2026-09-25): listed like the others, so it can be
@@ -393,11 +403,13 @@ await check("CONTROL: the page still works when nothing is refused", async () =>
   await page.close();
   // Jarvis Live's key ships off (the owner's decision of 2026-09-28): it
   // says "off", and every key that ships on is working.
-  const on = list.filter((r) => r.name !== "Start or end Jarvis Live");
-  assert.equal(on.length, list.length - 1);
+  // Watch with me's key ships off too (the design, 2026-09-28).
+  const OFF = ["Start or end Jarvis Live", "Start or stop Watch with me"];
+  const on = list.filter((r) => !OFF.includes(r.name));
+  assert.equal(on.length, list.length - OFF.length);
   assert.ok(on.every((r) => r.bound === "true"));
   assert.ok(on.every((r) => /working/i.test(r.state)));
-  assert.equal(list.find((r) => r.name === "Start or end Jarvis Live").state, "off");
+  for (const name of OFF) assert.equal(list.find((r) => r.name === name).state, "off");
 });
 
 await browser.close();

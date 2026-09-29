@@ -298,6 +298,28 @@ def said(found: list) -> str:
 
 # ---- the route -----------------------------------------------------------------
 
+def _clean_words(image: bytes, reader: Callable[[bytes], dict]) -> dict:
+    """`reader(image)`'s answer with secrets hidden in its words: {"ok", "text",
+    "left_out", "why"}. Never raises. The words are checked whole (from the
+    reader's positioned lines when it gives them) and only then cut to
+    jarvis_ocr.MAX_CHARS, so a cut can never leave half a secret in."""
+    try:
+        import jarvis_picture
+        res = jarvis_picture.clean(image, ocr=reader, want_png=False)
+    except Exception:
+        return {"ok": False, "text": "", "left_out": 0,
+                "why": "the picture could not be checked for keys, passwords and card numbers"}
+    if not res.get("ok"):
+        return {"ok": False, "text": "", "left_out": 0, "why": str(res.get("why") or "")}
+    text = str(res.get("text") or "")
+    left = int(res.get("left_out") or 0)
+    cap = int(getattr(jarvis_ocr, "MAX_CHARS", 4500))
+    if len(text) > cap:
+        left += len(text) - cap
+        text = text[:cap].rstrip()
+    return {"ok": True, "text": text, "left_out": left, "why": ""}
+
+
 def scan(body, *, reader: Optional[Callable[[bytes], dict]] = None,
          now: Optional[float] = None) -> tuple:
     """POST /api/photo/scan {"image": "data:image/jpeg;base64,..."} ->
@@ -314,7 +336,13 @@ def scan(body, *, reader: Optional[Callable[[bytes], dict]] = None,
     image = jarvis_ocr.image_bytes({"type": "image_url", "image_url": {"url": uri}})
     if not image:
         return 400, {"ok": False, "error": BAD_IMAGE}
-    read = (reader or jarvis_ocr.read_text)(image)
+    # Through the same door every picture goes through (2026-09-29, the owner's
+    # "Yes, clean them too"): anything that looks like a key, password or card
+    # number is [hidden] in the words BEFORE a date or a title is picked from them,
+    # so a reminder's proposed title can never carry one. The picture itself is not
+    # painted here (nothing shows it to a model); one that cannot be checked gives
+    # no words.
+    read = _clean_words(image, reader or jarvis_ocr.read_text)
     if not isinstance(read, dict) or not read.get("ok"):
         why = read.get("why") if isinstance(read, dict) else ""
         return 503, {"ok": False, "error": why or jarvis_ocr.FAILED}

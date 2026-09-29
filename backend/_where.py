@@ -182,6 +182,11 @@ SHIPPED = (
     "jarvis_documents.py",
     # the words in a picture, read on this PC and marked as outside text (no patch)
     "jarvis_ocr.py",
+    # screen safety (2026-09-29): secrets in a picture of the screen are painted
+    # black before anything reads it (no patch)
+    "jarvis_secret_rules.py", "jarvis_secrets.py", "jarvis_picture.py",
+    # the pictures the owner attaches to a chat get the same treatment, before any model (no patch)
+    "jarvis_chat_picture.py",
     # plug-in programs (MCP): read-only tools from programs on this PC, through more_tools
     "jarvis_mcp.py",
     # the crisis help line: the word check, the fixed US help message, the note to the model
@@ -308,10 +313,16 @@ SHIPPED = (
     # of their own: jarvis_chatbot.py loads both.
     "jarvis_chatbot_api.py",
     "jarvis_chatbot_local.py",
-    # "Look at this" and "Watch with me", build steps 1 and 2: the session
-    # rules, pause rules, caps and the Never look at list (no route yet, no
-    # patch; the Windows readers are step 3)
+    # "Look at this" and "Watch with me": the session rules, pause rules,
+    # caps, the Never look at list and the routes (screen.patch installs
+    # them); jarvis_screen_win.py is the Windows half - what is in front,
+    # the picture, the window's own text (2026-09-29)
+    "jarvis_screen_win.py",
     "jarvis_screen.py",
+    # ... and its slow picture mode for a PC with one graphics card (2026-09-29):
+    # a small picture model on the processor, off by default, ON is one card
+    # (screen-picture.patch adds the gate lines); the routes are jarvis_screen.py's
+    "jarvis_screen_picture.py",
     # "Ask several and compare": several of the conversations above, ONE
     # card, ONE summary. No patch of its own: jarvis_chatbot.py loads it and
     # chatbot-routes.patch already installs the routes that reach it.

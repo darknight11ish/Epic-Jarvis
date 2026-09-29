@@ -328,9 +328,10 @@ def t_the_real_line_runs_on_powershell():
 def t_the_choices_come_from_the_pack_that_is_installed():
     reset("v1")
     view = V.speaker_view()
-    check("Kokoro v1.0: eleven voices by name, Heart first and chosen, no note",
+    check("Kokoro v1.0: eleven voices by name, Heart first and chosen, and the way to make "
+          "Ashby and Clara in its note (they are not made yet)",
           [c["id"] for c in view["choices"]] == list(K.V1_PICK) and view["choice"] == "af_heart"
-          and view["default"] == "af_heart" and view["note"] == ""
+          and view["default"] == "af_heart" and view["note"] == K.BLENDS_TO_MAKE
           and view["pack"] == {"kind": "v1", "name": "Kokoro v1.0", "voices": 54}, view)
     check("and speaker() is Heart's number in that pack (3), not 0",
           V.speaker() == 3 and V.speaker_name() == "af_heart")
@@ -338,7 +339,8 @@ def t_the_choices_come_from_the_pack_that_is_installed():
     view = V.speaker_view()
     check("the old pack: nine voices, no Sky or Adam, the way to the new pack in its note",
           [c["id"] for c in view["choices"]] == list(K.V019_PICK) and view["choice"] == "af"
-          and view["note"] == K.upgrade_note() and view["pack"]["kind"] == "v019"
+          and view["note"] == K.upgrade_note() + " " + K.BLENDS_NEED_V1
+          and view["pack"]["kind"] == "v019"
           and V.speaker() == 0, view)
     reset(None)
     view = V.speaker_view()
@@ -386,7 +388,8 @@ def t_a_voice_the_pack_does_not_have_is_never_spoken_by_a_wrong_number():
     V._write_state(speaker="af")                    # the old default, saved before the upgrade
     view = V.speaker_view()
     check("the old default is Heart on v1.0: same choice, its new name",
-          view["choice"] == "af_heart" and V.speaker() == 3 and "note" in view and view["note"] == "")
+          view["choice"] == "af_heart" and V.speaker() == 3 and "note" in view
+          and view["note"] == K.BLENDS_TO_MAKE)
     V._write_state(speaker="af_sky")                # chosen before Sky was taken off the list
     view = V.speaker_view()
     check("a voice that is no longer offered still works for the owner who chose it, "
@@ -403,7 +406,8 @@ def t_the_settings_file_number_keeps_its_old_meaning():
     CFG["tts_speaker_id"] = 9
     check("[voice] tts_speaker_id = 9 is still George (the old numbering), on v1.0 too",
           V.speaker_name() == "bm_george" and V.speaker() == 26
-          and V.speaker_view()["choice"] == "bm_george" and V.speaker_view()["note"] == "")
+          and V.speaker_view()["choice"] == "bm_george"
+          and V.speaker_view()["note"] == K.BLENDS_TO_MAKE)
     CFG["tts_speaker_id"] = 0
     check("0 is the default American voice", V.speaker_name() == "af_heart" and V.speaker() == 3)
     CFG["tts_speaker_id"] = 40
@@ -588,26 +592,38 @@ def t_british_voices_are_asked_for_british_english():
           S._tts_cache.calls == [(21, 1.0, None)], S._tts_cache.calls)
 
 
-def t_the_old_mouth_timing_is_never_used_with_the_new_pack():
-    reset("v1")
-    seen = []
-    fake = types.ModuleType("jarvis_mouth")
-    fake.speak = lambda *a, **k: seen.append("called") or False
-    saved = sys.modules.get("jarvis_mouth")
-    sys.modules["jarvis_mouth"] = fake
-    try:
-        out = []
-        got = S.kokoro_speak(S._tts_cache, "Hello there.", 3, 1.0, 0.0, mouth=out)
-        check("on Kokoro v1.0 jarvis_mouth is not asked (its timing is v0.19's), the sound is made",
-              got is not None and not seen and out == [], (seen, out))
-        reset("v019")
-        got = S.kokoro_speak(S._tts_cache, "Hello there.", 3, 1.0, 0.0, mouth=[])
-        check("on the old pack it is asked, as before", seen == ["called"], seen)
-    finally:
-        if saved is None:
-            sys.modules.pop("jarvis_mouth", None)
-        else:
-            sys.modules["jarvis_mouth"] = saved
+def t_the_mouth_timing_is_asked_on_both_packs():
+    """2026-09-29: Kokoro v1.0 has its own exact mouth timing now (jarvis_mouth.py
+    reads the pack it finds and refuses a copy made for another one), so
+    kokoro_speak asks for it on either pack - handing a British voice's own
+    language on. If jarvis_mouth cannot, the sound is made as it always was."""
+    for kind in ("v1", "v019"):
+        reset(kind)
+        seen = []
+        fake = types.ModuleType("jarvis_mouth")
+        fake.speak = lambda *a, **k: seen.append(k) or False
+        saved = sys.modules.get("jarvis_mouth")
+        sys.modules["jarvis_mouth"] = fake
+        try:
+            out = []
+            got = S.kokoro_speak(S._tts_cache, "Hello there.", 3, 1.0, 0.0, mouth=out)
+            check(f"on {kind} jarvis_mouth is asked, and when it declines the sound is made "
+                  "the ordinary way with no mouth", got is not None and len(seen) == 1
+                  and out == [], (seen, out))
+            check(f"... an American voice on {kind}: no per-call language",
+                  seen[0].get("extra_lang") is None and seen[0].get("lang") == "en-us", seen[0])
+            got = S.kokoro_speak(S._tts_cache, "Hello there.", 21, 1.0, 0.0, mouth=[])
+            want = "en-gb-x-rp" if kind == "v1" else None
+            check(f"... Emma (21) on {kind}: "
+                  + ("British English handed on, as the sound's own call asks"
+                     if kind == "v1" else "no accent (that pack speaks American only)"),
+                  seen[1].get("extra_lang") == want
+                  and seen[1].get("lang") == (want or "en-us"), seen[1])
+        finally:
+            if saved is None:
+                sys.modules.pop("jarvis_mouth", None)
+            else:
+                sys.modules["jarvis_mouth"] = saved
 
 
 # ---------------------------------------------------------------------- Hear it --

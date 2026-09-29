@@ -98,6 +98,15 @@ INDIRECT = {
               "time-zone data of its own (jarvis_calendar.py's event times)",
     "sherpa-onnx-core": "sherpa-onnx loads it (its native library); named so the "
                         "hash-locked requirements.lock holds it on every platform",
+    # The six pywinrt packages jarvis_ocr.py needs (2026-09-29). They are imported
+    # as winrt.windows.<namespace>, all of which the one name "winrt" stands for
+    # above; pywinrt 3.x installs only the namespaces named, so each is listed.
+    "winrt-windows.media.ocr": "jarvis_ocr.py: Windows' text reader (winrt.windows.media.ocr)",
+    "winrt-windows.graphics.imaging": "jarvis_ocr.py: opening the picture for the reader",
+    "winrt-windows.storage.streams": "jarvis_ocr.py: handing the picture over in memory",
+    "winrt-windows.foundation": "jarvis_ocr.py: makes Windows' asynchronous calls awaitable",
+    "winrt-windows.foundation.collections": "jarvis_ocr.py: the lists the reader answers with",
+    "winrt-windows.globalization": "jarvis_ocr.py: the reader's language",
     "markitdown": "imported only by the separate converter program jarvis_documents.py "
                   "starts (its _CHILD code), never by the backend itself - so a crafted "
                   "PDF is read in a process with no passwords in its environment",

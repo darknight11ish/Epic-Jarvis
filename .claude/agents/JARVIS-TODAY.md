@@ -74,7 +74,9 @@ Parakeet speech-to-text (sherpa-onnx), Kokoro text-to-speech (v0.19's
 voices, or v1.0's - a 350 MB one-line install, pinned in
 `jarvis_kokoro.py`; the choice is saved by NAME, a **Hear it** button on
 every voice in both apps, British voices asked for British English on v1.0;
-JARVIS-API §94), custom voices (ZipVoice on the processor, F5 on
+**Ashby and Clara**, two blended voices made for Jarvis by one owner-run line
+into a pinned copy of the pack's voice file, checked against the owner's voice
+print, never for an animal; JARVIS-API §94, §94.7), custom voices (ZipVoice on the processor, F5 on
 the second card; Pocket TTS built, off), speaking from the first comma,
 spoken-style answers, "stop" and barge-in, "One moment", "I heard you". **Jarvis Live** (2026-09-28,
 `jarvis_live.py`, JARVIS-API §63, `docs/LIVE-DESIGN.md`): a back-and-forth
@@ -158,12 +160,29 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
   chatbot driver (core, websites, API services, second local AI; API §87),
   customer-support chats (`jarvis_support.py`, API §65),
   Projects steps 1-2 (`jarvis_projects.py`, API §88), the phone's
-  "Swipe to approve or deny" switch, and the rules for looking at the
-  screen, steps 1-2 (`jarvis_screen.py`, with Focus's reader moved to
-  `jarvis_front.py`, API §62 - no Windows readers, route or app screens yet;
-  the voice setting "Answers about your screen after "Hey Jarvis""
-  (`hands_free_screen`, `screen_aloud` on the utterance reply) is in both
-  apps).
+  "Swipe to approve or deny" switch, and **"Look at this" / "Watch with me"**
+  (2026-09-29, API §62 and §96; `jarvis_screen.py`, `jarvis_screen_win.py`,
+  `screen.patch`): on the PC the Look at this key, the bar's Watch button, an
+  always-on-top badge, a tray row and a Never look at list; on the phone the
+  assistant gesture (words only, off by default, Security switch "Let Jarvis
+  read this phone's screen"), "Watch this phone with me" (Android screen
+  sharing, one picture per question, needs Usage access) and the PC's
+  watching shown on Home with Stop. Words only on one graphics card - no model
+  is shown a picture. The Windows readers and the phone's Android parts have
+  not run on a real machine yet. The voice setting "Answers about your screen
+  after "Hey Jarvis"" (`hands_free_screen`) is in both apps. **Screen safety**
+  (2026-09-29, API §62.13; `jarvis_secrets.py`, `jarvis_secret_rules.py`,
+  `jarvis_picture.py`): anything that looks like a key, token, password or card
+  number is hidden (`[hidden]`, and painted solid black in a picture) before a
+  look's words or a picture are used - the PC's and the phone's alike; the
+  PC's picture is taken with every Never look at window, private browser
+  window and Jarvis window painted black; a private browser window in front is
+  a pause; the text reader runs inside Jarvis (pywinrt) with word positions.
+  Not run on a real PC yet. **Pictures the owner attaches to a chat are cleaned
+  the same way** (2026-09-29, "Yes, clean them too"; `jarvis_chat_picture.py`,
+  JARVIS-API §36): before any model sees one, secrets are painted solid black;
+  nothing to hide - it goes on untouched; one that cannot be checked is
+  withheld and the answer says so.
 - **Third graphics card: its own lane, off by default** - on
   `claude/jarvis-continuation-03kls1` (2026-09-28, 5cc47a9c): a third
   NVIDIA card is detected, and one of the five second-card features can be

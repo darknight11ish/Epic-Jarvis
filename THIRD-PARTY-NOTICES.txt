@@ -164,7 +164,10 @@ sherpa-onnx (k2-fsa), Apache-2.0 - https://github.com/k2-fsa/sherpa-onnx
   LICENSE file is the Apache-2.0 text; it also carries espeak-ng-data
   (GPL-3, see espeak-ng below), English and Chinese pronunciation lists and
   Chinese text rules that Jarvis does not use, each under its own licence;
-  nothing of it is shipped here), Silero VAD (MIT), 3D-Speaker
+  nothing of it is shipped here; "Ashby" and "Clara" (backend/jarvis_kokoro.py,
+  2026-09-29) are two weighted averages of that pack's own voice tables, made
+  on the owner's PC from the installed file - no new voice data is shipped),
+  Silero VAD (MIT), 3D-Speaker
   CAM++ (Apache-2.0), and - for "very strict" - NVIDIA NeMo TitaNet-Large
   (the licence its NGC model card states).
   Custom voices (backend/jarvis_voices.py, 2026-09-24) add two more
@@ -289,6 +292,20 @@ Memory ideas 1 and 4 (2026-09-26, docs/MEMORY-RESEARCH-2026-09-26.md). No
   fact against the one it would invalidate by their valid-from dates
   (backend/rebuilt/jarvis_memory.py, add()).
 
+PICTURE MODE'S MODEL (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+MiniCPM-V 4.6 (OpenBMB, https://github.com/OpenBMB/MiniCPM-V,
+  https://huggingface.co/openbmb/MiniCPM-V-4_6), reported as Apache-2.0
+  (the licence was not re-checked when this was written - Hugging Face could
+  not be reached from where it was built). Used by backend/jarvis_screen_picture.py
+  as the small picture model that runs on the PC's processor when the owner
+  turns on "Read pictures of my screen (slow)". It is NOT distributed with
+  Jarvis: the owner downloads it themselves with one pasted PowerShell line
+  (`ollama pull`, from Ollama's own library - its tag and size are unverified),
+  and Ollama (MIT, https://github.com/ollama/ollama) runs it in a separate
+  copy of itself that only this PC can reach. Anything that looks like a key,
+  a card number or a password is blacked out of a picture before it reaches it.
+
 WEB SEARCH (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 ddgs (deedy5), MIT - https://github.com/deedy5/ddgs
@@ -309,6 +326,110 @@ ddgs (deedy5), MIT - https://github.com/deedy5/ddgs
   their own terms. Exa is called directly over HTTPS; its exa-py library (MIT) is not
   a dependency - its 2.22.2 source was only read, to confirm the request's
   address, header and field names, and none of it is copied.
+
+SCREEN SAFETY (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+Blacking out keys, passwords and card numbers in a picture of the screen
+(the owner's "all three", 2026-09-29; backend/jarvis_secrets.py,
+jarvis_secret_rules.py, jarvis_picture.py, docs/JARVIS-API.md 62.13).
+
+gitleaks (Zachary Rice), MIT - https://github.com/gitleaks/gitleaks
+  Adapted: config/gitleaks.toml, the default rule file - the patterns, entropy
+  bars, secret groups and allowlists of 221 rules, turned into Python data by
+  tools/gen_secret_rules.py (backend/jarvis_secret_rules.py; the file's header
+  says which version it was made from and the small changes it needed). The
+  gitleaks program is not used and none of its Go code is shipped.
+
+MIT License
+
+Copyright (c) 2019 Zachary Rice
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Presidio (Microsoft and Presidio Contributors), MIT -
+https://github.com/microsoft/presidio
+  Adapted: the regular expressions of its credit-card, crypto, IBAN, email and
+  IP-address recognisers (presidio-analyzer, predefined_recognizers/generic),
+  copied into backend/jarvis_secrets.py. The Presidio package, its language
+  models and spaCy are NOT used: the check digits (the card's Luhn check, the
+  wallet's and the IBAN's own) are written in Jarvis's own code.
+
+The MIT License (MIT)
+
+Copyright (c) Presidio Contributors.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+winocr (Tomofumi Inoue), MIT - https://github.com/GitHub30/winocr
+  The idea of a few lines - a picture goes into a Windows software bitmap
+  that Windows' own OcrEngine reads - was adapted in backend/jarvis_ocr.py.
+  The package is not installed and none of it is shipped; above all not its
+  serve(), which opens a web server to the whole network. Version 0.0.15's
+  licence file was read from its wheel on PyPI on 2026-09-29.
+
+MIT License
+
+Copyright (c) 2021 Tomofumi Inoue
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+pywinrt (winrt-runtime, winrt-Windows.Media.Ocr, winrt-Windows.Graphics.Imaging,
+winrt-Windows.Storage.Streams, winrt-Windows.Foundation,
+winrt-Windows.Foundation.Collections, winrt-Windows.Globalization), MIT -
+https://github.com/pywinrt/pywinrt
+  Windows' own text reader called from Python, inside Jarvis. Installed on
+  the PC by pip from backend/requirements.txt (version 3.2.1; each wheel's
+  metadata says "License-Expression: MIT", read from PyPI on 2026-09-29); not
+  shipped here and none of its code is copied. (winrt-Windows.Media.Control,
+  for music control, is the same project.)
 
 BROWSER WINDOWS (not generated - keep when regenerating)
 ---------------------------------------------------------------------------

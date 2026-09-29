@@ -110,9 +110,11 @@ class NotificationAllowListStore(private val context: Context) {
      * since an app posting a notification a person would want to read
      * almost always has an icon too.
      */
-    fun installedApps(): List<InstalledApp> {
+    fun installedApps(skipNotificationList: Boolean = true): List<InstalledApp> {
         val pm = context.packageManager
-        val already = packages()
+        // The Never look at picker (Security) wants every app, including the
+        // ones already on this list, so it passes false.
+        val already = if (skipNotificationList) packages() else emptySet()
         return runCatching {
             pm.getInstalledApplications(PackageManager.GET_META_DATA)
         }.getOrDefault(emptyList())

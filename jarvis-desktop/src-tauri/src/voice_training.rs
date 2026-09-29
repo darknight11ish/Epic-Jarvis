@@ -1626,8 +1626,49 @@ mod tests {
     }
 
     #[test]
+    fn every_voice_the_pc_offers_can_be_sent_back_ashby_and_clara_too() {
+        let all = cases();
+        let st = &all["voices"]["pack_v1_blends"]["speaker"];
+        let ids: Vec<&str> = st["choices"]
+            .as_array()
+            .expect("choices")
+            .iter()
+            .map(|c| c["id"].as_str().expect("id"))
+            .collect();
+        assert_eq!(
+            &ids[..2],
+            ["mix_ashby", "mix_clara"],
+            "made for Jarvis, first"
+        );
+        for id in &ids {
+            assert_eq!(
+                speaker_name(id),
+                Some(*id),
+                "{id} is sent as the PC named it"
+            );
+        }
+        // Only those two carry the PC's one plain line.
+        for c in st["choices"].as_array().expect("choices") {
+            let id = c["id"].as_str().expect("id");
+            assert_eq!(
+                c.get("detail").is_some(),
+                id.starts_with("mix_"),
+                "{id}: a line under the name only for the two blends"
+            );
+        }
+    }
+
+    #[test]
     fn a_voice_name_is_checked_before_it_is_sent() {
-        for ok in ["af", "af_bella", "bm_george", "am_michael", "af_heart"] {
+        for ok in [
+            "af",
+            "af_bella",
+            "bm_george",
+            "am_michael",
+            "af_heart",
+            "mix_ashby",
+            "mix_clara",
+        ] {
             assert_eq!(speaker_name(ok), Some(ok), "{ok}");
         }
         assert_eq!(speaker_name("  af_bella "), Some("af_bella"));
