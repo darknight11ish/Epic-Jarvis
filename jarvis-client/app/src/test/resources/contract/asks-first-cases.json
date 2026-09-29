@@ -309,7 +309,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Tidy your inbox (archive, star, mark as read or move emails to Trash)"
+       "title": "Tidy your inbox (archive, star, mark read or trash)"
       },
       {
        "action": "edit_calendar_event",
@@ -1255,7 +1255,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Tidy your inbox (archive, star, mark as read or move emails to Trash)"
+       "title": "Tidy your inbox (archive, star, mark read or trash)"
       },
       {
        "action": "edit_calendar_event",
@@ -2198,7 +2198,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Tidy your inbox (archive, star, mark as read or move emails to Trash)"
+       "title": "Tidy your inbox (archive, star, mark read or trash)"
       },
       {
        "action": "edit_calendar_event",
@@ -3134,7 +3134,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Tidy your inbox (archive, star, mark as read or move emails to Trash)"
+       "title": "Tidy your inbox (archive, star, mark read or trash)"
       },
       {
        "action": "edit_calendar_event",
@@ -4070,7 +4070,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Tidy your inbox (archive, star, mark as read or move emails to Trash)"
+       "title": "Tidy your inbox (archive, star, mark read or trash)"
       },
       {
        "action": "edit_calendar_event",
@@ -5018,7 +5018,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Tidy your inbox (archive, star, mark as read or move emails to Trash)"
+       "title": "Tidy your inbox (archive, star, mark read or trash)"
       },
       {
        "action": "edit_calendar_event",
@@ -5961,7 +5961,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Tidy your inbox (archive, star, mark as read or move emails to Trash)"
+       "title": "Tidy your inbox (archive, star, mark read or trash)"
       },
       {
        "action": "edit_calendar_event",

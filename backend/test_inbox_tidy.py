@@ -1035,7 +1035,10 @@ def t_wired_in_like_its_neighbours():
     check("a plan step may never name it", AG._plan_step_excluded("tidy_inbox"))
     check("its own answer is not 'outside text'", "tidy_inbox" in AG._NOT_READING)
     groups = {n: m for n, _d, m in AG.TOOL_GROUPS}
-    check("it is in exactly one short-list group", groups.get("tidy_inbox") == ("tidy_inbox",))
+    check("it is in exactly one short-list group (shared with draft_email, so the "
+          "more_tools text stays under its budget)",
+          sum("tidy_inbox" in m for m in groups.values()) == 1
+          and "tidy_inbox" in groups.get("draft_email", ()))
     tool = AG.TOOLS["tidy_inbox"]
     check("its schema has exactly the four actions and no way to say delete",
           tool.parameters["properties"]["action"]["enum"] == ["archive", "star", "mark_read",
