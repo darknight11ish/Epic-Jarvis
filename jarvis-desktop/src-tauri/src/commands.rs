@@ -1338,6 +1338,17 @@ fn cursor_point() -> Option<(i32, i32)> {
 /// Grabs the display under the pointer, encodes it as JPEG and returns a
 /// base64 data URI.
 ///
+/// **Nothing calls this any more, and nothing should hand its picture to a
+/// model** (checked 2026-09-29, screen safety): "Look at this" and "Watch
+/// with me" ask the PC's backend for their picture (`look.rs`; the backend's
+/// `jarvis_screen_win.capture`), because only the backend knows the owner's
+/// "Never look at" list and paints those windows, private browser windows and
+/// keys, passwords and card numbers SOLID BLACK before anything reads the
+/// picture (docs/JARVIS-API.md 62.13). This whole-monitor grab knows none of
+/// that. `capture_screen` below is not in `lib.rs`'s command list. If it is
+/// ever wired to something that shows a picture to a model, the same
+/// cleaning must come first.
+///
 /// Split out of the command so the `Alt+Shift+S` hotkey can run it on a worker
 /// thread without going through the IPC layer.
 pub fn capture_primary_display() -> Result<CapturePayload, String> {

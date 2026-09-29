@@ -3,12 +3,11 @@ owner's screen ONLY when asked, keeps nothing it saw, and pauses on anything
 private.
 
 NEW MODULE, shipped whole (apply-patches.ps1 copies it beside jarvis_hud.py;
-no patch yet). docs/SCREEN-DESIGN.md build steps 1 and 2: the session rules,
-tested here. NOT BUILT YET, said plainly: the Windows readers (is the focused
-box a password box? is the window protected from capture? the window's own
-text) are step 3 and need the owner's PC; the desktop's key, badge and tray
-row are steps 4 and 5; the phone is steps 7 and 8. No route reaches this
-module yet, so neither app can start anything here today.
+routes by screen.patch). docs/SCREEN-DESIGN.md: the session rules, tested
+here. (The Windows readers are jarvis_screen_win.py, the desktop's key, badge
+and tray row are look.rs and watch-badge, the phone is its Screen* files;
+JARVIS-API section 62 says what was built and what was not run on a real
+machine.)
 
 THE OWNER'S DECISION (2026-09-28, CLAUDE.md): "Jarvis may look at the
 owner's screen, on the PC and the phone, two ways: 'Look at this' - one look
@@ -49,14 +48,18 @@ IN PLAIN WORDS, WHAT HAPPENS
          prompt is in front;
       e. a web browser is in front, the list holds websites, and the site
          cannot be read ("I can't tell which site this is, so I'm not
-         looking.").
+         looking.");
+      f. the browser in front is a PRIVATE window (its title says InPrivate,
+         Incognito or Private Browsing) - added 2026-09-29.
     While paused, no picture exists.
   * WHAT THE MODEL GETS: the words Windows' own text recognition finds in
     the picture (at most OCR_MAX_CHARS, 4,500), the window's own labels and
     text boxes with every password box skipped (at most UI_MAX_CHARS,
     3,000), and the program's name and window title - all under the same
     OUTSIDE TEXT label JARVIS-API section 36 uses for the words in a picture
-    (SCREEN_TEXT_HEAD). The picture itself is not sent on one graphics card.
+    (SCREEN_TEXT_HEAD), and all with anything that looks like a key, a
+    password or a card number HIDDEN first ("[hidden]", see SCREEN SAFETY
+    below). The picture itself is not sent on one graphics card.
     The turn records a read of `read_screen` (SCREEN_TOOL), so a note write
     or web search after it asks first, as after any reading tool.
 
@@ -80,13 +83,36 @@ THE PRIVACY LAW - enforced by the shape of the code, and tested
     ("list_unreadable") rather than falling back to the built-in entries,
     because the owner's own entries - their bank - would be lost silently.
 
+SCREEN SAFETY (the owner's "all three", 2026-09-29; JARVIS-API 62.13)
+  1. `clean_picture` below is the ONE DOOR every picture of the screen goes
+     through - the PC's own and the phone's - before anything reads it or
+     looks at it. It reads the words with their positions (jarvis_ocr.py),
+     hides every secret in them (jarvis_secrets.py: gitleaks and Presidio
+     patterns), and can paint those places SOLID BLACK in the picture
+     (jarvis_picture.py). The words the model gets never hold a secret; the
+     picture a picture model may be shown is only ever `cleaned["png"]`.
+     FAIL CLOSED: a picture that cannot be checked hands on nothing.
+  2. The text reader runs inside Jarvis (pywinrt), one Windows call per
+     picture, and gives each word's position; PowerShell stays as the
+     fallback.
+  3. The PC's picture is taken with every window on the Never look at list -
+     not only the one in front - painted black, and private browser windows,
+     Jarvis's own windows, the lock screen and admin prompts too
+     (jarvis_screen_win.capture); no window list, no picture.
+
 WHAT IT CANNOT DO, SAID PLAINLY
   * A sensitive page that is not on the list will be seen when the owner
     asks. Programs that do not mark their password boxes may show masked
     dots. Text planted on a page is labelled outside text and flagged, but
     it is still read.
-  * "Look at my whole screen" checks the rules for the window in FRONT
-    only; windows behind it are in the picture too.
+  * A pattern is a guess from the SHAPE of words: a password shown with a
+    show-password eye, or typed in a box with nothing written beside it, looks
+    like any other word and is NOT hidden. The password-box check and the
+    Never look at list are the other two locks; none is perfect alone.
+  * A window whose program Windows will not name, a private window of a
+    browser that does not say InPrivate / Incognito / Private Browsing in its
+    title, and anything the text reader cannot read (tiny or stylised text,
+    a QR code, a photo of a card) are not caught.
 """
 from __future__ import annotations
 
@@ -166,6 +192,13 @@ SCREEN_TEXT_CUT = ("[{n:,} more characters were on the screen and were left out:
                    "send whole.]")
 SCREEN_TEXT_NONE = ("[Jarvis looked at the screen and could not read any words there. Say so "
                     "plainly rather than guessing what it shows.]")
+SCREEN_TEXT_UNCHECKED = (
+    "[Jarvis looked at the screen but could not check what it shows for private things (a "
+    "password, a key, a card number), so it did not read it. Say so plainly and never guess "
+    "what was on the screen.]")
+SCREEN_TEXT_HIDDEN = (
+    "[{n} private-looking thing(s) on the screen - a password, a key or a card number - were "
+    "hidden and show as [hidden]. Never guess what they were.]")
 OCR_LINE = "Words read from the picture of the screen:"
 UI_LINE = "Text from the window's own labels and boxes (password boxes skipped):"
 
@@ -177,6 +210,7 @@ PAUSE_WORDS = {
     "password_box": "a password box",
     "never_look": "something on your Never look at list",
     "protected": "a window that asks not to be captured",
+    "private_window": "a private browser window",
     "jarvis": "one of Jarvis's own windows",
     "lock_screen": "the lock screen",
     "admin_prompt": "an admin prompt",
@@ -192,6 +226,7 @@ PAUSE_WORDS = {
 PAUSE_SAID = {
     "unknown_site": "I can't tell which site this is, so I'm not looking.",
     "password_box": "There's a password box in front, so I'm not looking.",
+    "private_window": "That's a private browser window, so I'm not looking.",
     "never_look": "That's on your Never look at list, so I'm not looking.",
 }
 END_WORDS = {
@@ -253,10 +288,28 @@ DEFAULT_PROGRAMS = (
 DEFAULT_SITES = (
     "1password.com", "vault.bitwarden.com", "lastpass.com", "passwords.google.com",
     "keepersecurity.com", "app.nordpass.com", "dashlane.com",
+    # Copy-protected streaming video (added 2026-09-29, screen safety): the
+    # picture is often blank on capture anyway, and a film is somebody else's
+    # work. The owner can take any of these off, like every built-in entry.
+    "netflix.com", "primevideo.com", "disneyplus.com", "hulu.com", "max.com",
+    "hbomax.com", "peacocktv.com", "paramountplus.com", "tv.apple.com", "crunchyroll.com",
 )
+#: Words in a browser window's title that say it is a PRIVATE window: Edge
+#: writes "InPrivate", Chrome "Incognito", Firefox "Private Browsing". The
+#: front window with one of these is a pause (`private_window`); one beside
+#: or behind is painted black in the picture (jarvis_screen_win.must_hide).
+#: Another browser's private window is covered only if its title has one of
+#: these words - not confirmed for Brave, Opera or Vivaldi.
+PRIVATE_TITLE_MARKS = ("inprivate", "incognito", "private browsing")
 #: The lock screen and admin prompts (rule d - not list entries, never removable).
 LOCK_EXES = ("lockapp.exe",)
 ADMIN_EXES = ("consent.exe",)
+
+def is_private_title(title) -> bool:
+    """Does a browser window's title say it is a private window?"""
+    t = str(title or "").lower()
+    return any(m in t for m in PRIVATE_TITLE_MARKS)
+
 
 _EXE_RX = re.compile(r"^[\w .()&+-]{1,80}\.exe$", re.I)
 KINDS = ("program", "site")
@@ -583,6 +636,9 @@ def pause_reason(snap, never: NeverLook) -> Optional[str]:
         # e. a browser whose site cannot be read, while the list holds sites
         if not site and never.holds_sites():
             return "unknown_site"
+    # b2. a private browser window (Incognito, InPrivate, Private Browsing)
+    if exe in front.BROWSERS and is_private_title(snap.get("title")):
+        return "private_window"
     # c. capture protection
     protected = snap.get("capture_protected")
     if protected is True:
@@ -619,10 +675,40 @@ def clip(text: str, cap: int) -> tuple:
     return (t[:cap].rstrip() if left else t), left
 
 
+def _hide_or_fail(text: str) -> tuple:
+    """(the text with anything that looks like a key, a password or a card
+    number replaced by "[hidden]", how many runs were hidden, unchecked).
+    FAIL CLOSED: when it cannot be checked the answer is ("", 0, True) -
+    nothing is handed on rather than something unchecked."""
+    try:
+        import jarvis_secrets
+        t, n = jarvis_secrets.redact_text(text)
+        return t, n, False
+    except Exception:
+        return "", 0, True
+
+
+def hide_secrets(text: str) -> tuple:
+    """(the text with secrets hidden, how many runs), or ("", 0) when it could
+    not be checked. (jarvis_secrets.py; screen safety, 2026-09-29.)"""
+    t, n, _bad = _hide_or_fail(text)
+    return t, n
+
+
 def ui_words(items) -> tuple:
     """The window's own labels and text boxes, EVERY password box skipped
     (a reader that marks it `password`/`is_password`, or a control type of
-    "password"), joined and capped at UI_MAX_CHARS. -> (text, left out)."""
+    "password"), anything that looks like a secret hidden, joined and capped
+    at UI_MAX_CHARS. -> (text, left out). The hiding is done BEFORE the cut,
+    so the cut can never leave half a secret in."""
+    text, left, _hidden, _bad = ui_words_checked(items)
+    return text, left
+
+
+def ui_words_checked(items) -> tuple:
+    """`ui_words`, and also how many runs were hidden and whether the check
+    could not run (then the text is "" - nothing unchecked is handed on):
+    (text, left out, hidden, unchecked)."""
     lines = []
     for it in items or []:
         if isinstance(it, str):
@@ -637,7 +723,9 @@ def ui_words(items) -> tuple:
         t = " ".join(str(t or "").split())
         if t:
             lines.append(t)
-    return clip("\n".join(lines), UI_MAX_CHARS)
+    joined, n, bad = _hide_or_fail("\n".join(lines))
+    text, left = clip(joined, UI_MAX_CHARS)
+    return text, left, n, bad and bool(lines)
 
 
 def _ocr_words(got) -> tuple:
@@ -647,6 +735,42 @@ def _ocr_words(got) -> tuple:
         text, left = clip(got.get("text") or "", OCR_MAX_CHARS)
         return text, left + int(got.get("left_out") or 0)
     return clip(got if isinstance(got, str) else "", OCR_MAX_CHARS)
+
+
+def clean_picture(picture, ocr: Optional[Callable] = None, *, want_png: bool = False) -> dict:
+    """THE DOOR every picture of the screen goes through before ANYTHING
+    reads it or looks at it (screen safety, 2026-09-29): a picture of the PC's
+    screen (Look at this / Watch with me) and a picture the phone sends to the
+    PC (`screen: "phone"`) alike. Reads the picture's words with `ocr`
+    (default jarvis_ocr.read_text - the words AND where each sits), hides
+    every key, token, password and card number in them (jarvis_secrets.py:
+    gitleaks and Presidio patterns), and, with `want_png`, paints those
+    places SOLID BLACK in the picture.
+
+      -> {"ok": bool         the WORDS are usable,
+          "text": str        the words, each hidden run replaced by "[hidden]"
+                             (not cut to length - `_ocr_words` cuts),
+          "left_out": int, "hidden": int (runs hidden), "kinds": [pattern ids],
+          "png": bytes|None  the cleaned PNG, only with want_png and only when it
+                             could be made - THE ONLY PICTURE any picture model
+                             may be shown; the original is never passed on,
+          "png_why": str     why `png` is None,
+          "why": str, "unchecked": bool}
+
+    FAIL CLOSED: a picture that could not be checked, or whose secrets could
+    not all be given a box, comes back with no `png` (and, when the check
+    itself failed, no words either). Never raises; nothing is written to
+    disk.
+
+    For a picture model, in `Screen._read` below: pass `want_png=True` and use
+    `cleaned["png"]` only when it is not None."""
+    try:
+        import jarvis_picture
+        return jarvis_picture.clean(picture, ocr=ocr or _default_reader(), want_png=want_png)
+    except Exception:
+        return {"ok": False, "text": "", "left_out": 0, "hidden": 0, "kinds": [], "png": None,
+                "png_why": "the picture could not be checked", "why": "the picture could not be checked",
+                "unchecked": True}
 
 
 def program_name(exe: str) -> str:
@@ -666,6 +790,11 @@ class Glance:
     ocr_left: int = 0
     ui_text: str = ""
     ui_left: int = 0
+    #: How many runs of words (a key, a password, a card number) were hidden
+    #: in what was read - a count only, never what they were - and whether the
+    #: check itself could not run (then nothing from the picture is handed on).
+    hidden: int = 0
+    unchecked: bool = False
     #: Set once the picture's words have been read (or reading failed). A look
     #: taken with wait=False is handed back the moment the picture is grabbed
     #: and checked; Windows' text recognition then runs beside it.
@@ -686,6 +815,9 @@ def model_part(g: Glance) -> str:
     if g.title:
         where += f" Window title: {g.title}"
     out.append(where)
+    if g.unchecked:
+        out.append(SCREEN_TEXT_UNCHECKED)
+        return "\n\n".join(out)
     if not g.ocr_text and not g.ui_text:
         out.append(SCREEN_TEXT_NONE)
         return "\n\n".join(out)
@@ -697,6 +829,8 @@ def model_part(g: Glance) -> str:
         out.append(UI_LINE + "\n" + g.ui_text)
         if g.ui_left:
             out.append(SCREEN_TEXT_CUT.format(n=g.ui_left))
+    if g.hidden:
+        out.append(SCREEN_TEXT_HIDDEN.format(n=g.hidden))
     return "\n\n".join(out)
 
 
@@ -708,12 +842,18 @@ def looked_note(g: Glance) -> str:
 
 def label_phone_text(text: str) -> str:
     """A `screen_text` part from the phone's assistant gesture, labelled by
-    the BACKEND as outside text whatever the app said, capped like the PC's
-    window text. (Not reached yet: the chat route does not read the part.)"""
-    t, left = clip(str(text or "").replace("\x00", ""), UI_MAX_CHARS)
+    the BACKEND as outside text whatever the app said, anything that looks
+    like a secret hidden first, capped like the PC's window text."""
+    raw = str(text or "").replace("\x00", "")
+    hidden, n, bad = _hide_or_fail(raw)
+    if bad and raw.strip():
+        return "\n\n".join([SCREEN_TEXT_HEAD, SCREEN_TEXT_UNCHECKED])
+    t, left = clip(hidden, UI_MAX_CHARS)
     out = [SCREEN_TEXT_HEAD, UI_LINE + "\n" + t if t else SCREEN_TEXT_NONE]
     if left:
         out.append(SCREEN_TEXT_CUT.format(n=left))
+    if n:
+        out.append(SCREEN_TEXT_HIDDEN.format(n=n))
     return "\n\n".join(out)
 
 
@@ -834,7 +974,10 @@ def with_screen(messages: list, mark: str = "", *, engine=None,
                 image = _image_bytes(p)
                 got = None
                 if image:
-                    got = (read or _default_reader())(image)
+                    # Through the one door: secrets in the words are hidden
+                    # before anything is used (the picture itself never goes
+                    # on from here).
+                    got = clean_picture(image, ocr=read)
                 t, _left = _ocr_words(got) if got is not None else ("", 0)
                 if t:
                     texts.append(t)
@@ -1077,6 +1220,8 @@ class Screen:
         if _exe(before) in front.BROWSERS:
             site = front.site_of(front.host_of(before.get("host") or ""))
         title, _ = clip(" ".join(str(before.get("title") or "").split()), TITLE_MAX_CHARS)
+        # A window's title can hold a secret too (a tab named after a token).
+        title, _n = hide_secrets(title) if title else ("", 0)
         return Glance(at=self.clock(), mode=mode, program=program_name(before.get("exe")),
                       title=title, site=site)
 
@@ -1084,16 +1229,19 @@ class Screen:
         """The slow half: Windows' text recognition on the picture, then the
         picture is gone. Always sets `g.ready`, whatever happens."""
         try:
-            try:
-                got = self.ocr(picture)
-            except Exception:
-                got = {"ok": False}
+            # Through the one door: the words are read WITH their positions
+            # and every secret in them is hidden. (A picture model would
+            # be given `cleaned["png"]` here - clean_picture(..., want_png=True)
+            # - and nothing else.)
+            cleaned = clean_picture(picture, ocr=self.ocr)
             picture = None               # the picture is gone from here on
-            ocr_text, ocr_left = _ocr_words(got)
-            ui_text_, ui_left = ui_words(items)
+            ocr_text, ocr_left = _ocr_words(cleaned)
+            ui_text_, ui_left, ui_hidden, ui_bad = ui_words_checked(items)
             g.ocr_text, g.ocr_left, g.ui_text, g.ui_left = ocr_text, ocr_left, ui_text_, ui_left
+            g.hidden = int(cleaned.get("hidden") or 0) + int(ui_hidden or 0)
+            g.unchecked = bool(cleaned.get("unchecked")) or bool(ui_bad)
             _audit("screen.look", {"mode": g.mode, "ocr_chars": len(ocr_text),
-                                   "ui_chars": len(ui_text_)})
+                                   "ui_chars": len(ui_text_), "hidden": g.hidden})
         finally:
             picture = items = None
             g.ready.set()
@@ -1355,7 +1503,9 @@ def _windows_readers() -> dict:
     other box. Nothing is ever started without all of them."""
     try:
         import jarvis_screen_win as win
-        return win.readers() if win.available() else {}
+        # The picture cannot be taken without the owner's Never look at
+        # list: it is what says which windows to paint black.
+        return win.readers(never=lambda: ENGINE.never) if win.available() else {}
     except Exception:
         return {}
 
