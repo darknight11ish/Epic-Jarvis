@@ -115,6 +115,17 @@ import {
   start as startLink,
 } from "./jarvis-link.js";
 import { startVoice, setVoiceMode, setLevel, attachSpeechSource } from "./voice.js";
+import {
+  lookLine,
+  markMessage,
+  refusedWords,
+  SEEN as LOOK_SEEN,
+  stripShown,
+  watchOn,
+  watchSign,
+  DROP as LOOK_DROP,
+  lookHeld,
+} from "./look-rules.js";
 import { followClip, trackFor } from "./face-voice.js";
 import { ignoreWhileTalking, loadBargeIn } from "./barge-in.js";
 import {
@@ -319,6 +330,14 @@ const dom = {
   mic: $("mic"),
   voiceAuto: $("voice-auto"),
   liveToggle: $("jarvis-live-toggle"),
+  watchToggle: $("watch-toggle"),
+  watchStrip: $("watch-strip"),
+  watchTitle: $("watch-title"),
+  watchDetail: $("watch-detail"),
+  watchNote: $("watch-note"),
+  watchMore: $("watch-more"),
+  watchDrop: $("watch-drop"),
+  watchStop: $("watch-stop"),
   liveStrip: $("jarvis-live-strip"),
   liveTitle: $("jarvis-live-title"),
   liveDetail: $("jarvis-live-detail"),
@@ -3254,7 +3273,7 @@ async function send(promptText, provenance = "typed", { live: isLive = false, cl
       ...(state.clipboard
         ? [userMessage(`Context:\n${state.clipboard}`, "clipboard")]
         : []),
-      liveTag(withCutOff(userMessage(content, state.turnProvenance))),
+      liveTag(withCutOff(screenTag(userMessage(content, state.turnProvenance)))),
     ],
     hasImage: Boolean(state.capture),
     auto: true,
@@ -5696,6 +5715,177 @@ listen("live-heard", (event) => {
   paintLive();
   setTimeout(paintLive, LIVE_FLASH_MS + 50);
 });
+
+/* ==========================================================================
+   Look at this / Watch with me (look-rules.js; look.rs; docs/SCREEN-DESIGN.md)
+   --------------------------------------------------------------------------
+   "Look at this" is a KEY (Rust looks first, THEN this bar comes up); Watch
+   with me is the button beside Live. The PC holds the session and any look:
+   this window only ever hears fixed words and minutes (`screen-status`) and
+   ONE note about a look (`screen-look`: "Looked at: Chrome window - words
+   only", or why there was no look). No picture and no word from the screen
+   ever comes here. While a look is held, each question carries the mark
+   `screen: "look"`, and the PC adds the words to THAT question as outside
+   text. The strip is thrown away when the bar closes (Rust says so).
+   ========================================================================== */
+
+const screen = {
+  status: null,
+  at: 0,
+  stale: false,
+  /** The last look's note ("Looked at: ..."), or "". */
+  note: "",
+  /** The note of the last MARKED question, kept beside its answer. */
+  answerNote: "",
+  /** A refusal (the start was held, the look could not be taken). */
+  notice: "",
+  noticeTimer: null,
+  paintTimer: null,
+  busy: false,
+};
+
+/** The message, marked to read the look the PC holds (look-rules.js). */
+function screenTag(message) {
+  const marked = markMessage(message, screen.status);
+  screen.answerNote = marked !== message ? screen.note || LOOK_SEEN.held_short : "";
+  return marked;
+}
+
+/** The status with its minutes counted on from when it arrived. */
+function screenNow() {
+  const s = screen.status;
+  if (!s || typeof s !== "object") return null;
+  if (s.on === true && Number.isFinite(s.left_s)) {
+    const gone = Math.floor((Date.now() - screen.at) / 1000);
+    return { ...s, left_s: Math.max(0, s.left_s - gone) };
+  }
+  return s;
+}
+
+function paintWatch() {
+  if (!dom.watchStrip) return;
+  const now = screenNow();
+  const on = watchOn(now);
+  dom.watchToggle.setAttribute("aria-pressed", String(on));
+  dom.watchToggle.title = on
+    ? "Watch with me is on - click to stop"
+    : "Watch with me: Jarvis looks at your screen when you ask, and pauses on passwords. A sign stays on screen.";
+  const endedAgo = now && now.state === "ended" ? Math.floor((Date.now() - screen.at) / 1000) : null;
+  const sign = watchSign(now, { stale: screen.stale, endedAgo });
+  const held = lookHeld(now);
+  const note = screen.notice || (held ? screen.note : screen.answerNote) || "";
+  const show = sign.show || stripShown(now, note);
+  dom.watchStrip.hidden = !show;
+  clearTimeout(screen.paintTimer);
+  if (!show) return;
+  dom.watchStrip.dataset.tone = sign.show ? sign.tone : "off";
+  dom.watchTitle.textContent = sign.show ? sign.title : "Your screen";
+  let detail = sign.detail;
+  if (held && !detail) detail = LOOK_SEEN.held;
+  if (detail !== dom.watchDetail.textContent && detail) announce(detail);
+  dom.watchDetail.textContent = detail;
+  let line = note;
+  if (!line && on && !held) line = LOOK_SEEN.watching_note;
+  dom.watchNote.hidden = !line;
+  dom.watchNote.textContent = line;
+  dom.watchNote.dataset.tone = screen.notice ? "warn" : "ok";
+  dom.watchStop.hidden = !sign.stop;
+  dom.watchStop.textContent = sign.stop || "Stop watching";
+  dom.watchMore.hidden = !sign.more;
+  dom.watchDrop.hidden = !held;
+  dom.watchDrop.textContent = LOOK_DROP;
+  // While it is on the minutes change; after it ended the sign goes.
+  if (on || sign.show) screen.paintTimer = setTimeout(paintWatch, 10000);
+}
+
+function screenNotice(text, ms = 20000) {
+  screen.notice = String(text || "").trim();
+  clearTimeout(screen.noticeTimer);
+  if (screen.notice) {
+    announce(screen.notice, "assertive");
+    screen.noticeTimer = setTimeout(() => {
+      screen.notice = "";
+      paintWatch();
+    }, ms);
+  }
+  paintWatch();
+}
+
+function screenTake(payload) {
+  if (!payload || typeof payload !== "object") return;
+  screen.status = payload.status && typeof payload.status === "object" ? payload.status : null;
+  screen.at = Date.now();
+  screen.stale = payload.stale === true;
+  // A look that is no longer held (used up, two minutes old, the bar
+  // closed) has no note left to show, unless a question already carries it.
+  if (!lookHeld(screen.status)) screen.note = "";
+  paintWatch();
+}
+
+listen("screen-status", (event) => screenTake(event && event.payload));
+
+listen("screen-look", (event) => {
+  const p = (event && event.payload) || {};
+  if (p.closed === true) {
+    // The bar closed: nothing about the last look stays on it.
+    screen.note = "";
+    screen.answerNote = "";
+    screen.notice = "";
+    paintWatch();
+    return;
+  }
+  const line = lookLine(p);
+  if (line.tone === "ok") {
+    screen.notice = "";
+    screen.note = line.text;
+    announce(line.text);
+  } else {
+    screen.note = "";
+    screenNotice(line.text);
+    return;
+  }
+  paintWatch();
+});
+
+async function toggleWatch() {
+  // One click at a time.
+  if (screen.busy) return;
+  screen.busy = true;
+  dom.watchToggle.setAttribute("aria-busy", "true");
+  try {
+    if (watchOn(screen.status)) {
+      await invokeStrict("screen_watch", { action: "stop" });
+    } else {
+      screen.notice = "";
+      await invokeStrict("screen_watch", { action: "start", by: "button" });
+    }
+  } catch (error) {
+    screenNotice(refusedWords(error));
+  } finally {
+    screen.busy = false;
+    dom.watchToggle.removeAttribute("aria-busy");
+  }
+}
+
+async function watchDo(action, args = {}) {
+  try {
+    await invokeStrict("screen_watch", { action, ...args });
+  } catch (error) {
+    screenNotice(refusedWords(error));
+  }
+}
+
+if (dom.watchToggle) {
+  dom.watchToggle.addEventListener("click", toggleWatch);
+  dom.watchStop.addEventListener("click", () => watchDo("stop"));
+  dom.watchMore.addEventListener("click", () => watchDo("extend", { minutes: 20 }));
+  dom.watchDrop.addEventListener("click", () => {
+    screen.note = "";
+    screen.answerNote = "";
+    watchDo("drop");
+  });
+  invoke("screen_status").then(screenTake);
+}
 
 /** "Resume Live" and "Move it here": the same chat carries on. */
 function liveResume() {

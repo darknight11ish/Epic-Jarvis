@@ -1,0 +1,18 @@
+{
+  "$schema": "../gen/schemas/windows-schema.json",
+  "identifier": "watch-badge",
+  "description": "The Watch with me badge - a small always-on-top sign at the top of the screen while Jarvis is watching the screen on this PC (look.rs, watch-badge.html). It shows only fixed words and minutes from the PC's jarvis_screen.py (never a program, a site, a title or a word from the screen) and two buttons: Stop watching and 20 more minutes. It holds the watch set so the owner can always stop watching from the sign that says Jarvis is, whatever window is in front and whether or not App lock has hidden the Jarvis bar. It is hidden from screen captures, reads the theme (theme-read) and follows the text size (its own webview zoom and window size). No approvals, no chat, no picture: the picture is the PC's own, taken in memory when the owner asks, and the badge cannot ask for one.",
+  "windows": [
+    "watch-badge"
+  ],
+  "permissions": [
+    "core:app:default",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-size",
+    "core:webview:allow-set-webview-zoom",
+    "theme-read",
+    "screen-watch"
+  ]
+}

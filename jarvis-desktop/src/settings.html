@@ -71,6 +71,7 @@
           <a href="#second-card">Second graphics card</a>
           <a href="#big-model">Big model (slow)</a>
           <a href="#folders">Folders Jarvis may look in</a>
+          <a href="#screen-look">Look at this and Watch with me</a>
           <a href="#backup">Backups</a>
           <a href="#updates">Updates</a>
           <a href="#tool-updates">Check for tool updates</a>
@@ -1614,6 +1615,33 @@
         </div>
       </section>
 
+      <!-- ── Look at this and Watch with me ────────────────────────────────
+           The owner's decision of 2026-09-28 (look-settings.js, look-rules.js;
+           look.rs screen_status, screen_never; backend jarvis_screen.py;
+           JARVIS-API sections 62 and 93). What the two ways do, in plain
+           words, and the "Never look at" list: programs and websites Jarvis
+           never looks at. Adding is at once; taking one off is ONE approval
+           card on this PC. The keys are under Shortcuts. -->
+      <section class="card" id="screen-look">
+        <h2 id="sl-title">Look at this and Watch with me</h2>
+        <p class="note" id="sl-detail"></p>
+        <p class="state" id="sl-state" role="status">Asking Jarvis…</p>
+        <div id="sl-body" hidden>
+          <h3 class="subhead" id="sl-never-title">Never look at</h3>
+          <p class="note" id="sl-never-detail"></p>
+          <ul class="sc-cards" id="sl-list"></ul>
+          <p class="note" id="sl-empty" hidden></p>
+          <div class="row">
+            <label for="sl-kind">Add</label>
+            <select id="sl-kind"></select>
+            <input id="sl-value" type="text" maxlength="200" autocomplete="off" spellcheck="false"
+                   aria-label="The program or website to add" placeholder="MyBank.exe or mybank.com" />
+            <button class="btn small" id="sl-add" type="button">Add to the list</button>
+          </div>
+          <span class="status" id="sl-status" role="status"></span>
+        </div>
+      </section>
+
       <!-- ── Backups ────────────────────────────────────────────────────────
            The owner's decision of 2026-09-27: "one locked backup file into
            a folder the owner picks ... locked with a recovery code only
@@ -2036,6 +2064,7 @@
     <script type="module" src="sky-settings.js"></script>
     <script type="module" src="email-sending-settings.js"></script>
     <script type="module" src="folders-settings.js"></script>
+    <script type="module" src="look-settings.js"></script>
     <script type="module" src="backup-settings.js"></script>
     <script type="module" src="devices.js"></script>
     <script type="module" src="tool-updates-settings.js"></script>

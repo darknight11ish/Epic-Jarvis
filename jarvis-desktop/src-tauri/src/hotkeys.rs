@@ -68,12 +68,17 @@ pub const ACTIONS: &[Action] = &[
         hint: "Put whatever is on the clipboard into the bar as context.",
     },
     Action {
+        // The id stays `capture_screen`: it is what an owner's saved key is
+        // stored under. Since 2026-09-29 it is "Look at this" (the owner's
+        // decision of 2026-09-28, docs/SCREEN-DESIGN.md section 1): the PC
+        // looks at the window in front, keeps only its words for the
+        // question, and never saves a picture (look.rs).
         id: "capture_screen",
-        label: "Attach a screen capture",
+        label: "Look at this",
         default: "Alt+Shift+S",
         // Worth keeping on screen: it is the first thing anyone tries to set
         // this to, and the failure is silent and confusing.
-        hint: "Not Win+Shift+S — the Snipping Tool owns that at the shell level.",
+        hint: "Jarvis looks at the window in front, once, then you ask about it. Nothing is saved. Not Win+Shift+S — the Snipping Tool owns that at the shell level.",
     },
     Action {
         id: "quick_note",
@@ -121,6 +126,15 @@ pub const ACTIONS: &[Action] = &[
         hint: "Hold it and speak, then let go: Jarvis types what you said into the program in front. A quick tap keeps it listening until you press it again. Works once talk-to-type is on (Settings, Voice).",
     },
     Action {
+        id: "toggle_watch",
+        label: "Start or stop Watch with me",
+        // OFF until the owner picks a key (the design's "an optional key
+        // (Alt+Shift+V, unbound by default)"). Alt+Shift+V is suggested in
+        // the hint: the same family as the others, and nothing here uses V.
+        default: "",
+        hint: "Off until you pick a key - Alt+Shift+V is free for it. Starting is held while the connection is catching up or App lock would ask; stopping never is.",
+    },
+    Action {
         id: "toggle_live",
         label: "Start or end Jarvis Live",
         // OFF until the owner picks a key (the owner's decision of
@@ -134,6 +148,9 @@ pub const ACTIONS: &[Action] = &[
 /// The key the Live hotkey's hint suggests. Checked below to be free of every
 /// other action's shipped key.
 pub const LIVE_SUGGESTED: &str = "Alt+Shift+L";
+
+/// The key the Watch with me hotkey's hint suggests (same check).
+pub const WATCH_SUGGESTED: &str = "Alt+Shift+V";
 
 fn action(id: &str) -> Option<&'static Action> {
     ACTIONS.iter().find(|a| a.id == id)
@@ -659,6 +676,45 @@ mod tests {
         set.insert("toggle_live".into(), "Alt+Shift+X".into());
         let err = validate(&set).expect_err("a clash with Stop everything was accepted");
         assert!(err.contains("Stop everything"), "{err}");
+    }
+
+    /// The owner's decision of 2026-09-28: the Alt+Shift+S key is renamed
+    /// "Look at this" (not a second key), and Watch with me's own key is OFF
+    /// until picked, Alt+Shift+V suggested.
+    #[test]
+    fn look_at_this_keeps_its_key_and_watch_with_me_is_off_until_picked() {
+        let look = action("capture_screen").expect("the Look at this hotkey exists");
+        assert_eq!(look.label, "Look at this");
+        assert_eq!(look.default, "Alt+Shift+S", "renamed, not moved");
+        assert!(look.hint.contains("Nothing is saved"));
+        let watch = action("toggle_watch").expect("the Watch with me hotkey exists");
+        assert_eq!(watch.default, "", "the Watch with me key must ship OFF");
+        assert!(watch.hint.contains(WATCH_SUGGESTED));
+        let suggested = parse(WATCH_SUGGESTED).expect("the suggestion parses");
+        for other in ACTIONS.iter().filter(|a| !a.default.is_empty()) {
+            assert_ne!(
+                parse(other.default).unwrap(),
+                suggested,
+                "the suggested Watch with me key is {}'s shipped key",
+                other.label
+            );
+        }
+        assert_ne!(
+            parse(WATCH_SUGGESTED).unwrap(),
+            parse(LIVE_SUGGESTED).unwrap(),
+            "Live and Watch with me must not suggest the same key"
+        );
+        let mut set: BTreeMap<String, String> = ACTIONS
+            .iter()
+            .map(|a| (a.id.to_string(), a.default.to_string()))
+            .collect();
+        validate(&set).expect("the Watch with me key left off must not read as no keys");
+        set.insert("toggle_watch".into(), WATCH_SUGGESTED.into());
+        validate(&set).expect("picking the suggested key is accepted");
+        // Live and Watch on one key: refused, by name.
+        set.insert("toggle_live".into(), WATCH_SUGGESTED.into());
+        let err = validate(&set).expect_err("Live and Watch with me on one key were accepted");
+        assert!(err.contains("Watch with me"), "{err}");
     }
 
     #[test]

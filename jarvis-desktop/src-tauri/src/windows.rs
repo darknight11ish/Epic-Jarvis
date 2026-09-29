@@ -227,12 +227,15 @@ fn attach_quickbar_listeners(app: &AppHandle, window: &WebviewWindow) {
             }
             if let Some(quickbar) = handle.get_webview_window(QUICKBAR_LABEL) {
                 let _ = quickbar.hide();
+                // The bar closed: a look held for follow-ups is thrown away.
+                crate::look::bar_closed(&handle);
             }
         }
         WindowEvent::CloseRequested { api, .. } => {
             api.prevent_close();
             if let Some(quickbar) = handle.get_webview_window(QUICKBAR_LABEL) {
                 let _ = quickbar.hide();
+                crate::look::bar_closed(&handle);
             }
         }
         _ => {}
@@ -364,9 +367,12 @@ pub fn hide_quickbar(app: &AppHandle) -> Result<(), String> {
         .get_webview_window(QUICKBAR_LABEL)
         .ok_or_else(|| format!("window `{QUICKBAR_LABEL}` was not found"))?;
 
-    window
+    let hidden = window
         .hide()
-        .map_err(|e| format!("unable to hide the quickbar: {e}"))
+        .map_err(|e| format!("unable to hide the quickbar: {e}"));
+    // The bar closed: a look held for follow-ups is thrown away (look.rs).
+    crate::look::bar_closed(app);
+    hidden
 }
 
 /// Toggles the quickbar. Returns its new visibility.

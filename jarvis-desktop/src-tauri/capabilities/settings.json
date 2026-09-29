@@ -19,6 +19,7 @@
     "external-links",
     "appearance-read",
     "faces-open",
+    "screen-never-look",
     "core:webview:allow-set-webview-zoom"
   ]
 }

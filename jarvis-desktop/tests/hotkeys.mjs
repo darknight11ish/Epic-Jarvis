@@ -43,7 +43,17 @@ await check("every bindable action is listed", async () => {
   const page = await open();
   const list = await rows(page);
   await page.close();
-  assert.equal(list.length, 9, `${list.length} rows, expected 9`);
+  assert.equal(list.length, 10, `${list.length} rows, expected 10`);
+  // "Look at this" (2026-09-29): the old "Attach a screen capture" key, renamed
+  // (the owner's decision of 2026-09-28) - the same key, not a second one.
+  const look = list.find((r) => r.name === "Look at this");
+  assert.ok(look, "Look at this is not listed");
+  assert.equal(look.key, "Alt + Shift + S");
+  assert.ok(!list.some((r) => r.name === "Attach a screen capture"), "the old name is still listed");
+  // Watch with me's own key ships off, like Live's.
+  const watch = list.find((r) => r.name === "Start or stop Watch with me");
+  assert.ok(watch, "Watch with me is not listed");
+  assert.equal(watch.key, "Off - pick a key");
   assert.equal(list[0].name, "Show or hide the Jarvis bar");
   assert.equal(list[0].key, "Alt + Space");
   // "Stop everything" (2026-09-25): listed like the others, so it can be
