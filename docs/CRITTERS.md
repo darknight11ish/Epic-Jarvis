@@ -52,7 +52,9 @@ them.
 ![The pygmy owl in all eight states](critters/pygmyowl-states.png)
 
 A round owl on a branch, with huge yellow eyes. Owls have no hands, so its
-orb floats beside it.
+orb floats beside it. Its cream chest fades into the brown of its neck and
+shoulders over the top fifth of the body, instead of ending in a straight
+hem (2026-09-29; +8 shader size; only the chest's band of colour changed).
 
 | Jarvis is... | The owl... |
 |---|---|
@@ -177,7 +179,18 @@ and wider the higher it goes.
 
 **No mouth and no orb.** Its eyes, glowing on the visor, are its face. They
 glow in the colour bound to the state - the colour the animals' orbs glow
-in - with a white-hot middle, and so does the visor's rim. The common
+in - with only a small white middle, and so does the visor's rim. (Until
+2026-09-29 the white was most of it: the glow was laid over the blue glass
+and squeezed by the shader's tone curve, so every state's eyes came out
+near-white - saturation 0.02 to 0.07 - and listening and waiting on you were
+the same pale pink. Now the glass is nearly black under each eye, so its blue
+no longer mixes in, and the eye is the state's colour. Measured on the eyes'
+brightest pixels, 300 px: saturation idle 0.04 to 0.55, listening 0.03 to
+0.39, thinking 0.07 to 0.50, approval 0.04 to 0.46, error 0.06 to 0.33;
+listening amber and waiting on you yellow are now 20 levels of 255 apart in
+their eyes' average colour where they were 9. The picture
+`critters/robot-states.png` above was redrawn with this, as the Faces window
+draws it, so it now also shows the Zs asleep and the waiting-on-you ring.) The common
 shader's orb is kept only as a light, a point just behind the glass: it
 throws no glint and no halo, but lights the robot's chest, mittens and fins
 in the eyes' colour, as the animals' orbs light their fur. **While Jarvis
@@ -1159,6 +1172,50 @@ files and the animals' `.sksl`; nothing the animals do changed.
   head's surface: round dots on top, upright dashes on the sides like the
   back's.
 
+#### More march steps on the PC than on the phone (2026-09-29)
+
+The step counts above are set by Android's shader size limit, which a PC does
+not have. So the **desktop's copy of each shader is marched with more steps
+than the phone's**; the phone's stay as they were. `tools/gen_critters.py`
+does it in one place (`DESKTOP_STEPS`), replacing the `MARCH_STEPS` line of
+each animal's `.sksl` in the desktop copy only. `tools/shader_size.py` now
+measures the PHONE's copy (`CritterShaders.kt`), which is the one the limit
+applies to, and `gen_critters.py --check` covers both.
+
+| Face | Phone (unchanged) | Desktop | Wrongly drawn pixels, phone steps to desktop steps* |
+|---|---|---|---|
+| Red panda | 36 | 64 | 9,042 to 289 |
+| Monkey | 36 | 64 | 3,481 to 46 |
+| Pygmy owl | 48 | 72 | 1,448 to 34 |
+| Sea otter | 48 | 96 | 2,822 to 4 |
+| Robot | 64 | 96 | 98 to 1 |
+
+*Pixels that differ by more than 32 of 255 from a 400-step drawing of the
+same shader, over 48 pictures per face at 256 px (8 states and 4 idle
+moments, each from 4 sides), through Skia. In the pictures that have them,
+the differences are one-pixel rows along an outline (the monkey's head, the
+panda's tail crossing its cheek) - the fringe and the dotted seam the review
+saw. Most rays stop early, so the average cost of a frame does not grow with
+the cap (drawing the 48 pictures took the same time at every step count);
+only the few rays that skim a surface use the extra steps.
+
+**What is not measured.** The first time a shader is built its size matters
+to the graphics driver, and a Windows driver that unrolls the march loop (it
+may, for a loop with a fixed count) would build slower with more steps. There
+is no Windows graphics driver here: the browser's software one built each
+face in the same time at 1x and at the desktop steps (about 250 to 470 ms,
+whatever the cap), which says only that nothing is quadratic. The caps were
+therefore kept moderate (1.5 to 2 times, not more), and are one line each in
+`DESKTOP_STEPS` to lower if the Faces window is slow to open. Please look at
+how long a face takes to appear the first time on the real PC.
+
+The two apps now differ at a few outline pixels (the phone has the old,
+slightly rougher edge along a skimming ray). Nothing else differs. The
+bounding-volume test (`tests/face-bounds.mjs`) draws the real, longer shader
+on both sides of its comparison, so it still tests the cut-off and nothing
+else; with the longer march it finds fewer stray pixels than before (at most
+1 in a picture; it was up to 5).
+
 ### Resolution and frame rate (owner, 2026-09-28)
 
 The owner's ask: "if Jarvis detects capable hardware (and the user opts for
@@ -1326,8 +1383,8 @@ sphere) and fails if one picture differs by more than 8 pixels or the average
 is over 0.7 a picture (measured: at most 3, and under 0.3). Its CONTROL
 shrinks every part's sphere to half and must see the difference.
 
-**Size.** Panda 59,729, owl 48,916, otter 54,898, monkey 59,728, robot 44,965
-(limit 60,000; the panda and monkey have about 270 left, so a new part on
+**Size.** Panda 59,729, owl 51,945, otter 54,898, monkey 59,728, robot 45,206
+(2026-09-29, after the robot's eye colour and the owl's chest fade; limit 60,000; the panda and monkey have about 270 left, so a new part on
 either must save what it adds). **To change a part**: move or resize its
 sphere in `animalSpan` in the same commit - the check above fails if a part
 pokes out.
@@ -1341,7 +1398,8 @@ fifth, added by this list:
   `mapLite`, `partAt`, `material`, `sparkle`, `stuckRay`, `ground` (0 for
   no shadow on the ground, as every animal), the camera
   constants and `MARCH_STEPS` (see `common_tail.sksl`; give it as many as
-  the size limit allows). The orb's glow and light come from `uOrb`; the
+  the size limit allows - the phone's count; the desktop's is a line in
+  `gen_critters.py`'s `DESKTOP_STEPS`, up to 2 times more). The orb's glow and light come from `uOrb`; the
   orb can be another shape (the monkey's banana is its own part, glowing
   through `sparkle`).
 - **Pose:** a file on each side registering itself the way

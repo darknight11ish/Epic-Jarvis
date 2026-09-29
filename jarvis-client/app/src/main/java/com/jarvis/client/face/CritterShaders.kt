@@ -3979,7 +3979,7 @@ float4 material(float id, float3 pos, float3 n) {
 }
 
 // Painted on top of the lighting: what glows. The eyes, in the state's
-// colour (uHot) with a white-hot middle; the visor's rim; a soft
+// colour (uHot) with a small white middle (the glass under them is dark, see material()); the visor's rim; a soft
 // reflection on the glass; the gleam of a polish; the fins' edges.
 float3 sparkle(float id, float3 pos) {
     float3 hot = toLinear(uHot);
