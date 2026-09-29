@@ -155,6 +155,9 @@ await check("nodding off: the lid comes down with the eyes, from the look it had
     // Half way down (1.2 s) it is part way, not there yet, and not still where it began (when it began with none).
     const mid = lidOf(id, "standby", from, 1.2, 141.2, h, {}, 0);
     if (from === "idle") assert.ok(mid[0] > 0.1 && mid[0] < 0.53, `${id}: ${mid} 1.2 s into nodding off`);
+    // In step with the eyes: the eyes' drooping is over by 2.8 s, and so is the lid's coming down (the
+    // plain settling alone would still be a fifth short of it there).
+    near(lidOf(id, "standby", from, 2.8, 142.8, h, {}, 0)[0], 0.55, 0.011, `${id} from ${from}: not down with the eyes at 2.8 s`);
     // The lid follows the eyes: shut eyes, heavy lid; wide eyes, none of it.
     const eyes = eyeOf(id, "standby", "idle", 3.4, 143.4, { past: awakeFrom("idle") }, {}, 0)[0];
     assert.ok(eyes < 0.01, `${id}: eyes ${eyes} shut at 3.4 s`);
@@ -177,6 +180,7 @@ await check("waking: the heavy lid lifts a little after the eyes open, into no l
     const early = lidOf(id, to, "standby", 0.25, 120.25, { past: asleep9 }, {}, ampOf(to));
     if (to === "idle") assert.ok(early[0] > 0.5, `${id}: the lid was already ${early[0]} at 0.25 s (it should wait for the eyes)`);
     if (to === "idle") assert.ok(lidOf(id, "idle", "standby", 1.5, 121.5, { past: asleep9 }, {})[0] < 0.005, `${id}: still a lid 1.5 s after waking`);
+    if (to === "idle") assert.ok(lidOf(id, "idle", "standby", 1.3, 121.3, { past: asleep9 }, {})[0] < 0.02, `${id}: the lid is not up with the wake-up (1.3 s)`);
   }
 });
 
