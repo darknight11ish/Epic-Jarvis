@@ -1373,7 +1373,7 @@ def t_nothing_from_the_screen_reaches_status_or_the_route_answers():
         check("no program, title, word or picture description in a status body",
               not any(x in b.lower() for x in LEAKS), b[:200])
     check("the audit log holds counts and seconds only",
-          all(set((d or {})) <= {"seconds", "chars", "mode", "ocr_chars", "ui_chars", "did",
+          all(set((d or {})) <= {"seconds", "chars", "mode", "ocr_chars", "ui_chars", "did", "hidden",
                                  "minutes", "why", "outcome", "kind"} for _e, d in AUDIT), AUDIT)
 
 
