@@ -136,6 +136,29 @@ float beakIn(float3 h) {
 }
 float partBeak(float3 h) { return min(min(beakUp(h), beakLo(h)), beakIn(h)); }
 
+// Where along a ray the animal can be. Each part has a sphere round it,
+// placed from where the part is in THIS pose (the body and head through the
+// pose's own frames), with a margin of a few pixels - a ray that passes a
+// part by less than that can still be taken for a hit. A ray that meets none
+// of them is not marched at all, and one that does is marched no further than
+// the last of them (clipSpan, common_head.sksl). Measured against the single
+// sphere this replaces: docs/CRITTERS.md, "The bounding volumes".
+float3 fromBody(float3 q) { return uBodyPos + q.x * uBodyR0 + q.y * uBodyR1 + q.z * uBodyR2; }
+float3 fromHead(float3 h) { return uNeck + h.x * uHeadR0 + h.y * uHeadR1 + h.z * uHeadR2; }
+float2 animalSpan(float3 ro, float3 rd) {
+    float2 s = float2(1e9, -1e9);
+    s = addSphere(s, ro, rd, fromBody(float3(0.0, 0.36, 0.03)), 0.58);                              // body, belly and feet
+    s = addSphere(s, ro, rd, fromHead(float3(0.0, 0.30, 0.0)), 0.60);                               // head, eyes, beak
+    s = addSphere(s, ro, rd, fromBody(float3(-0.32, 0.64, 0.04) + 0.05 * uWingL0 - 0.28 * uWingL1 + 0.02 * uWingL2), 0.44);   // wings
+    s = addSphere(s, ro, rd, fromBody(float3(0.32, 0.64, 0.04) + 0.05 * uWingR0 - 0.28 * uWingR1 + 0.02 * uWingR2), 0.44);
+    float3 br = BRANCH_B - BRANCH_A;                                                                // the branch, in three
+    s = addSphere(s, ro, rd, BRANCH_A + br * (1.0 / 6.0), 0.46);
+    s = addSphere(s, ro, rd, BRANCH_A + br * 0.5, 0.46);
+    s = addSphere(s, ro, rd, BRANCH_A + br * (5.0 / 6.0), 0.46);
+    s = addSphere(s, ro, rd, uOrb.xyz, uOrb.w + 0.08);                                              // the orb
+    return clipSpan(ro, rd, s, CAM_TARGET, BOUND_R);
+}
+
 float map(float3 p) {
     float3 b = toBody(p);
     float d = smin(partBody(b), partWings(b), 0.03);

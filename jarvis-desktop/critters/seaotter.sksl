@@ -53,6 +53,7 @@ const float CAM_DIST = 3.30;
 const float CAM_PITCH = 0.50;
 const float BOUND_R = 1.25;
 const int MARCH_STEPS = 48;
+
 // The pool: a thin round disc of water, this wide.
 const float POOL_R = 1.02;
 
@@ -140,6 +141,41 @@ float partEyes(float3 h) {
 float waterAt(float3 p) {
     float slab = max(p.y - uWater.x, (uWater.x - 0.05) - p.y);
     return smax(slab, length(p.xz) - POOL_R, 0.04);
+}
+
+// Where along a ray the animal can be. Each part has a sphere round it,
+// placed from where the part is in THIS pose (the body and head through the
+// pose's own frames), with a margin of a few pixels - a ray that passes a
+// part by less than that can still be taken for a hit. A ray that meets none
+// of them is not marched at all, and one that does is marched no further than
+// the last of them (clipSpan, common_head.sksl). Measured against the single
+// sphere this replaces: docs/CRITTERS.md, "The bounding volumes".
+float3 fromBody(float3 q) { return uBodyPos + q.x * uBodyR0 + q.y * uBodyR1 + q.z * uBodyR2; }
+float3 fromHead(float3 h) { return uNeck + h.x * uHeadR0 + h.y * uHeadR1 + h.z * uHeadR2; }
+// The pool: a thin flat disc, so its box - a slab of height, cut by a round
+// column - is far tighter than a sphere round it.
+float2 poolSpan(float3 ro, float3 rd) {
+    float iy = 1.0 / (rd.y < 0.0 ? min(rd.y, -1e-4) : max(rd.y, 1e-4));
+    float ta = (uWater.x - 0.30 - ro.y) * iy;
+    float tb = (uWater.x + 0.25 - ro.y) * iy;
+    float a = max(dot(rd.xz, rd.xz), 1e-6);
+    float b = dot(ro.xz, rd.xz);
+    float disc = b * b - a * (dot(ro.xz, ro.xz) - (POOL_R + 0.25) * (POOL_R + 0.25));
+    if (disc <= 0.0) return float2(1e9, -1e9);
+    float sq = sqrt(disc);
+    float2 r = float2(max(min(ta, tb), (-b - sq) / a), min(max(ta, tb), (-b + sq) / a));
+    return r.x < r.y ? r : float2(1e9, -1e9);
+}
+float2 animalSpan(float3 ro, float3 rd) {
+    float2 s = poolSpan(ro, rd);                                                                    // the water
+    s = addSphere(s, ro, rd, fromBody(float3(-0.20, 0.0, 0.0)), 0.52);                              // body, in three
+    s = addSphere(s, ro, rd, fromBody(float3(0.17, 0.0, 0.0)), 0.55);
+    s = addSphere(s, ro, rd, fromBody(float3(0.66, 0.06, 0.0)), 0.44);                              // tail and feet
+    s = addSphere(s, ro, rd, fromHead(float3(0.0)), 0.52);                                          // head
+    s = addSphere(s, ro, rd, 0.5 * (uShL + uPawL), 0.5 * length(uPawL - uShL) + 0.16);              // arms
+    s = addSphere(s, ro, rd, 0.5 * (uShR + uPawR), 0.5 * length(uPawR - uShR) + 0.16);
+    s = addSphere(s, ro, rd, uOrb.xyz, uOrb.w + 0.08);                                              // the pebble
+    return clipSpan(ro, rd, s, CAM_TARGET, BOUND_R);
 }
 
 float map(float3 p) {

@@ -60,8 +60,8 @@ const float3 CREAM = float3(0.930, 0.830, 0.680);
 const float3 DARK = float3(0.034, 0.012, 0.007);
 const float3 INK = float3(0.004, 0.004, 0.006);
 
-// Where the camera looks, how far back it sits, and the sphere the animal
-// fits inside (rays that miss it are not marched at all).
+// Where the camera looks, how far back it sits, and the outer sphere the animal
+// fits inside (nothing is drawn beyond it; animalSpan, below, is tighter).
 const float3 CAM_TARGET = float3(0.0, -0.08, 0.0);
 const float CAM_DIST = 3.35;
 const float CAM_PITCH = 0.0;
@@ -176,6 +176,34 @@ float partEyes(float3 h) {
     float2 ea = eyeAt();
     float3 ep = float3(abs(h.x) - ea.x, h.y - ea.y, h.z + 0.31);
     return sdEllipsoid(ep, float3(0.074, max(0.008, 0.084 * open), 0.055));
+}
+
+// Where along a ray the animal can be. Each part has a sphere round it,
+// placed from where the part is in THIS pose (the body and head through the
+// pose's own frames), with a margin of a few pixels - a ray that passes a
+// part by less than that can still be taken for a hit. A ray that meets none
+// of them is not marched at all, and one that does is marched no further than
+// the last of them (clipSpan, common_head.sksl). Measured against the single
+// sphere this replaces: docs/CRITTERS.md, "The bounding volumes".
+float3 fromBody(float3 q) { return uBodyPos + q.x * uBodyR0 + q.y * uBodyR1 + q.z * uBodyR2; }
+float3 fromHead(float3 h) { return uNeck + HEAD_S * (h.x * uHeadR0 + h.y * uHeadR1 + h.z * uHeadR2); }
+float2 animalSpan(float3 ro, float3 rd) {
+    float2 s = float2(1e9, -1e9);
+    s = addSphere(s, ro, rd, fromBody(float3(0.0, 0.31, 0.02)), 0.50);                              // torso
+    s = addSphere(s, ro, rd, fromBody(float3(0.0, 0.075, -0.22)), 0.52);                            // legs
+    s = addSphere(s, ro, rd, fromHead(float3(0.0, 0.32, -0.05)), 0.70);                             // skull, muzzle, nose, eyes
+    s = addSphere(s, ro, rd, fromHead(float3(-0.265, 0.60, 0.04) + 0.13 * uEarL1), 0.28);           // ears
+    s = addSphere(s, ro, rd, fromHead(float3(0.265, 0.60, 0.04) + 0.13 * uEarR1), 0.28);
+    s = addSphere(s, ro, rd, 0.5 * (uShL + uPawL), 0.5 * length(uPawL - uShL) + 0.16);              // arms
+    s = addSphere(s, ro, rd, 0.5 * (uShR + uPawR), 0.5 * length(uPawR - uShR) + 0.16);
+    float3 tA = 0.5 * (uTail1.xyz + uTail2.xyz);                                                    // tail, in two
+    float rA = max(max(length(uTail0.xyz - tA), length(uTail1.xyz - tA)), max(length(uTail2.xyz - tA), length(uTail3.xyz - tA)));
+    s = addSphere(s, ro, rd, tA, rA + max(max(uTail0.w, uTail1.w), max(uTail2.w, uTail3.w)) + 0.08);
+    float3 tB = 0.5 * (uTail3.xyz + uTail4.xyz);
+    float rB = max(max(length(uTail2.xyz - tB), length(uTail3.xyz - tB)), max(length(uTail4.xyz - tB), length(uTail5.xyz - tB)));
+    s = addSphere(s, ro, rd, tB, rB + max(max(uTail2.w, uTail3.w), max(uTail4.w, uTail5.w)) + 0.08);
+    s = addSphere(s, ro, rd, uOrb.xyz, uOrb.w + 0.08);                                              // the orb
+    return clipSpan(ro, rd, s, CAM_TARGET, BOUND_R);
 }
 
 // The whole panda: distance to the nearest surface. This is the function the

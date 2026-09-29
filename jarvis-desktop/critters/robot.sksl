@@ -134,6 +134,24 @@ float partArms(float3 p) {
     return min(l, r);
 }
 
+// Where along a ray the animal can be. Each part has a sphere round it,
+// placed from where the part is in THIS pose (the body and head through the
+// pose's own frames), with a margin of a few pixels - a ray that passes a
+// part by less than that can still be taken for a hit. A ray that meets none
+// of them is not marched at all, and one that does is marched no further than
+// the last of them (clipSpan, common_head.sksl). Measured against the single
+// sphere this replaces: docs/CRITTERS.md, "The bounding volumes".
+float3 fromBody(float3 q) { return uBodyPos + q.x * uBodyR0 + q.y * uBodyR1 + q.z * uBodyR2; }
+float3 fromHead(float3 h) { return uNeck + h.x * uHeadR0 + h.y * uHeadR1 + h.z * uHeadR2; }
+float2 animalSpan(float3 ro, float3 rd) {
+    float2 s = float2(1e9, -1e9);
+    s = addSphere(s, ro, rd, uBodyPos, 0.46);                                                       // the egg
+    s = addSphere(s, ro, rd, fromHead(HC), 0.82);                                                   // helmet, pods, fins
+    s = addSphere(s, ro, rd, 0.5 * (uShL + uHandL), 0.5 * length(uHandL - uShL) + 0.21);            // arms
+    s = addSphere(s, ro, rd, 0.5 * (uShR + uHandR), 0.5 * length(uHandR - uShR) + 0.21);
+    return clipSpan(ro, rd, s, CAM_TARGET, BOUND_R);
+}
+
 // The whole robot: distance to the nearest surface. The march calls this
 // over and over, so it returns the distance only; which part was hit is
 // asked once, afterwards, by partAt().
