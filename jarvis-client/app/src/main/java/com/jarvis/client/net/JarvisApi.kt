@@ -2435,11 +2435,14 @@ class JarvisApi(
         /** See [ChatHistory.requestBody]'s own doc on this same parameter. */
         cloudYes: Boolean = false,
         live: Boolean = false,
+        /** The look at the phone's own screen this question carries ([ScreenLook]). */
+        screen: ScreenLook.Attach? = null,
     ): Call? {
         val target = url("/api/chat") ?: return null
         val body = ChatHistory.requestBody(
             history, asking, picture, conversationId,
             interrupted = interrupted, temporary = temporary, cloudYes = cloudYes, live = live,
+            screen = screen,
         )
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()

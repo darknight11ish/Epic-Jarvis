@@ -46,6 +46,21 @@ data class Security(
      * With App lock off neither ends it. Back to the default is instant.
      */
     val liveEnd: LiveEnd = LiveEnd.APP_LOCK,
+    /**
+     * "Let the assistant gesture read the screen" (the owner's decision of
+     * 2026-09-28, docs/SCREEN-DESIGN.md section 3): OFF by default. Turning
+     * it on lets Jarvis read the words on the phone's screen when the owner
+     * invokes the assistant, so it LOOSENS what Jarvis may see and asks for
+     * the fingerprint or PIN ([SecurityRules.loosens]); off is instant.
+     */
+    val screenRead: Boolean = false,
+    /**
+     * The apps the owner never wants looked at, on top of the built-in ones
+     * ([ScreenNever]: Jarvis itself, password managers, bank-looking apps).
+     * Adding is stricter, so instant; taking one off loosens, so it asks for
+     * the fingerprint or PIN.
+     */
+    val neverApps: Set<String> = emptySet(),
 ) {
     /**
      * True when the owner has asked for anything stricter than the defaults.
@@ -317,7 +332,9 @@ object SecurityRules {
             (from.privateLists && !to.privateLists) ||
             (from.method == CheckMethod.FINGERPRINT_ONLY && to.method == CheckMethod.FINGERPRINT_OR_PIN) ||
             (!from.swipeDecides && to.swipeDecides) ||
-            (from.liveEnd == LiveEnd.APP_LOCK && to.liveEnd == LiveEnd.SCREEN_LOCK)
+            (from.liveEnd == LiveEnd.APP_LOCK && to.liveEnd == LiveEnd.SCREEN_LOCK) ||
+            (!from.screenRead && to.screenRead) ||
+            ScreenNever.removes(from.neverApps, to.neverApps)
 
     /**
      * Why a tightening cannot be taken, or null when it can. [availability]
@@ -426,6 +443,8 @@ object SecurityRules {
         KEY_METHOD to s.method.wire,
         KEY_SWIPE to s.swipeDecides.toString(),
         KEY_LIVE_END to s.liveEnd.wire,
+        KEY_SCREEN_READ to s.screenRead.toString(),
+        KEY_NEVER_APPS to ScreenNever.toStored(s.neverApps),
     )
 
     /**
@@ -443,6 +462,9 @@ object SecurityRules {
         // setting existed, never something looser than it.
         swipeDecides = get(KEY_SWIPE) != "false",
         liveEnd = LiveEnd.fromWire(get(KEY_LIVE_END)),
+        // Missing or unreadable reads as OFF: the stricter reading.
+        screenRead = get(KEY_SCREEN_READ) == "true",
+        neverApps = ScreenNever.fromStored(get(KEY_NEVER_APPS)),
     )
 
     const val KEY_APP_LOCK = "security_app_lock"
@@ -452,6 +474,8 @@ object SecurityRules {
     const val KEY_METHOD = "security_method"
     const val KEY_SWIPE = "security_swipe_decides"
     const val KEY_LIVE_END = "security_live_end"
+    const val KEY_SCREEN_READ = "security_screen_read"
+    const val KEY_NEVER_APPS = "security_never_apps"
 }
 
 /**
