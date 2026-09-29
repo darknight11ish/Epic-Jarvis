@@ -1,6 +1,18 @@
 # Apps in Projects: design (2026-09-29)
 
-Status: **designed, nothing built.** For the owner's decision (`CLAUDE.md`,
+Status (2026-09-29): **the backend half is built** - `backend/jarvis_apps.py`,
+`apps-in-projects.patch`, the `app` column, the shared contract file
+(`tools/gen_projects_cases.py`), and `backend/test_apps.py`. It is **JARVIS-API
+section 92** (this document called it 91; pairing phase 2 took 91 first).
+B2 (the model tools, section 4) and milestone C are **not** built: the owner
+answered question 1 on 2026-09-29 - Jarvis writing the code waits for the 12 GB
+card - and question 2 - the phone **may** approve a merge, after the whole
+change has been shown, never from a widget or notification. Two small
+differences from the text below, written where they matter: an empty task
+started from the API has `"source": "empty"` until something is pasted, and
+the contract file keeps the shared app sentences under `app_words`, apart from
+`words`, so the two apps' word-for-word `words` checks keep their meaning. The
+screens are built against section 7.1. Original status: designed. For the owner's decision (`CLAUDE.md`,
 2026-09-28, "The app builder's projects join Projects"): *an app is a coding
 project whose tests are its benchmarks - one list, not two.* This is the app
 builder's **milestone B** (`docs/APP-BUILDER-DESIGN.md`), redrawn so that its

@@ -1,5 +1,393 @@
 {
+ "app_limits": {
+  "blocks": 2000000,
+  "card_diff": 60000,
+  "open_tasks": 10,
+  "task_title": 120
+ },
+ "app_merge_card": "Add Jarvis's change to your app \"notes-app\": Add a dark mode\n\nYou pasted this change in on your PC.\n\n2 file(s):\n  src/App.tsx  (+3 -0)\n  src/theme.css  (+1 -0)\n\nNothing is run: this only changes the app's files. Saying no keeps the change aside, and your app stays as it is.\n\nThe full change:\n\ndiff --git a/src/App.tsx b/src/App.tsx\nnew file mode 100644\nindex 0000000..5ae39b2\n--- /dev/null\n+++ b/src/App.tsx\n@@ -0,0 +1,3 @@\n+export default function App() {\n+  return <h1>Notes</h1>;\n+}\ndiff --git a/src/theme.css b/src/theme.css\nnew file mode 100644\nindex 0000000..a56a647\n--- /dev/null\n+++ b/src/theme.css\n@@ -0,0 +1 @@\n+:root { color-scheme: dark; }\n",
+ "app_words": {
+  "cant_run": "Jarvis cannot run this yet. Run it yourself and log the number.",
+  "card_waiting": "A card for this app is already waiting - answer it first.",
+  "delete_app_project_q": "Delete the project \"{name}\"? Its benchmarks and every number logged go with it. The app's files stay on this PC and can be added back later. This cannot be undone.",
+  "deleted_app_kept": "Deleted. The app's files stay on this PC and can be added back.",
+  "outcomes": {
+   "conflict": "Not added - the change did not fit the app's newer version. Nothing was changed; discard it and ask again.",
+   "denied": "Not added - you said no. The change is kept aside.",
+   "failed": "Not added - something went wrong. Nothing was changed.",
+   "merged": "Added to your app.",
+   "refused": "Not added.",
+   "stale": "Not added - the app or the change moved after the card was shown. Look at the new card.",
+   "timed_out": "Not added - the card timed out. The change is kept aside.",
+   "unsaved": "Not added - the app's own folder has changes that are not saved in git.",
+   "withdrawn": "Not added - the change was thrown away before you answered."
+  },
+  "pasted_line": "You pasted this change in on your PC."
+ },
  "cases": {
+  "app_denied": {
+   "ok": true,
+   "project": {
+    "app": {
+     "git_ok": true,
+     "main": {
+      "at": 1790000000.0,
+      "head": "8dc2396",
+      "subject": "Jarvis: Add a dark mode",
+      "versions": 3
+     },
+     "merge": {
+      "last": {
+       "at": 1790000000.0,
+       "message": "Not added - you said no. The change is kept aside.",
+       "outcome": "denied",
+       "task": "000000000002"
+      },
+      "waiting": null
+     },
+     "name": "notes-app",
+     "said": "",
+     "tasks": [
+      {
+       "added": 1,
+       "files": 1,
+       "older_main": true,
+       "removed": 0,
+       "source": "pasted",
+       "started": 1790000000.0,
+       "task": "000000000002",
+       "title": "Try a login page",
+       "waiting": false
+      }
+     ],
+     "title": "Notes app",
+     "type": "web"
+    },
+    "benchmark_list": [],
+    "benchmarks": 0,
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "folder": null,
+    "goals": [],
+    "id": "00000000000000000000000000000001",
+    "instructions": "",
+    "kind": "coding",
+    "max": {
+     "benchmarks": 12,
+     "instructions": 1500,
+     "note": 200,
+     "notes": 10
+    },
+    "name": "Notes app",
+    "notes": [],
+    "shareable": false,
+    "shareable_last": null,
+    "shareable_waiting": false,
+    "shareable_waiting_words": "",
+    "work_list": {
+     "name": "notes app",
+     "title": "Notes app list"
+    }
+   }
+  },
+  "app_fresh": {
+   "ok": true,
+   "project": {
+    "app": {
+     "git_ok": true,
+     "main": {
+      "at": 1790000000.0,
+      "head": "eb189c4",
+      "subject": "Start Notes app",
+      "versions": 1
+     },
+     "merge": {
+      "last": null,
+      "waiting": null
+     },
+     "name": "notes-app",
+     "said": "",
+     "tasks": [],
+     "title": "Notes app",
+     "type": "web"
+    },
+    "benchmark_list": [],
+    "benchmarks": 0,
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "folder": null,
+    "goals": [],
+    "id": "00000000000000000000000000000001",
+    "instructions": "",
+    "kind": "coding",
+    "max": {
+     "benchmarks": 12,
+     "instructions": 1500,
+     "note": 200,
+     "notes": 10
+    },
+    "name": "Notes app",
+    "notes": [],
+    "shareable": false,
+    "shareable_last": null,
+    "shareable_waiting": false,
+    "shareable_waiting_words": "",
+    "work_list": {
+     "name": "notes app",
+     "title": "Notes app list"
+    }
+   }
+  },
+  "app_merged": {
+   "ok": true,
+   "project": {
+    "app": {
+     "git_ok": true,
+     "main": {
+      "at": 1790000000.0,
+      "head": "8dc2396",
+      "subject": "Jarvis: Add a dark mode",
+      "versions": 3
+     },
+     "merge": {
+      "last": {
+       "at": 1790000000.0,
+       "message": "Added to your app.",
+       "outcome": "merged",
+       "task": "000000000001"
+      },
+      "waiting": null
+     },
+     "name": "notes-app",
+     "said": "",
+     "tasks": [
+      {
+       "added": 0,
+       "files": 0,
+       "older_main": true,
+       "removed": 0,
+       "source": "empty",
+       "started": 1790000000.0,
+       "task": "000000000002",
+       "title": "Try a login page",
+       "waiting": false
+      }
+     ],
+     "title": "Notes app",
+     "type": "web"
+    },
+    "benchmark_list": [],
+    "benchmarks": 0,
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "folder": null,
+    "goals": [],
+    "id": "00000000000000000000000000000001",
+    "instructions": "",
+    "kind": "coding",
+    "max": {
+     "benchmarks": 12,
+     "instructions": 1500,
+     "note": 200,
+     "notes": 10
+    },
+    "name": "Notes app",
+    "notes": [],
+    "shareable": false,
+    "shareable_last": null,
+    "shareable_waiting": false,
+    "shareable_waiting_words": "",
+    "work_list": {
+     "name": "notes app",
+     "title": "Notes app list"
+    }
+   }
+  },
+  "app_no_git": {
+   "ok": true,
+   "project": {
+    "app": {
+     "git_ok": false,
+     "main": null,
+     "merge": {
+      "last": null,
+      "waiting": null
+     },
+     "name": "notes-app",
+     "said": "Git is not installed on this PC (https://git-scm.com), so Jarvis cannot keep app projects yet.",
+     "tasks": [],
+     "title": "Notes app",
+     "type": "web"
+    },
+    "benchmark_list": [],
+    "benchmarks": 0,
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "folder": null,
+    "goals": [],
+    "id": "00000000000000000000000000000006",
+    "instructions": "",
+    "kind": "coding",
+    "max": {
+     "benchmarks": 12,
+     "instructions": 1500,
+     "note": 200,
+     "notes": 10
+    },
+    "name": "Notes app",
+    "notes": [],
+    "shareable": false,
+    "shareable_last": null,
+    "shareable_waiting": false,
+    "shareable_waiting_words": "",
+    "work_list": {
+     "name": "notes app",
+     "title": "Notes app list"
+    }
+   }
+  },
+  "app_tasks": {
+   "ok": true,
+   "project": {
+    "app": {
+     "git_ok": true,
+     "main": {
+      "at": 1790000000.0,
+      "head": "eb189c4",
+      "subject": "Start Notes app",
+      "versions": 1
+     },
+     "merge": {
+      "last": null,
+      "waiting": null
+     },
+     "name": "notes-app",
+     "said": "",
+     "tasks": [
+      {
+       "added": 4,
+       "files": 2,
+       "older_main": false,
+       "removed": 0,
+       "source": "pasted",
+       "started": 1790000000.0,
+       "task": "000000000001",
+       "title": "Add a dark mode",
+       "waiting": false
+      },
+      {
+       "added": 0,
+       "files": 0,
+       "older_main": false,
+       "removed": 0,
+       "source": "empty",
+       "started": 1790000000.0,
+       "task": "000000000002",
+       "title": "Try a login page",
+       "waiting": false
+      }
+     ],
+     "title": "Notes app",
+     "type": "web"
+    },
+    "benchmark_list": [],
+    "benchmarks": 0,
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "folder": null,
+    "goals": [],
+    "id": "00000000000000000000000000000001",
+    "instructions": "",
+    "kind": "coding",
+    "max": {
+     "benchmarks": 12,
+     "instructions": 1500,
+     "note": 200,
+     "notes": 10
+    },
+    "name": "Notes app",
+    "notes": [],
+    "shareable": false,
+    "shareable_last": null,
+    "shareable_waiting": false,
+    "shareable_waiting_words": "",
+    "work_list": {
+     "name": "notes app",
+     "title": "Notes app list"
+    }
+   }
+  },
+  "app_waiting": {
+   "ok": true,
+   "project": {
+    "app": {
+     "git_ok": true,
+     "main": {
+      "at": 1790000000.0,
+      "head": "eb189c4",
+      "subject": "Start Notes app",
+      "versions": 1
+     },
+     "merge": {
+      "last": null,
+      "waiting": "000000000001"
+     },
+     "name": "notes-app",
+     "said": "",
+     "tasks": [
+      {
+       "added": 4,
+       "files": 2,
+       "older_main": false,
+       "removed": 0,
+       "source": "pasted",
+       "started": 1790000000.0,
+       "task": "000000000001",
+       "title": "Add a dark mode",
+       "waiting": true
+      },
+      {
+       "added": 0,
+       "files": 0,
+       "older_main": false,
+       "removed": 0,
+       "source": "empty",
+       "started": 1790000000.0,
+       "task": "000000000002",
+       "title": "Try a login page",
+       "waiting": false
+      }
+     ],
+     "title": "Notes app",
+     "type": "web"
+    },
+    "benchmark_list": [],
+    "benchmarks": 0,
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "folder": null,
+    "goals": [],
+    "id": "00000000000000000000000000000001",
+    "instructions": "",
+    "kind": "coding",
+    "max": {
+     "benchmarks": 12,
+     "instructions": 1500,
+     "note": 200,
+     "notes": 10
+    },
+    "name": "Notes app",
+    "notes": [],
+    "shareable": false,
+    "shareable_last": null,
+    "shareable_waiting": false,
+    "shareable_waiting_words": "",
+    "work_list": {
+     "name": "notes app",
+     "title": "Notes app list"
+    }
+   }
+  },
   "bench_empty": {
    "benchmark": {
     "better": null,
@@ -134,6 +522,7 @@
   "coding": {
    "ok": true,
    "project": {
+    "app": null,
     "benchmark_list": [
      {
       "better": "higher",
@@ -219,6 +608,7 @@
   "life": {
    "ok": true,
    "project": {
+    "app": null,
     "benchmark_list": [
      {
       "better": "higher",
@@ -375,6 +765,7 @@
   "life_answered": {
    "ok": true,
    "project": {
+    "app": null,
     "benchmark_list": [
      {
       "better": "higher",
@@ -541,6 +932,7 @@
   "life_waiting": {
    "ok": true,
    "project": {
+    "app": null,
     "benchmark_list": [
      {
       "better": "higher",
@@ -694,13 +1086,171 @@
     }
    }
   },
+  "list_adopted": {
+   "available": true,
+   "empty": "",
+   "max": 30,
+   "ok": true,
+   "projects": [
+    {
+     "app": {
+      "merge_waiting": false,
+      "name": "notes-app",
+      "tasks": 1,
+      "type": "web"
+     },
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000001",
+     "kind": "coding",
+     "name": "Notes app",
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "notes app",
+      "title": "Notes app list"
+     }
+    },
+    {
+     "app": {
+      "merge_waiting": false,
+      "name": "old-notes",
+      "tasks": 0,
+      "type": "android"
+     },
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000002",
+     "kind": "coding",
+     "name": "Old notes",
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "old notes",
+      "title": "Old notes list"
+     }
+    }
+   ],
+   "title": "Projects",
+   "unlinked_apps": []
+  },
+  "list_after_delete": {
+   "available": true,
+   "empty": "",
+   "max": 30,
+   "ok": true,
+   "projects": [
+    {
+     "app": {
+      "merge_waiting": false,
+      "name": "old-notes",
+      "tasks": 0,
+      "type": "android"
+     },
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000002",
+     "kind": "coding",
+     "name": "Old notes",
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "old notes",
+      "title": "Old notes list"
+     }
+    },
+    {
+     "app": null,
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000005",
+     "kind": "life",
+     "name": "Half marathon",
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "half marathon",
+      "title": "Half marathon list"
+     }
+    }
+   ],
+   "title": "Projects",
+   "unlinked_apps": [
+    {
+     "name": "notes-app",
+     "title": "Notes app",
+     "type": "web"
+    }
+   ]
+  },
+  "list_app": {
+   "available": true,
+   "empty": "",
+   "max": 30,
+   "ok": true,
+   "projects": [
+    {
+     "app": {
+      "merge_waiting": false,
+      "name": "notes-app",
+      "tasks": 0,
+      "type": "web"
+     },
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000001",
+     "kind": "coding",
+     "name": "Notes app",
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "notes app",
+      "title": "Notes app list"
+     }
+    }
+   ],
+   "title": "Projects",
+   "unlinked_apps": [
+    {
+     "name": "old-notes",
+     "title": "Old notes",
+     "type": "android"
+    }
+   ]
+  },
   "list_empty": {
    "available": true,
    "empty": "No projects yet.",
    "max": 30,
    "ok": true,
    "projects": [],
-   "title": "Projects"
+   "title": "Projects",
+   "unlinked_apps": []
   },
   "list_two": {
    "available": true,
@@ -709,6 +1259,7 @@
    "ok": true,
    "projects": [
     {
+     "app": null,
      "benchmarks": 4,
      "changed": 1790000000.0,
      "created": 1790000000.0,
@@ -727,6 +1278,7 @@
      }
     },
     {
+     "app": null,
      "benchmarks": 2,
      "changed": 1790000000.0,
      "created": 1790000000.0,
@@ -750,7 +1302,79 @@
      }
     }
    ],
-   "title": "Projects"
+   "title": "Projects",
+   "unlinked_apps": []
+  },
+  "task_empty": {
+   "ok": true,
+   "task": {
+    "added": 0,
+    "diff": "",
+    "files": 0,
+    "list": [],
+    "older_main": false,
+    "refused": "This task has not changed anything yet.",
+    "removed": 0,
+    "source": "empty",
+    "started": 1790000000.0,
+    "task": "000000000002",
+    "title": "Try a login page",
+    "too_big": false,
+    "waiting": false
+   }
+  },
+  "task_pasted": {
+   "ok": true,
+   "task": {
+    "added": 4,
+    "diff": "diff --git a/src/App.tsx b/src/App.tsx\nnew file mode 100644\nindex 0000000..5ae39b2\n--- /dev/null\n+++ b/src/App.tsx\n@@ -0,0 +1,3 @@\n+export default function App() {\n+  return <h1>Notes</h1>;\n+}\ndiff --git a/src/theme.css b/src/theme.css\nnew file mode 100644\nindex 0000000..a56a647\n--- /dev/null\n+++ b/src/theme.css\n@@ -0,0 +1 @@\n+:root { color-scheme: dark; }\n",
+    "files": 2,
+    "list": [
+     {
+      "added": "3",
+      "path": "src/App.tsx",
+      "removed": "0"
+     },
+     {
+      "added": "1",
+      "path": "src/theme.css",
+      "removed": "0"
+     }
+    ],
+    "older_main": false,
+    "refused": "",
+    "removed": 0,
+    "source": "pasted",
+    "started": 1790000000.0,
+    "task": "000000000001",
+    "title": "Add a dark mode",
+    "too_big": false,
+    "waiting": false
+   }
+  },
+  "task_too_big": {
+   "ok": true,
+   "task": {
+    "added": 1400,
+    "diff": "",
+    "files": 1,
+    "list": [
+     {
+      "added": "1400",
+      "path": "big.txt",
+      "removed": "0"
+     }
+    ],
+    "older_main": false,
+    "refused": "This change is too big to show on one card (1 file) - ask Jarvis to split it into smaller steps.",
+    "removed": 0,
+    "source": "pasted",
+    "started": 1790000000.0,
+    "task": "000000000003",
+    "title": "A huge change",
+    "too_big": true,
+    "waiting": false
+   }
   }
  },
  "limits": {
@@ -822,6 +1446,138 @@
   }
  ],
  "posts": {
+  "adopt": {
+   "body": {
+    "ok": true,
+    "project": {
+     "app": {
+      "git_ok": true,
+      "main": {
+       "at": 1790000000.0,
+       "head": "2c22635",
+       "subject": "Start Old notes",
+       "versions": 1
+      },
+      "merge": {
+       "last": null,
+       "waiting": null
+      },
+      "name": "old-notes",
+      "said": "",
+      "tasks": [],
+      "title": "Old notes",
+      "type": "android"
+     },
+     "benchmark_list": [],
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000002",
+     "instructions": "",
+     "kind": "coding",
+     "max": {
+      "benchmarks": 12,
+      "instructions": 1500,
+      "note": 200,
+      "notes": 10
+     },
+     "name": "Old notes",
+     "notes": [],
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "old notes",
+      "title": "Old notes list"
+     }
+    }
+   },
+   "status": 200
+  },
+  "adopt_after_delete": {
+   "body": {
+    "ok": true,
+    "project": {
+     "app": {
+      "git_ok": false,
+      "main": null,
+      "merge": {
+       "last": null,
+       "waiting": null
+      },
+      "name": "notes-app",
+      "said": "Git is not installed on this PC (https://git-scm.com), so Jarvis cannot keep app projects yet.",
+      "tasks": [],
+      "title": "Notes app",
+      "type": "web"
+     },
+     "benchmark_list": [],
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000006",
+     "instructions": "",
+     "kind": "coding",
+     "max": {
+      "benchmarks": 12,
+      "instructions": 1500,
+      "note": 200,
+      "notes": 10
+     },
+     "name": "Notes app",
+     "notes": [],
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "notes app",
+      "title": "Notes app list"
+     }
+    }
+   },
+   "status": 200
+  },
+  "adopt_again": {
+   "body": {
+    "error": "That app already has a project.",
+    "ok": false
+   },
+   "status": 409
+  },
+  "adopt_missing": {
+   "body": {
+    "error": "There is no app folder with that name.",
+    "ok": false
+   },
+   "status": 404
+  },
+  "app_and_folder": {
+   "body": {
+    "error": "A project has a folder or an app, not both.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "app_bad_type": {
+   "body": {
+    "error": "An app is \"web\" or \"android\".",
+    "ok": false
+   },
+   "status": 400
+  },
+  "app_on_life": {
+   "body": {
+    "error": "Only a coding project can be an app.",
+    "ok": false
+   },
+   "status": 400
+  },
   "bench_command_pc": {
    "body": {
     "benchmark": {
@@ -862,10 +1618,69 @@
    },
    "status": 403
   },
+  "create_app": {
+   "body": {
+    "ok": true,
+    "project": {
+     "app": {
+      "git_ok": true,
+      "main": {
+       "at": 1790000000.0,
+       "head": "eb189c4",
+       "subject": "Start Notes app",
+       "versions": 1
+      },
+      "merge": {
+       "last": null,
+       "waiting": null
+      },
+      "name": "notes-app",
+      "said": "",
+      "tasks": [],
+      "title": "Notes app",
+      "type": "web"
+     },
+     "benchmark_list": [],
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000001",
+     "instructions": "",
+     "kind": "coding",
+     "max": {
+      "benchmarks": 12,
+      "instructions": 1500,
+      "note": 200,
+      "notes": 10
+     },
+     "name": "Notes app",
+     "notes": [],
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "notes app",
+      "title": "Notes app list"
+     }
+    }
+   },
+   "status": 200
+  },
+  "create_app_no_git": {
+   "body": {
+    "error": "Git is not installed on this PC (https://git-scm.com), so Jarvis cannot keep app projects yet.",
+    "ok": false
+   },
+   "status": 503
+  },
   "create_coding_pc": {
    "body": {
     "ok": true,
     "project": {
+     "app": null,
      "benchmark_list": [],
      "benchmarks": 0,
      "changed": 1790000000.0,
@@ -904,6 +1719,7 @@
    "body": {
     "ok": true,
     "project": {
+     "app": null,
      "benchmark_list": [],
      "benchmarks": 0,
      "changed": 1790000000.0,
@@ -936,12 +1752,68 @@
    },
    "status": 200
   },
+  "create_life_for_app": {
+   "body": {
+    "ok": true,
+    "project": {
+     "app": null,
+     "benchmark_list": [],
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000005",
+     "instructions": "",
+     "kind": "life",
+     "max": {
+      "benchmarks": 12,
+      "instructions": 1500,
+      "note": 200,
+      "notes": 10
+     },
+     "name": "Half marathon",
+     "notes": [],
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "half marathon",
+      "title": "Half marathon list"
+     }
+    }
+   },
+   "status": 200
+  },
   "delete": {
    "body": {
     "deleted": true,
     "ok": true
    },
    "status": 200
+  },
+  "delete_app": {
+   "body": {
+    "app_kept": "notes-app",
+    "deleted": true,
+    "ok": true
+   },
+   "status": 200
+  },
+  "discard": {
+   "body": {
+    "discarded": true,
+    "ok": true
+   },
+   "status": 200
+  },
+  "discard_again": {
+   "body": {
+    "error": "No such task.",
+    "ok": false
+   },
+   "status": 404
   },
   "folder_from_phone": {
    "body": {
@@ -995,6 +1867,51 @@
    },
    "status": 200
   },
+  "merge_card_raised": {
+   "body": {
+    "message": "Waiting for your approval. Your app stays as it is unless you approve the card.",
+    "ok": true,
+    "waiting": true
+   },
+   "status": 202
+  },
+  "merge_card_twice": {
+   "body": {
+    "error": "A card for this app is already waiting - answer it first.",
+    "ok": false
+   },
+   "status": 409
+  },
+  "merge_empty": {
+   "body": {
+    "error": "This task has not changed anything yet.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "merge_no": {
+   "body": {
+    "message": "Waiting for your approval. Your app stays as it is unless you approve the card.",
+    "ok": true,
+    "waiting": true
+   },
+   "status": 202
+  },
+  "merge_too_big": {
+   "body": {
+    "error": "This change is too big to show on one card (1 file) - ask Jarvis to split it into smaller steps.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "merge_yes": {
+   "body": {
+    "message": "Waiting for your approval. Your app stays as it is unless you approve the card.",
+    "ok": true,
+    "waiting": true
+   },
+   "status": 202
+  },
   "name_twice": {
    "body": {
     "error": "There is already a project with that name.",
@@ -1009,12 +1926,135 @@
    },
    "status": 404
   },
+  "paste": {
+   "body": {
+    "ok": true,
+    "task": {
+     "added": 4,
+     "diff": "diff --git a/src/App.tsx b/src/App.tsx\nnew file mode 100644\nindex 0000000..5ae39b2\n--- /dev/null\n+++ b/src/App.tsx\n@@ -0,0 +1,3 @@\n+export default function App() {\n+  return <h1>Notes</h1>;\n+}\ndiff --git a/src/theme.css b/src/theme.css\nnew file mode 100644\nindex 0000000..a56a647\n--- /dev/null\n+++ b/src/theme.css\n@@ -0,0 +1 @@\n+:root { color-scheme: dark; }\n",
+     "files": 2,
+     "list": [
+      {
+       "added": "3",
+       "path": "src/App.tsx",
+       "removed": "0"
+      },
+      {
+       "added": "1",
+       "path": "src/theme.css",
+       "removed": "0"
+      }
+     ],
+     "older_main": false,
+     "refused": "",
+     "removed": 0,
+     "source": "pasted",
+     "started": 1790000000.0,
+     "task": "000000000001",
+     "title": "Add a dark mode",
+     "too_big": false,
+     "waiting": false
+    }
+   },
+   "status": 200
+  },
+  "paste_bad_path": {
+   "body": {
+    "error": "Refused the file name '../escape.txt'.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "paste_big": {
+   "body": {
+    "ok": true,
+    "task": {
+     "added": 1400,
+     "diff": "",
+     "files": 1,
+     "list": [
+      {
+       "added": "1400",
+       "path": "big.txt",
+       "removed": "0"
+      }
+     ],
+     "older_main": false,
+     "refused": "This change is too big to show on one card (1 file) - ask Jarvis to split it into smaller steps.",
+     "removed": 0,
+     "source": "pasted",
+     "started": 1790000000.0,
+     "task": "000000000003",
+     "title": "A huge change",
+     "too_big": true,
+     "waiting": false
+    }
+   },
+   "status": 200
+  },
+  "paste_from_phone": {
+   "body": {
+    "error": "A change is pasted in on the PC only.",
+    "ok": false,
+    "pc_only": true
+   },
+   "status": 403
+  },
+  "paste_no_blocks": {
+   "body": {
+    "error": "No <<<FILE>>> blocks were found.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "paste_nothing_changed": {
+   "body": {
+    "error": "Nothing in that paste would change the app: files git keeps out (such as .env) and files that are already the same are left out.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "paste_second": {
+   "body": {
+    "ok": true,
+    "task": {
+     "added": 1,
+     "diff": "diff --git a/login.html b/login.html\nnew file mode 100644\nindex 0000000..cddb6e3\n--- /dev/null\n+++ b/login.html\n@@ -0,0 +1 @@\n+<form></form>\n",
+     "files": 1,
+     "list": [
+      {
+       "added": "1",
+       "path": "login.html",
+       "removed": "0"
+      }
+     ],
+     "older_main": true,
+     "refused": "",
+     "removed": 0,
+     "source": "pasted",
+     "started": 1790000000.0,
+     "task": "000000000002",
+     "title": "Try a login page",
+     "too_big": false,
+     "waiting": false
+    }
+   },
+   "status": 200
+  },
+  "paste_while_waiting": {
+   "body": {
+    "error": "A card for this change is waiting - answer it first.",
+    "ok": false
+   },
+   "status": 409
+  },
   "shareable_off": {
    "body": {
     "changed": false,
     "message": "Shareable is off. Nothing from this project can be shared.",
     "ok": true,
     "project": {
+     "app": null,
      "benchmark_list": [
       {
        "better": "higher",
@@ -1175,6 +2215,7 @@
     "message": "Waiting for your approval. Shareable stays off unless you approve the card.",
     "ok": true,
     "project": {
+     "app": null,
      "benchmark_list": [
       {
        "better": "higher",
@@ -1331,6 +2372,92 @@
    },
    "status": 202
   },
+  "task_no_such": {
+   "body": {
+    "error": "No such task.",
+    "ok": false
+   },
+   "status": 404
+  },
+  "task_on_life": {
+   "body": {
+    "error": "This project is not an app.",
+    "ok": false
+   },
+   "status": 404
+  },
+  "task_start": {
+   "body": {
+    "ok": true,
+    "task": {
+     "added": 0,
+     "files": 0,
+     "older_main": false,
+     "removed": 0,
+     "source": "empty",
+     "started": 1790000000.0,
+     "task": "000000000001",
+     "title": "Add a dark mode",
+     "waiting": false
+    }
+   },
+   "status": 200
+  },
+  "task_start_big": {
+   "body": {
+    "ok": true,
+    "task": {
+     "added": 0,
+     "files": 0,
+     "older_main": false,
+     "removed": 0,
+     "source": "empty",
+     "started": 1790000000.0,
+     "task": "000000000003",
+     "title": "A huge change",
+     "waiting": false
+    }
+   },
+   "status": 200
+  },
+  "task_start_long_title": {
+   "body": {
+    "error": "The title is 121 characters - at most 120.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "task_start_no_git": {
+   "body": {
+    "error": "Git is not installed on this PC (https://git-scm.com), so Jarvis cannot keep app projects yet.",
+    "ok": false
+   },
+   "status": 503
+  },
+  "task_start_no_title": {
+   "body": {
+    "error": "The title cannot be empty.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "task_start_second": {
+   "body": {
+    "ok": true,
+    "task": {
+     "added": 0,
+     "files": 0,
+     "older_main": false,
+     "removed": 0,
+     "source": "empty",
+     "started": 1790000000.0,
+     "task": "000000000002",
+     "title": "Try a login page",
+     "waiting": false
+    }
+   },
+   "status": 200
+  },
   "too_long": {
    "body": {
     "error": "The instructions is 1501 characters - at most 1500.",
@@ -1410,6 +2537,20 @@
     "ok": true
    },
    "status": 200
+  },
+  "update_app": {
+   "body": {
+    "error": "An app is chosen when the project is made.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "update_folder_on_app": {
+   "body": {
+    "error": "This project's files are its app.",
+    "ok": false
+   },
+   "status": 400
   }
  },
  "scales": [

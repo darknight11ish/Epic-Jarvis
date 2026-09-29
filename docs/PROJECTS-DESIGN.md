@@ -7,6 +7,12 @@ life projects, and Jarvis does real work on the PC with a card for every
 change. Queued after the chatbot driver. Written by the studio's designer;
 file references were checked in the source unless marked.
 
+**Apps (2026-09-29):** an app Jarvis builds is a coding project whose tests
+are its benchmarks - one list, not two. Its tasks, the merge card and pasting a
+change in on the PC are in `docs/APPS-IN-PROJECTS-DESIGN.md` (backend built:
+`jarvis_apps.py`, `docs/JARVIS-API.md` section 92); Jarvis writing the code
+(step 5 and 7 below) still waits for the 12 GB card.
+
 **In short:** a project is one place for one thing the owner is working on -
 an app, or "run a half marathon". It holds instructions, files, chats,
 goals, measurements ("benchmarks") and a work list. Jarvis can do real work

@@ -60,8 +60,8 @@ def _row(rid, action, raised=None, *, drop_raised=False, **extra) -> dict:
     return row
 
 
-def _with_risk(rid, risk: dict, **kw) -> dict:
-    row = _row(rid, LOCAL_UNDOABLE, **kw)
+def _with_risk(rid, risk: dict, action=LOCAL_UNDOABLE, **kw) -> dict:
+    row = _row(rid, action, **kw)
     row["risk"] = risk
     return row
 
@@ -86,6 +86,13 @@ def rows() -> list:
         ("classified, stays on this PC, cannot be undone",
          _with_risk("a10", {"classified": True, "reach": "local", "reversible": "no",
                             "why": "It cannot be undone.", "swipe_ok": False})),
+        # The merge card of an app inside Projects (apps-in-projects.patch:
+        # ("no", "local") in the gate's table): risky, so the PC asks Windows
+        # Hello and the phone the screen lock; never a swipe.
+        ("adding a change to an app: stays on this PC, no Undo yet - risky",
+         _with_risk("a17", {"classified": True, "reach": "local", "reversible": "no",
+                            "why": "It cannot be undone.", "swipe_ok": False},
+                    action="app_merge_change")),
         ("classified, stays on this PC, hard to undo (not risky: only \"no\" is)",
          _with_risk("a11", {"classified": True, "reach": "local", "reversible": "hard",
                             "why": "Undoing it takes work.", "swipe_ok": False})),

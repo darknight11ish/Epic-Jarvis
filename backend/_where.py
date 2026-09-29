@@ -203,6 +203,11 @@ SHIPPED = (
     # card showing the full diff before anything reaches the app; runs nothing
     # (docs/APP-BUILDER-DESIGN.md, milestone A - no patch, no tool yet)
     "jarvis_app_workspace.py",
+    # an app inside Projects: its tasks, a task's whole change, and the ONE
+    # merge card; routes installed by apps-in-projects.patch (2026-09-29,
+    # docs/APPS-IN-PROJECTS-DESIGN.md - screens, merge card and a change
+    # pasted in on the PC; no model tool, nothing runs)
+    "jarvis_apps.py",
     # "Goals with one card per step" (the owner's "build it now",
     # 2026-09-27; goals.patch): a goal's own plan and weekly check-in.
     "jarvis_goals.py",
