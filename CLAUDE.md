@@ -1581,6 +1581,22 @@ instructions):
   backend; speed is measured on the owner's PC before anything says "works".
   Everything the model sees is outside text, and secrets are blacked out first.
   Camera/Live pictures still wait for the 12 GB card.
+- **Screen safety, built 2026-09-29** (branch `feat-screen-safety`; JARVIS-API
+  §62.13): anything that looks like a key, token, password or card number is
+  hidden (`[hidden]`, and solid black in a picture) before a look's words or a
+  picture are used - the PC's screen and the phone's screen text and
+  screenshot alike (`jarvis_secrets.py`, `jarvis_secret_rules.py`,
+  `jarvis_picture.py`; `jarvis_screen.clean_picture` is the one door; fail
+  closed). The text reader runs inside Jarvis through six pywinrt packages,
+  with each word's position, PowerShell kept as the fallback. The PC's picture
+  is taken with every "Never look at" window painted black (not only the front
+  one), private browser windows and Jarvis's own windows too; a private browser
+  window in front is a new pause; ten streaming sites joined the built-in list;
+  the accessibility-text walk skips off-screen controls and has a quarter-second
+  budget. **Said plainly:** a password behind a show-password eye has no shape a
+  pattern can see. Emails and IP addresses are hidden too (a list in
+  `jarvis_secrets.PII_KINDS`). Nothing ran on Windows yet: the owner's check is
+  `tools\check_screen_safety.py`.
 
 ## Every new feature gets its own audit, without being asked
 

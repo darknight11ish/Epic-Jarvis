@@ -17508,3 +17508,94 @@ unpacked: `$env:JARVIS_KOKORO_V1_DIR = "...\voice-models\tts"; py -3
 backend\test_kokoro.py` speaks in every offered voice with the real model.
 The rules both apps are tested against: `python3 tools/gen_voice_training_cases.py
 --check` and `python3 tools/gen_phone_voice_cases.py --check`.
+
+
+# Screen safety: secrets and private windows painted black (2026-09-29)
+
+The owner's "all three" of 2026-09-29 (CLAUDE.md). Route and words: no new
+route; `docs/JARVIS-API.md` section 62.13 says what it does and does not
+cover. Modules (all shipped whole, no patch): `jarvis_secrets.py` (finds
+secrets), `jarvis_secret_rules.py` (gitleaks's rule data, generated),
+`jarvis_picture.py` (paints boxes, hands on only a checked picture),
+`jarvis_screen.clean_picture` (the one door), and changes to `jarvis_ocr.py`,
+`jarvis_screen_win.py` and `jarvis_screen.py`.
+
+## In plain words
+
+Before Jarvis reads your screen, it looks for anything that looks like a key, a
+password or a card number in the words on it, and hides it - `[hidden]` in the
+words, solid black in a picture (never a blur, which can be undone). Windows on
+your "Never look at" list are painted black even when they are behind the one
+Jarvis is looking at, and so are private browser windows. If Jarvis cannot check
+a picture, it does not use it.
+
+**What it cannot do:** it guesses from how words are SHAPED. A password shown
+behind a "show password" eye, or typed in a box with nothing written beside it,
+looks like any other word and is not hidden. Text too small or too stylised for
+Windows to read, a QR code and a photo of a card are not caught. It will
+sometimes hide something harmless (a long product code, a version number that
+looks like an IP address), and a hidden thing at the end of a line may take the
+first word of the next line with it. That is the safe way round.
+
+## Owner steps
+
+Merge, pull, then ONE line in PowerShell (it installs the six new Windows
+packages and puts the new modules in place, then runs the check on a test
+picture with FAKE secrets in it; the check says whether the text reader is
+"inside Jarvis" or "PowerShell", and writes a cleaned picture to your temp folder
+for you to open):
+
+```powershell
+Push-Location "C:\Users\pcadmin\Epic-Jarvis"; .\scripts\apply-patches.ps1; py -3 .\tools\check_screen_safety.py; Pop-Location
+```
+
+Then restart Jarvis. To see the windows being painted, put a program from your
+Never look at list (or a private browser window) beside another window and run
+`py -3 .\tools\check_screen_safety.py --screen` from the same folder: it lists
+what it painted black and writes a whole-screen picture for you to open. Both
+files are yours; Jarvis itself never saves a picture.
+
+## What the code does
+
+- `jarvis_screen.clean_picture(picture, ocr=None, want_png=False)` reads the
+  words with positions, hides secrets in ALL of them (before any cut to 4,500
+  characters), returns `{"ok", "text", "left_out", "hidden", "kinds", "png",
+  "png_why", "why", "unchecked"}`. `png` is the only picture a picture model may be
+  shown, and is None whenever it could not be made safely.
+- `Screen._read` and `with_screen` (the phone's screenshot) go through it; so do
+  the window's own text (`ui_words`) and the phone's screen text
+  (`label_phone_text`).
+- `jarvis_ocr.read_lines` runs Windows' reader in this program through pywinrt
+  (six packages, `requirements.txt` and `requirements.lock`) and falls back to
+  PowerShell; both give each word's position.
+- `jarvis_screen_win.capture` lists the windows before and after the grab and
+  paints black what `must_hide` says; no window list, no picture.
+- `tools/gen_secret_rules.py --from gitleaks.toml` makes `jarvis_secret_rules.py`
+  again (a new gitleaks release); `python3 tools/gen_secret_rules.py --url`
+  downloads it first.
+
+## Not checked, said plainly
+
+- Nothing here ran on Windows: the in-process text reader (pywinrt), the window
+  list (EnumWindows), the address-box reads and the black boxes on a real
+  screen. Every name was checked against the pywinrt packages' own type files
+  and the rules around them are tested, but `tools\check_screen_safety.py` on
+  your PC is the first real run.
+- How long the whole check takes on a full screen, and how fast the reader is
+  inside Jarvis compared with PowerShell, are unmeasured (the check prints the
+  time).
+- A private window of Brave, Opera or Vivaldi is caught only if its title says
+  InPrivate, Incognito or Private Browsing.
+- Whether Windows draws copy-protected video black in this kind of screen grab
+  (or leaves a gap) is not known; the streaming sites are also on the Never look
+  at list for that reason.
+- xcap's `wgc` feature (Windows Graphics Capture) was NOT switched on: nothing
+  uses xcap for a look any more (only an unused whole-monitor grab in
+  `commands.rs` does), so it would change nothing that matters.
+
+## Test it
+
+`python3 backend/test_secrets.py`, `test_secret_rules.py`, `test_screen_clean.py`,
+`test_screen_masks.py`, `test_ocr_words.py` (no network, no model, no Windows;
+PowerShell 7 is used for one check if it is installed), and the existing
+`test_screen.py`, `test_screen_win.py`, `test_screen_turn.py`, `test_picture_text.py`.

@@ -170,7 +170,15 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
   watching shown on Home with Stop. Words only on one graphics card - no model
   is shown a picture. The Windows readers and the phone's Android parts have
   not run on a real machine yet. The voice setting "Answers about your screen
-  after "Hey Jarvis"" (`hands_free_screen`) is in both apps.
+  after "Hey Jarvis"" (`hands_free_screen`) is in both apps. **Screen safety**
+  (2026-09-29, API §62.13; `jarvis_secrets.py`, `jarvis_secret_rules.py`,
+  `jarvis_picture.py`): anything that looks like a key, token, password or card
+  number is hidden (`[hidden]`, and painted solid black in a picture) before a
+  look's words or a picture are used - the PC's and the phone's alike; the
+  PC's picture is taken with every Never look at window, private browser
+  window and Jarvis window painted black; a private browser window in front is
+  a pause; the text reader runs inside Jarvis (pywinrt) with word positions.
+  Not run on a real PC yet.
 - **Third graphics card: its own lane, off by default** - on
   `claude/jarvis-continuation-03kls1` (2026-09-28, 5cc47a9c): a third
   NVIDIA card is detected, and one of the five second-card features can be

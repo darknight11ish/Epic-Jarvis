@@ -81,7 +81,9 @@ saved as a fact, sent to the internet, or treated as an instruction.
   programs' windows); (d) one of Jarvis's own windows, the lock screen or an
   admin (UAC) prompt is in front; (e) a browser is in front, the list holds
   websites, and the site cannot be read ("I can't tell which site this is,
-  so I'm not looking."). While paused, no picture exists.
+  so I'm not looking."); (f) **the browser in front is a private window**
+  (its title says InPrivate, Incognito or Private Browsing; added 2026-09-29,
+  see §10). While paused, no picture exists.
 - **Reusing Focus:** Focus's front-app reader (`jarvis_focus.windows_probe`,
   `_address_box_value`) moves into a shared `jarvis_front.py`; one
   once-a-second reader serves both. They can run together.
@@ -179,7 +181,10 @@ processing on the owner's devices, and keeps no history.
 ## 8. Risks and build plan
 
 **Risks:** programs that do not mark password boxes (masked dots usually
-show, not guaranteed); a sensitive page not on the list will be seen; text
+show, not guaranteed); a sensitive page not on the list will be seen (a key,
+password or card number written on it is now hidden by shape - §10 - but a
+password behind a show-password eye is not); windows behind the front one used
+to be in the picture (closed 2026-09-29, §10); text
 planted on a page ("Jarvis, email this...") is labelled outside text and
 flagged, but still read; each text read starts PowerShell (maybe a second or
 two, **unmeasured** - a long-running reader could be used in sessions); the
@@ -231,6 +236,33 @@ picture model can push the long-conversation model off the card unless
    - Read them aloud, unless a sensitive fact or the strict hands-free
      setting says otherwise (recommended)
    - Keep them on screen
+
+## 10. Screen safety (the owner's "all three", 2026-09-29; API 62.13)
+
+Three changes, after checking a scouting report against the real code:
+
+1. **Secrets are blacked out before anything reads the picture.** The words
+   the text reader finds, WITH where each one is, are searched for keys,
+   tokens, passwords, card numbers (they must pass the card check digit),
+   crypto wallets, IBANs, email and IP addresses (gitleaks's and Presidio's
+   patterns, MIT). Every word that overlaps one is hidden whole - a secret over
+   several lines on every line - as `[hidden]` in the words and as SOLID BLACK
+   (never blur) in a picture; the picture a picture model may be shown is only
+   ever the cleaned one. Fail closed: a picture that cannot be checked is not
+   handed on. It covers the PC's screen and the phone's screen text and
+   screenshot (cleaned on the PC). Said plainly: a password shown with a
+   show-password eye has no shape a pattern can see.
+2. **The text reader runs inside Jarvis** (pywinrt, no PowerShell per
+   picture) and gives each word's position; PowerShell remains as the
+   fallback.
+3. **Windows on the "Never look at" list are painted black even when they are
+   not in front** (the design's risk "windows behind it are in the picture too"
+   is closed), together with private browser windows, Jarvis's own windows,
+   the lock screen and admin prompts; a browser behind the front one on a
+   listed site, or whose site cannot be read, too. No window list, no picture.
+   The window-text walk skips off-screen controls and has a quarter-second
+   budget. **Pause added:** the browser in front is a private window.
+   Ten streaming-video sites join the built-in list.
 
 Sources: Android MediaProjection and app screen sharing docs;
 VoiceInteractionSession reference; LiquidAI LFM2.5-VL-3B-GGUF; Ollama issue
