@@ -336,7 +336,7 @@ fun FaceView(
 
             // The voice right now (level, open, wide, round), refilled each
             // frame - one array for the life of the loop, nothing per frame.
-            val voiceNow = FloatArray(4)
+            val voiceNow = FloatArray(5)   // (the fifth: seconds until the clip's next phrase end - Speaker.mouthNow)
 
             // One frame's worth of the host, with the voice read at this
             // instant. The mouth's own level wins while a real voice plays.
@@ -1500,8 +1500,10 @@ class FaceHost {
         speed: Float = 1f,
         /**
          * The voice being heard, as `Speaker.mouthNow` writes it: level,
-         * open, wide, round at [0..3]. Null when no real voice plays. Only
-         * its mouth ([1..3]) is read here - the level arrives as [voiceIn].
+         * open, wide, round at [0..3], and (when it has room) the seconds until
+         * the clip's next phrase end at [4]. Null when no real voice plays. Only
+         * its mouth ([1..3]) and that end ([4]) are read here - the level
+         * arrives as [voiceIn].
          * Copied out, never kept: the caller refills the same array.
          */
         voiceMouth: FloatArray? = null,
@@ -1622,7 +1624,7 @@ class FaceHost {
         // comma's short pause (the desktop's faces.html does the same). The
         // room's hum under the gate is quiet.
         val micHeard = (micIn ?: 0f).coerceIn(0f, 1f).let { if (it < Spec.MIC_GATE) 0f else it }
-        feed.stepFrame(dt, state, micHeard, voiceIn?.coerceIn(0f, 1f))
+        feed.stepFrame(dt, state, micHeard, voiceIn?.coerceIn(0f, 1f), ahead = if (voiceMouth != null && voiceMouth.size >= 5) voiceMouth[4] else -1f)
 
         // The mouth, as heard: no envelope of its own - the track is
         // smoothed already, and another lag here would put it behind.

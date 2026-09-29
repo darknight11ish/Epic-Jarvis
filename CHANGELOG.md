@@ -6,6 +6,32 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **The animals move less when Jarvis is not being used, and never the
+  same way twice (2026-09-29, both apps).** Three fixes from the skeptical
+  review. (1) **Fewer small idle moves:** while you have not talked to
+  Jarvis, typed, been given an answer or been asked something for five
+  minutes, and your pointer (PC) or finger (phone) is not on the face, an
+  animal does about one small thing (a tail flick, an ear turn, a stretch)
+  in four - about 40 an hour instead of 155 to 190. Breathing and looking
+  around are unchanged; the moves that remain are the same clips, only
+  rarer, and they fade in and out over a couple of seconds when you come
+  back. A face that has only just opened counts as used for its first five
+  minutes; the Faces window always counts as used. (2) **Motion that does
+  not repeat:** the five heads no longer sway together while talking (they
+  were 86 to 91 percent alike; now about 5), breathing is uneven (each
+  breath up to about 15 percent longer or shorter, never deeper than
+  before), each small idle move differs a little in size (up to a quarter
+  smaller) and length (0.8 to 1.25 times), and the owl's thinking head
+  rolls half as far and turns to its orb now and then instead of all the
+  time (it moved 87 percent of the time, now 19). Nothing moves faster or
+  further than it did. (3) **Gestures land on the end of a sentence:** a
+  nod used to peak about half a second after the sentence it marked, inside
+  the next one. Both apps read each spoken clip before it plays, so they
+  know where its sentences end and start the gesture early: it now peaks
+  within a tenth of a second of the end, at every voice speed. A typed
+  answer and the phone's own voice keep their old timing. Needs the new
+  desktop and phone builds; no backend change.
+
 - **A thumbs-down on a crisis-help answer no longer counts toward "suggest
   the bigger model".** Crisis messages were already never counted for the
   owner's own "that's wrong" words or for Jarvis struggling with a tool, but

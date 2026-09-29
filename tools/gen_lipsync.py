@@ -86,7 +86,7 @@ for (const c of clips) {
   }
   out.clips.push({ file: c.name, sampleRate: w.sampleRate, samples: w.samples.length, n: t.n,
     level: Array.from(t.level, r), open: Array.from(t.open, r), wide: Array.from(t.wide, r),
-    round: Array.from(t.round, r), reads });
+    round: Array.from(t.round, r), reads, phrase_ends: Array.from(L.phraseEnds(t), r) });
 }
 // Mouth shapes inside the WAV: the fixture's merged track and reads, then
 // what the desktop made of each variant (a mouth? merged? the same sound?).

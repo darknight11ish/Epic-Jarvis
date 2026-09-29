@@ -16,7 +16,7 @@
   "use strict";
   const C = root.CritterPose;
   const { makePose, halfLives, mouthOf, clamp, smooth, rx, ry, rz, mul, apply, add, invRow,
-          wave, bump, envAHR, happening, beat, shift, looks, restingGaze, optsOf, mods, blinkAt,
+          wave, bump, envAHR, happening, happeningV, noise, breathWave, NONE4, playingV, beat, shift, looks, restingGaze, optsOf, mods, blinkAt,
           overlayAt, ease, toward, eyesOpen, eyesClose, TAU, gaze, NONE, ZERO2, AWAKE, focusOf, petOf, cuteOf,
           switchE, listenNod, phraseBeat, ackNodOf, ackGlowOf, focusEndOf, variant, arrivalOf, cuteAt,
           cuteQuiet, cuteBusy, fullTurn, HELLO_S, GOODBYE_S } = C.util;
@@ -41,6 +41,8 @@
   const S_GAZE = 160, S_EVENT = 176, S_ROLL = 184, S_LEAN = 192, S_BEAT = 200, S_BLINK = 208;
   // ...and for the new behaviours (critter-pose.js's "New behaviours").
   const S_LISTEN = 216, S_THINK = 219, S_FOCUS = 222, S_NOD = 234, S_PHRASE = 235, S_CUTE = 236;
+  // ...and the otter's own seeds for the slow wander (critter-pose.js noise()): its talking sway and its breathing.
+  const N_YAW = 24, N_ROLL = 25, N_BREATH = 26;
   // How long each cute moment lasts: rolling over in the water, juggling
   // its pebble from paw to paw.
   const CUTE_LEN = [6.8, 6.5];
@@ -68,7 +70,9 @@
     const fp = fw * (1 - 0.6 * o.calm);   // the focus pose itself: smaller under calm (the happenings still go by fw)
     // (and so do the stretch as a focus session ends, and being stroked)
     const fe = state === "idle" ? focusEndOf(t, o) : 0, pw = AWAKE[state] ? petOf(o) : 0;
-    m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0)) * (1 - fe) * (1 - pw);
+    // (The idle happening of this slot, its size and thinning: critter-pose.js happeningV.)
+    const evI = state === "idle" ? happeningV(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS, o.attention) : NONE4;
+    m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0)) * (1 - fe) * (1 - pw) * evI[3];
     const hap = m[0], sw = m[2], play = m[3];
     const P = {
       headYaw: 0, headPitch: 0, headRoll: 0, bob: 0, rock: 0, tilt: 0.10, breath: 1,
@@ -145,8 +149,8 @@
       P.speak = 1;
       P.tilt = 0.16;
       P.headPitch = 0.05;
-      P.headYaw = sw * 0.05 * wave(t, 111, 0) + 0.08 * g[2];
-      P.headRoll = sw * 0.04 * wave(t, 93, 0.5);
+      P.headYaw = sw * 0.05 * noise(t, N_YAW, 4) + 0.08 * g[2];
+      P.headRoll = sw * 0.04 * noise(t, N_ROLL, 4);
       P.lookX = g[0] - 0.16 * g[2]; P.lookY = g[1] - 0.16 * g[3];
       P.orbGlow = 0.6 + 0.45 * amp;
       if (b[0] === 0) {
@@ -231,7 +235,7 @@
       // pebble, kicks its feet or rolls lazily to one side; now and then
       // washes its face.
       const g = looks(t, S_GAZE, 1.5, 6, 0.35, 0.8, 0.25, 0, 0.08, 1.1, o);
-      const ev = happening(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS);
+      const ev = evI;
       const x = ev[1];
       let hx = g[2];
       P.tilt = 0.10 + sw * 0.011 * shift(t, S_ROLL);
@@ -325,7 +329,7 @@
     P.ripple *= settle;
     P.bob = 0.009 * water * wave(t, 179, 0);
     P.rock += 0.025 * water * wave(t, 130, 0.6);
-    const b = wave(t, breathK, 0) * (1 + 0.6 * deepBreath);
+    const b = breathWave(t, breathK, N_BREATH) * (1 + 0.6 * deepBreath);
     P.breath = 1 + 0.02 * breathDepth * b;
 
     const w = state === "standby" ? 0 : clamp(look.w || 0, 0, 1);
@@ -494,7 +498,7 @@
 
   /** Whether one of its idle happenings is playing at clock t (critter-pose.js playing()). */
   function busy(state, t, since, opts) {
-    return state === "idle" && (C.util.playing(happening(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS))
+    return state === "idle" && (playingV(happeningV(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS, opts ? optsOf(opts, t).attention : 1))
       || cuteBusy(t, since, opts, S_CUTE, CUTE_LEN));
   }
 

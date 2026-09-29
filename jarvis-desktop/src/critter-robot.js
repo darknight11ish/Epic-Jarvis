@@ -39,7 +39,7 @@
   "use strict";
   const C = root.CritterPose;
   const { makePose, halfLives, mouthOf, clamp, ease, rx, ry, rz, mul, apply, add, invRow,
-          wave, bump, envAHR, happening, chain, shift, gaze, looks, restingGaze, optsOf, mods, blinkAt,
+          wave, bump, envAHR, happening, happeningV, thinGate, noise, breathWave, NONE4, playingV, chain, shift, gaze, looks, restingGaze, optsOf, mods, blinkAt,
           overlayAt, toward, eyesClose, TAU, NONE, ZERO2, AWAKE, focusOf, petOf, cuteOf, varOf, switchE,
           listenNod, phraseBeat, ackNodOf, ackGlowOf, focusEndOf, variant, cuteAt, cuteQuiet, cuteBusy,
           HELLO_S, GOODBYE_S } = C.util;
@@ -71,6 +71,11 @@
   // purpose is what would make two faces glance or blink together).
   const S_GAZE = 77, S_EVENT = 157, S_BEAT = 237, S_BLINK = 244, S_LEAN = 135, S_ZIP = 158, S_SIDE = 254,
         S_LISTEN = 78, S_THINK = 79, S_FOCUS = 239, S_NOD = 252, S_PHRASE = 253, S_CUTE = 251, S_BAG = 243;
+  // The salts of a happening's size, length and thinning (critter-pose.js happeningV): three in a gap
+  // that nothing else of the robot's uses.
+  const S_VARY = 166;
+  // ...and the robot's own seeds for the slow wander (critter-pose.js noise()): its talking sway and its hover.
+  const N_YAW = 40, N_ROLL = 41, N_BREATH = 42;
   // How long each cute moment lasts: the wave, polishing its visor.
   const CUTE_LEN = [3.3, 3.2];
 
@@ -90,14 +95,18 @@
   // fin flick, curious look, hover dip, look at its mitten, happy squint
   const SMALL = [22, 20, 18, 18, 22];
   const K_ZIP = 5;
-  function idleEvent(t) {
+  // (`att`: the host's attention, 0..1 - critter-pose.js happeningV. The fourth
+  // number is the happening's weight: its size, thinned when Jarvis is not
+  // being used. The zip keeps its own length, which its path is worked out in.)
+  function idleEvent(t, att) {
     const n = Math.floor(t / SLOT), m = n & 255, pos = m & 15;
     if ((pos === 0 || pos === 6 || pos === 13) && hash01(m * 256 + S_ZIP) < 0.75) {
       // (happening()'s own start: the same hash, so every kind starts alike.)
       const off = 0.5 + 5.5 * hash01(m * 256 + S_EVENT + 2);
-      return [K_ZIP, t - n * SLOT - off, n * SLOT + off];
+      const size = 0.75 + 0.25 * hash01(m * 256 + S_VARY + 1);
+      return [K_ZIP, t - n * SLOT - off, n * SLOT + off, size * thinGate(n, SLOT, S_VARY, att == null ? 1 : att)];
     }
-    return happening(t, SLOT, 0.5, 5.5, S_EVENT, 0.7, SMALL);
+    return happeningV(t, SLOT, 0.5, 5.5, S_EVENT, 0.7, SMALL, att, S_VARY);
   }
   /** Which way a happening starting at clock `at` goes, -1 or 1. */
   function sideOf(at) { return hash01((Math.floor(at / SLOT) & 255) * 256 + S_SIDE) < 0.5 ? -1 : 1; }
@@ -233,7 +242,8 @@
     const cw = cu[0] >= 0 ? cuteOf(o) : 0;
     const fw = state === "idle" ? focusOf(o) : 0;
     const fp = fw * (1 - 0.6 * o.calm);   // the focus pose itself: smaller under calm (the happenings still go by fw)
-    m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0));
+    const evI = state === "idle" ? idleEvent(t, o.attention) : NONE4;
+    m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0)) * (evI[0] === K_ZIP ? 1 : evI[3]);
     const hap = m[0], sw = m[2], play = m[3];
     // The zip: gone under calm, Still, serious, a wake-up and a focus session
     // - and while it is being petted: it comes back to the hand.
@@ -328,8 +338,8 @@
       P.speak = 1;
       P.happy = 0.55; P.size = 1.02; P.glow = 1.1; P.finGlow = 0.7;
       P.pitch = 0.03;
-      P.headYaw = sw * 0.05 * wave(t, 111, 0) + 0.09 * g[2];
-      P.headRoll = sw * 0.04 * wave(t, 93, 0.5);
+      P.headYaw = sw * 0.05 * noise(t, N_YAW, 4) + 0.09 * g[2];
+      P.headRoll = sw * 0.04 * noise(t, N_ROLL, 4);
       P.lookX = g[0] - 0.16 * g[2]; P.lookY = g[1] - 0.16 * g[3];
       P.lHx = -0.47; P.lHy = -0.12; P.lHz = -0.12; P.rHx = 0.47; P.rHy = -0.12; P.rHz = -0.12;
       if (b[0] === 0) {
@@ -413,7 +423,7 @@
       // after; it bobs gently where it floats and its fins sway a little.
       // Now and then one small thing, a zip, or a cute moment.
       const g = looks(t, S_GAZE, 1.4, 5.5, 0.4, 0.8, 0.3, 0.05, 0.07, 1.1, o);
-      const ev = idleEvent(t), x = ev[1];
+      const ev = evI, x = ev[1];
       P.happy = 0.85;
       P.headYaw = 0.22 * g[2];
       P.headPitch = 0.08 * g[3] + sw * 0.015 * wave(t, 97, 1.1);
@@ -457,7 +467,7 @@
         lid = 1 - 0.3 * e;
         P.headRoll += sideOf(ev[2]) * 0.08 * play * e;
       } else if (ev[0] === K_ZIP) {
-        zip = [x, ev[2], zipW * zipClear(t, since, x)];
+        zip = [x, ev[2], zipW * ev[3] * zipClear(t, since, x)];
       }
       turnBlink = g[4];
       if (fw > 0) {
@@ -532,10 +542,10 @@
     P.glow += 0.4 * gl; P.finGlow += 0.6 * gl;
 
     // The hover.
-    const hb = wave(t, bobK, 0);
+    const hb = breathWave(t, bobK, N_BREATH);
     P.posY += bobA * (1 - 0.4 * o.calm) * hb;
     // Its fins trail the hover a moment behind (follow-through).
-    const trail = 0.25 * bobA * (1 - 0.4 * o.calm) * wave(t - 0.35, bobK, 0) / 0.018;
+    const trail = 0.25 * bobA * (1 - 0.4 * o.calm) * breathWave(t - 0.35, bobK, N_BREATH) / 0.018;
     P.finL += 0.04 * trail; P.finR += 0.04 * trail;
 
     // Following the pointer: mostly with the eyes. Asleep, it does not.
@@ -732,7 +742,7 @@
 
   /** Whether one of its idle moments is playing at clock t (critter-pose.js playing(), cuteBusy()). */
   function busy(state, t, since, opts) {
-    return state === "idle" && (C.util.playing(idleEvent(t)) || cuteBusy(t, since, opts, S_CUTE, CUTE_LEN));
+    return state === "idle" && (playingV(idleEvent(t, opts ? optsOf(opts, t).attention : 1)) || cuteBusy(t, since, opts, S_CUTE, CUTE_LEN));
   }
 
   /** Whether one of its own talking gestures is playing at clock t (critter-pose.js gesturing()). */

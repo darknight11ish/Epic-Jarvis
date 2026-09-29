@@ -540,6 +540,69 @@ if (!K) {
     assert.equal(busy, true);
   });
 
+  await check("attention: as it was for five minutes, then the happenings thin out; a pointer on the face or using Jarvis brings them back", async () => {
+    const { page, done } = await open();
+    await post(page, { type: "jarvis-hud-face", state: "idle" });
+    await page.waitForTimeout(500);
+    const fresh = await opts(page);
+    assert.equal(fresh.attention, 1, "a page that has only just opened counts as used");
+    // Six minutes on with nothing happening (LAST_ACTIVE is the page's own memory of when it last was).
+    await page.evaluate(() => { LAST_ACTIVE -= 360; });
+    await page.waitForTimeout(500);
+    const easing = await opts(page);
+    assert.ok(easing.attention < 1 && easing.attention > 0, `eased, not snapped: ${easing.attention}`);
+    await page.waitForTimeout(2200);
+    const idle = await opts(page);
+    assert.equal(idle.attention, 0);
+    await page.evaluate(() => { POINTER_ON = true; });
+    await page.waitForTimeout(2300);
+    const pointed = await opts(page);
+    await page.evaluate(() => { POINTER_ON = false; });
+    await page.waitForTimeout(2300);
+    const gone = await opts(page);
+    // Using Jarvis (a question being asked) counts, and stays for five minutes.
+    await post(page, { type: "jarvis-hud-face", state: "listening" });
+    await page.waitForTimeout(2500);
+    await post(page, { type: "jarvis-hud-face", state: "idle" });
+    await page.waitForTimeout(300);
+    const used = await opts(page);
+    await done();
+    assert.equal(pointed.attention, 1);
+    assert.equal(gone.attention, 0);
+    assert.equal(used.attention, 1);
+  });
+
+  await check("a clip's phrase ends are handed to the pose ahead of time, and the finder that listens to the level stays out of it", async () => {
+    const { page, done } = await open();
+    await page.evaluate(() => { CritterPose.species.redpanda.gesturing = () => false; });
+    await post(page, { type: "jarvis-hud-face", state: "speaking" });
+    await page.waitForTimeout(200);
+    // A clip: sound 0-1.5 s, a pause, sound 1.8-4.0 s. Its ends: 1.5 and 4.0 (2 s apart or more).
+    const cued = await page.evaluate(() => {
+      const n = 500, level = new Float32Array(n), z = new Float32Array(n);
+      for (let i = 0; i < n; i++) level[i] = (i < 150 || (i >= 180 && i < 400)) ? 0.5 : 0;
+      const packed = JarvisLipSync.pack({ fps: 100, n, level, open: z, wide: z, round: z });
+      window.__faceVoice.cue({ id: 901, n: 1, track: packed, t: 0, at: Date.now(), playing: true, rate: 1 });
+      return JarvisLipSync.phraseEnds(JarvisLipSync.unpack(packed));
+    });
+    assert.equal(cued.length, 2);
+    const seen = [];
+    for (let i = 0; i < 170; i++) {
+      const o = await opts(page);
+      seen.push({ due: o.phraseDue, n: o.phraseN, end: o.phraseEnd });
+      await page.waitForTimeout(30);
+    }
+    await done();
+    const first = seen.find((x) => typeof x.due === "number");
+    assert.ok(first, "an end was handed over ahead of time");
+    assert.ok(first.due > 0.5 && first.due <= 0.95, `first seen ${first.due} s before its end`);
+    assert.ok(seen.every((x) => typeof x.due !== "number" || x.end === undefined), "the finder is not asked while the clip's ends are handed over");
+    assert.ok(seen.every((x) => x.end === undefined || x.end >= 1e8), "the finder never finds an end of its own while the clip's track is used");
+    const ns = [...new Set(seen.map((x) => x.n))];
+    assert.ok(ns.includes(1) && ns.includes(2), `both ends taken up: ${ns}`);
+    assert.ok(seen.some((x) => x.due < 0), "the end is kept after it has passed, for its gesture");
+  });
+
   await browser.close();
   close();
 }

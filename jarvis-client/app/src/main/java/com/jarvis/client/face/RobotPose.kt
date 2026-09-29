@@ -25,6 +25,12 @@ import com.jarvis.client.face.CritterPose.focusEndOf
 import com.jarvis.client.face.CritterPose.focusOf
 import com.jarvis.client.face.CritterPose.gaze
 import com.jarvis.client.face.CritterPose.happening
+import com.jarvis.client.face.CritterPose.happeningV
+import com.jarvis.client.face.CritterPose.thinGate
+import com.jarvis.client.face.CritterPose.breathWave
+import com.jarvis.client.face.CritterPose.noise
+import com.jarvis.client.face.CritterPose.NONE4
+import com.jarvis.client.face.CritterPose.playingV
 import com.jarvis.client.face.CritterPose.hash01
 import com.jarvis.client.face.CritterPose.invRow
 import com.jarvis.client.face.CritterPose.listenNod
@@ -125,6 +131,12 @@ object RobotPose {
     private const val S_PHRASE = 253
     private const val S_CUTE = 251
     private const val S_BAG = 243
+    // The salts of a happening's size, length and thinning (happeningV): three in a gap nothing else of the robot's uses.
+    private const val S_VARY = 166
+    // The robot's own seeds for the slow wander (noise()): its talking sway and its hover.
+    private const val N_YAW = 40
+    private const val N_ROLL = 41
+    private const val N_BREATH = 42
     /** How long each cute moment lasts: the wave, polishing its visor. */
     private val CUTE_LEN = floatArrayOf(3.3f, 3.2f)
 
@@ -136,15 +148,16 @@ object RobotPose {
     private const val K_ZIP = 5f
 
     /** What it does at rest at clock [t]: [kind, seconds since it started, the clock it starts at] (the desktop's idleEvent). */
-    private fun idleEvent(t: Float): FloatArray {
+    private fun idleEvent(t: Float, att: Float = 1f): FloatArray {
         val n = floor(t / SLOT).toInt()
         val m = n and 255
         val pos = m and 15
         if ((pos == 0 || pos == 6 || pos == 13) && hash01(m * 256 + S_ZIP) < 0.75f) {
             val off = 0.5f + 5.5f * hash01(m * 256 + S_EVENT + 2)
-            return floatArrayOf(K_ZIP, t - n * SLOT - off, n * SLOT + off)
+            val size = 0.75f + 0.25f * hash01(m * 256 + S_VARY + 1)
+            return floatArrayOf(K_ZIP, t - n * SLOT - off, n * SLOT + off, size * thinGate(n, SLOT, S_VARY, att))
         }
-        return happening(t, SLOT, 0.5f, 5.5f, S_EVENT, 0.7f, SMALL)
+        return happeningV(t, SLOT, 0.5f, 5.5f, S_EVENT, 0.7f, SMALL, att, S_VARY)
     }
 
     /** Which way a happening starting at clock [at] goes, -1 or 1. */
@@ -152,7 +165,7 @@ object RobotPose {
 
     /** Whether one of its idle moments is playing at clock [t] - the desktop's busy(state, t, since, opts). */
     fun busy(state: FaceState, t: Float, since: Float? = null, opts: Opts? = null): Boolean =
-        state == FaceState.IDLE && (CritterPose.playing(idleEvent(t)) || cuteBusy(t, since, opts, S_CUTE, CUTE_LEN))
+        state == FaceState.IDLE && (playingV(idleEvent(t, opts?.norm(t)?.attention ?: 1f)) || cuteBusy(t, since, opts, S_CUTE, CUTE_LEN))
 
     /** Whether one of its own talking gestures is playing at clock [t] - the desktop's gesturing(t). */
     fun gesturing(t: Float): Boolean {
@@ -260,7 +273,8 @@ object RobotPose {
         val cw = if (cu[0] >= 0f) cuteOf(o) else 0f
         val fw = if (state == FaceState.IDLE) focusOf(o) else 0f
         val fp = fw * (1f - 0.6f * o.calm)   // the focus pose itself: smaller under calm (the happenings still go by fw)
-        val hap = o.hap * (1f - fw) * (1f - cw * (if (cu[0] >= 0f) cuteQuiet(cu[1], CUTE_LEN[cu[0].toInt()]) else 0f))
+        val evI = if (state == FaceState.IDLE) idleEvent(t, o.attention) else NONE4
+        val hap = o.hap * (1f - fw) * (1f - cw * (if (cu[0] >= 0f) cuteQuiet(cu[1], CUTE_LEN[cu[0].toInt()]) else 0f)) * (if (evI[0] == K_ZIP) 1f else evI[3])
         val sw = o.sway
         val play = o.play
         val zipW = (1f - o.still) * (1f - o.calm) * (1f - o.serious) * (1f - o.quiet) * (1f - fw) *
@@ -353,8 +367,8 @@ object RobotPose {
                 p[SPEAK] = 1f
                 p[HAPPY] = 0.55f; p[SIZE] = 1.02f; p[GLOW] = 1.1f; p[FIN_GLOW] = 0.7f
                 p[PITCH] = 0.03f
-                p[HEAD_YAW] = sw * 0.05f * wave(t, 111f, 0f) + 0.09f * g[2]
-                p[HEAD_ROLL] = sw * 0.04f * wave(t, 93f, 0.5f)
+                p[HEAD_YAW] = sw * 0.05f * noise(t, N_YAW, 4f) + 0.09f * g[2]
+                p[HEAD_ROLL] = sw * 0.04f * noise(t, N_ROLL, 4f)
                 p[LOOK_X] = g[0] - 0.16f * g[2]; p[LOOK_Y] = g[1] - 0.16f * g[3]
                 p[L_HX] = -0.47f; p[L_HY] = -0.12f; p[L_HZ] = -0.12f; p[R_HX] = 0.47f; p[R_HY] = -0.12f; p[R_HZ] = -0.12f
                 if (b[0] == 0f) {
@@ -431,7 +445,7 @@ object RobotPose {
             FaceState.IDLE -> {
                 // Happy arcs, looking about; now and then a small thing, a zip or a cute moment.
                 val g = looks(t, S_GAZE, 1.4f, 5.5f, 0.4f, 0.8f, 0.3f, 0.05f, 0.07f, 1.1f, o)
-                val ev = idleEvent(t)
+                val ev = evI
                 val x = ev[1]
                 p[HAPPY] = 0.85f
                 p[HEAD_YAW] = 0.22f * g[2]
@@ -482,7 +496,7 @@ object RobotPose {
                         lid = 1f - 0.3f * e
                         p[HEAD_ROLL] += sideOf(ev[2]) * 0.08f * play * e
                     }
-                    K_ZIP -> zip = floatArrayOf(x, ev[2], zipW * zipClear(t, since, x))
+                    K_ZIP -> zip = floatArrayOf(x, ev[2], zipW * ev[3] * zipClear(t, since, x))
                 }
                 turnBlink = g[4]
                 if (fw > 0f) {
@@ -549,9 +563,9 @@ object RobotPose {
         p[GLOW] += 0.4f * gl; p[FIN_GLOW] += 0.6f * gl
 
         // The hover, and the fins trailing it.
-        val hb = wave(t, bobK, 0f)
+        val hb = breathWave(t, bobK, N_BREATH)
         p[POS_Y] += bobA * (1f - 0.4f * o.calm) * hb
-        val trail = 0.25f * bobA * (1f - 0.4f * o.calm) * wave(t - 0.35f, bobK, 0f) / 0.018f
+        val trail = 0.25f * bobA * (1f - 0.4f * o.calm) * breathWave(t - 0.35f, bobK, N_BREATH) / 0.018f
         p[FIN_L] += 0.04f * trail; p[FIN_R] += 0.04f * trail
 
         // The pointer: mostly with the eyes. Asleep, it does not follow.

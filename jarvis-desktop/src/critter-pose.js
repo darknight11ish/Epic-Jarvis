@@ -127,6 +127,55 @@
     const u = (loopT(t) / LOOP) * k;
     return TAU * (u - Math.floor(u));
   }
+  /* ------------------------------------------------------------------ *
+   * Smooth drift that does not repeat (2026-09-29, the skeptical review:
+   * "all five heads sway almost identically" and "breathing is a
+   * metronome"). A sine has one period, so every face that used the same
+   * one swayed in step, and a breath was exactly as long as the last.
+   * noise() is a slow, smooth wander instead, seeded per face and per use:
+   *
+   *  - it is a uniform cubic B-spline through random control values, one
+   *    every `scale` seconds (a power of two). That curve is smooth (no
+   *    corner, no sudden change of speed) and can never leave -1..1;
+   *  - its speed is bounded by construction: at most 2 / scale a second (a
+   *    spline's slope is a weighted average of the gaps between neighbouring
+   *    control values, and no gap is more than 2), so "how fast can it move"
+   *    is a number written here, not a hope;
+   *  - the control values are picked with the same integer hash as
+   *    everything else, taken round PERIOD, so it repeats only after the
+   *    4096 seconds every other rhythm here repeats after, and the phone may
+   *    restart its clock at any multiple of that. JavaScript and Kotlin
+   *    agree (integer hash, a handful of sums).
+   * ------------------------------------------------------------------ */
+  function ctrl(seed, j) {
+    const h = hash01((seed & 255) * 8192 + j * 2), s = hash01((seed & 255) * 8192 + j * 2 + 1);
+    // 0.5..1 in size, either way up: a control value near 0 would make a dead
+    // stretch, and the wander should keep moving a little.
+    return (s < 0.5 ? -1 : 1) * (0.5 + 0.5 * h);
+  }
+  /** -1..1, smooth, changing by at most 2 / scale a second; `scale` a power of two (seconds), `seed` under 256. */
+  function noise(t, seed, scale) {
+    const n = PERIOD / scale;
+    const tl = t - PERIOD * Math.floor(t / PERIOD);
+    const u = tl / scale, i = Math.floor(u), f = u - i;
+    const c0 = ctrl(seed, (i + n - 1) % n), c1 = ctrl(seed, i % n), c2 = ctrl(seed, (i + 1) % n), c3 = ctrl(seed, (i + 2) % n);
+    const g = 1 - f;
+    return (c0 * g * g * g + c1 * (3 * f * f * f - 6 * f * f + 4) + c2 * (-3 * f * f * f + 3 * f * f + 3 * f + 1) + c3 * f * f * f) / 6;
+  }
+  /**
+   * A breath at clock t, -1..1 like the sine it replaces, but uneven: the
+   * phase is the steady one (k cycles a LOOP) plus a slow wander, so the
+   * breath's rate drifts by at most BREATH_VAR either way (each breath's
+   * length varies by about that much) and its depth by up to a tenth (never deeper than the steady breath was). `seed` is
+   * the face's own.
+   */
+  const BREATH_VAR = 0.20, BREATH_SPAN = 16;
+  function breathWave(t, k, seed) {
+    const w0 = TAU * k / LOOP;   // radians a second at the steady rate
+    const ph = phaseOf(t, k) + BREATH_VAR * (BREATH_SPAN / 2) * w0 * noise(t, seed, BREATH_SPAN);
+    return Math.sin(ph) * (0.95 + 0.05 * noise(t, seed + 1, 32));
+  }
+
   /** 0 at both ends, 1 in the middle, with no sudden start or stop (x in 0..1). */
   function bump(x) {
     if (x <= 0 || x >= 1) return 0;
@@ -306,6 +355,49 @@
   }
 
   /**
+   * happening() for the idle happenings, with two more things (2026-09-29,
+   * the skeptical review):
+   *
+   *  - Each one is a little different. A slot's hash also gives it a SIZE
+   *    (0.75 to 1: never bigger than the tested clip) and a LENGTH (the same
+   *    clip played 0.8 to 1.25 times as long: `x` comes back already divided
+   *    by it, so a caller reads the clip's own time, and playing() still
+   *    works). Before, the panda's tail flick was the very same clip 28
+   *    times in 30 minutes.
+   *  - Fewer of them when Jarvis is not being used. `att` (the host's
+   *    `attention`, 0..1) is 1 while the owner has talked to Jarvis lately or
+   *    is pointing at the face, else 0. At 0, about one slot in four still has
+   *    its happening (the same clips, only rarer); the rest have none. Each
+   *    slot has its own threshold, so as `att` eases over a couple of seconds
+   *    the others fade in one by one and a clip already playing grows or
+   *    shrinks smoothly - nothing snaps. At 1 (and when a host passes
+   *    nothing) every slot keeps its happening exactly as before.
+   *
+   * Returns [kind, seconds since it started (negative before), the clock it
+   * starts at, weight]: `weight` is size times the thinning, 0..1, for the
+   * caller to scale the clip by. [-1, 0, 0, 1] for none. `vsalt` is the
+   * first of three salts for the size, length and thinning (default salt + 3).
+   */
+  const NONE4 = [-1, 0, 0, 1];
+  const EV_SIZE_LO = 0.75, EV_LONG = 1.25, THIN_KEEP = 0.25, THIN_RAMP = 0.5;
+  function thinGate(n, slot, vsalt, att) {
+    const r = hash01(slotId(n, slot) * 256 + vsalt);
+    // The attention at which this slot's happening is fully back: below zero
+    // (always kept) for the quarter that stay when Jarvis is not being used.
+    const th = r < THIN_KEEP ? -1 : (r - THIN_KEEP) / (1 - THIN_KEEP) * (1 - THIN_RAMP);
+    return smooth(clamp((att - th) / THIN_RAMP, 0, 1));
+  }
+  function happeningV(t, slot, lead, spread, salt, chance, kinds, att, vsalt) {
+    const h = happening(t, slot, lead, spread, salt, chance, kinds);
+    if (h[0] < 0) return NONE4;
+    if (vsalt === undefined) vsalt = salt + 3;
+    const n = Math.floor(t / slot), id = slotId(n, slot) * 256;
+    const size = EV_SIZE_LO + (1 - EV_SIZE_LO) * hash01(id + vsalt + 1);
+    const long = Math.pow(EV_LONG, 2 * hash01(id + vsalt + 2) - 1);
+    return [h[0], h[1] / long, h[2], size * thinGate(n, slot, vsalt, att == null ? 1 : att)];
+  }
+
+  /**
    * A talking gesture (a nod, a paw or wing lifted, a tilt), in phrases: at
    * most one in each two-second slot, often none, never the same kind twice
    * running - and none at all when one of the eyes' looks (gazeSalt, lo, hi
@@ -448,7 +540,17 @@
       pet: w(o.pet), petX: clamp(num(o.petX, 0), -1, 1), petDir: clamp(num(o.petDir, 0), -1, 1),
       hello: o.hello == null ? 1 : w(o.hello), goodbye: w(o.goodbye),
       heardAt: at(o.heard), heardN: Math.floor(num(o.heardN, -1)),
-      phraseAt: at(o.phraseEnd), phraseN: Math.floor(num(o.phraseN, -1)),
+      // Jarvis's phrase ends: either one that has happened (`phraseEnd`, seconds
+      // since), or - the host having read the whole clip before it plays - the
+      // next one still ahead (`phraseDue`, seconds until it; negative once it
+      // has passed). With `phraseDue` the gesture is timed to LAND on the end
+      // (phraseBeat), not to start there.
+      phraseAt: typeof o.phraseDue === "number" && isFinite(o.phraseDue) ? t0 + clamp(o.phraseDue, -30, 30) : at(o.phraseEnd),
+      phraseAhead: typeof o.phraseDue === "number" && isFinite(o.phraseDue) ? 1 : 0,
+      phraseN: Math.floor(num(o.phraseN, -1)),
+      // How much the owner is using Jarvis (2026-09-29): 1 (the default: as it
+      // always was) or fewer idle happenings when 0. See happeningV.
+      attention: o.attention == null ? 1 : w(o.attention),
       nodAt: at(o.ackNod), glowAt: at(o.ackGlow), focusEndAt: at(o.focusEnd),
       arrive: -1,
       _n: 1,
@@ -584,11 +686,16 @@
    * happening()'s three numbers.
    */
   function phraseBeat(t, o, salt, gazeSalt, lo, hi, contact) {
-    const x = t - o.phraseAt;
+    const k = bagKind(Math.max(0, o.phraseN), 3, salt);
+    // With the end known in advance (phraseDue) the gesture starts early
+    // enough for its strongest moment to land on it: a nod peaks 0.35 s in,
+    // a lift is at its top from 0.4 to 0.7 s (0.5 taken), a tilt at 0.6 s.
+    const x = t - o.phraseAt + (o.phraseAhead ? PHRASE_LEAD[k] : 0);
     if (!(x >= 0 && x < 2)) return NONE;
     if (!clearOfLooks(o.phraseAt, gazeSalt, lo, hi, contact)) return NONE;
-    return [bagKind(Math.max(0, o.phraseN), 3, salt), x, o.phraseAt];
+    return [k, x, o.phraseAt];
   }
+  const PHRASE_LEAD = [0.35, 0.5, 0.6];
 
   /** The nod when a fact is saved (o.nodAt): [head pitch, ears] to add. About 2.5 degrees. */
   const ACK_S = 1.2;
@@ -748,12 +855,49 @@
     return { talk, quiet, ago, n };
   }
 
+  /**
+   * The host's side of gestures that land ON Jarvis's sentence ends
+   * (2026-09-29; the skeptical review found a nod peaked 0.45-0.55 s after
+   * the sentence it marked, inside the next one, because pauseStep only
+   * hears an end once it is over). A host that has the whole clip before
+   * it plays (JarvisLipSync.phraseEnds on the desktop, the same on the
+   * phone) knows where each end will be, so it hands the pose the next end
+   * BEFORE it comes, and the pose starts the gesture early enough for its
+   * strongest moment to land on it (opts.phraseDue, phraseBeat).
+   *
+   * rec: {n, due} (null to start): `n` counts the ends handed over so far,
+   * `due` is when the latest one is, in seconds from now (negative once it
+   * has passed; null before the first). Each frame, hand it the seconds
+   * since the last frame and `next`: the seconds until the clip's next end
+   * still to come (null: none known). Put rec.due into opts.phraseDue and
+   * rec.n into opts.phraseN. An end is taken up only when it is between
+   * AHEAD.MIN and AHEAD.MAX seconds away - early enough that no gesture
+   * (the longest starts 0.6 s before its end) begins part way in, not so
+   * early that the one before is still playing - and only PAUSE.PHRASE_GAP
+   * after the last one taken, the same spacing as pauseStep. One found too
+   * late (the host started listening for ends part way into a clip) is left
+   * out, not played half way.
+   */
+  const AHEAD = Object.freeze({ MIN: 0.65, MAX: 0.9 });
+  function aheadStep(rec, dt, next) {
+    const n = rec ? rec.n : 0;
+    const due = rec && typeof rec.due === "number" ? rec.due - Math.max(0, dt) : null;
+    if (typeof next === "number" && next >= AHEAD.MIN && next <= AHEAD.MAX
+        && (due === null || next - due >= PAUSE.PHRASE_GAP)) {
+      return { n: n + 1, due: next };
+    }
+    return { n, due };
+  }
+
   // The panda's own dice.
   const S_GAZE = 0, S_EVENT = 16, S_ROLL = 24, S_LEAN = 32, S_BEAT = 40, S_BLINK = 48;
   // ...and for the new behaviours: listening's and thinking's variants, the
   // focus looks (twelve), the listening nods, the phrase-end gestures, the
   // cute moments.
   const S_LISTEN = 56, S_THINK = 59, S_FOCUS = 62, S_NOD = 74, S_PHRASE = 75, S_CUTE = 76;
+  // ...and the panda's own seeds for the slow wander (noise()): its talking
+  // sway, and its breathing. Each face has its own, so no two sway together.
+  const N_YAW = 8, N_ROLL = 9, N_BREATH = 10;
   // How long each cute moment lasts: hugging its tail, playing with its orb.
   const CUTE_LEN = [7.0, 5.0];
   // Its idle happenings, and how often each comes up: the small ones (a
@@ -779,7 +923,7 @@
     // idle: a slow swish, pushed the other way when its weight shifts, and
     // now and then a flick (the happening "tail flick", kind 1).
     let s = sw * (0.16 * wave(t, 87, 0) + 0.08 * wave(t, 139, 1.7) - 0.065 * shift(t - 0.6, S_ROLL));
-    const ev = happening(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS);
+    const ev = happeningV(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS);
     if (ev[0] === 1) s += m[0] * 0.32 * (bump(ev[1] / 0.8) - 0.3 * bump((ev[1] - 0.6) / 0.9));
     return s;
   }
@@ -797,9 +941,11 @@
    */
   const HAPPENING_S = 5.5;
   function playing(ev) { return ev[0] >= 0 && ev[1] >= 0 && ev[1] < HAPPENING_S; }
+  /** playing(), for happeningV's answer: one thinned away (weight 0) is not playing. */
+  function playingV(ev) { return playing(ev) && ev[3] > 0; }
   /** The panda's: an idle happening (the same dice its idle pose rolls) is playing at clock t. */
   function busy(state, t, since, opts) {
-    return state === "idle" && (playing(happening(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS))
+    return state === "idle" && (playingV(happeningV(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS, opts ? optsOf(opts, t).attention : 1))
       || cuteBusy(t, since, opts, S_CUTE, CUTE_LEN));
   }
   /**
@@ -868,7 +1014,10 @@
     const fp = fw * (1 - 0.6 * o.calm);   // the focus pose itself: smaller under calm (the happenings still go by fw)
     // (and so do the stretch as a focus session ends, and being stroked)
     const fe = state === "idle" ? focusEndOf(t, o) : 0, pw = AWAKE[state] ? petOf(o) : 0;
-    m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0)) * (1 - fe) * (1 - pw);
+    // The idle happening of this slot (one dice roll, read by the tail too),
+    // and its weight: size, and thinned away when Jarvis is not being used.
+    const evI = state === "idle" ? happeningV(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS, o.attention) : NONE4;
+    m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0)) * (1 - fe) * (1 - pw) * evI[3];
     const hap = m[0], sw = m[2], play = m[3];
     const P = {
       headYaw: 0, headPitch: 0, headRoll: 0, lean: 0, bob: 0, breath: 1,
@@ -958,8 +1107,8 @@
       P.speak = 1;
       P.lean = 0.05;
       P.headPitch = 0.03;
-      P.headYaw = sw * 0.05 * wave(t, 111, 0) + 0.08 * g[2];
-      P.headRoll = sw * 0.035 * wave(t, 93, 0.5);
+      P.headYaw = sw * 0.05 * noise(t, N_YAW, 4) + 0.08 * g[2];
+      P.headRoll = sw * 0.035 * noise(t, N_ROLL, 4);
       P.lookX = g[0] - 0.16 * g[2]; P.lookY = g[1] - 0.16 * g[3];
       P.brow = 0.3 + 0.1 * amp;
       P.earL = P.earR = 0.45;
@@ -1057,7 +1206,7 @@
       // before the head does; now and then a stretch or a scratch.
       const g = looks(t, S_GAZE, 1.5, 6, 0.35, 0.8, 0.25, 0, 0.08, 1.1, o);
       const gLag = looks(t - 0.3, S_GAZE, 1.5, 6, 0.35, 0.8, 0.25, 0, 0.08, 1.1, o);
-      const ev = happening(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS);
+      const ev = evI;
       const x = ev[1];
       const roll = sw * 0.025 * shift(t, S_ROLL);
       let ex = g[0], ey = g[1], hx = g[2], hy = g[3];
@@ -1189,7 +1338,7 @@
     }
 
     // Breathing: the chest swells and the whole body rises a little.
-    const b = wave(t, breathK, 0) * (1 + 0.6 * deepBreath);
+    const b = breathWave(t, breathK, N_BREATH) * (1 + 0.6 * deepBreath);
     P.breath = 1 + 0.018 * breathDepth * b;
     P.bob = 0.007 * breathDepth * b + lift;
 
@@ -1888,7 +2037,7 @@
     // The new behaviours' helpers for a host: the pause finder and its
     // numbers, how opaque to draw a face while it says hello or goodbye, and
     // how long each of those takes.
-    PAUSE, pauseStep, switchAlpha, HELLO_S, GOODBYE_S,
+    PAUSE, pauseStep, AHEAD, aheadStep, switchAlpha, HELLO_S, GOODBYE_S,
     // ...and whether a moment it hands in (a stroke, a nod, a glow, a stretch) is playing.
     momentsBusy,
     // Every animal, by face id. The owl and the otter add themselves. Each
@@ -1900,7 +2049,10 @@
     // Shared with the other animals' files, so all three do their sums alike.
     util: { makePose, halfLives, mouthOf, clamp, smooth, ease, rx, ry, rz, mul, apply, add, invRow,
             wave, bump, envAHR, happening, beat, shift, gaze, looks, restingGaze, optsOf, mods, chain,
-            gauss, blinkAt, overlayAt, phaseOf, LOOP, PERIOD, TAU, playing,
+            gauss, blinkAt, overlayAt, phaseOf, LOOP, PERIOD, TAU, playing, playingV,
+            // The slow wander, uneven breathing, and the idle happenings that
+            // vary and thin out (2026-09-29).
+            noise, breathWave, happeningV, thinGate, NONE4, PHRASE_LEAD,
             toward, eyesOpen, eyesClose, WAKE_S, SLEEP_S,
             // The new behaviours' shared parts (see "New behaviours").
             NEVER, NONE, ZERO2, ZERO4, ZERO5, AWAKE, newOf, varOf, focusOf, petOf, cuteOf, extras, switchE, bagKind,

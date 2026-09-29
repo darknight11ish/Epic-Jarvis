@@ -143,6 +143,41 @@ class CritterPoseTest {
         }
     }
 
+    /**
+     * The slow wander that replaced the shared sines (noise, breathWave) and the
+     * host's look-ahead for phrase ends (aheadStep) give the phone's numbers the
+     * desktop's, at moments inside one period, past it and days on.
+     */
+    @Test
+    fun `the slow wander and the look-ahead match the desktop's`() {
+        val text = checkNotNull(javaClass.classLoader?.getResourceAsStream("critter-drift-golden.json")) {
+            "critter-drift-golden.json is missing from test resources - run tools/gen_critters.py"
+        }.bufferedReader().readText()
+        val o = Json.parseToJsonElement(text).jsonObject
+        for (c in o["noise"]!!.jsonArray) {
+            val n = c.jsonObject
+            val got = CritterPose.noise(n["t"]!!.jsonPrimitive.float, n["seed"]!!.jsonPrimitive.float.toInt(), n["scale"]!!.jsonPrimitive.float)
+            assertEquals("noise $n", n["v"]!!.jsonPrimitive.float, got, 2e-3f)
+        }
+        for (c in o["breath"]!!.jsonArray) {
+            val n = c.jsonObject
+            val got = CritterPose.breathWave(n["t"]!!.jsonPrimitive.float, n["k"]!!.jsonPrimitive.float, n["seed"]!!.jsonPrimitive.float.toInt())
+            assertEquals("breath $n", n["v"]!!.jsonPrimitive.float, got, 2e-3f)
+        }
+        val lim = o["ahead_limits"]!!.jsonObject
+        assertEquals(lim["MIN"]!!.jsonPrimitive.float, CritterPose.Ahead.MIN, 0f)
+        assertEquals(lim["MAX"]!!.jsonPrimitive.float, CritterPose.Ahead.MAX, 0f)
+        var rec: CritterPose.AheadRec? = null
+        for (c in o["ahead"]!!.jsonArray) {
+            val a = c.jsonObject
+            val next = a["next"]!!.let { if (it is kotlinx.serialization.json.JsonNull) null else it.jsonPrimitive.float }
+            rec = CritterPose.aheadStep(rec, a["dt"]!!.jsonPrimitive.float, next)
+            assertEquals("ahead n $a", a["n"]!!.jsonPrimitive.float.toInt(), rec.n)
+            val due = a["due"]!!.let { if (it is kotlinx.serialization.json.JsonNull) null else it.jsonPrimitive.float }
+            if (due == null) assertEquals("ahead due $a", null, rec.due) else assertEquals("ahead due $a", due, rec.due!!, 1e-4f)
+        }
+    }
+
     /** The host's opts as the fixture gives them (the desktop's keys, the switches by their ids). */
     private fun optsOf(o: kotlinx.serialization.json.JsonObject?): CritterPose.Opts {
         fun f(k: String, d: Float) = o?.get(k)?.jsonPrimitive?.float ?: d
@@ -157,6 +192,7 @@ class CritterPoseTest {
             phraseEnd = f("phraseEnd", CritterPose.NEVER), phraseN = i("phraseN", -1),
             ackNod = f("ackNod", CritterPose.NEVER), ackGlow = f("ackGlow", CritterPose.NEVER),
             focusEnd = f("focusEnd", CritterPose.NEVER),
+            attention = f("attention", 1f), phraseDue = f("phraseDue", Float.NaN),
         )
     }
 
@@ -174,17 +210,24 @@ class CritterPoseTest {
         assertEquals(o["happening_s"]!!.jsonPrimitive.float, CritterPose.HAPPENING_S, 0f)
         val times = o["times"]!!.jsonArray.map { it.jsonPrimitive.float }
         val busy = o["busy"]!!.jsonObject
-        val phone = mapOf<String, (FaceState, Float) -> Boolean>(
-            "redpanda" to { s, t -> CritterPose.busy(s, t) }, "pygmyowl" to { s, t -> OwlPose.busy(s, t) },
-            "seaotter" to { s, t -> OtterPose.busy(s, t) }, "monkey" to { s, t -> MonkeyPose.busy(s, t) },
-            "robot" to { s, t -> RobotPose.busy(s, t) },
+        val phone = mapOf<String, (FaceState, Float, CritterPose.Opts?) -> Boolean>(
+            "redpanda" to { s, t, o -> CritterPose.busy(s, t, null, o) }, "pygmyowl" to { s, t, o -> OwlPose.busy(s, t, null, o) },
+            "seaotter" to { s, t, o -> OtterPose.busy(s, t, null, o) }, "monkey" to { s, t, o -> MonkeyPose.busy(s, t, null, o) },
+            "robot" to { s, t, o -> RobotPose.busy(s, t, null, o) },
         )
         assertEquals(phone.keys, busy.keys)
+        val idle0 = o["busy_att0"]!!.jsonObject
+        assertEquals(phone.keys, idle0.keys)
         for ((sp, fn) in phone) {
             val want = busy[sp]!!.jsonPrimitive.content
-            val got = times.joinToString("") { if (fn(FaceState.IDLE, it)) "1" else "0" }
+            val got = times.joinToString("") { if (fn(FaceState.IDLE, it, null)) "1" else "0" }
             assertEquals("$sp: busy differs from the desktop's", want, got)
-            for (st in FaceState.entries) if (st != FaceState.IDLE) assertTrue("$sp busy in $st", times.none { fn(st, it) })
+            // ...and while the owner is not using Jarvis (`attention` 0): about one in four.
+            val want0 = idle0[sp]!!.jsonPrimitive.content
+            val notUsed = CritterPose.Opts(attention = 0f)
+            assertEquals("$sp: busy with attention 0 differs from the desktop's", want0,
+                times.joinToString("") { if (fn(FaceState.IDLE, it, notUsed)) "1" else "0" })
+            for (st in FaceState.entries) if (st != FaceState.IDLE) assertTrue("$sp busy in $st", times.none { fn(st, it, null) })
         }
         // And whether one of its own talking gestures plays - what the host
         // checks before it hands the pose Jarvis's phrase ends mid-answer.
@@ -1408,5 +1451,110 @@ class CritterPoseTest {
             val w = worstRun(a, 9f, st - 0.5f, 1e6f) { FaceState.IDLE to opts() }
             assertTrue("${a.id} cute at $st: speed changed by $w a second in one frame", w < 0.25f)
         }
+    }
+
+    // ---- Motion after the skeptical review (2026-09-29): the desktop's animal-motion.mjs, on the phone's copies ----
+
+    @Test
+    fun `the slow wander is smooth, bounded, fast at most 2 over scale, and repeats only after 4096 s`() {
+        for (scale in listOf(4f, 16f)) {
+            var prev = CritterPose.noise(0f, 8, scale)
+            var lo = 9f; var hi = -9f; var fast = 0f
+            var t = 1f / 60f
+            while (t < 2100f) {
+                val v = CritterPose.noise(t, 8, scale)
+                lo = minOf(lo, v); hi = maxOf(hi, v)
+                fast = maxOf(fast, abs(v - prev) * 60f)
+                prev = v
+                t += 1f / 60f
+            }
+            assertTrue("scale $scale: $lo..$hi", lo >= -1f && hi <= 1f && hi > 0.5f && lo < -0.5f)
+            assertTrue("scale $scale changes $fast a second", fast <= 2f / scale + 1e-3f)
+        }
+        for (t in listOf(0.3f, 47.1f, 1000.7f)) {
+            assertEquals(CritterPose.noise(t, 17, 8f), CritterPose.noise(t + 4096f, 17, 8f), 1e-4f)
+        }
+    }
+
+    @Test
+    fun `breaths are uneven and never deeper than the steady one`() {
+        for (k in listOf(171f, 256f, 300f)) {
+            var deepest = 0f
+            val ups = ArrayList<Float>()
+            var prev = CritterPose.breathWave(1000f, k, 10)
+            var t = 1000f + 0.02f
+            while (t < 2800f) {
+                val v = CritterPose.breathWave(t, k, 10)
+                deepest = maxOf(deepest, abs(v))
+                if (prev < 0f && v >= 0f) ups.add(t)
+                prev = v
+                t += 0.02f
+            }
+            assertTrue("never deeper: $deepest", deepest <= 1f + 1e-4f)
+            val per = ups.zipWithNext { a, b -> b - a }
+            val mean = per.average().toFloat()
+            val worst = per.maxOf { abs(it / mean - 1f) }
+            assertTrue("k=$k: breaths differ by up to ${100 * worst} percent", worst in 0.08f..0.22f)
+        }
+    }
+
+    @Test
+    fun `with the owner not using Jarvis about one idle happening in four is left, and attention 1 changes nothing`() {
+        val faces = mapOf<String, (Float, CritterPose.Opts?) -> Boolean>(
+            "redpanda" to { t, o -> CritterPose.busy(FaceState.IDLE, t, null, o) },
+            "pygmyowl" to { t, o -> OwlPose.busy(FaceState.IDLE, t, null, o) },
+            "seaotter" to { t, o -> OtterPose.busy(FaceState.IDLE, t, null, o) },
+            "monkey" to { t, o -> MonkeyPose.busy(FaceState.IDLE, t, null, o) },
+            "robot" to { t, o -> RobotPose.busy(FaceState.IDLE, t, null, o) },
+        )
+        for ((sp, busy) in faces) {
+            var all = 0; var few = 0; var was = false; var wasFew = false
+            var t = 1000f
+            while (t < 1000f + 3600f) {
+                val b = busy(t, null); val f = busy(t, CritterPose.Opts(attention = 0f))
+                assertEquals("$sp: attention 1 is today's", b, busy(t, CritterPose.Opts(attention = 1f)))
+                if (b && !was) all++
+                if (f && !wasFew) few++
+                if (f) assertTrue("$sp: a thinned happening at $t that was not there", b)
+                was = b; wasFew = f
+                t += 0.05f
+            }
+            val share = few.toFloat() / all
+            assertTrue("$sp: $few of $all left", all > 120 && share in 0.15f..0.35f)
+        }
+    }
+
+    @Test
+    fun `each idle happening is a little different and the slower ones still end inside their slot`() {
+        val sizes = HashSet<String>()
+        for (n in 0 until 256) {
+            val h = CritterPose.happeningV(n * 16f + 9f, 16f, 0.5f, 5.5f, 16, 1.0f, 1, 1f)
+            if (h[0] < 0f) continue
+            assertTrue("size ${h[3]}", h[3] in 0.75f - 1e-6f..1f + 1e-6f)
+            val ratio = (9f - (h[2] - n * 16f)) / h[1]
+            assertTrue("length $ratio", ratio in 0.8f - 1e-4f..1.25f + 1e-4f)
+            sizes.add("%.3f".format(h[3]))
+        }
+        assertTrue("the slots do not vary: ${sizes.size}", sizes.size > 100)
+    }
+
+    @Test
+    fun `the owl's thinking head rolls half as far and moves far less than the 87 percent it did`() {
+        var roll = 0f; var moving = 0; var n = 0
+        var prev: FloatArray? = null
+        var t = 1000f
+        while (t < 1600f) {
+            val p = OwlPose.stateTargets(FaceState.THINKING, t, 0f, CritterPose.Look(), 99f)
+            roll = maxOf(roll, abs(p[2]))
+            prev?.let {
+                val v = Math.sqrt(((p[0] - it[0]) * (p[0] - it[0]) + (p[1] - it[1]) * (p[1] - it[1]) + (p[2] - it[2]) * (p[2] - it[2])).toDouble()) / 0.05 * 180 / Math.PI
+                if (v > 3.0) moving++
+                n++
+            }
+            prev = p
+            t += 0.05f
+        }
+        assertTrue("rolls $roll rad", roll <= 0.13f + 1e-5f)
+        assertTrue("moves ${100 * moving / n} percent of the time", moving.toFloat() / n < 0.45f)
     }
 }

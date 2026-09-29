@@ -1306,6 +1306,27 @@ const OPTION_EASE_S = 1;
 // rate an animal is drawn at (dozing, 2 a second), so a face that is still
 // being drawn never counts as stale.
 const MEM_STALE_S = 1;
+// How much the owner is using Jarvis (2026-09-29; docs/CRITTERS.md "Fewer
+// small moves when Jarvis is not being used"): 1 while they have talked,
+// typed, been given an answer or been asked something in the last
+// ATTENTION_S seconds (the state showed listening, thinking, speaking or
+// waiting on you), or their pointer is on the face; else 0, when the idle
+// happenings drop to about one in four. Eased over ATTENTION_EASE_S. The
+// Faces window is someone choosing a face, so it is always 1 there. A page
+// that has only just opened counts as used (nothing is known yet), so the
+// first ATTENTION_S seconds are as they always were. The phone's AnimalNow.
+const ATTENTION_S = 300, ATTENTION_EASE_S = 2;
+/** How long an end handed to the pose ahead of time stays in its opts: the
+ *  gesture on it is over within 1.4 s of the end (the longest, a tilt, starts
+ *  0.6 s early and lasts up to 2 s). */
+const PHRASE_KEEP_S = 2;
+const ATTENTION_STATES = { listening: 1, thinking: 1, speaking: 1, approval: 1 };
+let LAST_ACTIVE = performance.now() / 1000, POINTER_ON = false;
+function attentionWant(st, now){
+  if(!DISPLAY_MODE) return 1;
+  if(ATTENTION_STATES[st]) LAST_ACTIVE = now;
+  return POINTER_ON || now - LAST_ACTIVE < ATTENTION_S ? 1 : 0;
+}
 // The "Still" option (the animals only breathe and blink): Settings ->
 // "Animal options" -> "Keep the animal still", shared with the phone and
 // kept on the PC; this computer's copy is in localStorage (animal-shared.js).
@@ -1584,7 +1605,8 @@ function critterFace(o){
               nodsR: FACE_ANIMAL.nods ? 1 : 0, focusBuddyR: FACE_ANIMAL.focus_buddy ? 1 : 0,
               acksR: FACE_ANIMAL.acks ? 1 : 0, pettingR: FACE_ANIMAL.petting ? 1 : 0,
               cuteR: FACE_ANIMAL.cute_moments ? 1 : 0, focusR: FACE_MOMENTS.focusOn ? 1 : 0,
-              heard: null, phrase: null, phraseOn: false,
+              heard: null, phrase: null, phraseOn: false, ahead: null, lookahead: false,
+              attR: attentionWant(st, now) ? 1 : 0,
               petR: 0, petX: 0, petDir: 0, focusEndAt: 0 };
         this.mem.set(VIEW, m);
       }
@@ -1613,6 +1635,7 @@ function critterFace(o){
         m.phraseOn = true;
         // An earlier answer's last phrase end is no gesture of this one.
         if(m.phrase) m.phrase = { talk: 0, quiet: 0, ago: 1e9, n: m.phrase.n };
+        if(m.ahead) m.ahead = { n: m.ahead.n, due: null };
       }
       m.lastAmp = amp;
       // Calm motion (the OS's reduced motion), a serious moment (the
@@ -1653,9 +1676,22 @@ function critterFace(o){
       const age = (r) => r && { talk: 0, quiet: 0, ago: Math.min(1e9, r.ago + dt), n: r.n };
       const micNow = HUD.raw < AMP.gate ? 0 : HUD.raw;
       m.heard = st === "listening" ? CritterPose.pauseStep(m.heard, dt, micNow, PZ.NOD_QUIET, PZ.NOD_GAP) : age(m.heard);
-      m.phrase = st === "speaking" && m.phraseOn
+      // Jarvis's phrase ends. The clip that is playing was read whole before
+      // it started, so its ends are known IN ADVANCE (LIP.ends): the next one
+      // is handed to the pose about 0.65-0.9 s early and the gesture peaks on
+      // it, instead of on the moment it was heard to be over (about 0.4 s
+      // late, inside the next sentence). Without a clip's track (or when it
+      // has none) the finder listens to the level as before.
+      const pn = Math.max(m.phrase ? m.phrase.n : 0, m.ahead ? m.ahead.n : 0);
+      if(m.phrase && m.phrase.n !== pn) m.phrase = Object.assign({}, m.phrase, { n: pn });
+      if(m.ahead && m.ahead.n !== pn) m.ahead = Object.assign({}, m.ahead, { n: pn });
+      m.lookahead = st === "speaking" && m.phraseOn && !!LIP.track && !LIP.ended && !!LIP.ends;
+      m.ahead = CritterPose.aheadStep(m.ahead || (pn ? { n: pn, due: null } : null), dt, m.lookahead ? lipNextEnd() : null);
+      m.phrase = st === "speaking" && m.phraseOn && !m.lookahead
         ? CritterPose.pauseStep(m.phrase, dt, realVoiceNow() ? HUD.voiceRaw : 0, PZ.PHRASE_QUIET, PZ.PHRASE_GAP)
         : age(m.phrase);
+      // Fewer idle happenings while Jarvis is not being used.
+      m.attR = ramp(m.attR, attentionWant(st, now) > 0, dt / ATTENTION_EASE_S);
       // Being stroked: in over PET_IN_S, out over PET_OUT_S; where the hand is
       // across the face and which way it moves, smoothed.
       const pet = pettingNow(TOUCH, now * 1000);
@@ -1684,7 +1720,14 @@ function critterFace(o){
         pet: e(m.petR), petX: m.petX, petDir: m.petDir,
       };
       if(m.heard){ o.heard = m.heard.ago; o.heardN = m.heard.n; }
-      if(m.phraseOn){ o.phraseEnd = m.phrase ? m.phrase.ago : 1e9; o.phraseN = m.phrase ? m.phrase.n : 0; }
+      if(m.phraseOn){
+        // An end handed over ahead of time (lookahead) is kept until its gesture
+        // has finished, also once the clip is over - the last end of a clip is
+        // the clip's own end - so it is never cut off by the finder taking over.
+        if(m.ahead && m.ahead.due !== null && m.ahead.due > -PHRASE_KEEP_S){ o.phraseDue = m.ahead.due; o.phraseN = m.ahead.n; }
+        else { o.phraseEnd = m.phrase ? m.phrase.ago : 1e9; o.phraseN = m.phrase ? m.phrase.n : 0; }
+      }
+      o.attention = e(m.attR);
       if(FACE_MOMENTS.factAt) o.ackNod = now - FACE_MOMENTS.factAt / 1000;
       if(FACE_MOMENTS.glowAt) o.ackGlow = now - FACE_MOMENTS.glowAt / 1000;
       if(m.focusEndAt) o.focusEnd = now - m.focusEndAt;
@@ -4547,6 +4590,7 @@ const LIP = {
   rate: 1,
   est: 0,           // where the audio is now, as last worked out
   heardAt: -1e9,    // performance.now() when real voice last played
+  ends: null,       // where its phrases end (seconds into the clip), worked out when it arrived
   micAt: 0,         // performance.now() of the last microphone level; 0 = none
   out: { level: 0, open: 0, wide: 0, round: 0 },
   mouth: null,      // the mouth now, or null when no real voice is playing
@@ -4620,12 +4664,12 @@ function lipCue(c){
   const id = +c.id, n = +c.n || 0;
   if(!(id > 0) || id < LIP.id) return;            // about an older clip: stale
   if(id > LIP.id){
-    Object.assign(LIP, { id, n: -1, track: null, dur: 0, ended: false, playing: false, t: 0 });
+    Object.assign(LIP, { id, n: -1, track: null, ends: null, dur: 0, ended: false, playing: false, t: 0 });
   }
   if(typeof c.track === "string" && !LIP.track && typeof JarvisLipSync !== "undefined"){
     try {
       const tr = JarvisLipSync.unpack(c.track);
-      if(tr && tr.n > 0 && tr.fps > 0){ LIP.track = tr; LIP.dur = tr.n / tr.fps; }
+      if(tr && tr.n > 0 && tr.fps > 0){ LIP.track = tr; LIP.dur = tr.n / tr.fps; LIP.ends = JarvisLipSync.phraseEnds(tr); }
     } catch(e){ LIP.track = null; }
   }
   if(n <= LIP.n || LIP.ended) return;             // an older clock, or already over
@@ -4669,6 +4713,16 @@ function lipStep(){
     }
   }
   if((now - LIP.heardAt) / 1000 < LIP_QUIET_HOLD_S) setSpeechLevel(0);
+}
+
+/** Real seconds until the next phrase end of the clip that is playing (its
+ *  ends are known from the moment it arrives), or null: no clip playing, or no
+ *  end left in it. LIP.est is where the audio is (the clock the mouth uses);
+ *  the clock may run faster than 1 (LIP.rate). */
+function lipNextEnd(){
+  if(!LIP.playing || !LIP.ends) return null;
+  for(let i = 0; i < LIP.ends.length; i++) if(LIP.ends[i] > LIP.est) return (LIP.ends[i] - LIP.est) / (LIP.rate || 1);
+  return null;
 }
 
 /** The state a live face shows: while Jarvis's real voice is playing, a
@@ -6828,6 +6882,9 @@ async function bootDisplay() {
     try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* an old engine */ }
   });
   canvas.addEventListener("pointermove", (e) => petMove(surface.touch, e, canvas));
+  // The pointer being on the face counts as using Jarvis (attentionWant).
+  canvas.addEventListener("pointerenter", () => { POINTER_ON = true; });
+  canvas.addEventListener("pointerleave", () => { POINTER_ON = false; });
   for (const end of ["pointerup", "pointercancel", "lostpointercapture"]) {
     canvas.addEventListener(end, () => petUp(surface.touch));
   }

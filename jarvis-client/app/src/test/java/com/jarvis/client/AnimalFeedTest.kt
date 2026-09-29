@@ -378,4 +378,81 @@ class AnimalFeedTest {
         repeat(90) { f.stepWeights(1f / 60f) }
         assertEquals("eased out within a second or so", 0f, f.opts(0f, 0f, 0f).pet, 0.02f)
     }
+
+    // ---- Fewer small moves when Jarvis is not being used (2026-09-29) ----------
+
+    @Test
+    fun attentionIsOneForTheFirstFiveMinutesAndAfterUseThenEasesToZero() {
+        val f = AnimalFeed()
+        val t0 = 1000 * s
+        AnimalNow.activeAt = t0
+        // used a moment ago: 1
+        f.stepWeights(1f / 60f, 1f, now = t0 + 10 * s)
+        assertEquals(1f, f.opts(0f, 0f, 0f).attention, 0f)
+        // five minutes on with nothing: it eases down over ATTENTION_EASE_S, never a snap
+        var prev = 1f
+        var steps = 0
+        while (f.opts(0f, 0f, 0f).attention > 0f && steps < 1000) {
+            f.stepWeights(1f / 60f, 1f, now = t0 + 400 * s)
+            val a = f.opts(0f, 0f, 0f).attention
+            assertTrue("a smooth fall: $prev then $a", prev - a < 0.05f)
+            prev = a
+            steps++
+        }
+        assertTrue("about ${AnimalNow.ATTENTION_EASE_S} s: $steps frames", steps in 100..140)
+        // a finger on the face brings it back
+        f.petDown(50f, 100f)
+        repeat(130) { f.stepWeights(1f / 60f, 1f, now = t0 + 400 * s) }
+        assertEquals(1f, f.opts(0f, 0f, 0f).attention, 0f)
+        f.petUp()
+        // and so does using Jarvis: listening, thinking, speaking, waiting on you - not idle
+        AnimalNow.activeAt = 0L
+        val g = AnimalFeed()
+        g.onState(FaceState.IDLE, voiced = false, now = t0)
+        assertEquals("idle is not use", 0L, AnimalNow.activeAt)
+        for ((k, st) in listOf(FaceState.LISTENING, FaceState.THINKING, FaceState.SPEAKING, FaceState.APPROVAL).withIndex()) {
+            g.onState(st, voiced = false, now = t0 + k * s)
+            assertEquals("$st is use", t0 + k * s, AnimalNow.activeAt)
+        }
+        AnimalNow.activeAt = System.nanoTime()
+    }
+
+    @Test
+    fun aClipsPhraseEndsAreHandedOverAheadAndTheFindersLevelIsIgnored() {
+        AnimalNow.activeAt = System.nanoTime()
+        val f = AnimalFeed()
+        f.onState(FaceState.SPEAKING, voiced = true)
+        // a clip with a track and its next end 2.0 s away: nothing yet (too far), no finder, no gesture
+        var ahead = 2.0f
+        fun frame(level: Float) { f.stepFrame(1f / 60f, FaceState.SPEAKING, 0f, level, ahead = ahead); ahead -= 1f / 60f }
+        repeat(60) { frame(0.5f) }
+        var o = f.opts(0f, 0f, 0f)
+        assertTrue(f.lookahead)
+        assertEquals(0, o.phraseN)
+        assertTrue("no end handed over yet", o.phraseDue.isNaN())
+        // ...and the level falling silent does not make the finder fire a second, late gesture
+        repeat(30) { frame(0f) }
+        // within 0.9 s the end is taken up: phraseDue (about 0.9 s) and count 1
+        o = f.opts(0f, 0f, 0f)
+        assertEquals(1, o.phraseN)
+        assertTrue("due ahead: ${o.phraseDue}", o.phraseDue > 0f && o.phraseDue <= CritterPose.Ahead.MAX)
+        assertEquals(CritterPose.NEVER, o.phraseEnd, 0f)
+        // it runs down and goes past, and is kept for the gesture (2 s), then dropped for the finder's values
+        repeat(90) { frame(0f) }
+        assertTrue(f.opts(0f, 0f, 0f).phraseDue < 0f)
+        ahead = com.jarvis.client.audio.LipSync.NO_PHRASE_END
+        repeat(200) { frame(0f) }
+        o = f.opts(0f, 0f, 0f)
+        assertTrue("dropped once its gesture is over", o.phraseDue.isNaN())
+        assertEquals("the count carries on", 1, o.phraseN)
+        // A clip with no track (the phone's own voice): the finder listens to the level as before.
+        val g = AnimalFeed()
+        g.onState(FaceState.SPEAKING, voiced = true)
+        repeat(60) { g.stepFrame(1f / 60f, FaceState.SPEAKING, 0f, 0.5f, ahead = -1f) }
+        repeat(20) { g.stepFrame(1f / 60f, FaceState.SPEAKING, 0f, 0f, ahead = -1f) }
+        assertFalse(g.lookahead)
+        assertEquals(1, g.opts(0f, 0f, 0f).phraseN)
+        assertTrue(g.opts(0f, 0f, 0f).phraseDue.isNaN())
+        assertEquals(com.jarvis.client.audio.LipSync.NO_PHRASE_END, AnimalFeed.NO_END, 0f)
+    }
 }

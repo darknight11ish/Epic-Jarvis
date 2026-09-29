@@ -24,9 +24,11 @@ sleeping Zs drawn over an animal on standby (`zs` in `critter-pose.js`,
 happening is playing (`busy` in each pose file), which both apps' frame pacers
 read, and whether one of its own talking gestures is (`gesturing`), which both
 hosts read before handing the pose Jarvis's phrase ends:
-`critter-busy-golden.json`.
+`critter-busy-golden.json`. And the slow wander that replaces the shared sines
+(`noise`, `breathWave`) and the host's look-ahead for phrase ends (`aheadStep`):
+`critter-drift-golden.json`.
 
-    python3 tools/gen_critters.py          # write all four outputs
+    python3 tools/gen_critters.py          # write all the outputs
     python3 tools/gen_critters.py --check  # exit 1 if any is out of date
 
 CI and `jarvis-desktop/tests/faces.mjs` run `--check`.
@@ -365,6 +367,18 @@ def behaviour_cases(sp):
     add("idle", CUTE[sp][1] + 2.6, {"cute_moments": 0.5}, since=1e6, amp=0.0)
     add("idle", CUTE[sp][0] + 2.6, {"calm": 1}, since=1e6, amp=0.0)
     add("idle", CUTE[sp][0] + 2.6, {}, since=100.0, amp=0.0)
+    # Added 2026-09-29 (the skeptical review): fewer idle happenings while
+    # Jarvis is not being used - each of the animal's happenings with
+    # `attention` 0 (thinned away or one of the quarter that stay, by its
+    # slot) and part way - and its gestures landing ON a phrase end handed
+    # over ahead of time (`phraseDue`: seconds until it, negative once past).
+    for t in MOMENTS["happen"][sp]:
+        add("idle", t, {"attention": 0}, since=99.0, amp=0.0)
+        add("idle", t, {"attention": 0.5}, since=99.0, amp=0.0)
+    for n, (t, due) in enumerate(((20.0, 0.35), (31.3, 0.0), (44.6, -0.2), (57.1, -0.5), (63.9, 0.5), (20.0, -1.4))):
+        add("speaking", t, {"phraseDue": due, "phraseN": n + 1})
+    add("speaking", 31.3, {"phraseDue": 0.0, "phraseN": 2, "calm": 1})
+    add("speaking", 31.3, {"phraseDue": 0.0, "phraseN": 2, "serious": 1})
     # Added 2026-09-28 (the audit's fixes): a focus session under calm (its
     # pose smaller), and a hello and a goodbye at an error (none of it).
     add("idle", 30.0, {"focus": 1, "calm": 1})
@@ -398,6 +412,8 @@ def robot_cases():
     add("idle", zip0 + 1.2, {}, since=5.0)
     add("idle", zip0 + 1.2, {"calm": 1})
     add("idle", zip0 + 1.2, {"calm": 0.4})
+    add("idle", zip0 + 1.2, {"attention": 0})
+    add("idle", zip0 + 1.2, {"attention": 0.5})
     for x in (2.5, 2.8, 3.1):
         add("idle", CUTE["robot"][1] + x, {}, since=1e6)
     for o in ({"goodbye": 1}, {"hello": 0}, {"goodbye": 0.9, "still": 1}, {"hello": 0.1, "serious": 1}):
@@ -477,6 +493,30 @@ MOMENT_CASES = [
               {"pet": 1, "still": 1}, {"ackNod": 0.5, "serious": 1}, {"ackNod": 0.5, "calm": 1})
 ]
 
+# The slow wander (critter-pose.js noise(), breathWave()) and the host's side
+# of gestures that land on phrase ends (aheadStep): their answers at fixed
+# moments - inside one period, past it, and days on - which the phone's
+# CritterPoseTest checks its copies against (critter-drift-golden.json).
+OUT_DRIFT = OUT_GOLDEN.with_name("critter-drift-golden.json")
+DRIFT_TIMES = [0.0, 0.7, 1.9, 3.3, 5.1, 12.34, 47.6, 133.05, 1023.5, 1024.25, 4095.5, 4096.25, 4100.0, 8191.75, 86400.25, 259200.375]
+AHEAD_STEPS = [  # (dt, next): a clip's ends coming up, one too late, one too soon after the last, a gap of nothing
+    (0.0, None), (0.016, 1.4), (0.016, 0.95), (0.016, 0.88), (0.016, 0.87), (0.016, 0.5), (0.5, 3.0), (0.5, 2.9),
+    (0.016, 0.7), (0.016, 0.6), (0.3, 0.8), (1.2, 0.85), (0.016, 0.66), (0.016, None), (2.5, 0.9), (0.016, 0.64),
+]
+DRIFT_NODE = r"""
+for (const f of process.argv.slice(1)) require(f);
+const C = globalThis.CritterPose, U = C.util;
+const inp = JSON.parse(require('fs').readFileSync(0, 'utf8'));
+const out = { noise: [], breath: [], ahead: [], ahead_limits: C.AHEAD, breath_var: null };
+for (const seed of [8, 17, 26, 34, 42]) for (const scale of [4, 8, 16, 32]) for (const t of inp.times) {
+  out.noise.push({ t, seed, scale, v: U.noise(t, seed, scale) });
+}
+for (const k of [171, 205, 256, 300]) for (const t of inp.times) out.breath.push({ t, k, seed: 10, v: U.breathWave(t, k, 10) });
+let rec = null;
+for (const [dt, next] of inp.ahead) { rec = C.aheadStep(rec, dt, next); out.ahead.push({ dt, next, n: rec.n, due: rec.due }); }
+process.stdout.write(JSON.stringify(out, (k, v) => typeof v === 'number' ? Math.round(v * 1e6) / 1e6 : v, 1) + '\n');
+"""
+
 BUSY_NODE = r"""
 for (const f of process.argv.slice(1)) require(f);
 const C = globalThis.CritterPose;
@@ -484,8 +524,11 @@ const inp = JSON.parse(require('fs').readFileSync(0, 'utf8'));
 const times = inp.times;
 const out = { happening_s: C.HAPPENING_S, times, busy: {}, gesture_s: C.util.GESTURE_S, gesturing: {},
               moments: inp.moments.map(c => ({ ...c, busy: C.momentsBusy(c.state, c.opts) })) };
+out.busy_att0 = {};
 for (const sp of Object.keys(C.species)) {
   out.busy[sp] = times.map(t => C.species[sp].busy('idle', t) ? '1' : '0').join('');
+  // ...and with the owner not using Jarvis (`attention` 0): about one in four.
+  out.busy_att0[sp] = times.map(t => C.species[sp].busy('idle', t, undefined, { attention: 0 }) ? '1' : '0').join('');
   // Whether one of its own talking gestures plays (the host's check before
   // it hands the pose Jarvis's phrase ends part way into an answer).
   out.gesturing[sp] = times.map(t => C.species[sp].gesturing(t) ? '1' : '0').join('');
@@ -544,7 +587,10 @@ def build():
                         capture_output=True, text=True, check=True)
     busy = subprocess.run(["node", "-e", BUSY_NODE, *pose_files], input=json.dumps({"times": BUSY_TIMES, "moments": MOMENT_CASES}),
                           capture_output=True, text=True, check=True)
-    return {OUT_JS: js, OUT_KT: kt, OUT_GOLDEN: res.stdout, OUT_ZS: zs.stdout, OUT_BUSY: busy.stdout}
+    drift = subprocess.run(["node", "-e", DRIFT_NODE, *pose_files],
+                           input=json.dumps({"times": DRIFT_TIMES, "ahead": AHEAD_STEPS}),
+                           capture_output=True, text=True, check=True)
+    return {OUT_JS: js, OUT_KT: kt, OUT_GOLDEN: res.stdout, OUT_ZS: zs.stdout, OUT_BUSY: busy.stdout, OUT_DRIFT: drift.stdout}
 
 
 def main():
