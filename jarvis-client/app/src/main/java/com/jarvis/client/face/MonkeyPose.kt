@@ -13,6 +13,11 @@ import com.jarvis.client.face.CritterPose.envAHR
 import com.jarvis.client.face.CritterPose.eyesClose
 import com.jarvis.client.face.CritterPose.eyesOpen
 import com.jarvis.client.face.CritterPose.happening
+import com.jarvis.client.face.CritterPose.happeningV
+import com.jarvis.client.face.CritterPose.breathWave
+import com.jarvis.client.face.CritterPose.noise
+import com.jarvis.client.face.CritterPose.NONE4
+import com.jarvis.client.face.CritterPose.playingV
 import com.jarvis.client.face.CritterPose.invRow
 import com.jarvis.client.face.CritterPose.looks
 import com.jarvis.client.face.CritterPose.mul
@@ -167,12 +172,16 @@ object MonkeyPose {
     private const val S_NOD = 118
     private const val S_PHRASE = 119
     private const val S_CUTE = 121
+    // The monkey's own seeds for the slow wander (noise()): its talking sway and its breathing.
+    private const val N_YAW = 32
+    private const val N_ROLL = 33
+    private const val N_BREATH = 34
     /** How long each cute moment lasts: sniffing its banana, twirling it. */
     private val CUTE_LEN = floatArrayOf(5.5f, 4.4f)
 
     /** Whether one of its idle happenings is playing at clock [t] - the desktop's busy(state, t). */
     fun busy(state: FaceState, t: Float, since: Float? = null, opts: Opts? = null): Boolean =
-        state == FaceState.IDLE && (CritterPose.playing(happening(t, SLOT, 0.5f, 5.5f, S_EVENT, CHANCE, EVENTS)) ||
+        state == FaceState.IDLE && (playingV(happeningV(t, SLOT, 0.5f, 5.5f, S_EVENT, CHANCE, EVENTS, opts?.norm(t)?.attention ?: 1f)) ||
             cuteBusy(t, since, opts, S_CUTE, CUTE_LEN))
 
     /** Whether one of its own talking gestures is playing at clock [t] - the desktop's gesturing(t). */
@@ -206,7 +215,7 @@ object MonkeyPose {
         val k = swingOf(state)
         var a = 0.014f * (1f + 0.25f * wave(t, 41f, 1.3f))
         if (state == FaceState.IDLE) {
-            val ev = happening(t, SLOT, 0.5f, 5.5f, S_EVENT, CHANCE, EVENTS)
+            val ev = happeningV(t, SLOT, 0.5f, 5.5f, S_EVENT, CHANCE, EVENTS)
             if (ev[0] == 3f) a += hap * 0.007f * envAHR(ev[1], 1.5f, 3.0f, 2.0f)
         }
         return k * sway * a * wave(t, 293f, 0f)
@@ -226,7 +235,9 @@ object MonkeyPose {
         // (and so do the stretch as a focus session ends, and being stroked)
         val fe = if (state == FaceState.IDLE) focusEndOf(t, o) else 0f
         val pw = if (awake(state)) petOf(o) else 0f
-        val hap = o.hap * (1f - fw) * (1f - cw * (if (cu[0] >= 0f) cuteQuiet(cu[1], CUTE_LEN[cu[0].toInt()]) else 0f)) * (1f - fe) * (1f - pw)
+        // (The idle happening of this slot, its size and thinning: happeningV.)
+        val evI = if (state == FaceState.IDLE) happeningV(t, SLOT, 0.5f, 5.5f, S_EVENT, CHANCE, EVENTS, o.attention) else NONE4
+        val hap = o.hap * (1f - fw) * (1f - cw * (if (cu[0] >= 0f) cuteQuiet(cu[1], CUTE_LEN[cu[0].toInt()]) else 0f)) * (1f - fe) * (1f - pw) * evI[3]
         val sw = o.sway
         val play = o.play
         val p = FloatArray(N)
@@ -312,8 +323,8 @@ object MonkeyPose {
                 p[SPEAK] = 1f
                 p[LEAN] = 0.05f
                 p[HEAD_PITCH] = 0.03f
-                p[HEAD_YAW] = sw * 0.05f * wave(t, 111f, 0f) + 0.09f * g[2]
-                p[HEAD_ROLL] = sw * 0.04f * wave(t, 93f, 0.5f)
+                p[HEAD_YAW] = sw * 0.05f * noise(t, N_YAW, 4f) + 0.09f * g[2]
+                p[HEAD_ROLL] = sw * 0.04f * noise(t, N_ROLL, 4f)
                 p[LOOK_X] = g[0] - 0.16f * g[2]; p[LOOK_Y] = g[1] - 0.16f * g[3]
                 p[BROW] = 0.3f + 0.1f * amp
                 p[ORB_GLOW] = 0.6f + 0.45f * amp
@@ -403,7 +414,7 @@ object MonkeyPose {
             FaceState.IDLE -> {
                 // Hangs and swings, looks about, and now and then one small thing.
                 val g = looks(t, S_GAZE, 1.2f, 5f, 0.35f, 0.8f, 0.25f, 0f, 0.08f, 1.1f, o)
-                val ev = happening(t, SLOT, 0.5f, 5.5f, S_EVENT, CHANCE, EVENTS)
+                val ev = evI
                 val x = ev[1]
                 var ex = g[0]
                 var ey = g[1]
@@ -519,7 +530,7 @@ object MonkeyPose {
         p[HEAD_ROLL] -= 0.4f * p[SWING]
         p[SWING] += 0.02f * pw * o.petX   // (stroked: toward your hand)
 
-        val b = wave(t, breathK, 0f) * (1f + 0.6f * deepBreath)
+        val b = breathWave(t, breathK, N_BREATH) * (1f + 0.6f * deepBreath)
         p[BREATH] = 1f + 0.02f * breathDepth * b
         p[BOB] = 0.006f * breathDepth * b
 

@@ -26,7 +26,7 @@
   "use strict";
   const C = root.CritterPose;
   const { makePose, halfLives, mouthOf, clamp, smooth, rx, ry, rz, mul, apply, add, invRow,
-          wave, bump, envAHR, happening, beat, shift, looks, restingGaze, optsOf, mods, blinkAt,
+          wave, bump, envAHR, happening, happeningV, noise, breathWave, NONE4, playingV, beat, shift, looks, restingGaze, optsOf, mods, blinkAt,
           overlayAt, ease, toward, eyesOpen, eyesClose, gaze, NONE, ZERO2, AWAKE, focusOf, petOf, cuteOf,
           switchE, listenNod, phraseBeat, ackNodOf, ackGlowOf, focusEndOf, variant, arrivalOf, cuteAt,
           cuteQuiet, cuteBusy, fullTurn, HELLO_S, GOODBYE_S, TAU } = C.util;
@@ -66,6 +66,8 @@
   const S_GAZE = 224, S_EVENT = 240, S_ROLL = 248, S_LEAN = 216, S_BEAT = 232, S_BLINK = 212;
   // ...and for the new behaviours (critter-pose.js's "New behaviours").
   const S_LISTEN = 100, S_THINK = 103, S_FOCUS = 106, S_NOD = 118, S_PHRASE = 119, S_CUTE = 121;
+  // ...and the monkey's own seeds for the slow wander (critter-pose.js noise()): its talking sway and its breathing.
+  const N_YAW = 32, N_ROLL = 33, N_BREATH = 34;
   // How long each cute moment lasts: sniffing its banana, twirling it.
   const CUTE_LEN = [5.5, 4.4];
   // Its idle happenings, and how often each comes up: kicking its legs,
@@ -95,7 +97,7 @@
     const k = SWING[state] === undefined ? 1 : SWING[state];
     let a = 0.014 * (1 + 0.25 * wave(t, 41, 1.3));
     if (state === "idle") {
-      const ev = happening(t, SLOT, 0.5, 5.5, S_EVENT, CHANCE, EVENTS);
+      const ev = happeningV(t, SLOT, 0.5, 5.5, S_EVENT, CHANCE, EVENTS);
       if (ev[0] === 3) a += m[0] * 0.007 * envAHR(ev[1], 1.5, 3.0, 2.0);
     }
     return k * m[2] * a * wave(t, 293, 0);
@@ -114,7 +116,9 @@
     const fp = fw * (1 - 0.6 * o.calm);   // the focus pose itself: smaller under calm (the happenings still go by fw)
     // (and so do the stretch as a focus session ends, and being stroked)
     const fe = state === "idle" ? focusEndOf(t, o) : 0, pw = AWAKE[state] ? petOf(o) : 0;
-    m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0)) * (1 - fe) * (1 - pw);
+    // (The idle happening of this slot, its size and thinning: critter-pose.js happeningV.)
+    const evI = state === "idle" ? happeningV(t, SLOT, 0.5, 5.5, S_EVENT, CHANCE, EVENTS, o.attention) : NONE4;
+    m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0)) * (1 - fe) * (1 - pw) * evI[3];
     const hap = m[0], sw = m[2], play = m[3];
     const P = {
       headYaw: 0, headPitch: 0, headRoll: 0, swing: 0, lean: 0, breath: 1, bob: 0,
@@ -197,8 +201,8 @@
       P.speak = 1;
       P.lean = 0.05;
       P.headPitch = 0.03;
-      P.headYaw = sw * 0.05 * wave(t, 111, 0) + 0.09 * g[2];
-      P.headRoll = sw * 0.04 * wave(t, 93, 0.5);
+      P.headYaw = sw * 0.05 * noise(t, N_YAW, 4) + 0.09 * g[2];
+      P.headRoll = sw * 0.04 * noise(t, N_ROLL, 4);
       P.lookX = g[0] - 0.16 * g[2]; P.lookY = g[1] - 0.16 * g[3];
       P.brow = 0.3 + 0.1 * amp;
       P.orbGlow = 0.6 + 0.45 * amp;
@@ -301,7 +305,7 @@
       // its tail; now and then looks at its banana or swings a little
       // wider; once in a while scratches its head.
       const g = looks(t, S_GAZE, 1.2, 5, 0.35, 0.8, 0.25, 0, 0.08, 1.1, o);
-      const ev = happening(t, SLOT, 0.5, 5.5, S_EVENT, CHANCE, EVENTS);
+      const ev = evI;
       const x = ev[1];
       let ex = g[0], ey = g[1], hx = g[2], hy = g[3];
       if (ev[0] === 4) {
@@ -423,7 +427,7 @@
     P.swing += 0.02 * pw * o.petX;   // (stroked: toward your hand)
 
     // Breathing: the chest swells and the body lifts a little.
-    const b = wave(t, breathK, 0) * (1 + 0.6 * deepBreath);
+    const b = breathWave(t, breathK, N_BREATH) * (1 + 0.6 * deepBreath);
     P.breath = 1 + 0.02 * breathDepth * b;
     P.bob = 0.006 * breathDepth * b;
 
@@ -750,7 +754,7 @@
 
   /** Whether one of its idle happenings is playing at clock t (critter-pose.js playing()). */
   function busy(state, t, since, opts) {
-    return state === "idle" && (C.util.playing(happening(t, SLOT, 0.5, 5.5, S_EVENT, CHANCE, EVENTS))
+    return state === "idle" && (playingV(happeningV(t, SLOT, 0.5, 5.5, S_EVENT, CHANCE, EVENTS, opts ? optsOf(opts, t).attention : 1))
       || cuteBusy(t, since, opts, S_CUTE, CUTE_LEN));
   }
 

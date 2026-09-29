@@ -143,6 +143,41 @@ class CritterPoseTest {
         }
     }
 
+    /**
+     * The slow wander that replaced the shared sines (noise, breathWave) and the
+     * host's look-ahead for phrase ends (aheadStep) give the phone's numbers the
+     * desktop's, at moments inside one period, past it and days on.
+     */
+    @Test
+    fun `the slow wander and the look-ahead match the desktop's`() {
+        val text = checkNotNull(javaClass.classLoader?.getResourceAsStream("critter-drift-golden.json")) {
+            "critter-drift-golden.json is missing from test resources - run tools/gen_critters.py"
+        }.bufferedReader().readText()
+        val o = Json.parseToJsonElement(text).jsonObject
+        for (c in o["noise"]!!.jsonArray) {
+            val n = c.jsonObject
+            val got = CritterPose.noise(n["t"]!!.jsonPrimitive.float, n["seed"]!!.jsonPrimitive.float.toInt(), n["scale"]!!.jsonPrimitive.float)
+            assertEquals("noise $n", n["v"]!!.jsonPrimitive.float, got, 2e-3f)
+        }
+        for (c in o["breath"]!!.jsonArray) {
+            val n = c.jsonObject
+            val got = CritterPose.breathWave(n["t"]!!.jsonPrimitive.float, n["k"]!!.jsonPrimitive.float, n["seed"]!!.jsonPrimitive.float.toInt())
+            assertEquals("breath $n", n["v"]!!.jsonPrimitive.float, got, 2e-3f)
+        }
+        val lim = o["ahead_limits"]!!.jsonObject
+        assertEquals(lim["MIN"]!!.jsonPrimitive.float, CritterPose.Ahead.MIN, 0f)
+        assertEquals(lim["MAX"]!!.jsonPrimitive.float, CritterPose.Ahead.MAX, 0f)
+        var rec: CritterPose.AheadRec? = null
+        for (c in o["ahead"]!!.jsonArray) {
+            val a = c.jsonObject
+            val next = a["next"]!!.let { if (it is kotlinx.serialization.json.JsonNull) null else it.jsonPrimitive.float }
+            rec = CritterPose.aheadStep(rec, a["dt"]!!.jsonPrimitive.float, next)
+            assertEquals("ahead n $a", a["n"]!!.jsonPrimitive.float.toInt(), rec.n)
+            val due = a["due"]!!.let { if (it is kotlinx.serialization.json.JsonNull) null else it.jsonPrimitive.float }
+            if (due == null) assertEquals("ahead due $a", null, rec.due) else assertEquals("ahead due $a", due, rec.due!!, 1e-4f)
+        }
+    }
+
     /** The host's opts as the fixture gives them (the desktop's keys, the switches by their ids). */
     private fun optsOf(o: kotlinx.serialization.json.JsonObject?): CritterPose.Opts {
         fun f(k: String, d: Float) = o?.get(k)?.jsonPrimitive?.float ?: d
@@ -157,6 +192,7 @@ class CritterPoseTest {
             phraseEnd = f("phraseEnd", CritterPose.NEVER), phraseN = i("phraseN", -1),
             ackNod = f("ackNod", CritterPose.NEVER), ackGlow = f("ackGlow", CritterPose.NEVER),
             focusEnd = f("focusEnd", CritterPose.NEVER),
+            attention = f("attention", 1f), phraseDue = f("phraseDue", Float.NaN),
         )
     }
 
@@ -174,17 +210,24 @@ class CritterPoseTest {
         assertEquals(o["happening_s"]!!.jsonPrimitive.float, CritterPose.HAPPENING_S, 0f)
         val times = o["times"]!!.jsonArray.map { it.jsonPrimitive.float }
         val busy = o["busy"]!!.jsonObject
-        val phone = mapOf<String, (FaceState, Float) -> Boolean>(
-            "redpanda" to { s, t -> CritterPose.busy(s, t) }, "pygmyowl" to { s, t -> OwlPose.busy(s, t) },
-            "seaotter" to { s, t -> OtterPose.busy(s, t) }, "monkey" to { s, t -> MonkeyPose.busy(s, t) },
-            "robot" to { s, t -> RobotPose.busy(s, t) },
+        val phone = mapOf<String, (FaceState, Float, CritterPose.Opts?) -> Boolean>(
+            "redpanda" to { s, t, o -> CritterPose.busy(s, t, null, o) }, "pygmyowl" to { s, t, o -> OwlPose.busy(s, t, null, o) },
+            "seaotter" to { s, t, o -> OtterPose.busy(s, t, null, o) }, "monkey" to { s, t, o -> MonkeyPose.busy(s, t, null, o) },
+            "robot" to { s, t, o -> RobotPose.busy(s, t, null, o) },
         )
         assertEquals(phone.keys, busy.keys)
+        val idle0 = o["busy_att0"]!!.jsonObject
+        assertEquals(phone.keys, idle0.keys)
         for ((sp, fn) in phone) {
             val want = busy[sp]!!.jsonPrimitive.content
-            val got = times.joinToString("") { if (fn(FaceState.IDLE, it)) "1" else "0" }
+            val got = times.joinToString("") { if (fn(FaceState.IDLE, it, null)) "1" else "0" }
             assertEquals("$sp: busy differs from the desktop's", want, got)
-            for (st in FaceState.entries) if (st != FaceState.IDLE) assertTrue("$sp busy in $st", times.none { fn(st, it) })
+            // ...and while the owner is not using Jarvis (`attention` 0): about one in four.
+            val want0 = idle0[sp]!!.jsonPrimitive.content
+            val notUsed = CritterPose.Opts(attention = 0f)
+            assertEquals("$sp: busy with attention 0 differs from the desktop's", want0,
+                times.joinToString("") { if (fn(FaceState.IDLE, it, notUsed)) "1" else "0" })
+            for (st in FaceState.entries) if (st != FaceState.IDLE) assertTrue("$sp busy in $st", times.none { fn(st, it, null) })
         }
         // And whether one of its own talking gestures plays - what the host
         // checks before it hands the pose Jarvis's phrase ends mid-answer.

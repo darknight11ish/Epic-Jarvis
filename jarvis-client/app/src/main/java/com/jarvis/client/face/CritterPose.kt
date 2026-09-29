@@ -148,6 +148,41 @@ object CritterPose {
         return TAU * (u - floor(u))
     }
     internal const val TAU_F = TAU
+
+    // --- smooth drift that does not repeat (the desktop's noise() note) -------
+
+    private fun ctrl(seed: Int, j: Int): Float {
+        val h = hash01((seed and 255) * 8192 + j * 2)
+        val s = hash01((seed and 255) * 8192 + j * 2 + 1)
+        return (if (s < 0.5f) -1f else 1f) * (0.5f + 0.5f * h)
+    }
+    /**
+     * -1..1, smooth, changing by at most 2 / [scale] a second: a uniform cubic
+     * B-spline through random control values, one every [scale] seconds (a
+     * power of two), repeating after [PERIOD] - the desktop's noise().
+     */
+    internal fun noise(t: Float, seed: Int, scale: Float): Float {
+        val n = (PERIOD / scale).toInt()
+        val tl = t - PERIOD * floor(t / PERIOD)
+        val u = tl / scale
+        val i = floor(u).toInt()
+        val f = u - i
+        val c0 = ctrl(seed, (i + n - 1) % n)
+        val c1 = ctrl(seed, i % n)
+        val c2 = ctrl(seed, (i + 1) % n)
+        val c3 = ctrl(seed, (i + 2) % n)
+        val g = 1f - f
+        return (c0 * g * g * g + c1 * (3f * f * f * f - 6f * f * f + 4f) +
+            c2 * (-3f * f * f * f + 3f * f * f + 3f * f + 1f) + c3 * f * f * f) / 6f
+    }
+    internal const val BREATH_VAR = 0.20f
+    internal const val BREATH_SPAN = 16f
+    /** A breath at clock [t], -1..1 but uneven - the desktop's breathWave(). */
+    internal fun breathWave(t: Float, k: Float, seed: Int): Float {
+        val w0 = TAU * k / LOOP
+        val ph = phaseOf(t, k) + BREATH_VAR * (BREATH_SPAN / 2f) * w0 * noise(t, seed, BREATH_SPAN)
+        return sin(ph) * (1f + 0.10f * noise(t, seed + 1, 32f))
+    }
     /** 0 at both ends, 1 in the middle, easing in and out (x in 0..1). */
     internal fun bump(x: Float): Float {
         if (x <= 0f || x >= 1f) return 0f
@@ -276,6 +311,41 @@ object CritterPose {
     /** [count] kinds, all as often. */
     internal fun happening(t: Float, slot: Float, lead: Float, spread: Float, salt: Int, chance: Float, count: Int): FloatArray =
         happening(t, slot, lead, spread, salt, chance, EVEN[count - 1])
+
+    /**
+     * The desktop's happeningV(): happening() for the idle happenings, with a
+     * size (0.75 to 1), a length (the same clip played 0.8 to 1.25 times as
+     * long: the time comes back already divided by it) and thinning when
+     * Jarvis is not being used ([att], the host's `attention`). Returns
+     * [kind, seconds since it started, the clock it starts at, weight]; the
+     * weight is size times the thinning. [NONE4] for none. [vsalt] is the
+     * first of three salts for the thinning, the size and the length.
+     */
+    internal val NONE4 = floatArrayOf(-1f, 0f, 0f, 1f)
+    internal const val EV_SIZE_LO = 0.75f
+    internal const val EV_LONG = 1.25f
+    internal const val THIN_KEEP = 0.25f
+    internal const val THIN_RAMP = 0.5f
+    internal fun thinGate(n: Int, slot: Float, vsalt: Int, att: Float): Float {
+        val r = hash01(slotId(n, slot) * 256 + vsalt)
+        val th = if (r < THIN_KEEP) -1f else (r - THIN_KEEP) / (1f - THIN_KEEP) * (1f - THIN_RAMP)
+        return smooth(clamp((att - th) / THIN_RAMP, 0f, 1f))
+    }
+    internal fun happeningV(
+        t: Float, slot: Float, lead: Float, spread: Float, salt: Int, chance: Float, kinds: FloatArray,
+        att: Float = 1f, vsalt: Int = salt + 3,
+    ): FloatArray {
+        val h = happening(t, slot, lead, spread, salt, chance, kinds)
+        if (h[0] < 0f) return NONE4
+        val n = floor(t / slot).toInt()
+        val id = slotId(n, slot) * 256
+        val size = EV_SIZE_LO + (1f - EV_SIZE_LO) * hash01(id + vsalt + 1)
+        val long = EV_LONG.pow(2f * hash01(id + vsalt + 2) - 1f)
+        return floatArrayOf(h[0], h[1] / long, h[2], size * thinGate(n, slot, vsalt, att))
+    }
+    internal fun happeningV(t: Float, slot: Float, lead: Float, spread: Float, salt: Int, chance: Float, count: Int,
+                            att: Float = 1f, vsalt: Int = salt + 3): FloatArray =
+        happeningV(t, slot, lead, spread, salt, chance, EVEN[count - 1], att, vsalt)
 
     /**
      * A talking gesture, in phrases, never the same kind twice running and
@@ -410,11 +480,27 @@ object CritterPose {
         internal val atClock: Boolean = false,
         /** Which small reaction an arrival plays (set by the pose itself; -1: none). */
         internal val arrive: Int = -1,
+        /**
+         * How much the owner is using Jarvis, 0..1 (the desktop's `attention`; 1
+         * as it always was): at 0 about one idle happening in four is left
+         * (happeningV).
+         */
+        val attention: Float = 1f,
+        /**
+         * The next phrase end still to come, in seconds from now (negative once
+         * it has passed; NaN: not given) - the host having read the whole
+         * clip before it plays. It takes the place of [phraseEnd], and the
+         * gesture lands ON it (phraseBeat). [norm] turns it into the clock and
+         * sets [phraseAhead].
+         */
+        val phraseDue: Float = Float.NaN,
+        internal val phraseAhead: Boolean = false,
     ) {
         /** The weights clamped, and each moment turned into the clock [now] minus it (the desktop's optsOf). */
         internal fun norm(now: Float): Opts {
             if (atClock) return this
             fun at(v: Float) = if (v >= 0f && v < NEVER) now - v else -NEVER
+            val ahead = phraseDue.isFinite()
             return Opts(
                 clamp(calm, 0f, 1f), clamp(serious, 0f, 1f), clamp(still, 0f, 1f), 0f,
                 clamp(variety, 0f, 1f), clamp(cute, 0f, 1f),
@@ -422,8 +508,10 @@ object CritterPose {
                 clamp(focus, 0f, 1f),
                 clamp(pet, 0f, 1f), clamp(petX, -1f, 1f), clamp(petDir, -1f, 1f),
                 clamp(hello, 0f, 1f), clamp(goodbye, 0f, 1f),
-                at(heard), heardN, at(phraseEnd), phraseN, at(ackNod), at(ackGlow), at(focusEnd),
+                at(heard), heardN, if (ahead) now + clamp(phraseDue, -30f, 30f) else at(phraseEnd), phraseN,
+                at(ackNod), at(ackGlow), at(focusEnd),
                 atClock = true,
+                attention = clamp(attention, 0f, 1f), phraseAhead = ahead,
             )
         }
         /** How much of the idle happenings and talking gestures is left. */
@@ -513,11 +601,15 @@ object CritterPose {
     }
     /** A talking gesture at the end of one of Jarvis's phrases - the desktop's phraseBeat(). */
     internal fun phraseBeat(t: Float, o: Opts, salt: Int, gazeSalt: Int, lo: Float, hi: Float, contact: Float): FloatArray {
-        val x = t - o.phraseEnd
+        val k = bagKind(max(0, o.phraseN), 3, salt)
+        // With the end known in advance the gesture starts early enough for its strongest moment to land on it.
+        val x = t - o.phraseEnd + (if (o.phraseAhead) PHRASE_LEAD[k] else 0f)
         if (!(x >= 0f && x < 2f)) return NONE
         if (!clearOfLooks(o.phraseEnd, gazeSalt, lo, hi, contact)) return NONE
-        return floatArrayOf(bagKind(max(0, o.phraseN), 3, salt).toFloat(), x, o.phraseEnd)
+        return floatArrayOf(k.toFloat(), x, o.phraseEnd)
     }
+    /** How long after a gesture starts its strongest moment is: a nod 0.35 s, a lift 0.5 s, a tilt 0.6 s. */
+    internal val PHRASE_LEAD = floatArrayOf(0.35f, 0.5f, 0.6f)
     internal const val ACK_S = 1.2f
     /** The nod when a fact is saved: [pitch, ears] - the desktop's ackNodOf(). */
     internal fun ackNodOf(t: Float, o: Opts): FloatArray {
@@ -646,6 +738,34 @@ object CritterPose {
         return PauseRec(talk, quiet, ago, n)
     }
 
+    /**
+     * The host's side of gestures that land ON Jarvis's sentence ends when it
+     * knows them in advance - the desktop's aheadStep(). [n] counts the ends
+     * handed over, [due] is when the latest one is, in seconds from now
+     * (negative once it has passed; null before the first). Hand it to the
+     * pose as `phraseDue` and `phraseN`.
+     */
+    data class AheadRec(val n: Int = 0, val due: Float? = null)
+    object Ahead {
+        /** An end is taken up only between these many seconds away. */
+        const val MIN = 0.65f
+        const val MAX = 0.9f
+    }
+    /**
+     * Each frame: [dt] seconds since the last, and [next], the seconds until
+     * the clip's next end still to come (null: none known). Taken up only
+     * between [Ahead.MIN] and [Ahead.MAX] seconds away and [Pause.PHRASE_GAP]
+     * after the last one taken.
+     */
+    fun aheadStep(rec: AheadRec?, dt: Float, next: Float?): AheadRec {
+        val n = rec?.n ?: 0
+        val due = rec?.due?.let { it - max(0f, dt) }
+        if (next != null && next >= Ahead.MIN && next <= Ahead.MAX && (due == null || next - due >= Pause.PHRASE_GAP)) {
+            return AheadRec(n + 1, next)
+        }
+        return AheadRec(n, due)
+    }
+
     const val HELLO_S = 1.0f
     const val GOODBYE_S = 1.0f
     /**
@@ -674,6 +794,10 @@ object CritterPose {
     private const val S_NOD = 74
     private const val S_PHRASE = 75
     private const val S_CUTE = 76
+    // The panda's own seeds for the slow wander (noise()): its talking sway and its breathing.
+    private const val N_YAW = 8
+    private const val N_ROLL = 9
+    private const val N_BREATH = 10
     /** How long each cute moment lasts: hugging its tail, playing with its orb. */
     private val CUTE_LEN = floatArrayOf(7.0f, 5.0f)
 
@@ -690,6 +814,8 @@ object CritterPose {
 
     /** Whether [happening]'s answer [ev] has started and is not over - the desktop's playing(). */
     internal fun playing(ev: FloatArray): Boolean = ev[0] >= 0f && ev[1] >= 0f && ev[1] < HAPPENING_S
+    /** [playing], for [happeningV]'s answer: one thinned away (weight 0) is not playing. */
+    internal fun playingV(ev: FloatArray): Boolean = playing(ev) && ev[3] > 0f
 
     /**
      * Whether one of the panda's idle happenings is playing at clock [t] - the
@@ -697,7 +823,7 @@ object CritterPose {
      * The same dice its idle pose rolls.
      */
     fun busy(state: FaceState, t: Float, since: Float? = null, opts: Opts? = null): Boolean =
-        state == FaceState.IDLE && (playing(happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS)) ||
+        state == FaceState.IDLE && (playingV(happeningV(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS, opts?.norm(t)?.attention ?: 1f)) ||
             cuteBusy(t, since, opts, S_CUTE, CUTE_LEN))
 
     /** The longest a talking gesture plays - the desktop's GESTURE_S. */
@@ -744,7 +870,7 @@ object CritterPose {
             FaceState.BANKED -> sw * 0.03f * wave(t, 70f, 0f)
             FaceState.IDLE -> {
                 var s = sw * (0.16f * wave(t, 87f, 0f) + 0.08f * wave(t, 139f, 1.7f) - 0.065f * shift(t - 0.6f, S_ROLL))
-                val ev = happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS)
+                val ev = happeningV(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS)
                 if (ev[0] == 1f) s += hap * 0.32f * (bump(ev[1] / 0.8f) - 0.3f * bump((ev[1] - 0.6f) / 0.9f))
                 s
             }
@@ -778,7 +904,9 @@ object CritterPose {
         // (and so do the stretch as a focus session ends, and being stroked)
         val fe = if (state == FaceState.IDLE) focusEndOf(t, o) else 0f
         val pw = if (awake(state)) petOf(o) else 0f
-        val hap = o.hap * (1f - fw) * (1f - cw * (if (cu[0] >= 0f) cuteQuiet(cu[1], CUTE_LEN[cu[0].toInt()]) else 0f)) * (1f - fe) * (1f - pw)
+        // The idle happening of this slot (one dice roll, read by the tail too), and its weight.
+        val evI = if (state == FaceState.IDLE) happeningV(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS, o.attention) else NONE4
+        val hap = o.hap * (1f - fw) * (1f - cw * (if (cu[0] >= 0f) cuteQuiet(cu[1], CUTE_LEN[cu[0].toInt()]) else 0f)) * (1f - fe) * (1f - pw) * evI[3]
         val sw = o.sway
         val play = o.play
         val p = FloatArray(N)
@@ -868,8 +996,8 @@ object CritterPose {
                 p[SPEAK] = 1f
                 p[LEAN] = 0.05f
                 p[HEAD_PITCH] = 0.03f
-                p[HEAD_YAW] = sw * 0.05f * wave(t, 111f, 0f) + 0.08f * g[2]
-                p[HEAD_ROLL] = sw * 0.035f * wave(t, 93f, 0.5f)
+                p[HEAD_YAW] = sw * 0.05f * noise(t, N_YAW, 4f) + 0.08f * g[2]
+                p[HEAD_ROLL] = sw * 0.035f * noise(t, N_ROLL, 4f)
                 p[LOOK_X] = g[0] - 0.16f * g[2]; p[LOOK_Y] = g[1] - 0.16f * g[3]
                 p[BROW] = 0.3f + 0.1f * amp
                 p[EAR_L] = 0.45f; p[EAR_R] = 0.45f
@@ -953,7 +1081,7 @@ object CritterPose {
             FaceState.IDLE -> {
                 val g = looks(t, S_GAZE, 1.5f, 6f, 0.35f, 0.8f, 0.25f, 0f, 0.08f, 1.1f, o)
                 val gLag = looks(t - 0.3f, S_GAZE, 1.5f, 6f, 0.35f, 0.8f, 0.25f, 0f, 0.08f, 1.1f, o)
-                val ev = happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS)
+                val ev = evI
                 val x = ev[1]
                 val roll = sw * 0.025f * shift(t, S_ROLL)
                 var ex = g[0]
@@ -1073,7 +1201,7 @@ object CritterPose {
             for (i in intArrayOf(TAIL_SWING, TAIL_2, TAIL_3, TAIL_4, TAIL_5)) p[i] += (sw0 - p[i]) * hug
         }
 
-        val b = wave(t, breathK, 0f) * (1f + 0.6f * deepBreath)
+        val b = breathWave(t, breathK, N_BREATH) * (1f + 0.6f * deepBreath)
         p[BREATH] = 1f + 0.018f * breathDepth * b
         p[BOB] = 0.007f * breathDepth * b + lift
 

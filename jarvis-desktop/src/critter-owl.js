@@ -17,7 +17,7 @@
   "use strict";
   const C = root.CritterPose;
   const { makePose, halfLives, mouthOf, clamp, smooth, rx, ry, rz, mul, apply, add, invRow,
-          wave, bump, envAHR, happening, beat, shift, looks, restingGaze, optsOf, mods, blinkAt,
+          wave, bump, envAHR, happening, happeningV, noise, breathWave, NONE4, playingV, beat, shift, looks, restingGaze, optsOf, mods, blinkAt,
           overlayAt, ease, toward, eyesOpen, eyesClose, gaze, NONE, ZERO2, AWAKE, focusOf, petOf, cuteOf,
           switchE, listenNod, phraseBeat, ackNodOf, ackGlowOf, focusEndOf, variant, arrivalOf, cuteAt,
           cuteQuiet, cuteBusy, HELLO_S, GOODBYE_S } = C.util;
@@ -51,6 +51,9 @@
   const S_GAZE = 80, S_EVENT = 96, S_ROLL = 104, S_LEAN = 112, S_BEAT = 120, S_BLINK = 128;
   // ...and for the new behaviours (critter-pose.js's "New behaviours").
   const S_LISTEN = 136, S_THINK = 139, S_FOCUS = 142, S_NOD = 154, S_PHRASE = 155, S_CUTE = 156;
+  // ...and the owl's own seeds for the slow wander (critter-pose.js noise()): its talking
+  // sway, its breathing, and the tilt and the turn to the orb while it thinks.
+  const N_YAW = 16, N_ROLL = 17, N_BREATH = 18, N_TILT = 20, N_FOLLOW = 21;
   // How long each cute moment lasts: turning its head right round, a hop.
   const CUTE_LEN = [8.2, 3.0];
   // Its idle happenings, and how often each comes up: the head tilts and the
@@ -110,7 +113,9 @@
     const fp = fw * (1 - 0.6 * o.calm);   // the focus pose itself: smaller under calm (the happenings still go by fw)
     // (and so do the stretch as a focus session ends, and being stroked)
     const fe = state === "idle" ? focusEndOf(t, o) : 0, pw = AWAKE[state] ? petOf(o) : 0;
-    m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0)) * (1 - fe) * (1 - pw);
+    // (The idle happening of this slot, its size and thinning: critter-pose.js happeningV.)
+    const evI = state === "idle" ? happeningV(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS, o.attention) : NONE4;
+    m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0)) * (1 - fe) * (1 - pw) * evI[3];
     const hap = m[0], sw = m[2], play = m[3];
     const P = {
       headYaw: 0, headPitch: 0, headRoll: 0, neckDrop: 0, bob: 0, breath: 1, fluff: 1,
@@ -155,10 +160,16 @@
       const q = orbit(t, since, sw), ca = q[3], sa = q[4];
       P.orbA = q[0]; P.orbY = q[1]; P.orbD = q[2];
       P.orbR = 0.10;
-      P.headRoll = sw * 0.26 * wave(t, 90, 0);
+      // A slow tilt of the head, about half what it was (a sine of 0.26 rad kept
+      // the head moving nearly all the time: 87 percent, against 19 to 46 for
+      // the others) and wandering rather than swinging; and it turns to follow
+      // the orb only now and then - for a stretch of some passes, then rests -
+      // not on every one of the orb's turns (2026-09-29).
+      P.headRoll = sw * 0.13 * noise(t, N_TILT, 8);
+      const follow = smooth(clamp((noise(t, N_FOLLOW, 16) + 0.05) / 0.5, 0, 1));
       // (Eased in as the orb comes round, so the head never starts turning
       // with a jolt.)
-      P.headYaw = m[1] * 0.45 * ca * Math.max(0, sa) * smooth(clamp(sa / 0.3, 0, 1));
+      P.headYaw = m[1] * 0.45 * ca * Math.max(0, sa) * smooth(clamp(sa / 0.3, 0, 1)) * follow;
       P.headPitch = 0.14;
       P.lookX = (0.35 + 0.55 * sw) * ca; P.lookY = 0.45 - 0.1 * sw;
       P.brow = 0.1;
@@ -184,8 +195,8 @@
       P.speak = 1;
       P.lean = 0.04;
       P.headPitch = 0.03;
-      P.headYaw = sw * 0.06 * wave(t, 111, 0) + 0.12 * g[2];
-      P.headRoll = sw * 0.035 * wave(t, 93, 0.5);
+      P.headYaw = sw * 0.06 * noise(t, N_YAW, 4) + 0.12 * g[2];
+      P.headRoll = sw * 0.035 * noise(t, N_ROLL, 4);
       P.lookX = g[0] - 0.28 * g[2]; P.lookY = g[1] - 0.28 * g[3];
       P.brow = 0.1 + 0.1 * amp;
       P.orbGlow = 0.6 + 0.45 * amp;
@@ -276,7 +287,7 @@
       // often a curious tilt of the head or a long slow blink; now and then
       // a ruffle of its feathers or a wing lifted and resettled.
       const g = looks(t, S_GAZE, 1.5, 6, 0.35, 0.7, 0.25, 0, 0.04, 0.8, o);
-      const ev = happening(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS);
+      const ev = evI;
       const x = ev[1];
       const roll = sw * 0.011 * shift(t, S_ROLL);
       P.bodyRoll = roll;
@@ -365,7 +376,7 @@
     const gl = AWAKE[state] ? ackGlowOf(t, o) : 0;
     P.orbGlow += 0.4 * gl; P.orbR *= 1 + 0.2 * gl;
 
-    const b = wave(t, breathK, 0) * (1 + 0.6 * deepBreath);
+    const b = breathWave(t, breathK, N_BREATH) * (1 + 0.6 * deepBreath);
     P.breath = 1 + 0.016 * breathDepth * b;
     P.bob = 0.006 * breathDepth * b + hop;
 
@@ -554,7 +565,7 @@
 
   /** Whether one of its idle happenings is playing at clock t (critter-pose.js playing()). */
   function busy(state, t, since, opts) {
-    return state === "idle" && (C.util.playing(happening(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS))
+    return state === "idle" && (playingV(happeningV(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS, opts ? optsOf(opts, t).attention : 1))
       || cuteBusy(t, since, opts, S_CUTE, CUTE_LEN));
   }
 

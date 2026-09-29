@@ -13,6 +13,11 @@ import com.jarvis.client.face.CritterPose.envAHR
 import com.jarvis.client.face.CritterPose.eyesClose
 import com.jarvis.client.face.CritterPose.eyesOpen
 import com.jarvis.client.face.CritterPose.happening
+import com.jarvis.client.face.CritterPose.happeningV
+import com.jarvis.client.face.CritterPose.breathWave
+import com.jarvis.client.face.CritterPose.noise
+import com.jarvis.client.face.CritterPose.NONE4
+import com.jarvis.client.face.CritterPose.playingV
 import com.jarvis.client.face.CritterPose.invRow
 import com.jarvis.client.face.CritterPose.looks
 import com.jarvis.client.face.CritterPose.mul
@@ -109,6 +114,12 @@ object OwlPose {
     private const val S_NOD = 154
     private const val S_PHRASE = 155
     private const val S_CUTE = 156
+    // The owl's own seeds for the slow wander (noise()): its talking sway, its breathing, and the tilt and the turn to the orb while it thinks.
+    private const val N_YAW = 16
+    private const val N_ROLL = 17
+    private const val N_BREATH = 18
+    private const val N_TILT = 20
+    private const val N_FOLLOW = 21
     /** How long each cute moment lasts: turning its head right round, a hop. */
     private val CUTE_LEN = floatArrayOf(8.2f, 3.0f)
 
@@ -118,7 +129,7 @@ object OwlPose {
 
     /** Whether one of its idle happenings is playing at clock [t] - the desktop's busy(state, t). */
     fun busy(state: FaceState, t: Float, since: Float? = null, opts: Opts? = null): Boolean =
-        state == FaceState.IDLE && (CritterPose.playing(happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS)) ||
+        state == FaceState.IDLE && (playingV(happeningV(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS, opts?.norm(t)?.attention ?: 1f)) ||
             cuteBusy(t, since, opts, S_CUTE, CUTE_LEN))
 
     /** Whether one of its own talking gestures is playing at clock [t] - the desktop's gesturing(t). */
@@ -164,7 +175,9 @@ object OwlPose {
         // (and so do the stretch as a focus session ends, and being stroked)
         val fe = if (state == FaceState.IDLE) focusEndOf(t, o) else 0f
         val pw = if (awake(state)) petOf(o) else 0f
-        val hap = o.hap * (1f - fw) * (1f - cw * (if (cu[0] >= 0f) cuteQuiet(cu[1], CUTE_LEN[cu[0].toInt()]) else 0f)) * (1f - fe) * (1f - pw)
+        // (The idle happening of this slot, its size and thinning: happeningV.)
+        val evI = if (state == FaceState.IDLE) happeningV(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS, o.attention) else NONE4
+        val hap = o.hap * (1f - fw) * (1f - cw * (if (cu[0] >= 0f) cuteQuiet(cu[1], CUTE_LEN[cu[0].toInt()]) else 0f)) * (1f - fe) * (1f - pw) * evI[3]
         val sw = o.sway
         val play = o.play
         val p = FloatArray(N)
@@ -213,8 +226,10 @@ object OwlPose {
                 val sa = q[4]
                 p[ORB_A] = q[0]; p[ORB_Y] = q[1]; p[ORB_D] = q[2]
                 p[ORB_R] = 0.10f
-                p[HEAD_ROLL] = sw * 0.26f * wave(t, 90f, 0f)
-                p[HEAD_YAW] = o.head * 0.45f * ca * max(0f, sa) * smooth(clamp(sa / 0.3f, 0f, 1f))
+                // A slow, wandering tilt about half what it was; and it turns to follow the orb only now and then.
+                p[HEAD_ROLL] = sw * 0.13f * noise(t, N_TILT, 8f)
+                val follow = smooth(clamp((noise(t, N_FOLLOW, 16f) + 0.05f) / 0.5f, 0f, 1f))
+                p[HEAD_YAW] = o.head * 0.45f * ca * max(0f, sa) * smooth(clamp(sa / 0.3f, 0f, 1f)) * follow
                 p[HEAD_PITCH] = 0.14f
                 p[LOOK_X] = (0.35f + 0.55f * sw) * ca; p[LOOK_Y] = 0.45f - 0.1f * sw
                 p[BROW] = 0.1f
@@ -236,8 +251,8 @@ object OwlPose {
                 p[SPEAK] = 1f
                 p[LEAN] = 0.04f
                 p[HEAD_PITCH] = 0.03f
-                p[HEAD_YAW] = sw * 0.06f * wave(t, 111f, 0f) + 0.12f * g[2]
-                p[HEAD_ROLL] = sw * 0.035f * wave(t, 93f, 0.5f)
+                p[HEAD_YAW] = sw * 0.06f * noise(t, N_YAW, 4f) + 0.12f * g[2]
+                p[HEAD_ROLL] = sw * 0.035f * noise(t, N_ROLL, 4f)
                 p[LOOK_X] = g[0] - 0.28f * g[2]; p[LOOK_Y] = g[1] - 0.28f * g[3]
                 p[BROW] = 0.1f + 0.1f * amp
                 p[ORB_GLOW] = 0.6f + 0.45f * amp
@@ -314,7 +329,7 @@ object OwlPose {
             FaceState.IDLE -> {
                 // The head does the looking, and holds; now and then one small thing.
                 val g = looks(t, S_GAZE, 1.5f, 6f, 0.35f, 0.7f, 0.25f, 0f, 0.04f, 0.8f, o)
-                val ev = happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS)
+                val ev = evI
                 val x = ev[1]
                 val roll = sw * 0.011f * shift(t, S_ROLL)
                 p[BODY_ROLL] = roll
@@ -399,7 +414,7 @@ object OwlPose {
         val gl = if (awake(state)) ackGlowOf(t, o) else 0f
         p[ORB_GLOW] += 0.4f * gl; p[ORB_R] *= 1f + 0.2f * gl
 
-        val b = wave(t, breathK, 0f) * (1f + 0.6f * deepBreath)
+        val b = breathWave(t, breathK, N_BREATH) * (1f + 0.6f * deepBreath)
         p[BREATH] = 1f + 0.016f * breathDepth * b
         p[BOB] = 0.006f * breathDepth * b + hop
 

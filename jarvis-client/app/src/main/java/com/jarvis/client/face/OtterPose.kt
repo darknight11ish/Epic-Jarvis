@@ -13,6 +13,11 @@ import com.jarvis.client.face.CritterPose.envAHR
 import com.jarvis.client.face.CritterPose.eyesClose
 import com.jarvis.client.face.CritterPose.eyesOpen
 import com.jarvis.client.face.CritterPose.happening
+import com.jarvis.client.face.CritterPose.happeningV
+import com.jarvis.client.face.CritterPose.breathWave
+import com.jarvis.client.face.CritterPose.noise
+import com.jarvis.client.face.CritterPose.NONE4
+import com.jarvis.client.face.CritterPose.playingV
 import com.jarvis.client.face.CritterPose.invRow
 import com.jarvis.client.face.CritterPose.looks
 import com.jarvis.client.face.CritterPose.mul
@@ -114,12 +119,16 @@ object OtterPose {
     private const val S_NOD = 234
     private const val S_PHRASE = 235
     private const val S_CUTE = 236
+    // The otter's own seeds for the slow wander (noise()): its talking sway and its breathing.
+    private const val N_YAW = 24
+    private const val N_ROLL = 25
+    private const val N_BREATH = 26
     /** How long each cute moment lasts: rolling over in the water, juggling its pebble from paw to paw. */
     private val CUTE_LEN = floatArrayOf(6.8f, 6.5f)
 
     /** Whether one of its idle happenings is playing at clock [t] - the desktop's busy(state, t). */
     fun busy(state: FaceState, t: Float, since: Float? = null, opts: Opts? = null): Boolean =
-        state == FaceState.IDLE && (CritterPose.playing(happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS)) ||
+        state == FaceState.IDLE && (playingV(happeningV(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS, opts?.norm(t)?.attention ?: 1f)) ||
             cuteBusy(t, since, opts, S_CUTE, CUTE_LEN))
 
     /** Whether one of its own talking gestures is playing at clock [t] - the desktop's gesturing(t). */
@@ -151,7 +160,9 @@ object OtterPose {
         // (and so do the stretch as a focus session ends, and being stroked)
         val fe = if (state == FaceState.IDLE) focusEndOf(t, o) else 0f
         val pw = if (awake(state)) petOf(o) else 0f
-        val hap = o.hap * (1f - fw) * (1f - cw * (if (cu[0] >= 0f) cuteQuiet(cu[1], CUTE_LEN[cu[0].toInt()]) else 0f)) * (1f - fe) * (1f - pw)
+        // (The idle happening of this slot, its size and thinning: happeningV.)
+        val evI = if (state == FaceState.IDLE) happeningV(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS, o.attention) else NONE4
+        val hap = o.hap * (1f - fw) * (1f - cw * (if (cu[0] >= 0f) cuteQuiet(cu[1], CUTE_LEN[cu[0].toInt()]) else 0f)) * (1f - fe) * (1f - pw) * evI[3]
         val sw = o.sway
         val play = o.play
         val p = FloatArray(N)
@@ -233,8 +244,8 @@ object OtterPose {
                 p[SPEAK] = 1f
                 p[TILT] = 0.16f
                 p[HEAD_PITCH] = 0.05f
-                p[HEAD_YAW] = sw * 0.05f * wave(t, 111f, 0f) + 0.08f * g[2]
-                p[HEAD_ROLL] = sw * 0.04f * wave(t, 93f, 0.5f)
+                p[HEAD_YAW] = sw * 0.05f * noise(t, N_YAW, 4f) + 0.08f * g[2]
+                p[HEAD_ROLL] = sw * 0.04f * noise(t, N_ROLL, 4f)
                 p[LOOK_X] = g[0] - 0.16f * g[2]; p[LOOK_Y] = g[1] - 0.16f * g[3]
                 p[ORB_GLOW] = 0.6f + 0.45f * amp
                 if (b[0] == 0f) {
@@ -306,7 +317,7 @@ object OtterPose {
             FaceState.IDLE -> {
                 // Floats, looks about, and now and then one small thing.
                 val g = looks(t, S_GAZE, 1.5f, 6f, 0.35f, 0.8f, 0.25f, 0f, 0.08f, 1.1f, o)
-                val ev = happening(t, 16f, 0.5f, 5.5f, S_EVENT, 0.7f, EVENTS)
+                val ev = evI
                 val x = ev[1]
                 var hx = g[2]
                 p[TILT] = 0.10f + sw * 0.011f * shift(t, S_ROLL)
@@ -396,7 +407,7 @@ object OtterPose {
         p[RIPPLE] *= settle
         p[BOB] = 0.009f * water * wave(t, 179f, 0f)
         p[ROCK] += 0.025f * water * wave(t, 130f, 0.6f)
-        val b = wave(t, breathK, 0f) * (1f + 0.6f * deepBreath)
+        val b = breathWave(t, breathK, N_BREATH) * (1f + 0.6f * deepBreath)
         p[BREATH] = 1f + 0.02f * breathDepth * b
 
         val w = if (state == FaceState.STANDBY) 0f else clamp(look.w, 0f, 1f)
