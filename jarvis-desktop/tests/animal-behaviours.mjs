@@ -556,28 +556,40 @@ if (!K) {
     await page.waitForTimeout(500);
     const fresh = await opts(page);
     assert.equal(fresh.attention, 1, "a page that has only just opened counts as used");
-    // Each step waits for what it expects to see, not for a number of seconds:
-    // a slow machine draws few frames, and the value only moves when one is drawn.
-    const attnWhen = async (page, test) => (await page.waitForFunction(test, null, { timeout: 60000 })).jsonValue();
+    // The value only moves when the pose is asked for, and on a slow machine (the
+    // runner's software WebGL) the page draws a frame every few seconds, while the
+    // ease needs 8 or more of them. So this test asks the face's own pose itself,
+    // every 20 ms, in the state given - the same call a drawn frame makes - and
+    // waits for the value it expects, not for a number of seconds.
+    const attnDrive = (page, state, want) => page.evaluate(async ({ state, want }) => {
+      const s = window.__faceSwitch.surface;
+      VIEW = s.view;
+      const end = performance.now() + 30000;
+      while (performance.now() < end) {
+        s.theme.pose(performance.now() / 1000, state, 0);
+        const a = window.__faceOpts.attention;
+        if (want === "below1" ? a < 1 : a === want) return a;
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      throw new Error(`attention never became ${want}: ${window.__faceOpts.attention}`);
+    }, { state, want });
     // Six minutes on with nothing happening (LAST_ACTIVE is the page's own memory of when it last was).
     await page.evaluate(() => { LAST_ACTIVE -= 360; });
     // It starts to ease: the first value below 1 is part way down, never a snap to 0.
-    const easing = { attention: await attnWhen(page, () => { const a = window.__faceOpts && window.__faceOpts.attention; return a < 1 ? a : false; }) };
+    const easing = { attention: await attnDrive(page, "idle", "below1") };
     assert.ok(easing.attention < 1 && easing.attention > 0, `eased, not snapped: ${easing.attention}`);
-    await attnWhen(page, () => window.__faceOpts && window.__faceOpts.attention === 0 ? true : false);
+    await attnDrive(page, "idle", 0);
     const idle = await opts(page);
     assert.equal(idle.attention, 0);
     await page.evaluate(() => { POINTER_ON = true; });
-    await attnWhen(page, () => window.__faceOpts && window.__faceOpts.attention === 1 ? true : false);
+    await attnDrive(page, "idle", 1);
     const pointed = await opts(page);
     await page.evaluate(() => { POINTER_ON = false; });
-    await attnWhen(page, () => window.__faceOpts && window.__faceOpts.attention === 0 ? true : false);
+    await attnDrive(page, "idle", 0);
     const gone = await opts(page);
     // Using Jarvis (a question being asked) counts, and stays for five minutes.
-    await post(page, { type: "jarvis-hud-face", state: "listening" });
-    await attnWhen(page, () => window.__faceOpts && window.__faceOpts.attention === 1 ? true : false);
-    await post(page, { type: "jarvis-hud-face", state: "idle" });
-    await page.waitForTimeout(300);
+    await attnDrive(page, "listening", 1);
+    await attnDrive(page, "idle", 1);
     const used = await opts(page);
     await done();
     assert.equal(pointed.attention, 1);

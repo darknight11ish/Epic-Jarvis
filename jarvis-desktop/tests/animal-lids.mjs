@@ -254,7 +254,9 @@ await check("the shader takes the lid: uLid and eyeLid are in the shared head (a
 // same picture.
 
 let K;
-try { K = await import("./uikit.mjs"); } catch { K = null; }
+// Playwright first: uikit.mjs ends the whole run (exit 2) when it is missing,
+// which is how the backend job (no Playwright) once failed after all checks passed.
+try { await import("playwright"); K = await import("./uikit.mjs"); } catch { K = null; }
 if (!K) {
   console.log("skip  the drawing checks: Playwright is not installed (tests/README.md)");
 } else {
