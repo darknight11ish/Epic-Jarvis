@@ -1316,7 +1316,15 @@ reads from on its own. Three things about it are invariants:
   marked from that turn on. Automatic learning trusts this - through an
   in-memory registry of the same facts (hashes, never words) that is kept
   even while history is off - instead of the history an app re-sends (the
-  memory-safety audit).
+  memory-safety audit). **One loosening, the owner's (2026-09-28, after the
+  second chat audit):** when the PC meets a conversation it already holds
+  in its own encrypted record (after a restart, or "Continue this chat"),
+  it re-registers that record's typed and spoken user messages that did not
+  read outside text - read from the PC's own record, never from what the
+  app sends, and never shared, pasted, chatbot, support, crisis or imported
+  text - so a continued chat does not fall back to a card for every fact.
+  A Forget or Erase on the conversation is remembered across a restart
+  (a floor in the history database), so the words cannot come back.
 - **Deep questions are not kept at all** (`jarvis_big_model.py`, security
   audit L2, 2026-09-25): they live in memory until the backend stops. They
   used to be written to `deep-questions.jsonl` in plain text, outside this
@@ -1827,11 +1835,13 @@ backend routes, in both directions; the rest are listed here only.
 | Jarvis Live's "End Live when" as a PC voice setting (`live_end`: when App lock would ask again, or - looser, with an approval card - only when Windows locks) | The owner's decision of 2026-09-28 is about the PC, where Live can outlast App lock while the owner walks away from a desk. **The phone has its own "End Live when" since 2026-09-28 (the Jarvis Live extras)**, on its Security screen, saved on the phone: "When App lock would ask again" (default) or "Only when the phone's screen locks" (looser, so it asks for the fingerprint or PIN, like every loosening there - not a card, because the phone's lock settings never go to the PC). Each app keeps its own, because each app's App lock is its own. |
 | The "Start or end Jarvis Live" hotkey (`hotkeys.rs` `toggle_live`, off until the owner picks a key; Alt+Shift+L suggested), 2026-09-28 | A key on a PC's keyboard. The phone's one-tap equivalents are its Quick Settings tile and the headset button (the phone table). |
 | Jarvis Live noticing "another program is using the microphone" (Windows' own record) and muting itself | The PC's way of noticing a call (the owner's answer, 2026-09-28). The phone notices a call from Android's audio mode instead (the phone row). When Windows' record cannot be read, the PC's sign says "Jarvis can't tell when you're on a call - use Mute". |
+| "This looks like a game, so nothing in it is kept or learned." strip under the Jarvis bar (the second chat audit, 2026-09-28) | The bar has a strip for the chat's own state ("Temporary chat: ..."); a game or role-play the PC made temporary by itself gets one too, so a chat that never reaches History says so. The phone has no such strip: it only avoids saying "the last one is in History" for a game (`ChatSession.game`), and "New conversation"/"After 30 quiet minutes" say the plain thing. |
 
 **On the phone, kept off the desktop:**
 
 | what | why |
 |---|---|
+| "This is the chat you are in on Home" line on an opened chat in History, and "Change" beside History's on/off line (the second chat audit, 2026-09-28) | The phone's History is a screen of its own, next to Home's chat, so it can name the one Home is in and put the switch's state at the top (the settings sit at the bottom of a long list). The desktop's Brain History is a separate window whose settings row is always on screen, and the bar tells the owner where a chat went when it ends. |
 | The ongoing "Talking to Gemini, 3 of 5" notification with Stop, while Jarvis talks to a chatbot for the owner (`service/ChatbotNotifier.kt`; JARVIS-API §60) | Written with the feature, 2026-09-28. It is how a phone in a pocket shows that something is still going and offers Stop without opening the app. On the PC the same line heads the Brain's "Talk to a chatbot for me" card, the approval card arrives the usual way, and the "Stop everything" hotkey stops a conversation too - a Windows notification that stays up would only repeat what the Brain shows. The same holds for "Ask several and compare" (2026-09-28): the phone's line reads "Comparing 3 chatbots: asking ChatGPT, 2 of 3" and its Stop stops the whole comparison. |
 | The phone's own layout settings (`AppearanceStore.kt`, `Look`: the face's share of Home, the tabs row, glow, motion, compact spacing, corners, text size, panel edges, and the "make room" switches) | They describe a phone screen. They are saved per device and never synced (`toSyncDocument` leaves them out), so they cannot change the desktop. |
 | "Also on my phone" (the owner's decision of 2026-09-26; `net/AlsoOnPhone.kt`, a button on an alarm or reminder in Brain -> Coming up) | Written with the feature. It hands an alarm to the PHONE's own Clock app, or a reminder to its calendar, by the owner's tap, so it rings with the PC off - the gap it closes is the phone's alone (the PC is Jarvis's clock, and the phone hears of a job only while connected). On the desktop the PC already rings it; Windows' Clock app offers no way for another program to add an alarm; and putting an event into Google Calendar from the desktop would be a new way out of the PC (a link to Google carrying the event's words), which the creativity audit (usefulness #12) said needs the owner's OK first - not built. No route is involved, so `tools/check_parity.py` has nothing to check. |

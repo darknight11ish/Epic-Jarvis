@@ -3455,11 +3455,14 @@ it the conversation it is in: the SAME `conversation_id`, so what follows is
 filed with it and the PC's own "read outside text" mark carries over (it is
 decided from the PC's record, never from the app); the kept questions and
 their answers, oldest first, skipping a question whose answer was not kept
-(`answer_kept: false`), a Live side remark, shared text (it is outside
-text), and any `support`/`chatbot` row; then only the newest that fit the
+(`answer_kept: false`), a Live side remark, shared text sitting right before
+a typed message (it is outside text; a shared-only turn is loaded, with its
+"shared" tag), and any `support`/`chatbot` row; then only the newest that fit the
 app's own re-send limits (10 pairs, 18,000 characters - §18.1), saying
-"Older messages were not loaded - Jarvis reads back only the newest ones."
-when some did not. Each question keeps its tag. Desktop: the Brain's
+"3 older questions were not loaded - Jarvis reads back only the newest
+ones." (with the count) when some did not, and "1 earlier question was left
+out: its answer was not kept." (with the count) when some had no kept answer
+(the second chat audit, 2026-09-28). Each question keeps its tag. Desktop: the Brain's
 Continue (`brain_continue_chat`, the id only) brings up the Jarvis bar,
 which reads the chat itself (`chat_continue_open`, refused in Rust for any
 other kind and while the private lists are hidden). Phone: History's
@@ -3478,7 +3481,11 @@ History to read back - history off - it takes over the id alone).
 - The whole conversation so far is on screen as a folded, scrolling thread
   ("Earlier in this chat · 3 questions") above the current question - every
   finished pair, not only the model's re-send window (capped at 100). On
-  screen only; never read aloud, never kept by the app.
+  screen only; never read aloud, never kept by the app. Since the second
+  chat audit (2026-09-28, §18.7) it lands on the newest pair, draws the line
+  "Jarvis reads from here down. What is above stays on screen only." where
+  the model's window begins, and is **hidden while "Hide memory lists and
+  chat history" is on** (the owner's decision), on both apps.
 - **A new conversation after 30 quiet minutes**: the next question starts a
   new one, and one quiet line says "It's been a while, so this is a new
   conversation. The last one is in History." Never mid-Live.
@@ -3513,6 +3520,80 @@ search. "Load older" may bring in more to search.").
 
 **Not built** (proposals, for the owner): rename, pin, archive, branching,
 edit-and-resend, and any wider chat-word search.
+
+### 18.7 After the second chat audit (2026-09-28)
+
+`docs/studio-2026-09-28/chat-audit2-{memory,desktop,phone}.md` and the
+owner's answers (CLAUDE.md, "After the second chat audit"). Everything here
+is additive; an older PC or app simply lacks it.
+
+- **A continued chat's own words count again after a restart** (the owner's
+  decision). `ChatLog._seed` calls `_rehydrate(cid)`: it re-registers, in
+  the live-turn registry, the most recent 60 user rows of a chat or Live
+  chat that the PC holds in its encrypted record, when their provenance is
+  `typed` or `voice` (with their stored voice-check facts) and the row did
+  not read outside text - decided from the PC's record, never from the
+  request. Shared, pasted, clipboard, picture, chatbot, support and imported
+  text is never re-registered, and a chat titled "A difficult moment" (a
+  crisis turn) is not re-registered and cannot be continued (`get()` says
+  `continuable: false` with `CRISIS_CONTINUE_WHY`). Forgotten and erased
+  facts stay forgotten: the "hush" floor a Forget or Erase sets on a
+  conversation is stored in the history database (`meta` table, key
+  `hush:<cid>`) as well as in memory, so a restart cannot bring the words
+  back to the learner. It is dropped with the chat and travels with
+  "Forget a time frame"'s take-out and Undo.
+- **A game stays a game.** `jarvis_intake` keeps a bounded set of
+  conversation ids the PC judged to be a game or role-play
+  (`is_game_conversation`): once a conversation was a game it stays
+  temporary after the apps' window has slid past the first message, and the
+  quick path and the "next time" hint use the same check. The route's
+  `temporary` header still says so; the phone shows no "last one is in
+  History" line for it.
+- **A hand-accepted fact keeps its chat.** `auto_learn_notes` records the
+  conversation a proposal came from (also when learning is off), and
+  `_fact_meta` copies it onto the fact when the owner accepts the card by
+  hand, so "Erase the words … also delete the chat" and "Facts this chat
+  taught" (§79) find it.
+- **Search combines with Show**: `GET /api/history/search` takes `kind`
+  like `GET /api/history` (§71). Both apps pass the chosen kind and search
+  again when it changes; an older PC that ignores it is narrowed by the app.
+- **Every delete dialog says what stays**: "Facts Jarvis learned stay.
+  Copies in older backups stay until they age out." (single delete;
+  keep-days; erase-with-chat, which also says how many OTHER facts the chat
+  taught and that they stay; "Forget a time frame"'s card: "Facts you did
+  not tick stay. …"). The locked backup's own note (§ backup) also names
+  deleted chats.
+- **"Forget a time frame" starts a chat that spills over the days unticked**
+  ("Also has messages from outside these days. Tick it only if the whole
+  chat should go."); it used to be ticked.
+- **Facts a chat taught, on an opened chat** (chat and Live kinds): both
+  apps read §79's route and show the facts (read-only), or "Your memory
+  lists are hidden, so they are not shown here." while they are hidden.
+  "read outside text" now marks the answer that read it, not "You"; a
+  support or chatbot record has its own note above it.
+- **Chatbot and comparison chats say whether they were kept.** A session and
+  a comparison carry `history: {kept, why}` once they end (§60.3 views), and
+  the summary notes no longer promise History: "Kept in your encrypted chat
+  history on the PC." / "Not kept in your chat history: <why>", with "Open in
+  History" when kept, on both apps (the support plate had the same line).
+- **The phone**: History says at the top whether it is on ("Change" opens
+  the settings); Live starting or ending on Home says where the chat went;
+  Home's thread lands on the newest pair, shows the newest 20 with "Show
+  older", and the note under it says "started a new conversation" once the
+  chat has been quiet 30 minutes; a temporary chat or game never says "the
+  last one is in History"; a chat deleted by a shorter "keep for" limit or
+  an erase the phone could not name is noticed by re-reading Home's chat;
+  "Forget a time frame" is no longer taken as done by an older "done" left
+  by an earlier one (`last.at` against the time before the card).
+- **Desktop**: the thread hides with the private lists (`chat_thread_hidden`
+  command, also allowed for the Jarvis bar); a game shows "This looks like a
+  game, so nothing in it is kept or learned."; Continue is refused while Jarvis Live is on here.
+
+**Not built** (waiting on the owner or the second card): renaming, pinning,
+archiving, branching, editing and resending, wider chat-word search; larger
+re-send limits for two cards (the line above the thread tells the truth
+about today's limits); a warning on Continue when history is off; a sign on
+the phone's Live screen while Temporary is on.
 
 ---
 
@@ -3603,8 +3684,13 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    TAINT is not forgotten (security review G1, 2026-09-26): a conversation
    the backend meets for the first time since it started, with earlier
    turns in the request, is tainted unless the history database holds every
-   one of those turns and none read outside text - so after a restart its
-   next turns are "the conversation read outside text", a card.
+   one of those turns and none read outside text. Since the second chat
+   audit (2026-09-28, §18.7) the PC also re-registers the owner's OWN typed
+   and spoken messages of such a chat from its encrypted record (never
+   shared, pasted, chatbot, support or crisis text, and never a row that
+   read outside text), so after a restart or "Continue this chat" facts learned
+   from those messages save without a card again; a Forget or Erase floor
+   on the conversation survives the restart.
    - a turn it did not see arrive (re-sent or made-up history, or older than
      the registry): "from a message this PC did not see arrive ..."
    - no valid `conversation_id` on the request: "the app did not say which
@@ -11163,7 +11249,7 @@ handed to the AI".
 
 | Route | Method | Answers |
 |---|---|---|
-| `GET /api/history/search?q=<words>&limit=<1-50, default 20>` | GET | **200** the `GET /api/history` status fields (`enabled`, `recording`, `why_not`, `keep_days`, ...) plus `query_ok` (bool), `why` (a sentence when `query_ok` is false), `conversations` (each a `/api/history` row plus `hits` - how many messages hold a search word - and `snippet`), `more` (there were more matches than `limit`), `partial` (the scan stopped early) and `searched` (how many conversations were looked at). **200 with `query_ok: false`** and a sentence for words that are too short (fewer than two letters once one-letter words are skipped) or too long (more than 8 words or 100 characters). `503` without chat history on the PC; `501` from a `jarvis_chat_log.py` older than this section. Token + origin. |
+| `GET /api/history/search?q=<words>&limit=<1-50, default 20>[&kind=<chat|live|support|chatbot|compare>]` | GET | **200** the `GET /api/history` status fields (`enabled`, `recording`, `why_not`, `keep_days`, ...) plus `query_ok` (bool), `why` (a sentence when `query_ok` is false), `conversations` (each a `/api/history` row plus `hits` - how many messages hold a search word - and `snippet`), `more` (there were more matches than `limit`), `partial` (the scan stopped early) and `searched` (how many conversations were looked at). **200 with `query_ok: false`** and a sentence for words that are too short (fewer than two letters once one-letter words are skipped) or too long (more than 8 words or 100 characters). `503` without chat history on the PC; `501` from a `jarvis_chat_log.py` older than this section. Token + origin. |
 
 `snippet` is `{"role": "user" | "assistant" | "title", "at", "before",
 "after", "parts": [{"text", "hit"}]}` - a short piece (at most 180
