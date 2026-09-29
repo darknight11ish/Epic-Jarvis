@@ -388,10 +388,17 @@ def set_speed(body) -> tuple:
 # owner's current choice if it is not among them (jarvis_kokoro.offered).
 
 def _voices_file() -> str:
-    """Where the installed voice pack's voices.bin is: the place
-    jarvis_speech speaks from (its `[voice] tts_voices` setting included)."""
+    """Where the voices file is that Jarvis speaks from: the one the speech
+    engine was BUILT with, once it is built (jarvis_speech._TTS_VOICES - so a
+    blend file made while Jarvis runs is not believed until the engine has
+    really loaded it), else the place it will load from (jarvis_speech's
+    `[voice] tts_voices` setting, or the pinned blend file beside the pack
+    when it is there)."""
     try:
         import jarvis_speech as S
+        loaded = getattr(S, "_TTS_VOICES", "")
+        if isinstance(loaded, str) and loaded:
+            return loaded
         return str(S._sherpa_tts_paths()["voices"])
     except Exception:
         return str(_models_dir() / "tts" / "voices.bin")
@@ -399,8 +406,18 @@ def _voices_file() -> str:
 
 def pack_kind() -> str:
     """"v1" (Kokoro v1.0), "v019" (the pack Jarvis shipped with) or "" (no
-    pack, or one this does not know). Cheap: one file's size."""
+    pack, or one this does not know). Cheap: one file's size. The blend file
+    (Ashby and Clara) is Kokoro v1.0 too: this is the PACK; table_kind() is
+    the one that knows about the two extra voices."""
     return K.kind_of_file(_voices_file())
+
+
+def table_kind() -> str:
+    """pack_kind(), or "v1mix" when the voices file is the pinned blend file:
+    Kokoro v1.0 with Ashby and Clara in two of its slots. What every voice's
+    number (`sid`) is looked up in - never for an animal, which only ever
+    uses the pack's own voices."""
+    return K.table_kind_of_file(_voices_file())
 
 
 SPEAKER_TITLE = "Jarvis's built-in voice"
@@ -433,6 +450,11 @@ def _builtin_now(kind: str) -> dict:
     saved = _read_state()["speaker"]
     if saved is not None:
         got = K.resolve(kind, saved)
+        if got in K.MIX and blend_refused(got):
+            # Ashby or Clara, but the voice check says it sounds like the
+            # owner's own voice: never spoken. The pack's default speaks.
+            return {"name": K.default_name(kind), "sid": K.default_sid(kind), "chosen": saved,
+                    "fell_back": True, "custom": False, "refused": True}
         if got is not None:
             return {"name": got, "sid": K.sid_of(kind, got), "chosen": saved,
                     "fell_back": False, "custom": False}
@@ -459,16 +481,26 @@ def speaker() -> int:
     pack: the owner's choice, else `[voice] tts_speaker_id` (the old
     numbering), else the pack's default. Never raises."""
     try:
-        return int(_builtin_now(pack_kind())["sid"])
+        return int(_builtin_now(table_kind())["sid"])
     except Exception:
         return 0
+
+
+def speaker_speed() -> float:
+    """How fast the built-in voice speaks: the owner's speaking speed times
+    the chosen voice's own pace (only Ashby has one: 0.95, a little slower).
+    Never raises."""
+    try:
+        return min(2.0, max(0.5, speed() * K.voice_pace(speaker_name())))
+    except Exception:
+        return speed()
 
 
 def speaker_name() -> str:
     """The NAME of the built-in voice that speaks ("af_heart"), "" for a
     hand-set number beyond the pack. Never raises."""
     try:
-        return str(_builtin_now(pack_kind())["name"])
+        return str(_builtin_now(table_kind())["name"])
     except Exception:
         return ""
 
@@ -478,7 +510,7 @@ def accent_lang(sid) -> Optional[str]:
     for the engine's own default: only Kokoro v1.0's British voices take one
     (jarvis_speech.kokoro_speak asks). Never raises."""
     try:
-        kind = pack_kind()
+        kind = table_kind()
         return K.accent_lang(kind, K.name_of(kind, int(sid)),
                              str(_cfg("tts_lang_british", "") or ""))
     except Exception:
@@ -489,14 +521,33 @@ def _speaker_rows(kind: str, now: Optional[dict] = None) -> list:
     """The picker rows: what the pack offers, then the current choice if it
     is not one of them."""
     now = now or _builtin_now(kind)
-    return K.offered(kind, now["name"] if not now["custom"] and now["name"] else None)
+    rows = K.offered(kind, now["name"] if not now["custom"] and now["name"] else None)
+    # Ashby and Clara are only listed while the voice check has not found
+    # that they sound like the owner's own voice (blend_check).
+    return [r for r in rows if not (r["id"] in K.MIX and blend_refused(r["id"]))]
+
+
+def _blend_note(kind: str, now: dict) -> str:
+    """One plain sentence about Ashby and Clara for the picker's note, or "":
+    why they are not there (the old pack, not made yet, not the expected
+    file, or the voice check refused one), or that they need a restart."""
+    fam = K.family(kind)
+    if fam == K.V019:
+        return K.BLENDS_NEED_V1
+    if fam != K.V1:
+        return ""
+    if kind == K.V1MIX:
+        return " ".join(blend_verdict(v).get("why", "") for v in K.MIX_IDS
+                        if blend_refused(v) and v != now.get("chosen")).strip()
+    state = K.blend_state(_voices_file())
+    return {"ready": K.BLENDS_RESTART, "bad": K.BLENDS_BAD}.get(state, K.BLENDS_TO_MAKE)
 
 
 def speaker_view() -> dict:
     """GET /api/voice/voices `speaker`: the choice, and every word the
     apps show - the same shape `speed` uses above, so both apps reuse ONE
     row of UI for it."""
-    kind = pack_kind()
+    kind = table_kind()
     now = _builtin_now(kind)
     rows = _speaker_rows(kind, now)
     note = ""
@@ -508,12 +559,24 @@ def speaker_view() -> dict:
     else:
         choice = now["name"]
     if now["fell_back"]:
-        note = (f"You chose {K.label_of(now['chosen'])}, which needs the newer voice pack "
-                f"(Kokoro v1.0). Until it is installed, {K.label_of(now['name'])} speaks.")
+        chose = K.label_of(now['chosen'])
+        if now.get("refused"):
+            why = (blend_verdict(now["chosen"]) or {}).get("why", "")
+            note = f"{why} {K.label_of(now['name'])} speaks instead.".strip()
+        elif now["chosen"] in K.MIX and K.family(kind) == K.V1:
+            note = (f"You chose {chose}, which is not made yet (see below). Until it is, "
+                    f"{K.label_of(now['name'])} speaks.")
+        else:
+            note = (f"You chose {chose}, which needs the newer voice pack (Kokoro v1.0). "
+                    f"Until it is installed, {K.label_of(now['name'])} speaks.")
     if kind == K.V019:
         up = K.upgrade_note()
         if up:
             note = (note + " " if note else "") + up
+    more = _blend_note(kind, now)
+    if more:
+        note = (note + " " if note else "") + more
+    _recheck_saved_blend(kind)
     try:
         fv = face_voice()
     except Exception:
@@ -532,12 +595,24 @@ def speaker_view() -> dict:
 def set_speaker(body) -> tuple:
     """POST /api/voice/voices/speaker {"speaker": "<a name from
     speaker.choices>"}: at once, no card either way (see above)."""
-    kind = pack_kind()
+    kind = table_kind()
     ids = {r["id"] for r in _speaker_rows(kind)}
     if not isinstance(body, dict) or set(body) != {"speaker"} \
             or not isinstance(body["speaker"], str) or body["speaker"] not in ids:
         return 400, {"ok": False, "error": "choose one of the listed voices"}
     choice = body["speaker"]
+    if choice in K.MIX:
+        # Ashby and Clara: the voice check first - Jarvis must not speak in
+        # anything that sounds like the owner's own voice. Made once per set
+        # of voice prints (blend_check keeps the answer).
+        if not _TRY_LOCK.acquire(blocking=False):
+            return 429, {"ok": False, "error": CHECK_BUSY}
+        try:
+            chk = blend_check(choice)
+        finally:
+            _TRY_LOCK.release()
+        if not chk.get("ok"):
+            return (503 if chk.get("unchecked") else 400), {"ok": False, "error": chk["why"]}
     err = _write_state(speaker=choice)
     if err:
         return 500, {"ok": False, "error": err}
@@ -586,6 +661,141 @@ def migrate_saved_choices() -> list:
 
 
 # --------------------------------------------------------------------------
+#   Ashby and Clara: the "not the owner's voice" check
+# --------------------------------------------------------------------------
+#
+# A recorded voice is refused if it sounds like the OWNER (owner_check): a
+# Jarvis speaking in the owner's voice could pass its own voice check. Nothing
+# stops a blend of two Kokoro voices from landing near it by chance, so the
+# two made-for-Jarvis voices get the same check, on a sample of what they say:
+#
+#   * when the owner CHOOSES one (set_speaker) and when they hear it (Hear it),
+#   * again whenever the voice prints change (a chosen one is re-checked in
+#     the background by speaker_view - the same cue a recorded voice uses),
+#   * a voice that fails is not listed, not chosen and not spoken with: the
+#     pack's default speaks, and the note says why.
+#
+# The answer is kept in memory for one set of voice prints (prints_fingerprint)
+# and one blend file; nothing is written to disk and nothing is sent anywhere.
+# Not being able to check (no voice engine, no voice-check module) is not
+# "fine": the voice is not used until it can be. With no voice print trained
+# yet there is nothing to compare with, and owner_check says so and lets it
+# through (as it does for a recorded voice); it is checked again as soon as the
+# owner trains their voice.
+
+#: What the sample says: about five seconds, so the check sees more than one
+#: three-second stretch (owner_check compares every stretch).
+BLEND_CHECK_LINE = ("Good evening. Your calendar is clear this afternoon, and nothing is "
+                    "waiting for you.")
+CHECK_BUSY = ("the PC is still making the sound for the last Hear it. Try again in a "
+              "moment")
+_BLEND_CHECKS: dict = {}
+_RECHECKING: set = set()
+
+
+def _blend_key(name: str) -> tuple:
+    return (prints_fingerprint(), str(K.BLEND_SHA256), name)
+
+
+def blend_verdict(name: str) -> Optional[dict]:
+    """The kept owner check for this blend at the current voice prints, or
+    None (not checked yet, or the prints have changed since)."""
+    try:
+        return _BLEND_CHECKS.get(_blend_key(name))
+    except Exception:
+        return None
+
+
+def blend_refused(name: str) -> bool:
+    """The kept check found that this blend sounds like the owner."""
+    v = blend_verdict(name)
+    return v is not None and not v.get("ok")
+
+
+def blend_check(name: str, speech_module=None) -> dict:
+    """{"ok": True | False, "why": words, ...}: does Ashby or Clara sound
+    like the owner? Speaks BLEND_CHECK_LINE in it and gives the sound to
+    owner_check(). `"unchecked": True` (and not kept) when it could not be
+    made to speak. The caller holds _TRY_LOCK (one sound at a time)."""
+    hit = blend_verdict(name)
+    if hit is not None:
+        return hit
+    S = speech_module
+    if S is None:
+        try:
+            import jarvis_speech as S
+        except Exception:
+            S = None
+    engine = None
+    if S is not None:
+        try:
+            engine = S._tts_engine()
+        except Exception:
+            engine = None
+    sid = K.sid_of(table_kind(), name)
+    if engine is None or sid is None:
+        return {"ok": False, "unchecked": True,
+                "why": "this PC has no built-in voice to check it with"}
+    try:
+        audio = S.kokoro_speak(engine, BLEND_CHECK_LINE, sid, K.voice_pace(name), 0.0)
+    except Exception as exc:
+        return {"ok": False, "unchecked": True,
+                "why": f"the built-in voice failed ({type(exc).__name__})"}
+    if audio is None:
+        return {"ok": False, "unchecked": True, "why": "the built-in voice made no sound"}
+    try:
+        _need_numpy()
+        x = np.asarray(audio[0], dtype=np.float32)
+        if int(audio[1]) != SAMPLE_RATE:
+            x = resample(x, int(audio[1]), SAMPLE_RATE)
+        chk = owner_check(x)
+    except Exception as exc:
+        return {"ok": False, "unchecked": True,
+                "why": f"it could not be checked ({type(exc).__name__})"}
+    keep = {k: chk[k] for k in ("ok", "why", "fingerprint", "score", "bar", "checked",
+                                "refused") if k in chk}
+    if not keep.get("ok"):
+        # owner_check's own words talk about "a recording" and "someone else"
+        # - not what to say about a built-in voice.
+        who = K.MIX[name]["name"]
+        keep["why"] = (f"{who} sounds too much like your own voice, so Jarvis will not use it."
+                       if keep.get("refused") == "owner_voice" else
+                       f"{who} could not be checked against your voice print, so Jarvis will "
+                       f"not use it yet.")
+    if len(_BLEND_CHECKS) > 64:
+        _BLEND_CHECKS.clear()
+    _BLEND_CHECKS[_blend_key(name)] = keep
+    _audit("voices.blend_check", {"voice": name, "ok": bool(keep.get("ok"))})
+    return keep
+
+
+def _recheck_saved_blend(kind: str) -> None:
+    """The owner's saved Ashby or Clara, checked again in the background when
+    the voice prints have changed (or the PC has restarted) since it was last
+    checked: one sample, once, never while another sound is being made."""
+    if kind != K.V1MIX:
+        return
+    saved = _read_state()["speaker"]
+    if saved not in K.MIX or saved in _RECHECKING or blend_verdict(saved) is not None:
+        return
+    _RECHECKING.add(saved)
+
+    def run() -> None:
+        try:
+            if _TRY_LOCK.acquire(blocking=False):
+                try:
+                    blend_check(saved)
+                finally:
+                    _TRY_LOCK.release()
+        except Exception:
+            pass
+        finally:
+            _RECHECKING.discard(saved)
+
+    _spawn(run)
+
+
+# --------------------------------------------------------------------------
 #   "Hear it": one short fixed line in a named voice, changing nothing
 # --------------------------------------------------------------------------
 #
@@ -593,7 +803,9 @@ def migrate_saved_choices() -> list:
 # answers a WAV (200 audio/wav) of SAMPLE_LINE in that Kokoro voice at the
 # owner's speaking speed - never a custom voice, never an animal's pitch, so
 # it can never be the owner's own voice (a recording is not reachable from
-# here at all). NO CARD, NO EVENT, NO AUDIT LINE, nothing saved and the
+# here at all - except Ashby and Clara, which are Kokoro voices blended, and
+# are checked against the owner's voice print first, above). NO CARD, NO
+# EVENT, NO AUDIT LINE (bar that check's one line), nothing saved and the
 # chosen voice untouched: it only makes a sound for the app that asked, like
 # an animal's "Try it" (below), so it is not a way out of this PC and is not
 # held on a stale link. What the apps do around it - never over Jarvis, not
@@ -612,7 +824,7 @@ _SAMPLE_CACHE_MAX = 16
 def sample_voice(body, speech_module=None) -> tuple:
     """POST /api/voice/voices/sample {"voice": name} -> (200, WAV bytes) or
     (4xx/503, {"ok": false, "error"})."""
-    kind = pack_kind()
+    kind = table_kind()
     ids = {r["id"] for r in _speaker_rows(kind)}
     if not isinstance(body, dict) or set(body) != {"voice"} \
             or not isinstance(body["voice"], str) or body["voice"] not in ids:
@@ -643,7 +855,11 @@ def _sample_voice(kind: str, name: str, speech_module=None) -> tuple:
     sid = K.sid_of(kind, name)
     if sid is None:
         return 400, {"ok": False, "error": "choose one of the listed voices"}
-    pace = min(2.0, max(0.5, speed()))
+    if name in K.MIX:
+        chk = blend_check(name, S)
+        if not chk.get("ok"):
+            return (503 if chk.get("unchecked") else 400), {"ok": False, "error": chk["why"]}
+    pace = min(2.0, max(0.5, speed() * K.voice_pace(name)))
     try:
         stamp = os.path.getsize(_voices_file())
     except OSError:
@@ -898,7 +1114,7 @@ def builtin_voice() -> tuple:
     except Exception:
         fv = None
     if fv is None:
-        return speaker(), speed(), 0.0, ""
+        return speaker(), speaker_speed(), 0.0, ""
     pace = min(2.0, max(0.5, float(fv["speed"]) * speed()))
     semis = min(MAX_SEMITONES, max(MIN_SEMITONES, float(fv["semitones"])))
     return _animal_sid(pack_kind(), fv), pace, semis, fv["face"]
@@ -3337,6 +3553,8 @@ def _reset_for_tests() -> None:
     with _SLOW_LOCK:
         _SLOW.update(rtfs=[], until=-1e9, why="")
     _SAMPLE_CACHE.clear()
+    _BLEND_CHECKS.clear()
+    _RECHECKING.clear()
     wake()
     try:
         _F5.stop("reset")
