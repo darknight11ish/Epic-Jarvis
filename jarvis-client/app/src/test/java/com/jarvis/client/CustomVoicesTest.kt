@@ -339,7 +339,7 @@ class CustomVoicesTest {
             listOf("af", "af_bella", "af_nicole", "af_sarah", "am_michael", "bf_emma", "bf_isabella", "bm_george", "bm_lewis"),
             sk.choices.map { it.id },
         )
-        assertEquals("American (female)", sk.choices[0].label)
+        assertEquals("American (female) - Default", sk.choices[0].label)
         assertEquals("British (male) - George", sk.choices[7].label)
         assertEquals("af", sk.choice)
         assertEquals(CustomVoices.SPEAKER_TITLE, sk.title)
@@ -512,7 +512,7 @@ class CustomVoicesTest {
         val busy = answer("animal_try_busy")
         assertEquals(429, busy.code)
         assertEquals(
-            "The PC is still making the sound for the last Try it. Try it again in a moment.",
+            "The PC is still making another voice sample. Try again in a moment.",
             CustomVoices.sentence(busy.error),
         )
     }
@@ -581,7 +581,7 @@ class CustomVoicesTest {
         // A voice that sounds like the owner is not listed any more, and says why.
         val refused = requireNotNull(status("pack_v1_ashby_refused_listed").speaker)
         assertEquals(listOf("mix_clara", "af_heart"), refused.choices.map { it.id }.take(2))
-        val why = "Ashby sounds too much like your own voice, so Jarvis will not use it."
+        val why = "Ashby sounds too close to your own voice, and a voice that sounds like you could pass Jarvis's own voice check. Jarvis will not use it, so the normal voice speaks."
         assertEquals(why, refused.note)
         assertEquals(why, CustomVoices.answerLine(answer("pack_v1_ashby_refused")))
         assertEquals(why, CustomVoices.answerLine(answer("pack_v1_sample_refused")))
@@ -620,7 +620,7 @@ class CustomVoicesTest {
         val busy = answer("sample_busy")
         assertEquals(429, busy.code)
         assertEquals(
-            "The PC is still making the sound for the last Hear it. Try again in a moment.",
+            "The PC is still making another voice sample. Try again in a moment.",
             CustomVoices.sentence(busy.error),
         )
     }

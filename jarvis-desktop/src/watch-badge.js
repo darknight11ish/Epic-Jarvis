@@ -13,7 +13,7 @@ import { watchSign, ENDED_SHOW_S } from "./look-rules.js";
 const TAURI = globalThis.__TAURI__;
 /** The badge's size at 100% text, in logical pixels (look.rs BADGE_W/H). */
 const BADGE_W = 400;
-const BADGE_H = 64;
+const BADGE_H = 88;
 const THEMES = ["deep-space", "paper", "high-contrast"];
 const ZOOM_KEY = "jarvis.zoom";
 const ZOOM_STEPS = [0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2, 2.5];
@@ -33,6 +33,8 @@ const el = {
 let last = { status: null, at: 0, stale: false };
 let failed = { words: "", until: 0 };
 let timer = null;
+/** The height (in css px) the window was last sized to. */
+let fitted = BADGE_H;
 
 async function invoke(command, args = {}) {
   if (!TAURI || !TAURI.core) return null;
@@ -80,6 +82,26 @@ function render() {
   if (sign.on) timer = setTimeout(render, 10000);
   else if (sign.show) timer = setTimeout(render, (ENDED_SHOW_S + 1) * 1000 - (endedAgo() || 0) * 1000);
   if (now < failed.until) setTimeout(render, failed.until - now + 50);
+  fit();
+}
+
+/** The window is a fixed size, so it can be too small for the words (a long
+ *  line, or big text). Grow it to fit what is drawn, so the Stop button is
+ *  never cut off. It never shrinks below the normal size. */
+function fit() {
+  if (!TAURI || !TAURI.window) return;
+  requestAnimationFrame(async () => {
+    try {
+      const zoom = storedZoom();
+      const need = Math.max(BADGE_H, Math.ceil(el.badge.offsetHeight + 8));
+      if (need === fitted) return;
+      fitted = need;
+      const Size = (TAURI.dpi && TAURI.dpi.LogicalSize) || (TAURI.window && TAURI.window.LogicalSize);
+      if (Size) await TAURI.window.getCurrentWindow().setSize(new Size(Math.round(BADGE_W * zoom), Math.round(need * zoom)));
+    } catch {
+      /* the fixed size stands */
+    }
+  });
 }
 
 function take(payload) {
@@ -115,7 +137,7 @@ async function applyZoom() {
     if (TAURI.webview) await TAURI.webview.getCurrentWebview().setZoom(zoom);
     const Size = (TAURI.dpi && TAURI.dpi.LogicalSize) || (TAURI.window && TAURI.window.LogicalSize);
     if (Size && TAURI.window) {
-      await TAURI.window.getCurrentWindow().setSize(new Size(Math.round(BADGE_W * zoom), Math.round(BADGE_H * zoom)));
+      await TAURI.window.getCurrentWindow().setSize(new Size(Math.round(BADGE_W * zoom), Math.round(fitted * zoom)));
     }
   } catch (error) {
     console.info("[watch-badge] could not follow the text size:", error);

@@ -211,7 +211,7 @@ def t_names_carry_over_and_stand_in():
     check("... and not twice if it is offered",
           len(K.offered("v1", "af_bella")) == len(K.V1_PICK))
     check("labels are plain words",
-          K.label_of("af") == "American (female)" and K.label_of("af_heart") == "American (female) - Heart"
+          K.label_of("af") == "American (female) - Default" and K.label_of("af_heart") == "American (female) - Heart"
           and K.label_of("bm_george") == "British (male) - George"
           and K.label_of("am_michael") == "American (male) - Michael"
           and K.label_of("zf_xiaobei") == "Voice zf_xiaobei" and K.label_of("") == "")
@@ -713,7 +713,7 @@ def t_hear_it_is_one_at_a_time_and_kept_in_memory_only():
         c, o = V.sample_voice({"voice": "af_bella"})
     check("a second one while the first is being made is refused at once, in words (429)",
           c == 429 and o["error"] == V.SAMPLE_BUSY
-          and o["error"] == "the PC is still making the sound for the last Hear it. Try again in a moment", (c, o))
+          and o["error"] == "The PC is still making another voice sample. Try again in a moment.", (c, o))
     with V._TRY_LOCK:
         c2, _o2 = V.try_face_animal({"face": "redpanda"})
     check("it shares 'Try it's lock: they are never made at the same time", c2 == 429)
@@ -725,7 +725,8 @@ def t_hear_it_says_so_when_it_cannot():
     fake_engine_missing = types.SimpleNamespace(_tts_engine=lambda: None)
     c, o = V.sample_voice({"voice": "af_bella"}, speech_module=fake_engine_missing)
     check("no built-in voice on this PC: 503 in words",
-          c == 503 and o["error"] == "this PC has no built-in voice to play it with", (c, o))
+          c == 503 and o["error"].startswith("This PC has no built-in voice to play it with.")
+          and "see the Kokoro line in Settings" in o["error"], (c, o))
 
     class Boom:
         def generate(self, *a, **k):
@@ -734,8 +735,9 @@ def t_hear_it_says_so_when_it_cannot():
                                  _write_wav=S._write_wav)
     S._tts_cache = Boom()
     c, o = V.sample_voice({"voice": "af_bella"})
-    check("a voice that fails: 503 naming the exception, never its message",
-          c == 503 and "RuntimeError" in o["error"] and "secret" not in o["error"], (c, o))
+    check("a voice that fails: 503 in plain words, never the exception's name or message",
+          c == 503 and "RuntimeError" not in o["error"] and "secret" not in o["error"]
+          and o["error"] == V.SAMPLE_FAILED, (c, o))
     reset("v1")
 
     class Silent:
@@ -744,7 +746,7 @@ def t_hear_it_says_so_when_it_cannot():
     S._tts_cache = Silent()
     c, o = V.sample_voice({"voice": "af_bella"})
     check("a voice that makes no sound: 503 in words",
-          c == 503 and o["error"] == "the built-in voice made no sound", (c, o))
+          c == 503 and o["error"] == V.SAMPLE_FAILED, (c, o))
     check("and the lock is free again afterwards", V._TRY_LOCK.acquire(blocking=False)
           and (V._TRY_LOCK.release() or True))
 

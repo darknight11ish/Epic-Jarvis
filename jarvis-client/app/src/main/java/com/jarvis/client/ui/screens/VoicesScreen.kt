@@ -573,9 +573,10 @@ private fun SpeakerPlate(
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
-    // Which voice is being heard, and the words under the list.
+    // Which voice is being heard, and the words that go under THAT voice's row.
     var hearing by remember { mutableStateOf<String?>(null) }
     var said by remember { mutableStateOf("") }
+    var saidFor by remember { mutableStateOf<String?>(null) }
     Plate {
         Text(sk.title, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
         if (sk.detail.isNotBlank()) {
@@ -597,11 +598,12 @@ private fun SpeakerPlate(
                             onClick = { if (c.id != sk.choice) onSet(c.id) },
                         )
                         Quiet(
-                            CustomVoices.HEAR_LABEL,
+                            if (hearing == c.id) "Playing..." else CustomVoices.HEAR_LABEL,
                             modifier = Modifier.semantics { contentDescription = "Hear ${c.label}" },
                             enabled = hearing == null,
                             onClick = {
                                 hearing = c.id
+                                saidFor = c.id
                                 said = CustomVoices.TRY_ASKING
                                 scope.launch {
                                     try {
@@ -616,12 +618,13 @@ private fun SpeakerPlate(
                     if (c.detail.isNotBlank()) {
                         Text(c.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
                     }
+                    // What happened when THIS voice's button was pressed, right
+                    // under it - not only below a long list.
+                    if (said.isNotBlank() && saidFor == c.id) {
+                        Text(said, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                    }
                 }
             }
-        }
-        if (said.isNotBlank()) {
-            Gap(6)
-            Text(said, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
         }
         if (sk.note.isNotBlank()) {
             Gap(6)

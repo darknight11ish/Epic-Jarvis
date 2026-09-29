@@ -11332,7 +11332,7 @@
             "voices": [
               {
                 "id": "af",
-                "label": "American (female)"
+                "label": "American (female) - Default"
               },
               {
                 "id": "af_bella",
@@ -11493,7 +11493,7 @@
             "voices": [
               {
                 "id": "af",
-                "label": "American (female)"
+                "label": "American (female) - Default"
               },
               {
                 "id": "af_bella",
@@ -11637,7 +11637,7 @@
     },
     "animal_try_busy": {
       "body": {
-        "error": "the PC is still making the sound for the last Try it. Try it again in a moment",
+        "error": "The PC is still making another voice sample. Try again in a moment.",
         "ok": false
       },
       "code": 429
@@ -11772,7 +11772,7 @@
             "voices": [
               {
                 "id": "af",
-                "label": "American (female)"
+                "label": "American (female) - Default"
               },
               {
                 "id": "af_bella",
@@ -11940,7 +11940,7 @@
             "voices": [
               {
                 "id": "af",
-                "label": "American (female)"
+                "label": "American (female) - Default"
               },
               {
                 "id": "af_bella",
@@ -12101,7 +12101,7 @@
             "voices": [
               {
                 "id": "af",
-                "label": "American (female)"
+                "label": "American (female) - Default"
               },
               {
                 "id": "af_bella",
@@ -12262,7 +12262,7 @@
             "voices": [
               {
                 "id": "af",
-                "label": "American (female)"
+                "label": "American (female) - Default"
               },
               {
                 "id": "af_bella",
@@ -12467,7 +12467,7 @@
             }
           ],
           "default": "af_heart",
-          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+          "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
           "note": "",
           "pack": {
             "kind": "v1",
@@ -12482,7 +12482,7 @@
     },
     "pack_v1_ashby_refused": {
       "body": {
-        "error": "Ashby sounds too much like your own voice, so Jarvis will not use it.",
+        "error": "Ashby sounds too close to your own voice, and a voice that sounds like you could pass Jarvis's own voice check. Jarvis will not use it, so the normal voice speaks.",
         "ok": false
       },
       "code": 400
@@ -12540,8 +12540,8 @@
             }
           ],
           "default": "af_heart",
-          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
-          "note": "Ashby and Clara, two voices made for Jarvis, are not made yet. To make them, run the one line under \"Make Ashby and Clara\" in backend\\README.md on your PC, then restart Jarvis.",
+          "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
+          "note": "Ashby and Clara, two voices made for Jarvis, are not made yet. To make them, run the one line under \"Make Ashby and Clara\" in the README.md file inside the backend folder of your Jarvis folder. Then restart Jarvis.",
           "pack": {
             "kind": "v1",
             "name": "Kokoro v1.0",
@@ -12555,7 +12555,7 @@
     },
     "pack_v1_sample_refused": {
       "body": {
-        "error": "Ashby sounds too much like your own voice, so Jarvis will not use it.",
+        "error": "Ashby sounds too close to your own voice, and a voice that sounds like you could pass Jarvis's own voice check. Jarvis will not use it, so the normal voice speaks.",
         "ok": false
       },
       "code": 400
@@ -12576,7 +12576,7 @@
     },
     "sample_busy": {
       "body": {
-        "error": "the PC is still making the sound for the last Hear it. Try again in a moment",
+        "error": "The PC is still making another voice sample. Try again in a moment.",
         "ok": false
       },
       "code": 429
@@ -12597,7 +12597,7 @@
           "choices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -12633,7 +12633,7 @@
             }
           ],
           "default": "af",
-          "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+          "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
           "note": "",
           "pack": {
             "kind": "",
@@ -12710,7 +12710,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -12761,7 +12761,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -12920,7 +12920,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -12956,7 +12956,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -13034,7 +13034,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -13085,7 +13085,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -13244,7 +13244,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -13280,7 +13280,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "While the Red Panda face is showing, its own voice speaks instead (\"Voice follows the face\" is on); this choice is used the rest of the time.",
         "pack": {
           "kind": "",
@@ -13358,7 +13358,7 @@
         "card": "NVIDIA GeForce RTX 2060",
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -13382,7 +13382,7 @@
         "zipvoice": {
           "available": false,
           "where": "this PC's processor",
-          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); the README.md file inside the backend folder of your Jarvis folder, \"Custom voices\", has the one-line install"
         }
       },
       "face_voice": {
@@ -13409,7 +13409,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -13562,7 +13562,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -13598,7 +13598,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -13651,7 +13651,7 @@
         "card": "NVIDIA GeForce RTX 2060",
         "enabled": true,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": {
           "at": 1790000000.0,
@@ -13663,7 +13663,7 @@
         "need_mb_measured": false,
         "pending": false,
         "state": "off",
-        "state_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "state_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "why": "F5-TTS on the NVIDIA GeForce RTX 2060: a better copy of the custom voice. It starts when Jarvis speaks in a custom voice and stops after 10 idle minutes"
       },
       "engines": {
@@ -13679,7 +13679,7 @@
         "zipvoice": {
           "available": false,
           "where": "this PC's processor",
-          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); the README.md file inside the backend folder of your Jarvis folder, \"Custom voices\", has the one-line install"
         }
       },
       "face_voice": {
@@ -13706,7 +13706,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -13859,7 +13859,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -13895,7 +13895,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -13948,7 +13948,7 @@
         "card": "NVIDIA GeForce RTX 2060",
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -13972,7 +13972,7 @@
         "zipvoice": {
           "available": false,
           "where": "this PC's processor",
-          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); the README.md file inside the backend folder of your Jarvis folder, \"Custom voices\", has the one-line install"
         }
       },
       "face_voice": {
@@ -13999,7 +13999,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -14152,7 +14152,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -14188,7 +14188,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -14241,7 +14241,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -14265,7 +14265,7 @@
         "zipvoice": {
           "available": false,
           "where": "this PC's processor",
-          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); the README.md file inside the backend folder of your Jarvis folder, \"Custom voices\", has the one-line install"
         }
       },
       "face_voice": {
@@ -14292,7 +14292,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -14445,7 +14445,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -14481,7 +14481,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -14534,7 +14534,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -14558,7 +14558,7 @@
         "zipvoice": {
           "available": false,
           "where": "this PC's processor",
-          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); the README.md file inside the backend folder of your Jarvis folder, \"Custom voices\", has the one-line install"
         }
       },
       "face_voice": {
@@ -14585,7 +14585,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -14738,7 +14738,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -14774,8 +14774,8 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
-        "note": "Better voices are available: Kokoro v1.0 has more, better-rated voices and a real British accent (a 350 MB download). To get them, run the one line under \"Upgrade the voice pack to Kokoro v1.0\" in backend\\README.md on your PC, then restart Jarvis. Your choice carries over. Ashby and Clara, two voices made for Jarvis, need the newer voice pack (Kokoro v1.0).",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
+        "note": "Better voices are available: Kokoro v1.0 has more, better-rated voices and a real British accent (a 350 MB download). To get them, run the one line under \"Upgrade the voice pack to Kokoro v1.0\" in the README.md file inside the backend folder of your Jarvis folder. Then restart Jarvis. Your choice carries over. Ashby and Clara, two voices made for Jarvis, need the newer voice pack (Kokoro v1.0).",
         "pack": {
           "kind": "v019",
           "name": "Kokoro v0.19",
@@ -14827,7 +14827,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -14851,7 +14851,7 @@
         "zipvoice": {
           "available": false,
           "where": "this PC's processor",
-          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); the README.md file inside the backend folder of your Jarvis folder, \"Custom voices\", has the one-line install"
         }
       },
       "face_voice": {
@@ -14878,7 +14878,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -15037,7 +15037,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -15073,7 +15073,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -15126,7 +15126,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -15177,7 +15177,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -15341,7 +15341,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -15377,7 +15377,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -15455,7 +15455,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -15479,7 +15479,7 @@
         "zipvoice": {
           "available": false,
           "where": "this PC's processor",
-          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); the README.md file inside the backend folder of your Jarvis folder, \"Custom voices\", has the one-line install"
         }
       },
       "face_voice": {
@@ -15506,7 +15506,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -15659,7 +15659,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -15695,7 +15695,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -15748,7 +15748,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -15772,7 +15772,7 @@
         "zipvoice": {
           "available": false,
           "where": "this PC's processor",
-          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); the README.md file inside the backend folder of your Jarvis folder, \"Custom voices\", has the one-line install"
         }
       },
       "face_voice": {
@@ -15799,7 +15799,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -15952,7 +15952,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -15988,7 +15988,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -16041,7 +16041,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -16065,7 +16065,7 @@
         "zipvoice": {
           "available": false,
           "where": "this PC's processor",
-          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); the README.md file inside the backend folder of your Jarvis folder, \"Custom voices\", has the one-line install"
         }
       },
       "face_voice": {
@@ -16092,7 +16092,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -16250,7 +16250,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -16286,7 +16286,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -16339,7 +16339,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -16363,7 +16363,7 @@
         "zipvoice": {
           "available": false,
           "where": "this PC's processor",
-          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); the README.md file inside the backend folder of your Jarvis folder, \"Custom voices\", has the one-line install"
         }
       },
       "face_voice": {
@@ -16390,7 +16390,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -16543,7 +16543,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -16579,7 +16579,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "While the Pygmy Owl face is showing, its own voice speaks instead (\"Voice follows the face\" is on); this choice is used the rest of the time.",
         "pack": {
           "kind": "",
@@ -16632,7 +16632,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -16683,7 +16683,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -16842,7 +16842,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -16878,7 +16878,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "While the Red Panda face is showing, its own voice speaks instead (\"Voice follows the face\" is on); this choice is used the rest of the time.",
         "pack": {
           "kind": "",
@@ -16956,7 +16956,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -16980,7 +16980,7 @@
         "zipvoice": {
           "available": false,
           "where": "this PC's processor",
-          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); the README.md file inside the backend folder of your Jarvis folder, \"Custom voices\", has the one-line install"
         }
       },
       "face_voice": {
@@ -17007,7 +17007,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -17165,7 +17165,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -17201,7 +17201,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -17254,7 +17254,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -17305,7 +17305,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -17464,7 +17464,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -17500,7 +17500,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -17578,7 +17578,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -17602,7 +17602,7 @@
         "zipvoice": {
           "available": false,
           "where": "this PC's processor",
-          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); the README.md file inside the backend folder of your Jarvis folder, \"Custom voices\", has the one-line install"
         }
       },
       "face_voice": {
@@ -17629,7 +17629,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -17759,7 +17759,7 @@
         "speaking": false,
         "title": "Voice follows the face"
       },
-      "fallback": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install",
+      "fallback": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); the README.md file inside the backend folder of your Jarvis folder, \"Custom voices\", has the one-line install",
       "last": {
         "at": 1790000000.0,
         "kind": "switch",
@@ -17788,7 +17788,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -17824,7 +17824,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -17864,7 +17864,7 @@
           "chars": 13,
           "engine": "kokoro",
           "failed": "",
-          "fallback": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install",
+          "fallback": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); the README.md file inside the backend folder of your Jarvis folder, \"Custom voices\", has the one-line install",
           "note": "",
           "rtf": 0.42,
           "seconds": 0.84,
@@ -17900,7 +17900,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -17924,7 +17924,7 @@
         "zipvoice": {
           "available": false,
           "where": "this PC's processor",
-          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); the README.md file inside the backend folder of your Jarvis folder, \"Custom voices\", has the one-line install"
         }
       },
       "face_voice": {
@@ -17951,7 +17951,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -18104,7 +18104,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -18140,8 +18140,8 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
-        "note": "Better voices are available: Kokoro v1.0 has more, better-rated voices and a real British accent (a 350 MB download). To get them, run the one line under \"Upgrade the voice pack to Kokoro v1.0\" in backend\\README.md on your PC, then restart Jarvis. Your choice carries over. Ashby and Clara, two voices made for Jarvis, need the newer voice pack (Kokoro v1.0).",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
+        "note": "Better voices are available: Kokoro v1.0 has more, better-rated voices and a real British accent (a 350 MB download). To get them, run the one line under \"Upgrade the voice pack to Kokoro v1.0\" in the README.md file inside the backend folder of your Jarvis folder. Then restart Jarvis. Your choice carries over. Ashby and Clara, two voices made for Jarvis, need the newer voice pack (Kokoro v1.0).",
         "pack": {
           "kind": "v019",
           "name": "Kokoro v0.19",
@@ -18193,7 +18193,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -18217,7 +18217,7 @@
         "zipvoice": {
           "available": false,
           "where": "this PC's processor",
-          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); the README.md file inside the backend folder of your Jarvis folder, \"Custom voices\", has the one-line install"
         }
       },
       "face_voice": {
@@ -18449,8 +18449,8 @@
           }
         ],
         "default": "af_heart",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
-        "note": "Ashby and Clara, two voices made for Jarvis, are not made yet. To make them, run the one line under \"Make Ashby and Clara\" in backend\\README.md on your PC, then restart Jarvis.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
+        "note": "Ashby and Clara, two voices made for Jarvis, are not made yet. To make them, run the one line under \"Make Ashby and Clara\" in the README.md file inside the backend folder of your Jarvis folder. Then restart Jarvis.",
         "pack": {
           "kind": "v1",
           "name": "Kokoro v1.0",
@@ -18502,7 +18502,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -18768,7 +18768,7 @@
           }
         ],
         "default": "af_heart",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "v1",
@@ -18821,7 +18821,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -19082,8 +19082,8 @@
           }
         ],
         "default": "af_heart",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
-        "note": "Ashby sounds too much like your own voice, so Jarvis will not use it.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
+        "note": "Ashby sounds too close to your own voice, and a voice that sounds like you could pass Jarvis's own voice check. Jarvis will not use it, so the normal voice speaks.",
         "pack": {
           "kind": "v1",
           "name": "Kokoro v1.0",
@@ -19135,7 +19135,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -19401,7 +19401,7 @@
           }
         ],
         "default": "af_heart",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "v1",
@@ -19454,7 +19454,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -19478,7 +19478,7 @@
         "zipvoice": {
           "available": false,
           "where": "this PC's processor",
-          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); the README.md file inside the backend folder of your Jarvis folder, \"Custom voices\", has the one-line install"
         }
       },
       "face_voice": {
@@ -19710,8 +19710,8 @@
           }
         ],
         "default": "af_heart",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
-        "note": "Ashby and Clara, two voices made for Jarvis, are not made yet. To make them, run the one line under \"Make Ashby and Clara\" in backend\\README.md on your PC, then restart Jarvis.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
+        "note": "Ashby and Clara, two voices made for Jarvis, are not made yet. To make them, run the one line under \"Make Ashby and Clara\" in the README.md file inside the backend folder of your Jarvis folder. Then restart Jarvis.",
         "pack": {
           "kind": "v1",
           "name": "Kokoro v1.0",
@@ -19763,7 +19763,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -19814,7 +19814,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -19973,7 +19973,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -20009,7 +20009,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -20087,7 +20087,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -20138,7 +20138,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -20297,7 +20297,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -20333,7 +20333,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -20421,7 +20421,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -20472,7 +20472,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -20631,7 +20631,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -20667,7 +20667,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -20745,7 +20745,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -20796,7 +20796,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -20960,7 +20960,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -20996,7 +20996,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -21059,7 +21059,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -21110,7 +21110,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -21269,7 +21269,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -21305,7 +21305,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",
@@ -21368,7 +21368,7 @@
         "card": null,
         "enabled": false,
         "files": false,
-        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); the README.md file inside the backend folder of your Jarvis folder, \"The better voice\", has the install",
         "idle_minutes": 10,
         "last": null,
         "load_seconds": null,
@@ -21419,7 +21419,7 @@
           "voices": [
             {
               "id": "af",
-              "label": "American (female)"
+              "label": "American (female) - Default"
             },
             {
               "id": "af_bella",
@@ -21578,7 +21578,7 @@
         "choices": [
           {
             "id": "af",
-            "label": "American (female)"
+            "label": "American (female) - Default"
           },
           {
             "id": "af_bella",
@@ -21614,7 +21614,7 @@
           }
         ],
         "default": "af",
-        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below. \"Hear it\" plays a short sample without changing your choice.",
+        "detail": "Which of the voices in Kokoro (the voice program Jarvis speaks with) Jarvis's built-in voice uses. It is never a voice you recorded; those are under Voices below. Hear it plays a short sample and does not change your choice.",
         "note": "",
         "pack": {
           "kind": "",

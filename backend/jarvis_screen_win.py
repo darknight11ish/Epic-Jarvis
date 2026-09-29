@@ -336,8 +336,9 @@ def unavailable_why() -> str:
         return "This is not Windows."
     if not available():
         return ("The 'uiautomation' package is missing, and Jarvis will not look at the screen "
-                "without it: it is what tells a password box from any other box. Run "
-                "scripts\\apply-patches.ps1 again on the PC to install it.")
+                "without it: it is what tells a password box from any other box. In PowerShell "
+                "on the PC, in the Jarvis folder, run: .\\scripts\\apply-patches.ps1 . "
+                "Then restart Jarvis.")
     return ""
 
 

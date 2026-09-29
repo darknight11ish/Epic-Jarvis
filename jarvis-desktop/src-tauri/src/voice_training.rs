@@ -103,7 +103,7 @@ pub(crate) const VOICES_UPDATE: &str =
 /// "Try it" on a PC whose backend has no route for it yet. The phone says
 /// the same (CustomVoices.kt `TRY_UPDATE`; custom-voices.js too).
 pub(crate) const TRY_UPDATE: &str =
-    "Your PC cannot play an animal's voice yet. Run the patch script on the PC first.";
+    "Your PC cannot play an animal's voice yet. In PowerShell on the PC, in the Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.";
 /// "Try it" while the talk button records: it would be recorded with the
 /// question. The phone says the same (CustomVoices.kt `TRY_BUSY`).
 pub(crate) const TRY_BUSY: &str = "Jarvis is busy talking or listening. Try it again in a moment.";
@@ -116,7 +116,7 @@ pub(crate) const HEAR_LOCKED: &str = "Jarvis is locked right now. Unlock it, the
 /// "Hear it" on a PC whose backend has no such route yet - the same words on
 /// the phone (CustomVoices.kt `HEAR_UPDATE`; custom-voices.js too).
 pub(crate) const HEAR_UPDATE: &str =
-    "Your PC cannot play voice samples yet. Run the patch script on the PC first.";
+    "Your PC cannot play voice samples yet. In PowerShell on the PC, in the Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.";
 /// Asking for a card, or loosening, while the event stream is stale.
 pub(crate) const HELD_STALE: &str =
     "The connection to Jarvis is catching up, so this cannot be sent until it does. \

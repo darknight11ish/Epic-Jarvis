@@ -421,14 +421,17 @@ def table_kind() -> str:
 
 
 SPEAKER_TITLE = "Jarvis's built-in voice"
-SPEAKER_DETAIL = ("Which of Kokoro's voices Jarvis's built-in voice uses - never a voice "
-                  "you recorded, which stays under \"Voices\" below. \"Hear it\" plays a "
-                  "short sample without changing your choice.")
+SPEAKER_DETAIL = ("Which of the voices in Kokoro (the voice program Jarvis speaks with) "
+                  "Jarvis's built-in voice uses. It is never a voice you recorded; those are "
+                  "under Voices below. Hear it plays a short sample and does not change your "
+                  "choice.")
 #: "Hear it": the one line the PC says. Fixed here - an app never sends
 #: words to be spoken this way. No name, nothing private.
 SAMPLE_LINE = "Hello, I'm Jarvis. This is how I sound."
-SAMPLE_BUSY = ("the PC is still making the sound for the last Hear it. Try again in a "
-               "moment")
+#: When a sample or a check cannot be made. The reason (a Python class name) goes to the
+#: log only, never on screen.
+SAMPLE_FAILED = "Jarvis's voice could not make the sample. Restart Jarvis and try again."
+SAMPLE_BUSY = "The PC is still making another voice sample. Try again in a moment."
 
 
 def _config_number() -> Optional[int]:
@@ -562,16 +565,17 @@ def speaker_view() -> dict:
         chose = K.label_of(now['chosen'])
         if now.get("refused"):
             why = (blend_verdict(now["chosen"]) or {}).get("why", "")
-            note = f"{why} {K.label_of(now['name'])} speaks instead.".strip()
+            note = f"{why} Right now {K.label_of(now['name'])} speaks.".strip()
         elif now["chosen"] in K.MIX and K.family(kind) == K.V1:
             made = K.blend_state(_voices_file()) == "ready"
             note = (f"You chose {chose}, which Jarvis has not loaded yet (see below). Until it "
-                    f"does, {K.label_of(now['name'])} speaks." if made else
+                    f"does, {K.label_of(now['name'])} speaks. Restart Jarvis to load it." if made else
                     f"You chose {chose}, which is not made yet (see below). Until it is, "
                     f"{K.label_of(now['name'])} speaks.")
         else:
             note = (f"You chose {chose}, which needs the newer voice pack (Kokoro v1.0). "
-                    f"Until it is installed, {K.label_of(now['name'])} speaks.")
+                    f"Until it is installed, {K.label_of(now['name'])} speaks. See the "
+                    f"\"Upgrade the voice pack\" line below.")
     if kind == K.V019:
         up = K.upgrade_note()
         if up:
@@ -690,8 +694,7 @@ def migrate_saved_choices() -> list:
 #: three-second stretch (owner_check compares every stretch).
 BLEND_CHECK_LINE = ("Good evening. Your calendar is clear this afternoon, and nothing is "
                     "waiting for you.")
-CHECK_BUSY = ("the PC is still making the sound for the last Hear it. Try again in a "
-              "moment")
+CHECK_BUSY = "The PC is still making another voice sample. Try again in a moment."
 _BLEND_CHECKS: dict = {}
 _RECHECKING: set = set()
 
@@ -738,14 +741,15 @@ def blend_check(name: str, speech_module=None) -> dict:
     sid = K.sid_of(table_kind(), name)
     if engine is None or sid is None:
         return {"ok": False, "unchecked": True,
-                "why": "this PC has no built-in voice to check it with"}
+                "why": ("This PC has no built-in voice to check it with. The voice files are "
+                        "missing; see the Kokoro line in Settings.")}
     try:
         audio = S.kokoro_speak(engine, BLEND_CHECK_LINE, sid, K.voice_pace(name), 0.0)
     except Exception as exc:
-        return {"ok": False, "unchecked": True,
-                "why": f"the built-in voice failed ({type(exc).__name__})"}
+        _audit("voices.blend_check_failed", {"voice": name, "error": type(exc).__name__})
+        return {"ok": False, "unchecked": True, "why": SAMPLE_FAILED}
     if audio is None:
-        return {"ok": False, "unchecked": True, "why": "the built-in voice made no sound"}
+        return {"ok": False, "unchecked": True, "why": SAMPLE_FAILED}
     try:
         _need_numpy()
         x = np.asarray(audio[0], dtype=np.float32)
@@ -753,18 +757,23 @@ def blend_check(name: str, speech_module=None) -> dict:
             x = resample(x, int(audio[1]), SAMPLE_RATE)
         chk = owner_check(x)
     except Exception as exc:
+        _audit("voices.blend_check_failed", {"voice": name, "error": type(exc).__name__})
         return {"ok": False, "unchecked": True,
-                "why": f"it could not be checked ({type(exc).__name__})"}
+                "why": (f"Jarvis could not compare {K.MIX[name]['name']} with your saved voice, "
+                        f"so it will not use it yet. Try again, or retrain your voice under "
+                        f"Voice, Your voice.")}
     keep = {k: chk[k] for k in ("ok", "why", "fingerprint", "score", "bar", "checked",
                                 "refused") if k in chk}
     if not keep.get("ok"):
         # owner_check's own words talk about "a recording" and "someone else"
         # - not what to say about a built-in voice.
         who = K.MIX[name]["name"]
-        keep["why"] = (f"{who} sounds too much like your own voice, so Jarvis will not use it."
+        keep["why"] = (f"{who} sounds too close to your own voice, and a voice that sounds like "
+                       f"you could pass Jarvis's own voice check. Jarvis will not use it, so "
+                       f"the normal voice speaks."
                        if keep.get("refused") == "owner_voice" else
-                       f"{who} could not be checked against your voice print, so Jarvis will "
-                       f"not use it yet.")
+                       f"Jarvis could not compare {who} with your saved voice, so it will not "
+                       f"use it yet. Try again, or retrain your voice under Voice, Your voice.")
     if len(_BLEND_CHECKS) > 64:
         _BLEND_CHECKS.clear()
     _BLEND_CHECKS[_blend_key(name)] = keep
@@ -854,7 +863,8 @@ def _sample_voice(kind: str, name: str, speech_module=None) -> tuple:
         except Exception:
             engine = None
     if engine is None:
-        return 503, {"ok": False, "error": "this PC has no built-in voice to play it with"}
+        return 503, {"ok": False, "error": ("This PC has no built-in voice to play it with. The voice "
+                                       "files are missing; see the Kokoro line in Settings.")}
     sid = K.sid_of(kind, name)
     if sid is None:
         return 400, {"ok": False, "error": "choose one of the listed voices"}
@@ -874,9 +884,10 @@ def _sample_voice(kind: str, name: str, speech_module=None) -> tuple:
     try:
         audio = S.kokoro_speak(engine, SAMPLE_LINE, sid, pace, 0.0)
     except Exception as exc:
-        return 503, {"ok": False, "error": f"the built-in voice failed ({type(exc).__name__})"}
+        _audit("voices.sample_failed", {"error": type(exc).__name__})
+        return 503, {"ok": False, "error": SAMPLE_FAILED}
     if audio is None:
-        return 503, {"ok": False, "error": "the built-in voice made no sound"}
+        return 503, {"ok": False, "error": SAMPLE_FAILED}
     wav = S._write_wav(audio[0], audio[1])
     while len(_SAMPLE_CACHE) >= _SAMPLE_CACHE_MAX:
         _SAMPLE_CACHE.pop(next(iter(_SAMPLE_CACHE)), None)
@@ -1376,7 +1387,7 @@ def try_face_animal(body, speech_module=None) -> tuple:
 
 
 _TRY_LOCK = threading.Lock()
-_TRY_BUSY = "the PC is still making the sound for the last Try it. Try it again in a moment"
+_TRY_BUSY = "The PC is still making another voice sample. Try again in a moment."
 
 
 def _try_face_animal(face: str, speech_module=None) -> tuple:
@@ -1396,7 +1407,8 @@ def _try_face_animal(face: str, speech_module=None) -> tuple:
         except Exception:
             engine = None
     if engine is None:
-        return 503, {"ok": False, "error": "this PC has no built-in voice to play it with"}
+        return 503, {"ok": False, "error": ("This PC has no built-in voice to play it with. The voice "
+                                       "files are missing; see the Kokoro line in Settings.")}
     pace = min(2.0, max(0.5, float(av["speed"]) * speed()))
     semis = min(MAX_SEMITONES, max(MIN_SEMITONES, float(av["semitones"])))
     mouth: list = []
@@ -1405,9 +1417,10 @@ def _try_face_animal(face: str, speech_module=None) -> tuple:
                                _animal_sid(pack_kind(), av),
                                pace, semis, mouth=mouth)
     except Exception as exc:
-        return 503, {"ok": False, "error": f"the built-in voice failed ({type(exc).__name__})"}
+        _audit("voices.sample_failed", {"error": type(exc).__name__})
+        return 503, {"ok": False, "error": SAMPLE_FAILED}
     if audio is None:
-        return 503, {"ok": False, "error": "the built-in voice made no sound"}
+        return 503, {"ok": False, "error": SAMPLE_FAILED}
     wav = S._write_wav(audio[0], audio[1])
     if mouth and mouth[0]:
         wav = S._mouth("add_chunk", wav, mouth[0]) or wav
@@ -1994,7 +2007,7 @@ def zipvoice_state() -> tuple:
         missing.append("espeak-ng-data")
     if missing:
         return False, (f"the ZipVoice model files are not on this PC yet (missing "
-                       f"{', '.join(missing)} in {zipvoice_dir()}); backend/README.md, "
+                       f"{', '.join(missing)} in {zipvoice_dir()}); the README.md file inside the backend folder of your Jarvis folder, "
                        f"\"Custom voices\", has the one-line install")
     return True, "ready"
 
@@ -2243,7 +2256,7 @@ def pocket_state(verify: bool = True) -> tuple:
     missing = [POCKET_FILES[k][0] for k, p in f.items() if not Path(p).is_file()]
     if missing:
         return False, (f"the Pocket TTS files are not on this PC (missing "
-                       f"{', '.join(missing)} in {pocket_dir()}); backend/README.md, "
+                       f"{', '.join(missing)} in {pocket_dir()}); the README.md file inside the backend folder of your Jarvis folder, "
                        f"\"Voice upgrades: the bake-off\", has the one-line install")
     if verify:
         for role, p in f.items():
@@ -2255,7 +2268,7 @@ def pocket_state(verify: bool = True) -> tuple:
                 return False, (f"{POCKET_FILES[role][0]} in {pocket_dir()} is not the file this "
                                f"Jarvis was checked with (its SHA-256 is different), so Pocket "
                                f"TTS is not used. Install it again with the line in "
-                               f"backend/README.md")
+                               f"the README.md file inside the backend folder of your Jarvis folder")
     return True, "ready"
 
 
@@ -2382,7 +2395,7 @@ def _f5_files_state() -> tuple:
         missing.append("vocos/config.yaml and vocos/pytorch_model.bin")
     if missing:
         return False, (f"the F5-TTS model files are not on this PC yet (missing "
-                       f"{', '.join(missing)} in {f5_dir()}); backend/README.md, "
+                       f"{', '.join(missing)} in {f5_dir()}); the README.md file inside the backend folder of your Jarvis folder, "
                        f"\"The better voice\", has the install")
     return True, ""
 

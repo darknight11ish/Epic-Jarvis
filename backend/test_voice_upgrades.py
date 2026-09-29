@@ -283,10 +283,10 @@ def t_the_speaker_choices_come_from_the_pc():
     check("the default voice, and speaker() is its number 0",
           view["choice"] == "af" and V.speaker() == 0 and not view["note"], view)
     check("the labels are the words the apps show",
-          view["choices"][0]["label"] == "American (female)"
+          view["choices"][0]["label"] == "American (female) - Default"
           and view["choices"][7]["label"] == "British (male) - George")
     check("the title and the detail say what it is",
-          view["title"] == "Jarvis's built-in voice" and "Kokoro" in view["detail"])
+          view["title"] == "Jarvis's built-in voice" and "Kokoro (the voice program Jarvis speaks with)" in view["detail"])
     check("GET /api/voice/voices carries it", V.status()["speaker"] == V.speaker_view())
     # The detail points at the "Voices" list, which both apps draw BELOW this
     # choice - it said "above" (play tester, 2026-09-27). Read from the two
@@ -297,7 +297,7 @@ def t_the_speaker_choices_come_from_the_pc():
           / "client" / "ui" / "screens" / "VoicesScreen.kt").read_text(encoding="utf-8")
     check("the detail says the recorded voices are under \"Voices\" below, and on both "
           "screens they are",
-          'stays under "Voices" below.' in view["detail"]
+          "those are under Voices below." in view["detail"]
           and html.index('id="cv-speaker"') < html.index('<h3 class="subhead">Voices</h3>')
           and kt.index("SpeakerPlate(\n") < kt.index('Text("Voices"'), view["detail"])
 
@@ -879,7 +879,7 @@ def t_try_it_plays_the_animal_as_it_is_now():
     S._tts_cache = None
     code, out = V.try_face_animal({"face": "redpanda"})
     check("no built-in voice on this PC: 503 in words",
-          code == 503 and out["error"] == "this PC has no built-in voice to play it with",
+          code == 503 and out["error"].startswith("This PC has no built-in voice to play it with."),
           (code, out))
     S._tts_cache = FakeKokoro()
     # One at a time: a second "Try it" while one is being made is refused
@@ -890,7 +890,7 @@ def t_try_it_plays_the_animal_as_it_is_now():
     finally:
         V._TRY_LOCK.release()
     check("a Try it while another is being made: 429 in words, nothing made",
-          code == 429 and out["ok"] is False and "Try it again in a moment" in out["error"],
+          code == 429 and out["ok"] is False and "Try again in a moment" in out["error"],
           (code, out))
     check("a bad body is still a 400 while one is being made",
           V._TRY_LOCK.acquire(blocking=False)

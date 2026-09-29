@@ -55,7 +55,7 @@ pub const SCREEN_STATUS: &str = "screen-status";
 pub const SCREEN_LOOK: &str = "screen-look";
 /// The badge's size, in logical pixels, at 100% text.
 const BADGE_W: f64 = 400.0;
-const BADGE_H: f64 = 64.0;
+const BADGE_H: f64 = 88.0;
 /// How long the badge stays up after a session ended, saying why.
 const BADGE_ENDED_FOR: Duration = Duration::from_secs(15);
 const READ_TIMEOUT: Duration = Duration::from_secs(5);
@@ -79,12 +79,12 @@ pub(crate) const STARTS: &[&str] = &["button", "tray", "hotkey", "voice"];
 /// A session is on on this PC, as far as this app knows (the tray's row).
 static ON_HERE: AtomicBool = AtomicBool::new(false);
 
-pub(crate) const MISSING: &str = "This PC's Jarvis does not have \"Look at this\" and \"Watch \
-     with me\" yet. Run scripts\\apply-patches.ps1 on the PC to add them.";
-pub(crate) const PICTURE_MISSING: &str = "This PC's Jarvis does not have picture mode yet. Run \
-     scripts\\apply-patches.ps1 on the PC to add it.";
-const STALE_HELD: &str = "The connection to Jarvis is catching up, so looking at the screen is \
-     held until it does - try again in a moment.";
+pub(crate) const MISSING: &str = "This PC's Jarvis is missing this feature. In PowerShell on \
+     the PC, in the Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.";
+pub(crate) const PICTURE_MISSING: &str = "This PC's Jarvis is missing this feature. In PowerShell \
+     on the PC, in the Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.";
+const STALE_HELD: &str = "Reconnecting to Jarvis. Looking at the screen waits until the \
+     connection is back - try again in a moment.";
 pub(crate) const APP_LOCK_HELD: &str = "Jarvis is locked (App lock). Open the Jarvis bar and \
      unlock it with Windows Hello, then ask Jarvis to look.";
 pub(crate) const NOT_THIS_PC: &str = "Jarvis only looks at the screen of the PC it runs on, and \
