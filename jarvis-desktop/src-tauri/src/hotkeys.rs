@@ -666,7 +666,12 @@ mod tests {
         let spec = action(crate::talk_type::ACTION_ID).expect("the talk-to-type hotkey exists");
         assert_eq!(spec.default, "Alt+Shift+T");
         let ours = parse(spec.default).expect("parses");
-        for other in ACTIONS.iter().filter(|a| a.id != spec.id) {
+        // Actions that ship with no key (Live's hotkey is off until the owner
+        // picks one) cannot clash, and an empty string is not a key.
+        for other in ACTIONS
+            .iter()
+            .filter(|a| a.id != spec.id && !a.default.is_empty())
+        {
             assert_ne!(
                 ours,
                 parse(other.default).unwrap(),

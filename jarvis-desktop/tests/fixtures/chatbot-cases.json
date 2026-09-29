@@ -47,7 +47,7 @@
       "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
       "history": {
         "kept": false,
-        "why": "there is no Windows Credential Manager on this system to keep the key in"
+        "why": "a test suite is running"
       },
       "id": "chat_000000000006",
       "max_messages": 4,
@@ -618,7 +618,7 @@
       "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
       "history": {
         "kept": false,
-        "why": "there is no Windows Credential Manager on this system to keep the key in"
+        "why": "a test suite is running"
       },
       "id": "cmp_000000000002",
       "max_messages": 3,
@@ -1651,7 +1651,7 @@
       "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
       "history": {
         "kept": false,
-        "why": "there is no Windows Credential Manager on this system to keep the key in"
+        "why": "a test suite is running"
       },
       "id": "cmp_000000000003",
       "max_messages": 3,
@@ -1933,7 +1933,7 @@
       "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
       "history": {
         "kept": false,
-        "why": "there is no Windows Credential Manager on this system to keep the key in"
+        "why": "a test suite is running"
       },
       "id": "cmp_000000000004",
       "max_messages": 3,
@@ -2306,7 +2306,7 @@
       "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
       "history": {
         "kept": false,
-        "why": "there is no Windows Credential Manager on this system to keep the key in"
+        "why": "a test suite is running"
       },
       "id": "chat_000000000010",
       "max_messages": 2,
@@ -2468,7 +2468,7 @@
       "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
       "history": {
         "kept": false,
-        "why": "there is no Windows Credential Manager on this system to keep the key in"
+        "why": "a test suite is running"
       },
       "id": "chat_000000000004",
       "max_messages": 5,
@@ -3417,7 +3417,7 @@
       "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
       "history": {
         "kept": false,
-        "why": "there is no Windows Credential Manager on this system to keep the key in"
+        "why": "a test suite is running"
       },
       "id": "chat_000000000005",
       "max_messages": 4,
@@ -3620,7 +3620,7 @@
       "goal": "Find out how to keep houseplants alive in a flat that gets very little light.",
       "history": {
         "kept": false,
-        "why": "there is no Windows Credential Manager on this system to keep the key in"
+        "why": "a test suite is running"
       },
       "id": "chat_00000000000d",
       "max_messages": 3,
