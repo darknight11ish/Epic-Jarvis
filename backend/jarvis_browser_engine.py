@@ -31,7 +31,7 @@ THE ONE PERMISSION MODEL - nothing here is a shortcut
   * A page it reads is OUTSIDE TEXT: the tool result is marked exactly like the
     visible browser's (jarvis_agent's took_in), the conversation is tainted,
     nothing from it is ever learned as a fact, notes written afterwards ask.
-  * Rule 1 for the headless browser, said exactly (JARVIS-API 97.3). REFUSED at
+  * Rule 1 for the windowless browser, said exactly (JARVIS-API 97.3). REFUSED at
     plan time, before any card: a `<secret>` step; a typed value or a web address
     (its path, query and fragment) that holds what looks like a password, key or
     token (jarvis_search._secret_in, which is jarvis_router's shapes and
@@ -72,7 +72,7 @@ THE ONE PERMISSION MODEL - nothing here is a shortcut
 WHICH BROWSER: THE RULE (choose())
   The model may pass mode: "auto" (default), "headless" or "visible".
     visible   the visible browser, always.
-    headless  the headless browser; if it cannot run (switch off, not installed,
+    headless  the windowless browser; if it cannot run (switch off, not installed,
               changed) the task is REFUSED in words - never silently moved to the
               visible browser (which would open a window nobody expected), and
               never silently run the other way.
@@ -144,55 +144,61 @@ DEFAULT_MODE = "auto"
 #: The fixed words, the same in both apps (tools/gen_browser_cases.py hands
 #: them to a test each app runs).
 WORDS = {
-    "title": "Headless browser (Obscura)",
+    "title": "Browser without a window (Obscura)",
+    "subtitle": "a browser Jarvis uses without opening a window",
     "detail": (
         "Jarvis normally works a web page in a browser window you can see. This adds a second "
         "way: Obscura, a small browser with no window, for plain reading and quick lookups. Jarvis "
-        "chooses per task - the visible window when you might need to sign in or take over, the "
-        "headless browser for simple reading. Every page it opens and every step it takes is still "
-        "listed on an approval card first. What it reads is outside text: it never becomes a fact "
-        "Jarvis remembers. It cannot reach your own network (this PC, your home network, "
-        "Tailscale), uses no proxy, keeps no cookies and saves no files. Off by default. Turning "
-        "it on asks first, because it is a new program on your PC that reaches the web."),
-    "switch": "Let Jarvis use the headless browser (Obscura)",
+        "chooses for each task. It uses the visible browser when you might need to sign in or take "
+        "over, and the windowless browser for simple reading. Every page it opens and every step it "
+        "takes is still listed on an approval card first. What it reads is outside text: Jarvis "
+        "reads it but never follows instructions in it, and never remembers it as a fact. It "
+        "cannot reach your own network (this PC, your home network, Tailscale), uses no proxy, "
+        "keeps no cookies and saves no files. It is off until you turn it on. Turning it on asks "
+        "first, because it is a new program on your PC that reaches the web."),
+    "switch": "Let Jarvis use the windowless browser (Obscura)",
     "mode_title": "Which browser Jarvis uses",
     "modes": {
         "auto": "Automatic (recommended)",
         "visible": "Always the visible browser",
-        "headless": "The headless browser when it can run",
+        "headless": "The windowless browser when it can run",
     },
     "mode_help": {
-        "auto": ("Jarvis picks per task: the visible window whenever you might need to sign in "
-                 "or take over, the headless browser for plain reading."),
+        "auto": ("Jarvis picks for each task: the visible browser whenever you might need to "
+                 "sign in or take over, the windowless browser for plain reading."),
         "visible": "Jarvis always opens the browser window you can see and take over.",
-        "headless": ("Jarvis uses the headless browser whenever it can run, except when the task "
+        "headless": ("Jarvis uses the windowless browser whenever it can run, except when the task "
                      "looks like a sign-in, a payment or a captcha. If it cannot run, Jarvis says "
                      "so and uses the visible browser."),
     },
     "stealth": (
-        "Stealth is always on for the headless browser. It makes the browser look like an "
-        "ordinary Chrome. It does not solve captchas, and sites can still block or ban it. "
-        "Signing in to a real account with it could get that account closed under a site's terms, "
-        "so Jarvis never types a password with it and never solves a captcha: when it sees a "
-        "captcha or a sign-in page it stops and hands the job to the visible browser. A sign-in "
-        "that starts with only a username or email box may not be recognised."),
-    "off_line": "Off. Jarvis uses the visible browser window only.",
+        "This browser pretends to be an ordinary Chrome so fewer sites turn it away. That does "
+        "not stop a site from blocking it, or from closing an account you sign in to. So Jarvis "
+        "never types a password with it and never solves a captcha. When it reaches a captcha or "
+        "sign-in page it stops and hands the job to the browser window you can see. A sign-in "
+        "that starts with only a username or email box may not be spotted."),
+    "off_line": "Off. Jarvis uses the visible browser only.",
     "waiting_line": "Waiting for your yes on the card. Nothing has changed yet.",
     "unread": "Could not read this setting.",
-    "missing": ("This PC's Jarvis does not have the headless browser yet. Run "
-                "scripts\\apply-patches.ps1 on the PC to add it."),
-    "steps_title": "To install it, paste this one line into PowerShell on your PC:",
+    "missing": ("This PC's Jarvis is missing this feature. In PowerShell on the PC, in the "
+                "Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis."),
+    "waiting_link": "Waiting for the connection to your PC.",
+    "mode_note": "This does nothing until the switch above is on.",
+    "could_not_turn_on": "Could not turn it on: ",
+    "steps_title": ("To install it, paste this one line into PowerShell (the Windows command "
+                    "window) on your PC:"),
     "steps_note": (
         "It downloads one named release of Obscura's Windows program from its GitHub releases "
         "(github.com/h4ckf0r0day/obscura, Apache-2.0), unpacks it into Jarvis's own folder and "
-        "prints its checksums for you to compare with the release page. It does not run the "
+        "prints its checksums (long codes that fingerprint the file) for you to compare with the "
+        "release page. It does not run the "
         "program. The line then prints a second command that checks it: version, stealth on, and "
         "that it refuses to visit your own network. Jarvis never downloads it by itself."),
 }
 
 #: The plain reason the headless engine cannot run right now, by code.
 NOT_READY = {
-    "off": "The headless browser is switched off.",
+    "off": "The windowless browser is switched off.",
     "missing": WORDS["missing"],
 }
 
@@ -201,7 +207,7 @@ NEEDS_OWNER = {
     "captcha": "an \"are you human\" check or captcha",
     "signin": "a sign-in page",
 }
-HANDOVER = ("This page wants a person ({what}). The headless browser has no window, never types a "
+HANDOVER = ("This page wants a person ({what}). The windowless browser has no window, never types a "
             "password and never solves a captcha, so Jarvis stopped. To carry on, ask again with the "
             "visible browser (say \"use the visible browser\"): its window opens and you can take "
             "over.")
@@ -293,13 +299,13 @@ def settings_path() -> Path:
 
 
 _SETTINGS_LOCK = threading.Lock()
-_DAMAGED = ("the browser settings file is damaged, so the headless browser stayed off. Turn it on "
-            "again to rewrite it")
+_DAMAGED = ("The browser settings file is damaged, so the windowless browser stayed off. Turn "
+            "the switch on again to rewrite the file.")
 
 
 def settings() -> dict:
     """{"obscura", "mode", "why"}. No file: off, Automatic. A file that cannot be
-    read, is not JSON, or holds a wrong kind of value: the headless browser OFF
+    read, is not JSON, or holds a wrong kind of value: the windowless browser OFF
     (the safe direction) and `why` says so; an unknown mode reads as Automatic."""
     try:
         raw = settings_path().read_text(encoding="utf-8")
@@ -308,7 +314,7 @@ def settings() -> dict:
     except OSError as exc:
         return {"obscura": False, "mode": DEFAULT_MODE,
                 "why": f"the browser settings file could not be read ({type(exc).__name__}), so "
-                       f"the headless browser stayed off"}
+                       f"the windowless browser stayed off"}
     try:
         doc = json.loads(raw)
         if not isinstance(doc, dict):
@@ -476,22 +482,22 @@ def reject_request(engine: str, r) -> Optional[str]:
     # is checked as "navigate" (an unstripped name skipped every check below).
     action = str(r.get("action") or "").strip()
     if isinstance(value, str) and "<secret>" in value:
-        return _refusal("the headless browser never types a saved secret or password - sign-in "
+        return _refusal("the windowless browser never types a saved secret or password - sign-in "
                         "needs the visible browser", withhold=True)
     if action == "read_new":
-        return _refusal("the headless browser cannot read a message list - use the visible "
+        return _refusal("the windowless browser cannot read a message list - use the visible "
                         "browser for that")
     if action == "navigate" and _scheme_of(value) in ("http", "https"):
         # (any other scheme is jarvis_browser_control.plan's own refusal, in its words)
         bad = address_problem(value)
         if bad:
-            return _refusal("the headless browser did not take that address: " + bad)
+            return _refusal("the windowless browser did not take that address: " + bad)
     if action in ("navigate", "type", "select") and isinstance(value, str):
         kind = _secret_kind(value)
         if kind:
             return _refusal(
                 f"what it would {'open' if action == 'navigate' else 'type'} looks like a password, "
-                f"key or token ({kind}) - the headless browser never types or sends one, so nothing "
+                f"key or token ({kind}) - the windowless browser never types or sends one, so nothing "
                 f"was sent", withhold=True)
     return None
 
@@ -527,7 +533,7 @@ def private_words_problem(steps, *, facts=None, owner_words: str = "", memory: b
     if not facts:
         if memory:
             return ("Jarvis recalled saved memories for this question and could not compare them "
-                    "with the words the headless browser would type or put in an address, so it "
+                    "with the words the windowless browser would type or put in an address, so it "
                     "did not go ahead")
         return ""
     try:
@@ -536,11 +542,11 @@ def private_words_problem(steps, *, facts=None, owner_words: str = "", memory: b
             names = WS.names_for_facts(facts)
         for text in texts:
             if WS.repeated_facts(text, facts, owner_words=owner_words, names=names):
-                return ("the words the headless browser would type or put in an address repeat "
+                return ("the words the windowless browser would type or put in an address repeat "
                         "something you told Jarvis, so it will not send them to a website. Ask "
                         "for it with the visible browser if you want that, or leave those words out")
     except Exception as exc:
-        return (f"the words the headless browser would type could not be checked against your "
+        return (f"the words the windowless browser would type could not be checked against your "
                 f"saved facts ({type(exc).__name__}), so it did not go ahead")
     return ""
 
@@ -570,7 +576,7 @@ def choose(requested=None, *, goal="", requests=None) -> dict:
     if pick["engine"] == "visible" and not pick["refused"]:
         ok, why = visible_available()
         if not ok:
-            more = (" Turn that switch on, or ask for something the headless browser can do "
+            more = (" Turn that switch on, or ask for something the windowless browser can do "
                     "(plain reading).") if settings()["obscura"] else ""
             return {"engine": "visible", "why": "", "refused": (
                 "This task needs the visible browser" +
@@ -594,12 +600,12 @@ def _choose(requested=None, *, goal="", requests=None) -> dict:
     if requested == "headless":
         if not ok:
             return {"engine": "visible", "why": "", "refused": (
-                "The headless browser was asked for but cannot run: " + not_ready +
+                "The windowless browser was asked for but cannot run: " + not_ready +
                 " Jarvis did not switch to the visible browser by itself; ask again with "
                 "\"use the visible browser\" if you want that.")}
         if any(reject_request("headless", r) for r in (requests or [])):
             return {"engine": "visible", "why": "", "refused": (
-                "The headless browser was asked for, but a step needs something it never does "
+                "The windowless browser was asked for, but a step needs something it never does "
                 "(a saved secret, words that look like a password or key, an odd web address, or a message list). Ask again with the visible browser.")}
         return {"engine": "headless", "why": "headless was asked for", "refused": ""}
     default = settings()["mode"]
@@ -608,37 +614,40 @@ def _choose(requested=None, *, goal="", requests=None) -> dict:
                 "refused": ""}
     if not ok:
         if default == "headless" or settings()["obscura"]:
-            why = ("the headless browser cannot run right now (" + not_ready.rstrip(".") +
+            why = ("the windowless browser cannot run right now (" + not_ready.rstrip(".") +
                    "), so Jarvis is using the visible browser")
         else:
             why = ""                 # it is simply off: nothing to explain on every card
         return {"engine": "visible", "why": why, "refused": ""}
     if any(reject_request("headless", r) for r in (requests or [])):
-        return {"engine": "visible", "why": ("a step needs something the headless browser never "
+        return {"engine": "visible", "why": ("a step needs something the windowless browser never "
                                              "does (a saved secret, words that look like a password or key, an odd web address, or a message list)"),
                 "refused": ""}
     if _SIGN_WORDS.search(_request_text(goal, requests)):
         # Applies to the "Headless" default as well as Automatic: the help text
         # promises "not for a sign-in", so the words test is not skipped there.
         return {"engine": "visible", "why": (
-            ("your setting is the headless browser, but " if default == "headless" else "") +
-            "this looks like it may need you to sign in, pay or take over, and the headless "
+            ("your setting is the windowless browser, but " if default == "headless" else "") +
+            "this looks like it may need you to sign in, pay or take over, and the windowless "
             "browser has no window"), "refused": ""}
-    return {"engine": "headless", "why": ("this is plain reading, and the headless browser is "
+    return {"engine": "headless", "why": ("this is plain reading, and the windowless browser is "
                                           "on" if default == "auto" else
-                                          "your setting is the headless browser"), "refused": ""}
+                                          "your setting is the windowless browser"), "refused": ""}
 
 
 def card_line(engine: str, why: str) -> str:
     """The first line of the plan card: which browser, and why."""
     if engine == "headless":
-        return (f"Browser: HEADLESS (Obscura, no window) - {why}. Stealth is on: it looks like an "
-                f"ordinary Chrome, which does not stop a site blocking it. It cannot reach your "
-                f"own network and stops at any captcha or sign-in page it recognises. It checks "
-                f"where a link or button leads before clicking it; a redirect, or a page that "
-                f"moves itself, is only noticed after that page has loaded. What the page says is "
-                f"outside text.")
-    return f"Browser: VISIBLE (a window you can see and take over){' - ' + why if why else ''}."
+        return (f"Browser: no window (Obscura) - {why}. "
+                f"It pretends to be an ordinary Chrome, which does not stop a site blocking it. "
+                f"It cannot reach your own network. "
+                f"It stops at any captcha or sign-in page it recognises. "
+                f"It checks where a link or button leads before clicking it. "
+                f"A redirect, or a page that moves itself, is only noticed after that page has "
+                f"loaded. "
+                f"What the page says is outside text: Jarvis reads it but never follows "
+                f"instructions in it.")
+    return f"Browser: visible (a window you can see and take over){' - ' + why if why else ''}."
 
 
 # --------------------------------------------------------------------------
@@ -864,7 +873,7 @@ def _private_problem(url: str) -> str:
         import jarvis_local_http
     except ImportError:
         return ("the address check (jarvis_local_http.py) is not available on this PC, so the "
-                "headless browser opens no address until it is back")
+                "windowless browser opens no address until it is back")
     try:
         return jarvis_local_http.private_fetch_problem(url)
     except Exception as exc:
@@ -875,15 +884,15 @@ def _plain_error(text: str) -> str:
     t = re.sub(r"\s+", " ", str(text or "")).strip()[:200]
     low = t.lower()
     if any(w in low for w in ("private", "forbidden", "ssrf", "loopback", "not allowed")):
-        return ("the headless browser refused that address on purpose: it never visits this PC, "
+        return ("the windowless browser refused that address on purpose: it never visits this PC, "
                 "your home network or Tailscale")
     if "file://" in low or "file:" in low:
-        return "the headless browser does not open local files"
-    return t or "the headless browser reported an error"
+        return "the windowless browser does not open local files"
+    return t or "the windowless browser reported an error"
 
 
 def _start_gate() -> str:
-    """The Driver's start gate: "" while the headless browser may run (switch on,
+    """The Driver's start gate: "" while the windowless browser may run (switch on,
     program installed, checked and unchanged), else the plain reason not."""
     ok, why = ready()
     return "" if ok else why
@@ -898,7 +907,7 @@ def _clean_address(raw) -> str:
     s = s.strip("".join(chr(c) for c in range(0x21)))
     if re.search(r"[\x00-\x1f\x7f]", s):
         raise RuntimeError("that address holds a control character, so where it leads cannot be "
-                           "checked and the headless browser did not follow it")
+                           "checked and the windowless browser did not follow it")
     return s.replace("\\", "/")
 
 
@@ -913,10 +922,10 @@ def _resolve_address(raw: str, base: str, base_href: str = "") -> str:
         parts = urllib.parse.urlsplit(target)
         host = parts.hostname
     except ValueError:
-        raise RuntimeError("that address could not be read, so the headless browser did not "
+        raise RuntimeError("that address could not be read, so the windowless browser did not "
                            "follow it") from None
     if parts.scheme.lower() not in ("http", "https"):
-        raise RuntimeError("that link does not open a web address, so the headless browser did "
+        raise RuntimeError("that link does not open a web address, so the windowless browser did "
                            "not click it")
     if "@" in parts.netloc:
         raise RuntimeError("that address has a name@ part before its host, so it is not "
@@ -1011,21 +1020,21 @@ class HeadlessEngine(Engine):
         _need_approval()
         allowed = self._fence
         if allowed is None:
-            raise RuntimeError("no approved run is holding the fence, so the headless browser "
+            raise RuntimeError("no approved run is holding the fence, so the windowless browser "
                                "opened nothing")
         bad = address_problem(url)
         if bad:
-            raise RuntimeError("the headless browser did not open that address: " + bad)
+            raise RuntimeError("the windowless browser did not open that address: " + bad)
         why = _private_problem(url)
         if why:
-            raise RuntimeError("the headless browser did not open that address: " + why)
+            raise RuntimeError("the windowless browser did not open that address: " + why)
         kind = _secret_kind(url)
         if kind:
             # The plan-time check (reject_request) is the first line; this is the
             # run-time one, like fill() and select(), so a password, key or token
             # in an address is never sent whatever reached the plan.
             raise RuntimeError(f"the address looks like it holds a password, key or token "
-                               f"({kind}) - the headless browser never sends one, so nothing "
+                               f"({kind}) - the windowless browser never sends one, so nothing "
                                f"was opened")
         got = self._call("browser_navigate", {"url": url, "waitUntil": "load"})
         if got["error"]:
@@ -1037,9 +1046,9 @@ class HeadlessEngine(Engine):
             # stopped part-way), so the program is stopped and nothing more is done.
             self.driver.stop("left the allowed sites")
             raise RuntimeError(
-                f"the page sent the headless browser on to {m.group(1)}, outside the allowed "
+                f"the page sent the windowless browser on to {m.group(1)}, outside the allowed "
                 f"sites. A redirect cannot be stopped part-way, so that page had already been "
-                f"loaded when Jarvis saw where it went; the headless browser was stopped and "
+                f"loaded when Jarvis saw where it went; the windowless browser was stopped and "
                 f"nothing else was done")
 
     def _reading(self) -> tuple:
@@ -1094,7 +1103,7 @@ class HeadlessEngine(Engine):
         _need_approval()
         got = self._call("browser_screenshot", {})
         if not got["image"]:
-            raise RuntimeError("the headless browser could not take a picture")
+            raise RuntimeError("the windowless browser could not take a picture")
         return got["image"]
 
     def _element(self, role: str, name: str) -> dict:
@@ -1120,7 +1129,7 @@ class HeadlessEngine(Engine):
     def _attr(self, e: dict, attribute: str) -> str:
         got = self._call("browser_get_attribute", {"ref": e["ref"], "attribute": attribute})
         if got["error"]:
-            raise RuntimeError(f"the headless browser could not read where that {e['role']} "
+            raise RuntimeError(f"the windowless browser could not read where that {e['role']} "
                                f"leads ({attribute}), so it did not click it")
         return got["text"].strip()
 
@@ -1129,7 +1138,7 @@ class HeadlessEngine(Engine):
         if got["error"]:
             if "not found" in got["text"].lower():
                 return ""                       # the page has no <base href>
-            raise RuntimeError("the headless browser could not read the page's base address, "
+            raise RuntimeError("the windowless browser could not read the page's base address, "
                                "so it did not click")
         return got["text"].strip()
 
@@ -1147,13 +1156,13 @@ class HeadlessEngine(Engine):
             target = _resolve_address(href, base, base_href)
             if not allowed(target):
                 raise RuntimeError(f"that link leads to {target}, outside the allowed sites - the "
-                                   f"headless browser did not follow it")
+                                   f"windowless browser did not follow it")
         if self._attr(e, "formaction"):
             raise RuntimeError("that button sends its form to an address of its own "
-                               "(formaction), which the headless browser does not follow")
+                               "(formaction), which the windowless browser does not follow")
         if e["role"] != "link" and self._attr(e, "form"):
             raise RuntimeError("that button belongs to a form elsewhere on the page (a form= "
-                               "box), so where it sends it cannot be checked and the headless "
+                               "box), so where it sends it cannot be checked and the windowless "
                                "browser did not press it")
         if href:
             # A second reading of the same address, from the page's own list of
@@ -1172,7 +1181,7 @@ class HeadlessEngine(Engine):
                     other = _resolve_address(str(d.get("href") or ""), base, base_href)
                     if not allowed(other):
                         raise RuntimeError(f"that link leads to {other}, outside the allowed "
-                                           f"sites - the headless browser did not follow it")
+                                           f"sites - the windowless browser did not follow it")
         if e["role"] == "link":
             return
         forms = self._call("browser_detect_forms")["text"]
@@ -1183,11 +1192,11 @@ class HeadlessEngine(Engine):
         except ValueError:
             doc = None
         if not isinstance(doc, list):
-            raise RuntimeError("the headless browser could not read the page's forms, so it did "
+            raise RuntimeError("the windowless browser could not read the page's forms, so it did "
                                "not press that button")
         for f in doc:
             if not isinstance(f, dict):
-                raise RuntimeError("the headless browser could not read the page's forms, so it "
+                raise RuntimeError("the windowless browser could not read the page's forms, so it "
                                    "did not press that button")
             if any(isinstance(x, dict) and x.get("ref") == e["ref"] for x in f.get("fields") or []):
                 action = str(f.get("action") or "")
@@ -1195,18 +1204,18 @@ class HeadlessEngine(Engine):
                     target = _resolve_address(action, base, base_href)
                     if not allowed(target):
                         raise RuntimeError(f"that button sends its form to {target}, outside the "
-                                           f"allowed sites - the headless browser did not press it")
+                                           f"allowed sites - the windowless browser did not press it")
 
     def click(self, role: str, name: str) -> None:
         _need_approval()
         allowed = self._fence
         if allowed is None:
-            raise RuntimeError("no approved run is holding the fence, so the headless browser "
+            raise RuntimeError("no approved run is holding the fence, so the windowless browser "
                                "clicked nothing")
         base = self._page_url()
         if not base or not allowed(base):
             raise RuntimeError(f"the page is at {base or 'an unknown address'}, outside the "
-                               f"allowed sites - the headless browser did not click")
+                               f"allowed sites - the windowless browser did not click")
         e = self._element(role, name)
         self._guard_click(e, allowed, base)
         # Reading the page tags its boxes afresh (ref names follow the page's order):
@@ -1216,7 +1225,7 @@ class HeadlessEngine(Engine):
         again = self._element(role, name)
         if (again["ref"], again["role"], again["name"]) != (e["ref"], e["role"], e["name"]):
             raise RuntimeError("the page changed between checking that click and making it, so "
-                               "the headless browser did not click")
+                               "the windowless browser did not click")
         got = self._call("browser_click", {"ref": e["ref"]})
         if got["error"]:
             raise RuntimeError(_plain_error(got["text"]))
@@ -1225,11 +1234,11 @@ class HeadlessEngine(Engine):
         _need_approval()
         e = self._element(role, name)
         if e["password"] or e["sensitive"]:
-            raise RuntimeError("the headless browser never types into a password or payment box")
+            raise RuntimeError("the windowless browser never types into a password or payment box")
         kind = _secret_kind(value)
         if kind:
             raise RuntimeError(f"what it would type looks like a password, key or token ({kind}) "
-                               f"- the headless browser never types one")
+                               f"- the windowless browser never types one")
         got = self._call("browser_fill", {"ref": e["ref"], "value": str(value)})
         if got["error"]:
             raise RuntimeError(_plain_error(got["text"]))
@@ -1243,7 +1252,7 @@ class HeadlessEngine(Engine):
         kind = _secret_kind(value)
         if kind:
             raise RuntimeError(f"what it would choose looks like a password, key or token "
-                               f"({kind}) - the headless browser never sends one")
+                               f"({kind}) - the windowless browser never sends one")
         got = self._call("browser_select_option", {
             "selector": f'[data-obscura-ref="{e["ref"]}"]', "value": str(value)})
         if got["error"]:
@@ -1283,7 +1292,7 @@ class HeadlessEngine(Engine):
                 return None
             if a == "read":
                 return self.value_of(step.role, step.name)
-            raise RuntimeError(f"the headless browser cannot do {a!r} - use the visible browser")
+            raise RuntimeError(f"the windowless browser cannot do {a!r} - use the visible browser")
 
 
 class VisibleEngine(Engine):
@@ -1395,11 +1404,11 @@ def _stopper() -> Optional[str]:
     running = any(d.alive() for d in {id(HEADLESS.driver): HEADLESS.driver,
                                       id(OB.DRIVER): OB.DRIVER}.values())
     stop_all("Stop everything")
-    return "The headless browser was stopped." if running else None
+    return "The windowless browser was stopped." if running else None
 
 
 def register_stopper() -> bool:
-    """Puts the headless browser on Stop everything's list. True when it is there."""
+    """Puts the windowless browser on Stop everything's list. True when it is there."""
     try:
         import jarvis_stop_all
         jarvis_stop_all.register("headless_browser", _stopper)
@@ -1425,11 +1434,11 @@ def describe_on() -> str:
         inst = ("Obscura is on this PC, but Jarvis will not start it yet: " +
                 OB.WHY.get(st["problem"], "") + " This card changes nothing about the file.")
     else:
-        inst = ("Obscura is not installed yet. The switch will be on, but the headless browser "
+        inst = ("Obscura is not installed yet. The switch will be on, but the windowless browser "
                 "waits until you install it yourself: this card downloads nothing. You install "
                 "it with one line in PowerShell (Settings shows it).")
     return (
-        "Let Jarvis use a headless browser (Obscura) for plain web reading?\n\n"
+        "Let Jarvis use a windowless browser (Obscura) for plain web reading?\n\n"
         "What it is: a new program on your PC - Obscura, open source (Apache-2.0), a small "
         "browser with no window. Jarvis can choose it, instead of the visible browser, for "
         "reading and quick lookups. Jarvis picks per task and the card for each task names which "
@@ -1438,12 +1447,11 @@ def describe_on() -> str:
         "it fills is still listed on its own approval card first, in full, exactly as for the "
         "visible browser. What it reads counts as outside text: Jarvis never follows instructions "
         "in it and never saves it as a fact.\n\n"
-        "Stealth is on, always: it makes the browser look like an ordinary Chrome. It does NOT solve "
-        "captchas, and a site can still block it or ban it. Jarvis never types a password with it "
-        "and never solves a captcha - when it sees a captcha or a sign-in page it recognises, it "
-        "stops and hands the job to the visible browser (a sign-in that starts with only a username "
-        "or email box may not be recognised). Signing in to a real account with any automated "
-        "browser can get that account closed under a site's terms.\n\n"
+        "This browser pretends to be an ordinary Chrome so fewer sites turn it away. That does "
+        "not stop a site from blocking it, or from closing an account you sign in to. So Jarvis "
+        "never types a password with it and never solves a captcha. When it reaches a captcha or "
+        "sign-in page it stops and hands the job to the visible browser. A sign-in that starts "
+        "with only a username or email box may not be spotted.\n\n"
         "What it types into a page or puts in an address is checked first: anything that looks "
         "like a password or key is refused, and so are words that repeat something you told Jarvis. "
         "Ordinary words are shown on the approval card in full. Before it clicks a link or button "
@@ -1468,9 +1476,9 @@ _LATEST: dict = {}
 _SWITCH = threading.Lock()
 
 LAST_WORDS = {
-    "enabled": "You approved the card, so the headless browser is on.",
-    "denied": "The card was turned down, so the headless browser stays off.",
-    "timed_out": "Nobody answered the card in time, so the headless browser stays off.",
+    "enabled": "You approved the card, so the windowless browser is on.",
+    "denied": "The card was turned down, so the windowless browser stays off.",
+    "timed_out": "Nobody answered the card in time, so the windowless browser stays off.",
     "refused": "Your PC's settings do not let this be approved, so it stayed off.",
     "withdrawn": "You turned this off while the card waited, so approving it changed nothing.",
     "failed": "It was approved, but the setting could not be saved, so it stayed off.",
@@ -1511,7 +1519,7 @@ def _finish(pid: str, outcome: str, why: str = "", message: Optional[str] = None
 def _decide(pid: str, apply: Callable[[bool], dict], gate: Callable,
             tier_of: Callable[[str], str]) -> None:
     text = describe_on()
-    detail = {"text": text, "what": "use a headless browser (Obscura) to read web pages",
+    detail = {"text": text, "what": "use a windowless browser (Obscura) to read web pages",
               "program": "Obscura", "stealth": True, "leaves_this_pc": True}
     try:
         v = gate(ACTION, detail, text)
@@ -1562,22 +1570,22 @@ def request(enabled, apply: Callable[[bool], dict], *, gate: Optional[Callable] 
                     _PENDING.clear()
             out = dict(apply(False) or {})
         out.setdefault("ok", True)
-        out.update(waiting=False, message="The headless browser is off. Jarvis uses the visible "
+        out.update(waiting=False, message="The windowless browser is off. Jarvis uses the visible "
                                           "browser only.")
         _audit("browser_engine.off", {})
         return 200, out
     if settings()["obscura"]:
         return 200, {"ok": True, "obscura": True, "waiting": False,
-                     "message": "The headless browser is already on."}
+                     "message": "The windowless browser is already on."}
     tier = tier_of(ACTION)
     if tier != "ask":
         return 503, {"ok": False, "error": (
-            f"{ACTION} is tier {tier!r} in jarvis-framework.toml; turning on the headless browser "
-            f"needs a person to say yes, so it must be 'ask'")}
+            "Your PC's settings file lets this switch turn itself on. It must ask you first. "
+            "Set it to ask in jarvis-framework.toml.")}
     with _LOCK:
         if _PENDING:
             return 202, {"ok": True, "waiting": True, "obscura": False,
-                         "message": "A card to turn on the headless browser is already waiting "
+                         "message": "A card to turn on the windowless browser is already waiting "
                                     "for your approval."}
         pid = _uuid.uuid4().hex
         _PENDING.update(id=pid, since=time.time())
@@ -1590,7 +1598,7 @@ def request(enabled, apply: Callable[[bool], dict], *, gate: Optional[Callable] 
             _PENDING.clear()
         return 503, {"ok": False, "error": "could not raise the approval card"}
     return 202, {"ok": True, "waiting": True, "obscura": False,
-                 "message": "Waiting for your approval. The headless browser turns on only if "
+                 "message": "Waiting for your approval. The windowless browser turns on only if "
                             "you approve the card, on your PC or phone."}
 
 
@@ -1611,10 +1619,12 @@ def status_line(st: dict) -> str:
     if not st["installed"]:
         return "Obscura is not installed on this PC yet."
     if st["problem"] == "changed":
-        return ("Installed, but the file has changed since it was checked - Jarvis will not "
-                "start it until you run the install line again.")
+        return ("Installed, but the file is not the one Jarvis checked, so Jarvis will not start "
+                "it. If you did not update it yourself, delete it. If you did, run the install "
+                "line again, then the check command with --accept-new.")
     if st["problem"] == "not_checked":
-        return "Installed, but not checked yet - run the install line once to check it."
+        return ("Installed, but not checked yet. Run the second command the install line printed "
+                "(it starts with Set-Location ... --check).")
     if st["problem"]:
         return "Installed, but Jarvis cannot start it: " + OB.WHY.get(st["problem"], "")
     ver = f"version {st['version']}, " if st["version"] else ""
@@ -1630,7 +1640,8 @@ def state_line(*, enabled: bool, waiting: bool, ready_now: bool, not_ready: str)
         return WORDS["off_line"]
     if not ready_now:
         return f"On, but not working yet: {not_ready} Jarvis uses the visible browser until then."
-    return "On. Jarvis picks the headless browser for plain reading and the visible one when you might need to take over."
+    return ("On. Jarvis picks the windowless browser for plain reading and the visible browser "
+            "when you might need to take over.")
 
 
 def view() -> dict:

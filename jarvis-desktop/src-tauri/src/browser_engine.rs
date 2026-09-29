@@ -31,9 +31,9 @@ pub(crate) const ACTIONS: &[&str] = &["read", "on", "off", "mode"];
 /// backend/jarvis_browser_engine.py.
 pub(crate) const MODES: &[&str] = &["auto", "visible", "headless"];
 
-pub(crate) const MISSING: &str = "This PC's Jarvis does not have the headless browser yet. Run \
-     scripts\\apply-patches.ps1 on the PC to add it.";
-const STALE_HELD: &str = "The connection to Jarvis is catching up, so turning on the headless \
+pub(crate) const MISSING: &str = "This PC's Jarvis is missing this feature. In PowerShell on the \
+     PC, in the Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.";
+const STALE_HELD: &str = "The connection to Jarvis is catching up, so turning on the windowless \
      browser is held until it does - try again in a moment.";
 const WRITE_TIMEOUT: Duration = Duration::from_secs(10);
 const PATH: &str = "/api/browser/engine";
@@ -42,7 +42,7 @@ const PATH: &str = "/api/browser/engine";
 /// of the three mode names goes in - nothing else.
 pub(crate) fn body(action: &str, mode: Option<&str>) -> Result<serde_json::Value, String> {
     if !ACTIONS.contains(&action) {
-        return Err(format!("The headless browser setting cannot {action:?}"));
+        return Err(format!("The windowless browser setting cannot {action:?}"));
     }
     Ok(match action {
         "on" => serde_json::json!({ "obscura": true }),
@@ -50,7 +50,10 @@ pub(crate) fn body(action: &str, mode: Option<&str>) -> Result<serde_json::Value
         "mode" => {
             let mode = mode.unwrap_or("");
             if !MODES.contains(&mode) {
-                return Err("Choose Automatic, Visible or Headless.".to_string());
+                return Err(
+                    "Choose Automatic, Always the visible browser or The windowless browser."
+                        .to_string(),
+                );
             }
             serde_json::json!({ "mode": mode })
         }

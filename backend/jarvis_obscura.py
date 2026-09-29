@@ -196,22 +196,31 @@ REFUSED_TOOLS = (
 
 #: What the owner sees for each reason a run did not go ahead. Words only.
 WHY = {
-    "not_installed": ("Obscura (the headless browser) is not installed on this PC yet. "
+    "not_installed": ("Obscura (the windowless browser) is not installed on this PC yet. "
                       "Settings shows the one line that installs it."),
-    "not_checked": ("Obscura is installed but has not been checked yet, so Jarvis will not "
-                    "start it. Compare the checksum the install line printed with the release "
-                    "page, then run the check command the line printed."),
-    "changed": ("Obscura's file has changed since it was checked, so Jarvis will not start "
-                "it. If you updated it yourself, run the install line in Settings again, "
-                "compare the checksum, then run the check command with --accept-new."),
-    "start_failed": "Obscura could not be started.",
-    "slow": "Obscura took too long, so it was stopped.",
-    "died": "Obscura stopped unexpectedly.",
-    "limit_time": "Obscura had been running for its time limit, so it was stopped.",
-    "limit_pages": "Obscura reached its limit of pages for one run, so it was stopped.",
-    "refused_tool": "Jarvis does not allow that Obscura tool.",
-    "switched_off": "The headless browser is switched off, so Obscura was not started",
-    "error": "Obscura ran into an error.",
+    "not_checked": ("Obscura is installed but not checked yet, so Jarvis will not start it. "
+                    "The install line printed a long code (a checksum, a fingerprint of the "
+                    "file). Check it matches the one on the release page. Then run the check "
+                    "command the line printed."),
+    "changed": ("Obscura's file is not the one Jarvis checked, so Jarvis will not start it. "
+                "If you did not update it yourself, delete it. If you did, run the install "
+                "line again, then the check command with --accept-new."),
+    "start_failed": ("The windowless browser (Obscura) could not start. Nothing was opened. "
+                     "Ask again with the visible browser, or run the check command the install "
+                     "line printed to see why."),
+    "slow": ("The windowless browser (Obscura) took too long, so it was stopped. Try again, "
+             "or ask for the visible browser."),
+    "died": ("The windowless browser (Obscura) stopped unexpectedly. Try again, or ask for "
+             "the visible browser."),
+    "limit_time": ("The windowless browser (Obscura) reached its time limit, so it was "
+                   "stopped. Try again, or ask for the visible browser."),
+    "limit_pages": ("The windowless browser (Obscura) reached its limit of pages for one "
+                    "run, so it was stopped. Try again with a smaller job, or ask for the "
+                    "visible browser."),
+    "refused_tool": "Jarvis refused a step that this browser is not allowed to do.",
+    "switched_off": "The windowless browser is switched off, so Obscura was not started",
+    "error": ("The windowless browser (Obscura) ran into an error. Try again, or ask for "
+              "the visible browser."),
     "not_windows": "Obscura's Windows program can only be started on Windows.",
 }
 
@@ -848,8 +857,8 @@ def check(say: Callable[[str], None] = print, *, accept_new: bool = False,
             say("  Stopped: this file is not the one that was checked before (its checksum "
                 "differs). If you updated it yourself on purpose, run the install line again.")
             return 1
-        say("  Checksum: no official one is built in yet (nobody could read one), so this "
-            "one will be REMEMBERED and a later different file refused.")
+        say("  Checksum: Jarvis has no official fingerprint for this file to compare with, "
+            "so it will remember this one. If the file ever changes, Jarvis will refuse it.")
     run = run_cli or _run_cli
     code, text = run([str(exe), "--version"])
     version = text.strip().splitlines()[0][:60] if text.strip() else ""

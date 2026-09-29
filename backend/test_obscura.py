@@ -305,13 +305,13 @@ def t_install_state():
     exe.parent.mkdir(parents=True, exist_ok=True)
     exe.write_bytes(b"MZ-pretend-program-v1")
     check("a file that was never checked is REFUSED (fail closed)",
-          OB.problem() == "not_checked" and "not been checked" in OB.WHY["not_checked"])
+          OB.problem() == "not_checked" and "not checked yet" in OB.WHY["not_checked"])
     dig = OB.digest_of(exe)
     OB.save_check({"version": "0.1.0", "digest": dig, "at": time.time(), "stealth_ok": True})
     check("a checked file is fine", OB.problem() == "" and OB.status()["version"] == "0.1.0")
     exe.write_bytes(b"MZ-pretend-program-v2-swapped")
     check("a file changed since it was checked is refused",
-          OB.problem() == "changed" and "changed" in OB.WHY["changed"])
+          OB.problem() == "changed" and "not the one Jarvis checked" in OB.WHY["changed"])
     real = OB.PINNED_DIGEST
     try:
         OB.PINNED_DIGEST = OB.digest_of(exe)

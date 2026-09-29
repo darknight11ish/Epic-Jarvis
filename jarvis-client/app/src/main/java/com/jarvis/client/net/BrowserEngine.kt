@@ -6,7 +6,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 
 /**
- * The headless browser (Obscura) setting (docs/JARVIS-API.md section 97; the
+ * The windowless browser (Obscura) setting (docs/JARVIS-API.md section 97; the
  * owner's decision, 2026-09-29): Jarvis may choose a browser with no window,
  * instead of the visible one, for plain web reading. Off by default, ON is one
  * approval card on the PC, OFF is instant - the same shape as [ScreenPicture],
@@ -44,54 +44,67 @@ object BrowserEngine {
     val MODES: List<String> = listOf("auto", "visible", "headless")
     const val DEFAULT_MODE = "auto"
 
-    const val TITLE = "Headless browser (Obscura)"
+    const val TITLE =
+        "Browser without a window (Obscura)"
+    const val SUBTITLE =
+        "a browser Jarvis uses without opening a window"
     const val DETAIL =
         "Jarvis normally works a web page in a browser window you can see. This adds a second " +
             "way: Obscura, a small browser with no window, for plain reading and quick lookups. " +
-            "Jarvis chooses per task - the visible window when you might need to sign in or take " +
-            "over, the headless browser for simple reading. Every page it opens and every step it " +
-            "takes is still listed on an approval card first. What it reads is outside text: it " +
-            "never becomes a fact Jarvis remembers. It cannot reach your own network (this PC, " +
-            "your home network, Tailscale), uses no proxy, keeps no cookies and saves no files. " +
-            "Off by default. Turning it on asks first, because it is a new program on your PC " +
-            "that reaches the web."
-    const val SWITCH = "Let Jarvis use the headless browser (Obscura)"
+            "Jarvis chooses for each task. It uses the visible browser when you might need to sign in" +
+            " or take over, and the windowless browser for simple reading. Every page it opens and " +
+            "every step it takes is still listed on an approval card first. What it reads is outside " +
+            "text: Jarvis reads it but never follows instructions in it, and never remembers it as a " +
+            "fact. It cannot reach your own network (this PC, your home network, Tailscale), uses no " +
+            "proxy, keeps no cookies and saves no files. It is off until you turn it on. Turning it " +
+            "on asks first, because it is a new program on your PC that reaches the web."
+    const val SWITCH =
+        "Let Jarvis use the windowless browser (Obscura)"
     const val MODE_TITLE = "Which browser Jarvis uses"
     const val STEALTH =
-        "Stealth is always on for the headless browser. It makes the browser look like an " +
-            "ordinary Chrome. It does not solve captchas, and sites can still block or ban it. " +
-            "Signing in to a real account with it could get that account closed under a site's terms, " +
-            "so Jarvis never types a password with it and never solves a captcha: when it sees a " +
-            "captcha or a sign-in page it stops and hands the job to the visible browser. A sign-in " +
-            "that starts with only a username or email box may not be recognised."
-    const val OFF_LINE = "Off. Jarvis uses the visible browser window only."
+        "This browser pretends to be an ordinary Chrome so fewer sites turn it away. That does " +
+            "not stop a site from blocking it, or from closing an account you sign in to. So Jarvis " +
+            "never types a password with it and never solves a captcha. When it reaches a captcha or " +
+            "sign-in page it stops and hands the job to the browser window you can see. A sign-in " +
+            "that starts with only a username or email box may not be spotted."
+    const val OFF_LINE =
+        "Off. Jarvis uses the visible browser only."
     const val WAITING_LINE = "Waiting for your yes on the card. Nothing has changed yet."
     const val UNREAD = "Could not read this setting."
     const val MISSING =
-        "This PC's Jarvis does not have the headless browser yet. Run " +
-            "scripts\\apply-patches.ps1 on the PC to add it."
-    const val STEPS_TITLE = "To install it, paste this one line into PowerShell on your PC:"
+        "This PC's Jarvis is missing this feature. In PowerShell on the PC, in the Jarvis folder," +
+            " run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis."
+    const val STEPS_TITLE =
+        "To install it, paste this one line into PowerShell (the Windows command window) on your " +
+            "PC:"
     const val STEPS_NOTE =
         "It downloads one named release of Obscura's Windows program from its GitHub releases " +
             "(github.com/h4ckf0r0day/obscura, Apache-2.0), unpacks it into Jarvis's own folder and " +
-            "prints its checksums for you to compare with the release page. It does not run the " +
-            "program. The line then prints a second command that checks it: version, stealth on, and " +
-            "that it refuses to visit your own network. Jarvis never downloads it by itself."
+            "prints its checksums (long codes that fingerprint the file) for you to compare with the " +
+            "release page. It does not run the program. The line then prints a second command that " +
+            "checks it: version, stealth on, and that it refuses to visit your own network. Jarvis " +
+            "never downloads it by itself."
+    const val WAITING_LINK =
+        "Waiting for the connection to your PC."
+    const val MODE_NOTE =
+        "This does nothing until the switch above is on."
+    const val COULD_NOT_TURN_ON =
+        "Could not turn it on: "
     const val COPY = "Copy the line"
 
     /** What each mode is called, and the one line that says what it does. */
     val MODE_LABELS: Map<String, String> = mapOf(
         "auto" to "Automatic (recommended)",
         "visible" to "Always the visible browser",
-        "headless" to "The headless browser when it can run",
+        "headless" to "The windowless browser when it can run",
     )
     val MODE_HELP: Map<String, String> = mapOf(
-        "auto" to "Jarvis picks per task: the visible window whenever you might need to sign in " +
-            "or take over, the headless browser for plain reading.",
+        "auto" to "Jarvis picks for each task: the visible browser whenever you might need to sign in or " +
+            "take over, the windowless browser for plain reading.",
         "visible" to "Jarvis always opens the browser window you can see and take over.",
-        "headless" to "Jarvis uses the headless browser whenever it can run, except when the task looks like a " +
-            "sign-in, a payment or a captcha. If it cannot run, Jarvis says so and uses the visible " +
-            "browser.",
+        "headless" to "Jarvis uses the windowless browser whenever it can run, except when the task looks like " +
+            "a sign-in, a payment or a captcha. If it cannot run, Jarvis says so and uses the visible" +
+            " browser.",
     )
 
     fun enabledBody(on: Boolean): String = "{\"obscura\":$on}"
@@ -123,6 +136,8 @@ object BrowserEngine {
         val line: String,
         val status: String,
         val installLine: String,
+        /** Not part of the shared table: true while the file is not on the PC (or changed). */
+        val needsInstall: Boolean = true,
     )
 
     private fun JsonObject.text(key: String): String =
@@ -153,16 +168,18 @@ object BrowserEngine {
             line = line,
             status = status.text("status_line"),
             installLine = status.text("install_line"),
+            needsInstall = status.flag("installed") != true || status.text("problem") == "changed",
         )
     }
 
     /** What to say after the switch was pressed, from the PC's answer. */
     fun said(on: Boolean, outcome: DesktopWrite.Outcome): String = when (outcome) {
         is DesktopWrite.Outcome.Waiting -> waitingLine()
-        is DesktopWrite.Outcome.Refused -> "Not changed. ${outcome.why}"
+        is DesktopWrite.Outcome.Refused ->
+            if (on) COULD_NOT_TURN_ON + outcome.why else "Not changed. ${outcome.why}"
         is DesktopWrite.Outcome.Done -> outcome.said
-            ?: if (on) "The headless browser is on."
-            else "The headless browser is off. Jarvis uses the visible browser only."
+            ?: if (on) "The windowless browser is on."
+            else "The windowless browser is off. Jarvis uses the visible browser only."
     }
 
     /** What to say after a mode was picked. */

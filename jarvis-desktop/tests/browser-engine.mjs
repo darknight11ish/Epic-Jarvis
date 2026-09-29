@@ -1,5 +1,5 @@
 /**
- * The headless browser (Obscura) setting on this PC (the owner's decision of
+ * The windowless browser (Obscura) setting on this PC (the owner's decision of
  * 2026-09-29; browser-engine-rules.js, browser-engine.js, browser_engine.rs,
  * settings.html; backend jarvis_browser_engine.py and jarvis_obscura.py).
  *
@@ -71,22 +71,45 @@ await check(`all ${T.panels.length} settings cases match the PC's rule`, () => {
   }
 });
 
-await check("the words are honest: stealth is on, it does not solve captchas, it can still be blocked, off is instant", () => {
-  assert.match(R.BROWSER.stealth, /always on/i);
+await check("the words are honest: it pretends to be Chrome, can still be blocked, never signs in or solves a captcha, off is instant", () => {
   assert.match(R.BROWSER.stealth, /ordinary Chrome/);
-  assert.match(R.BROWSER.stealth, /does not solve captchas/i);
-  assert.match(R.BROWSER.stealth, /block or ban/i);
-  assert.match(R.BROWSER.stealth, /account closed/i);
+  assert.match(R.BROWSER.stealth, /does not stop a site from blocking it/i);
+  assert.match(R.BROWSER.stealth, /closing an account you sign in to/i);
   assert.match(R.BROWSER.stealth, /never types a password/i);
+  assert.match(R.BROWSER.stealth, /never solves a captcha/i);
   assert.doesNotMatch(R.BROWSER.stealth, /never signs in/i);
-  assert.match(R.BROWSER.stealth, /may not be recognised/i);
+  assert.match(R.BROWSER.stealth, /may not be spotted/i);
   assert.match(R.BROWSER.stepsNote, /does not run the program/i);
-  assert.match(R.BROWSER.detail, /Off by default/);
+  assert.match(R.BROWSER.detail, /off until you turn it on/);
   assert.match(R.BROWSER.detail, /asks first/i);
   assert.match(R.BROWSER.detail, /outside text/i);
   assert.match(R.BROWSER.detail, /no proxy/i);
   assert.match(R.BROWSER.stepsNote, /never downloads it by itself/i);
   assert.match(R.BROWSER.askedCard, /stays off until you say yes/i);
+});
+
+await check("one name everywhere: the windowless browser and the visible browser, never 'headless' in the words", () => {
+  const all = JSON.stringify(R.BROWSER).toLowerCase();
+  assert.ok(!all.includes("headless browser"), "no 'headless browser' in the words");
+  assert.equal(R.BROWSER.title, "Browser without a window (Obscura)");
+  assert.equal(R.BROWSER.switch, "Let Jarvis use the windowless browser (Obscura)");
+  assert.equal(R.BROWSER.modes.headless, "The windowless browser when it can run");
+  assert.equal(R.BROWSER.waitingLink, "Waiting for the connection to your PC.");
+  assert.equal(R.BROWSER.modeNote, "This does nothing until the switch above is on.");
+});
+
+await check("the page shows the reason on screen, the install steps only while not installed, and plain words for a failure", () => {
+  const src = read("src/browser-engine.js");
+  assert.match(src, /el\.linkNote\.textContent = held \? BROWSER\.waitingLink/);
+  assert.match(src, /view\.needsInstall/);
+  assert.match(src, /BROWSER\.couldNotTurnOn \+ refusedWords\(error\)/);
+  assert.match(src, /\^HTTP 404/);
+  const html = read("src/settings.html");
+  const start = html.indexOf('id="browser-engine"');
+  const card = html.slice(start, html.indexOf("</section>", start));
+  assert.ok(card.includes('<textarea id="be-line-text"'), "the install line is a wrapped box");
+  assert.ok(card.indexOf('id="be-install"') < card.indexOf('id="be-mode"'), "the steps sit under the switch, above the picker");
+  assert.ok(card.includes('id="be-mode-note"'), "a note beside the picker");
 });
 
 await check("a failed read never shows the switch as OFF: it is shown as unknown (indeterminate) and cannot be pressed", () => {
