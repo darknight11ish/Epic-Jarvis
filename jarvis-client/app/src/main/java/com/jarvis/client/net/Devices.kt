@@ -35,6 +35,11 @@ object Devices {
         val lastSeen: Long?,
         val thisDevice: Boolean,
         val removable: Boolean,
+        /**
+         * Signed approvals (design §11): "waiting", "true" or "false" -
+         * null when the PC's row has no such field (an older PC).
+         */
+        val approvalKey: String? = null,
     )
 
     data class Shared(
@@ -65,6 +70,13 @@ object Devices {
     private fun JsonObject?.bool(key: String): Boolean? =
         (this?.get(key) as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
 
+    /** `approval_key`: true, false or "waiting" on the wire; anything else is "not said". */
+    private fun approvalKeyOf(el: kotlinx.serialization.json.JsonElement?): String? {
+        val p = el as? JsonPrimitive ?: return null
+        if (p.isString) return p.content.takeIf { it == "waiting" || it == "true" || it == "false" }
+        return p.booleanOrNull?.toString()
+    }
+
     /** `GET /api/devices`, read. A row without an id or a name is left out. */
     fun parse(obj: JsonObject): View {
         val you = obj.str("you")
@@ -80,6 +92,7 @@ object Devices {
                 lastSeen = o.long("last_seen"),
                 thisDevice = o.bool("this_device") == true || (you != null && id == you),
                 removable = o.bool("removable") == true && id != "pc",
+                approvalKey = approvalKeyOf(o["approval_key"]),
             )
         }
         val s = obj["shared"] as? JsonObject

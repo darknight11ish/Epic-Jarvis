@@ -397,6 +397,13 @@ data class PendingItem(
      * bare approve no longer names one - see [needsChoice].
      */
     val options: List<ProposalOption> = emptyList(),
+    /**
+     * The `text` part of the signed-approval words hash
+     * ([SignedApproval.wordsTextOf]), worked out from the RAW wire `detail`
+     * by [normalisePendingRow] - which always overwrites this key, so a row
+     * cannot bring its own. Empty for anything not read from the PC's list.
+     */
+    @SerialName("sign_text") val signText: String = "",
 ) {
     /**
      * Whether approving needs an option named alongside it.

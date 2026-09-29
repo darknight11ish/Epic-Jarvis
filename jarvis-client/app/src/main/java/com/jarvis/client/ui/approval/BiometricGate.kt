@@ -10,6 +10,7 @@ import com.jarvis.client.data.CheckAvailability
 import com.jarvis.client.data.CheckMethod
 import com.jarvis.client.data.CheckOutcome
 import com.jarvis.client.net.PendingItem
+import java.security.Signature
 import kotlin.coroutines.resume
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -38,7 +39,11 @@ object BiometricGate {
 
     /** One attempt's result: an outcome, or "try once more". */
     private sealed interface Attempt {
-        data class Done(val outcome: CheckOutcome) : Attempt
+        data class Done(
+            val outcome: CheckOutcome,
+            /** The signature the confirmed check unlocked, for a check made with a key. */
+            val signature: Signature? = null,
+        ) : Attempt
         data object Transient : Attempt
     }
 
@@ -100,18 +105,48 @@ object BiometricGate {
         title: String,
         subtitle: String,
         method: CheckMethod,
-    ): CheckOutcome {
+    ): CheckOutcome = checkWith(activity, title, subtitle, method, null).outcome
+
+    /** How a check made with a key ended: the outcome, and the unlocked signature when confirmed. */
+    class Signed(val outcome: CheckOutcome, val signature: Signature?)
+
+    /**
+     * The check for a signed approval: the same prompt, but with [signature]
+     * (a Keystore key that needs a fresh fingerprint or PIN for each use)
+     * wrapped in a `CryptoObject`. On a confirmed check, [Signed.signature]
+     * can sign once (docs/PAIRING-DESIGN.md §11.3).
+     */
+    suspend fun sign(
+        activity: FragmentActivity,
+        item: PendingItem,
+        method: CheckMethod,
+        signature: Signature,
+    ): Signed = checkWith(
+        activity,
+        title = item.title,
+        subtitle = item.risk.why.ifBlank { "Check the card before you confirm." },
+        method = method,
+        crypto = BiometricPrompt.CryptoObject(signature),
+    )
+
+    private suspend fun checkWith(
+        activity: FragmentActivity,
+        title: String,
+        subtitle: String,
+        method: CheckMethod,
+        crypto: BiometricPrompt.CryptoObject?,
+    ): Signed {
         val allowed = allowed(method)
         // At most two tries, and only for the temporary failures: a person
         // dismissing the prompt is an answer and is never asked again.
         for (attempt in 0 until 2) {
             if (attempt > 0) delay(RETRY_DELAY_MS)
             val status = BiometricManager.from(activity).canAuthenticate(allowed)
-            val result = beforePrompt(status) ?: promptOnce(activity, title, subtitle, method)
-            if (result is Attempt.Done) return result.outcome
+            val result = beforePrompt(status) ?: promptOnce(activity, title, subtitle, method, crypto)
+            if (result is Attempt.Done) return Signed(result.outcome, result.signature)
             Log.w(TAG, "biometric check not available right now (attempt ${attempt + 1}, status $status)")
         }
-        return CheckOutcome.FAILED
+        return Signed(CheckOutcome.FAILED, null)
     }
 
     private suspend fun promptOnce(
@@ -119,6 +154,7 @@ object BiometricGate {
         title: String,
         subtitle: String,
         method: CheckMethod,
+        crypto: BiometricPrompt.CryptoObject?,
     ): Attempt =
         suspendCancellableCoroutine { cont ->
             val prompt = BiometricPrompt(
@@ -128,7 +164,9 @@ object BiometricGate {
                     override fun onAuthenticationSucceeded(
                         result: BiometricPrompt.AuthenticationResult,
                     ) {
-                        if (cont.isActive) cont.resume(Attempt.Done(CheckOutcome.CONFIRMED))
+                        if (cont.isActive) {
+                            cont.resume(Attempt.Done(CheckOutcome.CONFIRMED, result.cryptoObject?.signature))
+                        }
                     }
 
                     override fun onAuthenticationError(code: Int, msg: CharSequence) {
@@ -186,7 +224,7 @@ object BiometricGate {
                     .setAllowedAuthenticators(allowed(method))
                     .setConfirmationRequired(true)
                 if (method == CheckMethod.FINGERPRINT_ONLY) builder.setNegativeButtonText("Cancel")
-                prompt.authenticate(builder.build())
+                if (crypto != null) prompt.authenticate(builder.build(), crypto) else prompt.authenticate(builder.build())
             }.onFailure {
                 // Not CANCELLED - the owner refused nothing - and not
                 // UNAVAILABLE either, which says "set up a screen lock" to
