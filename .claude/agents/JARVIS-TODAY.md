@@ -94,7 +94,7 @@ Details: `backend/jarvis_speech.py`, `jarvis_voices.py`, `docs/WAKE-WORD.md`.
 
 **Everyday tools** - timers, alarms, reminders, to-do lists, one shared
 scheduler; morning briefing; "tell me when" (email, devices, web pages);
-email read, drafts, send (one card per email); web search (SearXNG default,
+email read, drafts, send (one card per email), tidy by voice (archive, star, mark read, Trash: one card listing every email, Undo 10 min, no permanent delete; built, untried on a real mailbox); web search (SearXNG default,
 DuckDuckGo, Exa, Tavily, Brave); Google Calendar read-only; Home Assistant;
 folders and documents (PDF, Word, Excel, PowerPoint, Notion export); notes
 (Obsidian, Logseq, Joplin); screenshot text reading (Windows OCR); music
