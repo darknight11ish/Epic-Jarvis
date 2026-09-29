@@ -114,7 +114,7 @@
     "percent": 99,
     "waxing": true
    },
-   "today": "Sun rises 11:32, sets 02:31. Moon: full moon, 99% lit, rises 02:54, sets 10:42."
+   "today": "Sun rises 11:32, then sets 02:31. Moon: full moon, 99% lit, sets 10:42, then rises 02:54."
   },
   {
    "ms": 1734816720000,
@@ -156,7 +156,7 @@
     "percent": 60,
     "waxing": false
    },
-   "today": "Sun rises 14:18, sets 23:39. Moon: last quarter, 60% lit, rises 06:22, sets 18:52."
+   "today": "Sun sets 23:39, then rises 14:18. Moon: last quarter, 60% lit, rises 06:22, then sets 18:52."
   },
   {
    "ms": 1706205240000,
@@ -198,7 +198,7 @@
     "percent": 100,
     "waxing": true
    },
-   "today": "Sun rises 14:13, sets 00:11. Moon: full moon, 100% lit, rises 00:08, sets 15:08."
+   "today": "Sun sets 00:11, then rises 14:13. Moon: full moon, 100% lit, rises 00:08, then sets 15:08."
   },
   {
    "ms": 1705549920000,
@@ -240,7 +240,7 @@
     "percent": 50,
     "waxing": true
    },
-   "today": "Sun rises 14:18, sets 00:02. Moon: first quarter, 50% lit, rises 18:31, sets 07:40."
+   "today": "Sun rises 14:18, then sets 00:02. Moon: first quarter, 50% lit, sets 07:40, then rises 18:31."
   },
   {
    "ms": 1718941380000,
@@ -282,7 +282,7 @@
     "percent": 99,
     "waxing": true
    },
-   "today": "Sun rises 03:43, sets 20:20. Moon: full moon, 99% lit, rises 20:43, sets 03:15."
+   "today": "Sun sets 20:20, then rises 03:43. Moon: full moon, 99% lit, rises 20:43, then sets 03:15."
   },
   {
    "ms": 1718971200000,
@@ -324,7 +324,7 @@
     "percent": 99,
     "waxing": true
    },
-   "today": "Sun rises 03:43, sets 20:20. Moon: full moon, 99% lit, rises 20:43, sets 03:15."
+   "today": "Sun sets 20:20, then rises 03:43. Moon: full moon, 99% lit, rises 20:43, then sets 03:15."
   },
   {
    "ms": 1734816720000,
@@ -366,7 +366,7 @@
     "percent": 60,
     "waxing": false
    },
-   "today": "Sun rises 08:03, sets 15:53. Moon: last quarter, 60% lit, rises 22:56, sets 11:50."
+   "today": "Sun rises 08:03, then sets 15:53. Moon: last quarter, 60% lit, rises 22:56, then sets 11:50."
   },
   {
    "ms": 1742475720000,
@@ -408,7 +408,7 @@
     "percent": 69,
     "waxing": false
    },
-   "today": "Sun rises 06:00, sets 18:13. Moon: waning gibbous, 69% lit, rises 01:41, sets 08:19."
+   "today": "Sun sets 18:13, then rises 06:00. Moon: waning gibbous, 69% lit, rises 01:41, then sets 08:19."
   },
   {
    "ms": 1706205240000,
@@ -450,7 +450,7 @@
     "percent": 100,
     "waxing": true
    },
-   "today": "Sun rises 07:47, sets 16:37. Moon: full moon, 100% lit, rises 17:13, sets 08:42."
+   "today": "Sun rises 07:47, then sets 16:37. Moon: full moon, 100% lit, sets 08:42, then rises 17:13."
   },
   {
    "ms": 1712600460000,
@@ -492,7 +492,7 @@
     "percent": 0,
     "waxing": true
    },
-   "today": "Sun rises 05:16, sets 18:45. Moon: new moon, 0% lit, rises 05:28, sets 18:42."
+   "today": "Sun sets 18:45, then rises 05:16. Moon: new moon, 0% lit, sets 18:42, then rises 05:28."
   },
   {
    "ms": 1705549920000,
@@ -534,7 +534,7 @@
     "percent": 50,
     "waxing": true
    },
-   "today": "Sun rises 07:56, sets 16:24. Moon: first quarter, 50% lit, rises 11:00, sets 02:02."
+   "today": "Sun rises 07:56, then sets 16:24. Moon: first quarter, 50% lit, rises 11:00, then sets 02:02."
   },
   {
    "ms": 1790577000000,
@@ -576,7 +576,7 @@
     "percent": 97,
     "waxing": false
    },
-   "today": "Sun rises 05:57, sets 17:44. Moon: waning gibbous, 97% lit, rises 17:56, sets 08:14."
+   "today": "Sun sets 17:44, then rises 05:57. Moon: waning gibbous, 97% lit, sets 08:14, then rises 17:56."
   },
   {
    "ms": 1718941380000,
@@ -702,7 +702,7 @@
     "percent": 60,
     "waxing": false
    },
-   "today": "The sun stays down all day. Moon: last quarter, 60% lit, rises 23:14, sets 11:15."
+   "today": "The sun stays down all day. Moon: last quarter, 60% lit, sets 11:15, then rises 23:14."
   },
   {
    "ms": 1742475720000,
@@ -744,7 +744,7 @@
     "percent": 69,
     "waxing": false
    },
-   "today": "Sun rises 04:42, sets 17:23. Moon: waning gibbous, 69% lit."
+   "today": "Sun sets 17:23, then rises 04:42. Moon: waning gibbous, 69% lit."
   },
   {
    "ms": 1706205240000,
@@ -828,7 +828,7 @@
     "percent": 0,
     "waxing": true
    },
-   "today": "Sun rises 01:54, sets 20:00. Moon: new moon, 0% lit, rises 01:28, sets 20:01."
+   "today": "Sun sets 20:00, then rises 01:54. Moon: new moon, 0% lit, sets 20:01, then rises 01:28."
   },
   {
    "ms": 1705549920000,
@@ -912,7 +912,7 @@
     "percent": 97,
     "waxing": false
    },
-   "today": "Sun rises 05:18, sets 16:22. Moon: waning gibbous, 97% lit."
+   "today": "Sun sets 16:22, then rises 05:18. Moon: waning gibbous, 97% lit."
   },
   {
    "ms": 1718971200000,
@@ -954,7 +954,7 @@
     "percent": 99,
     "waxing": true
    },
-   "today": "Sun rises 09:25, sets 00:30. Moon: full moon, 99% lit, rises 00:49, sets 09:27."
+   "today": "Sun sets 00:30, then rises 09:25. Moon: full moon, 99% lit, rises 00:49, then sets 09:27."
   },
   {
    "ms": 1742475720000,
@@ -996,7 +996,7 @@
     "percent": 69,
     "waxing": false
    },
-   "today": "Sun rises 10:57, sets 23:08. Moon: waning gibbous, 69% lit, rises 05:49, sets 13:43."
+   "today": "Sun sets 23:08, then rises 10:57. Moon: waning gibbous, 69% lit, sets 13:43, then rises 05:49."
   },
   {
    "ms": 1712600460000,
@@ -1038,7 +1038,7 @@
     "percent": 0,
     "waxing": true
    },
-   "today": "Sun rises 10:25, sets 23:28. Moon: new moon, 0% lit, rises 10:48, sets 23:41."
+   "today": "Sun sets 23:28, then rises 10:25. Moon: new moon, 0% lit, sets 23:41, then rises 10:48."
   },
   {
    "ms": 1790577000000,
@@ -1080,7 +1080,7 @@
     "percent": 97,
     "waxing": false
    },
-   "today": "Sun rises 10:49, sets 22:42. Moon: waning gibbous, 97% lit, rises 23:27, sets 13:01."
+   "today": "Sun rises 10:49, then sets 22:42. Moon: waning gibbous, 97% lit, sets 13:01, then rises 23:27."
   },
   {
    "ms": 1718941380000,
@@ -1122,7 +1122,7 @@
     "percent": 99,
     "waxing": true
    },
-   "today": "Sun rises 02:56, sets 00:02. Moon: full moon, 99% lit."
+   "today": "Sun sets 00:02, then rises 02:56. Moon: full moon, 99% lit."
   },
   {
    "ms": 1734816720000,
@@ -1164,7 +1164,7 @@
     "percent": 60,
     "waxing": false
    },
-   "today": "Sun rises 11:22, sets 15:30. Moon: last quarter, 60% lit, rises 00:13, sets 13:23."
+   "today": "Sun rises 11:22, then sets 15:30. Moon: last quarter, 60% lit, rises 00:13, then sets 13:23."
   },
   {
    "ms": 1706205240000,
@@ -1206,7 +1206,7 @@
     "percent": 100,
     "waxing": true
    },
-   "today": "Sun rises 10:26, sets 16:54. Moon: full moon, 100% lit, rises 17:17, sets 11:43."
+   "today": "Sun rises 10:26, then sets 16:54. Moon: full moon, 100% lit, sets 11:43, then rises 17:17."
   },
   {
    "ms": 1705549920000,
@@ -1248,7 +1248,7 @@
     "percent": 50,
     "waxing": true
    },
-   "today": "Sun rises 10:48, sets 16:28. Moon: first quarter, 50% lit, rises 11:42, sets 04:44."
+   "today": "Sun rises 10:48, then sets 16:28. Moon: first quarter, 50% lit, rises 11:42, then sets 04:44."
   },
   {
    "ms": 1718971200000,
@@ -1290,7 +1290,7 @@
     "percent": 99,
     "waxing": true
    },
-   "today": "Sun rises 23:00, sets 11:12. Moon: full moon, 99% lit, rises 11:35, sets 22:58."
+   "today": "Sun rises 23:00, then sets 11:12. Moon: full moon, 99% lit, sets 22:58, then rises 11:35."
   },
   {
    "ms": 1742475720000,
@@ -1332,7 +1332,7 @@
     "percent": 69,
     "waxing": false
    },
-   "today": "Sun rises 23:08, sets 11:15. Moon: waning gibbous, 69% lit, rises 15:42, sets 04:01."
+   "today": "Sun rises 23:08, then sets 11:15. Moon: waning gibbous, 69% lit, rises 15:42, then sets 04:01."
   },
   {
    "ms": 1712600460000,
@@ -1374,7 +1374,7 @@
     "percent": 0,
     "waxing": true
    },
-   "today": "Sun rises 23:02, sets 11:10. Moon: new moon, 0% lit, rises 23:16, sets 11:43."
+   "today": "Sun rises 23:02, then sets 11:10. Moon: new moon, 0% lit, rises 23:16, then sets 11:43."
   },
   {
    "ms": 1790577000000,
@@ -1416,7 +1416,7 @@
     "percent": 97,
     "waxing": false
    },
-   "today": "Sun rises 22:52, sets 10:58. Moon: waning gibbous, 97% lit, rises 12:14, sets 00:42."
+   "today": "Sun sets 10:58, then rises 22:52. Moon: waning gibbous, 97% lit, rises 12:14, then sets 00:42."
   },
   {
    "ms": 1718941380000,
@@ -1458,7 +1458,7 @@
     "percent": 99,
     "waxing": true
    },
-   "today": "Sun rises 21:00, sets 06:53. Moon: full moon, 99% lit, rises 05:50, sets 21:12."
+   "today": "Sun sets 06:53, then rises 21:00. Moon: full moon, 99% lit, rises 05:50, then sets 21:12."
   },
   {
    "ms": 1718971200000,
@@ -1500,7 +1500,7 @@
     "percent": 99,
     "waxing": true
    },
-   "today": "Sun rises 21:00, sets 06:54. Moon: full moon, 99% lit, rises 06:47, sets 21:12."
+   "today": "Sun rises 21:00, then sets 06:54. Moon: full moon, 99% lit, sets 21:12, then rises 06:47."
   },
   {
    "ms": 1734816720000,
@@ -1542,7 +1542,7 @@
     "percent": 60,
     "waxing": false
    },
-   "today": "Sun rises 18:41, sets 09:06. Moon: last quarter, 60% lit, rises 13:44, sets 01:07."
+   "today": "Sun sets 09:06, then rises 18:41. Moon: last quarter, 60% lit, sets 01:07, then rises 13:44."
   },
   {
    "ms": 1742475720000,
@@ -1584,7 +1584,7 @@
     "percent": 69,
     "waxing": false
    },
-   "today": "Sun rises 19:58, sets 08:05. Moon: waning gibbous, 69% lit, rises 11:47, sets 02:13."
+   "today": "Sun rises 19:58, then sets 08:05. Moon: waning gibbous, 69% lit, sets 02:13, then rises 11:47."
   },
   {
    "ms": 1706205240000,
@@ -1626,7 +1626,7 @@
     "percent": 100,
     "waxing": true
    },
-   "today": "Sun rises 19:09, sets 09:04. Moon: full moon, 100% lit, rises 09:43, sets 19:06."
+   "today": "Sun rises 19:09, then sets 09:04. Moon: full moon, 100% lit, sets 19:06, then rises 09:43."
   },
   {
    "ms": 1712600460000,
@@ -1668,7 +1668,7 @@
     "percent": 0,
     "waxing": true
    },
-   "today": "Sun rises 20:13, sets 07:39. Moon: new moon, 0% lit, rises 20:25, sets 07:52."
+   "today": "Sun rises 20:13, then sets 07:39. Moon: new moon, 0% lit, rises 20:25, then sets 07:52."
   },
   {
    "ms": 1705549920000,
@@ -1710,7 +1710,7 @@
     "percent": 50,
     "waxing": true
    },
-   "today": "Sun rises 19:02, sets 09:08. Moon: first quarter, 50% lit, rises 03:21, sets 13:28."
+   "today": "Sun sets 09:08, then rises 19:02. Moon: first quarter, 50% lit, sets 13:28, then rises 03:21."
   },
   {
    "ms": 1790577000000,
@@ -1752,7 +1752,7 @@
     "percent": 97,
     "waxing": false
    },
-   "today": "Sun rises 19:35, sets 07:55. Moon: waning gibbous, 97% lit, rises 09:41, sets 20:34."
+   "today": "Sun sets 07:55, then rises 19:35. Moon: waning gibbous, 97% lit, rises 09:41, then sets 20:34."
   },
   {
    "ms": 1718971200000,
@@ -1794,7 +1794,7 @@
     "percent": 99,
     "waxing": true
    },
-   "today": "Sun rises 12:58, sets 20:11. Moon: full moon, 99% lit, rises 19:04, sets 13:22."
+   "today": "Sun rises 12:58, then sets 20:11. Moon: full moon, 99% lit, sets 13:22, then rises 19:04."
   },
   {
    "ms": 1742475720000,
@@ -1836,7 +1836,7 @@
     "percent": 69,
     "waxing": false
    },
-   "today": "Sun rises 10:36, sets 22:44. Moon: waning gibbous, 69% lit, rises 00:14, sets 18:18."
+   "today": "Sun sets 22:44, then rises 10:36. Moon: waning gibbous, 69% lit, sets 18:18, then rises 00:14."
   },
   {
    "ms": 1712600460000,
@@ -1878,7 +1878,7 @@
     "percent": 0,
     "waxing": true
    },
-   "today": "Sun rises 11:13, sets 21:56. Moon: new moon, 0% lit, rises 12:31, sets 21:48."
+   "today": "Sun sets 21:56, then rises 11:13. Moon: new moon, 0% lit, sets 21:48, then rises 12:31."
   },
   {
    "ms": 1790577000000,
@@ -1920,7 +1920,7 @@
     "percent": 97,
     "waxing": false
    },
-   "today": "Sun rises 10:06, sets 22:42. Moon: waning gibbous, 97% lit, rises 02:04, sets 10:12."
+   "today": "Sun rises 10:06, then sets 22:42. Moon: waning gibbous, 97% lit, sets 10:12, then rises 02:04."
   }
  ],
  "scenes": [

@@ -10129,8 +10129,11 @@ sentence, or a code split some other way. Deliberately over-redacts
 under-redacts - the real failure this exists to prevent.
 
 Redacted notifications are kept in `data/CapturedNotifications.kt` - a
-private, per-device `SharedPreferences` file, capped at 200 rows and 7
-days, NEVER sent anywhere on its own. `android:allowBackup="false"` on
+private, per-device `SharedPreferences` file, encrypted with an Android
+Keystore key that never leaves the phone (2026-09-29; rows an older build
+stored as plain text are moved over once), capped at 200 rows and 7
+days, NEVER sent anywhere on its own. If the phone cannot encrypt, the row
+is dropped rather than stored readable. `android:allowBackup="false"` on
 this whole app already keeps it out of any phone backup.
 
 **When the switch goes off, the copies go too** (2026-09-28, audit A3):

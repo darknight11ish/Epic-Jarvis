@@ -150,6 +150,8 @@ class AnimalOptionsTest {
         assertTrue("a PC nobody has changed", AnimalOptions.stillMoveNeeded(view))
         val chosen = Json.parseToJsonElement("""{"values":{"still":false},"changed":1759000000.5}""").jsonObject
         assertFalse("a choice made since wins", AnimalOptions.stillMoveNeeded(chosen))
+        val other = Json.parseToJsonElement("""{"values":{"still":false},"changed":1759000000.5,"still_changed":0}""").jsonObject
+        assertTrue("another switch changing does not stop it", AnimalOptions.stillMoveNeeded(other))
         val on = Json.parseToJsonElement("""{"values":{"still":true},"changed":0}""").jsonObject
         assertFalse("already on", AnimalOptions.stillMoveNeeded(on))
         assertFalse(AnimalOptions.stillMoveNeeded(JsonObject(mapOf("available" to JsonPrimitive(false)))))

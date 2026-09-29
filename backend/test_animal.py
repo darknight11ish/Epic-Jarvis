@@ -183,6 +183,20 @@ def _js_list(name):
     return re.findall(r'id:\s*"([^"]+)",\s*label:\s*"([^"]+)"', block)
 
 
+def t_still_has_its_own_change_time():
+    fresh()
+    check("nothing chosen: still_changed is 0", AN.view()["still_changed"] == 0.0)
+    AN.handle_post({"nods": False})
+    v = AN.view()
+    check("another switch changes 'changed' but not still_changed",
+          v["changed"] > 0 and v["still_changed"] == 0.0, v)
+    AN.handle_post({"still": True})
+    check("choosing Still sets it", AN.view()["still_changed"] > 0)
+    AN.handle_post({"nods": True})
+    check("and a later switch keeps it", AN.view()["still_changed"] > 0)
+    fresh()
+
+
 def t_device_words_and_steps():
     check("sharpness ids and labels are face-tuning.js QUALITIES'",
           [tuple(x) for x in _js_list("QUALITIES")] == list(AN.SHARPNESS), _js_list("QUALITIES"))
@@ -323,7 +337,17 @@ def t_per_device_goes_in_the_header():
               and "this device only" in r.reply, (r and r.reply, rf))
     check("the PC stored nothing for them", AN.values() == before
           and not AN.settings_path().exists())
-    r = go("set the frame rate to 45")
+    for phrase in ("raise the quality", "lower the frame rate", "turn down the resolution",
+                   "set the resolution to 1080", "set the frame rate to 60"):
+        r = go(phrase)
+        check(f"{phrase!r} names no animal: not an animal request",
+              r is None or not str(r.intent).startswith("animal"), r and r.intent)
+    for phrase, change in (("lower the animal's frame rate", "less_smooth"),
+                           ("turn up the robot's quality", "sharper"),
+                           ("raise the sharpness", "sharper")):
+        r = go(phrase)
+        check(f"{phrase!r} still works", r and r.face_tuning == change, r and (r.intent, r.face_tuning))
+    r = go("set the animal's frame rate to 45")
     check("an unknown rate is asked back", r.intent == "animal_ask" and "?" in r.reply, r.reply)
     rf = Q.route_fields(go("set a timer for 5 minutes"))
     check("an ordinary quick answer carries no face_tuning", "face_tuning" not in rf, rf)
@@ -475,7 +499,8 @@ def t_the_patch():
 
 
 if __name__ == "__main__":
-    for fn in (t_defaults, t_changes_at_once, t_device_words_and_steps,
+    for fn in (t_defaults, t_changes_at_once, t_still_has_its_own_change_time,
+               t_device_words_and_steps,
                t_every_switch_by_every_name, t_asking_changes_the_pc,
                t_open_meteo_still_raises_its_card, t_per_device_goes_in_the_header,
                t_unclear_is_asked_never_guessed, t_only_the_owners_own_words,

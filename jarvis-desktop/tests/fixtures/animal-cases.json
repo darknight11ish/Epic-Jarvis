@@ -1359,6 +1359,7 @@
   "serious_note": "\"Keep the animal still\" and serious moments (an approval, an error, a crisis answer) switch the behaviours off; calm motion makes them smaller.",
   "shared_note": "Kept on your PC: a change here, on your phone or by asking Jarvis changes both. No approval card - these only change how the animal moves.",
   "shared_title": "Shared with your phone",
+  "still_changed": 0.0,
   "switches": [
    {
     "built": true,
