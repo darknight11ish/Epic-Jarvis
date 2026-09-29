@@ -1107,7 +1107,12 @@ function paintChoiceRow(view, prefix, onChoose, onHear = null) {
     hear.classList.add("small");
     hear.setAttribute("aria-label", `Hear ${c.label}`);
     hear.dataset.hear = c.id;
-    wrap.append(row, hear);
+    // What happens when this voice's button is pressed is said right here,
+    // beside the voice - not only below a long list.
+    const rowStatus = node("span", "status cv-hear-status");
+    rowStatus.setAttribute("role", "status");
+    rowStatus.dataset.hearStatus = c.id;
+    wrap.append(row, hear, rowStatus);
     return wrap;
   }));
 }
@@ -1367,6 +1372,7 @@ function stopTry(why = "") {
   if (!p) return;
   animals.playing = null;
   p.audio.pause();
+  if (p.restore) p.restore();
   say(p.row.status, why);
 }
 
@@ -1398,11 +1404,20 @@ async function tryAnimal(face) {
  * answer starts, nothing held on a stale link (it changes nothing).
  */
 async function hearVoice(voice, label, hearButton) {
+  // The button reads "Stop" while its sample plays; pressing it stops the sample.
+  if (hearButton.dataset.playing === "1") {
+    stopTry(CV.HEAR_STOPPED);
+    return;
+  }
+  // The words go beside the tapped voice; every other voice's line is cleared.
+  for (const other of document.querySelectorAll("#cv-speaker-choices .cv-hear-status")) say(other, "");
+  say($("cv-speaker-status"), "");
   await playFromPc({
     command: "hear_voice_sample",
     args: { voice },
-    statusEl: $("cv-speaker-status"),
+    statusEl: hearButton.parentElement.querySelector(".cv-hear-status") || $("cv-speaker-status"),
     button: hearButton,
+    whilePlaying: CV.HEAR_STOP,
     busyWords: CV.HEAR_BUSY,
     playingWords: CV.hearPlaying(label),
     doneWords: CV.hearDone(label),
@@ -1415,7 +1430,7 @@ async function hearVoice(voice, label, hearButton) {
  * was playing stops first. `busyWords` are said instead when Jarvis is talking
  * or listening, before asking and again after the PC answered.
  */
-async function playFromPc({ command, args, statusEl, button: askButton, busyWords, playingWords, doneWords, beforeAsk }) {
+async function playFromPc({ command, args, statusEl, button: askButton, busyWords, playingWords, doneWords, beforeAsk, whilePlaying }) {
   stopTry();
   if (jarvisBusy()) {
     say(statusEl, busyWords, "bad");
@@ -1438,17 +1453,32 @@ async function playFromPc({ command, args, statusEl, button: askButton, busyWord
     }
     const audio = new Audio(reply.audio);
     const mine = () => animals.playing && animals.playing.audio === audio;
-    animals.playing = { audio, row: { status: statusEl } };
+    // A button that says "Stop" while it plays, and goes back after.
+    const before = askButton.textContent;
+    const restore = () => {
+      if (!whilePlaying) return;
+      askButton.textContent = before;
+      delete askButton.dataset.playing;
+    };
+    animals.playing = { audio, row: { status: statusEl }, restore };
+    if (whilePlaying) {
+      askButton.textContent = whilePlaying;
+      askButton.dataset.playing = "1";
+    }
     say(statusEl, playingWords, "ok");
     audio.addEventListener("ended", () => {
       if (!mine()) return;
       animals.playing = null;
+      restore();
       say(statusEl, doneWords, "ok");
     });
     try {
       await audio.play();
     } catch (error) {
-      if (mine()) animals.playing = null;
+      if (mine()) {
+        animals.playing = null;
+        restore();
+      }
       throw error;
     }
   } catch (error) {

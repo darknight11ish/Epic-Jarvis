@@ -50,7 +50,7 @@ internal fun LookSection(
     onChange: (Security) -> Unit,
 ) {
     val chrome = LocalChrome.current
-    Section("Looking at your screen") {
+    Section("Look at this and Watch with me") {
         Plate {
             SwitchRow(
                 title = ScreenNever.SETTING_TITLE,
@@ -94,7 +94,7 @@ private fun NeverList(security: Security, busy: Boolean, onChange: (Security) ->
                 // A loosening: SecurityRules.loosens sees an app leave the list,
                 // and the caller asks for the fingerprint or PIN first.
                 Quiet(
-                    "Remove",
+                    "Remove from the list",
                     modifier = Modifier.semantics { contentDescription = ScreenPlateText.removeLabel(labelOf(context, pkg)) },
                     enabled = !busy,
                     onClick = {

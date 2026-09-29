@@ -183,7 +183,7 @@ await check("Watch with me's fresh look is taken when a question STARTS: the bar
   assert.match(lookRs, /pub\(crate\) async fn ask\(app: &AppHandle\)[\s\S]*?"do": "ask"/);
   const voice = read("src-tauri/src/voice.rs");
   const arm = voice.slice(voice.indexOf("Ok(reply) if reply.wake_heard => {"));
-  assert.match(arm.slice(0, 900), /crate::look::ask_blocking\(&app\)/);
+  assert.match(arm.slice(0, 1400), /if reply\.is_owner \{\s*crate::look::ask_blocking\(&app\);/, "a wake look also needs the owner flag");
   assert.ok(arm.indexOf("ask_blocking") < arm.indexOf("VOICE_HEARD"), "the look comes before the question is handed on");
   // Without a session there is no request at all.
   assert.match(lookRs, /pub\(crate\) fn ask_blocking\(app: &AppHandle\) \{\s*if !on_here\(\) \{\s*return;/);

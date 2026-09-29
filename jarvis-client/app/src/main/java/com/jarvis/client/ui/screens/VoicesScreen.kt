@@ -643,6 +643,11 @@ private fun SpeakerPlate(
                     if (c.detail.isNotBlank()) {
                         Text(c.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
                     }
+                    // What happened when THIS voice's button was pressed, right
+                    // under it - not only below a long list.
+                    if (said.isNotBlank() && saidFor == c.id) {
+                        Text(said, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                    }
                 }
             }
         }

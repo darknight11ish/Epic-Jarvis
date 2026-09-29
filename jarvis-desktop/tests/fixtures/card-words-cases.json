@@ -264,7 +264,7 @@
     },
     {
       "action": "screen_picture_enable",
-      "title": "Jarvis wants to let it look at pictures of your screen, slowly, on the processor"
+      "title": "Jarvis wants to let it read pictures of your screen (slow, uses your main chip)"
     },
     {
       "action": "search_the_web",

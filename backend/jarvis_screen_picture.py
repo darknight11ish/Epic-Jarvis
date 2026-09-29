@@ -158,47 +158,50 @@ DOWNLOAD_FROM = "Ollama (ollama.com)"
 # --------------------------------------------------------------------------
 
 WORDS = {
-    "title": "Read pictures of my screen (slow, on the processor)",
+    "title": "Picture mode",
     "detail": (
-        "With one graphics card Jarvis reads only the WORDS on your screen. This lets a small "
-        "picture model also look at the picture itself, so it can tell what a chart, a button "
-        "or a photo shows. It runs on this PC's processor, not on your graphics card, so your "
-        "everyday chat model is not disturbed - but it is SLOW, and how slow depends on your PC. "
+        "By default Jarvis reads only the words on your screen. Picture mode also lets a small "
+        "picture reader look at the picture itself, so it can tell what a chart, a button "
+        "or a photo shows. It runs on your PC's main chip (the CPU), not your graphics card, so "
+        "your chat model is not slowed down - but it is SLOW, and how slow depends on your PC. "
         "Anything that looks like a key, a card number or a password is blacked out first, and "
         "if that part is missing no picture is used. Nothing leaves this PC and nothing is saved. "
         "Off by default. Turning it on asks first, because a model has to be downloaded."),
-    "switch": "Let Jarvis look at pictures of my screen (slow)",
-    "off_line": "Off. Jarvis reads the words on your screen only.",
+    "switch": "Turn on Picture mode (slow)",
+    "off_line": "Picture mode is off. Jarvis reads the words on your screen only.",
     "waiting_line": "Waiting for your yes on the card. Nothing has changed yet.",
     "unread": "Could not read this setting.",
-    "missing": "This PC's Jarvis does not have picture mode yet. Run scripts\\apply-patches.ps1 on the PC to add it.",
+    "missing": ("This PC's Jarvis is missing this feature. In PowerShell on the PC, in the Jarvis "
+                "folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis."),
     "steps_title": "To set it up, paste this one line into PowerShell on your PC:",
     "steps_note": (
-        "It downloads the picture model from Ollama (ollama.com; how big it is has not been "
-        "checked), then measures how many seconds one look takes on your PC and saves the "
+        "It downloads the picture model from Ollama (ollama.com). We have not checked how big "
+        "the download is, so expect a wait. Then it times one look on your PC and saves the "
         "number. Jarvis never downloads the model by itself."),
 }
 
 #: The plain reason a look did not use the picture. {model} and {n} are filled in.
 WHY_WORDS = {
-    "not_installed": "The picture model ({model}) is not installed on this PC yet.",
+    "not_installed": ("The picture model ({model}) is not installed on this PC yet. Run the "
+                      "set-up line in Settings, Picture mode."),
     "unknown_install": "Jarvis could not tell whether the picture model is installed (is Ollama running?).",
     "no_ollama": "Ollama was not found on this PC, so the picture reader could not start.",
     "start_failed": "The picture reader could not start.",
     "no_cleaner": ("The part of Jarvis that blacks out secrets in a picture is not installed, so no "
-                   "picture was used."),
+                   "picture was used. Run .\\scripts\\apply-patches.ps1 in the Jarvis folder, "
+                   "then restart Jarvis."),
     "clean_failed": "Blacking out secrets in the picture did not work, so no picture was used.",
     "slow": "The picture reader took longer than {n} seconds.",
     "error": "The picture reader ran into an error.",
     "empty": "The picture reader had nothing to say about it.",
     "on_graphics_card": ("The picture reader ended up on the graphics card, which is not what you "
                          "switched on, so Jarvis stopped it."),
-    "changed": ("The picture model's file has changed since it was measured, so Jarvis will not use it "
-                "until it is measured again."),
+    "changed": ("The picture model changed since you last timed it, so Jarvis will not use it. "
+                "Run the set-up line in Settings again to time it."),
     "cloud": ("The picture model's name looks like a cloud model, which would send your screen off this "
-              "PC, so nothing was sent."),
+              "PC, so nothing was sent. Pick a model that runs on this PC."),
     "switched_off": "Picture reading was turned off.",
-    "superseded": "A newer look replaced this one.",
+    "superseded": "You asked something newer, so this picture was skipped.",
     "cancelled": "The look was thrown away before the picture was read.",
 }
 
@@ -1363,13 +1366,14 @@ def describe_on(installed: Optional[bool] = None) -> str:
                "this PC, so no picture would be sent to the model until it is - Jarvis would say "
                "so and read the words only.")
     return (
-        "Let Jarvis look at pictures of your screen, slowly, on the processor?\n\n"
-        "What it does: with one graphics card Jarvis now reads only the words on your screen for "
-        f"\"Look at this\" and \"Watch with me\". This also lets a small picture model, {MODEL_NAME}, "
+        "Let Jarvis look at pictures of your screen, slowly, using your main chip (the CPU)?\n\n"
+        "What it does: by default Jarvis reads only the words on your screen for "
+        f"\"Look at this\" and \"Watch with me\". This also lets a small picture reader, {MODEL_NAME}, "
         "look at the picture itself, so it can tell what a chart, a button or a photo shows.\n\n"
-        "Where it runs: Jarvis starts a separate copy of Ollama that uses only this PC's "
-        "processor and listens on this PC only - not your graphics card, so your everyday chat "
-        "model is not disturbed, and not your network or the internet. Nothing leaves this PC.\n\n"
+        "Where it runs: Jarvis starts its own copy of Ollama (the program that runs the AI "
+        "models) that uses only your PC's main chip (the CPU) and listens on this PC only - not "
+        "your graphics card, so your chat model is not slowed down, and not your network or the "
+        "internet. Nothing leaves this PC.\n\n"
         "How slow: nobody knows yet on your PC. It is measured by a line you run yourself, and "
         "Settings shows the real number once you have. Expect seconds to minutes for one look. If "
         "it is too slow or fails, Jarvis says so and answers from the words only.\n\n"
@@ -1401,7 +1405,8 @@ LAST_WORDS = {
     "enabled": "You approved the card, so picture mode is on.",
     "denied": "The card was turned down, so picture mode stays off.",
     "timed_out": "Nobody answered the card in time, so picture mode stays off.",
-    "refused": "Your PC's settings do not let this be approved, so it stayed off.",
+    "refused": ("Your PC's settings file does not allow this switch to be turned on from a card, "
+                "so it stayed off. Open jarvis-framework.toml to allow it."),
     "withdrawn": "You turned this off while the card waited, so approving it changed nothing.",
     "failed": "It was approved, but the setting could not be saved, so it stayed off.",
 }
@@ -1441,7 +1446,7 @@ def _finish(pid: str, outcome: str, why: str = "", message: Optional[str] = None
 def _decide(pid: str, apply: Callable[[bool], dict], gate: Callable,
             tier_of: Callable[[str], str]) -> None:
     text = describe_on()
-    detail = {"text": text, "what": "read pictures of your screen on the processor",
+    detail = {"text": text, "what": "read pictures of your screen using the main chip (the CPU)",
               "model": model(), "listens_on": f"{HOST}:{port()}", "leaves_this_pc": False}
     try:
         v = gate(ACTION, detail, text)
@@ -1585,7 +1590,7 @@ def state_line(*, enabled: bool, waiting: bool, not_ready: str,
         return WORDS["off_line"]
     if not_ready:
         return f"On, but not working yet: {not_ready} Jarvis reads the words only until then."
-    line = "On. When you ask Jarvis to look, the picture model also looks at the picture."
+    line = "On. When you ask Jarvis to look, the picture reader also looks at the picture."
     if last_look and isinstance(last_look.get("seconds"), (int, float)):
         line += f" Your last look took {_secs(last_look['seconds'])} seconds."
     return line

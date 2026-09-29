@@ -79,7 +79,7 @@ internal fun ScreenPictureSection(canAct: Boolean = false) {
         }
     }
 
-    Section("Looking at your screen: pictures", trailing = { Quiet("Refresh", onClick = { reads += 1 }) }) {
+    Section("Picture mode", trailing = { Quiet("Refresh", onClick = { reads += 1 }) }) {
         Plate {
             if (unsupported) {
                 Text(

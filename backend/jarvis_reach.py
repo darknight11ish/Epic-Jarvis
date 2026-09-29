@@ -810,20 +810,21 @@ def _screen_picture(ctx: Ctx) -> dict:
     Ollama on this PC, that also looks at the picture of the screen. Not a way
     out of the PC - like the second card and the big model, it is listed so the
     page is honest about every model Jarvis runs."""
-    name = "Picture mode for the screen (slow)"
+    name = "Picture mode"
     st = ctx.screen_picture if ctx.screen_picture is not None else _screen_picture_status()
     if st.get("missing"):
         return _row("screen_picture", name, "not_set_up", "", ASK_NA,
-                    "Not set up: this PC's Jarvis has no picture mode yet.")
+                    "Not set up: this PC's Jarvis is missing this feature. In PowerShell on the PC, in the "
+                    "Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.")
     if not st.get("enabled"):
         return _row("screen_picture", name, "off", "", ASK_NA,
-                    "Off: with one graphics card Jarvis reads only the words on your screen. "
+                    "Off: Jarvis reads only the words on your screen. "
                     "Switching it on asks you with an approval card.")
-    return _row("screen_picture", name, "on", "this PC (a separate copy of Ollama, on the "
-                                              "processor)", ASK_NA,
-                "Switched on: when you ask Jarvis to look at your screen, a small picture model "
+    return _row("screen_picture", name, "on", "this PC (its own copy of Ollama, on your main "
+                                              "chip, the CPU)", ASK_NA,
+                "Switched on: when you ask Jarvis to look at your screen, a small picture reader "
                 "also looks at the picture, slowly. Secrets in it are blacked out first, it runs "
-                "on the processor and nothing leaves the PC or is saved.")
+                "on your main chip (the CPU) and nothing leaves the PC or is saved.")
 
 
 def _plugin_status() -> dict:

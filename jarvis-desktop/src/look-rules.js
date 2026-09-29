@@ -38,9 +38,9 @@ export const ENDED_SHOW_S = 15;
 /** Fixed words the windows SHOW. */
 export const SEEN = Object.freeze({
   hint: "Press the Look at this key, then ask - Jarvis reads the words on the window in front, once, and keeps nothing.",
-  held: "Jarvis is holding what it read for your follow-up questions. It is thrown away when it is two minutes old or the bar closes.",
+  held: "Jarvis is holding what it read for your follow-up questions. It is thrown away when it is two minutes old or the Jarvis bar closes.",
   held_short: "Answered using what Jarvis read from your screen (words only).",
-  link: "The link to Jarvis is catching up - Stop still works",
+  link: "Reconnecting to Jarvis. Stop still works.",
   watching_note: "Ask about your screen and Jarvis looks when you start. A picture is never saved.",
 });
 
@@ -115,7 +115,12 @@ export function lookLine(payload) {
     return { text: words(p.note) || "Looked at your screen.", tone: "ok" };
   }
   const said = words(p.said);
-  return { text: said || "Jarvis could not look at your screen just now.", tone: "warn" };
+  return {
+    text:
+      said ||
+      "Jarvis could not look at your screen just now. Try again. If it keeps happening, check Settings, Look at this and Watch with me.",
+    tone: "warn",
+  };
 }
 
 /** A look is held on the PC for follow-up questions. */
@@ -168,21 +173,27 @@ export const SETTINGS = Object.freeze({
   detail:
     "Jarvis looks at your screen only when you ask. \"Look at this\" reads the words on the window in front, once " +
     "(its key is under Shortcuts). \"Watch with me\" keeps a sign on screen the whole time and takes a fresh look each " +
-    "time you start a question. Jarvis reads the words only: a picture is never saved, and what it read is never kept in " +
-    "your chats. Anything that looks like a key, a password or a card number is hidden first. It pauses on password " +
+    "time you start a question. By default Jarvis reads only the words. Picture mode, below, lets a small picture reader " +
+    "look at a cleaned picture; nothing is saved, and what it read is never kept in your chats. " +
+    "Anything that looks like a key, a password or a card number is hidden first. It pauses on password " +
     "boxes, on private browser windows, on anything on the list below, and on windows that ask not to be captured.",
-  neverTitle: "Never look at",
+  neverTitle: "Never look at list",
   neverDetail:
     "Programs and websites Jarvis never looks at - it starts with password managers, Windows sign-in and streaming " +
     "video sites. A window on this list is painted black in what Jarvis looks at, even when it is behind another " +
     "window; so is a private browser window. " +
     "Adding one is instant. Taking one off asks you first, with a card, because it lets Jarvis read that one again. " +
     "This list lives on this PC only.",
-  empty: "Nothing added of your own yet. Add your bank here.",
+  empty: "You have not added any yet. Type your bank's website or program name below and press Add to the list.",
   kindProgram: "A program (like MyBank.exe)",
   kindSite: "A website (like mybank.com)",
   add: "Add to the list",
-  take: "Take off...",
+  take: "Remove from the list",
+  takeAsks: "asks first",
+  waitingLink: "Waiting for the connection to your PC.",
+  emptyAdd: "Type a program (like MyBank.exe) or website first.",
+  pictureNeedsLook:
+    "Picture mode needs Look at this, and this PC's Jarvis does not have it yet. See the note above.",
   builtIn: "Built in",
   yours: "Added by you",
   program: "Program",
@@ -197,7 +208,7 @@ export const SETTINGS = Object.freeze({
   thisPcOnly: "The list can only be seen and changed on the PC Jarvis runs on.",
 });
 
-/* ── Settings: picture mode (slow, on the processor) ───────────────────── */
+/* ── Settings: Picture mode (slow, uses the main chip) ────────────────── */
 
 /**
  * The words of Settings -> "Picture mode" (the owner's decision of 2026-09-29;
@@ -206,23 +217,24 @@ export const SETTINGS = Object.freeze({
  * the phone (net/ScreenPicture.kt) says exactly the same.
  */
 export const PICTURE = Object.freeze({
-  title: "Read pictures of my screen (slow, on the processor)",
+  title: "Picture mode",
   detail:
-    "With one graphics card Jarvis reads only the WORDS on your screen. This lets a small picture model also look at " +
-    "the picture itself, so it can tell what a chart, a button or a photo shows. It runs on this PC's processor, not on " +
-    "your graphics card, so your everyday chat model is not disturbed - but it is SLOW, and how slow depends on your PC. " +
+    "By default Jarvis reads only the words on your screen. Picture mode also lets a small picture reader look at " +
+    "the picture itself, so it can tell what a chart, a button or a photo shows. It runs on your PC's main chip (the CPU), not your " +
+    "graphics card, so your chat model is not slowed down - but it is SLOW, and how slow depends on your PC. " +
     "Anything that looks like a key, a card number or a password is blacked out first, and if that part is missing no " +
     "picture is used. Nothing leaves this PC and nothing is saved. Off by default. Turning it on asks first, because a " +
     "model has to be downloaded.",
-  switch: "Let Jarvis look at pictures of my screen (slow)",
-  offLine: "Off. Jarvis reads the words on your screen only.",
+  switch: "Turn on Picture mode (slow)",
+  offLine: "Picture mode is off. Jarvis reads the words on your screen only.",
   waitingLine: "Waiting for your yes on the card. Nothing has changed yet.",
   unread: "Could not read this setting.",
-  missing: "This PC's Jarvis does not have picture mode yet. Run scripts\\apply-patches.ps1 on the PC to add it.",
+  missing:
+    "This PC's Jarvis is missing this feature. In PowerShell on the PC, in the Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.",
   stepsTitle: "To set it up, paste this one line into PowerShell on your PC:",
   stepsNote:
-    "It downloads the picture model from Ollama (ollama.com; how big it is has not been checked), then measures how " +
-    "many seconds one look takes on your PC and saves the number. Jarvis never downloads the model by itself.",
+    "It downloads the picture model from Ollama (ollama.com). We have not checked how big the download is, so expect a " +
+    "wait. Then it times one look on your PC and saves the number. Jarvis never downloads the model by itself.",
   copy: "Copy the line",
   copied: "Copied. Paste it into PowerShell.",
   asking: "Asking...",

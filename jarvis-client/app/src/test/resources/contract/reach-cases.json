@@ -231,8 +231,8 @@
     {
      "asks": "-",
      "id": "screen_picture",
-     "line": "Off: with one graphics card Jarvis reads only the words on your screen. Switching it on asks you with an approval card.",
-     "name": "Picture mode for the screen (slow)",
+     "line": "Off: Jarvis reads only the words on your screen. Switching it on asks you with an approval card.",
+     "name": "Picture mode",
      "on": false,
      "state": "off",
      "state_words": "Off",
@@ -495,8 +495,8 @@
     {
      "asks": "-",
      "id": "screen_picture",
-     "line": "Off: with one graphics card Jarvis reads only the words on your screen. Switching it on asks you with an approval card.",
-     "name": "Picture mode for the screen (slow)",
+     "line": "Off: Jarvis reads only the words on your screen. Switching it on asks you with an approval card.",
+     "name": "Picture mode",
      "on": false,
      "state": "off",
      "state_words": "Off",
@@ -755,8 +755,8 @@
     {
      "asks": "-",
      "id": "screen_picture",
-     "line": "Off: with one graphics card Jarvis reads only the words on your screen. Switching it on asks you with an approval card.",
-     "name": "Picture mode for the screen (slow)",
+     "line": "Off: Jarvis reads only the words on your screen. Switching it on asks you with an approval card.",
+     "name": "Picture mode",
      "on": false,
      "state": "off",
      "state_words": "Off",
@@ -1039,12 +1039,12 @@
     {
      "asks": "-",
      "id": "screen_picture",
-     "line": "Switched on: when you ask Jarvis to look at your screen, a small picture model also looks at the picture, slowly. Secrets in it are blacked out first, it runs on the processor and nothing leaves the PC or is saved.",
-     "name": "Picture mode for the screen (slow)",
+     "line": "Switched on: when you ask Jarvis to look at your screen, a small picture reader also looks at the picture, slowly. Secrets in it are blacked out first, it runs on your main chip (the CPU) and nothing leaves the PC or is saved.",
+     "name": "Picture mode",
      "on": true,
      "state": "on",
      "state_words": "On",
-     "where": "this PC (a separate copy of Ollama, on the processor)"
+     "where": "this PC (its own copy of Ollama, on your main chip, the CPU)"
     },
     {
      "asks": "-",
@@ -1399,8 +1399,8 @@
     {
      "asks": "-",
      "id": "screen_picture",
-     "line": "Off: with one graphics card Jarvis reads only the words on your screen. Switching it on asks you with an approval card.",
-     "name": "Picture mode for the screen (slow)",
+     "line": "Off: Jarvis reads only the words on your screen. Switching it on asks you with an approval card.",
+     "name": "Picture mode",
      "on": false,
      "state": "off",
      "state_words": "Off",

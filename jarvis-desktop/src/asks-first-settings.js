@@ -264,7 +264,7 @@ async function changeLights(on, box) {
 }
 
 /**
- * "Offer this to the AI model", on the four reading tools only: ON one card
+ * "Let the AI use this", on the four reading tools only: ON one card
  * (held on a stale link, Windows Hello on the PC), OFF at once.
  */
 async function changeTool(tool, enabled, box) {

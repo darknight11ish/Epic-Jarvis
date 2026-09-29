@@ -614,7 +614,7 @@ object CustomVoices {
     const val TRY_STOPPED = "Stopped, because Jarvis is talking or listening now."
 
     /** A PC whose backend has no "Try it" route yet. */
-    const val TRY_UPDATE = "Your PC cannot play an animal's voice yet. Run the patch script on the PC first."
+    const val TRY_UPDATE = "Your PC cannot play an animal's voice yet. In PowerShell on the PC, in the Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis."
 
     /** While it plays. */
     fun tryPlaying(name: String): String = "Playing the $name's voice."
@@ -641,7 +641,7 @@ object CustomVoices {
     const val HEAR_LOCKED = "Jarvis is locked right now. Unlock it, then try again."
 
     /** A PC whose backend has no sample route yet. */
-    const val HEAR_UPDATE = "Your PC cannot play voice samples yet. Run the patch script on the PC first."
+    const val HEAR_UPDATE = "Your PC cannot play voice samples yet. In PowerShell on the PC, in the Jarvis folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis."
 
     /** While it plays: the voice's own label ("American (female) - Bella"). */
     fun hearPlaying(label: String): String = "Playing $label."

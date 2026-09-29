@@ -265,7 +265,7 @@ def t_the_card_says_what_it_does():
     text = c.cards[0][2]
     low = text.lower()
     check("the card says it runs on the processor, not the graphics card",
-          "processor" in low and "graphics card" in low)
+          "main chip" in low and "graphics card" in low)
     check("... that it is slow, and that nobody knows how slow until measured",
           "slow" in low and "measured" in low)
     check("... that secrets are blacked out first", "blacked out" in low)
@@ -506,7 +506,7 @@ def t_every_way_it_can_fail_is_said_and_falls_back_to_words():
     SP.save_measure({"model": SP.model(), "digest": "digest-1", "at": 1.0, "seconds": 20.0})
     g, job = r.look()
     check("a model whose checksum changed since it was measured is not used",
-          job.why == "changed" and r.posts == [] and "changed since it was measured"
+          job.why == "changed" and r.posts == [] and "changed since you last timed it"
           in SP.model_lines(g), job.why)
     r = Rig()
     CFG["screen_picture"] = {"model": "x:cloud"}

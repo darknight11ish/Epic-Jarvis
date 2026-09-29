@@ -182,8 +182,9 @@ CARD_ACTION = "change_own_config"
 
 TITLE = "Watch with me"
 LOOK_TITLE = "Look at this"
-NOT_BUILT = ("Looking at the screen is not built on this PC yet: the rules are in, but the "
-             "Windows readers it needs are the next step.")
+NOT_BUILT = ("Looking at the screen is not set up on this PC yet. This PC's Jarvis is missing "
+             "this feature. In PowerShell on the PC, in the Jarvis folder, run: "
+             ".\\scripts\\apply-patches.ps1 . Then restart Jarvis.")
 
 # --------------------------------------------------------------------------
 #   The label the model sees (JARVIS-API section 36's words, for the screen)
@@ -219,13 +220,13 @@ PAUSE_WORDS = {
     "private_window": "a private browser window",
     "jarvis": "one of Jarvis's own windows",
     "lock_screen": "the lock screen",
-    "admin_prompt": "an admin prompt",
+    "admin_prompt": "a Windows permission window",
     "unknown_site": "a web page whose site I can't read",
     "cannot_read": "a window I can't read",
-    "cannot_check": "a window I can't check for password boxes or capture protection",
+    "cannot_check": "a window I can't check for password boxes",
     "list_unreadable": "your Never look at list could not be read",
     "window_changed": "a different window came to the front while I looked",
-    "not_built": "looking at the screen is not built on this PC yet",
+    "not_built": "looking at the screen is not set up on this PC yet",
     "capture_failed": "the picture could not be taken",
 }
 #: What Jarvis says when a pause stops a look, where the design gives words.
@@ -234,13 +235,24 @@ PAUSE_SAID = {
     "password_box": "There's a password box in front, so I'm not looking.",
     "private_window": "That's a private browser window, so I'm not looking.",
     "never_look": "That's on your Never look at list, so I'm not looking.",
+    "protected": "That window asks not to be captured, so I'm not looking.",
+    "jarvis": "That's one of Jarvis's own windows, so I'm not looking.",
+    "lock_screen": "That's the lock screen, so I'm not looking.",
+    "admin_prompt": "That's a Windows permission window, so I'm not looking.",
+    "cannot_read": "I can't read that window, so I'm not looking.",
+    "cannot_check": "I can't tell whether this window has a password box, so I'm not looking.",
+    "list_unreadable": ("I can't read your Never look at list, so I'm not looking. Open "
+                        "Settings, Look at this and Watch with me, to see why."),
+    "window_changed": "A different window came to the front while I looked, so I'm not looking.",
+    "not_built": "Looking at the screen is not set up on this PC yet.",
+    "capture_failed": "I couldn't take the picture. Try again.",
 }
 END_WORDS = {
     "owner": "you stopped it",
     "time": "the time was up",
-    "locked": "Windows locked",
+    "locked": "Windows was locked",
     "slept": "the PC slept",
-    "stop_all": "Stop everything",
+    "stop_all": "you pressed Stop everything",
 }
 
 #: The words BOTH apps show for the sign (the desktop's badge and strip, the
@@ -258,10 +270,10 @@ SEEN = {
     "hint": ("Press the Look at this key, then ask - Jarvis reads the words on the window in "
              "front, once, and keeps nothing."),
     "held": ("Jarvis is holding what it read for your follow-up questions. It is thrown away "
-             "when it is two minutes old or the bar closes."),
+             "when it is two minutes old or the Jarvis bar closes."),
     "held_short": "Answered using what Jarvis read from your screen (words only).",
     "watching_note": "Ask about your screen and Jarvis looks when you start. A picture is never saved.",
-    "link": "The link to Jarvis is catching up - Stop still works",
+    "link": "Reconnecting to Jarvis. Stop still works.",
     "left_under_a_minute": "under a minute left",
 }
 SIGN_DOT = " · "
@@ -1654,7 +1666,9 @@ def look_line(payload) -> dict:
         return {"text": str(p.get("note") or "").strip() or "Looked at your screen.",
                 "tone": "ok"}
     return {"text": str(p.get("said") or "").strip()
-            or "Jarvis could not look at your screen just now.", "tone": "warn"}
+            or ("Jarvis could not look at your screen just now. Try again. If it keeps "
+                "happening, check Settings, Look at this and Watch with me."),
+            "tone": "warn"}
 
 
 def screen_mark(status) -> str:
@@ -1705,12 +1719,15 @@ def not_built_words() -> str:
         import jarvis_screen_win as win
         why = win.unavailable_why()
     except Exception:
-        why = "Jarvis's Windows screen reader (jarvis_screen_win.py) is not in the backend folder."
+        why = ("This PC's Jarvis is missing its Windows screen reader (jarvis_screen_win.py). "
+               "In PowerShell on the PC, in the Jarvis folder, run: "
+               ".\\scripts\\apply-patches.ps1 . Then restart Jarvis.")
     if why:
         return "Looking at the screen is off on this PC. " + why
     if _default_ocr() is None:
-        return ("Looking at the screen is off on this PC: the part of Jarvis that reads words "
-                "(jarvis_ocr.py) is not in the backend folder.")
+        return ("Looking at the screen is off on this PC. This PC's Jarvis is missing the part "
+                "that reads words (jarvis_ocr.py). In PowerShell on the PC, in the Jarvis "
+                "folder, run: .\\scripts\\apply-patches.ps1 . Then restart Jarvis.")
     return NOT_BUILT
 
 
@@ -1741,14 +1758,15 @@ ROUTE_NEVER = "/api/screen/never-look"
 #: GET from any paired device; POST {"enabled": bool} - ON is ONE card, OFF at once.
 ROUTE_PICTURE = "/api/screen/picture"
 PICTURE_MISSING = ("This PC's Jarvis does not have picture mode: jarvis_screen_picture.py is not "
-                   "in the backend folder. Run apply-patches.ps1 again.")
+                   "in the backend folder. In PowerShell on the PC, in the Jarvis folder, run: "
+                   ".\\scripts\\apply-patches.ps1 . Then restart Jarvis.")
 #: The verbs POST /api/screen takes. "look", "ask", "start" and "extend" can
 #: only come from THIS PC; "stop" (and "drop") from anywhere, because they
 #: only ever make Jarvis look LESS.
 LOCAL_DOS = ("look", "ask", "start", "extend")
 ANY_DOS = ("stop", "drop")
 LOCAL_ONLY_SAYS = ("Jarvis can only look at the screen of the PC it runs on, and only when it "
-                   "is asked from that PC.")
+                   "is asked from that PC. Press the Look at this key on the PC.")
 _LOOPBACK = ("127.0.0.1", "::1", "::ffff:127.0.0.1", "localhost")
 
 

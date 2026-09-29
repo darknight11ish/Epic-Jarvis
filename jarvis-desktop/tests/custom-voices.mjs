@@ -800,7 +800,9 @@ await check("Try it: the same words as the phone, step by step", async () => {
     "com", "jarvis", "client", "net", "CustomVoices.kt"), "utf8");
   for (const [name, words] of [["TRY_ASKING", CV.TRY_ASKING], ["TRY_BUSY", CV.TRY_BUSY],
     ["TRY_STOPPED", CV.TRY_STOPPED], ["TRY_UPDATE", CV.TRY_UPDATE]]) {
-    assert.ok(kt.includes(`const val ${name} = "${words}"`), `the phone's ${name} is not "${words}"`);
+    // Kotlin writes a backslash as two.
+    const inKt = words.replace(/\\/g, "\\\\");
+    assert.ok(kt.includes(`const val ${name} = "${inKt}"`), `the phone's ${name} is not "${words}"`);
   }
   assert.ok(kt.includes('fun tryPlaying(name: String): String = "Playing the $name\'s voice."'));
   assert.ok(kt.includes('fun tryDone(name: String): String = "That was the $name\'s voice."'));
@@ -808,7 +810,7 @@ await check("Try it: the same words as the phone, step by step", async () => {
   for (const [name, words] of [["TRY_BUSY", CV.TRY_BUSY], ["TRY_UPDATE", CV.TRY_UPDATE]]) {
     const m = RUST.match(new RegExp(`pub\\(crate\\) const ${name}: &str =\\s*"([^"]+)";`));
     assert.ok(m, `voice_training.rs has no ${name}`);
-    assert.equal(m[1], words, name);
+    assert.equal(m[1].replace(/\\\\/g, "\\"), words, name);
   }
 
   const page = await open(V.face_showing, LONG_TRY);
@@ -875,7 +877,7 @@ await check("Try it is refused while Jarvis speaks or answers - nothing is asked
   await two.waitForTimeout(250);
   const twoSaid = await rowSays(two, "redpanda");
   await two.close();
-  assert.equal(twoSaid, "The PC is still making the sound for the last Try it. Try it again in a moment.");
+  assert.equal(twoSaid, "The PC is still making another voice sample. Try again in a moment.");
 });
 
 await check("Try it stops the moment a question or an answer starts, and on Stop everything", async () => {
@@ -916,7 +918,9 @@ await check("Try it stops the moment a question or an answer starts, and on Stop
 
 const hearButtons = (page) => page.evaluate(() =>
   [...document.querySelectorAll("#cv-speaker-choices .cv-choice button[data-hear]")].map((b) => b.dataset.hear));
-const hearSays = (page) => text(page, "cv-speaker-status");
+// What was said beside the tapped voice (each voice has its own line).
+const hearSays = (page) => page.evaluate(() =>
+  [...document.querySelectorAll("#cv-speaker-choices .cv-hear-status")].map((e) => e.textContent).find((t) => t) || "");
 const hearOn = (page, voice) => page.click(`#cv-speaker-choices button[data-hear="${voice}"]`);
 
 /* ── Ashby and Clara: two voices blended for Jarvis (2026-09-29) ────────── */
@@ -967,11 +971,11 @@ await check("Ashby and Clara: Hear it asks the PC by name; the PC's refusals and
   // A voice that sounds like the owner: not listed any more, and it says why.
   const refused = CV.speakerView(V.pack_v1_ashby_refused_listed);
   assert.deepEqual(refused.choices.slice(0, 2).map((c) => c.id), ["mix_clara", "af_heart"]);
-  assert.equal(refused.note, "Ashby sounds too much like your own voice, so Jarvis will not use it.");
+  assert.equal(refused.note, "Ashby sounds too close to your own voice, and a voice that sounds like you could pass Jarvis's own voice check. Jarvis will not use it, so the normal voice speaks.");
   assert.equal(CV.voiceReply(P("pack_v1_ashby_refused"), WHERE).text,
-    "Ashby sounds too much like your own voice, so Jarvis will not use it.");
+    "Ashby sounds too close to your own voice, and a voice that sounds like you could pass Jarvis's own voice check. Jarvis will not use it, so the normal voice speaks.");
   assert.equal(CV.voiceReply(P("pack_v1_sample_refused"), WHERE).text,
-    "Ashby sounds too much like your own voice, so Jarvis will not use it.");
+    "Ashby sounds too close to your own voice, and a voice that sounds like you could pass Jarvis's own voice check. Jarvis will not use it, so the normal voice speaks.");
   // The old pack: not listed, and the picker says they need the newer pack.
   const old = CV.speakerView(V.pack_old);
   assert.ok(!old.choices.some((c) => c.id.startsWith("mix_")));
@@ -994,7 +998,8 @@ await check("Hear it: the same words as the phone, and a button on every voice",
     "com", "jarvis", "client", "net", "CustomVoices.kt"), "utf8");
   for (const [name, words] of [["HEAR_LABEL", CV.HEAR_LABEL], ["HEAR_BUSY", CV.HEAR_BUSY],
     ["HEAR_LOCKED", CV.HEAR_LOCKED], ["HEAR_UPDATE", CV.HEAR_UPDATE]]) {
-    assert.ok(kt.includes(`const val ${name} = "${words}"`), `the phone's ${name} is not "${words}"`);
+    const inKt = words.replace(/\\/g, "\\\\");
+    assert.ok(kt.includes(`const val ${name} = "${inKt}"`), `the phone's ${name} is not "${words}"`);
   }
   assert.ok(kt.includes('fun hearPlaying(label: String): String = "Playing $label."'));
   assert.ok(kt.includes('fun hearDone(label: String): String = "That was $label."'));
@@ -1003,12 +1008,12 @@ await check("Hear it: the same words as the phone, and a button on every voice",
     ["HEAR_UPDATE", CV.HEAR_UPDATE]]) {
     const m = RUST.match(new RegExp(`pub\\(crate\\) const ${name}: &str =\\s*"([^"]+)";`));
     assert.ok(m, `voice_training.rs has no ${name}`);
-    assert.equal(m[1], words, name);
+    assert.equal(m[1].replace(/\\\\/g, "\\"), words, name);
   }
   // The PC's own refusals, as it says them.
   assert.equal(CV.voiceReply(P("sample_bad"), WHERE).text, "Choose one of the listed voices.");
   assert.equal(CV.voiceReply(P("sample_busy"), WHERE).text,
-    "The PC is still making the sound for the last Hear it. Try again in a moment.");
+    "The PC is still making another voice sample. Try again in a moment.");
   for (const st of [V.pack_old, V.pack_v1]) {
     const page = await open(st);
     const ids = await hearButtons(page);
@@ -1027,12 +1032,18 @@ await check("Hear it: asks the PC for that voice by name, plays it, and changes 
   await hearOn(page, "am_fenrir");
   await page.waitForTimeout(400);
   const playing = await hearSays(page);
+  // The words sit beside the tapped voice (its own row), and its button reads "Stop" while it plays.
+  const beside = await page.evaluate(() => {
+    const b = document.querySelector('#cv-speaker-choices button[data-hear="am_fenrir"]');
+    return { button: b.textContent, own: b.parentElement.querySelector(".cv-hear-status").textContent };
+  });
   const asked = await calls(page, "hear_voice_sample");
   const chosen = await calls(page, "set_voice_speaker");
   const stillTicked = await page.evaluate(() =>
     [...document.querySelectorAll("#cv-speaker-choices input")].find((r) => r.checked)?.value);
   await page.close();
   assert.equal(playing, "Playing American (male) - Fenrir.");
+  assert.deepEqual(beside, { button: "Stop", own: "Playing American (male) - Fenrir." });
   assert.deepEqual(asked, [{ voice: "am_fenrir" }]);
   assert.deepEqual(chosen, [], "Hear it never changes the voice Jarvis uses");
   assert.equal(stillTicked, "af_heart");
@@ -1091,7 +1102,7 @@ await check("Hear it: never held on a stale link (it changes nothing), never ove
   await two.waitForTimeout(250);
   const twoSaid = await hearSays(two);
   await two.close();
-  assert.equal(twoSaid, "The PC is still making the sound for the last Hear it. Try again in a moment.");
+  assert.equal(twoSaid, "The PC is still making another voice sample. Try again in a moment.");
 });
 
 await check("Hear it stops the moment a question or an answer starts, and on Stop everything", async () => {

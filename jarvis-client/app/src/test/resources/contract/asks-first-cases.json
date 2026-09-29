@@ -70,7 +70,7 @@
        "action": "read_files_readonly",
        "fixed": false,
        "id": "read_files_readonly",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read files on this PC"
@@ -79,7 +79,7 @@
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read a note in Joplin"
@@ -88,7 +88,7 @@
        "action": "read_logseq_page",
        "fixed": false,
        "id": "read_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read a page in Logseq"
@@ -144,7 +144,7 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Make a new page in Logseq"
@@ -153,7 +153,7 @@
        "action": "edit_joplin_note",
        "fixed": false,
        "id": "edit_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in Joplin"
@@ -162,7 +162,7 @@
        "action": "edit_logseq_page",
        "fixed": false,
        "id": "edit_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a page in Logseq"
@@ -171,8 +171,8 @@
        "action": "delete_joplin_note",
        "fixed": false,
        "id": "delete_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a note in Joplin"
       },
@@ -180,8 +180,8 @@
        "action": "delete_logseq_page",
        "fixed": false,
        "id": "delete_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a page in Logseq"
       },
@@ -236,7 +236,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Set up something that repeats"
+       "title": "Set up the morning briefing or a \"tell me when\" alert"
       }
      ],
      "title": "Timers and reminders"
@@ -247,7 +247,7 @@
        "fixed": true,
        "id": "fixed:lights",
        "lights": true,
-       "note": "Off by default. The switch is below.",
+       "note": "Asks first unless you turn on the switch below (off by default).",
        "says": "Asks you first, every time",
        "title": "Switch lights, plugs and fans you name"
       },
@@ -302,7 +302,7 @@
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write an email draft"
@@ -329,7 +329,7 @@
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change an event in your calendar"
@@ -338,7 +338,7 @@
        "action": "delete_calendar_event",
        "fixed": false,
        "id": "delete_calendar_event",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
@@ -398,8 +398,8 @@
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Post to an outside service"
       },
@@ -407,8 +407,8 @@
        "action": "open_public_tunnel",
        "fixed": false,
        "id": "open_public_tunnel",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Open this PC to the internet"
       },
@@ -416,7 +416,7 @@
        "action": "news_read",
        "fixed": false,
        "id": "news_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a news feed you added"
@@ -425,7 +425,7 @@
        "action": "page_read",
        "fixed": false,
        "id": "page_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
@@ -434,7 +434,7 @@
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
@@ -469,7 +469,7 @@
       {
        "fixed": true,
        "id": "fixed:handoff",
-       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
        "says": "Does it without asking",
        "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
@@ -532,7 +532,7 @@
        "action": "delete_file",
        "fixed": false,
        "id": "delete_file",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete a file"
@@ -541,7 +541,7 @@
        "action": "spend_money",
        "fixed": false,
        "id": "spend_money",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Spend money"
@@ -550,7 +550,7 @@
        "action": "power_manage",
        "fixed": false,
        "id": "power_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
@@ -601,7 +601,7 @@
        "fixed": false,
        "id": "browse_model_catalog",
        "lockdown": true,
-       "note": "Only your settings file (jarvis-framework.toml) changes this one. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Look up AI models online"
@@ -610,7 +610,7 @@
        "action": "download_model",
        "fixed": false,
        "id": "download_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Download an AI model"
@@ -619,7 +619,7 @@
        "action": "switch_model",
        "fixed": false,
        "id": "switch_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Switch to a different AI model"
@@ -628,7 +628,7 @@
        "action": "rollback_model",
        "fixed": false,
        "id": "rollback_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Go back to the AI model you had before"
@@ -685,7 +685,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Let it look at pictures of your screen, slowly, on the processor"
+       "title": "Let it read pictures of your screen (slow, uses your main chip)"
       },
       {
        "action": "big_model_enable",
@@ -778,7 +778,7 @@
        "action": "memory_manage",
        "fixed": false,
        "id": "memory_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change what it remembers"
@@ -796,7 +796,7 @@
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change your profile"
@@ -891,7 +891,7 @@
        "action": "agent_spawn",
        "fixed": false,
        "id": "agent_spawn",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start a helper task"
@@ -900,7 +900,7 @@
        "action": "agent_kill",
        "fixed": false,
        "id": "agent_kill",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop a helper task"
@@ -909,7 +909,7 @@
        "action": "execute_pending_actions",
        "fixed": false,
        "id": "execute_pending_actions",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run actions it has lined up"
@@ -918,7 +918,7 @@
        "action": "unclassified_tool",
        "fixed": false,
        "id": "unclassified_tool",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Use a tool it has no plain name for"
@@ -990,7 +990,7 @@
       "waiting": false
      }
     ],
-    "label": "Offer this to the AI model"
+    "label": "Let the AI use this"
    },
    "waiting": null
   },
@@ -1064,7 +1064,7 @@
        "action": "read_files_readonly",
        "fixed": false,
        "id": "read_files_readonly",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read files on this PC"
@@ -1073,7 +1073,7 @@
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read a note in Joplin"
@@ -1082,7 +1082,7 @@
        "action": "read_logseq_page",
        "fixed": false,
        "id": "read_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read a page in Logseq"
@@ -1138,7 +1138,7 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Make a new page in Logseq"
@@ -1147,7 +1147,7 @@
        "action": "edit_joplin_note",
        "fixed": false,
        "id": "edit_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in Joplin"
@@ -1156,7 +1156,7 @@
        "action": "edit_logseq_page",
        "fixed": false,
        "id": "edit_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a page in Logseq"
@@ -1165,8 +1165,8 @@
        "action": "delete_joplin_note",
        "fixed": false,
        "id": "delete_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a note in Joplin"
       },
@@ -1174,8 +1174,8 @@
        "action": "delete_logseq_page",
        "fixed": false,
        "id": "delete_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a page in Logseq"
       },
@@ -1230,7 +1230,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Set up something that repeats"
+       "title": "Set up the morning briefing or a \"tell me when\" alert"
       }
      ],
      "title": "Timers and reminders"
@@ -1241,7 +1241,7 @@
        "fixed": true,
        "id": "fixed:lights",
        "lights": true,
-       "note": "Off by default. The switch is below.",
+       "note": "Asks first unless you turn on the switch below (off by default).",
        "says": "Asks you first, every time",
        "title": "Switch lights, plugs and fans you name"
       },
@@ -1296,7 +1296,7 @@
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write an email draft"
@@ -1323,7 +1323,7 @@
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change an event in your calendar"
@@ -1332,7 +1332,7 @@
        "action": "delete_calendar_event",
        "fixed": false,
        "id": "delete_calendar_event",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
@@ -1392,8 +1392,8 @@
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Post to an outside service"
       },
@@ -1401,8 +1401,8 @@
        "action": "open_public_tunnel",
        "fixed": false,
        "id": "open_public_tunnel",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Open this PC to the internet"
       },
@@ -1410,7 +1410,7 @@
        "action": "news_read",
        "fixed": false,
        "id": "news_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a news feed you added"
@@ -1419,7 +1419,7 @@
        "action": "page_read",
        "fixed": false,
        "id": "page_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
@@ -1428,7 +1428,7 @@
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
@@ -1463,7 +1463,7 @@
       {
        "fixed": true,
        "id": "fixed:handoff",
-       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
        "says": "Does it without asking",
        "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
@@ -1526,7 +1526,7 @@
        "action": "delete_file",
        "fixed": false,
        "id": "delete_file",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete a file"
@@ -1535,7 +1535,7 @@
        "action": "spend_money",
        "fixed": false,
        "id": "spend_money",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Spend money"
@@ -1544,7 +1544,7 @@
        "action": "power_manage",
        "fixed": false,
        "id": "power_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
@@ -1595,7 +1595,7 @@
        "fixed": false,
        "id": "browse_model_catalog",
        "lockdown": true,
-       "note": "Only your settings file (jarvis-framework.toml) changes this one. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Look up AI models online"
@@ -1604,7 +1604,7 @@
        "action": "download_model",
        "fixed": false,
        "id": "download_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Download an AI model"
@@ -1613,7 +1613,7 @@
        "action": "switch_model",
        "fixed": false,
        "id": "switch_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Switch to a different AI model"
@@ -1622,7 +1622,7 @@
        "action": "rollback_model",
        "fixed": false,
        "id": "rollback_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Go back to the AI model you had before"
@@ -1679,7 +1679,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Let it look at pictures of your screen, slowly, on the processor"
+       "title": "Let it read pictures of your screen (slow, uses your main chip)"
       },
       {
        "action": "big_model_enable",
@@ -1772,7 +1772,7 @@
        "action": "memory_manage",
        "fixed": false,
        "id": "memory_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change what it remembers"
@@ -1790,7 +1790,7 @@
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change your profile"
@@ -1885,7 +1885,7 @@
        "action": "agent_spawn",
        "fixed": false,
        "id": "agent_spawn",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start a helper task"
@@ -1894,7 +1894,7 @@
        "action": "agent_kill",
        "fixed": false,
        "id": "agent_kill",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop a helper task"
@@ -1903,7 +1903,7 @@
        "action": "execute_pending_actions",
        "fixed": false,
        "id": "execute_pending_actions",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run actions it has lined up"
@@ -1912,7 +1912,7 @@
        "action": "unclassified_tool",
        "fixed": false,
        "id": "unclassified_tool",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Use a tool it has no plain name for"
@@ -1984,7 +1984,7 @@
       "waiting": false
      }
     ],
-    "label": "Offer this to the AI model"
+    "label": "Let the AI use this"
    },
    "waiting": null
   },
@@ -2055,7 +2055,7 @@
        "action": "read_files_readonly",
        "fixed": false,
        "id": "read_files_readonly",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read files on this PC"
@@ -2064,7 +2064,7 @@
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read a note in Joplin"
@@ -2073,7 +2073,7 @@
        "action": "read_logseq_page",
        "fixed": false,
        "id": "read_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read a page in Logseq"
@@ -2129,7 +2129,7 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Make a new page in Logseq"
@@ -2138,7 +2138,7 @@
        "action": "edit_joplin_note",
        "fixed": false,
        "id": "edit_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in Joplin"
@@ -2147,7 +2147,7 @@
        "action": "edit_logseq_page",
        "fixed": false,
        "id": "edit_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a page in Logseq"
@@ -2156,8 +2156,8 @@
        "action": "delete_joplin_note",
        "fixed": false,
        "id": "delete_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a note in Joplin"
       },
@@ -2165,8 +2165,8 @@
        "action": "delete_logseq_page",
        "fixed": false,
        "id": "delete_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a page in Logseq"
       },
@@ -2221,7 +2221,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Set up something that repeats"
+       "title": "Set up the morning briefing or a \"tell me when\" alert"
       }
      ],
      "title": "Timers and reminders"
@@ -2232,7 +2232,7 @@
        "fixed": true,
        "id": "fixed:lights",
        "lights": true,
-       "note": "Off by default. The switch is below.",
+       "note": "Asks first unless you turn on the switch below (off by default).",
        "says": "Asks you first, every time",
        "title": "Switch lights, plugs and fans you name"
       },
@@ -2287,7 +2287,7 @@
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write an email draft"
@@ -2314,7 +2314,7 @@
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change an event in your calendar"
@@ -2323,7 +2323,7 @@
        "action": "delete_calendar_event",
        "fixed": false,
        "id": "delete_calendar_event",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
@@ -2382,8 +2382,8 @@
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Post to an outside service"
       },
@@ -2391,8 +2391,8 @@
        "action": "open_public_tunnel",
        "fixed": false,
        "id": "open_public_tunnel",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Open this PC to the internet"
       },
@@ -2400,7 +2400,7 @@
        "action": "news_read",
        "fixed": false,
        "id": "news_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a news feed you added"
@@ -2409,7 +2409,7 @@
        "action": "page_read",
        "fixed": false,
        "id": "page_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
@@ -2418,7 +2418,7 @@
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
@@ -2453,7 +2453,7 @@
       {
        "fixed": true,
        "id": "fixed:handoff",
-       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
        "says": "Does it without asking",
        "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
@@ -2516,7 +2516,7 @@
        "action": "delete_file",
        "fixed": false,
        "id": "delete_file",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete a file"
@@ -2525,7 +2525,7 @@
        "action": "spend_money",
        "fixed": false,
        "id": "spend_money",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Spend money"
@@ -2534,7 +2534,7 @@
        "action": "power_manage",
        "fixed": false,
        "id": "power_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
@@ -2584,7 +2584,7 @@
        "action": "browse_model_catalog",
        "fixed": false,
        "id": "browse_model_catalog",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Look up AI models online"
@@ -2593,7 +2593,7 @@
        "action": "download_model",
        "fixed": false,
        "id": "download_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Download an AI model"
@@ -2602,7 +2602,7 @@
        "action": "switch_model",
        "fixed": false,
        "id": "switch_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Switch to a different AI model"
@@ -2611,7 +2611,7 @@
        "action": "rollback_model",
        "fixed": false,
        "id": "rollback_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Go back to the AI model you had before"
@@ -2668,7 +2668,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Let it look at pictures of your screen, slowly, on the processor"
+       "title": "Let it read pictures of your screen (slow, uses your main chip)"
       },
       {
        "action": "big_model_enable",
@@ -2761,7 +2761,7 @@
        "action": "memory_manage",
        "fixed": false,
        "id": "memory_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change what it remembers"
@@ -2779,7 +2779,7 @@
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change your profile"
@@ -2874,7 +2874,7 @@
        "action": "agent_spawn",
        "fixed": false,
        "id": "agent_spawn",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start a helper task"
@@ -2883,7 +2883,7 @@
        "action": "agent_kill",
        "fixed": false,
        "id": "agent_kill",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop a helper task"
@@ -2892,7 +2892,7 @@
        "action": "execute_pending_actions",
        "fixed": false,
        "id": "execute_pending_actions",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run actions it has lined up"
@@ -2901,7 +2901,7 @@
        "action": "unclassified_tool",
        "fixed": false,
        "id": "unclassified_tool",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Use a tool it has no plain name for"
@@ -2973,7 +2973,7 @@
       "waiting": false
      }
     ],
-    "label": "Offer this to the AI model"
+    "label": "Let the AI use this"
    },
    "waiting": null
   },
@@ -3003,7 +3003,7 @@
        "fixed": false,
        "id": "email_read",
        "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
-       "says": "Never - your settings file switches it off",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Read your email"
       },
@@ -3039,7 +3039,7 @@
        "action": "read_files_readonly",
        "fixed": false,
        "id": "read_files_readonly",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read files on this PC"
@@ -3048,7 +3048,7 @@
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read a note in Joplin"
@@ -3057,7 +3057,7 @@
        "action": "read_logseq_page",
        "fixed": false,
        "id": "read_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read a page in Logseq"
@@ -3113,7 +3113,7 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Make a new page in Logseq"
@@ -3122,7 +3122,7 @@
        "action": "edit_joplin_note",
        "fixed": false,
        "id": "edit_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in Joplin"
@@ -3131,7 +3131,7 @@
        "action": "edit_logseq_page",
        "fixed": false,
        "id": "edit_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a page in Logseq"
@@ -3140,8 +3140,8 @@
        "action": "delete_joplin_note",
        "fixed": false,
        "id": "delete_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a note in Joplin"
       },
@@ -3149,8 +3149,8 @@
        "action": "delete_logseq_page",
        "fixed": false,
        "id": "delete_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a page in Logseq"
       },
@@ -3205,7 +3205,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Set up something that repeats"
+       "title": "Set up the morning briefing or a \"tell me when\" alert"
       }
      ],
      "title": "Timers and reminders"
@@ -3216,7 +3216,7 @@
        "fixed": true,
        "id": "fixed:lights",
        "lights": true,
-       "note": "Off by default. The switch is below.",
+       "note": "Asks first unless you turn on the switch below (off by default).",
        "says": "Does it without asking",
        "title": "Switch lights, plugs and fans you name"
       },
@@ -3271,7 +3271,7 @@
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write an email draft"
@@ -3298,7 +3298,7 @@
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change an event in your calendar"
@@ -3307,7 +3307,7 @@
        "action": "delete_calendar_event",
        "fixed": false,
        "id": "delete_calendar_event",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
@@ -3366,8 +3366,8 @@
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Post to an outside service"
       },
@@ -3375,8 +3375,8 @@
        "action": "open_public_tunnel",
        "fixed": false,
        "id": "open_public_tunnel",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Open this PC to the internet"
       },
@@ -3384,7 +3384,7 @@
        "action": "news_read",
        "fixed": false,
        "id": "news_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a news feed you added"
@@ -3393,7 +3393,7 @@
        "action": "page_read",
        "fixed": false,
        "id": "page_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
@@ -3402,7 +3402,7 @@
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
@@ -3437,7 +3437,7 @@
       {
        "fixed": true,
        "id": "fixed:handoff",
-       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
        "says": "Does it without asking",
        "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
@@ -3500,7 +3500,7 @@
        "action": "delete_file",
        "fixed": false,
        "id": "delete_file",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete a file"
@@ -3509,7 +3509,7 @@
        "action": "spend_money",
        "fixed": false,
        "id": "spend_money",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Spend money"
@@ -3518,7 +3518,7 @@
        "action": "power_manage",
        "fixed": false,
        "id": "power_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
@@ -3568,7 +3568,7 @@
        "action": "browse_model_catalog",
        "fixed": false,
        "id": "browse_model_catalog",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Look up AI models online"
@@ -3577,7 +3577,7 @@
        "action": "download_model",
        "fixed": false,
        "id": "download_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Download an AI model"
@@ -3586,7 +3586,7 @@
        "action": "switch_model",
        "fixed": false,
        "id": "switch_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Switch to a different AI model"
@@ -3595,7 +3595,7 @@
        "action": "rollback_model",
        "fixed": false,
        "id": "rollback_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Go back to the AI model you had before"
@@ -3652,7 +3652,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Let it look at pictures of your screen, slowly, on the processor"
+       "title": "Let it read pictures of your screen (slow, uses your main chip)"
       },
       {
        "action": "big_model_enable",
@@ -3745,7 +3745,7 @@
        "action": "memory_manage",
        "fixed": false,
        "id": "memory_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change what it remembers"
@@ -3763,7 +3763,7 @@
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change your profile"
@@ -3858,7 +3858,7 @@
        "action": "agent_spawn",
        "fixed": false,
        "id": "agent_spawn",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start a helper task"
@@ -3867,7 +3867,7 @@
        "action": "agent_kill",
        "fixed": false,
        "id": "agent_kill",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop a helper task"
@@ -3876,7 +3876,7 @@
        "action": "execute_pending_actions",
        "fixed": false,
        "id": "execute_pending_actions",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run actions it has lined up"
@@ -3885,7 +3885,7 @@
        "action": "unclassified_tool",
        "fixed": false,
        "id": "unclassified_tool",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Use a tool it has no plain name for"
@@ -3957,7 +3957,7 @@
       "waiting": false
      }
     ],
-    "label": "Offer this to the AI model"
+    "label": "Let the AI use this"
    },
    "waiting": null
   },
@@ -3987,7 +3987,7 @@
        "fixed": false,
        "id": "email_read",
        "note": "Asking first also leaves it out of the morning briefing and \"tell me when\", which cannot stop to ask.",
-       "says": "Never - your settings file switches it off",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Read your email"
       },
@@ -4023,7 +4023,7 @@
        "action": "read_files_readonly",
        "fixed": false,
        "id": "read_files_readonly",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read files on this PC"
@@ -4032,7 +4032,7 @@
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read a note in Joplin"
@@ -4041,7 +4041,7 @@
        "action": "read_logseq_page",
        "fixed": false,
        "id": "read_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read a page in Logseq"
@@ -4097,7 +4097,7 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Make a new page in Logseq"
@@ -4106,7 +4106,7 @@
        "action": "edit_joplin_note",
        "fixed": false,
        "id": "edit_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in Joplin"
@@ -4115,7 +4115,7 @@
        "action": "edit_logseq_page",
        "fixed": false,
        "id": "edit_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a page in Logseq"
@@ -4124,8 +4124,8 @@
        "action": "delete_joplin_note",
        "fixed": false,
        "id": "delete_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a note in Joplin"
       },
@@ -4133,8 +4133,8 @@
        "action": "delete_logseq_page",
        "fixed": false,
        "id": "delete_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a page in Logseq"
       },
@@ -4189,7 +4189,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Set up something that repeats"
+       "title": "Set up the morning briefing or a \"tell me when\" alert"
       }
      ],
      "title": "Timers and reminders"
@@ -4200,7 +4200,7 @@
        "fixed": true,
        "id": "fixed:lights",
        "lights": true,
-       "note": "Off by default. The switch is below.",
+       "note": "Asks first unless you turn on the switch below (off by default).",
        "says": "Asks you first, every time",
        "title": "Switch lights, plugs and fans you name"
       },
@@ -4255,7 +4255,7 @@
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write an email draft"
@@ -4282,7 +4282,7 @@
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change an event in your calendar"
@@ -4291,7 +4291,7 @@
        "action": "delete_calendar_event",
        "fixed": false,
        "id": "delete_calendar_event",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
@@ -4350,8 +4350,8 @@
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Post to an outside service"
       },
@@ -4359,8 +4359,8 @@
        "action": "open_public_tunnel",
        "fixed": false,
        "id": "open_public_tunnel",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Open this PC to the internet"
       },
@@ -4368,7 +4368,7 @@
        "action": "news_read",
        "fixed": false,
        "id": "news_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a news feed you added"
@@ -4377,7 +4377,7 @@
        "action": "page_read",
        "fixed": false,
        "id": "page_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
@@ -4386,7 +4386,7 @@
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
@@ -4421,7 +4421,7 @@
       {
        "fixed": true,
        "id": "fixed:handoff",
-       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
        "says": "Does it without asking",
        "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
@@ -4484,7 +4484,7 @@
        "action": "delete_file",
        "fixed": false,
        "id": "delete_file",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete a file"
@@ -4493,7 +4493,7 @@
        "action": "spend_money",
        "fixed": false,
        "id": "spend_money",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Spend money"
@@ -4502,7 +4502,7 @@
        "action": "power_manage",
        "fixed": false,
        "id": "power_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
@@ -4552,7 +4552,7 @@
        "action": "browse_model_catalog",
        "fixed": false,
        "id": "browse_model_catalog",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Look up AI models online"
@@ -4561,7 +4561,7 @@
        "action": "download_model",
        "fixed": false,
        "id": "download_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Download an AI model"
@@ -4570,7 +4570,7 @@
        "action": "switch_model",
        "fixed": false,
        "id": "switch_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Switch to a different AI model"
@@ -4579,7 +4579,7 @@
        "action": "rollback_model",
        "fixed": false,
        "id": "rollback_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Go back to the AI model you had before"
@@ -4636,7 +4636,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Let it look at pictures of your screen, slowly, on the processor"
+       "title": "Let it read pictures of your screen (slow, uses your main chip)"
       },
       {
        "action": "big_model_enable",
@@ -4729,7 +4729,7 @@
        "action": "memory_manage",
        "fixed": false,
        "id": "memory_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change what it remembers"
@@ -4747,7 +4747,7 @@
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change your profile"
@@ -4842,7 +4842,7 @@
        "action": "agent_spawn",
        "fixed": false,
        "id": "agent_spawn",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start a helper task"
@@ -4851,7 +4851,7 @@
        "action": "agent_kill",
        "fixed": false,
        "id": "agent_kill",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop a helper task"
@@ -4860,7 +4860,7 @@
        "action": "execute_pending_actions",
        "fixed": false,
        "id": "execute_pending_actions",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run actions it has lined up"
@@ -4869,7 +4869,7 @@
        "action": "unclassified_tool",
        "fixed": false,
        "id": "unclassified_tool",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Use a tool it has no plain name for"
@@ -4941,7 +4941,7 @@
       "waiting": false
      }
     ],
-    "label": "Offer this to the AI model"
+    "label": "Let the AI use this"
    },
    "waiting": {
     "action": "calendar_read",
@@ -5019,7 +5019,7 @@
        "action": "read_files_readonly",
        "fixed": false,
        "id": "read_files_readonly",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read files on this PC"
@@ -5028,7 +5028,7 @@
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read a note in Joplin"
@@ -5037,7 +5037,7 @@
        "action": "read_logseq_page",
        "fixed": false,
        "id": "read_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read a page in Logseq"
@@ -5093,7 +5093,7 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Make a new page in Logseq"
@@ -5102,7 +5102,7 @@
        "action": "edit_joplin_note",
        "fixed": false,
        "id": "edit_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in Joplin"
@@ -5111,7 +5111,7 @@
        "action": "edit_logseq_page",
        "fixed": false,
        "id": "edit_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a page in Logseq"
@@ -5120,8 +5120,8 @@
        "action": "delete_joplin_note",
        "fixed": false,
        "id": "delete_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a note in Joplin"
       },
@@ -5129,8 +5129,8 @@
        "action": "delete_logseq_page",
        "fixed": false,
        "id": "delete_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a page in Logseq"
       },
@@ -5185,7 +5185,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Set up something that repeats"
+       "title": "Set up the morning briefing or a \"tell me when\" alert"
       }
      ],
      "title": "Timers and reminders"
@@ -5196,7 +5196,7 @@
        "fixed": true,
        "id": "fixed:lights",
        "lights": true,
-       "note": "Off by default. The switch is below.",
+       "note": "Asks first unless you turn on the switch below (off by default).",
        "says": "Asks you first, every time",
        "title": "Switch lights, plugs and fans you name"
       },
@@ -5251,7 +5251,7 @@
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write an email draft"
@@ -5278,7 +5278,7 @@
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change an event in your calendar"
@@ -5287,7 +5287,7 @@
        "action": "delete_calendar_event",
        "fixed": false,
        "id": "delete_calendar_event",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
@@ -5347,8 +5347,8 @@
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Post to an outside service"
       },
@@ -5356,8 +5356,8 @@
        "action": "open_public_tunnel",
        "fixed": false,
        "id": "open_public_tunnel",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Open this PC to the internet"
       },
@@ -5365,7 +5365,7 @@
        "action": "news_read",
        "fixed": false,
        "id": "news_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a news feed you added"
@@ -5374,7 +5374,7 @@
        "action": "page_read",
        "fixed": false,
        "id": "page_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
@@ -5383,7 +5383,7 @@
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
@@ -5418,7 +5418,7 @@
       {
        "fixed": true,
        "id": "fixed:handoff",
-       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
        "says": "Does it without asking",
        "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
@@ -5481,7 +5481,7 @@
        "action": "delete_file",
        "fixed": false,
        "id": "delete_file",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete a file"
@@ -5490,7 +5490,7 @@
        "action": "spend_money",
        "fixed": false,
        "id": "spend_money",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Spend money"
@@ -5499,7 +5499,7 @@
        "action": "power_manage",
        "fixed": false,
        "id": "power_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
@@ -5550,7 +5550,7 @@
        "fixed": false,
        "id": "browse_model_catalog",
        "lockdown": true,
-       "note": "Only your settings file (jarvis-framework.toml) changes this one. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app. Lockdown is on, so this asks you first - or stops, if it runs by itself.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Look up AI models online"
@@ -5559,7 +5559,7 @@
        "action": "download_model",
        "fixed": false,
        "id": "download_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Download an AI model"
@@ -5568,7 +5568,7 @@
        "action": "switch_model",
        "fixed": false,
        "id": "switch_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Switch to a different AI model"
@@ -5577,7 +5577,7 @@
        "action": "rollback_model",
        "fixed": false,
        "id": "rollback_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Go back to the AI model you had before"
@@ -5634,7 +5634,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Let it look at pictures of your screen, slowly, on the processor"
+       "title": "Let it read pictures of your screen (slow, uses your main chip)"
       },
       {
        "action": "big_model_enable",
@@ -5727,7 +5727,7 @@
        "action": "memory_manage",
        "fixed": false,
        "id": "memory_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change what it remembers"
@@ -5745,7 +5745,7 @@
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change your profile"
@@ -5840,7 +5840,7 @@
        "action": "agent_spawn",
        "fixed": false,
        "id": "agent_spawn",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start a helper task"
@@ -5849,7 +5849,7 @@
        "action": "agent_kill",
        "fixed": false,
        "id": "agent_kill",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop a helper task"
@@ -5858,7 +5858,7 @@
        "action": "execute_pending_actions",
        "fixed": false,
        "id": "execute_pending_actions",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run actions it has lined up"
@@ -5867,7 +5867,7 @@
        "action": "unclassified_tool",
        "fixed": false,
        "id": "unclassified_tool",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Use a tool it has no plain name for"
@@ -5939,7 +5939,7 @@
       "waiting": false
      }
     ],
-    "label": "Offer this to the AI model"
+    "label": "Let the AI use this"
    },
    "waiting": null
   },
@@ -6010,7 +6010,7 @@
        "action": "read_files_readonly",
        "fixed": false,
        "id": "read_files_readonly",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read files on this PC"
@@ -6019,7 +6019,7 @@
        "action": "read_joplin_note",
        "fixed": false,
        "id": "read_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read a note in Joplin"
@@ -6028,7 +6028,7 @@
        "action": "read_logseq_page",
        "fixed": false,
        "id": "read_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Read a page in Logseq"
@@ -6084,7 +6084,7 @@
        "action": "create_logseq_page",
        "fixed": false,
        "id": "create_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Make a new page in Logseq"
@@ -6093,7 +6093,7 @@
        "action": "edit_joplin_note",
        "fixed": false,
        "id": "edit_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a note in Joplin"
@@ -6102,7 +6102,7 @@
        "action": "edit_logseq_page",
        "fixed": false,
        "id": "edit_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change a page in Logseq"
@@ -6111,8 +6111,8 @@
        "action": "delete_joplin_note",
        "fixed": false,
        "id": "delete_joplin_note",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a note in Joplin"
       },
@@ -6120,8 +6120,8 @@
        "action": "delete_logseq_page",
        "fixed": false,
        "id": "delete_logseq_page",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Delete a page in Logseq"
       },
@@ -6176,7 +6176,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Set up something that repeats"
+       "title": "Set up the morning briefing or a \"tell me when\" alert"
       }
      ],
      "title": "Timers and reminders"
@@ -6187,7 +6187,7 @@
        "fixed": true,
        "id": "fixed:lights",
        "lights": true,
-       "note": "Off by default. The switch is below.",
+       "note": "Asks first unless you turn on the switch below (off by default).",
        "says": "Asks you first, every time",
        "title": "Switch lights, plugs and fans you name"
       },
@@ -6242,7 +6242,7 @@
        "action": "draft_email",
        "fixed": false,
        "id": "draft_email",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Write an email draft"
@@ -6269,7 +6269,7 @@
        "action": "edit_calendar_event",
        "fixed": false,
        "id": "edit_calendar_event",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change an event in your calendar"
@@ -6278,7 +6278,7 @@
        "action": "delete_calendar_event",
        "fixed": false,
        "id": "delete_calendar_event",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete an event from your calendar"
@@ -6337,8 +6337,8 @@
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Post to an outside service"
       },
@@ -6346,8 +6346,8 @@
        "action": "open_public_tunnel",
        "fixed": false,
        "id": "open_public_tunnel",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
-       "says": "Never - your settings file switches it off",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
+       "says": "Never allowed: switched off in your PC's settings file.",
        "tier": "never",
        "title": "Open this PC to the internet"
       },
@@ -6355,7 +6355,7 @@
        "action": "news_read",
        "fixed": false,
        "id": "news_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Read a news feed you added"
@@ -6364,7 +6364,7 @@
        "action": "page_read",
        "fixed": false,
        "id": "page_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch a web page you're watching"
@@ -6373,7 +6373,7 @@
        "action": "github_read",
        "fixed": false,
        "id": "github_read",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Check GitHub for a \"tell me when\""
@@ -6408,7 +6408,7 @@
       {
        "fixed": true,
        "id": "fixed:handoff",
-       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
        "says": "Does it without asking",
        "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
@@ -6471,7 +6471,7 @@
        "action": "delete_file",
        "fixed": false,
        "id": "delete_file",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Delete a file"
@@ -6480,7 +6480,7 @@
        "action": "spend_money",
        "fixed": false,
        "id": "spend_money",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Spend money"
@@ -6489,7 +6489,7 @@
        "action": "power_manage",
        "fixed": false,
        "id": "power_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
@@ -6539,7 +6539,7 @@
        "action": "browse_model_catalog",
        "fixed": false,
        "id": "browse_model_catalog",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Look up AI models online"
@@ -6548,7 +6548,7 @@
        "action": "download_model",
        "fixed": false,
        "id": "download_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Download an AI model"
@@ -6557,7 +6557,7 @@
        "action": "switch_model",
        "fixed": false,
        "id": "switch_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Switch to a different AI model"
@@ -6566,7 +6566,7 @@
        "action": "rollback_model",
        "fixed": false,
        "id": "rollback_model",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Go back to the AI model you had before"
@@ -6623,7 +6623,7 @@
        "note": "Always asks. This cannot be changed from an app.",
        "says": "Asks you first, every time",
        "tier": "ask",
-       "title": "Let it look at pictures of your screen, slowly, on the processor"
+       "title": "Let it read pictures of your screen (slow, uses your main chip)"
       },
       {
        "action": "big_model_enable",
@@ -6716,7 +6716,7 @@
        "action": "memory_manage",
        "fixed": false,
        "id": "memory_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change what it remembers"
@@ -6734,7 +6734,7 @@
        "action": "user_profile_manage",
        "fixed": false,
        "id": "user_profile_manage",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Change your profile"
@@ -6829,7 +6829,7 @@
        "action": "agent_spawn",
        "fixed": false,
        "id": "agent_spawn",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start a helper task"
@@ -6838,7 +6838,7 @@
        "action": "agent_kill",
        "fixed": false,
        "id": "agent_kill",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Stop a helper task"
@@ -6847,7 +6847,7 @@
        "action": "execute_pending_actions",
        "fixed": false,
        "id": "execute_pending_actions",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run actions it has lined up"
@@ -6856,7 +6856,7 @@
        "action": "unclassified_tool",
        "fixed": false,
        "id": "unclassified_tool",
-       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "note": "This can only be changed in your PC's settings file (jarvis-framework.toml), not in the app.",
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Use a tool it has no plain name for"
@@ -6928,7 +6928,7 @@
       "waiting": false
      }
     ],
-    "label": "Offer this to the AI model"
+    "label": "Let the AI use this"
    },
    "waiting": null
   }
@@ -6979,14 +6979,14 @@
   "says": {
    "ask": "Asks you first, every time",
    "auto": "Does it without asking",
-   "never": "Never - your settings file switches it off",
+   "never": "Never allowed: switched off in your PC's settings file.",
    "notify": "Does it, then tells you"
   },
   "says_search": "Asks only when something private could slip in",
   "switch_label": "Ask me first",
   "title": "What asks first",
   "tools_detail": "Whether the AI model is offered each reading tool at all - a separate thing from whether it asks you first, above. Turning one on shows an approval card and asks Windows Hello, on this PC; turning it off is instant, from either app. Every other tool can only be added by hand, in your settings file (jarvis-framework.toml, [tools].enabled) - see backend/README.md.",
-  "tools_label": "Offer this to the AI model",
+  "tools_label": "Let the AI use this",
   "tools_not_on_list": "Only reading your calendar, email, notes and home status can be offered to the AI model from an app. Every other tool changes only in your settings file (jarvis-framework.toml, [tools].enabled).",
   "tools_pc_only": "Offering a tool to the AI model can only be turned on from the PC (Settings, What asks first). It takes an approval card and Windows Hello.",
   "waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC."
