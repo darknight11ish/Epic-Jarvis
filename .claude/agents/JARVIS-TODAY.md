@@ -74,7 +74,7 @@ Parakeet speech-to-text (sherpa-onnx), Kokoro text-to-speech (v0.19's
 voices, or v1.0's - a 350 MB one-line install, pinned in
 `jarvis_kokoro.py`; the choice is saved by NAME, a **Hear it** button on
 every voice in both apps, British voices asked for British English on v1.0;
-JARVIS-API §93), custom voices (ZipVoice on the processor, F5 on
+JARVIS-API §94), custom voices (ZipVoice on the processor, F5 on
 the second card; Pocket TTS built, off), speaking from the first comma,
 spoken-style answers, "stop" and barge-in, "One moment", "I heard you". **Jarvis Live** (2026-09-28,
 `jarvis_live.py`, JARVIS-API §63, `docs/LIVE-DESIGN.md`): a back-and-forth

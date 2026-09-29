@@ -105,7 +105,9 @@ import androidx.compose.ui.unit.dp
 import com.jarvis.client.Activity
 import com.jarvis.client.FaceState
 import com.jarvis.client.LinkState
+import com.jarvis.client.face.AnimalNow
 import com.jarvis.client.face.Bindings
+import com.jarvis.client.face.CritterFace
 import com.jarvis.client.face.Face
 import com.jarvis.client.face.FaceView
 import com.jarvis.client.data.FaceSize
@@ -225,6 +227,8 @@ data class HomeState(
      * STANDBY with its hollow ring, and says "Jarvis isn't connected".
      */
     val faceOffline: Boolean = false,
+    /** The idle face is a focus session's Quiet (`JarvisRuntime.faceFocusQuiet`): TalkBack says so. */
+    val faceFocusQuiet: Boolean = false,
     val power: String,
     val status: StatusInfo?,
     val pending: List<PendingItem>,
@@ -404,7 +408,7 @@ data class HomeState(
     val cloudOffer: String? = null,
     /**
      * The Undo strip for the newest inbox tidy still open to it ("Inbox tidy
-     * by voice", 2026-09-28; docs/JARVIS-API.md section 94), or null when
+     * by voice", 2026-09-28; docs/JARVIS-API.md section 95), or null when
      * there is none. Counts and the PC's own words - never a sender or a
      * subject. See [com.jarvis.client.net.InboxTidy.strip] for what it says
      * while the lists are hidden and on a stale link.
@@ -1762,8 +1766,11 @@ private fun HandlePill() {
  * So this listens in the Initial pass, which runs parent first, and consumes
  * nothing: the face still draws its press ring, and a drag on the face -
  * which consumes the moves - cancels the tap here.
+ *
+ * [character]: the face is an animal or the robot, which a long press pets
+ * (AnimalNow.pressOpensBrain says when a press still opens the Brain).
  */
-private fun Modifier.tapThrough(label: String, onTap: () -> Unit): Modifier = this
+private fun Modifier.tapThrough(label: String, character: Boolean, onTap: () -> Unit): Modifier = this
     // Merged so TalkBack reads the face's own live description ("Jarvis is
     // idle") on the same node that offers the action.
     .semantics(mergeDescendants = true) {
@@ -1773,11 +1780,17 @@ private fun Modifier.tapThrough(label: String, onTap: () -> Unit): Modifier = th
             true
         }
     }
-    .pointerInput(onTap) {
+    .pointerInput(onTap, character) {
         awaitEachGesture {
-            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             val up = waitForUpOrCancellation(PointerEventPass.Initial)
-            if (up != null) onTap()
+            // A long press on an animal is petting it (the owner's decision
+            // of 2026-09-28: "a long press on the phone that does not open
+            // Brain"), so there only a short tap opens it - held for less
+            // than the petting hold, the same threshold FaceView pets at.
+            // With Petting off, or on any other face, every tap opens it, as
+            // before. The switch is read as the finger lifts.
+            if (up != null && AnimalNow.pressOpensBrain(up.uptimeMillis - down.uptimeMillis, character)) onTap()
         }
     }
 
@@ -1851,7 +1864,11 @@ private fun FaceBlock(
                         )
                         .then(
                             if (opensMind) {
-                                Modifier.tapThrough(label = "Open the Brain", onTap = actions.onOpenBrain)
+                                Modifier.tapThrough(
+                                    label = "Open the Brain",
+                                    character = state.face is CritterFace,
+                                    onTap = actions.onOpenBrain,
+                                )
                             } else {
                                 Modifier
                             },
@@ -1861,6 +1878,7 @@ private fun FaceBlock(
                     FaceView(
                         state = state.faceState,
                         offline = state.faceOffline,
+                        focusQuiet = state.faceFocusQuiet,
                         face = state.face,
                         bindings = state.bindings,
                         notches = state.attention.pending,
@@ -2117,7 +2135,7 @@ private fun PcMediaPlate(canAct: Boolean, actions: HomeActions) {
 
 /**
  * The Undo strip under an inbox tidy ("Inbox tidy by voice", the owner's
- * decision of 2026-09-28; docs/JARVIS-API.md section 94): what was done, how
+ * decision of 2026-09-28; docs/JARVIS-API.md section 95): what was done, how
  * long Undo lasts, and one button. The words are the PC's own and the
  * desktop's strip says the same ([com.jarvis.client.net.InboxTidy], checked
  * against contract/inbox-tidy-cases.json). It approves nothing and raises no

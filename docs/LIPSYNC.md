@@ -263,6 +263,7 @@ pitch rise is the real one:
 | pygmy owl | 2 | 0.85 | +1 |
 | sea otter | 4 | 1.15 | +3 |
 | monkey (added 2026-09-28; not in these clips - `backend/test_mouth.py`'s real-model run covers it) | 6 | 1.0 | +1 |
+| robot (added 2026-09-28; no mouth - its eyes pulse with the same track; not in these clips - `backend/test_mouth.py`'s real-model run covers it, 35/35 matched) | 7 | 1.15 | +2 |
 
 (`backend/jarvis_voices.py` `FACE_VOICES`.) 24 kHz, 16-bit mono.
 
@@ -666,7 +667,7 @@ two Kokoro frames, not a share of each sound - and m/b/p energy troughs
   onnxruntime brings into the process first. If it cannot load, status
   says so and nothing else changes.
 - **Kokoro v0.19 only** (2026-09-29): with the v1.0 pack installed
-  (`docs/JARVIS-API.md` section 93) `jarvis_speech` does not ask
+  (`docs/JARVIS-API.md` section 94) `jarvis_speech` does not ask
   `jarvis_mouth` at all - `--prepare` builds its timing from the v0.19 model's
   graph and refuses v1.0's, in words - so every mouth is analysed from the
   sound, as for a custom voice. Timing for v1.0 is not built.
@@ -723,3 +724,170 @@ audio-only fallback is unchanged. `test_mouth.py` now also checks
 `finish()` at +4, -1.5 and -3, and its real-model run (with
 `JARVIS_KOKORO_DIR`) includes the deepest voice at a quick pace.
 
+
+## At every pace (the voice-speed check, 2026-09-28)
+
+The owner asked: "Do a check that the animal models work properly when the
+speed of Jarvis's voice is slowed or sped up."
+
+### In plain words
+
+**Yes, the mouths and the robot's eyes keep up at every speed.** The
+mouths were checked on 196 sentences of Jarvis's real voice, at seven
+speeds from half speed to double speed, in all five faces' voices, the plain
+voice used for a crisis answer, and the deepest pitch the owner can pick.
+They open and shut with the words, shut in every pause, and never jump,
+at every speed.
+
+**One thing was wrong, and is fixed in the pose code:** the animals'
+talking gestures are meant to land where Jarvis finishes a sentence. The
+part that finds sentence ends waits for a short quiet in the voice, and it
+waited too long: at the normal speed and faster, Jarvis's sentences follow
+each other with only about a tenth of a second of quiet, and it missed
+almost all of them - so once the apps switch that on, the animals would
+have all but stopped gesturing while they talk. It now waits a third as
+long (0.05 s instead of 0.15 s), which finds them at every speed and still
+never fires in the middle of a sentence. (The apps do not switch the
+sentence-end gestures on yet; the fix is in the shared pose code, ready for
+when they do.)
+
+### Every way the speed changes
+
+| What | Where | Range |
+|---|---|---|
+| "How fast Jarvis speaks" (both apps) | `jarvis_voices.speed()` | Slower 0.85, Normal 1.0, Faster 1.15 |
+| ...set by hand in the settings file | `[voice] tts_speed` | 0.5 to 2.0 |
+| each animal's own pace ("Each animal's voice") | `jarvis_voices.FACE_VOICES` / the owner's choice | Slower, Normal, Faster - times the owner's own |
+| together (`builtin_voice()`) | Kokoro is asked for pace / f, f = 2^(pitch/12) | 0.7225 to 1.3225 from the apps; 0.5 to 2.0 by hand |
+| the crisis plain voice (`tts_voice(plain=True)`) | the owner's speed, no animal pace, no pitch | as the owner's speed |
+| the phone's own fallback voice (Android text-to-speech) | never changed by Jarvis | the phone's default |
+
+**Nothing changes how fast a clip is played back.** The desktop never sets
+`playbackRate` (its lip clock would follow it if it did: face-voice.js
+sends the rate and faces.html counts time by it); the phone plays at the
+clip's own sample rate (`AudioTrack`, no `PlaybackParams`) and counts the
+frames it has played. So the speed is always baked into the sound itself,
+and the mouth only has to be made for the sound that was spoken.
+
+### What was measured
+
+Dev container, the real Kokoro model (kokoro-en-v0_19) through
+`jarvis_mouth.speak` exactly as `say()` calls it. Four texts ("Good
+morning. You have two meetings today, and it might rain later. Maybe bring
+an umbrella.", "Okay. Let me check. Done.", "Please see these three sheep,
+but maybe Bob made a map.", "Who knew the moon would glow so blue? I did,
+of course.") in the panda, owl, otter, monkey and robot voices, the plain
+voice and the deepest pitch (-3), at 0.5, 0.7225, 0.8, 1.0, 1.15, 1.3225
+and 2.0: 196 clips. "Timing" is the PC's Kokoro timing (the jmth chunk,
+what both apps show when it is there); "sound" is the analysis from the
+sound alone (a custom voice, or a PC without the one-time step). Mouth
+times are as a face reads them (`sample()`, with its 50 ms lead) at 60
+frames a second.
+
+| pace | 0.5 | 0.7225 | 0.8 | 1.0 | 1.15 | 1.3225 | 2.0 |
+|---|---|---|---|---|---|---|---|
+| syllables a second | 2.2 | 3.1 | 3.5 | 4.5 | 5.0 | 5.6 | 7.7 |
+| timing made (sample-exact) | 28/28 | 28/28 | 28/28 | 28/28 | 28/28 | 28/28 | 28/28 |
+| m, b, p shut: timing / sound | 147/147 / 131 | 147/147 / 131 | 147/147 / 137 | 147/147 / 138 | 147/147 / 138 | 147/147 / 139 | 147/147 / 139 |
+| mouth shut before an m/b/p's sound (timing), ms | 13 | 15 | 17 | 22 | 21 | 25 | 29 |
+| mouth starts to close before the sound stops, ms (timing / sound) | 43 / 60 | 40 / 65 | 40 / 63 | 40 / 73 | 40 / 70 | 43 / 77 | 50 / 63 |
+| the mouth dips between two syllables (sound) | 99 % | 99 % | 99 % | 99 % | 100 % | 97 % | 90 % |
+| ...and shuts (under 0.12) (sound) | 96 % | 97 % | 96 % | 95 % | 95 % | 92 % | 84 % |
+| mouth open in pauses (both) | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 |
+| biggest step between two 60 Hz frames: timing / sound | 0.42 / 0.55 | 0.42 / 0.57 | 0.42 / 0.55 | 0.43 / 0.53 | 0.43 / 0.49 | 0.43 / 0.54 | 0.43 / 0.53 |
+| robot's eye pulses a second | 1.4 | 1.9 | 2.0 | 2.3 | 2.4 | 2.5 | 2.7 |
+
+What that says:
+
+- **The timing follows the speed that was spoken.** The durations model is
+  asked for the same speed Kokoro speaks at (pace / f, `jarvis_mouth.speak`),
+  and every piece of every clip was exactly as long as it said, to the
+  sample, at every pace. A timing made at one speed and played at another
+  would fall off the words within a sentence: squeezed or stretched by
+  13-15 % it no longer matches the sound at all (lipsync.mjs checks this on
+  the committed clips).
+- **Always a little early, never late.** On screen the mouth shuts 13-29 ms
+  before an m, b or p is heard, at every pace - the side nobody notices.
+  It drifts by about 15 ms across the whole range, because Kokoro's sound
+  runs ahead of its own plan by a little more at slow speeds than fast ones
+  (raw Kokoro, six voices, speeds 0.4 to 2.4: a median of about 80 ms at
+  0.4-0.7, 52 ms at 1.0, 30-38 ms at 1.45-2.4). `SOUND_LEAD` stays one fixed
+  number: the drift stays on the early side everywhere.
+- **Fast speech does not smear the sound analysis** inside the apps' range:
+  at 1.3225x (5.6 syllables a second) the mouth still dips between 97 % of
+  syllables and shuts between 92 %. At 2x (only by hand in the settings
+  file) it smears a little (90 % / 84 %). Slow speech does not flap: about
+  one opening per vowel from 0.7225x up (1.2 at 0.5x, where Kokoro draws
+  vowels out).
+- **Never busier or jumpier when faster.** The biggest step between two
+  screen frames is the same at every pace; the robot's eye pulse follows
+  the syllables and stays at or under three a second even at 2x.
+
+**Phrase ends (the talking gestures).** Each answer is spoken one sentence
+per clip (the first may stop at its first comma; `speech-pieces.js`). The
+phrase finder (`CritterPose.pauseStep`, docs/CRITTERS.md) waits for the
+loudness to stay under 0.05 for `PHRASE_QUIET`; the loudness itself takes
+about 0.15-0.2 s to fall after the sound stops. With `PHRASE_QUIET` 0.15 s
+that needed about 0.35 s of real quiet. Two sentence clips played back to
+back (30 ms apart), six voices, ten sentence pieces, 36 sentence ends per
+pace:
+
+| pace | 0.5 | 0.7225 | 0.8 | 1.0 | 1.15 | 1.3225 | 2.0 |
+|---|---|---|---|---|---|---|---|
+| quiet in the loudness between two sentences (median, ms) | 275 | 192 | 167 | 133 | 133 | 117 | 117 |
+| sentence ends found, `PHRASE_QUIET` 0.15 s (before) | 33 | 27 | 21 | 10 | 4 | 1 | 4 |
+| ...0.05 s (now) | 34 | 36 | 36 | 34 | 29 | 25 | 12 |
+
+(Counted without the 2-second gap rule, so every sentence end can count;
+with it, at most one gesture every 2 s, as before. The ones still missed
+are short sentences - "Okay.", "Done.", "Right," - with less than
+`TALK_MIN`, 0.6 s, of talking before them, fewer of which reach it the
+faster Jarvis talks. With no gap at all between the clips the numbers are
+the same.) Inside one clip (the 196 clips above) it now also finds more
+sentence ends and commas: 32, 27, 25, 18, 15, 16 and 10 of 35 sentence
+ends (before: 25, 15, 10, 1, 1, 1 and 7), and it fired where there was no
+sentence end or comma twice at 0.5x, a pace only the settings file can set
+(in a word gap after "the moon" in the owl's voice, and just before the
+end of a drawn-out "Okay"; once before, the same "Okay"), and never at any
+other pace. 0.1 s was
+tried too and found fewer; 0.03 s began firing inside sentences at
+0.7225x. The microphone's pause finder (the listening nods) is unchanged.
+
+**Clips to look at** (the real faces.html, display mode, with the sound):
+the panda, the monkey and the robot at 0.7225x, 1.0x and 1.3225x, and the
+panda at 0.5x and the robot at 2x. Made in the dev container's scratch
+folder, not committed.
+
+### Not tested here
+
+- **A real phone.** The phone's copy gives the same numbers as the desktop's
+  on the committed slowest and fastest clips (LipSyncTest, on the JVM), but
+  nothing was played through a phone's speaker, and the phone cannot be
+  built here.
+- **The owner's PC**, and Bluetooth (see "Why 50 ms").
+- **The phone's own fallback voice** (Android's text-to-speech, used only
+  when the PC's voice is not there) is not sped up or slowed down by Jarvis
+  at all; its mouth follows its loudness as before.
+- **The sentence-end gestures are not switched on in either app yet**, so
+  nothing on screen uses the phrase finder today; the numbers above are
+  its own, run over the real clips the way faces.html would.
+
+### Tests
+
+- `backend/test_mouth.py`: the timing is asked for the speed Kokoro speaks
+  at, at 0.5 to 2.0 and pitches -3 to +4, and makes a whole mouth with the
+  m shut where the sound has it; its real-model run adds the slowest and
+  fastest paces the apps offer and both ends of `tts_speed`.
+- Two committed clips, `kokoro-panda-lips-slowest.wav` (0.7225x) and
+  `kokoro-robot-lips-fastest.wav` (1.3225x), "Okay. Maybe Bob made a map.",
+  each with the PC's jmth chunk. `lipsync.mjs`: at both, closures from the
+  sound and from the timing, no 60 Hz jump over 0.5, and the timing matches
+  the clip's own sound (a mis-scaled timing does not). `gen_lipsync.py`
+  puts their merged tracks in the golden fixture and `LipSyncTest` holds
+  the phone to them.
+- `jarvis-desktop/tests/voice-speed.mjs`: `PHRASE_QUIET` is 0.05 s on both
+  apps; a phrase end is found between two back-to-back sentences at both
+  paces (the old 0.15 s missed it at the fastest) and never inside "Maybe
+  Bob made a map."; the robot's eye pulse at both paces.
+  `CritterPoseTest` checks the Kotlin finder: 0.1 s between sentences
+  counts, a 30 ms silent consonant does not.

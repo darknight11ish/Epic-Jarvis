@@ -337,6 +337,9 @@ SHIPPED = (
     # the sun, the moon and the weather behind the animal faces, and the
     # town list it finds a place in without going online (sky.patch)
     "jarvis_sky.py", "jarvis_sky_places.py",
+    # every animal option in one place: "Keep the animal still" and the
+    # behaviour switches, shared by both apps (animal.patch)
+    "jarvis_animal.py",
     # pairing a phone by QR code, with a key per device (devices.patch,
     # docs/PAIRING-DESIGN.md phase 1): the check on every request's key,
     # the registry of key hashes, the pairing session and its card

@@ -439,6 +439,16 @@ object JarvisRuntime {
     val power: StateFlow<String> = _power.asStateFlow()
 
     /**
+     * Why the PC is in that power mode, in its own sentence (`GET /api/version`
+     * `capabilities.power.why`), or null when it did not say. The face reads
+     * it for one thing: a focus session's Quiet shows the focus buddy, not a
+     * sleeping animal ([com.jarvis.client.face.RestingFace]). `/api/status`
+     * and the `power` event carry only the mode, so it is read again from the
+     * handshake route on every `power` event, as the desktop does.
+     */
+    private val _powerWhy = MutableStateFlow<String?>(null)
+
+    /**
      * Lockdown is on (backend jarvis_asks_first.py, 2026-09-28): every way out
      * of the PC asks first, or has stopped. From `/api/version`'s
      * `capabilities.lockdown` at every handshake, then the `lockdown` event.
@@ -545,6 +555,15 @@ object JarvisRuntime {
      * connected" (FaceView's `offline`).
      */
     val faceOffline: StateFlow<Boolean> = _faceOffline.asStateFlow()
+
+    private val _faceFocusQuiet = MutableStateFlow(false)
+
+    /**
+     * The face is IDLE (not STANDBY) because a focus session put the PC on
+     * Quiet ([com.jarvis.client.face.RestingFace]): the focus buddy shows.
+     * Only TalkBack's words use it (FaceView's `focusQuiet`).
+     */
+    val faceFocusQuiet: StateFlow<Boolean> = _faceFocusQuiet.asStateFlow()
 
     private val _faceSerious = MutableStateFlow(false)
 
@@ -746,8 +765,21 @@ object JarvisRuntime {
                 }
             }
         }
+        // The shared animal switches (AnimalOptions) for the faces: the new
+        // behaviours (face.AnimalNow) and the seasonal touches (SeasonNow),
+        // whenever they arrive - this phone's copy first, then the PC's. The
+        // PC's defaults until either has been heard - not counted as a read
+        // (AnimalNow.reads), so a face opened before the real ones arrive
+        // still takes them at once.
+        scope.launch {
+            appearance.animal.collect { shared ->
+                val values = (shared ?: com.jarvis.client.net.AnimalOptions.Shared()).values
+                com.jarvis.client.face.AnimalNow.apply(values, stored = shared != null)
+                com.jarvis.client.face.SeasonNow.on = values["seasonal"] == true
+            }
+        }
 
-        // Inbox tidy (docs/JARVIS-API.md section 94): the newest tidy still
+        // Inbox tidy (docs/JARVIS-API.md section 95): the newest tidy still
         // open to Undo, read every POLL_MS while connected - a tiny read of
         // counts and words, never a sender or a subject. The clock ticks even
         // while the link is down, so an Undo whose ten minutes are up goes.
@@ -769,6 +801,7 @@ object JarvisRuntime {
             combine(_link, _activity, _power, _pending, _attention) { _, _, _, _, _ -> }
                 .combine(voice.phase) { _, _ -> }
                 .combine(_stale) { _, _ -> }
+                .combine(_powerWhy) { _, _ -> }
                 .collectLatest {
                     val wait = publishFace()
                     if (wait > 0L) {
@@ -861,6 +894,7 @@ object JarvisRuntime {
         when (result) {
             is ApiResult.Ok -> {
                 _version.value = result.value
+                _powerWhy.value = result.value.powerWhy()
                 _lockdown.value = com.jarvis.client.net.AsksFirst.lockdownFrom(
                     result.value.detail("lockdown"),
                 ) ?: false
@@ -1225,7 +1259,21 @@ object JarvisRuntime {
     @Volatile private var screenReads = 0L
     @Volatile private var streamOpens = 0L
 
+    /**
+     * The newest event id the PC had when this connection opened
+     * (`hello.latest`): every event at or below it is the PC replaying what
+     * this phone missed (AnimalNow.isReplay), above it is live. -1 until
+     * this connection's hello, or from a PC that does not send it. Read so
+     * the animal's moments - a fact's nod, a long answer's glow, the focus
+     * stretch - play for what happens now, never for a replay after a
+     * reconnect or a restart.
+     */
+    @Volatile private var replayUpTo = -1L
+
     private suspend fun onOpen(hello: com.jarvis.client.net.HelloPayload?) {
+        // The connect (no hello yet) forgets the last connection's replay
+        // point; the hello, the first frame, brings this one's.
+        replayUpTo = hello?.latest ?: -1L
         // A (re)connect: step events may have been missed since the last one.
         streamOpens += 1
         _link.value = LinkState.CONNECTED
@@ -1243,6 +1291,9 @@ object JarvisRuntime {
             // to forget.
             resumePointPending = null
             settings.clearResumePoint()
+            // A focus session's "ended" may be among what was missed: the
+            // animal's focus buddy must not stay on for good.
+            com.jarvis.client.face.AnimalNow.focusUnknown()
         }
 
         // A client that connects mid-turn has no other way to learn what Jarvis
@@ -1271,6 +1322,8 @@ object JarvisRuntime {
      * of these re-fetches the real endpoint; the bus is a doorbell.
      */
     private suspend fun onEvent(event: SseEvent) {
+        // Part of the PC's replay of what this phone missed (see replayUpTo).
+        val replayed = com.jarvis.client.face.AnimalNow.isReplay(event.id, replayUpTo)
         when (event.kind) {
             "approval" -> {
                 val phoneCardBefore = com.jarvis.client.net.PhoneNotifications
@@ -1329,6 +1382,9 @@ object JarvisRuntime {
             // never the question or the answer). The list is re-read for the
             // answer, and the switches for the speed it measured.
             "deep" -> {
+                // A long answer ready: the animal's glow (a doorbell only) -
+                // not for a replayed one.
+                com.jarvis.client.face.AnimalNow.deepEvent(event.data, replayed)
                 refreshDeep()
                 refreshBigModel()
             }
@@ -1356,7 +1412,12 @@ object JarvisRuntime {
                 }
                 refreshStatus()
             }
-            "power", "persona" -> refreshStatus()
+            "power", "persona" -> {
+                refreshStatus()
+                // Who put the PC in this mode can change while the mode
+                // does not (a focus session's Quiet, then the owner's own).
+                if (event.kind == "power") refreshPowerWhy()
+            }
             // The brief covers these; the Watches plate on Mind reads its
             // lists again, as the desktop's Brain does.
             "finding" -> _watchTick.update { it + 1 }
@@ -1388,7 +1449,7 @@ object JarvisRuntime {
             // the text - a doorbell like the rest. The list on Mind reads
             // itself again, and a quiet line counts them. Never a
             // notification: nothing here reaches ApprovalNotifier.
-            com.jarvis.client.net.AutoLearn.EVENT -> onMemorySaved(event.data)
+            com.jarvis.client.net.AutoLearn.EVENT -> onMemorySaved(event.data, replayed)
             // A timer, alarm or reminder went off on the PC, or Coming up
             // changed (`{"id", "kind", "state"}` only - a doorbell, never the
             // words). The list on Mind reads itself again; a job that went
@@ -1407,7 +1468,12 @@ object JarvisRuntime {
             // number - a doorbell, never what was in front). Mind's "Focus
             // session" reads itself again. The spoken line is the PC's
             // alone: the phone is refused it, and does not ask.
-            "focus" -> _focusTick.update { it + 1 }
+            "focus" -> {
+                // The animal's focus buddy, and its stretch as a session ends
+                // (not for a replayed end).
+                com.jarvis.client.face.AnimalNow.focusEvent(event.data, replayed)
+                _focusTick.update { it + 1 }
+            }
             // Jarvis Live changed (`{"state", "device", "paused", "muted"...}`
             // only - a doorbell, never anything said): read it again.
             "live" -> liveRead()
@@ -1416,6 +1482,11 @@ object JarvisRuntime {
             // just re-reads the shared document; nothing here redraws
             // anything directly.
             "appearance" -> refreshAppearance()
+            // The sun, moon or weather changed on the PC (a change made on
+            // the desktop, or asked of Jarvis; `{"changed": true}` only - a
+            // doorbell, never the town or the weather): read them again so
+            // the face and Appearance show it now, not at the next poll.
+            "sky" -> runCatching { sky() }
             // One step of the tool loop - asking the model, a tool starting,
             // finishing or refused - kept for Mind's "What Jarvis is doing".
             // It used to fall through to "unhandled" below.
@@ -1479,6 +1550,15 @@ object JarvisRuntime {
         // only when its settings page opens (audit A2). Its own failure,
         // including a PC without the route, changes nothing.
         runCatching { phoneNotificationsSettings() }
+    }
+
+    /**
+     * Reads only [_powerWhy] again. Not [handshake]: that also forgets the
+     * appearance route and clears the notice, which a power change has no
+     * business doing. A failed read keeps what was known.
+     */
+    private suspend fun refreshPowerWhy() {
+        api.version().onOk { _powerWhy.value = it.powerWhy() }
     }
 
     suspend fun refreshStatus() {
@@ -2149,6 +2229,77 @@ object JarvisRuntime {
         return com.jarvis.client.net.SkySettings.replyLine(r)
     }
 
+    // ------------------------------------------------- animal options ----
+
+    /**
+     * `GET /api/animal` (the owner's decisions of 2026-09-28, "Animal
+     * options"): "Keep the animal still" and the behaviour switches, shared
+     * with the desktop. A good answer is kept ([AppearanceStore.setAnimal])
+     * for the face, and this phone's old Still is moved to the PC once
+     * ([moveOldStill]).
+     */
+    suspend fun animalOptions(): ApiResult<JsonObject> {
+        val r = api.animal()
+        if (r is ApiResult.Ok) {
+            com.jarvis.client.net.AnimalOptions.parse(r.value)?.let {
+                appearance.setAnimal(it.shared)
+                moveOldStill(it.shared)
+            }
+        }
+        return r
+    }
+
+    /**
+     * ONE animal switch. No card either way (cosmetic); turning one ON is
+     * held on a stale link ([actionBlocker], rule 4, as the sky's switch is),
+     * turning one OFF never is. Returns the PC's sentence, or the plain words
+     * of a failure.
+     */
+    suspend fun setAnimalOption(id: String, on: Boolean): String {
+        val body = com.jarvis.client.net.AnimalOptions.body(id, on) ?: return "That is not an animal option."
+        if (on) actionBlocker()?.let { return it }
+        val r = api.animalPost(body)
+        if (r is ApiResult.Ok) {
+            (r.value["view"] as? JsonObject)?.let { com.jarvis.client.net.AnimalOptions.parse(it) }?.let {
+                appearance.setAnimal(it.shared)
+            }
+        }
+        return com.jarvis.client.net.AnimalOptions.replyLine(r)
+    }
+
+    /**
+     * This phone's old "Keep the animal still" (`Look.stillAnimal`, kept on
+     * the phone only before 2026-09-28) goes to the PC ONCE, and only if it
+     * was on - "if either device had Still on, keep it on". Until it lands
+     * an old "on" still counts on this phone
+     * ([com.jarvis.client.net.AnimalOptions.effectiveStill]); a failure (the
+     * PC not reachable, the link catching up) is tried again next time.
+     */
+    private suspend fun moveOldStill(shared: com.jarvis.client.net.AnimalOptions.Shared) {
+        if (appearance.animalMigrated.value) return
+        if (!appearance.look.value.stillAnimal || shared.still) {
+            appearance.markAnimalMigrated()
+            return
+        }
+        if (actionBlocker() != null) return
+        // Only while nobody has chosen anything on the PC yet: a switch
+        // changed there since (on the desktop, or by asking Jarvis) is newer
+        // than this phone's old choice, and wins.
+        val now = api.animal()
+        if (now !is ApiResult.Ok) return
+        if (!com.jarvis.client.net.AnimalOptions.stillMoveNeeded(now.value)) {
+            appearance.markAnimalMigrated()
+            return
+        }
+        val r = api.animalPost(com.jarvis.client.net.AnimalOptions.body("still", true) ?: return)
+        if (r is ApiResult.Ok) {
+            appearance.markAnimalMigrated()
+            (r.value["view"] as? JsonObject)?.let { com.jarvis.client.net.AnimalOptions.parse(it) }?.let {
+                appearance.setAnimal(it.shared)
+            }
+        }
+    }
+
     /** Re-reads `/api/deep`. Starts nothing on the PC. */
     suspend fun refreshDeep() {
         _deep.value = BigModel.deepReadOf(api.deep())
@@ -2598,6 +2749,9 @@ object JarvisRuntime {
         noteAppearanceRoute(result)
         if (result is ApiResult.Ok) {
             appearance.applySyncDocument(org.json.JSONObject(result.value.toString()))
+            // The shared animal switches ride along (animal.patch): an old
+            // Still of this phone's moves to the PC once they are known.
+            appearance.animal.value?.let { moveOldStill(it) }
         }
     }
 
@@ -3900,7 +4054,7 @@ object JarvisRuntime {
         _autoRememberedIds.value = emptyList()
     }
 
-    private fun onMemorySaved(data: kotlinx.serialization.json.JsonElement?) {
+    private fun onMemorySaved(data: kotlinx.serialization.json.JsonElement?, replayed: Boolean = false) {
         val ids = com.jarvis.client.net.AutoLearn.savedIds(data)
         val fresh = synchronized(this) {
             val (added, seen) = com.jarvis.client.net.AutoLearn.fresh(autoSeenIds, ids)
@@ -3910,6 +4064,11 @@ object JarvisRuntime {
         if (fresh.isNotEmpty()) {
             _autoRemembered.update { it + fresh.size }
             _autoRememberedIds.update { (it + fresh).takeLast(com.jarvis.client.net.MemoryUsed.MAX) }
+            // The animal's small nod - never while App lock or "Hide memory
+            // lists and chat history" is on (the owner's rule, 2026-09-28),
+            // and never for a replayed event.
+            val security = settings.security.value
+            com.jarvis.client.face.AnimalNow.factSavedIf(security.appLock, security.privateLists, replayed)
         }
         _autoTick.update { it + 1 }
     }
@@ -6101,7 +6260,7 @@ object JarvisRuntime {
     }
 
     // -------------------------------------------------- inbox tidy ----
-    // docs/JARVIS-API.md section 94 (the owner's decision of 2026-09-28) -
+    // docs/JARVIS-API.md section 95 (the owner's decision of 2026-09-28) -
     // see [com.jarvis.client.net.InboxTidy] and the Undo strip on Home
     // (ui/screens/HomeScreen.kt, InboxTidyPlate). The tidy itself is asked
     // for in chat and decided on an ordinary approval card; this only shows
@@ -6608,6 +6767,8 @@ object JarvisRuntime {
         }
         val shown = com.jarvis.client.face.FaceLink.shown(resolveFace(), faceCutSince, nowMs)
         _faceOffline.value = shown.offline
+        _faceFocusQuiet.value = !shown.offline && shown.state == FaceState.IDLE &&
+            com.jarvis.client.face.RestingFace.focusQuiet(_power.value, _powerWhy.value)
         _face.value = shown.state
         return if (shown.offline) 0L else com.jarvis.client.face.FaceLink.graceLeftMs(faceCutSince, nowMs)
     }
@@ -6651,8 +6812,12 @@ object JarvisRuntime {
             resting && _attention.value.banked -> FaceState.BANKED
             // Quiet is a power mode that suppresses speech, which is what
             // standby renders. Leaving it on IDLE said "ready to talk" about a
-            // machine that would not.
-            resting && (_power.value == "standby" || _power.value == "quiet") -> FaceState.STANDBY
+            // machine that would not. Except a focus session's Quiet (owner,
+            // 2026-09-29): that shows the focus buddy, awake and working
+            // beside the owner - see RestingFace. A Quiet set by hand stays
+            // asleep.
+            resting && com.jarvis.client.face.RestingFace.asleep(_power.value, _powerWhy.value) ->
+                FaceState.STANDBY
             else -> FaceState.IDLE
         }
     }

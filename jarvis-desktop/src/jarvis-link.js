@@ -16,6 +16,8 @@
  */
 
 import { fallbackTitle } from "./card-words.js";
+import { markMigrated, migrated, storeAnimal } from "./animal-shared.js";
+import { loadFaceTuning } from "./face-tuning.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -471,8 +473,25 @@ export function surfaceState(state = link, now = Date.now()) {
   if (live && Number((state && state.approvals) || 0) > 0) return "approval";
   const face = faceState(state);
   if (face !== "idle") return face;
+  return restingAsleep(state) ? "standby" : "idle";
+}
+
+/**
+ * Whether a resting Jarvis is asleep (standby) rather than awake.
+ *
+ * Standby, and Quiet, read as asleep - with one exception (owner,
+ * 2026-09-29): a focus session puts Jarvis on Quiet, and it must show the
+ * focus buddy, awake and working beside the owner, not a sleeping animal that
+ * wakes to say "YouTube can wait" and dozes off again. `powerSetBy` is
+ * "focus" only while Quiet is the focus session's own (stream.rs
+ * `power_set_by`, from the backend's `why`); a Quiet the owner sets by hand
+ * replaces it and stays asleep. The tray follows the same rule
+ * (tray.rs `spec_state`), and the phone's (FaceShellRules.kt `RestingFace`).
+ */
+export function restingAsleep(state = link) {
   const power = String((state && state.power) || "active");
-  return power === "standby" || power === "quiet" ? "standby" : "idle";
+  if (power === "quiet" && state && state.powerSetBy === "focus") return false;
+  return power === "standby" || power === "quiet";
 }
 
 /**
@@ -540,16 +559,27 @@ export function linkOffline(state = link, now = Date.now()) {
  *   ring (faces.html drawOfflineRing). Then `state` is always "standby".
  * - `waiting`: how many things the budget is holding back - banked's
  *   notches, the phone's `attention.pending`.
+ * - `focus`: the resting face is a focus session's Quiet (the focus buddy);
+ *   the words for a screen reader say so (face-words.js).
  */
 export function faceSignal(state = link, now = Date.now()) {
   const offline = !linkLive(state) && linkOffline(state, now);
   const pending = Number((state && state.attention && state.attention.pending) || 0);
+  const shown = surfaceState(state, now);
   return {
-    state: surfaceState(state, now),
+    state: shown,
     offline,
     waiting: Number.isFinite(pending) && pending > 0 ? pending : 0,
     serious: faceSerious(now),
+    // The resting face is a focus session's Quiet (the focus buddy), not
+    // asleep: only the screen reader's words differ (face-words.js).
+    focus: !offline && shown === "idle" && focusQuiet(state),
   };
+}
+
+/** True when the PC is Quiet because a focus session put it there. */
+export function focusQuiet(state = link) {
+  return Boolean(state && state.power === "quiet" && state.powerSetBy === "focus");
 }
 
 /* ---------------------------------------------------------------------- *
@@ -1078,8 +1108,68 @@ function readAppearanceColours() {
 export function followAppearance() {
   if (!IS_TAURI || appearanceFollowed) return;
   appearanceFollowed = true;
-  TAURI.event.listen("appearance-changed", () => readAppearanceColours());
+  TAURI.event.listen("appearance-changed", () => {
+    readAppearanceColours();
+    readAnimalOptions();
+  });
   readAppearanceColours();
+  readAnimalOptions();
+}
+
+/* ==========================================================================
+   The shared animal options, kept for the face frames
+   --------------------------------------------------------------------------
+   "Keep the animal still" and the behaviour switches live on the PC and come
+   with the appearance document (animal.patch; appearance.rs `animal`). The
+   face frames hold no command, so every window that follows the appearance
+   keeps a copy in this computer's localStorage (animal-shared.js), where
+   every face page reads it - the same road the sky takes. From memory
+   (`appearance_snapshot`), never the network, so it is safe on every
+   `appearance-changed`.
+   ========================================================================== */
+
+let stillMoveTried = false;
+
+function readAnimalOptions() {
+  if (!IS_TAURI) return;
+  TAURI.core
+    .invoke("appearance_snapshot")
+    .then((doc) => {
+      const animal = doc && doc.animal;
+      if (!animal || typeof animal !== "object") return;   // an older PC, or not heard yet
+      storeAnimal(animal);
+      moveOldStill(animal);
+    })
+    .catch(() => {
+      /* an older shell: the face frames keep this computer's own Still */
+    });
+}
+
+/**
+ * This computer's old "Keep the animal still" (face-tuning.js, before it was
+ * shared) goes to the PC once, and only if it was on - "if either device had
+ * Still on, keep it on" (animal.rs migrate_animal_still). Tried once per
+ * window; a failure (the PC not reachable) is tried again next time a window
+ * opens. Until it lands, an old "on" still counts on this computer
+ * (animal-shared.js effectiveStill).
+ */
+function moveOldStill(animal) {
+  if (stillMoveTried || migrated()) return;
+  if (loadFaceTuning().still !== true) {
+    markMigrated();       // nothing to move
+    return;
+  }
+  stillMoveTried = true;
+  if (animal.still === true) {
+    markMigrated();       // already on, on the PC
+    return;
+  }
+  TAURI.core
+    .invoke("migrate_animal_still")
+    .then(() => markMigrated())
+    .catch(() => {
+      /* not now: tried again when a window next opens */
+    });
 }
 
 /* ==========================================================================

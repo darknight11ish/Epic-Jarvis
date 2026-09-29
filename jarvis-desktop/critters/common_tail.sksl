@@ -1,8 +1,8 @@
 // ---- SHARED END of every animal face's shader (see common_head.sksl) ----
 //
 // Needs from the animal's part: map(), mapLite(), partAt(), material(),
-// sparkle(), stuckRay(), and the constants CAM_TARGET, CAM_DIST, CAM_PITCH,
-// BOUND_R and MARCH_STEPS.
+// sparkle(), stuckRay(), ground(), animalSpan(), and the constants CAM_TARGET,
+// CAM_DIST, CAM_PITCH, BOUND_R and MARCH_STEPS.
 
 // The surface's direction at p, from how map() changes a hair away along
 // each axis. d0 is map() at p itself, which the march has already measured
@@ -60,11 +60,12 @@ float4 critter(float2 p) {
     float halo = uOrbGlow * 0.030 * uOrb.w / max(orbMiss * orbMiss, 0.0004) *
                  (1.0 - smoothstep(0.0, 0.55, orbMiss));
 
-    // Skip rays that miss the animal's bounding sphere altogether.
-    float3 oc2 = ro - target;
-    float bb = dot(oc2, rd);
-    float cc = dot(oc2, oc2) - BOUND_R * BOUND_R;
-    float disc = bb * bb - cc;
+    // Skip rays that miss the animal's bounding volume altogether, and march
+    // the rest only from where they go in to where they come out. The
+    // animal's own animalSpan() says where that is (from where it is in this
+    // very pose); the sphere round the camera's target is the outer limit
+    // nothing is drawn past.
+    float2 span = animalSpan(ro, rd);
     float hitT = -1.0;
     float id = 0.0;
     // A soft outline. A ray either hits or misses, so without this the edge
@@ -76,14 +77,13 @@ float4 critter(float2 p) {
     float fp = max(uPx, 0.00001) / (3.1 * max(uZoom, 0.1));  // a pixel's width, per unit of distance
     // (Kept as distance over t while marching - pixels times fp, the same
     // thing one multiply cheaper per step. t is never 0: the camera is
-    // always outside the bounding sphere.)
+    // always outside the bounding volume.)
     float bestR = 1000.0;
     float bestT = 0.0;
     float d0 = 0.0;
-    if (disc > 0.0) {
-        float sq = sqrt(disc);
-        float t = max(0.0, -bb - sq);
-        float tMax = -bb + sq;
+    if (span.x < span.y) {
+        float t = max(0.0, span.x);
+        float tMax = span.y;
         // MARCH_STEPS steps, set by each animal. The size limit
         // (common_head.sksl) is what sets it: the march is by far the largest
         // part of the program, one map() per step, so an animal with a
@@ -138,7 +138,10 @@ float4 critter(float2 p) {
     float3 haloCol = pow(aces(hot * halo), float3(1.0 / 2.2));
     float haloA = max(haloCol.r, max(haloCol.g, haloCol.b));
     if (hitT < 0.0) {
-        return float4(haloCol, haloA);
+        // Nothing hit: the orb's glow - and the face's own soft shadow on the
+        // ground below it, if it has one (ground(): the robot's; 0 for the
+        // animals, who sit, perch, hang or float on something of their own).
+        return float4(haloCol, max(haloA, ground(ro, rd)));
     }
 
     float3 pos = ro + rd * hitT;

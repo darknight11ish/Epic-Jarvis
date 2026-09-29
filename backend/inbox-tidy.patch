@@ -38,15 +38,15 @@
 +++ b/jarvis_hud.py
 @@ -3487,6 +3487,21 @@
      except Exception as exc:
-         print(f"  sky        NOT ON ({type(exc).__name__}) - the sun, moon and weather are off")
-         print("             until jarvis_sky.py is back: run apply-patches.ps1 again")
+         print(f"  animal     NOT ON ({type(exc).__name__}) - the animal options stay as they are")
+         print("             until jarvis_animal.py is back: run apply-patches.ps1 again")
 +    # inbox-tidy.patch ("Inbox tidy by voice", the owner's decision of
-+    # 2026-09-28; JARVIS-API section 94): GET /api/email/tidy (whether it is
++    # 2026-09-28; JARVIS-API section 95): GET /api/email/tidy (whether it is
 +    # set up, and the newest tidy still open to Undo - counts only, never a
 +    # sender or a subject) and POST /api/email/tidy/undo (one tap, no card,
 +    # for 10 minutes). The tidy itself is asked for in chat: the model's
 +    # tidy_inbox tool raises ONE approval card listing every email. Wrapped
-+    # round Handler here, before anything listens, like sky above; every
++    # round Handler here, before anything listens, like animal above; every
 +    # rule is in jarvis_inbox_tidy.py.
 +    try:
 +        import jarvis_inbox_tidy

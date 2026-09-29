@@ -109,11 +109,20 @@ float partEyes(float3 h) {
     return sdEllipsoid(ep, float3(0.118, max(0.010, 0.118 * open), 0.075));
 }
 // How far the beak gapes: uMouth's open, a little less for a round sound
-// and flatter for a wide one - eased out (quick at first, gentle at the
-// top), so the everyday half-open of speech already shows a clear gap.
+// and flatter for a wide one - eased out steeply (very quick at first, flat
+// at the top): the lower half of the beak starts to overlap the upper one, so
+// no gap shows until it has dropped about half way, and an everyday vowel
+// (open 0.3 to 0.5) has to be there already or the beak seems to barely
+// move - at 96 pixels the whole full-open gap is under two pixels.
+// 1 - (1 - open)^7: 0.2 gives 0.79 of the full gape, 0.3 gives 0.92 and
+// 0.5 gives 0.99; louder words gape about as far as before (1 is 1, as
+// it was). Shut is 0, exactly as before.
 float gape() {
-    float e = uMouth.x * (1.0 - 0.3 * uMouth.z) * (1.0 - 0.3 * uMouth.y);
-    return e * (2.0 - e);
+    float k = (1.0 - 0.15 * uMouth.z) * (1.0 - 0.15 * uMouth.y);
+    float q = 1.0 - uMouth.x * k;
+    float q2 = q * q;
+    float q4 = q2 * q2;
+    return k * (1.0 - q4 * q2 * q);
 }
 // A small hooked beak: an upper half, and a lower half that drops to speak -
 // wider and flatter for a wide sound - with the dark of the open mouth
@@ -135,6 +144,29 @@ float beakIn(float3 h) {
                        float3(0.012 + 0.024 * g + 0.010 * uMouth.y, 0.012 + 0.034 * g, 0.030 + 0.006 * g));
 }
 float partBeak(float3 h) { return min(min(beakUp(h), beakLo(h)), beakIn(h)); }
+
+// Where along a ray the animal can be. Each part has a sphere round it,
+// placed from where the part is in THIS pose (the body and head through the
+// pose's own frames), with a margin of a few pixels - a ray that passes a
+// part by less than that can still be taken for a hit. A ray that meets none
+// of them is not marched at all, and one that does is marched no further than
+// the last of them (clipSpan, common_head.sksl). Measured against the single
+// sphere this replaces: docs/CRITTERS.md, "The bounding volumes".
+float3 fromBody(float3 q) { return uBodyPos + q.x * uBodyR0 + q.y * uBodyR1 + q.z * uBodyR2; }
+float3 fromHead(float3 h) { return uNeck + h.x * uHeadR0 + h.y * uHeadR1 + h.z * uHeadR2; }
+float2 animalSpan(float3 ro, float3 rd) {
+    float2 s = float2(1e9, -1e9);
+    s = addSphere(s, ro, rd, fromBody(float3(0.0, 0.36, 0.03)), 0.58);                              // body, belly and feet
+    s = addSphere(s, ro, rd, fromHead(float3(0.0, 0.30, 0.0)), 0.60);                               // head, eyes, beak
+    s = addSphere(s, ro, rd, fromBody(float3(-0.32, 0.64, 0.04) + 0.05 * uWingL0 - 0.28 * uWingL1 + 0.02 * uWingL2), 0.44);   // wings
+    s = addSphere(s, ro, rd, fromBody(float3(0.32, 0.64, 0.04) + 0.05 * uWingR0 - 0.28 * uWingR1 + 0.02 * uWingR2), 0.44);
+    float3 br = BRANCH_B - BRANCH_A;                                                                // the branch, in three
+    s = addSphere(s, ro, rd, BRANCH_A + br * (1.0 / 6.0), 0.46);
+    s = addSphere(s, ro, rd, BRANCH_A + br * 0.5, 0.46);
+    s = addSphere(s, ro, rd, BRANCH_A + br * (5.0 / 6.0), 0.46);
+    s = addSphere(s, ro, rd, uOrb.xyz, uOrb.w + 0.08);                                              // the orb
+    return clipSpan(ro, rd, s, CAM_TARGET, BOUND_R);
+}
 
 float map(float3 p) {
     float3 b = toBody(p);
@@ -227,7 +259,8 @@ float3 headColour(float3 h) {
 float3 bodyColour(float3 b) {
     // A pale front, narrower than the owl, with brown streaks running down
     // it; brown sides and back with white spots.
-    float front = (1.0 - smoothstep(-0.20, -0.02, b.z)) * (1.0 - smoothstep(0.16, 0.26, abs(b.x)));
+    float front = (1.0 - smoothstep(-0.20, -0.02, b.z)) * (1.0 - smoothstep(0.16, 0.26, abs(b.x))) *
+                  (1.0 - smoothstep(0.54, 0.72, b.y));
     float streak = smoothstep(0.35, 0.75, sin(b.x * 30.0 + sin(b.y * 6.0) * 1.6)) *
                    (1.0 - smoothstep(0.25, 0.80, b.y));
     float3 belly = mix(CREAM, BROWN * 1.15, streak * 0.85);
@@ -251,7 +284,10 @@ float3 eyeColour(float3 h) {
 
 float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
-    if (id == ID_EYE) return float4(eyeColour(h), 1.0);
+    if (id == ID_EYE) {
+        float4 l = eyeLid(eyeColour(h), CREAM, h, eyeAt(), 0.142, h.x < 0.0 ? uFace.x : uFace.y);
+        return float4(l.rgb, 1.0 - l.w);
+    }
     if (id == ID_BEAK) {
         if (beakIn(h) < min(beakUp(h), beakLo(h))) return float4(GAPE, -2.0);
         return float4(HORN, 0.5);
@@ -285,7 +321,7 @@ float3 sparkle(float id, float3 pos) {
     float2 at = float2(-0.030 + 0.016 * uLook.x, 0.036 + 0.012 * uLook.y);
     float spark = 1.0 - smoothstep(0.014, 0.024, length(q - at));
     float spark2 = 1.0 - smoothstep(0.006, 0.011, length(q - at - float2(0.048, -0.046)));
-    float lit = smoothstep(0.02, 0.25, min(uFace.x, uFace.y));
+    float lit = smoothstep(0.02, 0.25, min(uFace.x, uFace.y)) * (1.0 - uLid.x);
     return float3(1.5) * max(spark, spark2 * 0.8) * lit * (h.z < -0.33 ? 1.0 : 0.0);
 }
 
@@ -294,4 +330,10 @@ float3 sparkle(float id, float3 pos) {
 // meets something, and map() there; -1 for nothing.)
 float2 stuckRay(float3 ro, float3 rd) {
     return float2(-1.0, 0.0);
+}
+
+// Its shadow on the ground below (common_tail.sksl draws it where a ray
+// misses): none - it has its own seat, perch, vine or water.
+float ground(float3 ro, float3 rd) {
+    return 0.0;
 }

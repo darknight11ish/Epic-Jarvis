@@ -47,6 +47,9 @@ object OpenPlace {
         "voice" to Where.Go(Screen.SETTINGS, "voice"),
         "security" to Where.Go(Screen.SETTINGS, "security"),
         "appearance-card" to Where.Go(Screen.SETTINGS, "appearance-card"),
+        // "Animal options" is a card of its own on the desktop; on the phone it
+        // is inside Appearance, so the same row is where it opens.
+        "animal-options" to Where.Go(Screen.SETTINGS, "appearance-card"),
         "manner" to Where.Go(Screen.SETTINGS, "manner"),
         "web-search" to Where.Go(Screen.SETTINGS, "web-search"),
         "asks-first" to Where.Go(Screen.SETTINGS, "asks-first"),

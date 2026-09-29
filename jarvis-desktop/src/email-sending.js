@@ -33,7 +33,7 @@ export const DRAFT_EMAIL_ACTION = "draft_email";
 
 /**
  * The gate action every inbox tidy is asked under (jarvis_inbox_tidy.ACTION;
- * JARVIS-API.md section 94). Its card lists every email that will be touched
+ * JARVIS-API.md section 95). Its card lists every email that will be touched
  * (sender, subject, date - words from outside), so it too is shown verbatim
  * and approved only in the Jarvis bar, where the whole list can be read.
  */

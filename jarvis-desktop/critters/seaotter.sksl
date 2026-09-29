@@ -53,6 +53,7 @@ const float CAM_DIST = 3.30;
 const float CAM_PITCH = 0.50;
 const float BOUND_R = 1.25;
 const int MARCH_STEPS = 48;
+
 // The pool: a thin round disc of water, this wide.
 const float POOL_R = 1.02;
 
@@ -140,6 +141,41 @@ float partEyes(float3 h) {
 float waterAt(float3 p) {
     float slab = max(p.y - uWater.x, (uWater.x - 0.05) - p.y);
     return smax(slab, length(p.xz) - POOL_R, 0.04);
+}
+
+// Where along a ray the animal can be. Each part has a sphere round it,
+// placed from where the part is in THIS pose (the body and head through the
+// pose's own frames), with a margin of a few pixels - a ray that passes a
+// part by less than that can still be taken for a hit. A ray that meets none
+// of them is not marched at all, and one that does is marched no further than
+// the last of them (clipSpan, common_head.sksl). Measured against the single
+// sphere this replaces: docs/CRITTERS.md, "The bounding volumes".
+float3 fromBody(float3 q) { return uBodyPos + q.x * uBodyR0 + q.y * uBodyR1 + q.z * uBodyR2; }
+float3 fromHead(float3 h) { return uNeck + h.x * uHeadR0 + h.y * uHeadR1 + h.z * uHeadR2; }
+// The pool: a thin flat disc, so its box - a slab of height, cut by a round
+// column - is far tighter than a sphere round it.
+float2 poolSpan(float3 ro, float3 rd) {
+    float iy = 1.0 / (rd.y < 0.0 ? min(rd.y, -1e-4) : max(rd.y, 1e-4));
+    float ta = (uWater.x - 0.30 - ro.y) * iy;
+    float tb = (uWater.x + 0.25 - ro.y) * iy;
+    float a = max(dot(rd.xz, rd.xz), 1e-6);
+    float b = dot(ro.xz, rd.xz);
+    float disc = b * b - a * (dot(ro.xz, ro.xz) - (POOL_R + 0.25) * (POOL_R + 0.25));
+    if (disc <= 0.0) return float2(1e9, -1e9);
+    float sq = sqrt(disc);
+    float2 r = float2(max(min(ta, tb), (-b - sq) / a), min(max(ta, tb), (-b + sq) / a));
+    return r.x < r.y ? r : float2(1e9, -1e9);
+}
+float2 animalSpan(float3 ro, float3 rd) {
+    float2 s = poolSpan(ro, rd);                                                                    // the water
+    s = addSphere(s, ro, rd, fromBody(float3(-0.20, 0.0, 0.0)), 0.52);                              // body, in three
+    s = addSphere(s, ro, rd, fromBody(float3(0.17, 0.0, 0.0)), 0.55);
+    s = addSphere(s, ro, rd, fromBody(float3(0.66, 0.06, 0.0)), 0.44);                              // tail and feet
+    s = addSphere(s, ro, rd, fromHead(float3(0.0)), 0.52);                                          // head
+    s = addSphere(s, ro, rd, 0.5 * (uShL + uPawL), 0.5 * length(uPawL - uShL) + 0.16);              // arms
+    s = addSphere(s, ro, rd, 0.5 * (uShR + uPawR), 0.5 * length(uPawR - uShR) + 0.16);
+    s = addSphere(s, ro, rd, uOrb.xyz, uOrb.w + 0.08);                                              // the pebble
+    return clipSpan(ro, rd, s, CAM_TARGET, BOUND_R);
 }
 
 float map(float3 p) {
@@ -262,7 +298,10 @@ float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
     float3 v = normalize(eyePos() - pos);
     float edge = smoothstep(0.55, 0.92, 1.0 - abs(dot(n, v)));
-    if (id == ID_EYE) return float4(INK, 1.0);
+    if (id == ID_EYE) {
+        float4 l = eyeLid(INK, FACE * 0.95, h, eyeAt(), 0.048, h.x < 0.0 ? uFace.x : uFace.y);
+        return float4(l.rgb, 1.0 - l.w);
+    }
     if (id == ID_NOSE) return float4(INK * 2.0, 0.7);
     if (id == ID_HEAD) {
         // The drawn mouth on the front of the muzzle, and the walls of the
@@ -324,7 +363,7 @@ float3 sparkle(float id, float3 pos) {
     float2 q = float2(h.x - side * ea.x, h.y - ea.y);
     float2 at = float2(-0.010 + 0.008 * uLook.x, 0.014 + 0.006 * uLook.y);
     float spark = 1.0 - smoothstep(0.006, 0.011, length(q - at));
-    float lit = smoothstep(0.02, 0.25, min(uFace.x, uFace.y));
+    float lit = smoothstep(0.02, 0.25, min(uFace.x, uFace.y)) * (1.0 - uLid.x);
     return float3(1.5) * spark * lit * (h.z < -0.19 ? 1.0 : 0.0);
 }
 
@@ -339,4 +378,10 @@ float2 stuckRay(float3 ro, float3 rd) {
     float t = (uWater.x - ro.y) / rd.y;
     float3 q = ro + rd * t;
     return float2(length(q.xz) < POOL_R - 0.02 ? t : -1.0, map(q));
+}
+
+// Its shadow on the ground below (common_tail.sksl draws it where a ray
+// misses): none - it has its own seat, perch, vine or water.
+float ground(float3 ro, float3 rd) {
+    return 0.0;
 }

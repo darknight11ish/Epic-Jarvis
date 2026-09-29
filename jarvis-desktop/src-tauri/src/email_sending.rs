@@ -38,7 +38,7 @@ pub(crate) const SEND_EMAIL_ACTION: &str = "send_email";
 pub(crate) const DRAFT_EMAIL_ACTION: &str = "draft_email";
 
 /// The gate action every inbox tidy is asked under (jarvis_inbox_tidy.ACTION;
-/// JARVIS-API.md section 94). Its card lists every email that will be
+/// JARVIS-API.md section 95). Its card lists every email that will be
 /// touched - sender and subject, words from outside - so like an email's it
 /// is shown verbatim (never Markdown) and approved only in the Jarvis bar,
 /// where the whole list can be read, never from the widget's one line.
@@ -160,7 +160,7 @@ mod tests {
             &serde_json::json!({ "id": "a", "action": "draft_email" })
         ));
         // A tidy of the inbox lists every email it will touch (JARVIS-API.md
-        // section 94): the same never-Markdown, never-widget-approve rule.
+        // section 95): the same never-Markdown, never-widget-approve rule.
         assert!(is_email(
             &serde_json::json!({ "id": "a", "action": "tidy_inbox" })
         ));

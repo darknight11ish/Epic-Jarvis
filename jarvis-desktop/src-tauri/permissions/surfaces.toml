@@ -27,6 +27,16 @@ permissions = [
   # (jarvis-link.js followAppearance), and the widget's live face wears them.
   "allow-appearance-snapshot",
   "allow-appearance-colours",
+  # This computer's old "Keep the animal still", sent to the PC ONCE and
+  # only if it was on (animal.rs migrate_animal_still) - from whichever
+  # window opens first, since Settings may never be opened. It can only
+  # ever send {"still": true}, once; cosmetic, approves nothing.
+  "allow-migrate-animal-still",
+  # Whether App lock and "Hide memory lists and chat history" are on - two
+  # yes/no answers, the same ones the `security-changed` event already hands
+  # every window. The faces never nod at a saved fact while either is on
+  # (face-moments.js, the owner's rule of 2026-09-28).
+  "allow-get-lock-flags",
 ]
 
 # Reading the theme and nothing else: the first-run window paints the
@@ -158,6 +168,9 @@ permissions = [
   "allow-hud-chat",
   "allow-hud-chat-cancel",
   "allow-mark-answer",
+  # Two yes/no answers - App lock and "Hide memory lists" - so the HUD's
+  # face never nods at a saved fact while either is on (face-moments.js).
+  "allow-get-lock-flags",
 ]
 
 # The daily brief and the interruption budget. Granted to the quickbar alone,
@@ -438,6 +451,12 @@ permissions = [
   # stale link in Rust; hiding, forgetting and "off" never are.
   "allow-get-sky",
   "allow-set-sky",
+  # "Animal options" (backend/animal.patch, 2026-09-28): "Keep the animal
+  # still" and the behaviour switches, shared with the phone - a read and
+  # ONE change at a time. Cosmetic: no card either way; turning one on is
+  # held on a stale link in Rust.
+  "allow-get-animal",
+  "allow-set-animal",
   # "What asks first" (backend/asks-first.patch, 2026-09-26): every action
   # and whether it asks first, in the PC's words (a read); "Ask me first" on
   # ONE action of the short safe list - stricter at once, looser only as one
@@ -942,7 +961,7 @@ permissions = [
   "allow-forget-range-write",
 ]
 
-# "Inbox tidy by voice" (backend/inbox-tidy.patch; JARVIS-API section 94; the
+# "Inbox tidy by voice" (backend/inbox-tidy.patch; JARVIS-API section 95; the
 # owner's decision of 2026-09-28). The tidy itself is an ordinary approval
 # card, decided in the Jarvis bar (never by voice, never from the widget's
 # one line). This set is only the Undo strip under the bar's input: reading
@@ -1106,7 +1125,7 @@ permissions = ["allow-get-appearance"]
 # change anything: that is Settings.
 [[set]]
 identifier = "sky-read"
-description = "Read whether the sun and moon show behind the animal, the rough position and the weather now. Cosmetic and read-only."
+description = "Read whether the sun and moon show behind the face, the rough position and the weather now. Cosmetic and read-only."
 permissions = ["allow-get-sky"]
 
 # Settings' "Open Faces" button. Opens a window; changes nothing by itself.

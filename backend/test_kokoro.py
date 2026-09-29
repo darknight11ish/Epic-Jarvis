@@ -1,6 +1,6 @@
 """Kokoro v1.0: the voice pack, voices BY NAME, "Hear it", the carry-over of the
 owner's old choice, and the pinned download (the owner's decision of
-2026-09-28, built 2026-09-29; docs/JARVIS-API.md section 93).
+2026-09-28, built 2026-09-29; docs/JARVIS-API.md section 94).
 
     python3 test_kokoro.py
 
@@ -485,7 +485,8 @@ def t_status_does_the_carry_over_and_survives_damage():
 def t_the_animals_keep_their_voices_by_name_and_never_sky():
     d = reset("v1", face_voice=True)
     want = {"redpanda": ("af_bella", 2), "pygmyowl": ("af_nicole", 6),
-            "seaotter": ("af_sarah", 9), "monkey": ("am_michael", 16)}
+            "seaotter": ("af_sarah", 9), "monkey": ("am_michael", 16),
+            "robot": ("bf_emma", 21)}
     for face, (name, sid) in want.items():
         show_face(d, face)
         check(f"{face}: {name}, number {sid} on v1.0",
@@ -495,8 +496,8 @@ def t_the_animals_keep_their_voices_by_name_and_never_sky():
           all(r["speaker"] not in ("af_sky", "am_adam") for r in V.FACE_VOICES.values()))
     reset("v019", face_voice=True)
     show_face(V._config_dir(), "seaotter")
-    check("on the old pack the same names are the old numbers (3, 6, 1, 2 as before)",
-          [K.sid_of("v019", r["speaker"]) for r in V.FACE_VOICES.values()] == [1, 2, 3, 6])
+    check("on the old pack the same names are the old numbers (3, 6, 1, 2, 7 as before)",
+          [K.sid_of("v019", r["speaker"]) for r in V.FACE_VOICES.values()] == [1, 2, 3, 6, 7])
     d = reset("v1", face_voice=True)
     code, out = V.set_face_animal({"face": "redpanda", "speaker": "am_fenrir", "semitones": 1.0,
                                    "pace": "normal"})

@@ -74,7 +74,7 @@ await check("readSending passes the PC's own line on, and a PC without it says s
   // 40) and needs the same never-Markdown, never-widget-approve treatment.
   assert.equal(isEmailCard({ action: "draft_email" }), true);
   // An inbox tidy's card lists every email it will touch (JARVIS-API.md
-  // section 94): words from outside, so the same never-Markdown,
+  // section 95): words from outside, so the same never-Markdown,
   // never-widget-approve treatment, with its own one line for the widget.
   assert.equal(isEmailCard({ action: "tidy_inbox" }), true);
   assert.equal(emailDetail({ action: "tidy_inbox" }), TIDY_DETAIL);

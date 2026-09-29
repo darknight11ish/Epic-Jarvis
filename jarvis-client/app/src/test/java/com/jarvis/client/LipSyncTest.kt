@@ -1,6 +1,7 @@
 package com.jarvis.client
 
 import com.jarvis.client.audio.LipSync
+import com.jarvis.client.face.CritterPose
 import com.jarvis.client.audio.Wav
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -89,6 +90,11 @@ class LipSyncTest {
                     assertTrue("$name: $key[$i] is ${got[i]}, the desktop says $w", abs(got[i] - w) <= tol)
                 }
             }
+            // Where the phrases end, worked out before the clip plays: the desktop's answer.
+            val ends = LipSync.phraseEnds(track)
+            val wantEnds = o["phrase_ends"]!!.jsonArray.map { it.jsonPrimitive.float }
+            assertEquals("$name: phrase ends ${ends.toList()} vs the desktop's $wantEnds", wantEnds.size, ends.size)
+            for (i in ends.indices) assertEquals("$name: phrase end $i", wantEnds[i], ends[i], 2e-3f)
             // sample() at the same moments the desktop was asked about.
             val out = FloatArray(4)
             for (r in o["reads"]!!.jsonArray) {
@@ -271,6 +277,67 @@ class LipSyncTest {
         }
     }
 
+    /**
+     * The voice-speed check (2026-09-28): the same sentence at the slowest
+     * pace the apps offer (0.7225, an animal's Slower times the owner's) and
+     * the fastest (1.3225), each carrying the PC's mouth timing. The phone
+     * plays exactly what the desktop plays at both, and at both the mouth
+     * still shuts between the words and for m / b / p (the desktop's
+     * lipsync.mjs checks the same clips in more detail).
+     */
+    @Test
+    fun `at the slowest and the fastest pace the phone's mouth is the desktop's`() {
+        val paces = golden["paces"]!!.jsonArray
+        assertEquals("the fixture should hold the slowest and the fastest pace", 2, paces.size)
+        for (p in paces) {
+            val o = p.jsonObject
+            val name = o["file"]!!.jsonPrimitive.content
+            val wav = clip(name)
+            val pcm = Wav.decode(wav)
+            val rate = Wav.rateOf(wav)
+            val audio = LipSync.analyse(pcm, rate)
+            val track = LipSync.forClip(wav, pcm, rate)
+            assertTrue("$name: the PC's mouth was not taken", o["merged"]!!.jsonPrimitive.boolean)
+            assertFalse("$name: the PC's mouth was not taken", audio.open.contentEquals(track.open))
+            assertEquals("$name: frames", o["n"]!!.jsonPrimitive.int, track.n)
+            for ((key, got) in listOf("level" to track.level, "open" to track.open,
+                "wide" to track.wide, "round" to track.round)) {
+                val want = o[key]!!.jsonArray
+                assertEquals("$name: $key length", want.size, got.size)
+                for (i in got.indices) {
+                    val w = want[i].jsonPrimitive.float
+                    assertTrue("$name: $key[$i] is ${got[i]}, the desktop says $w", abs(got[i] - w) <= tol)
+                }
+            }
+            val out = FloatArray(4)
+            for (r in o["reads"]!!.jsonArray) {
+                val t = r.jsonObject["t"]!!.jsonPrimitive.float
+                val want = r.jsonObject["out"]!!.jsonArray.map { it.jsonPrimitive.float }
+                LipSync.sample(track, t, out)
+                for (k in 0..3) assertTrue("$name: sample($t)[$k] is ${out[k]}, the desktop says ${want[k]}", abs(out[k] - want[k]) <= tol)
+            }
+            // "Okay. Maybe Bob made a map.": the pause and the lips close the
+            // mouth between openings - from the sound alone and from the PC's timing.
+            assertTrue("$name: ${closures(audio.open)} closures from the sound", closures(audio.open) >= 5)
+            assertTrue("$name: ${closures(track.open)} closures from the PC's timing", closures(track.open) >= 4)
+        }
+    }
+
+    /** Times the mouth drops below 0.12 between two openings above 0.25 (lipsync.mjs `closures`). */
+    private fun closures(open: FloatArray): Int {
+        var count = 0
+        var low = 1f
+        var armed = false
+        for (o in open) {
+            if (o > 0.25f) {
+                if (armed && low < 0.12f) count++
+                armed = true
+                low = 1f
+            } else if (armed) low = minOf(low, o)
+        }
+        return count
+    }
+
     @Test
     fun `every good and broken chunk is read as the desktop reads it, and a broken one changes nothing`() {
         val src = clip(mouth["source"]!!.jsonPrimitive.content)
@@ -370,4 +437,31 @@ class LipSyncTest {
 
     private fun sha256(b: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
+
+    /** The phrase finder's rules, on made-up levels (the desktop's animal-motion.mjs holds the same numbers). */
+    @Test
+    fun `phrase ends are found before the clip plays, by the live finder's rules`() {
+        fun track(n: Int, f: (Int) -> Float) = LipSync.Track(100, FloatArray(n, f), FloatArray(n), FloatArray(n), FloatArray(n))
+        fun ends(t: LipSync.Track) = LipSync.phraseEnds(t).map { Math.round(it * 100) / 100f }
+        assertEquals(emptyList<Float>(), ends(track(0) { 0f }))
+        assertEquals(listOf(4f), ends(track(400) { 0.5f }))
+        assertEquals("a pause of 0.1 s at 2.00 s", listOf(2f, 5f), ends(track(500) { if (it in 200 until 210) 0f else 0.5f }))
+        assertEquals("0.3 s of sound before a pause is too short", listOf(2f, 5f),
+            ends(track(500) { if (it in 200 until 210 || it in 30 until 60) 0f else 0.5f }))
+        assertEquals("the clip's own end, under 2 s after a pause, is left out", listOf(2f),
+            ends(track(400) { if (it in 200 until 210) 0f else 0.5f }))
+        // The next end still to come, from a heard moment (what the face is handed ahead of time).
+        val e = floatArrayOf(1.2f, 3.5f)
+        assertEquals(1.2f, LipSync.nextEnd(e, 0f), 1e-6f)
+        assertEquals(0.7f, LipSync.nextEnd(e, 0.5f), 1e-6f)
+        assertEquals(2.3f, LipSync.nextEnd(e, 1.2f), 1e-6f)
+        assertEquals(LipSync.NO_PHRASE_END, LipSync.nextEnd(e, 3.5f), 0f)
+        assertEquals(LipSync.NO_PHRASE_END, LipSync.nextEnd(FloatArray(0), 0f), 0f)
+        // The same numbers as the live finder's (CritterPose.Pause).
+        assertEquals(CritterPose.Pause.ON, LipSync.PhraseRule.ON, 0f)
+        assertEquals(CritterPose.Pause.OFF, LipSync.PhraseRule.OFF, 0f)
+        assertEquals(CritterPose.Pause.TALK_MIN, LipSync.PhraseRule.TALK_MIN, 0f)
+        assertEquals(CritterPose.Pause.PHRASE_QUIET, LipSync.PhraseRule.QUIET, 0f)
+        assertEquals(CritterPose.Pause.PHRASE_GAP, LipSync.PhraseRule.GAP, 0f)
+    }
 }

@@ -37,17 +37,17 @@ object SkySettings {
     const val POLL_MS = 10L * 60 * 1000
 
     const val TITLE = "Sun, moon and weather"
-    const val SHOW_LABEL = "Show the sun and moon behind the animal"
+    const val SHOW_LABEL = "Show the sun and moon behind the face"
     const val SHOW_DETAIL =
         "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, " +
             "waxing, waning) - worked out on your own devices. Nothing goes online for it. For the " +
-            "animal faces; the others are not changed."
+            "animal and robot faces; the others are not changed."
     const val PLACE_LABEL = "Your town"
-    const val PLACE_PHONE = "Your town is typed on the PC, in Settings, Appearance."
+    const val PLACE_PHONE = "Your town is typed on the PC, in Settings, Animal options."
     const val PLACE_NONE = "No town yet, so there is no sun or moon to show. Type your town on the PC."
     const val FORGET_LABEL = "Forget my town"
-    const val WEATHER_LABEL = "Weather in the animal's scene"
-    const val WEATHER_DETAIL = "Rain, snow or wind behind the animal. Off by default."
+    const val WEATHER_LABEL = "Weather behind the face"
+    const val WEATHER_DETAIL = "Rain, snow or wind behind the face. Off by default."
     const val MISSING = "Your PC's Jarvis cannot show the sun, moon or weather yet - run apply-patches.ps1 on the PC."
 
     val SOURCES = listOf("off", "home_assistant", "open_meteo")

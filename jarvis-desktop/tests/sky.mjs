@@ -292,11 +292,11 @@ if (!K) {
   // Settings -> Appearance -> "Sun, moon and weather", with a fake PC.
   const VIEW = (over) => Object.assign({
     available: true, title: "Sun, moon and weather", show: false,
-    show_label: "Show the sun and moon behind the animal", show_detail: "detail",
+    show_label: "Show the sun and moon behind the face", show_detail: "detail",
     place: null, place_label: "Your town", place_detail: "Type it once on the PC.",
     place_none: "No town yet.", forget_label: "Forget my town", can_set_place: true,
     weather: { source: "off", now: null, status: "Off.", waiting: false, last: null,
-      label: "Weather in the animal's scene", detail: "Rain, snow or wind.",
+      label: "Weather behind the face", detail: "Rain, snow or wind.",
       choices: [{ id: "off", label: "Off (default)", why: "No weather is drawn." },
         { id: "home_assistant", label: "My Home Assistant", why: "home" },
         { id: "open_meteo", label: "Open-Meteo (online)", why: "online" }] },
@@ -321,7 +321,7 @@ if (!K) {
   await check("Settings shows the section in the PC's words, off by default", async () => {
     await sp.waitForFunction(() => !document.getElementById("sky-body").hidden, null, { timeout: 10000 });
     assert.equal(await sp.isChecked("#sky-show"), false);
-    assert.equal(await sp.textContent("#sky-show-label"), "Show the sun and moon behind the animal");
+    assert.equal(await sp.textContent("#sky-show-label"), "Show the sun and moon behind the face");
     assert.equal(await sp.isChecked('input[name="sky-weather"][value="off"]'), true);
   });
   await check("typing a town sends ONE change, and the faces' copy is kept", async () => {

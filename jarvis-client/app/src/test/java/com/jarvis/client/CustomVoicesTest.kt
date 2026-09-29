@@ -419,7 +419,7 @@ class CustomVoicesTest {
     fun `each animal's voice - the PC's rows, choices and words, no card`() {
         for (case in voices["status"]!!.jsonObject.keys) {
             val fv = requireNotNull(status(case).faceVoice) { "$case: no face_voice" }
-            assertEquals(case, listOf("redpanda", "pygmyowl", "seaotter", "monkey"), fv.animals.map { it.face })
+            assertEquals(case, listOf("redpanda", "pygmyowl", "seaotter", "monkey", "robot"), fv.animals.map { it.face })
             assertTrue("$case: ${fv.choices.voices.size} voices", fv.choices.voices.size >= 9)
             assertTrue(case, fv.choices.voices.none { it.id == "af_sky" || it.id == "am_adam" })
             assertEquals(case, listOf("slower", "normal", "faster"), fv.choices.paces.map { it.id })
@@ -435,6 +435,7 @@ class CustomVoicesTest {
                 Triple("af_nicole", 1.0, "slower"),
                 Triple("af_sarah", 3.0, "faster"),
                 Triple("am_michael", 1.0, "normal"),
+                Triple("bf_emma", 2.0, "faster"),
             ),
             own.map { Triple(it.speaker, it.semitones, it.pace) },
         )
@@ -463,7 +464,7 @@ class CustomVoicesTest {
             CustomVoices.answerLine(answer("animal_bad")),
         )
         assertEquals(
-            "Choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey.",
+            "Choose the Red Panda, the Pygmy Owl, the Sea Otter, the Monkey or the Robot.",
             CustomVoices.answerLine(answer("animal_try_bad")),
         )
         // A PC too old to have the rows: the switch alone, no rows.

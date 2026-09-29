@@ -213,6 +213,8 @@ import { mountInboxTidy } from "./inbox-tidy.js";
 // What a `step` event means, in words - shared with Brain's Live tab
 // (item 10, UI-AUDIT-2026-09-26.md).
 import { stepText } from "./step-words.js";
+import { DEVICE_CHANGES, stepTuning } from "./animal-shared.js";
+import { loadFaceTuning, saveFaceTuning } from "./face-tuning.js";
 // Jarvis Live: the same rules as the phone's (live-rules.js, 2026-09-28).
 import {
   BUTTONS,
@@ -697,7 +699,7 @@ const answerMemory = createAnswerMemory({
 let inboxTidyView = null;
 
 /**
- * "Inbox tidy by voice" (inbox-tidy.js; JARVIS-API.md section 94): ten
+ * "Inbox tidy by voice" (inbox-tidy.js; JARVIS-API.md section 95): ten
  * minutes of Undo after a tidy card was approved. The card itself is decided
  * above, in this bar; this strip only offers Undo - one tap, no card, held on
  * a stale link, and waiting for the unlock while Jarvis is locked (Rust).
@@ -1414,6 +1416,7 @@ function applyHeaderRoute(route) {
     temporaryChat.setGame(true);
   }
   openSettingsFromRoute(state.turnRoute);
+  applyFaceTuningFromRoute(state.turnRoute);
   cloudOfferFromRoute(state.turnRoute);
   openBrainFromRoute(state.turnRoute);
   const next = routeFromHeader(route);
@@ -1442,6 +1445,26 @@ function openSettingsFromRoute(route) {
     /* no storage: Settings opens at the top, and the answer's own words say where */
   }
   invoke("open_fix_place", { place: "settings" });
+}
+
+/**
+ * "Make the animal sharper" / "smoother" by voice or chat (jarvis_quick.py,
+ * the owner's decisions of 2026-09-28): sharpness and frame rate are kept
+ * per device, so the PC changes nothing and names the change in
+ * X-Jarvis-Route's `face_tuning` - and THIS computer, the one that asked,
+ * applies it to its own face settings (face-tuning.js) with the PC's own
+ * rule (animal-shared.js stepTuning). Every face page and Settings hear it
+ * through localStorage. Only one of a fixed list of words is acted on.
+ * Returns the line announced about it, or "".
+ */
+function applyFaceTuningFromRoute(route) {
+  const change = route && typeof route.face_tuning === "string" ? route.face_tuning : "";
+  if (!change || !DEVICE_CHANGES.includes(change)) return "";
+  const step = stepTuning(loadFaceTuning(), change);
+  if (step.changed) saveFaceTuning(step.tuning);
+  const line = step.line.replace("{device}", "this computer");
+  if (line) announce(line);
+  return line;
 }
 
 /**

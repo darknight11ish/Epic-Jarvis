@@ -983,6 +983,14 @@ def _match(text, now: float) -> Optional[Intent]:
     # made that older phrase silently unreachable. This block still runs
     # before everything below it, so it wins every case that does not
     # collide with something that came before it.
+    # --- animal options (jarvis_animal.py, jarvis_sky.py; 2026-09-28) -----------
+    # Before the generic "turn on/off <a setting>": "turn off the weather"
+    # and "stop the animal's nodding" are ours; a tail that names no animal
+    # option falls through untouched.
+    got = _animal(s)
+    if got is not None:
+        return got
+
     got = _settings_open(s)
     if got is not None:
         return got
@@ -1061,6 +1069,11 @@ def _match(text, now: float) -> Optional[Intent]:
                      r"(?:\s+list)?", s)
     if m:
         return Intent("todo_remove", {"text": m.group(1).strip()})
+    # --- an animal request nothing above understood (2026-09-28) ------------------
+    # Last, so a reminder or a list that happens to mention "the animal" is
+    # never taken for one: a plain question back, never a guess.
+    if _ANIMAL_UNSURE.fullmatch(s):
+        return Intent("animal_ask", {"about": "animal"})
     return None
 
 
@@ -2451,6 +2464,214 @@ def _settings_adjust(s: str) -> Optional[Intent]:
     return None
 
 
+# --------------------------------------------------------------------------
+#   Animal options, by asking (the owner's decision of 2026-09-28: "Jarvis
+#   can change any of them when asked ... the same rules as the switch").
+#   The shared switches and the sky change on the PC (jarvis_settings_
+#   registry's animal functions, the same ones the switches call); sharpness
+#   and frame rate are per device, so the answer carries `face_tuning` in
+#   X-Jarvis-Route and the app that asked changes itself. Whole sentences
+#   only, like everything here, and only names jarvis_animal.py / this block
+#   list - anything else about the animal gets a plain question back.
+# --------------------------------------------------------------------------
+
+#: What "the animal" may be called: the word itself, one of the four, or the robot.
+_BEAST = (r"(?:the\s+|my\s+)?(?:animal|animals|animal\s+face|red\s+panda|panda|owl|sea\s+otter"
+          r"|otter|monkey|robot)")
+_BEASTS = _BEAST + r"(?:'s|s')?"
+
+_STILL_ON = re.compile(
+    r"keep\s+" + _BEAST + r"\s+still"
+    r"|make\s+" + _BEAST + r"\s+(?:keep|stay|be|sit|hold)\s+still"
+    r"|(?:stop|no\s+more)\s+" + _BEAST + r"\s+(?:moving(?:\s+around)?|fidgeting|looking\s+around)"
+    r"|(?:tell\s+)?" + _BEAST + r"\s+(?:to\s+)?(?:keep|stay|sit|hold)\s+still")
+_STILL_OFF = re.compile(
+    r"let\s+" + _BEAST + r"\s+move(?:\s+(?:again|around|as\s+usual|normally))?"
+    r"|(?:stop|don'?t)\s+keep(?:ing)?\s+" + _BEAST + r"\s+still"
+    r"|" + _BEAST + r"\s+(?:can|may)\s+move(?:\s+(?:again|around|as\s+usual|normally))?")
+
+#: "turn on X" / "switch X off" / "enable X" / "disable X" / "stop X".
+_ONOFF = re.compile(
+    r"(?:turn|switch)\s+(on|off)\s+(.+)"
+    r"|(?:turn|switch)\s+(.+?)\s+(on|off)"
+    r"|(enable|disable)\s+(.+)"
+    r"|(stop|no\s+more)\s+(.+)")
+_SHOWHIDE = re.compile(r"(show|hide)\s+(?:me\s+)?(.+)")
+
+#: A tail's "for the animal" / "behind the animal" / "the animal's" parts -
+#: and "behind the face", the words the sky's own switches use (so they read
+#: right for the robot too).
+_TAIL_FOR = re.compile(r"\s+(?:for|on|behind|around|in)\s+(?:" + _BEAST
+                       + r"|(?:the\s+|my\s+)?face)(?:'s\s+scene)?$")
+_HEAD_OF = re.compile(r"^" + _BEASTS + r"\s+")
+
+_SKY_NAMES = ("sun and moon", "sun and the moon", "the sun and moon", "the sun and the moon",
+              "sky", "the sky", "sun and moon scene")
+_WEATHER_NAMES = ("weather", "the weather", "weather scene", "the weather scene",
+                  "weather in the scene", "rain and snow")
+
+_SOURCE = r"(open[\s-]?meteo(?:\s+online)?|(?:my\s+|the\s+)?home\s+assistant|off|nothing|none|no\s+weather)"
+_WEATHER_SRC = re.compile(
+    r"(?:use|pick|choose|switch\s+to|get)\s+" + _SOURCE + r"\s+(?:for|as)\s+(?:the\s+)?"
+    r"(?:" + _BEASTS + r"\s+)?weather(?:\s+source)?(?:\s+for\s+" + _BEAST + r")?"
+    r"|(?:get|take|draw)\s+(?:the\s+)?(?:" + _BEASTS + r"\s+)?weather\s+from\s+" + _SOURCE
+    + r"|(?:set|switch|change|put)\s+(?:the\s+)?(?:" + _BEASTS + r"\s+)?weather(?:\s+source)?"
+    r"\s+to\s+" + _SOURCE)
+
+_SHARP_WORD = {"lower": "low", "low": "low", "lowest": "low", "balanced": "medium",
+               "medium": "medium", "high": "high", "maximum": "max", "max": "max",
+               "highest": "max", "full": "max"}
+_RATE_WORD = {"30": "30", "thirty": "30", "60": "60", "sixty": "60", "90": "90",
+              "ninety": "90", "120": "120", "a hundred and twenty": "120",
+              "one hundred and twenty": "120", "max": "max", "maximum": "max"}
+_DEV_MAKE = re.compile(
+    r"make\s+" + _BEAST + r"(?:\s+look)?\s+(sharper|crisper|clearer|more\s+detailed"
+    r"|softer|less\s+sharp|blurrier|smoother|less\s+smooth|choppier)"
+    r"|make\s+" + _BEAST + r"(?:\s+look)?\s+as\s+sharp\s+as\s+(?:it\s+can(?:\s+be)?|possible)")
+_DEV_UPDOWN = re.compile(
+    r"(raise|increase|turn\s+up|lower|reduce|decrease|turn\s+down)\s+(?:the\s+)?(?:"
+    + _BEASTS + r"\s+)?(sharpness|quality|resolution|frame\s?rate)")
+_DEV_SET = re.compile(
+    r"(?:set|change|put|switch)\s+(?:the\s+)?(?:" + _BEASTS + r"\s+)?(sharpness|quality|resolution"
+    r"|frame\s?rate)\s+to\s+(.+?)(?:\s+(?:fps|frames\s+a\s+second))?")
+_DEV_AUTO = re.compile(
+    r"(?:turn|switch)\s+on\s+auto(?:matic)?[\s-]?adjust(?:ment)?"
+    r"|let\s+" + _BEAST + r"\s+(?:pick|choose|adjust)\s+(?:its\s+own\s+)?(?:sharpness(?:\s+and\s+"
+    r"frame\s?rate)?|quality|settings)(?:\s+(?:itself|automatically))?"
+    r"|(?:set|put)\s+(?:the\s+)?(?:" + _BEASTS + r"\s+)?(?:sharpness|quality)\s+(?:back\s+)?to\s+auto(?:matic)?")
+
+#: An animal request nothing else understood - asked back, never guessed.
+#: Only "the animal" itself (not a named animal: "set a timer for the
+#: monkey bread" is a timer), and only as the thing being changed.
+_ANIMAL_UNSURE = re.compile(
+    r"(?:turn|switch|make|set|change|stop|let|keep|enable|disable)\s+(?:on\s+|off\s+)?"
+    r"(?:the\s+|my\s+)?animal(?:'s|s)?(?:\s+.*)?")
+_WEATHER_ON = re.compile(
+    r"(?:turn|switch)\s+on\s+(?:the\s+)?(?:" + _BEASTS + r"\s+)?weather(?:\s+scene)?"
+    r"(?:\s+(?:for|behind)\s+" + _BEAST + r")?"
+    r"|(?:turn|switch)\s+(?:the\s+)?(?:" + _BEASTS + r"\s+)?weather(?:\s+scene)?\s+on"
+    r"|(?:enable|show)\s+(?:the\s+)?(?:" + _BEASTS + r"\s+)?weather\s+(?:for|behind)\s+" + _BEAST
+    + r"|enable\s+(?:the\s+)?weather(?:\s+scene)?")
+
+
+def _animal_target(tail: str):
+    """("switch", id) | ("sky", None) | ("weather", None) | None, for the
+    thing a "turn on/off ..." tail names - exact names only."""
+    t = " ".join(tail.split())
+    t = _TAIL_FOR.sub("", t)
+    for cand in (t, _HEAD_OF.sub("", t)):
+        bare = re.sub(r"^(?:the|my)\s+", "", cand)
+        if bare in _SKY_NAMES or cand in _SKY_NAMES:
+            return ("sky", None)
+        if bare in _WEATHER_NAMES or cand in _WEATHER_NAMES:
+            return ("weather", None)
+        try:
+            import jarvis_settings_registry as R
+        except Exception:
+            return None
+        key = R.find_animal_switch(cand)
+        if key is not None:
+            return ("switch", key)
+    return None
+
+
+def _source_of(word: str) -> Optional[str]:
+    w = word.strip()
+    if re.fullmatch(r"open[\s-]?meteo(?:\s+online)?", w):
+        return "open_meteo"
+    if re.fullmatch(r"(?:my\s+|the\s+)?home\s+assistant", w):
+        return "home_assistant"
+    if w in ("off", "nothing", "none", "no weather"):
+        return "off"
+    return None
+
+
+def _animal(s: str) -> Optional[Intent]:
+    # "Keep the animal still" and its opposite.
+    if _STILL_ON.fullmatch(s):
+        return Intent("animal_switch", {"key": "still", "on": True})
+    if _STILL_OFF.fullmatch(s):
+        return Intent("animal_switch", {"key": "still", "on": False})
+    # The weather's source, by name.
+    m = _WEATHER_SRC.fullmatch(s)
+    if m:
+        src = _source_of(next(g for g in m.groups() if g))
+        if src is not None:
+            return Intent("animal_weather", {"source": src})
+    # "Turn on the weather" names no source: asked, never guessed.
+    if _WEATHER_ON.fullmatch(s):
+        return Intent("animal_ask", {"about": "weather"})
+    # Per device: sharpness and frame rate.
+    if _DEV_AUTO.fullmatch(s):
+        return Intent("animal_device", {"change": "auto"})
+    m = _DEV_MAKE.fullmatch(s)
+    if m:
+        w = m.group(1)
+        change = ("sharpness:max" if w is None else
+                  "sharper" if w in ("sharper", "crisper", "clearer") or w.startswith("more")
+                  else "softer" if w in ("softer", "blurrier") or w == "less sharp"
+                  else "smoother" if w == "smoother" else "less_smooth")
+        return Intent("animal_device", {"change": change})
+    m = _DEV_UPDOWN.fullmatch(s)
+    if m:
+        up = m.group(1) in ("raise", "increase", "turn up")
+        rate = m.group(2).startswith("frame")
+        change = ("smoother" if up else "less_smooth") if rate else ("sharper" if up else "softer")
+        return Intent("animal_device", {"change": change})
+    m = _DEV_SET.fullmatch(s)
+    if m:
+        what, value = m.group(1), m.group(2).strip()
+        if what.startswith("frame"):
+            v = _RATE_WORD.get(value)
+            if v is not None:
+                return Intent("animal_device", {"change": f"frame_rate:{v}"})
+            if value in ("auto", "automatic"):
+                return Intent("animal_device", {"change": "auto"})
+        else:
+            v = _SHARP_WORD.get(value)
+            if v is not None:
+                return Intent("animal_device", {"change": f"sharpness:{v}"})
+        return Intent("animal_ask", {"about": "device"})
+    # On and off, by name: the shared switches, the sun and moon, the weather.
+    m = _ONOFF.fullmatch(s)
+    if m:
+        g = m.groups()
+        if g[0] is not None:
+            on, tail = g[0] == "on", g[1]
+        elif g[2] is not None:
+            on, tail = g[3] == "on", g[2]
+        elif g[4] is not None:
+            on, tail = g[4] == "enable", g[5]
+        else:
+            on, tail = False, g[7]
+        got = _animal_target(tail)
+        if got is not None:
+            kind, key = got
+            if kind == "switch":
+                return Intent("animal_switch", {"key": key, "on": on})
+            if kind == "sky":
+                return Intent("animal_sky", {"on": on})
+            if on:
+                return Intent("animal_ask", {"about": "weather"})
+            return Intent("animal_weather", {"source": "off"})
+    m = _SHOWHIDE.fullmatch(s)
+    if m:
+        got = _animal_target(m.group(2))
+        if got is not None and got[0] == "sky":
+            return Intent("animal_sky", {"on": m.group(1) == "show"})
+    return None
+
+
+ANIMAL_QUESTIONS = {
+    "animal": ("Which animal option do you mean? For example \"keep the animal still\", "
+               "\"turn off the weather\" or \"make the animal sharper\"."),
+    "weather": ("Where should the weather come from - your own Home Assistant, or Open-Meteo "
+                "online (that one asks with an approval card first)?"),
+    "device": ("Which one? Sharpness can be Lower, Balanced, High or Maximum; frame rate can be "
+               "30, 60, 90, 120 or Max."),
+}
+
+
 SEARCH_MISSING = ("Your PC's Jarvis does not have web search yet - run apply-patches.ps1 "
                   "on the PC.")
 
@@ -2788,6 +3009,10 @@ class Result:
     # the section id both apps already use for their own settings screen, so
     # they can jump there. None for every other answer made here.
     open_settings: Optional[str] = None
+    # Sharpness or frame rate asked for by voice or chat (2026-09-28): one of
+    # jarvis_animal.DEVICE_CHANGES. Per device, so the PC changes nothing -
+    # the app that asked applies it to itself (jarvis_animal.step_device).
+    face_tuning: Optional[str] = None
     # "Forget a time frame" (jarvis_forget_range.py, 2026-09-28): the place in
     # Brain both apps open - "forget-range" - after "forget what you learned
     # last week" filled in its list. Navigation only; nothing is removed.
@@ -2899,6 +3124,46 @@ def _run_settings_asks_first(f: dict, peer, local) -> Result:
     return Result(out.said, "settings_asks_first")
 
 
+def _run_animal(n: str, f: dict, peer, local) -> Result:
+    """Animal options by asking - the same functions the switches call, so
+    the same rules: the shared switches and the sun and moon at once, the
+    weather off or Home Assistant at once, Open-Meteo ONE approval card
+    (jarvis_sky raises it; nothing changes until it is approved); sharpness
+    and frame rate on the device that asked, named in X-Jarvis-Route."""
+    if n == "animal_ask":
+        return Result(ANIMAL_QUESTIONS.get(f.get("about"), ANIMAL_QUESTIONS["animal"]), n)
+    if n == "animal_device":
+        try:
+            import jarvis_animal as AN
+            said = AN.DEVICE_SAID[f["change"]]
+        except Exception:
+            return Result(ANIMAL_MISSING, n)
+        return Result(said, n, face_tuning=f["change"])
+    try:
+        import jarvis_settings_registry as R
+    except Exception:
+        return Result(SETTINGS_MISSING, n)
+    if n == "animal_switch":
+        out = R.set_animal_switch(f["key"], f["on"], peer=peer, local=local)
+    elif n == "animal_sky":
+        out = R.set_sky_show(f["on"], peer=peer, local=local)
+    elif n == "animal_weather":
+        out = R.set_weather_source(f["source"], peer=peer, local=local)
+        if out.ok and out.waiting:
+            # jarvis_sky's own two sentences, in one: the card is up and
+            # nothing has changed (the card is the only yes - a spoken one
+            # approves nothing).
+            return Result("An approval card is up - nothing is sent to Open-Meteo until you "
+                          "approve it, on your PC or phone.", n)
+    else:
+        return Result(ANIMAL_QUESTIONS["animal"], "animal_ask")
+    return Result(out.said, n)
+
+
+ANIMAL_MISSING = ("Your PC's Jarvis does not have the animal options yet - run "
+                  "apply-patches.ps1 on the PC.")
+
+
 def _run_settings_tool(f: dict, peer, local) -> Result:
     import jarvis_settings_registry as R
     out = R.set_reading_tool(f["tool"], f["on"], peer=peer, local=local)
@@ -2931,6 +3196,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return _run_settings_asks_first(f, peer, local)
     if n == "settings_tool":
         return _run_settings_tool(f, peer, local)
+    if n.startswith("animal_"):
+        return _run_animal(n, f, peer, local)
     if n == "manner_from_now_on":
         return _run_from_now_on(f, conversation, temporary)
     if n == "bulk":
@@ -3785,6 +4052,11 @@ def route_fields(res: Result) -> dict:
         # existing reader of X-Jarvis-Route that does not look for this key
         # is unaffected, exactly like `gate` above.
         out["open_settings"] = res.open_settings
+    if res.face_tuning:
+        # Sharpness or frame rate (jarvis_animal.DEVICE_CHANGES, 2026-09-28):
+        # per device, so the app that asked applies it to itself - the same
+        # additive road as open_settings above.
+        out["face_tuning"] = res.face_tuning
     if res.open_brain:
         # "Forget a time frame" (jarvis_forget_range.py, 2026-09-28): the
         # Brain place both apps open, with the list already filled in.

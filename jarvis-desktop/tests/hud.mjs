@@ -502,6 +502,31 @@ await check("the HUD's face sleeps on standby and goes serious on a crisis answe
   assert.deepEqual(problems, []);
 });
 
+await check("the HUD's face shows the focus buddy for a focus session's Quiet, and sleeps for a hand-set one", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const frame = await faceFrame(page);
+  await page.evaluate(() => { S.online = true; reactor.set("idle"); });
+  // What stream.rs pushes for the link (push_to_hud(app, "link", &link)): the
+  // mode and who set it. The `power` event alone carries only the mode.
+  const link = (power, by) => page.evaluate(([p, b]) => window.__jarvisFeed("link",
+    { connected: true, stale: false, power: p, power_set_by: b }), [power, by]);
+  const shown = async () => { await page.waitForTimeout(120); return frame.evaluate(() => LIVE_STATE); };
+  await link("quiet", "focus");
+  const focus = await shown();
+  await link("quiet", "override");
+  const byHand = await shown();
+  await link("quiet", "focus");
+  const again = await shown();
+  await link("active", "focus");
+  const over = await shown();
+  await page.close();
+  assert.equal(focus, "idle", "the HUD's animal slept through a focus session");
+  assert.equal(byHand, "standby", "a Quiet set by hand must stay asleep");
+  assert.equal(again, "idle");
+  assert.equal(over, "idle");
+  assert.deepEqual(problems, []);
+});
+
 await check("the face follows the owner's appearance pushed by the shell", async () => {
   const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
   await faceFrame(page);
@@ -844,7 +869,10 @@ await check("the HUD holds the mic's command and its reads, chat and mark - and 
   const link = surfaces.slice(surfaces.indexOf('identifier = "hud-link"'));
   const linkPerms = link.slice(link.indexOf("permissions = ["), link.indexOf("]") + 1);
   assert.deepEqual(linkPerms.match(/allow-[a-z-]+/g),
-    ["allow-hud-get", "allow-hud-chat", "allow-hud-chat-cancel", "allow-mark-answer"]);
+    ["allow-hud-get", "allow-hud-chat", "allow-hud-chat-cancel", "allow-mark-answer",
+      // Two yes/no answers (App lock, "Hide memory lists"): its face never
+      // nods at a saved fact while either is on (face-moments.js).
+      "allow-get-lock-flags"]);
   // The token is never put in the page.
   const lib = readFileSync(join(HERE, "..", "src-tauri", "src", "lib.rs"), "utf8");
   assert.doesNotMatch(BOOT, /__JARVIS_TOKEN__/);

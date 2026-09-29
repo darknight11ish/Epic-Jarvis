@@ -1,6 +1,6 @@
 /**
  * "Inbox tidy by voice" - the Undo strip under the Jarvis bar's input (the
- * owner's decision of 2026-09-28; JARVIS-API.md section 94; backend
+ * owner's decision of 2026-09-28; JARVIS-API.md section 95; backend
  * jarvis_inbox_tidy.py, inbox-tidy.patch; src-tauri/src/brain/inbox_tidy.rs).
  *
  * The owner says "archive the newsletters from last week" (or "mark all from

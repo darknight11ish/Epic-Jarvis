@@ -1185,8 +1185,8 @@ def t_the_patch_and_the_tables():
           risk is not None and "subject" not in risk[2].lower() and "sender" not in risk[2].lower())
     check("the tool's action name resolves to itself",
           re.search(r'^\s+"tidy_inbox": "tidy_inbox",', text, re.M) is not None)
-    check("the hud installs it after sky and before the main socket",
-          hud.index("jarvis_sky.install") < hud.index("jarvis_inbox_tidy.install")
+    check("the hud installs it after animal (and so after sky) and before the main socket",
+          hud.index("jarvis_animal.install") < hud.index("jarvis_inbox_tidy.install")
           < hud.index("_loopback_companion(bind, HUD_PORT, Handler)"))
     names = _stack.order()
     # It goes last (after devices.patch and apps-in-projects.patch, whose hunks

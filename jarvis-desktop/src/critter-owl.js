@@ -17,14 +17,17 @@
   "use strict";
   const C = root.CritterPose;
   const { makePose, halfLives, mouthOf, clamp, smooth, rx, ry, rz, mul, apply, add, invRow,
-          wave, bump, envAHR, happening, beat, shift, looks, restingGaze, optsOf, mods, blinkAt,
-          overlayAt, ease, toward, eyesOpen, eyesClose } = C.util;
+          wave, bump, envAHR, happening, happeningV, noise, breathWave, NONE4, playingV, beat, shift, looks, restingGaze, optsOf, mods, blinkAt,
+          overlayAt, ease, toward, eyesOpen, eyesClose, gaze, NONE, ZERO2, AWAKE, focusOf, petOf, cuteOf,
+          switchE, listenNod, phraseBeat, ackNodOf, ackGlowOf, focusEndOf, variant, arrivalOf, cuteAt,
+          cuteQuiet, cuteBusy, lidSet, lidNod, lidWake, HELLO_S, GOODBYE_S } = C.util;
 
   const KEYS = [
     "headYaw", "headPitch", "headRoll", "neckDrop", "bob", "breath", "fluff",
     "eyeL", "eyeR", "brow", "speak", "lookX", "lookY", "wingL", "wingR",
     "orbA", "orbY", "orbD", "orbR", "orbGlow",
     "lean", "bodyRoll", "asleep",
+    "lid", "lidSlope",   // the painted eyelid (uLid)
   ];
 
   // The orb floats free, and is placed round the owl rather than across it:
@@ -47,6 +50,13 @@
 
   // The owl's own dice (see critter-pose.js's note on salts).
   const S_GAZE = 80, S_EVENT = 96, S_ROLL = 104, S_LEAN = 112, S_BEAT = 120, S_BLINK = 128;
+  // ...and for the new behaviours (critter-pose.js's "New behaviours").
+  const S_LISTEN = 136, S_THINK = 139, S_FOCUS = 142, S_NOD = 154, S_PHRASE = 155, S_CUTE = 156;
+  // ...and the owl's own seeds for the slow wander (critter-pose.js noise()): its talking
+  // sway, its breathing, and the tilt and the turn to the orb while it thinks.
+  const N_YAW = 16, N_ROLL = 17, N_BREATH = 18, N_TILT = 20, N_FOLLOW = 21;
+  // How long each cute moment lasts: turning its head right round, a hop.
+  const CUTE_LEN = [8.2, 3.0];
   // Its idle happenings, and how often each comes up: the head tilts and the
   // slow blink most; the bigger ones (a ruffle, a wing lifted) less.
   const EVENTS = [14, 12, 12, 20, 20, 22];   // ruffle, wing left, wing right, tilt left, tilt right, slow blink
@@ -94,18 +104,31 @@
 
   function stateTargets(state, t, amp, look, since, o) {
     if (typeof since !== "number") since = 1e9;
-    o = o || optsOf();
-    const m = mods(o), hap = m[0], sw = m[2], play = m[3];
+    o = optsOf(o, t);
+    const m = mods(o);
+    // Idle: a focus session, and a cute moment while it plays, take the
+    // happenings away.
+    const cu = state === "idle" ? cuteAt(t, since, S_CUTE, CUTE_LEN) : NONE;
+    const cw = cu[0] >= 0 ? cuteOf(o) : 0;
+    const fw = state === "idle" ? focusOf(o) : 0;
+    const fp = fw * (1 - 0.6 * o.calm);   // the focus pose itself: smaller under calm (the happenings still go by fw)
+    // (and so do the stretch as a focus session ends, and being stroked)
+    const fe = state === "idle" ? focusEndOf(t, o) : 0, pw = AWAKE[state] ? petOf(o) : 0;
+    // (The idle happening of this slot, its size and thinning: critter-pose.js happeningV.)
+    const evI = state === "idle" ? happeningV(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS, o.attention) : NONE4;
+    m[0] *= (1 - fw) * (1 - cw * (cu[0] >= 0 ? cuteQuiet(cu[1], CUTE_LEN[cu[0]]) : 0)) * (1 - fe) * (1 - pw) * evI[3];
+    const hap = m[0], sw = m[2], play = m[3];
     const P = {
       headYaw: 0, headPitch: 0, headRoll: 0, neckDrop: 0, bob: 0, breath: 1, fluff: 1,
       eyeL: 1, eyeR: 1, brow: 0, speak: 0, lookX: 0, lookY: 0, wingL: 0, wingR: 0,
       orbA: ORB_REST[0], orbY: ORB_REST[1] + sw * 0.03 * wave(t, 228, 0), orbD: ORB_REST[2],
       orbR: ORB_REST[3], orbGlow: 0.55,
       lean: 0, bodyRoll: 0, asleep: state === "standby" ? 1 : 0,
+      lid: 0, lidSlope: 0,
     };
     // 284 cycles a loop: a breath every 3.6 seconds.
     let breathK = 284, breathDepth = 1, blinkSlow = 1.2, blinks = true, turnBlink = 0;
-    let eyeK = 1, deepBreath = 0;
+    let eyeK = 1, deepBreath = 0, ackK = 1, hop = 0;
 
     if (state === "listening") {
       // The listening tilt, eyes wide, leaning in, the orb close. The eyes
@@ -123,6 +146,15 @@
       P.lookX = g[0] - 0.7 * g[2]; P.lookY = 0.1 + g[1];
       P.orbA = ORB_LISTEN[0]; P.orbY = ORB_LISTEN[1]; P.orbD = ORB_LISTEN[2];
       P.orbGlow = 0.55 + 0.5 * amp;
+      // Now and then (variety): it tilts its head the other way, leans in a
+      // little closer, or bobs its head (owls do, to judge a distance).
+      const v = variant(t, o, S_LISTEN, 0.4);
+      if (v[0] === 0) P.headRoll -= 0.51 * play * v[1];
+      else if (v[0] === 1) { P.lean += 0.03 * v[1]; P.fluff -= 0.015 * v[1]; }
+      else if (v[0] === 2) P.neckDrop += 0.015 * v[1] * wave(t, 1024, 0);
+      // A small nod in your pauses (a fluff for the ear flick).
+      const nd = listenNod(t, o, S_NOD);
+      P.headPitch += nd[0]; P.headRoll += play * nd[1]; eyeK *= 1 - nd[2]; P.fluff += 0.03 * nd[3];
       turnBlink = g[4];
     } else if (state === "thinking") {
       // The orb circles its head (orbit(), above), and the owl follows it -
@@ -130,14 +162,26 @@
       const q = orbit(t, since, sw), ca = q[3], sa = q[4];
       P.orbA = q[0]; P.orbY = q[1]; P.orbD = q[2];
       P.orbR = 0.10;
-      P.headRoll = sw * 0.26 * wave(t, 90, 0);
+      // A slow tilt of the head, about half what it was (a sine of 0.26 rad kept
+      // the head moving nearly all the time: 87 percent, against 19 to 46 for
+      // the others) and wandering rather than swinging; and it turns to follow
+      // the orb only now and then - for a stretch of some passes, then rests -
+      // not on every one of the orb's turns (2026-09-29).
+      P.headRoll = sw * 0.13 * noise(t, N_TILT, 8);
+      const follow = smooth(clamp((noise(t, N_FOLLOW, 16) + 0.05) / 0.5, 0, 1));
       // (Eased in as the orb comes round, so the head never starts turning
       // with a jolt.)
-      P.headYaw = m[1] * 0.45 * ca * Math.max(0, sa) * smooth(clamp(sa / 0.3, 0, 1));
+      P.headYaw = m[1] * 0.45 * ca * Math.max(0, sa) * smooth(clamp(sa / 0.3, 0, 1)) * follow;
       P.headPitch = 0.14;
       P.lookX = (0.35 + 0.55 * sw) * ca; P.lookY = 0.45 - 0.1 * sw;
       P.brow = 0.1;
       P.orbGlow = 0.95 + 0.2 * wave(t, 424, 0);
+      // Now and then (variety): a tilt the other way, eyes narrowing as it
+      // leans in to think, or a small bob of the head.
+      const v = variant(t, o, S_THINK, 0.5);
+      if (v[0] === 0) P.headRoll -= 0.15 * play * v[1];
+      else if (v[0] === 1) { eyeK *= 1 - 0.25 * v[1]; P.lean += 0.025 * v[1]; }
+      else if (v[0] === 2) P.neckDrop += 0.015 * v[1] * wave(t, 1024, 0);
     } else if (state === "speaking") {
       // Leans in; its eyes lead each look and its head follows only a
       // little. It talks in phrases - a nod, a small lift of a wing, a tilt,
@@ -146,13 +190,15 @@
       // follows the mouth track of the words being heard (see
       // critter-pose.js's mouthOf); `speak` says how much of it to show.
       const g = looks(t, S_GAZE, 1.8, 6, 0.65, 0.5, 0.18, 0, 0.04, 0.6, o);
-      const b = beat(t, S_BEAT, S_GAZE, 1.8, 6, 0.65);
+      // (With the host's phrase ends, the gestures land on them instead.)
+      const b = o.phraseN >= 0 ? phraseBeat(t, o, S_PHRASE, S_GAZE, 1.8, 6, 0.65) : beat(t, S_BEAT, S_GAZE, 1.8, 6, 0.65);
       const x = b[1];
+      ackK = b[0] >= 0 ? 1 - bump(clamp(x / 1.6, 0, 1)) : 1;
       P.speak = 1;
       P.lean = 0.04;
       P.headPitch = 0.03;
-      P.headYaw = sw * 0.06 * wave(t, 111, 0) + 0.12 * g[2];
-      P.headRoll = sw * 0.035 * wave(t, 93, 0.5);
+      P.headYaw = sw * 0.06 * noise(t, N_YAW, 4) + 0.12 * g[2];
+      P.headRoll = sw * 0.035 * noise(t, N_ROLL, 4);
       P.lookX = g[0] - 0.28 * g[2]; P.lookY = g[1] - 0.28 * g[3];
       P.brow = 0.1 + 0.1 * amp;
       P.orbGlow = 0.6 + 0.45 * amp;
@@ -183,6 +229,11 @@
       P.lookX = g[0]; P.lookY = g[1];
       P.orbGlow = 0.9;
       blinkSlow = 1.6;
+      // The small reaction as it arrives (variety), then still. (Its
+      // feathers sleek down as it perks up.)
+      const ar = arrivalOf(state, o, since);
+      P.headPitch += ar[0]; P.headRoll += play * ar[1]; P.lean += ar[2]; eyeK *= 1 - ar[3];
+      P.fluff -= 0.03 * ar[4];
     } else if (state === "standby") {
       // Asleep: fluffed up round, head sunk in, eyes shut to slits. Now and
       // then a sigh - one deeper breath, the head settling a little lower.
@@ -214,6 +265,9 @@
       P.fluff = 1.03;
       P.orbGlow = 0.35;
       blinkSlow = 1.6;
+      const ar = arrivalOf(state, o, since);
+      P.headPitch += ar[0]; P.headRoll += play * ar[1]; P.lean += ar[2]; eyeK *= 1 - ar[3];
+      P.fluff -= 0.03 * ar[4];
     } else if (state === "banked") {
       // Fluffed and half-lidded, blinking slowly, and now and then nodding
       // off - the head sinks, and it catches itself.
@@ -235,7 +289,7 @@
       // often a curious tilt of the head or a long slow blink; now and then
       // a ruffle of its feathers or a wing lifted and resettled.
       const g = looks(t, S_GAZE, 1.5, 6, 0.35, 0.7, 0.25, 0, 0.04, 0.8, o);
-      const ev = happening(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS);
+      const ev = evI;
       const x = ev[1];
       const roll = sw * 0.011 * shift(t, S_ROLL);
       P.bodyRoll = roll;
@@ -267,11 +321,66 @@
         eyeK = 1 - 0.85 * envAHR(x, 0.45, 0.35, 0.6) * (1 - o.quiet);
       }
       turnBlink = g[4];
+      if (fw > 0) {
+        // Working beside you (a focus session): it half turns to watch the
+        // work, head a little down, and looks about far less.
+        const f = gaze(t, S_FOCUS, 4, 12, 0.75, 0.3, 0.12, 0, 0.02, 1.6);
+        P.headYaw += (0.35 + 0.4 * f[2] - P.headYaw) * fp;
+        P.headPitch += (-0.12 + 0.12 * f[3] - P.headPitch) * fp;
+        P.lookX += (f[0] - 0.8 * f[2] - P.lookX) * fp;
+        P.lookY += (-0.2 + f[1] - 0.8 * f[3] - P.lookY) * fp;
+        turnBlink *= 1 - fp;
+      }
+      // The small stretch as a focus session ends: a ruffle, wings eased out.
+      if (fe > 0) {
+        P.fluff += 0.06 * fe; P.neckDrop += 0.012 * fe; P.headPitch -= 0.05 * fe;
+        P.wingL += 0.25 * fe; P.wingR += 0.25 * fe; eyeK *= 1 - 0.3 * fe;
+        deepBreath = Math.max(deepBreath, fe);
+      }
+      if (cw > 0 && cu[0] === 0) {
+        // Cute moment: it turns its head right round, the way owls can -
+        // about 140 degrees, slowly - holds a moment, and turns back.
+        const s = C.hash01((Math.floor(cu[2]) & 4095) * 256 + S_CUTE + 1) < 0.5 ? -1 : 1;
+        const x = cu[1];
+        const e = cw * (ease((x - 0.3) / 3.6) - ease((x - 4.5) / 3.6));
+        P.headYaw += s * 2.4 * e;
+        const hold = cw * envAHR(x, 0.8, 6.6, 0.8);
+        P.lookX += (0 - P.lookX) * hold; P.lookY += (0 - P.lookY) * hold;
+        P.headPitch += (0.05 - P.headPitch) * hold;
+        turnBlink *= 1 - hold;
+      } else if (cw > 0 && cu[0] === 1) {
+        // Cute moment: a little hop on its branch - a crouch, up with its
+        // wings eased out, a soft landing with a fluff, and a look at you.
+        const x = cu[1];
+        hop = cw * (0.055 * bump((x - 0.55) / 0.7) - 0.012 * bump((x - 0.15) / 0.5) - 0.01 * bump((x - 1.1) / 0.5));
+        P.wingL += 0.3 * cw * bump((x - 0.5) / 0.8); P.wingR += 0.3 * cw * bump((x - 0.5) / 0.8);
+        P.fluff += cw * (0.04 * bump((x - 1.05) / 0.7) - 0.02 * bump((x - 0.15) / 0.5));
+        P.neckDrop += cw * 0.012 * bump((x - 0.15) / 0.5);
+        const at = cw * envAHR(x - 1.4, 0.3, 0.8, 0.5);
+        P.lookX += (0 - P.lookX) * at; P.lookY += (0 - P.lookY) * at;
+        P.headYaw += (0 - P.headYaw) * at;
+      }
     }
 
-    const b = wave(t, breathK, 0) * (1 + 0.6 * deepBreath);
+    // Stroked (petting): it fluffs up and leans its head into your hand,
+    // eyes closing - as an owl being scratched does.
+    if (pw > 0) {
+      P.headRoll += pw * play * (0.12 * o.petX + 0.03 * o.petDir);
+      P.headPitch += 0.03 * pw;
+      P.neckDrop -= 0.01 * pw;
+      P.fluff += 0.05 * pw;
+      eyeK *= 1 - 0.6 * pw;
+    }
+    // A fact saved: one small nod, and a flick of its feathers. A long
+    // answer ready: the orb swells once.
+    const an = AWAKE[state] ? ackNodOf(t, o) : ZERO2;
+    P.headPitch += ackK * an[0]; P.fluff += 0.02 * ackK * an[1];
+    const gl = AWAKE[state] ? ackGlowOf(t, o) : 0;
+    P.orbGlow += 0.4 * gl; P.orbR *= 1 + 0.2 * gl;
+
+    const b = breathWave(t, breathK, N_BREATH) * (1 + 0.6 * deepBreath);
     P.breath = 1 + 0.016 * breathDepth * b;
-    P.bob = 0.006 * breathDepth * b;
+    P.bob = 0.006 * breathDepth * b + hop;
 
     const w = state === "standby" ? 0 : clamp(look.w || 0, 0, 1);
     if (w > 0) {
@@ -284,11 +393,50 @@
       P.headPitch += m[1] * 0.25 * ly * w;
     }
 
+    farewell(P, state, o);
+    lidSet(P, state);
+
     // Owls blink slowly, and on their own clock (their own salt).
     const q = 1 - o.quiet;
     const k = eyeK * (1 - q * Math.max(blinks ? blinkAt(t, S_BLINK, blinkSlow, 3, 12) : 0, turnBlink));
     P.eyeL *= k; P.eyeR *= k;
     return P;
+  }
+
+  /**
+   * Hello and goodbye (critter-pose.js's farewell says how they work). The
+   * owl's goodbye is a small bow, looking at you, then it spreads its wings
+   * and flies up out of the picture (its branch stays); its hello, it
+   * flutters down onto the branch, lands with a fluff and looks at you.
+   * Asleep or dozing: no bow, no look. Waiting on you or at an error: none
+   * of it, the host's cross-fade (switchE).
+   */
+  const RISE = 2.2;   // how far up it flies to be out of view
+  function farewell(P, state, o) {
+    const g = o.goodbye, h = o.hello;
+    if (g <= 0 && h >= 1) return;
+    const E = switchE(o, state);
+    const awake = AWAKE[state] ? 1 : 0;
+    if (g > 0) {
+      const a = E * awake * bump(clamp(g / 0.6, 0, 1));
+      const at = E * awake * ease(g / 0.2);
+      P.lookX += (0 - P.lookX) * at; P.lookY += (0 - P.lookY) * at;
+      P.headYaw += (0 - P.headYaw) * at;
+      P.headPitch -= 0.25 * a; P.neckDrop += 0.02 * a; P.lean += 0.04 * a;
+      const up = E * ease((g - 0.35) / 0.65);
+      P.wingL += 0.9 * E * ease((g - 0.3) / 0.3); P.wingR += 0.9 * E * ease((g - 0.3) / 0.3);
+      P.bob += RISE * up;
+    }
+    if (h < 1) {
+      P.bob += E * RISE * (1 - ease(h / 0.5));
+      P.bob -= E * 0.02 * bump((h - 0.42) / 0.3);
+      const wg = E * 0.9 * (1 - ease((h - 0.4) / 0.3));
+      P.wingL += wg; P.wingR += wg;
+      P.fluff += E * 0.05 * bump((h - 0.42) / 0.35);
+      const at = E * awake * ease((h - 0.3) / 0.25) * (1 - ease((h - 0.8) / 0.2));
+      P.lookX += (0 - P.lookX) * at; P.lookY += (0 - P.lookY) * at;
+      P.headYaw += (0 - P.headYaw) * at;
+    }
   }
 
   /**
@@ -303,6 +451,9 @@
       const lids = (1 - 0.5 * ease(x / 0.7) - 0.5 * ease((x - 1.6) / 0.7)) * (1 - bump((x - 0.85) / 0.65));
       const lid = k * toward(eyesClose(x), lids, E);
       P.eyeL = F.eyeL * lid; P.eyeR = F.eyeR * lid;
+      // The painted lid comes down with the eyes' drooping, not with the slow blink laid on it.
+      const droop = 1 - 0.5 * ease(x / 0.7) - 0.5 * ease((x - 1.6) / 0.7);
+      lidNod(P, F, 1 - k * toward(eyesClose(x), droop, E));
       const head = e * (1 - ease((x - 1.6) / 1.2));
       P.neckDrop = toward(P.neckDrop, F.neckDrop, head);
       P.headPitch = toward(P.headPitch, F.headPitch, head);
@@ -319,6 +470,7 @@
     const fl = e * envAHR(x - 0.9, 0.3, 0.35, 0.55);
     P.eyeL *= (1 - k * (1 - l)) * (1 - 0.25 * fl);
     P.eyeR *= (1 - k * (1 - r)) * (1 - 0.25 * fl);
+    lidWake(P, x, k);   // ...and lifts a little after they open
     P.fluff += 0.06 * fl + 0.012 * e * wave(t, 2048, 0) * bump((x - 0.95) / 0.9);
     P.neckDrop -= 0.015 * e * bump((x - 0.2) / 1.3);
     P.headRoll += 0.04 * e * (bump((x - 1.25) / 0.45) - bump((x - 1.6) / 0.45));
@@ -401,6 +553,7 @@
       uWingL0: invRow(WL, 0), uWingL1: invRow(WL, 1), uWingL2: invRow(WL, 2),
       uWingR0: invRow(WR, 0), uWingR1: invRow(WR, 1), uWingR2: invRow(WR, 2),
       uFace: [clamp(P.eyeL, 0, 1.2), clamp(P.eyeR, 0, 1.2), P.brow],
+      uLid: [clamp(P.lid, 0, 1), clamp(P.lidSlope, -1, 1)],
       uMouth: mouthOf(P, mouth),
       uLook: [clamp(P.lookX, -1, 1), clamp(P.lookY, -1, 1)],
       uOrbGlow: [clamp(P.orbGlow, 0, 1.5)],
@@ -419,9 +572,16 @@
   }
 
   /** Whether one of its idle happenings is playing at clock t (critter-pose.js playing()). */
-  function busy(state, t) {
-    return state === "idle" && C.util.playing(happening(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS));
+  function busy(state, t, since, opts) {
+    return state === "idle" && (playingV(happeningV(t, 16, 0.5, 5.5, S_EVENT, 0.7, EVENTS, opts ? optsOf(opts, t).attention : 1))
+      || cuteBusy(t, since, opts, S_CUTE, CUTE_LEN));
   }
 
-  C.species.pygmyowl = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy };
+  /** Whether one of its own talking gestures is playing at clock t (critter-pose.js gesturing()). */
+  function gesturing(t) {
+    const b = beat(t, S_BEAT, S_GAZE, 1.8, 6, 0.65);
+    return b[0] >= 0 && b[1] >= 0 && b[1] < C.util.GESTURE_S;
+  }
+
+  C.species.pygmyowl = { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy, gesturing, HELLO_S, GOODBYE_S };
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -152,11 +152,12 @@ on a throwaway copy instead.
 | `photo-reminder.patch` | `jarvis_hud.py` | **Photo to reminder** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §83). One install()-shaped hunk at start-up - `jarvis_photo_remind.install(Handler, ...)` - whose context is `brain-reads.patch`'s own install block, so it goes after it, last like every new patch. It answers `POST /api/photo/scan`: the words in a picture read by Windows (`jarvis_ocr.py`), a date, time and title found by `jarvis_quick.py`'s own parser, and a PROPOSED reminder sent back - nothing set up, nothing kept, outside text. Needs `jarvis_photo_remind.py`; without it the banner says so and the route is not there. See "Photo to reminder", at the very end. |
 | `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude, Gemini or DeepSeek** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
 | `sky.patch` | `jarvis_hud.py` | **The sun, the moon and the weather behind the animal faces** (the owner's decisions of 2026-09-28). Adds `GET /api/sky` and `POST /api/sky` (ONE change: show on or off, the town - this PC only - forget the town, or the weather source; Open-Meteo ON is ONE approval card). Its context is `answer-sources.patch`'s own startup `install()` block, so it goes last. Needs `jarvis_sky.py` and `jarvis_sky_places.py` copied in; without them, or on any error, the banner says so and the route answers 503 - the faces are drawn exactly as before. See "The sky behind the animals", at the very end. |
+| `animal.patch` | `jarvis_hud.py` | **Animal options** (the owner's decisions of 2026-09-28). Adds `GET /api/animal` and `POST /api/animal` (ONE switch: "Keep the animal still" or one of the animal's behaviour switches; at once, no card) and puts the same values in `GET /api/appearance` as `animal`. Two hunks: one in `appearance.patch`'s `_appearance_view`, one right after `sky.patch`'s startup `install()` block, so it goes last. Needs `jarvis_animal.py` copied in; without it, or on any error, the banner says so and the route answers 503 - the faces are drawn as before. See "Animal options", at the very end. |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Three lines in `jarvis_gate.py`: the cards `pair_device`, `unretire_shared_key` and (phase 2, 2026-09-29, signed approvals from the phone) `register_approval_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; all three are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list but for `apps-in-projects.patch`, which builds on its lines: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 | `apps-in-projects.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **An app inside a Jarvis project: its tasks and the merge card** (the owner's decisions of 2026-09-28 and 2026-09-29; `docs/APPS-IN-PROJECTS-DESIGN.md`, `docs/JARVIS-API.md` section 92). One block in `jarvis_hud.py` right after `projects.patch`'s own: `jarvis_apps.install(...)` adds `GET /api/projects/<id>/app/tasks/<task>` and `POST .../app/tasks`, `.../files` (a change pasted in - PC only), `.../merge` (ONE risky approval card) and `.../discard`. Two lines in `jarvis_gate.py`: `app_merge_change` joins `_NO_RULE_FROM_DENIAL` (a no is never a standing rule) and `_RISK` as `("no", "local", ...)` - it cannot be undone yet, so it is a RISKY card (Windows Hello on the PC, the screen lock on the phone), approved on either device. Last in the list: its context is `projects.patch`'s, `forget-range.patch`'s and `devices.patch`'s lines. Needs `jarvis_apps.py` (with `jarvis_projects.py` and `jarvis_app_workspace.py`); without it, or on any error, the banner says "apps NOT ON" and the app routes are simply not there. See "Apps in Projects", at the very end. |
 | `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude, Gemini or DeepSeek** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
 
-| `inbox-tidy.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Inbox tidy by voice"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 94): archive, star, mark as read or move to Trash a checked list of emails, ONE approval card listing every one, 10 minutes to Undo. Four hunks: in `jarvis_gate.py` `tidy_inbox` joins "a no proposes no memory rule", gets its `_RISK` line (`"yes", "outbound"` - it changes the mailbox on a server, so approving it is a risky approval; nothing is deleted for good, and Undo puts everything back) and its `_TOOL_ACTIONS` line; in `jarvis_hud.py` ONE install block after `sky.patch`'s (`GET /api/email/tidy`, `POST /api/email/tidy/undo`). Its context is other patches' lines: after `support-chat.patch`, before `devices.patch`, which stays last. Needs `jarvis_inbox_tidy.py` - see "Inbox tidy", at the very end. |
+| `inbox-tidy.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Inbox tidy by voice"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 95): archive, star, mark as read or move to Trash a checked list of emails, ONE approval card listing every one, 10 minutes to Undo. Four hunks: in `jarvis_gate.py` `tidy_inbox` joins "a no proposes no memory rule", gets its `_RISK` line (`"yes", "outbound"` - it changes the mailbox on a server, so approving it is a risky approval; nothing is deleted for good, and Undo puts everything back) and its `_TOOL_ACTIONS` line; in `jarvis_hud.py` ONE install block after `sky.patch`'s (`GET /api/email/tidy`, `POST /api/email/tidy/undo`). Its context is other patches' lines: after `support-chat.patch`, before `devices.patch`, which stays last. Needs `jarvis_inbox_tidy.py` - see "Inbox tidy", at the very end. |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 
 ## All but two of the patches apply, and that is correct
@@ -5983,6 +5984,7 @@ checks it against rule 4 like every offer.
 
 ```
 python3 backend/test_second_card_suggest.py
+python3 backend/test_wellbeing.py
 ```
 
 Runs anywhere: the correction-phrase check's true and false positives (real
@@ -7131,7 +7133,7 @@ with those two - see `jarvis_voices.KOKORO_VOICES`'s own comment for the
 full reasoning and the caveat.
 
 **Also new (2026-09-27, the owner's choice): "Voice follows the face"** -
-with the red panda, pygmy owl, sea otter or monkey face showing, the built-in voice
+with the red panda, pygmy owl, sea otter, monkey or robot face showing, the built-in voice
 becomes that animal's: one of the Kokoro voices already installed, its own
 pace, and a small pitch rise (`jarvis_voices.FACE_VOICES`; the face is read
 from `appearance.json`). An on/off switch, **on by default**, right under
@@ -15705,7 +15707,7 @@ The owner chose this group on 2026-09-28, from
 
 Two options for the animal faces, both off until switched on: the real sun
 and moon for your town behind the animal, and rain, snow or wind. You type
-your town once on the PC (Settings, Appearance, "Sun, moon and weather");
+your town once on the PC (Settings, "Animal options");
 the PC finds it in a list of towns it carries and keeps only a rough
 position. Nothing goes online for the sun and moon - each app works them out
 itself. The weather comes from your own Home Assistant, or from Open-Meteo
@@ -15715,7 +15717,7 @@ on the internet if you choose it and approve its card.
 
 Nothing new to install: `apply-patches.ps1` copies the two modules and
 applies `sky.patch`, like every other feature. Then, in the desktop's
-Settings, Appearance: switch on "Show the sun and moon behind the animal",
+Settings, "Animal options": switch on "Show the sun and moon behind the face",
 type your town and press Set. For the weather from Home Assistant, it must
 already be set up for Jarvis (the same device the morning briefing reads).
 
@@ -15735,7 +15737,7 @@ already be set up for Jarvis (the same device the morning briefing reads).
 - Open-Meteo: one fixed address, the rounded position and four value names,
   no proxy, no redirect, 10 s, 64 KB; ON is a `change_own_config` card that
   names the exact numbers, good for that position only.
-- `jarvis_reach.py`: a row, "Weather for the animal's scene".
+- `jarvis_reach.py`: a row, "Weather behind the face".
 - Never: the town or position in a log line, the audit log or anything the
   AI model sees.
 
@@ -16767,6 +16769,69 @@ The words and real answers both apps are tested against:
 - A Home Assistant weather device whose attributes run past 500 characters
   (`jarvis_home`'s cap) loses its wind; the condition still draws.
 
+# Animal options: `jarvis_animal.py`, `animal.patch` (2026-09-28)
+
+## In plain words
+
+Every animal option is in one place in both apps now ("Animal options"),
+and Jarvis changes any of them when you ask. "Keep the animal still" and
+six switches for the animals' new behaviours (listening nods, focus buddy,
+small acknowledgements, petting, cute idle moments - on to start - and
+seasonal touches, off) are kept on the PC, so the desktop and the phone
+always agree. The animals do all six now; each switch turns its own off.
+Sharpness and frame rate stay on each device. None of them asks with a card
+- they only change how the animal moves. The weather from Open-Meteo still
+does.
+
+## Owner steps (one line each, in PowerShell)
+
+Nothing new to install: `apply-patches.ps1` copies `jarvis_animal.py` and
+applies `animal.patch`, like every other feature. If either device had "Keep
+the animal still" on before, it stays on (each device sends its old "on"
+once - unless you have already changed a switch since, which then wins).
+
+## What the code does
+
+- `jarvis_animal.py`: the switches (`SWITCHES` - one entry each: its words,
+  its default, whether the animal does it yet, and what you might call it),
+  `<config dir>/animal.json` (its own file, so the Faces window's save can
+  never overwrite it), `GET/POST /api/animal` (ONE change, at once, an
+  `appearance` event after it), and `step_device`, the one rule both apps
+  use for "make the animal sharper".
+- `jarvis_settings_registry.py`: "open animal options", and the three
+  functions the spoken requests call - `set_animal_switch` (the same
+  function the switch's route calls), `set_sky_show` and
+  `set_weather_source` (the sky's own `handle_post`, so Open-Meteo keeps its
+  card).
+- `jarvis_quick.py`: the sentences ("keep the animal still", "stop the
+  animal's nodding", "turn off the weather", "make the animal sharper", ...),
+  a plain question for anything unclear, and `face_tuning` in
+  X-Jarvis-Route for sharpness and frame rate (the asking app applies it).
+- `jarvis_sky.py`: a `sky` event (`{"changed": true}`, nothing else) on
+  every change, so the other app shows it at once.
+- `animal.patch`: the route at start-up, and the values in
+  `GET /api/appearance`.
+
+## Test it
+
+    python3 backend/test_animal.py
+    python3 tools/gen_animal_cases.py --check
+    python3 backend/run_suites.py
+
+## Not checked, said plainly
+
+- **Not run on the owner's PC.** `animal.patch` was rehearsed against the
+  text the earlier patches write (`_stack.stand_in`), not the real
+  `jarvis_hud.py`; `apply-patches.ps1` on the PC is the proof.
+- **The six behaviours are built** (every switch is `built: True`), so no
+  row shows the "Coming in the next update" line any more; the line and
+  `built` stay for the next new behaviour. Petting's words say where to
+  stroke on the PC (the Widget's face, or press, hold and stroke in the
+  Faces window - the floating face and the HUD let clicks through).
+- An app older than this feature ignores `face_tuning`, so "make the animal
+  sharper" answered on it says "Done" while nothing changes - update both
+  apps.
+
 ---
 # Chat with customer support for me: `support-chat.patch` (2026-09-28)
 
@@ -17159,7 +17224,7 @@ then not offered at all), or set `tidy_inbox = "never"`.
 - `jarvis_reach.py` ("What Jarvis can reach": "Email (tidying)"),
   `jarvis_asks_first.py` ("What asks first": never loosened, covered by
   Lockdown), `jarvis_card_words.py` (the card's title).
-- Both apps: the Undo strip (`docs/JARVIS-API.md` section 94.6); the desktop's
+- Both apps: the Undo strip (`docs/JARVIS-API.md` section 95.6); the desktop's
   `is_email`/`isEmailCard` cover `tidy_inbox`, so its card is shown verbatim
   and the widget's Approve opens the Jarvis bar.
 
@@ -17186,7 +17251,7 @@ the password). Then
 The owner's decision of 2026-09-28: better-rated voices, a real British
 accent, a "Hear it" button on every voice in both apps, the choice saved by
 the voice's **name** instead of a number, and the owner's current choice
-carrying over. Route and words: `docs/JARVIS-API.md` section 93.
+carrying over. Route and words: `docs/JARVIS-API.md` section 94.
 
 ## In plain words
 

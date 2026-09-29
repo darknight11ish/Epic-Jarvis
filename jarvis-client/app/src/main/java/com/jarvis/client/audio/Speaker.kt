@@ -105,6 +105,8 @@ class Speaker(private val context: Context) {
         val running: Boolean,
         /** Frames written so far - nothing past this can be heard yet. */
         val limit: Long,
+        /** Where the clip's phrases end (seconds into it), known before it plays: [LipSync.phraseEnds]. */
+        val ends: FloatArray,
     )
 
     /**
@@ -123,8 +125,17 @@ class Speaker(private val context: Context) {
      * The PC's voice gets the full mouth (open, wide, round) from the
      * analysed clip. The phone's own fallback voice gets an estimate of the
      * opening from loudness only - see [SpeechEnvelope] for why.
+     *
+     * With room for a fifth number, `out[4]` is the seconds until the next
+     * phrase end of the clip playing, on the clock the mouth reads (the
+     * heard one: [HeardClock]) - the whole clip was read before it started,
+     * so its ends are known ahead, and the face's gestures land on them.
+     * [LipSync.NO_PHRASE_END] means the clip has none left; -1 means there is no
+     * track at all (the phone's own voice, and the silence): then the face
+     * listens to the level instead.
      */
     fun mouthNow(out: FloatArray): Boolean {
+        if (out.size > 4) out[4] = -1f
         if (!cancelled) {
             val h = heard
             if (h != null) {
@@ -133,6 +144,7 @@ class Speaker(private val context: Context) {
                     // Outside the clip (its first lead-in, its very end) this
                     // writes zeros: a voice is on, the mouth is closed.
                     LipSync.sample(h.lips, t, out)
+                    if (out.size > 4) out[4] = LipSync.nextEnd(h.ends, t)
                     return true
                 }
             } else {
@@ -154,6 +166,7 @@ class Speaker(private val context: Context) {
         private val lips: LipSync.Track?,
     ) {
         private val presented = PresentedFrames(rate)
+        private val ends = LipSync.phraseEnds(lips)
         private val stamp = AudioTimestamp()
         private val scratch = FloatArray(4)
 
@@ -175,7 +188,7 @@ class Speaker(private val context: Context) {
             val ok = runCatching { out.getTimestamp(stamp) }.getOrDefault(false)
             val head = runCatching { out.playbackHeadPosition.toLong() and 0xFFFF_FFFFL }.getOrDefault(0L)
             val frames = presented.at(now, ok, stamp.framePosition, stamp.nanoTime, head)
-            heard = Heard(l, rate, frames, now, running, written)
+            heard = Heard(l, rate, frames, now, running, written, ends)
             if (running) {
                 LipSync.sample(l, frames.toFloat() / rate, scratch)
                 _level.value = scratch[0]

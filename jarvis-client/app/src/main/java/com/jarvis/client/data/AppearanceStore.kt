@@ -29,9 +29,13 @@ import kotlin.random.Random
  * capability by [JarvisRuntime], so a backend that predates the route is
  * simply never asked, and this store works exactly as it always did.
  *
+ * The shared animal switches ([animal], 2026-09-28) are read from the same
+ * document, never written into it: they change through `/api/animal`.
+ *
  * Everything else here is per device and never synced: the theme, the dark
  * theme Follow the system returns to ([preferredDark]), the face size, the
- * [look] record, and the face editor's [faceTuning].
+ * [look] record, and the face editor's [faceTuning] (sharpness and frame
+ * rate among it).
  */
 class AppearanceStore(context: Context) {
 
@@ -111,6 +115,36 @@ class AppearanceStore(context: Context) {
         val clamped = value.clamped()
         prefs.edit { putString(KEY_FACE_TUNING, clamped.encode()) }
         _faceTuning.value = clamped
+    }
+
+    private val _animal = MutableStateFlow(
+        com.jarvis.client.net.AnimalOptions.decode(prefs.getString(KEY_ANIMAL, null)),
+    )
+
+    /**
+     * "Keep the animal still" and the animal's behaviour switches, as the PC
+     * last told this phone (the owner's decisions of 2026-09-28, "Animal
+     * options") - SHARED with the desktop and kept on the PC, unlike
+     * everything else in this store except the face and the colours. Null
+     * until the PC has been heard (an older PC). Kept here too so the face
+     * wears it at once on the next start, before the PC answers. Written only
+     * from the PC's own answers ([applySyncDocument], [setAnimal]).
+     */
+    val animal: StateFlow<com.jarvis.client.net.AnimalOptions.Shared?> = _animal.asStateFlow()
+
+    fun setAnimal(value: com.jarvis.client.net.AnimalOptions.Shared) {
+        prefs.edit { putString(KEY_ANIMAL, com.jarvis.client.net.AnimalOptions.encode(value)) }
+        _animal.value = value
+    }
+
+    private val _animalMigrated = MutableStateFlow(prefs.getBoolean(KEY_ANIMAL_MIGRATED, false))
+
+    /** Whether this phone's old Still ([Look.stillAnimal]) has reached the PC (or had nothing to send). */
+    val animalMigrated: StateFlow<Boolean> = _animalMigrated.asStateFlow()
+
+    fun markAnimalMigrated() {
+        prefs.edit { putBoolean(KEY_ANIMAL_MIGRATED, true) }
+        _animalMigrated.value = true
     }
 
     private val _preferredDark = MutableStateFlow(loadPreferredDark())
@@ -379,6 +413,12 @@ class AppearanceStore(context: Context) {
     fun applySyncDocument(doc: JSONObject) {
         doc.optString("face").takeIf { it.isNotEmpty() }?.let { setFace(it) }
         doc.optJSONObject("bindings")?.let { setBindings(parseBindings(it)) }
+        // animal.patch (2026-09-28): the shared animal switches ride along.
+        // Never sent back - [toSyncDocument] leaves them out, and the PC
+        // ignores them in a POST; they change through POST /api/animal.
+        doc.optJSONObject("animal")?.let { a ->
+            com.jarvis.client.net.AnimalOptions.decode(a.toString())?.let { setAnimal(it) }
+        }
     }
 
     /**
@@ -509,6 +549,8 @@ class AppearanceStore(context: Context) {
         const val KEY_LOOK = "look"
         const val KEY_PREFERRED_DARK = "preferred_dark"
         const val KEY_FACE_TUNING = "face_tuning"
+        const val KEY_ANIMAL = "animal_shared"
+        const val KEY_ANIMAL_MIGRATED = "animal_still_migrated"
 
         /**
          * 500ms crossfade plus 500ms dwell means two opposing swings can be no
@@ -652,10 +694,13 @@ data class Look(
     val glow: Float = 1f,
     val motion: MotionPref = MotionPref.FOLLOW,
     /**
-     * "Keep the animal still" (owner, 2026-09-28): an animal face only
-     * breathes and blinks - no looking around, gestures or little idle
-     * happenings (FaceView's `stillMotion`). Off by default. The other faces
-     * ignore it. This phone's own choice; the PC has its own switch.
+     * "Keep the animal still" as this phone kept it before 2026-09-28's
+     * "Animal options" made it shared with the desktop (kept on the PC now,
+     * [AppearanceStore.animal]). Still read for two things only: the
+     * one-time move of an "on" to the PC (JarvisRuntime.moveOldStill), and
+     * an older PC that cannot share it yet (the Animal options section then
+     * offers the switch here, on this phone only). What the face uses is
+     * [com.jarvis.client.net.AnimalOptions.effectiveStill].
      */
     val stillAnimal: Boolean = false,
     /** Tighter padding and list spacing. */

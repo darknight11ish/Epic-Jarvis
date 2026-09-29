@@ -434,7 +434,7 @@ input:focus-visible, textarea:focus-visible {
   outline-offset: 2px;
 }
 
-/* A closed section: "Face on this computer" and "More options". Closed every
+/* A closed section: "Sharpness and frame rate on this computer" and "More options". Closed every
    visit, like the phone's. */
 .more {
   margin: 4px 0 14px;
@@ -503,7 +503,7 @@ select:focus-visible {
   line-height: 1.55;
 }
 
-/* The face's quality levels, one line each (Face on this computer). */
+/* The face's sharpness levels, one line each (Animal options). */
 .face-level-notes { list-style: none; padding: 0; }
 .face-level-notes li { margin: 0 0 2px; }
 .face-level-notes strong { color: var(--text); font-weight: 600; }

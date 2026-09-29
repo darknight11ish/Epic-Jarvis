@@ -77,6 +77,9 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "voice" to 0,
     "security" to 1,
     "appearance-card" to 2,
+    // "Animal options" lives inside Appearance on the phone (2026-09-28):
+    // the Appearance row, whose button opens it.
+    "animal-options" to 2,
     "manner" to 4,
     "web-search" to 5,
     "asks-first" to 6,
@@ -259,7 +262,7 @@ fun SettingsScreen(
                 Section("Appearance") {
                     Plate {
                         Text(
-                            "Theme, the reactor's face, and how it all looks.",
+                            "Theme, the reactor's face, the animal options, and how it all looks.",
                             style = MaterialTheme.typography.bodySmall,
                             color = chrome.textMid,
                         )

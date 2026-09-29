@@ -618,7 +618,7 @@ class AutoLearnTest {
     @Test
     fun theEventIsHandledAndNeverReachesANotification() {
         val rt = repoFile("$main/JarvisRuntime.kt").readText()
-        assertTrue(rt.contains("com.jarvis.client.net.AutoLearn.EVENT -> onMemorySaved(event.data)"))
+        assertTrue(rt.contains("com.jarvis.client.net.AutoLearn.EVENT -> onMemorySaved(event.data"))
         for (f in File(repoFile("$main/JarvisRuntime.kt").parentFile, "service").listFiles().orEmpty()) {
             val t = f.readText()
             assertFalse("${f.name} must not notify a saved fact", t.contains("memory_saved") || t.contains("AutoLearn"))

@@ -9,12 +9,12 @@
     "lon": -105.0,
     "name": "Denver, Colorado, United States"
    },
-   "place_detail": "Your town is typed on the PC, in Settings, Appearance.",
+   "place_detail": "Your town is typed on the PC, in Settings, Animal options.",
    "place_label": "Your town",
    "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
    "show": true,
-   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal faces; the others are not changed.",
-   "show_label": "Show the sun and moon behind the animal",
+   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal and robot faces; the others are not changed.",
+   "show_label": "Show the sun and moon behind the face",
    "title": "Sun, moon and weather",
    "weather": {
     "choices": [
@@ -34,8 +34,8 @@
       "why": "Free, no key. Sends your rough position (about 11 km) to api.open-meteo.com about every 20 minutes while a face is showing - nothing else. Turning it on takes an approval card; turning it off is instant."
      }
     ],
-    "detail": "Rain, snow or wind behind the animal. Off by default.",
-    "label": "Weather in the animal's scene",
+    "detail": "Rain, snow or wind behind the face. Off by default.",
+    "label": "Weather behind the face",
     "last": null,
     "now": null,
     "source": "home_assistant",
@@ -53,8 +53,8 @@
    "place_label": "Your town",
    "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
    "show": false,
-   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal faces; the others are not changed.",
-   "show_label": "Show the sun and moon behind the animal",
+   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal and robot faces; the others are not changed.",
+   "show_label": "Show the sun and moon behind the face",
    "title": "Sun, moon and weather",
    "weather": {
     "choices": [
@@ -74,8 +74,8 @@
       "why": "Free, no key. Sends your rough position (about 11 km) to api.open-meteo.com about every 20 minutes while a face is showing - nothing else. Turning it on takes an approval card; turning it off is instant."
      }
     ],
-    "detail": "Rain, snow or wind behind the animal. Off by default.",
-    "label": "Weather in the animal's scene",
+    "detail": "Rain, snow or wind behind the face. Off by default.",
+    "label": "Weather behind the face",
     "last": null,
     "now": null,
     "source": "off",
@@ -93,12 +93,12 @@
     "lon": -105.0,
     "name": "Denver, Colorado, United States"
    },
-   "place_detail": "Your town is typed on the PC, in Settings, Appearance.",
+   "place_detail": "Your town is typed on the PC, in Settings, Animal options.",
    "place_label": "Your town",
    "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
    "show": true,
-   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal faces; the others are not changed.",
-   "show_label": "Show the sun and moon behind the animal",
+   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal and robot faces; the others are not changed.",
+   "show_label": "Show the sun and moon behind the face",
    "title": "Sun, moon and weather",
    "weather": {
     "choices": [
@@ -118,8 +118,8 @@
       "why": "Free, no key. Sends your rough position (about 11 km) to api.open-meteo.com about every 20 minutes while a face is showing - nothing else. Turning it on takes an approval card; turning it off is instant."
      }
     ],
-    "detail": "Rain, snow or wind behind the animal. Off by default.",
-    "label": "Weather in the animal's scene",
+    "detail": "Rain, snow or wind behind the face. Off by default.",
+    "label": "Weather behind the face",
     "last": {
      "at": 0,
      "message": "Approved. The weather now comes from Open-Meteo.",
@@ -150,12 +150,12 @@
     "lon": -105.0,
     "name": "Denver, Colorado, United States"
    },
-   "place_detail": "Your town is typed on the PC, in Settings, Appearance.",
+   "place_detail": "Your town is typed on the PC, in Settings, Animal options.",
    "place_label": "Your town",
    "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
    "show": true,
-   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal faces; the others are not changed.",
-   "show_label": "Show the sun and moon behind the animal",
+   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal and robot faces; the others are not changed.",
+   "show_label": "Show the sun and moon behind the face",
    "title": "Sun, moon and weather",
    "weather": {
     "choices": [
@@ -175,8 +175,8 @@
       "why": "Free, no key. Sends your rough position (about 11 km) to api.open-meteo.com about every 20 minutes while a face is showing - nothing else. Turning it on takes an approval card; turning it off is instant."
      }
     ],
-    "detail": "Rain, snow or wind behind the animal. Off by default.",
-    "label": "Weather in the animal's scene",
+    "detail": "Rain, snow or wind behind the face. Off by default.",
+    "label": "Weather behind the face",
     "last": null,
     "now": null,
     "source": "off",
@@ -198,8 +198,8 @@
    "place_label": "Your town",
    "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
    "show": true,
-   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal faces; the others are not changed.",
-   "show_label": "Show the sun and moon behind the animal",
+   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal and robot faces; the others are not changed.",
+   "show_label": "Show the sun and moon behind the face",
    "title": "Sun, moon and weather",
    "weather": {
     "choices": [
@@ -219,8 +219,8 @@
       "why": "Free, no key. Sends your rough position (about 11 km) to api.open-meteo.com about every 20 minutes while a face is showing - nothing else. Turning it on takes an approval card; turning it off is instant."
      }
     ],
-    "detail": "Rain, snow or wind behind the animal. Off by default.",
-    "label": "Weather in the animal's scene",
+    "detail": "Rain, snow or wind behind the face. Off by default.",
+    "label": "Weather behind the face",
     "last": null,
     "now": null,
     "source": "off",
@@ -238,12 +238,12 @@
     "lon": -105.0,
     "name": "Denver, Colorado, United States"
    },
-   "place_detail": "Your town is typed on the PC, in Settings, Appearance.",
+   "place_detail": "Your town is typed on the PC, in Settings, Animal options.",
    "place_label": "Your town",
    "place_none": "No town yet, so there is no sun or moon to show. Type your town on the PC.",
    "show": true,
-   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal faces; the others are not changed.",
-   "show_label": "Show the sun and moon behind the animal",
+   "show_detail": "The real sun and moon for your town - sunrise and sunset, and the moon's shape (full, waxing, waning) - worked out on your own devices. Nothing goes online for it. For the animal and robot faces; the others are not changed.",
+   "show_label": "Show the sun and moon behind the face",
    "title": "Sun, moon and weather",
    "weather": {
     "choices": [
@@ -263,8 +263,8 @@
       "why": "Free, no key. Sends your rough position (about 11 km) to api.open-meteo.com about every 20 minutes while a face is showing - nothing else. Turning it on takes an approval card; turning it off is instant."
      }
     ],
-    "detail": "Rain, snow or wind behind the animal. Off by default.",
-    "label": "Weather in the animal's scene",
+    "detail": "Rain, snow or wind behind the face. Off by default.",
+    "label": "Weather behind the face",
     "last": null,
     "now": null,
     "source": "off",

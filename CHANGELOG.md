@@ -6,6 +6,188 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Painted eyelids for the four animals (2026-09-29, both apps).** The red
+  panda, pygmy owl, sea otter and monkey now have a lid of their own fur over
+  the top of each eye, so the looks read at a glance: **waiting on you** a
+  level, attentive lid; **something went wrong** a sloped, worried one;
+  **dozing** a heavy, sleepy one. Idle, listening, thinking and talking have
+  none, exactly as before. The lid eases in over about a second, never pops,
+  adds no idle movement, is the same under calm motion and Still, and is left
+  off entirely during a crisis-help answer (the animal stays neutral). It comes
+  down as an animal nods off and lifts a little after the eyes open as it wakes.
+  A blink still shuts the eye all the way, and a shut eye (asleep, mid-blink)
+  keeps its dark line - the lid gives way to it. The robot has none. Painted in
+  the shader's surface colouring, so it costs nothing per march step; the
+  phone's shaders are still under 60,000 (panda 59,693, owl 52,064, otter
+  55,018, monkey 59,602). Pictures in `docs/critters/eyelids/`; details in
+  `docs/CRITTERS.md` "Painted eyelids". Needs the new desktop and phone
+  builds; no backend change.
+
+- **Three drawing fixes for the animal faces (2026-09-29, from the skeptical
+  review).** (1) **The robot's eyes now show the colour of what Jarvis is
+  doing.** They were coming out nearly white in every state (so listening
+  and waiting on you looked the same pale pink); now listening is amber,
+  waiting on you yellow, thinking violet, an error rose, idle cyan - the
+  same colours the animals' orbs use. Both apps. The picture in
+  `docs/critters/robot-states.png` was redrawn. (2) **Sharper animals on the
+  PC:** the desktop draws each animal with 1.5 to 2 times more steps of its
+  ray-marching than the phone can afford, which removes the dotted seam where
+  the panda's tail crosses its cheek and the blue fringe round the monkey's
+  head (wrongly drawn pixels against a very slow reference: panda 9,042 to
+  289, monkey 3,481 to 46, owl 1,448 to 34, otter 2,822 to 4, robot 98 to 1).
+  The phone's drawing is unchanged; the two now differ by a few edge pixels.
+  Not measured here: how long a Windows graphics driver takes to build the
+  longer shaders the first time a face opens - if a face is slow to appear,
+  lower its number in `tools/gen_critters.py` (`DESKTOP_STEPS`). (3) **The
+  owl's cream chest fades into the brown at the neck** instead of ending in a
+  straight line. Needs the new desktop and phone builds; no backend change.
+
+- **The animals move less when Jarvis is not being used, and never the
+  same way twice (2026-09-29, both apps).** Three fixes from the skeptical
+  review. (1) **Fewer small idle moves:** while you have not talked to
+  Jarvis, typed, been given an answer or been asked something for five
+  minutes, and your pointer (PC) or finger (phone) is not on the face, an
+  animal does about one small thing (a tail flick, an ear turn, a stretch)
+  in four - about 40 an hour instead of 155 to 190. Breathing and looking
+  around are unchanged; the moves that remain are the same clips, only
+  rarer, and they fade in and out over a couple of seconds when you come
+  back. A face that has only just opened counts as used for its first five
+  minutes; the Faces window always counts as used. (2) **Motion that does
+  not repeat:** the five heads no longer sway together while talking (they
+  were 86 to 91 percent alike; now about 5), breathing is uneven (each
+  breath up to about 15 percent longer or shorter, never deeper than
+  before), each small idle move differs a little in size (up to a quarter
+  smaller) and length (0.8 to 1.25 times), and the owl's thinking head
+  rolls half as far and turns to its orb now and then instead of all the
+  time (it moved 87 percent of the time, now 19). Nothing moves faster or
+  further than it did. (3) **Gestures land on the end of a sentence:** a
+  nod used to peak about half a second after the sentence it marked, inside
+  the next one. Both apps read each spoken clip before it plays, so they
+  know where its sentences end and start the gesture early: it now peaks
+  within a tenth of a second of the end, at every voice speed. A typed
+  answer and the phone's own voice keep their old timing. Needs the new
+  desktop and phone builds; no backend change.
+- **A focus session shows the focus buddy, not a sleeping animal.** A focus
+  session puts Jarvis on Quiet, and every screen drew Quiet as asleep, so the
+  animal slept, woke to say "YouTube can wait" and dozed off again - the
+  focus buddy never appeared. Now a Quiet that a focus session set shows the
+  awake focus buddy on the PC's faces, the HUD, the tray icon and the phone;
+  a Quiet you set by hand, and standby, stay asleep. The screen reader says
+  Jarvis is working beside you and will not speak, except to name a
+  distraction.
+
+- **A still ring for errors, and a not-connected ring you can see.** On the
+  four animals and the robot an error now also draws a thin, still ring with
+  a gap at the bottom in the error colour, on both apps; it never moves, so
+  it is fine under Still, calm motion and a serious moment. The
+  "not connected" ring was so faint (1.65 : 1 against the background) that it
+  looked like plain sleep from across a room; it is now a heavier, complete
+  circle at about 4 : 1, and both rings stay readable on light and dark
+  backgrounds. They differ by shape as well as colour (a gap or none, heavy
+  or thin), so a colour-blind eye can tell them apart, and neither is the
+  waiting-on-you clock.
+
+- **The desktop tells a screen reader what the face shows, in the phone's
+  words.** It used to say only "Jarvis isn't connected" (or a raw word like
+  "banked"); the floating face, the widget and the face page now say the
+  phone's eight sentences, plus not connected and a focus session.
+
+- **The widget's sleeping Zs no longer get cut off.** In the widget's round
+  120 px window the panda's and monkey's Zs poked out past the edge; they now
+  stay inside it.
+
+- **The docs pictures of the animals' eight states are redrawn.** The red
+  panda's and pygmy owl's still showed a wave at "waiting on you" and a raised
+  paw or wing at "error", removed on 2026-09-28. All five are redrawn from the
+  current code and now show the error ring and the Zs.
+
+- **A thumbs-down on a crisis-help answer no longer counts toward "suggest
+  the bigger model".** Crisis messages were already never counted for the
+  owner's own "that's wrong" words or for Jarvis struggling with a tool, but
+  pressing the thumbs-down on the answer to a crisis message still added one
+  to the "you corrected me" count. It no longer does. The backend keeps a
+  short list of crisis-answer ids in memory only (ids, no words, nothing
+  written to disk or to a log, gone when it restarts, oldest dropped after
+  200), and the count skips any answer on it. Nothing else about the crisis
+  help line changes. Needs `apply-patches.ps1` on the PC (`jarvis_agent.py`
+  and `second-card-suggest.patch`).
+
+- **The animals' new behaviours, on both apps.** Every animal and the robot
+  now does what the six "Animal options" switches promised, each switch
+  turning its own off: **listening nods** (a small nod in your pauses while
+  you talk) and **gestures on Jarvis's sentence ends** (while it speaks
+  aloud, its nods and paw lifts land where a sentence ends - a typed or
+  quiet answer keeps the old timing); a **focus buddy** (in a focus session
+  it works quietly beside you, and stretches when the session ends); a small
+  **nod when a fact is saved** (never while App lock or "Hide memory lists
+  and chat history" is on) and a **glow when a long answer is ready**;
+  **petting** (on the PC stroke the Widget's face, or press, hold and stroke
+  in the Faces window; on the phone a long press on the face, which does not
+  open the Brain); **two cute idle moments** per face, taking turns after it
+  has rested a while; a **goodbye and a hello** when you switch faces; and
+  **seasonal touches** behind the face (off to start). "Keep the animal
+  still" and serious moments switch every one off; calm motion makes them
+  smaller - the focus buddy's pose included (it was drawn full size under
+  calm; fixed). While Jarvis is waiting on you or something went wrong, a
+  face switch is a quick gentle cross-fade, as in a serious moment (the
+  animal used to bow and drop out of view). Also fixed in this batch:
+  **the voice-speed fix** - the sentence-end finder missed almost every
+  sentence end at the normal pace and faster (only 1 of 36 at the fastest),
+  because sentences spoken back to back leave only about a tenth of a
+  second of quiet; it now finds 25 to 34 of 36, and never one inside a
+  sentence. **The options snap** - a face opened before the stored options
+  were read eased in from the defaults, so a face set to Still moved for a
+  moment; both apps now take them at once. On the PC the same now holds for
+  a face switched back to after another, and for the seasonal touches. And
+  on the PC, the sentence-end gestures
+  now switch on when Jarvis's voice is first heard (they almost never did:
+  the face turns to "speaking" as the text starts, before any sound), a
+  face that has just opened waits its "rested a while" before a cute moment,
+  and a stroke, a nod, a glow or a stretch is drawn at the full frame rate.
+  Needs `apply-patches.ps1` on the PC for the new Petting wording
+  (`jarvis_animal.py`). See `docs/CRITTERS.md`, "New behaviours".
+
+- **A fifth face: the robot, on both apps.** From the owner's own picture:
+  a small floating robot with a big white helmet, a glossy dark-blue visor
+  with a glowing rim, ear pods with teal fins, an egg of a body with a teal
+  shield, two mitten arms and no legs - it floats, with a soft shadow on
+  the ground. No mouth and no orb: its glowing eyes carry the state's colour
+  and its expression, and pulse with Jarvis's real voice. Now and then at
+  rest it zips round inside its own picture (never out of it, never under
+  "Keep the animal still", calm motion, a serious moment, a focus session or
+  a petting hand), waves, or polishes its visor. It counts as an animal for
+  every animal option and does everything the animals do - all eight
+  states, powering down and booting up, the Zs, hello and goodbye, and the
+  new behaviours. Its own voice under "Voice follows the face": Emma, two
+  steps higher and a little faster (changeable in "Each animal's voice").
+  The sky's switches now read "Show the sun and moon behind the face" and
+  "Weather behind the face", so they fit the robot too. Pick it in the
+  Faces window (PC) or Appearance (phone). Needs `apply-patches.ps1` on the
+  PC for its voice and the new sky wording (`jarvis_voices.py`, `jarvis_sky.py`,
+  `jarvis_reach.py`, `jarvis_quick.py`). See `docs/CRITTERS.md`, "Robot".
+
+- **Animal options: every animal option in one place, on both apps, and
+  Jarvis changes them when asked.** The desktop's Settings has a new
+  "Animal options" card; the phone's Appearance has the same section. It
+  holds "Keep the animal still", the sun, moon and weather (moved there),
+  sharpness and frame rate (marked "on this computer" / "on this phone"),
+  a button to the face's voice, and six switches for the new behaviours -
+  listening nods, focus buddy, small acknowledgements, petting and cute
+  idle moments (on to start) and seasonal touches (off). It covers every
+  character face, the robot included. Those six are saved and shared, and
+  the animals now do all six (see "The animals' new behaviours" above).
+  **"Keep the animal still" and the
+  switches are now shared**: kept on the PC, so a change on either device
+  changes both (before, each device had its own Still - if either had it on,
+  it stays on). Sharpness and frame rate stay per device. Say "keep the
+  animal still", "stop the animal's nodding", "turn off the weather", "turn
+  on the sun and moon" or "make the animal sharper" - answered at once,
+  without the AI model; "make the animal sharper" changes only the device
+  you asked from; switching the weather to Open-Meteo still shows its
+  approval card first. Anything unclear gets a plain question back. Needs
+  `apply-patches.ps1` on the PC (new: `jarvis_animal.py`, `animal.patch`).
+  See `docs/JARVIS-API.md` section 93 and `docs/CRITTERS.md`, "Animal
+  options".
 - **An app Jarvis builds is now a project (the backend half).** In
   Projects, a coding project can be an app: its latest saved version and its
   open tasks show on its page. A task is one change kept as a separate copy

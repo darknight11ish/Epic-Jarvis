@@ -1822,6 +1822,12 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
         "second_card",
         "quick",
         "open_settings",
+        // Sharpness or frame rate asked for by voice or chat (jarvis_quick.py,
+        // 2026-09-28's Animal options): per device, so this computer
+        // applies it to itself (main.js applyFaceTuningFromRoute,
+        // animal-shared.js stepTuning). One of a short fixed list of words,
+        // checked again on the page; nothing else rides with it.
+        "face_tuning",
         "offer",
         // "Forget a time frame" (jarvis_forget_range.py, 2026-09-28): the
         // Brain place main.js opens (openBrainFromRoute) after "forget what
@@ -3121,6 +3127,19 @@ pub async fn set_floating(app: AppHandle, enabled: bool) -> Result<bool, String>
 #[tauri::command]
 pub fn get_app_lock(app: AppHandle) -> bool {
     crate::lock::current(&app).app_lock
+}
+
+/// Whether App lock and "Hide memory lists and chat history" are on, as two
+/// yes/no answers and nothing else from the settings - all a face needs to
+/// hold back the small nod it gives when Jarvis saves a fact, which never
+/// plays while either is on (the owner's rule, 2026-09-28; face-moments.js).
+/// Changes arrive as the `security-changed` event every window hears; this
+/// is the answer before the first one. Reveals nothing a window could not
+/// already learn from that event.
+#[tauri::command]
+pub fn get_lock_flags(app: AppHandle) -> serde_json::Value {
+    let s = crate::lock::current(&app);
+    serde_json::json!({ "appLock": s.app_lock, "privateAnswers": s.private_answers })
 }
 
 /// The widget's Approve while App lock is on or on an email (where an
@@ -5918,6 +5937,22 @@ mod turn_tests {
     /// pass on as booleans, and the facts an answer used as ids alone -
     /// "mem:<id>" as a number, each once, in order - never "fact:<n>",
     /// never a word, never the raw `injected_ids`.
+    /// "Make the animal sharper" (2026-09-28): the page applies
+    /// `face_tuning` to this computer, so it must survive this filter - as a
+    /// string only, like `open_settings`.
+    #[test]
+    fn the_route_line_carries_face_tuning() {
+        let line = super::route_line_from_header(
+            r#"{"quick": "animal_device", "face_tuning": "sharper", "lane": "no AI model"}"#,
+        )
+        .unwrap();
+        let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(got["face_tuning"], "sharper");
+        let odd = super::route_line_from_header(r#"{"lane": "x", "face_tuning": 3}"#).unwrap();
+        let got: serde_json::Value = serde_json::from_str(&odd).unwrap();
+        assert!(got.get("face_tuning").is_none());
+    }
+
     #[test]
     fn the_route_line_carries_temporary_and_the_ids_of_the_facts_used() {
         let line = super::route_line_from_header(

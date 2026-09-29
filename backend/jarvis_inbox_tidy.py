@@ -3,7 +3,7 @@ move to Trash a checked list of emails, after ONE approval card that lists
 every one of them, with 10 minutes to Undo.
 
 NEW MODULE, shipped whole. inbox-tidy.patch installs its two routes
-(docs/JARVIS-API.md section 94) and gives the gate its words; jarvis_agent.py
+(docs/JARVIS-API.md section 95) and gives the gate its words; jarvis_agent.py
 calls plan(), describe() and run() for the model's `tidy_inbox` tool.
 
 THE OWNER'S DECISION (2026-09-28, CLAUDE.md)

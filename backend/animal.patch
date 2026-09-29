@@ -1,0 +1,39 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -309,6 +309,17 @@
+     for a machine nobody has edited yet.
+     """
+     doc = {"face": None, "bindings": {}, "updated": 0.0}
++    # animal.patch (the owner's decisions of 2026-09-28, "Animal options"):
++    # the shared animal switches - "Keep the animal still" and the animal's
++    # behaviours - ride along as "animal", so both apps, which already read
++    # this document again on every `appearance` event, repaint every face
++    # from one read. Kept in their own file by jarvis_animal.py, so the
++    # Faces window's save below (face and colours only) never touches them.
++    try:
++        import jarvis_animal
++        doc["animal"] = jarvis_animal.values()
++    except Exception:
++        pass
+     try:
+         if APPEARANCE_FILE.is_file():
+             stored = json.loads(APPEARANCE_FILE.read_text(encoding="utf-8"))
+@@ -2553,6 +2564,18 @@
+     except Exception as exc:
+         print(f"  sky        NOT ON ({type(exc).__name__}) - the sun, moon and weather are off")
+         print("             until jarvis_sky.py is back: run apply-patches.ps1 again")
++    # animal.patch (the owner's decisions of 2026-09-28, "Animal options"):
++    # GET /api/animal and POST /api/animal - "Keep the animal still" and the
++    # animal's behaviour switches, shared by both apps, each at once and
++    # with no card (they only change how the animal moves). Wrapped round
++    # Handler here, like sky above; the rules are all in jarvis_animal.py.
++    try:
++        import jarvis_animal
++        print(jarvis_animal.install(Handler, origin_ok=_origin_ok,
++                                    token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  animal     NOT ON ({type(exc).__name__}) - the animal options stay as they are")
++        print("             until jarvis_animal.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

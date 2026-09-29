@@ -118,12 +118,13 @@ stop_head.bin - generated numbers, not audio (the same bytes in both)
   sherpa-onnx kokoro-en-v0_19 release). Neither voice is shipped by it.
 
 jarvis-client/app/src/test/resources/lipsync/*.wav - test audio, not shipped
-  Fifteen short clips (about 26 s in all) of Jarvis's own built-in voice,
+  Seventeen short clips (about 31 s in all) of Jarvis's own built-in voice,
   made for the lip-sync tests (docs/LIPSYNC.md) with Kokoro-82M v0.19
   (https://huggingface.co/hexgrad/Kokoro-82M, Apache-2.0, via the
   sherpa-onnx kokoro-en-v0_19 release) through backend/jarvis_speech.py's
-  own kokoro_speak - the default voice and the three animal voices, some
-  resampled (8 to 44.1 kHz), pitched down or mixed with generated noise. Test
+  own kokoro_speak - the default voice and the animal voices, some
+  resampled (8 to 44.1 kHz), pitched down or mixed with generated noise, two
+  at the slowest and fastest speaking pace with the PC's mouth chunk. Test
   resources only: they are not in the phone app or the desktop app. The
   model itself is not shipped. lipsync-golden.json beside them is numbers
   computed from these clips.

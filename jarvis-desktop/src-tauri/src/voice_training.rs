@@ -1168,8 +1168,9 @@ pub async fn set_voice_face(app: AppHandle, enabled: bool) -> Result<Value, Stri
 }
 
 /// The animal faces with a voice of their own (`GET /api/voice/voices`
-/// `face_voice.animals`). Anything else is refused here, before it is sent.
-pub(crate) const ANIMALS: [&str; 4] = ["redpanda", "pygmyowl", "seaotter", "monkey"];
+/// `face_voice.animals`) - the four animals and the robot, which counts as
+/// one here as everywhere. Anything else is refused here, before it is sent.
+pub(crate) const ANIMALS: [&str; 5] = ["redpanda", "pygmyowl", "seaotter", "monkey", "robot"];
 
 /// How far an animal's pitch may move, in semitones ("steps" on screen):
 /// 3 deeper to 4 higher, in half steps - the PC's own range
@@ -1180,7 +1181,7 @@ pub(crate) const PITCH_MAX: f64 = 4.0;
 fn animal_id(face: &str) -> Result<&'static str, String> {
     let face = face.trim();
     ANIMALS.iter().copied().find(|a| *a == face).ok_or_else(|| {
-        "Choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey.".to_string()
+        "Choose the Red Panda, the Pygmy Owl, the Sea Otter, the Monkey or the Robot.".to_string()
     })
 }
 

@@ -41,7 +41,9 @@ import { TARGETS, fileNote, loadTargets, noTargetsLine, targetName } from "./not
 import { EMAIL_APPROVE, emailDetail, isEmailCard } from "./email-sending.js";
 import { CARD_KICKER, cardTitle } from "./card-words.js";
 import { isHeavy } from "./heavy-approve.js";
+import { faceWords } from "./face-words.js";
 import { relayFaceVoice } from "./face-voice.js";
+import { relayFaceMoments } from "./face-moments.js";
 import { startSkyFeed } from "./sky-feed.js";
 import {
   actionsOf as focusActionsOf,
@@ -114,6 +116,7 @@ const dom = {
   shell: $("widget-shell"),
   tray: $("widget-tray"),
   faceWrap: $("face-wrap"),
+  faceStatus: $("face-status"),
   faceFrame: $("face-frame"),
   board: $("board"),
   boardPick: $("board-pick"),
@@ -526,7 +529,7 @@ function applyFaceVisibility() {
   // followed a change anyway. See `postFace`.
   // Only when it changes: setting the same address again restarts the load
   // (and "Your widget" repaints call this after every read).
-  const src = show ? "faces.html?mode=display&feed=parent" : "";
+  const src = show ? "faces.html?mode=display&feed=parent&clip=circle" : "";
   if (dom.faceFrame && (dom.faceFrame.getAttribute("src") || "") !== src) dom.faceFrame.src = src;
 }
 
@@ -690,7 +693,15 @@ function postFace() {
   // notches) and `serious` (a crisis answer's calm, plain pose, section
   // 38.1) - jarvis-link.js faceSignal. The widget's own offline row says it
   // in words.
-  const message = { type: "jarvis-hud-face", ...faceSignal(currentLink()) };
+  const signal = faceSignal(currentLink());
+  const message = { type: "jarvis-hud-face", ...signal };
+  // What the face shows, in words, for a screen reader: the frame is hidden
+  // from it (aria-hidden), so this live region says it, in the phone's
+  // sentences (face-words.js). Only while the face is on screen.
+  if (dom.faceStatus) {
+    const words = faceWords(signal);
+    if (dom.faceStatus.textContent !== words) dom.faceStatus.textContent = words;
+  }
   if (faceAppearance) message.appearance = faceAppearance;
   try {
     frame.contentWindow.postMessage(message, location.origin);
@@ -1739,12 +1750,15 @@ startLink();
   // Lip-sync: Jarvis's voice and the owner's microphone, passed into the
   // face (face-voice.js) - an event reaches this page, never its frame.
   relayFaceVoice(dom.faceFrame, listen);
+  // A fact saved, a long answer ready, a focus session on or off - for the
+  // animal's small nod, glow and focus buddy (face-moments.js), the same way.
+  relayFaceMoments(dom.faceFrame, listen, IS_TAURI ? invokeStrict : null);
   listen("appearance-changed", () => readFaceAppearance(false));
   readFaceAppearance(true);
   // The sun, the moon and the weather behind the animal (sky-feed.js): kept
   // in this computer's localStorage for the face frame, which holds no
   // command of its own (capability sky-read).
-  startSkyFeed();
+  startSkyFeed({ onEvent });
 
   // Ollama and the LiteLLM proxy are not on the bus, so their dots still need
   // one probe. Once, at boot — there is no timer here any more.

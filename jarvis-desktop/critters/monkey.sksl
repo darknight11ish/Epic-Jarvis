@@ -114,7 +114,7 @@ float2 eyeAt() { return float2(0.118, 0.400) + 0.010 * uLook; }
 
 // A small pear of a body; the belly swells with each breath.
 float partTorso(float3 b) {
-    return sdEllipsoid(b, float3(0.175, 0.215, 0.150) * uBreath + float3(0.0, 0.0, 0.0));
+    return sdEllipsoid(b, float3(0.175, 0.215, 0.150) * uBreath);
 }
 // The legs: thigh, shin and a round foot on each. Each side is worked out
 // only for its own half (the panda's eyes' trick), which halves the cost.
@@ -219,6 +219,43 @@ float partEyes(float3 h) {
     return sdEllipsoid(ep, float3(0.052, max(0.007, 0.066 * open), 0.042));
 }
 
+// Where along a ray the animal can be. Each part has a sphere round it,
+// placed from where the part is in THIS pose (the body and head through the
+// pose's own frames), with a margin of a few pixels - a ray that passes a
+// part by less than that can still be taken for a hit. A ray that meets none
+// of them is not marched at all, and one that does is marched no further than
+// the last of them (clipSpan, common_head.sksl). Measured against the single
+// sphere this replaces: docs/CRITTERS.md, "The bounding volumes".
+float3 fromBody(float3 q) { return uBodyPos + q.x * uBodyR0 + q.y * uBodyR1 + q.z * uBodyR2; }
+float3 fromHead(float3 h) { return uNeck + HEAD_S * (h.x * uHeadR0 + h.y * uHeadR1 + h.z * uHeadR2); }
+// Where the vine is at x (partVine's own curve): its middle there.
+float3 vineAt(float x) {
+    float dx = x - uVine.z;
+    return float3(x, uVine.x - 0.035 * x * x - uVine.w / (1.0 + 18.0 * dx * dx), uVine.y);
+}
+float2 animalSpan(float3 ro, float3 rd) {
+    float2 s = float2(1e9, -1e9);
+    s = addSphere(s, ro, rd, uBodyPos, 0.36);                                                       // torso
+    s = addSphere(s, ro, rd, fromBody(uKneeL), max(length(float3(-0.085, -0.13, 0.0) - uKneeL), length(uFootL - uKneeL)) + 0.20);   // legs
+    s = addSphere(s, ro, rd, fromBody(uKneeR), max(length(float3(0.085, -0.13, 0.0) - uKneeR), length(uFootR - uKneeR)) + 0.20);
+    s = addSphere(s, ro, rd, fromHead(float3(0.0, 0.38, 0.0)), 0.78);                               // head and ears
+    s = addSphere(s, ro, rd, uElbA, max(length(uShA - uElbA), length(uHandA - uElbA)) + 0.15);      // arms
+    s = addSphere(s, ro, rd, uElbB, max(length(uShB - uElbB), length(uHandB - uElbB)) + 0.15);
+    float3 tA = 0.5 * (uTail1.xyz + uTail2.xyz);                                                    // tail, in two
+    float rA = max(max(length(uTail0.xyz - tA), length(uTail1.xyz - tA)), max(length(uTail2.xyz - tA), length(uTail3.xyz - tA)));
+    s = addSphere(s, ro, rd, tA, rA + max(max(uTail0.w, uTail1.w), uTail2.w) + 0.08);
+    float rB = max(length(uTail2.xyz - uTail3.xyz), length(uTail4.xyz - uTail3.xyz));
+    s = addSphere(s, ro, rd, uTail3.xyz, rB + max(uTail2.w, uTail3.w) + 0.08);
+    s = addSphere(s, ro, rd, uOrb.xyz, 0.27);                                                       // the banana
+    s = addSphere(s, ro, rd, vineAt(-1.10), 0.36);                                                  // the vine, in six
+    s = addSphere(s, ro, rd, vineAt(-0.66), 0.36);
+    s = addSphere(s, ro, rd, vineAt(-0.22), 0.36);
+    s = addSphere(s, ro, rd, vineAt(0.22), 0.36);
+    s = addSphere(s, ro, rd, vineAt(0.66), 0.36);
+    s = addSphere(s, ro, rd, vineAt(1.10), 0.36);
+    return clipSpan(ro, rd, s, CAM_TARGET, BOUND_R);
+}
+
 // The whole monkey, its vine and its banana: distance to the nearest
 // surface. The march calls this over and over, so it returns the distance
 // only; which part was hit is asked once, afterwards, by partAt().
@@ -288,7 +325,10 @@ float3 headColour(float3 h) {
 
 float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
-    if (id == ID_EYE) return float4(INK, 1.0);
+    if (id == ID_EYE) {
+        float4 l = eyeLid(INK, PEACH, h, eyeAt(), 0.079, h.x < 0.0 ? uFace.x : uFace.y);
+        return float4(l.rgb, 1.0 - l.w);
+    }
     if (id == ID_NOSE) return float4(float3(0.080, 0.022, 0.012), 0.6);
     if (id == ID_HEAD) {
         // The painted mouth on the front of the head, and the walls of the
@@ -350,7 +390,7 @@ float3 sparkle(float id, float3 pos) {
     float2 sparkAt = float2(-0.017 + 0.010 * uLook.x, 0.022 + 0.008 * uLook.y);
     float spark = 1.0 - smoothstep(0.009, 0.016, length(q - sparkAt));
     float spark2 = 1.0 - smoothstep(0.004, 0.007, length(q - sparkAt - float2(0.026, -0.028)));
-    float lit = smoothstep(0.02, 0.2, min(uFace.x, uFace.y));
+    float lit = smoothstep(0.02, 0.2, min(uFace.x, uFace.y)) * (1.0 - uLid.x);
     return float3(1.6) * max(spark, spark2 * 0.8) * lit * (h.z < -0.26 ? 1.0 : 0.0);
 }
 
@@ -358,4 +398,10 @@ float3 sparkle(float id, float3 pos) {
 // (common_tail.sksl): nothing behind this animal to fill it in.
 float2 stuckRay(float3 ro, float3 rd) {
     return float2(-1.0, 0.0);
+}
+
+// Its shadow on the ground below (common_tail.sksl draws it where a ray
+// misses): none - it has its own seat, perch, vine or water.
+float ground(float3 ro, float3 rd) {
+    return 0.0;
 }

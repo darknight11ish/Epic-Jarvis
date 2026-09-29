@@ -12,7 +12,8 @@
 // This part holds what every animal shares: the uniforms the host sets for
 // all of them, and the small shape and colour helpers. The animal's own file
 // supplies its body (map, mapLite, partAt) and its colouring (material,
-// sparkle) plus where the camera looks (CAM_TARGET, CAM_DIST, BOUND_R). The
+// sparkle), where the camera looks (CAM_TARGET, CAM_DIST, BOUND_R) and where
+// along a ray it can be (animalSpan: a sphere round each part). The
 // shared end (common_tail.sksl) does the rest: the march, the soft outline,
 // the lighting, the orb and its glow.
 //
@@ -55,6 +56,7 @@ uniform float uTime;
 uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
 uniform float uPx;        // one pixel, in the same units as critter()'s `p`
 uniform float uNoShadow;  // 1: skip the soft shadow (a small face, or Lower); 0 or unset: draw it
+uniform float2 uLid;      // PREVIEW: a painted eyelid over each eye - how far down it is (0 none, 1 shut), and its slope (+1: the inner end up, a concerned look; -1: the outer end up)
 
 const float PI = 3.14159265;
 // The part id every animal gives its orb. Its own ids are its business.
@@ -100,6 +102,59 @@ float smin(float a, float b, float k) {
     return min(a, b) - h * h * 0.25 / k;
 }
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
+
+// Where a ray runs inside a sphere: (where it goes in, where it comes out),
+// or (1e9, -1e9) - "nowhere", which the callers' min and max take as empty -
+// when it misses. Each animal's animalSpan() (common_tail.sksl asks it) joins
+// these to say where along a ray the animal can be, so the march only looks
+// there.
+float2 sphereSpan(float3 ro, float3 rd, float3 c, float r) {
+    float3 oc = ro - c;
+    float b = dot(oc, rd);
+    float disc = b * b - (dot(oc, oc) - r * r);
+    if (disc <= 0.0) return float2(1e9, -1e9);
+    float sq = sqrt(disc);
+    return float2(-b - sq, -b + sq);
+}
+
+// The stretch of a ray that is in either of two spans: from the first way in
+// to the last way out (the gap between, if any, is marched too - it is cheap
+// compared with a second march).
+float2 joinSpan(float2 a, float2 b) { return float2(min(a.x, b.x), max(a.y, b.y)); }
+// One more part's sphere added to the span so far (start from float2(1e9, -1e9), which is empty).
+float2 addSphere(float2 s, float3 ro, float3 rd, float3 c, float r) { return joinSpan(s, sphereSpan(ro, rd, c, r)); }
+// The span the march really uses. It STARTS where the outer sphere (the one
+// round the camera's target, which is what used to be the only bound) lets
+// the ray in - the same first step as ever, so a ray that meets the animal
+// takes exactly the steps it always took and draws the same pixel - and ENDS
+// where the ray leaves the animal's parts, or the outer sphere, whichever
+// comes first. A ray that meets no part has an empty span and is not marched
+// at all.
+float2 clipSpan(float3 ro, float3 rd, float2 parts, float3 c, float r) {
+    float2 o = sphereSpan(ro, rd, c, r);
+    return float2(o.x, min(parts.y, o.y));
+}
+
+// THE PAINTED EYELID. An animal's eyes can only squash up and down, which
+// reads as a wink or a blink and cannot be sloped. This lays a lid of the
+// surrounding fur over the top of the eye, with a thin darker crease along its
+// edge, sloped by uLid.y. It is worked out in the surface shading (once a
+// pixel, on the eyes only), not in map(), so the march does not pay for it.
+// `h` is the point in the head's own frame, `ea` the eye's middle there, `r`
+// the eye's height when open at its widest; returns the colour and, in w, how covered it is.
+// The lid gives way to an eye that is shutting: a shut eye is its own thin
+// dark line (a blink, or asleep), and a lid laid over that would rub it out
+// and leave the animal with no eyes - so the lid fades out as the eye squashes
+// under 0.3 (`open`, the same number partEyes squashes it by).
+float4 eyeLid(float3 ink, float3 fur, float3 h, float2 ea, float r, float open) {
+    float side = h.x < 0.0 ? -1.0 : 1.0;
+    float lid = uLid.x * smoothstep(0.03, 0.3, open);
+    float2 q = float2(side * h.x - ea.x, h.y - ea.y);
+    float d = q.y - r * (1.0 - 2.0 * lid) + lid * uLid.y * 0.8 * q.x;
+    float cov = smoothstep(-0.004, 0.004, d);
+    float crease = (1.0 - smoothstep(0.0, 0.007, abs(d))) * smoothstep(0.02, 0.1, lid);
+    return float4(mix(ink, fur, cov) * (1.0 - 0.4 * crease), cov);
+}
 
 // The orb: held, not grown, so never blended into the body.
 float orbDist(float3 p) { return length(p - uOrb.xyz) - uOrb.w; }
