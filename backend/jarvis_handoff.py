@@ -50,12 +50,14 @@ WHAT IT NEVER DOES
   * Run while nothing is paused at an owner page. No route answers a picture
     or passes an input otherwise (test_handoff.py checks that, in code and in
     behaviour).
-  * Hide anything from the site: it is the same visible window, driven the
-    same open way. No stealth plug-in, no change to how the browser presents
-    itself, no script injected into the page, no captcha solving. A tap
-    passed on this way reaches the page as Playwright's own mouse event;
-    some captchas can tell, and refuse it - the apps say so, and offer
-    "Solve it on the PC instead".
+  * Solve a captcha, or add any spoofing of its own: it is the same visible
+    window (a real browser), no script injected into the page, no captcha
+    solving, no proxy. (The owner reversed "driven openly, nothing that
+    hides it" on 2026-09-29 - the headless browser runs with stealth on and the visible browser is a plain real browser - but the
+    owner still solves every captcha, and this file adds nothing to hide
+    anything.) A tap passed on this way reaches the page as Playwright's own
+    mouse event; some captchas can tell, and refuse it - the apps say so,
+    and offer "Solve it on the PC instead".
 
 THE PHONE'S SIDE (docs/JARVIS-API.md section 87.8): pictures are asked for
 only while the "Solve it here" screen is on screen, and never while App lock

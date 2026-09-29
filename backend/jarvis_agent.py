@@ -419,23 +419,91 @@ def _run_control_phone(args: dict, plan_obj, *, announce=None, checkpoint=None) 
                  approved=True)
 
 
+class _NoBrowser:
+    """A browser plan that says why nothing can be done (the chosen engine cannot
+    run): `problem` is in plain words and _one_call tells the model, with no card."""
+
+    def __init__(self, problem: str) -> None:
+        self.problem = problem
+
+
 def _prepare_browser_control(args: dict):
     try:
         import jarvis_browser_control as B
     except Exception as exc:
         return None, f"Control a browser tab: {json.dumps(args, ensure_ascii=False)} " \
                       f"(unavailable: {exc})"
-    p = B.plan(str(args.get("goal", "")), str(args.get("session", "")),
-               args.get("requests") or [], allowed_domains=args.get("allowed_domains"))
+    # Which browser: the visible one (the default before 2026-09-29) or the
+    # headless one (Obscura, jarvis_browser_engine.py). The choice is a plain
+    # rule in code and is named on the first line of the card; it never changes
+    # who is asked (the same plan card, step by step, either way).
+    engine, why = "visible", ""
+    try:
+        import jarvis_browser_engine as E
+        pick = E.choose(args.get("mode"), goal=str(args.get("goal", "")),
+                        requests=args.get("requests") or [])
+        if pick["refused"]:
+            return _NoBrowser(pick["refused"]), "Control a browser tab: " + pick["refused"]
+        engine, why = pick["engine"], pick["why"]
+    except ImportError:
+        pass        # a PC without the engine module: the visible browser, as before
+    try:
+        p = B.plan(str(args.get("goal", "")), str(args.get("session", "")),
+                   args.get("requests") or [], allowed_domains=args.get("allowed_domains"),
+                   engine=engine, engine_why=why)
+    except RuntimeError as exc:
+        return _NoBrowser(str(exc)), f"Control a browser tab: {exc}"
     return p, B.describe(p)
 
 
 def _run_browser_control(args: dict, plan_obj, *, announce=None, checkpoint=None) -> dict:
     if plan_obj is None:
         return {"ok": False, "error": "browser control is not available here"}
+    if isinstance(plan_obj, _NoBrowser):
+        return {"ok": False, "error": plan_obj.problem}
     import jarvis_browser_control as B
     return B.run(plan_obj, announce=announce, checkpoint=checkpoint,
                  approved=True)
+
+
+#: The headless browser (jarvis_browser_engine.py; JARVIS-API 97.3): rule 1 for what
+#: a plan would TYPE or put in a web address. The plan-time secret check is the
+#: engine's own (reject_request). This is the half that needs THIS TURN'S saved
+#: facts, which only the loop has: a typed value, or an address's query, that
+#: repeats a saved fact is refused before any card, like a search would ask.
+BROWSER_OUTSIDE_LINE = ("Jarvis read outside text in this conversation (an email, a file, a note, "
+                        "a web page or another tool's answer). Check that nothing private is in "
+                        "the words this plan types or puts in an address.")
+
+
+def _browser_private_refusal(state, watch: "_TurnWatch") -> str:
+    """"" or the plain reason a plan on the HEADLESS browser is refused because
+    what it types, or an address's query, repeats a saved fact (or could not be
+    compared with them). Any other plan: ""."""
+    if getattr(state, "engine", "") != "headless":
+        return ""
+    try:
+        import jarvis_browser_engine as E
+        return E.private_words_problem(getattr(state, "steps", []), facts=watch.facts,
+                                       owner_words=watch.owner_words, memory=watch.memory)
+    except Exception as exc:
+        return (f"the words the headless browser would type could not be checked "
+                f"({type(exc).__name__}), so it did not go ahead")
+
+
+def browser_card_lines(state, watch: "_TurnWatch") -> list:
+    """The plain line at the TOP of a headless browser plan's card when outside text
+    shaped the turn AND the plan types something or puts words in an address."""
+    if getattr(state, "engine", "") != "headless" or not (watch.read or watch.tainted):
+        return []
+    for st in getattr(state, "steps", []) or []:
+        value = getattr(st, "value", None)
+        if not isinstance(value, str) or not value:
+            continue
+        if st.action in ("type", "select") or (
+                st.action == "navigate" and ("?" in value or "#" in value)):
+            return [BROWSER_OUTSIDE_LINE]
+    return []
 
 
 def _prepare_github_search(args: dict):
@@ -1170,30 +1238,30 @@ TOOLS: dict = {
     "browser_control": Tool(
         "browser_control",
         "Drive one browser tab by naming page elements (role and accessible "
-        "name). A missing or ambiguous element is reported, not guessed; "
-        "add 'within' to say which. read_new returns only a chat's messages "
-        "after a cursor; read_page returns the page's main text in pieces. "
-        "Stops if the page leaves the allowed sites, asks a question, opens "
-        "a tab or downloads.",
+        "name). A missing or ambiguous element is reported, not guessed. "
+        "read_new: a chat's new messages; read_page: the main text in "
+        "pieces. Stops if the page leaves the allowed sites, asks a "
+        "question, opens a tab or downloads.",
         {"type": "object", "properties": {
             "goal": {"type": "string"},
-            "session": {"type": "string", "description": "a label for the tab"},
+            "session": {"type": "string"},
+            "mode": {"type": "string", "enum": ["auto", "headless", "visible"],
+                "description": "headless: no window, reading only. visible: sign-in, "
+                    "checkout"},
             "allowed_domains": {"type": "array", "items": {"type": "string"},
-                "description": "hostnames the tab may visit (default: the sites the plan "
-                    "names)"},
+                "description": "hostnames allowed (default: the plan's sites)"},
             "requests": {"type": "array", "items": {"type": "object", "properties": {
                 "action": {"type": "string",
                     "enum": ["navigate", "click", "type", "select", "read", "read_new",
                              "read_page"]},
-                "role": {"type": "string", "description": "e.g. button, textbox; for "
-                    "read_new, the message list's role"},
-                "name": {"type": "string", "description": "accessible name; for read_new, "
-                    "the message list's"},
+                "role": {"type": "string", "description": "e.g. button, textbox; "
+                    "read_new: the list's"},
+                "name": {"type": "string", "description": "accessible name"},
                 "within": {"type": "string", "description": "the section, dialog or row it "
                     "is in, when two elements match"},
                 "value": {"type": "string", "description": "navigate: URL. type/select: "
-                    "text (a saved secret as <secret>name</secret>). read_new: the highest "
-                    "message index seen. read_page: character offset (\"0\" = start)"},
+                    "text (saved secret: <secret>name</secret>). read_new: highest index "
+                    "seen. read_page: offset (\"0\")"},
                 "why": {"type": "string"},
                 "irreversible": {"type": "boolean"},
                 "leaves_machine": {"type": "boolean",
@@ -3810,6 +3878,14 @@ def _publish_step(step: dict) -> None:
         pass
 
 
+def _headless_offered() -> bool:
+    try:
+        import jarvis_browser_engine as E
+        return bool(E.headless_offered())
+    except Exception:
+        return False
+
+
 def offered_tools(enabled_tools) -> list:
     """The tool names a turn actually offers the model: the ones in
     `enabled_tools` that are real tools here, in TOOLS order. `None` means
@@ -3822,11 +3898,15 @@ def offered_tools(enabled_tools) -> list:
     if enabled_tools is None:
         return list(TOOLS)
     wanted = set(enabled_tools)
-    if "browser_control" in wanted and _second_card_lane("browser_control") is None:
+    if ("browser_control" in wanted and _second_card_lane("browser_control") is None
+            and not _headless_offered()):
         # Browser control needs BOTH: its name in `[tools].enabled`, and the
         # second card's "Browser control" switch working (jarvis_second_card).
         # Its own module says why: page after page of history does not fit
-        # the main card's 16K. Without the second lane it is not offered.
+        # the main card's 16K. Without the second lane it is not offered -
+        # except that the headless browser (jarvis_browser_engine.py, switched
+        # on by the owner with one card) reads a page in the same small pieces
+        # and needs no second card for it.
         wanted.discard("browser_control")
     if FILES_TOOL in wanted and not _folders_listed():
         # Nothing to look in: not offered, so its description costs no tokens
@@ -6742,6 +6822,29 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # The owner's decision: the card says PLAINLY, at the top, when
         # outside text shaped this turn.
         top = draft_email_card_lines(watch)
+        if top:
+            plan_text = "\n".join(top) + "\n\n" + plan_text
+    if name == "browser_control":
+        # The browser the model asked for cannot run (the headless one is off,
+        # not installed or changed): nothing to ask about, so no card, and never
+        # a quiet switch to the other browser. The model is told why. The same
+        # for a headless plan whose typed words or address repeat a saved fact.
+        problem = getattr(state, "problem", "")
+        private = "" if problem else _browser_private_refusal(state, watch)
+        if problem or private:
+            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                          "content": _tool_content({
+                              "ok": False,
+                              "error": (f"refused: {problem} Nothing was opened and nobody "
+                                        f"was asked." if problem else
+                                        f"refused: {private}. Nothing was opened and nobody "
+                                        f"was asked.")})})
+            steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+            say_step("tool_refused", name)
+            return
+        # The owner's decision (rule 1): the card says PLAINLY, at the top, when
+        # outside text shaped a plan that types or puts words in an address.
+        top = browser_card_lines(state, watch)
         if top:
             plan_text = "\n".join(top) + "\n\n" + plan_text
     if name == "tidy_inbox":

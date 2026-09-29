@@ -1059,6 +1059,17 @@ identifier = "screen-picture"
 description = "Read picture mode's setting, ask to turn it on (one approval card on this PC) or turn it off at once."
 permissions = ["allow-screen-picture"]
 
+# The headless browser's switch (browser_engine.rs; backend/jarvis_browser_engine.py;
+# the owner's decision of 2026-09-29): Obscura, a browser with no window, that
+# Jarvis may choose for plain reading. Read it, turn it on (ONE approval card on
+# this PC, held on a stale link) or off (at once), and pick which browser Jarvis
+# uses by default. Only Settings shows it; it carries a switch position, a mode
+# and words - never a word from a web page.
+[[set]]
+identifier = "browser-engine"
+description = "Read the headless browser's setting, ask to turn it on (one approval card on this PC), turn it off at once, or pick which browser Jarvis uses by default."
+permissions = ["allow-browser-engine"]
+
 [[set]]
 identifier = "focus"
 description = "Read the focus session (a countdown, booleans and counts - never what was in front) and do ONE thing to it: pause, resume, +10 minutes, stop, or lock on where the owner lands. No card; resume, extend and lock are held on a stale link."

@@ -73,6 +73,7 @@
           <a href="#big-model">Big model (slow)</a>
           <a href="#folders">Folders Jarvis may look in</a>
           <a href="#screen-look">Look at this and Watch with me</a>
+          <a href="#browser-engine">Headless browser</a>
           <a href="#backup">Backups</a>
           <a href="#updates">Updates</a>
           <a href="#tool-updates">Check for tool updates</a>
@@ -1715,6 +1716,42 @@
         </div>
       </section>
 
+      <!-- ── The headless browser (Obscura) ────────────────────────────────
+           The owner's decision of 2026-09-29 (browser-engine.js,
+           browser-engine-rules.js; browser_engine.rs browser_engine; backend
+           jarvis_browser_engine.py and jarvis_obscura.py; JARVIS-API section
+           97). A browser with no window that Jarvis may choose, per task,
+           instead of the visible one for plain reading. Off by default; on is
+           ONE approval card; off is at once. The mode list says which browser
+           Jarvis uses by default. There is NO proxy field and no address
+           field here, and none can be added. The PC gives every word. -->
+      <section class="card" id="browser-engine">
+        <h2 id="be-title">Headless browser (Obscura)</h2>
+        <div id="be-body" hidden>
+          <p class="note" id="be-detail"></p>
+          <label class="toggle">
+            <input id="be-switch" type="checkbox" />
+            <span id="be-switch-label">Let Jarvis use the headless browser (Obscura)</span>
+          </label>
+          <p class="sc-line" id="be-line" role="status"></p>
+          <p class="note" id="be-state-line" hidden></p>
+          <p class="note" id="be-stealth"></p>
+          <div class="row">
+            <label for="be-mode" id="be-mode-title">Which browser Jarvis uses</label>
+            <select id="be-mode"></select>
+          </div>
+          <p class="note" id="be-mode-help"></p>
+          <p class="note" id="be-steps-title" hidden></p>
+          <div class="row sc-command">
+            <input id="be-line-text" type="text" readonly spellcheck="false" autocomplete="off"
+                   aria-label="The PowerShell line to install and check the headless browser" hidden />
+            <button class="btn small" id="be-copy" type="button" hidden>Copy the line</button>
+          </div>
+          <p class="note" id="be-steps-note" hidden></p>
+          <span class="status" id="be-status" role="status"></span>
+        </div>
+      </section>
+
       <!-- ── Backups ────────────────────────────────────────────────────────
            The owner's decision of 2026-09-27: "one locked backup file into
            a folder the owner picks ... locked with a recovery code only
@@ -2139,6 +2176,7 @@
     <script type="module" src="email-sending-settings.js"></script>
     <script type="module" src="folders-settings.js"></script>
     <script type="module" src="look-settings.js"></script>
+    <script type="module" src="browser-engine.js"></script>
     <script type="module" src="backup-settings.js"></script>
     <script type="module" src="devices.js"></script>
     <script type="module" src="tool-updates-settings.js"></script>

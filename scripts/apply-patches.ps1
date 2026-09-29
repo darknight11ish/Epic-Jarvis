@@ -877,6 +877,18 @@ $PATCHES = @(
     # jarvis_screen_picture.py copied in; the routes are answered by
     # jarvis_screen.py, which screen.patch already installs.
     'screen-picture.patch'
+    # The headless browser, Obscura (the owner's decision of 2026-09-29;
+    # JARVIS-API section 97): ONE card to turn it on (obscura_enable, tier
+    # ask) and GET/POST /api/browser/engine. Three hunks: in jarvis_gate.py the
+    # new action joins the "a no is not a standing rule" list and gets its
+    # _RISK line - both right after screen-picture.patch's own last lines, so
+    # it goes after it - and in jarvis_hud.py ONE install block right after
+    # screen.patch's own, the last one before `_loopback_companion` (last,
+    # like every new patch). Needs jarvis_browser_engine.py and
+    # jarvis_obscura.py copied in; without them, or on any error, the banner
+    # says so and the route is simply not there - the visible browser is
+    # unchanged.
+    'browser-engine.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1055,7 +1067,7 @@ $SHIPPED = @(
     'jarvis_projects.py'         # projects.patch: projects, life benchmarks and their numbers, projects.db; jarvis_quick.py (already SHIPPED) calls it for "log 5 km run"
     'jarvis_chatbot_gemini.py'   # the Gemini website adapter: a visible browser window, typed at a person's pace, stops at any captcha or sign-in page; needs Playwright (not installed by this script)
     'jarvis_chatbot_routes.py'   # chatbot-routes.patch: GET /api/chatbot/status, POST /api/chatbot/start (ONE card), /stop and /limits (a new card)
-    # --- more chatbot websites, driven the same open way (2026-09-28, "the chatbot driver becomes versatile"); reached through chatbot-routes.patch ---
+    # --- more chatbot websites, in a visible window the same way (2026-09-28, "the chatbot driver becomes versatile"); reached through chatbot-routes.patch ---
     'jarvis_chatbot_web.py'      # what every website adapter shares: the visible window, the typing, the host lock, every "needs you" page, sign-in and self-check; jarvis_chatbot.py loads it, and it loads the site files below
     'jarvis_chatbot_chatgpt.py'  # ChatGPT (chatgpt.com): a thin site file - its selectors, host and words; its own profile and spare account
     'jarvis_chatbot_claude.py'   # Claude (claude.ai): a thin site file
@@ -1071,6 +1083,9 @@ $SHIPPED = @(
     'jarvis_screen_win.py'       # the Windows half of "Look at this" and "Watch with me": what is in front (password box, capture protection, lock), the picture (in memory, never on disk) and the window's own text; copied before jarvis_screen.py
     'jarvis_screen.py'           # "Look at this" and "Watch with me": session states, pause rules, caps, the Never look at list, GET/POST /api/screen and /api/screen/never-look (screen.patch)
     'jarvis_screen_picture.py'   # slow picture mode for one graphics card: a small picture model on the PROCESSOR in its own copy of Ollama; off by default, ON is one card, OFF is instant; secrets blacked out first or no picture; GET/POST /api/screen/picture (routes in jarvis_screen.py, gate lines in screen-picture.patch)
+    # --- the headless browser, Obscura (2026-09-29, browser-engine.patch) ---
+    'jarvis_obscura.py'          # the driver for Obscura, a browser with no window: started over standard input/output (no port), --stealth always, no proxy, allow-listed tools only, one program at a time, hard limits; the owner's install line and check
+    'jarvis_browser_engine.py'   # which browser Jarvis uses (visible or headless), the switch (off by default, ON is one card), the mode rule, GET/POST /api/browser/engine (browser-engine.patch)
     'jarvis_chatbot_compare.py'  # "Ask several and compare": 2 or more chatbots, ONE card listing every one, one after another, ONE summary; routes in jarvis_chatbot_routes.py
     # --- Jarvis Live (2026-09-28): talking back and forth; the camera off until the second card passes the photo test ---
     'jarvis_live.py'             # the Live session (start, stop, time limit, quiet, pauses), the source=live rules jarvis_speech follows, GET/POST /api/voice/live (live.patch)

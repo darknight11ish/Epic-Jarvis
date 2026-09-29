@@ -123,6 +123,21 @@ that second-card lane (jarvis_agent.run_local_turn). Nothing in this module
 changed: every check above still applies, and every step still needs its
 own approval.
 
+TWO BROWSERS (2026-09-29, jarvis_browser_engine.py, JARVIS-API section 97)
+A plan now carries an `engine`: "visible" (Playwright, everything above, the
+default and the only one before) or "headless" (Obscura, a browser with no
+window, driven by jarvis_obscura.py). Nothing about the PERMISSION MODEL
+depends on it: `plan(..., engine="headless")` reads the page through the
+engine's own `read`, binds each request to exactly one element the same way,
+`describe()` prints the same card (with the engine named on its first line),
+and `run()` re-reads and re-checks before every step and applies the same fence
+- the engine is handed the fence too, because Obscura cannot be stopped part-way
+into a page load and so refuses a click that would leave the allowed sites
+BEFORE it is made. The headless engine refuses at plan time what it never does
+(a `<secret>` step, a message list) and stops a run at a captcha or a sign-in
+page, in words. A headless plan whose engine can no longer run (switched off,
+the file changed) stops in words; it NEVER falls back to the visible browser.
+
 WHAT ACTUALLY HAPPENS, AND WHAT DOES NOT LEAVE THIS MACHINE
 Unlike `jarvis_ui_control.py`, where only some steps reach the network,
 every step here already involves a browser that is, by definition, talking
@@ -248,6 +263,13 @@ class Plan:
     # Things the page did while plan() was looking (a dialog it showed, a
     # download it tried) - shown on the card, never acted on.
     notices: list = field(default_factory=list)
+    # Which browser runs the steps: "visible" (Playwright, the default and
+    # the only one before 2026-09-29) or "headless" (Obscura, through
+    # jarvis_browser_engine.py), and the plain reason for the card's first
+    # line. Nothing else about a plan depends on it: the same card, the same
+    # fence, the same re-check before every step.
+    engine: str = "visible"
+    engine_why: str = ""
 
     @property
     def weight(self) -> str:
@@ -1533,6 +1555,10 @@ def _event_text(ev: dict) -> str:
         return "the browser tab was closed"
     if kind == "unresponsive":
         return "the page stopped responding"
+    if kind == "needs_owner":
+        # The headless engine reached a captcha, an "are you human" page or a
+        # sign-in page: its own words say to use the visible browser.
+        return str(ev.get("text") or "the page wants a person")
     if kind == "blocked_navigation":
         return (f"the page tried to go to {ev.get('url')}, outside the allowed sites - "
                 "Jarvis blocked it before it loaded")
@@ -1541,9 +1567,34 @@ def _event_text(ev: dict) -> str:
     return f"the page did something unexpected ({kind})"
 
 
+def _engine_hooks(engine: str):
+    """The read/act/observe hooks of a non-visible engine (jarvis_browser_engine),
+    or None for the visible one. Raises a RuntimeError in plain words when the
+    engine cannot run - a plan for it is never made, and a run of it never
+    silently falls back to the other browser."""
+    if engine == "visible":
+        return None
+    try:
+        import jarvis_browser_engine as E
+        return E.hooks(engine)
+    except Exception as exc:
+        raise RuntimeError(str(exc) or f"the {engine} browser is not available") from exc
+
+
+def _engine_reject(engine: str, request) -> Optional[str]:
+    if engine == "visible":
+        return None
+    try:
+        import jarvis_browser_engine as E
+        return E.reject_request(engine, request)
+    except Exception:
+        return "the headless browser is not available"
+
+
 def plan(goal: str, session: str, requests: list, *,
          allowed_domains: Optional[list] = None,
-         read: Optional[Callable[[str], dict]] = None) -> Plan:
+         read: Optional[Callable[[str], dict]] = None,
+         engine: str = "visible", engine_why: str = "") -> Plan:
     """Work out the concrete steps. Reads the current page; sends no input.
 
     `requests` is a list of dicts, each naming what the caller wants to
@@ -1590,7 +1641,8 @@ def plan(goal: str, session: str, requests: list, *,
     that can be clicked or typed into is not guessed at - it is reported in
     `unmatched` and simply does not become a step.
     """
-    getter = read or _default_read
+    hooks = _engine_hooks(engine) if read is None else None
+    getter = read or (hooks.read if hooks else _default_read)
     current = getter(session) or {"url": "", "title": "", "elements": []}
     elements = current.get("elements") or []
     url = str(current.get("url") or "")
@@ -1606,6 +1658,15 @@ def plan(goal: str, session: str, requests: list, *,
         heavy = bool(r.get(IRREVERSIBLE_HINT)) or bool(r.get(LEAVES_MACHINE_HINT))
         value = r.get("value")
         secret_names = _secret_names(value)
+        no = _engine_reject(engine, r)
+        if no:
+            # The value stays off the plan (and so off the card and the log) when it
+            # was a saved secret, or when the headless engine judged it to look like
+            # a password, key or token.
+            unmatched.append({**r, "value": "(withheld)" if (
+                secret_names or getattr(no, "withhold", False)) else value,
+                "reason": str(no)})
+            continue
         if action not in _ACTIONS:
             unmatched.append({**r, "reason": f"unknown action {action!r}"})
             continue
@@ -1688,7 +1749,7 @@ def plan(goal: str, session: str, requests: list, *,
         goal=str(goal), session=str(session), steps=steps, unmatched=unmatched,
         if_refused="nothing on this page changes; the goal is not attempted",
         allowed_domains=list(allowed_domains) if allowed_domains else None,
-        notices=notices)
+        notices=notices, engine=engine, engine_why=engine_why)
 
 
 def _plan_hosts(p: Plan) -> list:
@@ -1719,7 +1780,14 @@ CARD_WEIGHT_LINE = (
 def describe(p: Plan) -> str:
     """The card text. Every step in full, in the order it would run."""
     lines = [f'Jarvis would like to do this in the browser session "{p.session}": {p.goal}',
-             "", f"{len(p.steps)} step(s), {CARD_WEIGHT_LINE}"]
+             ""]
+    if p.engine != "visible" or p.engine_why:
+        try:
+            import jarvis_browser_engine as E
+            lines += [E.card_line(p.engine, p.engine_why), ""]
+        except Exception:
+            lines += [f"Browser: {p.engine.upper()}.", ""]
+    lines.append(f"{len(p.steps)} step(s), {CARD_WEIGHT_LINE}")
     if p.steps:
         if p.allowed_domains:
             lines.append("Allowed sites: " + ", ".join(p.allowed_domains)
@@ -1871,18 +1939,31 @@ def run(p: Plan, *, read: Optional[Callable[[str], dict]] = None,
     if not approved:
         return {"ok": False, "reason": "not approved; nothing was done",
                 "plan": p.as_dict()}
-    getter = read or _default_read
-    actor = act or _default_act
-    looker = observe or read or _default_observe
+    try:
+        hooks = _engine_hooks(p.engine) if act is None else None
+    except RuntimeError as exc:
+        # The engine that was approved cannot run now (switched off, changed,
+        # uninstalled): stop in words. Never quietly open the other browser.
+        return {"ok": False, "reason": f"{exc}", "done": [],
+                "not_run": [s.as_dict() for s in p.steps]}
+    getter = read or (hooks.read if hooks else _default_read)
+    actor = act or (hooks.act if hooks else _default_act)
+    looker = observe or read or (hooks.observe if hooks else _default_observe)
     allowed = _fence_for(p)
-    real_browser = act is None
+    real_browser = act is None and hooks is None
     sessions = sorted({s.session for s in p.steps})
     if real_browser:
         for name in sessions:
             _arm_fence(name, allowed)
+    if hooks is not None and hasattr(hooks, "set_fence"):
+        # The headless browser cannot be stopped part-way into a page load, so
+        # it checks a link's or a form's address itself BEFORE a click.
+        hooks.set_fence(allowed)
     try:
         return _run_steps(p, getter, actor, looker, allowed, announce, checkpoint, secrets)
     finally:
+        if hooks is not None and hasattr(hooks, "set_fence"):
+            hooks.set_fence(None)
         if real_browser:
             for name in sessions:
                 _disarm_fence(name)

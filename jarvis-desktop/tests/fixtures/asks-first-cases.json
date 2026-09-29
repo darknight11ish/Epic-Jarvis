@@ -386,6 +386,15 @@
        "title": "Work a web page for you in a browser"
       },
       {
+       "action": "obscura_enable",
+       "fixed": false,
+       "id": "obscura_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Use a headless browser (Obscura) for plain web reading"
+      },
+      {
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
@@ -1364,6 +1373,15 @@
        "title": "Work a web page for you in a browser"
       },
       {
+       "action": "obscura_enable",
+       "fixed": false,
+       "id": "obscura_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Use a headless browser (Obscura) for plain web reading"
+      },
+      {
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
@@ -2338,6 +2356,15 @@
        "title": "Work a web page for you in a browser"
       },
       {
+       "action": "obscura_enable",
+       "fixed": false,
+       "id": "obscura_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Use a headless browser (Obscura) for plain web reading"
+      },
+      {
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
@@ -3306,6 +3333,15 @@
        "title": "Work a web page for you in a browser"
       },
       {
+       "action": "obscura_enable",
+       "fixed": false,
+       "id": "obscura_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Use a headless browser (Obscura) for plain web reading"
+      },
+      {
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
@@ -4272,6 +4308,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Work a web page for you in a browser"
+      },
+      {
+       "action": "obscura_enable",
+       "fixed": false,
+       "id": "obscura_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Use a headless browser (Obscura) for plain web reading"
       },
       {
        "action": "post_to_external_service",
@@ -5255,6 +5300,15 @@
        "title": "Work a web page for you in a browser"
       },
       {
+       "action": "obscura_enable",
+       "fixed": false,
+       "id": "obscura_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Use a headless browser (Obscura) for plain web reading"
+      },
+      {
        "action": "post_to_external_service",
        "fixed": false,
        "id": "post_to_external_service",
@@ -6227,6 +6281,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Work a web page for you in a browser"
+      },
+      {
+       "action": "obscura_enable",
+       "fixed": false,
+       "id": "obscura_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Use a headless browser (Obscura) for plain web reading"
       },
       {
        "action": "post_to_external_service",

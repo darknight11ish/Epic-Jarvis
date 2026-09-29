@@ -314,6 +314,17 @@ second_card_third_assign = "ask"
 # and the switch refuses to turn on at all.
 screen_picture_enable = "ask"
 
+# --- The headless browser, Obscura (2026-09-29) ------------------------------
+# Lets Jarvis choose a browser with no window (Obscura, open source,
+# Apache-2.0) instead of the visible one for plain reading and quick lookups.
+# It is a new program on this PC that reaches the web, so turning it on is one
+# approval card (Settings on the PC, or the phone); turning it off never asks
+# and stops the program. Every page, click and box it fills is still listed
+# on its own card first, exactly as for the visible browser. Obscura is
+# downloaded by a line the owner pastes themselves, never by Jarvis. Must stay
+# "ask": anything else and the switch refuses to turn on at all.
+obscura_enable = "ask"
+
 # --- The wiki builder (Brain window or phone: "Add to wiki") -------------
 # Adding one document from <your vault>/Jarvis Wiki/Sources writes pages in
 # that Jarvis Wiki folder, on this PC, using the model on the second card -
@@ -766,6 +777,17 @@ third_port = 11436
 # threads = 0
 # How long the model stays in memory after a look.
 # keep_alive = "5m"
+
+# ------------------------------------------------------------------------
+# 9b1b. THE HEADLESS BROWSER (jarvis_obscura.py, jarvis_browser_engine.py)
+# ------------------------------------------------------------------------
+# Optional. Obscura is started over standard input and output, so it opens no
+# port; there is NO proxy setting and none can be added here. The owner's
+# install line puts it in <settings folder>\obscura, which is where Jarvis
+# looks. A full path to obscura.exe here overrides that (a relative path is
+# ignored).
+[obscura]
+# path = "C:\\Tools\\obscura\\obscura.exe"
 
 # ------------------------------------------------------------------------
 # 9b2. TALKING TO AN AI CHATBOT FOR YOU (jarvis_chatbot.py)

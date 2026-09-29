@@ -1,0 +1,50 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -169,6 +169,7 @@
+     "app_merge_change",  # jarvis_apps.py acts only on tier "ask": ONE card per change added to an app (apps-in-projects.patch)
+     "tidy_inbox",  # jarvis_inbox_tidy.py / jarvis_agent.py acts only on tier "ask": ONE card per tidy, listing every email (inbox-tidy.patch)
+     "screen_picture_enable",  # jarvis_screen_picture.py acts only on tier "ask": ONE card to turn on slow picture reading (screen-picture.patch)
++    "obscura_enable",  # jarvis_browser_engine.py acts only on tier "ask": ONE card to turn on the headless browser, Obscura (browser-engine.patch)
+ })
+ 
+ 
+@@ -825,6 +826,15 @@
+     # nothing leaves this PC; the model itself is downloaded by the owner's own
+     # pasted line, never by this card. Turning it off again is instant.
+     "screen_picture_enable": ("yes", "local", "lets \"Look at this\" and \"Watch with me\" also look at the picture of your screen, slowly, using a small model in a separate copy of Ollama that runs on this PC's processor (never the graphics card) and only this PC can reach (127.0.0.1); secrets in the picture are blacked out first, nothing is saved or sent anywhere, the model is downloaded by you, not by this card, and turning it off again is instant"),
++    # browser-engine.patch (jarvis_browser_engine.py, jarvis_obscura.py; the
++    # owner's decision of 2026-09-29). ONE card to let Jarvis choose a
++    # headless browser - Obscura, a program with no window, started by Jarvis
++    # on this PC and driven over standard input and output (no port) - for
++    # plain web reading, instead of the visible browser. A new program and a
++    # new way onto the web, so "outbound" (a risky approval): the pages are on
++    # the internet, and every page, click and box it fills is still its own
++    # plan card first. Stealth is on. Turning it off is instant and stops it.
++    "obscura_enable": ("yes", "outbound", "lets Jarvis choose a browser with no window (Obscura, a program on this PC that Jarvis starts and stops) for plain web reading; the pages are on the internet and it looks like an ordinary Chrome, but every page, click and box it fills is still its own card first, it never types a password or solves a captcha and stops at a captcha or sign-in page it recognises, it cannot open your own network, and turning it off is instant"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3495,6 +3510,21 @@
+     except Exception as exc:
+         print(f"  screen     NOT ON ({type(exc).__name__}) - Look at this / Watch with me are off")
+         print("             until jarvis_screen.py is back: run apply-patches.ps1 again")
++    # browser-engine.patch (the owner's decision of 2026-09-29): GET/POST
++    # /api/browser/engine - the headless browser (Obscura) switch, OFF by
++    # default, ON is one approval card (obscura_enable), OFF is instant - and
++    # which browser Jarvis uses by default (Automatic, Visible, Headless).
++    # Every page, click and box it fills is still its own plan card, exactly
++    # as for the visible browser; the rules are all in jarvis_browser_engine.py
++    # and jarvis_obscura.py. Wrapped round Handler here, before anything
++    # listens, like screen above.
++    try:
++        import jarvis_browser_engine
++        print(jarvis_browser_engine.install(Handler, origin_ok=_origin_ok,
++                                            token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  browser    NOT ON ({type(exc).__name__}) - the headless browser setting is off")
++        print("             until jarvis_browser_engine.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")
