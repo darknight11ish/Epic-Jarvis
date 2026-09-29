@@ -362,9 +362,12 @@ restore_backup            = "ask"
 # Windows Hello and always from this PC (jarvis_owner_check.PC_ONLY_ACTIONS),
 # whatever these lines say. Must stay "ask": anything else and pairing (or
 # bringing the key back) refuses to go ahead. Removing a device and retiring
-# the old shared key never ask - they only take access away.
+# the old shared key never ask - they only take access away. And letting a
+# paired phone approve risky cards with its own fingerprint or PIN
+# (register_approval_key, phase 2): also ONE card, PC only, Windows Hello.
 pair_device               = "ask"
 unretire_shared_key       = "ask"
+register_approval_key     = "ask"
 
 
 # ------------------------------------------------------------------------

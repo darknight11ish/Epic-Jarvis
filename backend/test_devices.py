@@ -1004,7 +1004,8 @@ def t_the_routes():
     banner = D.install(H, origin_ok=lambda h: True, token_ok=orig,
                        read_body=lambda h: h.body)
     check("the banner line says pairing is on", "pairing by QR code on" in banner, banner)
-    check("capabilities.pairing = {version: 1}", D.capability() == {"version": 1})
+    check("capabilities.pairing = {version: 1, signed_approvals: true}",
+          D.capability() == {"version": 1, "signed_approvals": True})
     h = H("/api/other", token=SHARED)
     h.do_GET()
     check("another route goes to the original", h.sent == [("original GET", "/api/other")])
@@ -1075,7 +1076,8 @@ def t_the_routes():
           E._capability_probe()["pairing"] is False)
     D._ARMED = True
     try:
-        check("installed: {version: 1}", E._capability_probe()["pairing"] == {"version": 1})
+        check("installed: {version: 1, signed_approvals: true}",
+              E._capability_probe()["pairing"] == {"version": 1, "signed_approvals": True})
     finally:
         D._ARMED = False
 
