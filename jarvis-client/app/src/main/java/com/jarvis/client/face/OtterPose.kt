@@ -92,7 +92,9 @@ object OtterPose {
     private const val RIPPLE = 24
     private const val WAVE = 25
     private const val ASLEEP = 26
-    private const val N = 27
+    private const val LID = 27
+    private const val LID_SLOPE = 28
+    private const val N = 29
 
     private const val TAU = (2.0 * PI).toFloat()
     private val NECK = floatArrayOf(-0.60f, 0.14f, 0.0f)
@@ -438,6 +440,7 @@ object OtterPose {
         }
         farewell(p, state, o)
 
+        CritterPose.lidSet(p, LID, state)
         val q = 1f - o.quiet
         val k = eyeK * (1f - q * max(if (blinks) blinkAt(t, S_BLINK, blinkSlow, 2f, 10f) else 0f, turnBlink))
         p[EYE_L] *= k
@@ -497,6 +500,9 @@ object OtterPose {
                 (1f - ease((x - 1.4f) / 0.8f))
             val lid = k * toward(eyesClose(x), lids, ex)
             p[EYE_L] = f[EYE_L] * lid; p[EYE_R] = f[EYE_R] * lid
+            // The painted lid comes down with the eyes' drooping, not with the squint of the stretch laid on it.
+            val droop = (1f - 0.35f * ease((x - 0.2f) / 0.8f)) * (1f - ease((x - 1.4f) / 0.8f))
+            CritterPose.lidNod(p, f, LID, 1f - k * toward(eyesClose(x), droop, ex))
             // Its paws (and the pebble) stay where they were until 1.2 s.
             val hold = e * (1f - ease((x - 1.2f) / 1.2f))
             for (i in PAW_LX..PAW_RZ) p[i] = toward(p[i], f[i], hold)
@@ -523,12 +529,13 @@ object OtterPose {
         val lids = 0.4f * ease((x - 0.45f) / 0.4f) + 0.6f * ease((x - 1.05f) / 0.45f)
         val fe = 1f - k * (1f - toward(eyesOpen(x), lids, ex))
         p[EYE_L] *= fe; p[EYE_R] *= fe
+        CritterPose.lidWake(p, LID, x, k)   // ...and lifts a little after they open
     }
 
     internal val HALF = CritterPose.halfLives(
         N,
         intArrayOf(EYE_L, EYE_R, LOOK_X, LOOK_Y), intArrayOf(SPEAK), intArrayOf(HEAD_YAW, HEAD_PITCH, HEAD_ROLL),
-        intArrayOf(PAW_LX, PAW_LY, PAW_LZ, PAW_RX, PAW_RY, PAW_RZ, ORB_X, ORB_Y, ORB_Z), intArrayOf(PADDLE),
+        intArrayOf(PAW_LX, PAW_LY, PAW_LZ, PAW_RX, PAW_RY, PAW_RZ, ORB_X, ORB_Y, ORB_Z), intArrayOf(PADDLE), LID,
     ).also { h ->
         // (rock is an angle: rolled right over, it settles the short way round.)
         h.cut[ROCK] = PI.toFloat()
@@ -567,6 +574,7 @@ object OtterPose {
             "uNeck" to toWorld(NECK[0], NECK[1], NECK[2]),
             "uHeadR0" to invRow(hm, 0), "uHeadR1" to invRow(hm, 1), "uHeadR2" to invRow(hm, 2),
             "uFace" to floatArrayOf(clamp(p[EYE_L], 0f, 1.2f), clamp(p[EYE_R], 0f, 1.2f), clamp(p[PADDLE], 0f, 1f)),
+            "uLid" to floatArrayOf(clamp(p[LID], 0f, 1f), clamp(p[LID_SLOPE], -1f, 1f)),
             "uMouth" to CritterPose.mouthOf(p[SPEAK], mouth),
             "uLook" to floatArrayOf(clamp(p[LOOK_X], -1f, 1f), clamp(p[LOOK_Y], -1f, 1f)),
             "uShL" to toWorld(-0.34f, 0.20f, -0.13f),

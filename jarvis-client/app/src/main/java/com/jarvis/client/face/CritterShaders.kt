@@ -62,6 +62,7 @@ uniform float uTime;
 uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
 uniform float uPx;        // one pixel, in the same units as critter()'s `p`
 uniform float uNoShadow;  // 1: skip the soft shadow (a small face, or Lower); 0 or unset: draw it
+uniform float2 uLid;      // PREVIEW: a painted eyelid over each eye - how far down it is (0 none, 1 shut), and its slope (+1: the inner end up, a concerned look; -1: the outer end up)
 
 const float PI = 3.14159265;
 // The part id every animal gives its orb. Its own ids are its business.
@@ -132,6 +133,27 @@ float2 addSphere(float2 s, float3 ro, float3 rd, float3 c, float r) { return joi
 float2 clipSpan(float3 ro, float3 rd, float2 parts, float3 c, float r) {
     float2 o = sphereSpan(ro, rd, c, r);
     return float2(o.x, min(parts.y, o.y));
+}
+
+// THE PAINTED EYELID. An animal's eyes can only squash up and down, which
+// reads as a wink or a blink and cannot be sloped. This lays a lid of the
+// surrounding fur over the top of the eye, with a thin darker crease along its
+// edge, sloped by uLid.y. It is worked out in the surface shading (once a
+// pixel, on the eyes only), not in map(), so the march does not pay for it.
+// `h` is the point in the head's own frame, `ea` the eye's middle there, `r`
+// the eye's height when open at its widest; returns the colour and, in w, how covered it is.
+// The lid gives way to an eye that is shutting: a shut eye is its own thin
+// dark line (a blink, or asleep), and a lid laid over that would rub it out
+// and leave the animal with no eyes - so the lid fades out as the eye squashes
+// under 0.3 (`open`, the same number partEyes squashes it by).
+float4 eyeLid(float3 ink, float3 fur, float3 h, float2 ea, float r, float open) {
+    float side = h.x < 0.0 ? -1.0 : 1.0;
+    float lid = uLid.x * smoothstep(0.03, 0.3, open);
+    float2 q = float2(side * h.x - ea.x, h.y - ea.y);
+    float d = q.y - r * (1.0 - 2.0 * lid) + lid * uLid.y * 0.8 * q.x;
+    float cov = smoothstep(-0.004, 0.004, d);
+    float crease = (1.0 - smoothstep(0.0, 0.007, abs(d))) * smoothstep(0.02, 0.1, lid);
+    return float4(mix(ink, fur, cov) * (1.0 - 0.4 * crease), cov);
 }
 
 // The orb: held, not grown, so never blended into the body.
@@ -327,8 +349,7 @@ float partTorso(float3 b) {
 }
 // One piece per leg: the thigh, reaching forward into the foot.
 float partLegs(float3 b) {
-    float3 bs = float3(abs(b.x), b.y, b.z);
-    return sdEllipsoid(bs - float3(0.205, 0.075, -0.22), float3(0.14, 0.11, 0.26));
+    return sdEllipsoid(float3(abs(b.x) - 0.205, b.y - 0.075, b.z + 0.22), float3(0.14, 0.11, 0.26));
 }
 // The rounded end of each arm is its paw.
 float partArms(float3 p) {
@@ -379,9 +400,8 @@ float mouthCarve(float3 h) { return mouthShape(h) + max(0.02 - 0.08 * uMouth.x, 
 // The head (head frame, unscaled): skull, cheek fluff, muzzle and eyebrow
 // puffs, with the mouth carved out of it.
 float partHead(float3 h) {
-    float3 hs = float3(abs(h.x), h.y, h.z);
     float d = sdEllipsoid(h - float3(0.0, 0.34, 0.0), float3(0.45, 0.37, 0.39));
-    d = smin(d, sdEllipsoid(hs - float3(0.25, 0.21, -0.09), float3(0.22, 0.17, 0.20)), 0.10);
+    d = smin(d, sdEllipsoid(float3(abs(h.x) - 0.25, h.y - 0.21, h.z + 0.09), float3(0.22, 0.17, 0.20)), 0.10);
     // The muzzle; its lower edge - the chin - drops as the jaw opens, and
     // it pushes forward a little for an "oo".
     d = smin(d, sdEllipsoid(h - float3(0.0, 0.205, -0.29) + float3(0.0, 0.045, 0.012) * uMouth.xxz,
@@ -553,7 +573,10 @@ float3 earColour(float3 e) {
 // means: 0 fur, above 0 glossy, -1 matte without fur, -2 inside a mouth).
 float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
-    if (id == ID_EYE) return float4(INK, 1.0);
+    if (id == ID_EYE) {
+        float4 l = eyeLid(INK, RUST * 1.3, h, eyeAt(), 0.101, h.x < 0.0 ? uFace.x : uFace.y);
+        return float4(l.rgb, 1.0 - l.w);
+    }
     if (id == ID_NOSE) return float4(INK * 2.0, 0.6);
     if (id == ID_HEAD) {
         // The painted mouth on the front of the muzzle, and the walls of
@@ -586,7 +609,7 @@ float3 sparkle(float id, float3 pos) {
     float2 sparkAt = float2(-0.024 + 0.014 * uLook.x, 0.028 + 0.010 * uLook.y);
     float spark = 1.0 - smoothstep(0.012, 0.021, length(q - sparkAt));
     float spark2 = 1.0 - smoothstep(0.005, 0.009, length(q - sparkAt - float2(0.036, -0.036)));
-    float lit = smoothstep(0.02, 0.2, min(uFace.x, uFace.y));
+    float lit = smoothstep(0.02, 0.2, min(uFace.x, uFace.y)) * (1.0 - uLid.x);
     return float3(1.6) * max(spark, spark2 * 0.8) * lit * (h.z < -0.28 ? 1.0 : 0.0);
 }
 
@@ -930,6 +953,7 @@ uniform float uTime;
 uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
 uniform float uPx;        // one pixel, in the same units as critter()'s `p`
 uniform float uNoShadow;  // 1: skip the soft shadow (a small face, or Lower); 0 or unset: draw it
+uniform float2 uLid;      // PREVIEW: a painted eyelid over each eye - how far down it is (0 none, 1 shut), and its slope (+1: the inner end up, a concerned look; -1: the outer end up)
 
 const float PI = 3.14159265;
 // The part id every animal gives its orb. Its own ids are its business.
@@ -1000,6 +1024,27 @@ float2 addSphere(float2 s, float3 ro, float3 rd, float3 c, float r) { return joi
 float2 clipSpan(float3 ro, float3 rd, float2 parts, float3 c, float r) {
     float2 o = sphereSpan(ro, rd, c, r);
     return float2(o.x, min(parts.y, o.y));
+}
+
+// THE PAINTED EYELID. An animal's eyes can only squash up and down, which
+// reads as a wink or a blink and cannot be sloped. This lays a lid of the
+// surrounding fur over the top of the eye, with a thin darker crease along its
+// edge, sloped by uLid.y. It is worked out in the surface shading (once a
+// pixel, on the eyes only), not in map(), so the march does not pay for it.
+// `h` is the point in the head's own frame, `ea` the eye's middle there, `r`
+// the eye's height when open at its widest; returns the colour and, in w, how covered it is.
+// The lid gives way to an eye that is shutting: a shut eye is its own thin
+// dark line (a blink, or asleep), and a lid laid over that would rub it out
+// and leave the animal with no eyes - so the lid fades out as the eye squashes
+// under 0.3 (`open`, the same number partEyes squashes it by).
+float4 eyeLid(float3 ink, float3 fur, float3 h, float2 ea, float r, float open) {
+    float side = h.x < 0.0 ? -1.0 : 1.0;
+    float lid = uLid.x * smoothstep(0.03, 0.3, open);
+    float2 q = float2(side * h.x - ea.x, h.y - ea.y);
+    float d = q.y - r * (1.0 - 2.0 * lid) + lid * uLid.y * 0.8 * q.x;
+    float cov = smoothstep(-0.004, 0.004, d);
+    float crease = (1.0 - smoothstep(0.0, 0.007, abs(d))) * smoothstep(0.02, 0.1, lid);
+    return float4(mix(ink, fur, cov) * (1.0 - 0.4 * crease), cov);
 }
 
 // The orb: held, not grown, so never blended into the body.
@@ -1382,7 +1427,10 @@ float3 eyeColour(float3 h) {
 
 float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
-    if (id == ID_EYE) return float4(eyeColour(h), 1.0);
+    if (id == ID_EYE) {
+        float4 l = eyeLid(eyeColour(h), CREAM, h, eyeAt(), 0.142, h.x < 0.0 ? uFace.x : uFace.y);
+        return float4(l.rgb, 1.0 - l.w);
+    }
     if (id == ID_BEAK) {
         if (beakIn(h) < min(beakUp(h), beakLo(h))) return float4(GAPE, -2.0);
         return float4(HORN, 0.5);
@@ -1416,7 +1464,7 @@ float3 sparkle(float id, float3 pos) {
     float2 at = float2(-0.030 + 0.016 * uLook.x, 0.036 + 0.012 * uLook.y);
     float spark = 1.0 - smoothstep(0.014, 0.024, length(q - at));
     float spark2 = 1.0 - smoothstep(0.006, 0.011, length(q - at - float2(0.048, -0.046)));
-    float lit = smoothstep(0.02, 0.25, min(uFace.x, uFace.y));
+    float lit = smoothstep(0.02, 0.25, min(uFace.x, uFace.y)) * (1.0 - uLid.x);
     return float3(1.5) * max(spark, spark2 * 0.8) * lit * (h.z < -0.33 ? 1.0 : 0.0);
 }
 
@@ -1760,6 +1808,7 @@ uniform float uTime;
 uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
 uniform float uPx;        // one pixel, in the same units as critter()'s `p`
 uniform float uNoShadow;  // 1: skip the soft shadow (a small face, or Lower); 0 or unset: draw it
+uniform float2 uLid;      // PREVIEW: a painted eyelid over each eye - how far down it is (0 none, 1 shut), and its slope (+1: the inner end up, a concerned look; -1: the outer end up)
 
 const float PI = 3.14159265;
 // The part id every animal gives its orb. Its own ids are its business.
@@ -1830,6 +1879,27 @@ float2 addSphere(float2 s, float3 ro, float3 rd, float3 c, float r) { return joi
 float2 clipSpan(float3 ro, float3 rd, float2 parts, float3 c, float r) {
     float2 o = sphereSpan(ro, rd, c, r);
     return float2(o.x, min(parts.y, o.y));
+}
+
+// THE PAINTED EYELID. An animal's eyes can only squash up and down, which
+// reads as a wink or a blink and cannot be sloped. This lays a lid of the
+// surrounding fur over the top of the eye, with a thin darker crease along its
+// edge, sloped by uLid.y. It is worked out in the surface shading (once a
+// pixel, on the eyes only), not in map(), so the march does not pay for it.
+// `h` is the point in the head's own frame, `ea` the eye's middle there, `r`
+// the eye's height when open at its widest; returns the colour and, in w, how covered it is.
+// The lid gives way to an eye that is shutting: a shut eye is its own thin
+// dark line (a blink, or asleep), and a lid laid over that would rub it out
+// and leave the animal with no eyes - so the lid fades out as the eye squashes
+// under 0.3 (`open`, the same number partEyes squashes it by).
+float4 eyeLid(float3 ink, float3 fur, float3 h, float2 ea, float r, float open) {
+    float side = h.x < 0.0 ? -1.0 : 1.0;
+    float lid = uLid.x * smoothstep(0.03, 0.3, open);
+    float2 q = float2(side * h.x - ea.x, h.y - ea.y);
+    float d = q.y - r * (1.0 - 2.0 * lid) + lid * uLid.y * 0.8 * q.x;
+    float cov = smoothstep(-0.004, 0.004, d);
+    float crease = (1.0 - smoothstep(0.0, 0.007, abs(d))) * smoothstep(0.02, 0.1, lid);
+    return float4(mix(ink, fur, cov) * (1.0 - 0.4 * crease), cov);
 }
 
 // The orb: held, not grown, so never blended into the body.
@@ -2226,7 +2296,10 @@ float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
     float3 v = normalize(eyePos() - pos);
     float edge = smoothstep(0.55, 0.92, 1.0 - abs(dot(n, v)));
-    if (id == ID_EYE) return float4(INK, 1.0);
+    if (id == ID_EYE) {
+        float4 l = eyeLid(INK, FACE * 0.95, h, eyeAt(), 0.048, h.x < 0.0 ? uFace.x : uFace.y);
+        return float4(l.rgb, 1.0 - l.w);
+    }
     if (id == ID_NOSE) return float4(INK * 2.0, 0.7);
     if (id == ID_HEAD) {
         // The drawn mouth on the front of the muzzle, and the walls of the
@@ -2288,7 +2361,7 @@ float3 sparkle(float id, float3 pos) {
     float2 q = float2(h.x - side * ea.x, h.y - ea.y);
     float2 at = float2(-0.010 + 0.008 * uLook.x, 0.014 + 0.006 * uLook.y);
     float spark = 1.0 - smoothstep(0.006, 0.011, length(q - at));
-    float lit = smoothstep(0.02, 0.25, min(uFace.x, uFace.y));
+    float lit = smoothstep(0.02, 0.25, min(uFace.x, uFace.y)) * (1.0 - uLid.x);
     return float3(1.5) * spark * lit * (h.z < -0.19 ? 1.0 : 0.0);
 }
 
@@ -2638,6 +2711,7 @@ uniform float uTime;
 uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
 uniform float uPx;        // one pixel, in the same units as critter()'s `p`
 uniform float uNoShadow;  // 1: skip the soft shadow (a small face, or Lower); 0 or unset: draw it
+uniform float2 uLid;      // PREVIEW: a painted eyelid over each eye - how far down it is (0 none, 1 shut), and its slope (+1: the inner end up, a concerned look; -1: the outer end up)
 
 const float PI = 3.14159265;
 // The part id every animal gives its orb. Its own ids are its business.
@@ -2708,6 +2782,27 @@ float2 addSphere(float2 s, float3 ro, float3 rd, float3 c, float r) { return joi
 float2 clipSpan(float3 ro, float3 rd, float2 parts, float3 c, float r) {
     float2 o = sphereSpan(ro, rd, c, r);
     return float2(o.x, min(parts.y, o.y));
+}
+
+// THE PAINTED EYELID. An animal's eyes can only squash up and down, which
+// reads as a wink or a blink and cannot be sloped. This lays a lid of the
+// surrounding fur over the top of the eye, with a thin darker crease along its
+// edge, sloped by uLid.y. It is worked out in the surface shading (once a
+// pixel, on the eyes only), not in map(), so the march does not pay for it.
+// `h` is the point in the head's own frame, `ea` the eye's middle there, `r`
+// the eye's height when open at its widest; returns the colour and, in w, how covered it is.
+// The lid gives way to an eye that is shutting: a shut eye is its own thin
+// dark line (a blink, or asleep), and a lid laid over that would rub it out
+// and leave the animal with no eyes - so the lid fades out as the eye squashes
+// under 0.3 (`open`, the same number partEyes squashes it by).
+float4 eyeLid(float3 ink, float3 fur, float3 h, float2 ea, float r, float open) {
+    float side = h.x < 0.0 ? -1.0 : 1.0;
+    float lid = uLid.x * smoothstep(0.03, 0.3, open);
+    float2 q = float2(side * h.x - ea.x, h.y - ea.y);
+    float d = q.y - r * (1.0 - 2.0 * lid) + lid * uLid.y * 0.8 * q.x;
+    float cov = smoothstep(-0.004, 0.004, d);
+    float crease = (1.0 - smoothstep(0.0, 0.007, abs(d))) * smoothstep(0.02, 0.1, lid);
+    return float4(mix(ink, fur, cov) * (1.0 - 0.4 * crease), cov);
 }
 
 // The orb: held, not grown, so never blended into the body.
@@ -2920,7 +3015,7 @@ float2 eyeAt() { return float2(0.118, 0.400) + 0.010 * uLook; }
 
 // A small pear of a body; the belly swells with each breath.
 float partTorso(float3 b) {
-    return sdEllipsoid(b, float3(0.175, 0.215, 0.150) * uBreath + float3(0.0, 0.0, 0.0));
+    return sdEllipsoid(b, float3(0.175, 0.215, 0.150) * uBreath);
 }
 // The legs: thigh, shin and a round foot on each. Each side is worked out
 // only for its own half (the panda's eyes' trick), which halves the cost.
@@ -3131,7 +3226,10 @@ float3 headColour(float3 h) {
 
 float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
-    if (id == ID_EYE) return float4(INK, 1.0);
+    if (id == ID_EYE) {
+        float4 l = eyeLid(INK, PEACH, h, eyeAt(), 0.079, h.x < 0.0 ? uFace.x : uFace.y);
+        return float4(l.rgb, 1.0 - l.w);
+    }
     if (id == ID_NOSE) return float4(float3(0.080, 0.022, 0.012), 0.6);
     if (id == ID_HEAD) {
         // The painted mouth on the front of the head, and the walls of the
@@ -3193,7 +3291,7 @@ float3 sparkle(float id, float3 pos) {
     float2 sparkAt = float2(-0.017 + 0.010 * uLook.x, 0.022 + 0.008 * uLook.y);
     float spark = 1.0 - smoothstep(0.009, 0.016, length(q - sparkAt));
     float spark2 = 1.0 - smoothstep(0.004, 0.007, length(q - sparkAt - float2(0.026, -0.028)));
-    float lit = smoothstep(0.02, 0.2, min(uFace.x, uFace.y));
+    float lit = smoothstep(0.02, 0.2, min(uFace.x, uFace.y)) * (1.0 - uLid.x);
     return float3(1.6) * max(spark, spark2 * 0.8) * lit * (h.z < -0.26 ? 1.0 : 0.0);
 }
 
@@ -3536,6 +3634,7 @@ uniform float uTime;
 uniform float uZoom;      // 1 = framed; the desktop's wheel zoom
 uniform float uPx;        // one pixel, in the same units as critter()'s `p`
 uniform float uNoShadow;  // 1: skip the soft shadow (a small face, or Lower); 0 or unset: draw it
+uniform float2 uLid;      // PREVIEW: a painted eyelid over each eye - how far down it is (0 none, 1 shut), and its slope (+1: the inner end up, a concerned look; -1: the outer end up)
 
 const float PI = 3.14159265;
 // The part id every animal gives its orb. Its own ids are its business.
@@ -3606,6 +3705,27 @@ float2 addSphere(float2 s, float3 ro, float3 rd, float3 c, float r) { return joi
 float2 clipSpan(float3 ro, float3 rd, float2 parts, float3 c, float r) {
     float2 o = sphereSpan(ro, rd, c, r);
     return float2(o.x, min(parts.y, o.y));
+}
+
+// THE PAINTED EYELID. An animal's eyes can only squash up and down, which
+// reads as a wink or a blink and cannot be sloped. This lays a lid of the
+// surrounding fur over the top of the eye, with a thin darker crease along its
+// edge, sloped by uLid.y. It is worked out in the surface shading (once a
+// pixel, on the eyes only), not in map(), so the march does not pay for it.
+// `h` is the point in the head's own frame, `ea` the eye's middle there, `r`
+// the eye's height when open at its widest; returns the colour and, in w, how covered it is.
+// The lid gives way to an eye that is shutting: a shut eye is its own thin
+// dark line (a blink, or asleep), and a lid laid over that would rub it out
+// and leave the animal with no eyes - so the lid fades out as the eye squashes
+// under 0.3 (`open`, the same number partEyes squashes it by).
+float4 eyeLid(float3 ink, float3 fur, float3 h, float2 ea, float r, float open) {
+    float side = h.x < 0.0 ? -1.0 : 1.0;
+    float lid = uLid.x * smoothstep(0.03, 0.3, open);
+    float2 q = float2(side * h.x - ea.x, h.y - ea.y);
+    float d = q.y - r * (1.0 - 2.0 * lid) + lid * uLid.y * 0.8 * q.x;
+    float cov = smoothstep(-0.004, 0.004, d);
+    float crease = (1.0 - smoothstep(0.0, 0.007, abs(d))) * smoothstep(0.02, 0.1, lid);
+    return float4(mix(ink, fur, cov) * (1.0 - 0.4 * crease), cov);
 }
 
 // The orb: held, not grown, so never blended into the body.

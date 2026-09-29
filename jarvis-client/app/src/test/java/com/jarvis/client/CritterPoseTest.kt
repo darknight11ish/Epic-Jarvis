@@ -14,6 +14,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
@@ -850,6 +851,8 @@ class CritterPoseTest {
         var worst = 0f
         for ((name, v) in a) for (i in v.indices) {
             if (name == "uFace" && i < 2) continue
+            // (The painted eyelid, uLid, is the eyes' too: the lid lifts as they open.)
+            if (name == "uLid") continue
             // (The robot's eyes are all of uEyes and uEyes2, where they look
             // (uLook: painted on its visor, not a turning eyeball) and the
             // light they throw, uOrbGlow: their shape and glow are the eyes too.)
@@ -1556,5 +1559,135 @@ class CritterPoseTest {
         }
         assertTrue("rolls $roll rad", roll <= 0.13f + 1e-5f)
         assertTrue("moves ${100 * moving / n} percent of the time", moving.toFloat() / n < 0.45f)
+    }
+
+    // --- the painted eyelids (the owner, 2026-09-29) -------------------------
+
+    private val lidders get() = sleepers.filter { it.id != "robot" }
+    private fun lidWant(s: FaceState) = when (s) {
+        FaceState.APPROVAL -> floatArrayOf(0.2f, 0f)
+        FaceState.ERROR -> floatArrayOf(0.42f, 1f)
+        FaceState.BANKED, FaceState.STANDBY -> floatArrayOf(0.55f, 0f)
+        else -> floatArrayOf(0f, 0f)
+    }
+    private fun lidNow(a: Sleeper, s: FaceState, p: FaceState, since: Float, t: Float, h: CritterPose.Hist, o: CritterPose.Opts = opts()) =
+        a.uniforms(a.pose(s, p, since, t, ampOf(s), CritterPose.Look(), h, o), null).getValue("uLid")
+
+    @Test
+    fun `each state has its own lid, the robot has none`() {
+        for (a in lidders) for (s in FaceState.values()) for (t in listOf(0f, 3.7f, 41.9f, 300.25f, 2000.5f, 86400.25f)) {
+            val l = lidNow(a, s, s, 30f, t, CritterPose.Hist())
+            val w = lidWant(s)
+            assertEquals("${a.id} $s lid", w[0], l[0], 1e-5f)
+            assertEquals("${a.id} $s slope", w[1], l[1], 1e-5f)
+        }
+        val r = sleepers.first { it.id == "robot" }
+        assertNull("the robot has no eyelids", r.uniforms(r.pose(FaceState.ERROR, FaceState.ERROR, 30f, 5f, 0f, CritterPose.Look(), CritterPose.Hist(), opts()), null)["uLid"])
+    }
+
+    @Test
+    fun `a settled lid is a look, not a motion`() {
+        for (a in lidders) for (s in listOf(FaceState.APPROVAL, FaceState.ERROR, FaceState.BANKED, FaceState.STANDBY)) {
+            var lo = 9f; var hi = -9f
+            var t = 0f
+            while (t < 600f) {
+                val l = lidNow(a, s, s, 1e6f, t, CritterPose.Hist())
+                lo = minOf(lo, l[0]); hi = maxOf(hi, l[0]); t += 0.25f
+            }
+            assertTrue("${a.id} $s: the lid moved ${hi - lo}", hi - lo < 1e-6f)
+        }
+    }
+
+    @Test
+    fun `waiting on you and an error arrive eased, never a jump`() {
+        for (a in lidders) for (s in listOf(FaceState.APPROVAL, FaceState.ERROR)) {
+            var prev: FloatArray? = null
+            var x = 0f
+            var last = floatArrayOf(0f, 0f)
+            while (x <= 4f) {
+                val l = lidNow(a, s, FaceState.IDLE, x, 50f + x, CritterPose.Hist(prevAmp = 0f))
+                prev?.let {
+                    assertTrue("${a.id} $s: jump ${l[0] - it[0]} at $x", abs(l[0] - it[0]) < 0.006f && abs(l[1] - it[1]) < 0.012f)
+                    assertTrue("${a.id} $s: the lid went back up at $x", l[0] >= it[0] - 1e-6f)
+                }
+                if (x == 0f) assertTrue("${a.id} $s starts at ${l[0]}", l[0] < 0.005f)
+                prev = l; last = l; x += 1f / 240f
+            }
+            assertEquals("${a.id} $s settles", lidWant(s)[0], last[0], 0.003f)
+            assertEquals("${a.id} $s slope settles", lidWant(s)[1], last[1], 0.006f)
+        }
+    }
+
+    @Test
+    fun `no change of state makes the lid jump`() {
+        for (a in lidders) for (from in FaceState.values()) for (to in FaceState.values()) {
+            if (from == to) continue
+            var prev: FloatArray? = null
+            var x = 0f
+            while (x <= 4f) {
+                val l = lidNow(a, to, from, x, 90f + x, CritterPose.Hist(prevAmp = ampOf(from)))
+                prev?.let { assertTrue("${a.id} $from->$to at $x: ${it[0]} -> ${l[0]}", abs(l[0] - it[0]) < 0.008f && abs(l[1] - it[1]) < 0.02f) }
+                prev = l; x += 1f / 240f
+            }
+        }
+    }
+
+    @Test
+    fun `nodding off lowers the lid to the heavy one and waking lifts it, in step with the piece`() {
+        for (a in lidders) {
+            for (from in listOf(FaceState.IDLE, FaceState.APPROVAL, FaceState.ERROR)) {
+                val h = CritterPose.Hist(past = listOf(CritterPose.Change(from, 20f, ampOf(from)), CritterPose.Change(FaceState.STANDBY, 9f, 0f)))
+                var prev = lidNow(a, FaceState.STANDBY, from, 0f, 140f, h)
+                assertEquals("${a.id} from $from: starts with the lid it had", lidWant(from)[0], prev[0], 0.01f)
+                var x = 0f
+                while (x <= 3.6f) {
+                    val l = lidNow(a, FaceState.STANDBY, from, x, 140f + x, h)
+                    assertTrue("${a.id} from $from at $x: ${prev[0]} -> ${l[0]}", abs(l[0] - prev[0]) < 0.008f && abs(l[1] - prev[1]) < 0.02f)
+                    prev = l; x += 1f / 240f
+                }
+                assertEquals("${a.id} from $from: heavy asleep", 0.55f, prev[0], 0.002f)
+            }
+            val asleep = CritterPose.Hist(past = listOf(CritterPose.Change(FaceState.STANDBY, 9f, 0f), CritterPose.Change(FaceState.IDLE, 20f, 0f)))
+            for (to in listOf(FaceState.IDLE, FaceState.APPROVAL, FaceState.ERROR, FaceState.BANKED)) {
+                var prev = lidNow(a, to, FaceState.STANDBY, 0f, 120f, asleep)
+                assertEquals("${a.id} into $to: heavy as it starts to wake", 0.55f, prev[0], 0.01f)
+                var x = 0f
+                while (x <= 3.4f) {
+                    val l = lidNow(a, to, FaceState.STANDBY, x, 120f + x, asleep)
+                    assertTrue("${a.id} into $to at $x: ${prev[0]} -> ${l[0]}", abs(l[0] - prev[0]) < 0.008f && abs(l[1] - prev[1]) < 0.02f)
+                    prev = l; x += 1f / 240f
+                }
+                assertEquals("${a.id} into $to settles", lidWant(to)[0], prev[0], 0.002f)
+                assertEquals("${a.id} into $to slope", lidWant(to)[1], prev[1], 0.005f)
+            }
+        }
+    }
+
+    @Test
+    fun `a crisis-help moment keeps the animal neutral, and calm and still do not take the lid`() {
+        for (a in lidders) for (s in FaceState.values()) {
+            val none = lidNow(a, s, s, 30f, 20f, CritterPose.Hist(), opts(serious = 1f))
+            assertEquals("${a.id} $s serious", 0f, none[0], 0f)
+            assertEquals("${a.id} $s serious slope", 0f, none[1], 0f)
+            val half = lidNow(a, s, s, 30f, 20f, CritterPose.Hist(), opts(serious = 0.5f))
+            assertEquals("${a.id} $s half serious", lidWant(s)[0] * 0.5f, half[0], 1e-5f)
+            for (o in listOf(opts(calm = 1f), opts(still = 1f))) {
+                assertEquals("${a.id} $s under calm/still", lidWant(s)[0], lidNow(a, s, s, 30f, 20f, CritterPose.Hist(), o)[0], 1e-5f)
+            }
+        }
+        val asleep = CritterPose.Hist(past = listOf(CritterPose.Change(FaceState.STANDBY, 9f, 0f), CritterPose.Change(FaceState.IDLE, 20f, 0f)))
+        for (a in lidders) for (f in 0..68) {
+            val l = lidNow(a, FaceState.ERROR, FaceState.STANDBY, f * 0.05f, 120f + f * 0.05f, asleep, opts(serious = 1f))
+            assertTrue("${a.id} waking into a crisis at ${f * 0.05f}: ${l[0]}", l[0] == 0f && l[1] == 0f)
+        }
+    }
+
+    @Test
+    fun `hello and goodbye leave the lid alone`() {
+        for (a in lidders) for (s in listOf(FaceState.APPROVAL, FaceState.ERROR, FaceState.BANKED, FaceState.STANDBY, FaceState.IDLE)) {
+            for (o in listOf(CritterPose.Opts(goodbye = 0.3f), CritterPose.Opts(goodbye = 0.8f), CritterPose.Opts(hello = 0.2f), CritterPose.Opts(hello = 0.7f))) {
+                assertEquals("${a.id} $s $o", lidWant(s)[0], lidNow(a, s, s, 30f, 33f, CritterPose.Hist(), o)[0], 1e-5f)
+            }
+        }
     }
 }

@@ -20,13 +20,14 @@
           wave, bump, envAHR, happening, happeningV, noise, breathWave, NONE4, playingV, beat, shift, looks, restingGaze, optsOf, mods, blinkAt,
           overlayAt, ease, toward, eyesOpen, eyesClose, gaze, NONE, ZERO2, AWAKE, focusOf, petOf, cuteOf,
           switchE, listenNod, phraseBeat, ackNodOf, ackGlowOf, focusEndOf, variant, arrivalOf, cuteAt,
-          cuteQuiet, cuteBusy, HELLO_S, GOODBYE_S } = C.util;
+          cuteQuiet, cuteBusy, lidSet, lidNod, lidWake, HELLO_S, GOODBYE_S } = C.util;
 
   const KEYS = [
     "headYaw", "headPitch", "headRoll", "neckDrop", "bob", "breath", "fluff",
     "eyeL", "eyeR", "brow", "speak", "lookX", "lookY", "wingL", "wingR",
     "orbA", "orbY", "orbD", "orbR", "orbGlow",
     "lean", "bodyRoll", "asleep",
+    "lid", "lidSlope",   // the painted eyelid (uLid)
   ];
 
   // The orb floats free, and is placed round the owl rather than across it:
@@ -123,6 +124,7 @@
       orbA: ORB_REST[0], orbY: ORB_REST[1] + sw * 0.03 * wave(t, 228, 0), orbD: ORB_REST[2],
       orbR: ORB_REST[3], orbGlow: 0.55,
       lean: 0, bodyRoll: 0, asleep: state === "standby" ? 1 : 0,
+      lid: 0, lidSlope: 0,
     };
     // 284 cycles a loop: a breath every 3.6 seconds.
     let breathK = 284, breathDepth = 1, blinkSlow = 1.2, blinks = true, turnBlink = 0;
@@ -392,6 +394,7 @@
     }
 
     farewell(P, state, o);
+    lidSet(P, state);
 
     // Owls blink slowly, and on their own clock (their own salt).
     const q = 1 - o.quiet;
@@ -448,6 +451,9 @@
       const lids = (1 - 0.5 * ease(x / 0.7) - 0.5 * ease((x - 1.6) / 0.7)) * (1 - bump((x - 0.85) / 0.65));
       const lid = k * toward(eyesClose(x), lids, E);
       P.eyeL = F.eyeL * lid; P.eyeR = F.eyeR * lid;
+      // The painted lid comes down with the eyes' drooping, not with the slow blink laid on it.
+      const droop = 1 - 0.5 * ease(x / 0.7) - 0.5 * ease((x - 1.6) / 0.7);
+      lidNod(P, F, 1 - k * toward(eyesClose(x), droop, E));
       const head = e * (1 - ease((x - 1.6) / 1.2));
       P.neckDrop = toward(P.neckDrop, F.neckDrop, head);
       P.headPitch = toward(P.headPitch, F.headPitch, head);
@@ -464,6 +470,7 @@
     const fl = e * envAHR(x - 0.9, 0.3, 0.35, 0.55);
     P.eyeL *= (1 - k * (1 - l)) * (1 - 0.25 * fl);
     P.eyeR *= (1 - k * (1 - r)) * (1 - 0.25 * fl);
+    lidWake(P, x, k);   // ...and lifts a little after they open
     P.fluff += 0.06 * fl + 0.012 * e * wave(t, 2048, 0) * bump((x - 0.95) / 0.9);
     P.neckDrop -= 0.015 * e * bump((x - 0.2) / 1.3);
     P.headRoll += 0.04 * e * (bump((x - 1.25) / 0.45) - bump((x - 1.6) / 0.45));
@@ -546,6 +553,7 @@
       uWingL0: invRow(WL, 0), uWingL1: invRow(WL, 1), uWingL2: invRow(WL, 2),
       uWingR0: invRow(WR, 0), uWingR1: invRow(WR, 1), uWingR2: invRow(WR, 2),
       uFace: [clamp(P.eyeL, 0, 1.2), clamp(P.eyeR, 0, 1.2), P.brow],
+      uLid: [clamp(P.lid, 0, 1), clamp(P.lidSlope, -1, 1)],
       uMouth: mouthOf(P, mouth),
       uLook: [clamp(P.lookX, -1, 1), clamp(P.lookY, -1, 1)],
       uOrbGlow: [clamp(P.orbGlow, 0, 1.5)],

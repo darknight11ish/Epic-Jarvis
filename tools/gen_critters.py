@@ -285,6 +285,8 @@ def golden_cases(species):
     # the options that switch it off or make it smaller.
     for sp in species:
         cases.extend(behaviour_cases(sp))
+        if sp != "robot":
+            cases.extend(lid_cases(sp))
     if "robot" in species:
         cases.extend(robot_cases())
     # The owl's orb kept clear of its head while the pointer turns the head
@@ -399,6 +401,57 @@ def behaviour_cases(sp):
     add("idle", 77.3, {"focus": 1, "calm": 0.5})
     add("error", 30.0, {"hello": 0.6})
     add("error", 30.0, {"goodbye": 0.7})
+    return cases
+
+
+def lid_cases(sp):
+    """The painted eyelids (uLid, 2026-09-29; the robot has none): each state
+    that has one, settled and arriving, at several moments; woken into and
+    nodded off from; and switched off by a crisis-help moment. (Every state
+    is also in golden_cases above; these are the moments that show the lid
+    easing in and out.)"""
+    cases = []
+    base = {"species": sp, "amp": 0.0, "look": {}}
+    asleep9 = [{"state": "standby", "gap": 9.0, "amp": 0.0}, {"state": "idle", "gap": 20.0, "amp": 0.0}]
+
+    def add(state, prev, since, t, hist=None, opts=None, amp=None):
+        c = dict(base, state=state, prev=prev, since=since, t=t)
+        if amp is not None:
+            c["amp"] = amp
+        if hist is not None:
+            c["hist"] = hist
+        if opts is not None:
+            c["opts"] = opts
+        cases.append(c)
+
+    # Something went wrong arriving (the sloped, worried lid eases in), waiting
+    # on you arriving (the level one), a doze arriving and leaving.
+    for i, since in enumerate((0.0, 0.1, 0.25, 0.5, 1.0, 2.5)):
+        add("error", "idle", since, 300.0 + since, {"prevAmp": 0.0})
+        add("approval", "idle", since, 310.0 + since, {"prevAmp": 0.0}, amp=0.28)
+        add("banked", "idle", since, 320.0 + since, {"prevAmp": 0.0})
+        add("idle", "banked", since, 330.0 + since, {"prevAmp": 0.0})
+        add("idle", "error", since, 340.0 + since, {"prevAmp": 0.0})
+        add("error", "approval", since, 350.0 + since, {"prevAmp": 0.28})
+    # ...under calm and still (the lid is a settled look: the same amount).
+    for opts in ({"calm": 1}, {"still": 1}):
+        for since in (0.25, 1.0):
+            add("error", "idle", since, 360.0 + since, {"prevAmp": 0.0}, opts)
+            add("approval", "idle", since, 370.0 + since, {"prevAmp": 0.0}, opts, amp=0.28)
+    # Nodding off from each look (the lid comes down with the eyes, from the one it had).
+    for prev, past_amp in (("approval", 0.28), ("error", 0.0), ("idle", 0.0)):
+        awake = [{"state": prev, "gap": 20.0, "amp": past_amp}, {"state": "standby", "gap": 9.0, "amp": 0.0}]
+        for x in (0.5, 1.0, 1.7, 2.4, 3.2):
+            add("standby", prev, x, 380.0 + x, {"past": awake})
+    # Waking into each look (the heavy lid lifts after the eyes open).
+    for state in ("idle", "error", "approval", "banked"):
+        for x in (0.3, 0.6, 0.9, 1.3, 1.8, 2.6):
+            add(state, "standby", x, 400.0 + x, {"past": asleep9}, amp=0.28 if state == "approval" else 0.0)
+    # A crisis-help moment (serious) leaves the animal neutral: no lid at all,
+    # part way as the host eases the weight, and asleep or dozing.
+    for state in ("error", "approval", "banked", "standby"):
+        for w in (0.5, 1.0):
+            add(state, state, 20.0, 420.0, None, {"serious": w})
     return cases
 
 

@@ -52,6 +52,9 @@
   // is left of the change halves. Most of a change is done in about three
   // half-lives.
   const HL_EYES = 0.035, HL_MOUTH = 0.07, HL_HEAD = 0.13, HL_LIMB = 0.15, HL_BODY = 0.18, HL_TRAIL = 0.22;
+  // The painted eyelid (uLid) arrives after the eyes' own squash and the head:
+  // 0.25 s, so a lid is mostly down in under a second and never pops.
+  const HL_LID = 0.25;
 
   // The pose is a flat list of numbers so two of them can be blended
   // element by element. These are the names, in order. (New names go on the
@@ -63,6 +66,8 @@
     "tailSwing", "tailCurl", "orbX", "orbY", "orbZ", "orbR", "orbGlow",
     "bodyRoll", "earTwL", "earTwR", "tail2", "tail3", "tail4", "tail5",
     "asleep",
+    // The painted eyelid (uLid): how far down it is, and its slope.
+    "lid", "lidSlope",
   ];
 
   // Where things rest, in the body's own frame (origin on the seat).
@@ -1028,6 +1033,7 @@
       orbX: LAP.orb[0], orbY: LAP.orb[1], orbZ: LAP.orb[2], orbR: LAP.orb[3], orbGlow: 0.55,
       bodyRoll: 0, earTwL: 0, earTwR: 0, tail2: 0, tail3: 0, tail4: 0, tail5: 0,
       asleep: state === "standby" ? 1 : 0,
+      lid: 0, lidSlope: 0,
     };
     // 256 cycles a loop is one breath every 4 seconds.
     let breathK = 256, breathDepth = 1, blinkSlow = 1, blinks = true, turnBlink = 0;
@@ -1366,10 +1372,58 @@
 
     farewell(P, state, o);
 
+    lidSet(P, state);
     const q = 1 - (o.quiet || 0);
     const k = eyeK * (1 - q * Math.max(blinks ? blinkAt(t, S_BLINK, blinkSlow, 2, 10) : 0, turnBlink));
     P.eyeL *= k; P.eyeR *= k;
     return P;
+  }
+
+  /* ------------------------------------------------------------------ *
+   * The painted eyelids (owner, 2026-09-29): a lid of the surrounding fur
+   * laid over the top of each eye by the shader (uLid, in the surface
+   * colouring; docs/CRITTERS.md "Painted eyelids"). The four animals share
+   * these amounts; the robot has no lids.
+   *
+   * A lid is a SETTLED LOOK, not a movement: it is a number the state sets
+   * and the pose's ordinary settling eases in and out, so it never pops and
+   * adds no idle motion. Idle, listening, thinking and speaking have none.
+   * The ordinary blink still shuts the eye all the way (the eye's own
+   * squash), lid or no lid: the lid only ever covers the top of an eye, so
+   * the two cannot fight.
+   *   - waiting on you: a level, attentive lid;
+   *   - something went wrong: a lid sloped worried (inner end up);
+   *   - dozing and asleep: a heavy, level lid.
+   * A crisis-help moment (`serious`) takes them all away, applied where the
+   * pose is finished (makePose), so a lid fades with the host's eased weight.
+   * Still and calm change nothing about them: at an approval or an error the
+   * lid is the plain look the owner asked for.
+   * ------------------------------------------------------------------ */
+  /** [how far down 0..1, slope -1..1 (+1: inner end up, worried)] by state. */
+  const LID = { approval: [0.2, 0], error: [0.42, 1], banked: [0.55, 0], standby: [0.55, 0] };
+  /** The heavy lid of sleep (also what a wake-up lifts, and a nodding off lowers). */
+  const LID_SLEEP = 0.55;
+  function lidSet(P, state) {
+    const l = LID[state] || ZERO2;
+    P.lid = l[0]; P.lidSlope = l[1];
+  }
+  /** Nodding off: from the lid the old state had (F) to the sleeping one, as the eyes close (close 0..1). */
+  function lidNod(P, F, close) {
+    P.lid = toward(F.lid, P.lid, close);
+    P.lidSlope = toward(F.lidSlope, P.lidSlope, close);
+  }
+  /** Waking, x seconds in: the sleeping lid lifts a little after the eyes open (from 0.25 s, done by 1.15 s). */
+  function lidUp(x) { return ease((x - 0.25) / 0.9); }
+  /** A crisis-help moment (`serious`, a weight the host eases) leaves the animal neutral: no lid. Poses without lids pass through. */
+  function lidCalm(P, o) {
+    if (P.lid !== undefined) { const w = 1 - o.serious; P.lid *= w; P.lidSlope *= w; }
+    return P;
+  }
+  /** Waking (k: how asleep it was, 1 fully): from the sleeping lid to the state's own. */
+  function lidWake(P, x, k) {
+    const s = k * (1 - lidUp(x));
+    P.lid = toward(P.lid, LID_SLEEP, s);
+    P.lidSlope = toward(P.lidSlope, 0, s);
   }
 
   /**
@@ -1535,6 +1589,11 @@
         - 0.50 * ease((x - 2.1) / 0.5)) * (1 - bump((x - 0.55) / 0.45)) * (1 - bump((x - 1.85) / 0.35));
       const lid = k * toward(eyesClose(x), lids, E);
       P.eyeL = F.eyeL * lid; P.eyeR = F.eyeR * lid;
+      // The painted lid comes down with the eyes' drooping - not with the two
+      // quick blinks laid on it (the eye's own squash does those).
+      const droop = 1 - 0.45 * ease(x / 0.6) - 0.30 * ease((x - 0.95) / 0.6) + 0.25 * ease((x - 1.55) / 0.3)
+        - 0.50 * ease((x - 2.1) / 0.5);
+      lidNod(P, F, 1 - k * toward(eyesClose(x), droop, E));
       // How far down the head has gone: sags, nods, catches, and drops.
       const down = 0.2 * ease(x / 0.9) + 0.35 * ease((x - 0.95) / 0.6) - 0.2 * ease((x - 1.55) / 0.45)
         + 0.65 * ease((x - 2.0) / 1.0);
@@ -1552,6 +1611,7 @@
     const lids = eyesOpen(x) * (1 - E * bump((x - 0.75) / 0.45)) * (1 - 0.85 * E * bump((x - 1.25) / 0.4));
     const f = 1 - k * (1 - lids);
     P.eyeL *= f; P.eyeR *= f;
+    lidWake(P, x, k);   // ...and lifts a little after they open
     P.headPitch += 0.05 * e * bump((x - 0.2) / 1.2);
     const s = e * envAHR(x - 0.55, 0.5, 0.35, 0.6);
     P.lean -= 0.05 * s; P.headPitch += 0.08 * s; P.breath += 0.012 * s;
@@ -1681,10 +1741,10 @@
       // The state's pose at clock tt, `sn` seconds into it, dx seconds after now.
       const at = (tt, sn, dx) => {
         const x = cr ? cr[0] + dx : len;
-        if (x >= len) return targets(state, tt, amp, look, sn, o);
+        if (x >= len) return lidCalm(targets(state, tt, amp, look, sn, o), o);
         const P = targets(state, tt, amp, look, sn, withQuiet(o, state === "standby" ? 0 : quietOf(x)));
         moves(P, state, x, far, ex, tt, F);
-        return P;
+        return lidCalm(P, o);
       };
       const cur = at(t, since, 0);
       const curB = both ? at(t - FD, since - FD, -FD) : null;
@@ -1732,6 +1792,8 @@
   /** A half-life table from which part is which (eyes, mouth, head, limbs, loose parts). */
   function halfLives(eyes, mouth, head, limbs, trail) {
     const out = {};
+    // The painted eyelid settles slowly (HL_LID): a look, not a movement.
+    out.lid = [HL_LID, 0]; out.lidSlope = [HL_LID, 0];
     for (const k of eyes) out[k] = [HL_EYES, 0];
     for (const k of mouth) out[k] = [HL_MOUTH, 0];
     for (const k of head) out[k] = [HL_HEAD, 0];
@@ -1880,6 +1942,7 @@
       uEarL0: invRow(EL, 0), uEarL1: invRow(EL, 1), uEarL2: invRow(EL, 2),
       uEarR0: invRow(ER, 0), uEarR1: invRow(ER, 1), uEarR2: invRow(ER, 2),
       uFace: [clamp(P.eyeL, 0, 1.2), clamp(P.eyeR, 0, 1.2), P.brow],
+      uLid: [clamp(P.lid, 0, 1), clamp(P.lidSlope, -1, 1)],
       uMouth: mouthOf(P, mouth),
       uLook: [clamp(P.lookX, -1, 1), clamp(P.lookY, -1, 1)],
       uShL: toWorld([-0.24, 0.48, -0.10]),
@@ -2047,7 +2110,7 @@
     // `busy(state, t)`: whether an idle happening is playing (the frame pacer's).
     species: { redpanda: { KEYS, stateTargets, pose, uniforms, mouth: mouthOf, overlay, busy, gesturing, HELLO_S, GOODBYE_S } },
     // Shared with the other animals' files, so all three do their sums alike.
-    util: { makePose, halfLives, mouthOf, clamp, smooth, ease, rx, ry, rz, mul, apply, add, invRow,
+    util: { makePose, halfLives, lidSet, lidNod, lidWake, LID, LID_SLEEP, mouthOf, clamp, smooth, ease, rx, ry, rz, mul, apply, add, invRow,
             wave, bump, envAHR, happening, beat, shift, gaze, looks, restingGaze, optsOf, mods, chain,
             gauss, blinkAt, overlayAt, phaseOf, LOOP, PERIOD, TAU, playing, playingV,
             // The slow wander, uneven breathing, and the idle happenings that

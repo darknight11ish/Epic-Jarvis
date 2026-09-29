@@ -1029,6 +1029,99 @@ robot face plugs in as it is. Details:
   window without it keeps the nod back until the Security settings change
   once (fails closed).
 
+### Painted eyelids (owner, 2026-09-29)
+
+The four animals (not the robot, whose eyes carry the state) have **painted
+eyelids**: a lid of the surrounding fur laid over the top of each eye, with a
+thin darker crease along its edge, that can slope. Before, an eye could only
+squash up and down, which reads as a wink or a blink and cannot look worried.
+The lid is painted in the shader's **surface colouring** (`eyeLid` in
+`critters/common_head.sksl`, called from each animal's `material()` for the
+eye), once a pixel on the eyes only - not in the shape - so the march pays
+nothing for it. Each animal takes one new uniform, `uLid` (two numbers: how far
+down, 0 none to 1 shut; and the slope, +1 the inner end up, a worried look).
+
+**What each state does** (the same amounts for all four animals):
+
+| State | Lid | Slope |
+|---|---|---|
+| Idle, listening, thinking, speaking | none (0) - exactly the picture as before | - |
+| Waiting on you | 0.20 | level (attentive) |
+| Something went wrong | 0.42 | +1 (worried) |
+| Dozing (`banked`) | 0.55 | level (heavy) |
+| Asleep (`standby`) | 0.55 | level (heavy) - but see "a shut eye" below |
+
+**In the pose code** (`critter-pose.js`, `critter-owl.js`, `critter-otter.js`,
+`critter-monkey.js`; line for line in `CritterPose.kt`, `OwlPose.kt`,
+`OtterPose.kt`, `MonkeyPose.kt`): two new pose numbers, `lid` and `lidSlope`
+(the shader's one `uLid`, sent by `uniforms()` on both apps - the phone's
+`CritterFaces.kt` and the desktop's `faces.html` upload whatever the pose
+returns, so nothing else needed to know about it). The shared parts are in
+`critter-pose.js`'s `util` and `CritterPose.kt`: `LID` (the table above),
+`lidSet` (each state's `stateTargets` ends by setting the lid), `lidNod` and
+`lidWake`, `lidCalm`.
+
+- **A lid is a settled look, not a movement.** The state sets the number and
+  the pose's ordinary settling (inertialization) eases it, with its own
+  half-life `HL_LID` = 0.25 s (slower than the eyes' 0.035 s and the head's
+  0.13 s, so on an arrival the eyes and head lead and the lid settles in after:
+  mostly there in a second, never a pop). It adds no idle motion: a settled lid
+  does not move at all (tested over ten minutes). Measured at 240 frames a
+  second: the lid moves at most 0.008 (the slope 0.02) in one frame on any of the
+  56 changes of state, and at most 0.006 (0.012) arriving at an error or approval.
+- **Nodding off and waking.** Nodding off, the lid comes down from the lid the
+  old state had to the heavy one **with the eyes' drooping** (the same curve the
+  eyes' squash follows, without the two quick blinks laid on it, so the lid does
+  not slam with a blink); waking, it lifts a little **after** the eyes open
+  (from 0.25 s, done by 1.15 s), into no lid, a level one or a worried one
+  (`lidUp`). Both are laid on inside the existing `wakeSleep`, so they end when
+  it does, are scaled by how far the change before them had got (a quick flip
+  never jumps), and play under calm, serious and still exactly as the eyes do.
+- **Blinks and a shut eye.** A blink still shuts the eye all the way. The lid
+  gives way to an eye that is shutting: it fades out as the eye squashes below
+  0.3 (`open`, passed to `eyeLid`), because a shut eye is its own thin dark
+  line (a blink, or asleep) and a lid laid over it would rub the line out and
+  leave the animal with no eyes. So asleep the animal keeps its shut-eye line
+  (the lid is drawn only while the eyes are still part open, as it nods off
+  and while dozing, where the eye is 0.35 open).
+- **Calm and Still** do not remove the lid: at an approval or an error it is the
+  plain worried or attentive look the owner asked for, and under calm and Still
+  it arrives the same eased way.
+- **A crisis-help moment (`serious`) keeps the animal neutral: no lid.** It is
+  applied where the pose is finished (`lidCalm`, in `makePose`/`blend`), so it
+  scales with the host's eased weight, and also removes the lid while waking
+  into or nodding off during such a moment.
+- **Goodbye and hello, and the cross-fade, are unchanged.**
+- The desktop's **flat drawing without a graphics card** does not draw lids
+  (it is a plain 2D sketch of the pose, without the shader's surface colouring);
+  the eyes, brows and the state's ring still say the state there.
+
+**Sizes** (phone copy, limit 60,000): panda 59,693 (main before the lid:
+59,729), owl 52,064 (51,945), otter 55,018 (54,898), monkey 59,602 (59,728).
+The lid costs about 110 in each. The panda and monkey paid for it with exact
+rewrites of shape code that runs in every march step, which change no pixel
+(the panda's legs and head no longer build a mirrored copy of the point first;
+the monkey's torso no longer adds a zero vector). With `uLid` 0 the pictures
+are exactly the old ones (the prototype compared the phone's shader with main's
+over 48 pictures per animal, 0 pixels different; `tests/animal-lids.mjs` holds
+"no lid draws nothing" for the desktop's shader). The robot's shader carries
+the shared `uLid` declaration and function (in the common head) but nothing
+calls them.
+
+**Golden fixture.** `critter-pose-golden.json` gained `uLid` in every case
+(all 1,354 earlier cases are identical apart from that one value) and 364 new
+cases (`lid_cases` in `tools/gen_critters.py`): each lidded state arriving and
+leaving at six moments, under calm and still, nodding off from three looks,
+waking into four, and under a crisis-help weight. **Tests:**
+`jarvis-desktop/tests/animal-lids.mjs` (pose half: every value above, the
+easing, no idle motion, serious, calm and still, blinks, hello and goodbye;
+picture half, with Playwright and the real shader: idle pixel for pixel
+unchanged, a lid changes only the eyes, covers the amount asked (a level lid of
+0.2, 0.42, 0.55, 0.9 covers 4-26, 24-60, 42-86 and 92-100 percent of the eye's
+dark - a round eye's area grows faster than the lid's depth), the slope tilts
+it, a shut eye keeps its line), and `CritterPoseTest` (the phone's copy of the
+same rules). Pictures: `docs/critters/eyelids/`.
+
 ### How the mouths talk
 
 Every spoken reply reaches the app as a whole sound clip before it plays.
@@ -1478,8 +1571,8 @@ sphere) and fails if one picture differs by more than 8 pixels or the average
 is over 0.7 a picture (measured: at most 3, and under 0.3). Its CONTROL
 shrinks every part's sphere to half and must see the difference.
 
-**Size.** Panda 59,729, owl 51,945, otter 54,898, monkey 59,728, robot 45,206
-(2026-09-29, after the robot's eye colour and the owl's chest fade; limit 60,000; the panda and monkey have about 270 left, so a new part on
+**Size.** Panda 59,693, owl 52,064, otter 55,018, monkey 59,602, robot 45,206
+(2026-09-29, after the painted eyelids; limit 60,000; the panda and monkey have about 300-400 left, so a new part on
 either must save what it adds). **To change a part**: move or resize its
 sphere in `animalSpan` in the same commit - the check above fails if a part
 pokes out.

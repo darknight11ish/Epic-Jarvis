@@ -88,7 +88,9 @@ object OwlPose {
     private const val LEAN = 20
     private const val BODY_ROLL = 21
     private const val ASLEEP = 22
-    private const val N = 23
+    private const val LID = 23
+    private const val LID_SLOPE = 24
+    private const val N = 25
 
     // The orb is placed round the owl (the desktop's note): its angle round
     // the head's upright axis, its height and its distance from that axis.
@@ -429,6 +431,7 @@ object OwlPose {
         }
         farewell(p, state, o)
 
+        CritterPose.lidSet(p, LID, state)
         val q = 1f - o.quiet
         val k = eyeK * (1f - q * max(if (blinks) blinkAt(t, S_BLINK, blinkSlow, 3f, 12f) else 0f, turnBlink))
         p[EYE_L] *= k
@@ -480,6 +483,9 @@ object OwlPose {
             val lids = (1f - 0.5f * ease(x / 0.7f) - 0.5f * ease((x - 1.6f) / 0.7f)) * (1f - bump((x - 0.85f) / 0.65f))
             val lid = k * toward(eyesClose(x), lids, ex)
             p[EYE_L] = f[EYE_L] * lid; p[EYE_R] = f[EYE_R] * lid
+            // The painted lid comes down with the eyes' drooping, not with the slow blink laid on it.
+            val droop = 1f - 0.5f * ease(x / 0.7f) - 0.5f * ease((x - 1.6f) / 0.7f)
+            CritterPose.lidNod(p, f, LID, 1f - k * toward(eyesClose(x), droop, ex))
             val head = e * (1f - ease((x - 1.6f) / 1.2f))
             p[NECK_DROP] = toward(p[NECK_DROP], f[NECK_DROP], head)
             p[HEAD_PITCH] = toward(p[HEAD_PITCH], f[HEAD_PITCH], head)
@@ -495,6 +501,7 @@ object OwlPose {
         val fl = e * envAHR(x - 0.9f, 0.3f, 0.35f, 0.55f)
         p[EYE_L] *= (1f - k * (1f - l)) * (1f - 0.25f * fl)
         p[EYE_R] *= (1f - k * (1f - r)) * (1f - 0.25f * fl)
+        CritterPose.lidWake(p, LID, x, k)   // ...and lifts a little after they open
         p[FLUFF] += 0.06f * fl + 0.012f * e * wave(t, 2048f, 0f) * bump((x - 0.95f) / 0.9f)
         p[NECK_DROP] -= 0.015f * e * bump((x - 0.2f) / 1.3f)
         p[HEAD_ROLL] += 0.04f * e * (bump((x - 1.25f) / 0.45f) - bump((x - 1.6f) / 0.45f))
@@ -505,7 +512,7 @@ object OwlPose {
     internal val HALF = CritterPose.halfLives(
         N,
         intArrayOf(EYE_L, EYE_R, LOOK_X, LOOK_Y), intArrayOf(SPEAK), intArrayOf(HEAD_YAW, HEAD_PITCH, HEAD_ROLL, NECK_DROP, BROW),
-        intArrayOf(), intArrayOf(WING_L, WING_R, FLUFF),
+        intArrayOf(), intArrayOf(WING_L, WING_R, FLUFF), LID,
     ).also { h ->
         h.hl[ORB_A] = 0.16f; h.hl[ORB_Y] = 0.55f; h.hl[ORB_D] = 0.16f
         h.cut[ORB_A] = ORB_CUT
@@ -585,6 +592,7 @@ object OwlPose {
             "uWingL0" to invRow(wl, 0), "uWingL1" to invRow(wl, 1), "uWingL2" to invRow(wl, 2),
             "uWingR0" to invRow(wr, 0), "uWingR1" to invRow(wr, 1), "uWingR2" to invRow(wr, 2),
             "uFace" to floatArrayOf(clamp(p[EYE_L], 0f, 1.2f), clamp(p[EYE_R], 0f, 1.2f), p[BROW]),
+            "uLid" to floatArrayOf(clamp(p[LID], 0f, 1f), clamp(p[LID_SLOPE], -1f, 1f)),
             "uMouth" to CritterPose.mouthOf(p[SPEAK], mouth),
             "uLook" to floatArrayOf(clamp(p[LOOK_X], -1f, 1f), clamp(p[LOOK_Y], -1f, 1f)),
             "uOrbGlow" to floatArrayOf(clamp(p[ORB_GLOW], 0f, 1.5f)),

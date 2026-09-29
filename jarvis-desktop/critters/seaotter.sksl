@@ -298,7 +298,10 @@ float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
     float3 v = normalize(eyePos() - pos);
     float edge = smoothstep(0.55, 0.92, 1.0 - abs(dot(n, v)));
-    if (id == ID_EYE) return float4(INK, 1.0);
+    if (id == ID_EYE) {
+        float4 l = eyeLid(INK, FACE * 0.95, h, eyeAt(), 0.048, h.x < 0.0 ? uFace.x : uFace.y);
+        return float4(l.rgb, 1.0 - l.w);
+    }
     if (id == ID_NOSE) return float4(INK * 2.0, 0.7);
     if (id == ID_HEAD) {
         // The drawn mouth on the front of the muzzle, and the walls of the
@@ -360,7 +363,7 @@ float3 sparkle(float id, float3 pos) {
     float2 q = float2(h.x - side * ea.x, h.y - ea.y);
     float2 at = float2(-0.010 + 0.008 * uLook.x, 0.014 + 0.006 * uLook.y);
     float spark = 1.0 - smoothstep(0.006, 0.011, length(q - at));
-    float lit = smoothstep(0.02, 0.25, min(uFace.x, uFace.y));
+    float lit = smoothstep(0.02, 0.25, min(uFace.x, uFace.y)) * (1.0 - uLid.x);
     return float3(1.5) * spark * lit * (h.z < -0.19 ? 1.0 : 0.0);
 }
 
