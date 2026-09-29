@@ -321,7 +321,7 @@ moment. They are told apart by **shape**, not by colour alone:
 | | Not connected | Error |
 |---|---|---|
 | Shape | a complete circle | an arc with a gap of 70 degrees centred at the bottom (six o'clock) |
-| Weight | the heavier: at least 2.5 px, 0.012 of the picture | thin: at least 1.5 px, 0.006 of the picture |
+| Weight | the heavier: at least 2.5 px on screen, 0.012 of the picture | thin: at least 1.5 px on screen, 0.006 of the picture |
 | Colour | the standby colour | the error colour |
 | Which faces | every face | the four animals and the robot |
 | Radius | 1.03 of the overlay radius (0.4532 of the picture) - the same for both | |

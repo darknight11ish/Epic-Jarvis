@@ -5138,6 +5138,13 @@ function ringTone(c, bg){
   }
   return far;
 }
+/** How many of this surface's own pixels make one CSS pixel: the face's picture is
+ *  never drawn smaller than 120 px, so at 40 px on screen a "2.5 px" line would
+ *  be under one pixel there. The floors below are in CSS pixels. */
+function ringScale(g, w){
+  const cw = g.canvas && g.canvas.clientWidth;
+  return cw > 0 ? Math.max(1, w / cw) : 1;
+}
 function ringCss(state, ground){
   const [r, g, b] = ringTone(parseCol(boundTint(state)), parseCol(ground || BG));
   return `rgb(${r},${g},${b})`;
@@ -5152,7 +5159,7 @@ function drawOfflineRing(g, w, h, s, state, ground){
   const side = Math.min(w, h);
   g.save();
   g.strokeStyle = ringCss(state, ground);
-  g.lineWidth = Math.max(2.5, side * 0.012);
+  g.lineWidth = Math.max(2.5 * ringScale(g, w), side * 0.012);
   g.beginPath(); g.arc(w / 2, h / 2, side * 0.44 * 1.03, 0, TAU); g.stroke();
   g.restore();
 }
@@ -5169,7 +5176,7 @@ function drawErrorRing(g, w, h, s, state, ground){
   const half = ERROR_RING_GAP / 2, down = Math.PI / 2;   // canvas angles grow clockwise: pi/2 is six o'clock
   g.save();
   g.strokeStyle = ringCss("error", ground);
-  g.lineWidth = Math.max(1.5, side * 0.006);
+  g.lineWidth = Math.max(1.5 * ringScale(g, w), side * 0.006);
   g.lineCap = "butt";
   g.beginPath(); g.arc(w / 2, h / 2, side * 0.44 * 1.03, down + half, down - half + TAU); g.stroke();
   g.restore();
