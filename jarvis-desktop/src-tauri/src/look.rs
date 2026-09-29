@@ -359,10 +359,8 @@ pub(crate) async fn run_watch(
                 return Err(why.to_string());
             }
         }
-        "extend" => {
-            if stale(app) {
-                return Err(STALE_HELD.to_string());
-            }
+        "extend" if stale(app) => {
+            return Err(STALE_HELD.to_string());
         }
         _ => {}
     }

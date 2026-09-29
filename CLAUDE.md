@@ -1710,6 +1710,12 @@ including every `#[cfg(windows)]` block — which a Linux check would have
 skipped entirely, and which is where the unsafe FFI lives. It takes about
 twenty seconds warm.
 
+**Use the same Rust as CI.** CI runs the newest stable Rust, and this container
+can lag behind it: on 2026-09-29 the container's 1.94 passed clippy while CI's
+1.98 flagged a nested `if` (`collapsible_match`) and failed the `rust` check.
+Run `rustup toolchain install stable --profile minimal -c clippy -c rustfmt
+--no-self-update` first, then the three commands above.
+
 The third, `cargo test`, still needs a Windows host. Write the Rust tests
 anyway; they are compiled by `--all-targets` above, so at least they are known
 to build. A "GNU compiler is not supported for this target" warning in the
