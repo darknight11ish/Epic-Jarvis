@@ -5,6 +5,13 @@ they worked on separate branches. This is the reconciled version, now that
 both have merged into `main` — read this one, not an old copy on a deleted
 branch.
 
+## Whenever a choice is needed, give multiple choice
+
+The owner has said it again and again ("Give me multiple choice", 2026-09-29
+and before): when a decision is theirs, offer it as a multiple-choice
+question, not an open one and not a wall of text. Lead with the recommended
+option. The rules below say how to keep it short.
+
 ## Keep multiple-choice questions SHORT
 
 This is the rule that gets broken most. Asking four questions with four
