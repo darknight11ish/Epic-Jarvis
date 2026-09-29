@@ -2,6 +2,8 @@ package com.jarvis.client
 
 import com.jarvis.client.net.CustomVoices
 import com.jarvis.client.net.JarvisJson
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -74,5 +76,81 @@ class FaceVoiceOfferTest {
         assertEquals("/api/voice/voices/face_offer", CustomVoices.FACE_OFFER_PATH)
         assertEquals("{\"face\":\"redpanda\",\"answer\":\"use\"}", CustomVoices.faceOfferBody("redpanda", use = true))
         assertEquals("{\"face\":\"seaotter\",\"answer\":\"keep\"}", CustomVoices.faceOfferBody("seaotter", use = false))
+    }
+
+    // ---- Changing the one-time answer later, on each animal's row ----
+
+    private fun animalRow(vararg extra: Pair<String, JsonElement>) = JsonObject(
+        mapOf<String, JsonElement>(
+            "face" to JsonPrimitive("redpanda"),
+            "name" to JsonPrimitive("Red Panda"),
+            "speaker" to JsonPrimitive("3"),
+            "semitones" to JsonPrimitive(1.5),
+            "pace" to JsonPrimitive("normal"),
+        ) + extra,
+    )
+
+    private fun answerOf(row: JsonObject): String? {
+        val choices = JsonObject(
+            mapOf(
+                "voices" to JsonArray(
+                    listOf(JsonObject(mapOf("id" to JsonPrimitive("3"), "label" to JsonPrimitive("Nicole")))),
+                ),
+                "paces" to JsonArray(
+                    listOf(JsonObject(mapOf("id" to JsonPrimitive("normal"), "label" to JsonPrimitive("Normal")))),
+                ),
+            ),
+        )
+        val status = requireNotNull(
+            CustomVoices.parse(
+                withFaceVoice(
+                    mapOf(
+                        "enabled" to JsonPrimitive(true),
+                        "animal_choices" to choices,
+                        "animals" to JsonArray(listOf(row)),
+                    ),
+                ),
+            ),
+        )
+        val animals = requireNotNull(status.faceVoice).animals
+        assertEquals(1, animals.size)
+        return animals[0].answer
+    }
+
+    @Test
+    fun anAnimalRowsAnswerIsUseKeepOrNothing() {
+        assertEquals("use", answerOf(animalRow("answer" to JsonPrimitive("use"))))
+        assertEquals("keep", answerOf(animalRow("answer" to JsonPrimitive("keep"))))
+        assertNull(answerOf(animalRow("answer" to JsonNull)))
+        // An older PC sends no `answer` at all.
+        assertNull(answerOf(animalRow()))
+        // Garbage of any kind is no answer, never a crash.
+        assertNull(answerOf(animalRow("answer" to JsonPrimitive("maybe"))))
+        assertNull(answerOf(animalRow("answer" to JsonPrimitive(true))))
+        assertNull(answerOf(animalRow("answer" to JsonObject(emptyMap()))))
+    }
+
+    @Test
+    fun eachAnswerGetsTheOppositeButtonAndNoAnswerGetsNone() {
+        assertEquals("Use its own voice", CustomVoices.changeMindLabel("keep"))
+        assertEquals(true, CustomVoices.changeMindUse("keep"))
+        assertEquals("Keep my voice", CustomVoices.changeMindLabel("use"))
+        assertEquals(false, CustomVoices.changeMindUse("use"))
+        assertNull(CustomVoices.changeMindLabel(null))
+        assertNull(CustomVoices.changeMindUse(null))
+        assertNull(CustomVoices.changeMindLabel("maybe"))
+        assertNull(CustomVoices.changeMindUse("maybe"))
+    }
+
+    @Test
+    fun pressingTheButtonSendsTheOppositeAnswerForThatAnimal() {
+        assertEquals(
+            "{\"face\":\"pygmyowl\",\"answer\":\"use\"}",
+            CustomVoices.faceOfferBody("pygmyowl", use = requireNotNull(CustomVoices.changeMindUse("keep"))),
+        )
+        assertEquals(
+            "{\"face\":\"pygmyowl\",\"answer\":\"keep\"}",
+            CustomVoices.faceOfferBody("pygmyowl", use = requireNotNull(CustomVoices.changeMindUse("use"))),
+        )
     }
 }

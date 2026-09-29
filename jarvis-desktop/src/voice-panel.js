@@ -1181,13 +1181,20 @@ function animalRow(view, a) {
   reset.classList.add("small");
   reset.setAttribute("aria-label", `Reset the ${a.name} to its own voice`);
 
+  // Change your mind about the one-time question: only when it was answered.
+  const mind = button("Keep my voice", () => {
+    if (mind.dataset.answer) answerAnimalOffer(a.face, mind.dataset.answer, status);
+  }, { ghost: true });
+  mind.classList.add("small");
+  mind.hidden = true;
+
   const controls = node("div", "cv-animal-controls");
-  controls.append(voiceField, pitchField, pace, tryIt, reset);
   const status = node("span", "status");
+  controls.append(voiceField, pitchField, pace, tryIt, reset, mind);
   status.setAttribute("role", "status");
   row.append(head, controls, status);
 
-  const r = { row, lineEl, voice, pitch, shown, pace, tryIt, reset, status, name: a.name };
+  const r = { row, lineEl, voice, pitch, shown, pace, tryIt, reset, mind, status, name: a.name };
   const current = () => ({
     speaker: voice.value,
     semitones: Number(pitch.value),
@@ -1258,6 +1265,14 @@ function paintAnimals() {
       c.disabled = linkStale;
       c.title = linkStale ? HELD : "";
     }
+    // "keep" offers its own voice; "use" offers going back; unanswered: neither.
+    r.mind.hidden = !a.answer;
+    r.mind.dataset.answer = a.answer === "keep" ? "use" : a.answer === "use" ? "keep" : "";
+    r.mind.textContent = a.answer === "keep" ? "Use its own voice" : "Keep my voice";
+    r.mind.setAttribute("aria-label", a.answer === "keep"
+      ? `Use the ${a.name}'s own voice` : `Keep my voice for the ${a.name}`);
+    r.mind.disabled = linkStale;
+    r.mind.title = linkStale ? HELD : "";
     r.reset.disabled = linkStale || !a.changed;
     r.reset.title = linkStale ? HELD : a.changed ? "" : `The ${a.name} already speaks in its own voice.`;
   }
@@ -1437,8 +1452,13 @@ async function answerFaceOffer(button) {
   await sendChoice("cv-face-status", "answer_face_voice_offer", { face, answer }, [paintFace]);
 }
 
+/** Changing the answer to the one-time question, from the animal's own row. */
+async function answerAnimalOffer(face, answer, statusEl) {
+  await sendChoice(statusEl, "answer_face_voice_offer", { face, answer }, [paintAnimals]);
+}
+
 async function sendChoice(statusId, command, args, repaint) {
-  const out = $(statusId);
+  const out = typeof statusId === "string" ? $(statusId) : statusId;
   if (linkStale) {
     say(out, HELD, "bad");
     repaint.forEach((fn) => fn());

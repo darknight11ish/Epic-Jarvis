@@ -5,15 +5,24 @@ Written after the audits of 2026-09-28
 It builds on [`INSTALL.md`](INSTALL.md) ("Updating everything"); where the two
 differ, this page is newer.
 
-**Read this first.** Most of the new work (chatbot compare, Jarvis Live,
-Goals, phone notifications, the monkey, Lockdown, Today and the rest) is
-still on five branches that are **not merged into `main`**, and nothing
-reaches your devices until it is. So there are two rounds:
+**Read this first (updated after pull requests #23 and #25 were merged).**
+Everything the sessions had built by the evening of 2026-09-28 is now on
+`main`: the five branches (chatbot compare, Jarvis Live, Goals, phone
+notifications, the monkey, Lockdown, Today and the rest) came in with #23,
+and **QR-code pairing with a key per device**, the audits' fixes and the
+one-time animal-voice question came in with #25 (and a small follow-up
+after it). So:
 
-- **Round 1, today:** update to what is on `main` now - the three animal
-  faces (pull request #20) and "the rules stay first" (#21).
-- **Round 2, after the five branches are merged:** the same steps again,
-  then the longer checklist.
+- **Use Round 1's steps 1, 2 and 4** (backend, desktop, quick check) as the
+  update steps - they still work - but **not its step 3**: that names an
+  old phone build. Ignore the rest of Round 1's wording; it was written
+  before the merge.
+- **Then "After it is merged"** (it says how to get the right phone build
+  and how to try the new pairing), then the **checklist** and the
+  **measurements**.
+- **Not on `main` yet:** work other sessions pushed afterwards - mainly
+  customer-support chats (research session) and the animal-options page
+  (animal-face session). It arrives in its own later pull request.
 
 Every PowerShell command below is **one line**: copy the whole line, paste,
 press Enter. Each was checked for PowerShell 5.1 (the one Windows comes
@@ -23,7 +32,7 @@ backend folder as written in INSTALL.md; change it if yours moved.
 
 ---
 
-## Round 1 - update to today's `main`
+## Round 1 - the update steps (written before the merge: use steps 1, 2 and 4 only)
 
 ### 1. The backend on the PC
 
@@ -63,14 +72,15 @@ cd "$env:USERPROFILE\Epic-Jarvis\jarvis-desktop"; npm install; npm run tauri bui
 
 A folder opens: double-click the `...-setup.exe` in it.
 
-### 3. The phone
+### 3. The phone (old - use "After it is merged" below instead)
 
-The phone app on the `client-latest` release is already built from today's
+The phone app on the `client-latest` release was, when this was written, built from that day's
 `main` (version 0.2.206, commit `f81d230`, "tested on an emulator before
 publishing"). On the phone, open
 <https://github.com/darknight11ish/Epic-Jarvis/releases/tag/client-latest>,
 tap `jarvis-client-f81d230.apk`, and install it over the old one. It stays
-paired.
+paired. **Do not install that one now** - it is older than the merge; wait
+for the page to name the newest `main` commit (see "After it is merged").
 
 ### 4. Quick check
 
@@ -87,14 +97,13 @@ paired.
    and what won't you do?". It should answer as Jarvis, briefly, and mention
    asking before acting.
 3. **The animal faces:** Settings → Faces, pick the red panda, then the
-   owl, then the otter. Each should move gently and blink. **Known, not yet
-   fixed:** "Voice follows the face" starts ON and the otter uses the "Sky"
-   voice - both against your 2026-09-28 decision; turn the switch off by
-   hand for now.
+   owl, then the otter. Each should move gently and blink. (The old note
+   here, that "Voice follows the face" starts on and the otter uses the
+   "Sky" voice, is fixed: it starts off, and the otter uses another voice.)
 
 ---
 
-## Round 2 - getting the five branches in
+## Round 2 - how the five branches got in (done)
 
 ### Before anything merges: what must be fixed first
 
@@ -104,13 +113,13 @@ the line and a proposed fix:
 | # | What | Branch | Report | Status |
 |---|---|---|---|---|
 | 1 | One-time codes get past the phone's hiding filter | continuation | [04 security](audit-2026-09-28/04-security.md), [01 Android](audit-2026-09-28/01-bugs-android.md) | fixed in the combined pull request |
-| 2 | Your animal-voice decision (starts off, one-time question, otter not "Sky") | mascot | [06 decisions](audit-2026-09-28/06-decisions.md) | starts off and otter not "Sky": fixed; the one-time question: **not yet** |
+| 2 | Your animal-voice decision (starts off, one-time question, otter not "Sky") | mascot | [06 decisions](audit-2026-09-28/06-decisions.md) | fixed: starts off, otter not "Sky", and the one-time question (each animal asks once for itself) came in with #25 |
 | 3 | The five "right after the sources block" patches, and the four "is last" tests | all five | [05 merge](audit-2026-09-28/05-merge.md) | fixed |
 | 4 | Desktop `send()`: Live and "Try the cloud model" clash | research + continuation | [05 merge](audit-2026-09-28/05-merge.md) | fixed |
 | 5 | API section numbers §59-61 and the phone's settings index 12 used twice | all | [05 merge](audit-2026-09-28/05-merge.md) | fixed |
 | 6 | The web address in a code comment in `faces.html` (fails a test) | GitHub repos | [10 sessions](audit-2026-09-28/10-threads.md) | fixed |
 
-### How it gets merged - one pull request (your choice, 2026-09-28)
+### How it got merged - one pull request (your choice, 2026-09-28; done as #23)
 
 All five branches, the fixes above and the audit's own fixes are in ONE
 pull request from `claude/jarvis-post-change-audits-olihzo`. **You press
@@ -128,8 +137,32 @@ the phone, **wait until the `client-latest` page names the new `main`
 commit** (it is only published after the emulator test passes on that
 exact file; it says "from `main`, commit ..." at the top), then install it.
 
-**New pairing?** No. Pairing is unchanged in all five branches (QR pairing
-is still for later), so the phone stays paired.
+**New pairing?** Yes, but nothing forces you to redo it. QR-code pairing
+with a key for each device is built (design: `PAIRING-DESIGN.md`, API:
+`JARVIS-API.md` section 90). Your phone **stays paired with its old shared
+key**, which keeps working until you retire it. To try the new way: PC,
+Settings, **Devices**, **Pair a phone**; on the phone, Settings or the
+pairing screen, **Scan the code on your PC** (or type the 8-letter code).
+Both screens show the same four words; approve the card on the PC (with
+Windows Hello) only if they match.
+
+**The half-hour test before you retire the old shared key.** Retire is
+the one step you cannot try safely on paper, so check these four things
+first (each fails safe if wrong):
+
+1. On the PC, in PowerShell: `tailscale status --json` prints something and
+   the PC's own name (`Self`, `DNSName`) is in it.
+2. Pair the phone the new way, then in Devices press **Remove** for it: the
+   phone's live connection drops within about 10 seconds.
+3. When the pairing card appears on the PC, the Windows Hello prompt comes
+   to the front (not hidden behind another window).
+4. The phone connects through Tailscale or NordVPN Meshnet (not home
+   Wi-Fi); pairing over plain home Wi-Fi is refused with a plain message.
+
+If any fail, do not press **Retire the old shared key**; send back what you
+saw. Not built yet: the fingerprint-signed "yes" for risky cards on the
+phone (phase 2 of the design), and the check that the phone's security
+chip is genuine (left out on purpose, see design section 9).
 
 ---
 
@@ -164,13 +197,16 @@ happen, write down which line and what you saw instead.
   timer for 1 minute". It is set anyway and rings.
 - [ ] **Phone notifications, off by default** (phone): Settings → Phone
   notifications shows OFF. Turning it on raises a card on the PC. Turn it
-  off from the phone: immediate. **Known gap:** turning it off from the PC
-  only reaches the phone next time its settings page opens.
-- [ ] **One-time codes hidden** (after fix 1): with notifications on for a
+  off from the phone: immediate. Turn it off from the PC: the phone stops
+  saving new ones within about 15 seconds of the next capture, and what it
+  had saved is deleted; "Delete captured notifications" on that page does
+  the same by hand (it asks "are you sure?" first).
+- [ ] **One-time codes hidden:** with notifications on for a
   test app, send yourself "Use 482913 to log in". Ask Jarvis "what are my
   latest notifications?". The code shows as `[hidden code]`.
-- [ ] **Goals:** "set a goal: walk three times a week". One card to accept;
-  ticking a step off needs no card.
+- [ ] **Goals:** "set a goal: walk three times a week". Accepting sets up
+  the weekly check-in straight away, **with no card** (like a repeating
+  reminder); ticking a step off needs no card either.
 - [ ] **The plan card stays off.** Ask for three things in one go. You get
   one card per acting step, never one card for several.
 - [ ] **Chatbot compare** (Brain → the chatbot section on the PC): compare
@@ -178,16 +214,29 @@ happen, write down which line and what you saw instead.
   (at most 3 on one card). Nothing is sent before you approve.
 - [ ] **Jarvis Live** (PC): start it, talk, pause, stop. It answers in
   short spoken sentences; pressing Stop everything (Alt+Shift+X) ends it at
-  once. Try talk-to-type (Alt+Shift+T) while Live is on: **known gap**, the
-  message blames "Hey Jarvis".
+  once. Try talk-to-type (Alt+Shift+T) while Live is on: it says "Jarvis Live
+  is using the microphone. End Live first, or just talk to Jarvis."
 - [ ] **Lockdown:** turn it on. Timers still ring; nothing else runs by
-  itself. **Known gap:** a chatbot comparison already running, and the
-  weather, keep going.
+  itself, and a chatbot conversation or comparison that was already running
+  stops, and the online weather behind the animal stops.
 - [ ] **Today / widgets / tiles:** the Today page shows the day; a
   quick-settings tile on the phone never offers Approve.
 - [ ] **Faces:** all four animals (with the monkey) on both apps; the Zs
-  when on standby; "Voice follows the face" starts OFF and asks once (after
-  fix 2).
+  when on standby; "Voice follows the face" starts OFF. The first time you
+  pick each animal it asks "The Red Panda has its own voice. Use it?" - once
+  per animal; "Use it" for one animal does not change another. Later, in
+  the voice settings, each animal's row has **Use its own voice** or **Keep
+  my voice** to change your mind.
+- [ ] **Picking a face on the PC:** the Faces window: Tab once reaches
+  "Skip to the faces"; **Use this face** applies and saves at once, with
+  Undo.
+- [ ] **Widgets under App lock:** turn App lock on. On the phone, a
+  home-screen widget button opens Jarvis to unlock instead of acting (Stop
+  everything still works); on the PC widget, Focus, timer and music open the
+  Jarvis bar instead of acting.
+- [ ] **QR pairing and Devices** (both apps): see "New pairing?" above; the
+  Devices list on both apps shows each device with **Remove**, and marks
+  this one.
 - [ ] **Backup:** Settings → Backups → make one now. A locked file appears
   in the folder you chose, and the recovery code is shown once.
 
@@ -219,7 +268,7 @@ happen, write down which line and what you saw instead.
    a name (built 2026-09-28, **off** until your PC's numbers say it helps).
    On the build machine (words only, no real model) it took LoCoMo's
    "Found all @5" from 3.6% back up to 8.3% and left the main self-test
-   unchanged - your PC's meaning search may differ. After Round 1, this one
+   unchanged - your PC's meaning search may differ. After the update steps, this one
    line runs both tests twice, without and with it, and opens the folder
    (`jarvis-memory-eval\common-cut` in your user folder, with an `off` and
    an `on` folder inside). It takes a while:
