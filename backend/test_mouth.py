@@ -715,7 +715,7 @@ def t_multilang_text():
     check("v1.0 front end, step one: ':' becomes ',', runs of white space one space, the wide "
           "Chinese marks their plain twins (in sherpa-onnx's order)",
           got == "Note, a b c d"
-          and J.multilang_text("，：；、。？！") == ",:;,.?!"
+          and J.multilang_text("\uff0c\uff1a\uff1b\u3001\u3002\uff1f\uff01") == ",:;,.?!"
           and J.multilang_text("  x  ") == " x ", got)
     check("... a no-break space is not white space to std::regex, so it stays",
           J.multilang_text("a b") == "a b")
@@ -764,7 +764,7 @@ def t_multilang_pieces():
     check("a bare punctuation mark stands alone as [0, mark, 0] (sherpa-onnx's IsPunctuation)",
           J.multilang_pieces(".", toks, 510, "nowhere") == [([0, 4, 0], ["", ".", ""])])
     check("Chinese characters -> None (that text is read from the pack's Chinese lexicon)",
-          J.multilang_pieces("hello 你好", toks, 510, "nowhere") is None)
+          J.multilang_pieces("hello \u4f60\u597d", toks, 510, "nowhere") is None)
     check("nothing to say -> no pieces", J.multilang_pieces("", toks, 510, "nowhere") == [])
     d = _loader_dir()
     if d is None:
@@ -983,6 +983,7 @@ V1_SENTENCES = REAL_SENTENCES + [
     "Hi.",
     "Line one.\n\nLine two after a blank line.",           # white space is folded
     "The quick brown fox jumps over the lazy dog, and then it goes to sleep for a while.",
+    ".", "(", "?!", "...",                                 # bare punctuation stands alone
 ]
 #: name: (sid, speed, semitones, the British espeak voice or None)
 V1_VOICES = {"default": (3, 1.0, 0.0, None), "panda": (2, 1.0, 2.0, None),

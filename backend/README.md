@@ -15382,6 +15382,17 @@ folder) prints whether mouths are ready and, after Jarvis has spoken, how
 many sentences got them and why any did not; the phone and desktop read
 the same from `/api/voice/status` (`tts.mouth`).
 
+**On the Kokoro v1.0 voice pack** (added 2026-09-29; the owner's "Build exact
+timing"): it is the **same line, run again after the new pack is installed**
+(the copy made for the old pack is never used with the new one - the check
+says so in words). It takes about ten seconds, reads the 326 MB `model.onnx`
+(never changes it), and writes one new file, `model.durations.onnx` (56 MB),
+in the same folder - normally `.openjarvis\voice-models\tts` - and the last
+line it prints says exactly where. If it says "this is not the Kokoro v1.0
+model file Jarvis's install line puts there", the file in `tts` is not the
+one the install line unpacks; nothing was made, and the mouths keep being
+worked out from the sound. Then restart Jarvis.
+
 ## What the code does
 
 - `jarvis_mouth.py` (new, shipped whole): `prepare()` (the one-time step);
@@ -15411,7 +15422,9 @@ the same from `/api/voice/status` (`tts.mouth`).
     python3 backend/run_suites.py
 
 With the real voice files (`JARVIS_KOKORO_DIR` = a kokoro-en-v0_19 folder)
-`test_mouth.py` also checks the real model in all four voices.
+`test_mouth.py` also checks the real model in all four voices; with
+`JARVIS_KOKORO_V1_DIR` (an unpacked kokoro-multi-lang-v1_0 folder) it checks
+Kokoro v1.0 the same way, British voices included.
 
 ## Not checked, said plainly
 
@@ -15428,6 +15441,12 @@ With the real voice files (`JARVIS_KOKORO_DIR` = a kokoro-en-v0_19 folder)
   48,424 lines (this repository's docs and the 36 test sentences) it
   matched piper-phonemize on all but 8 odd code fragments; any mismatch makes that sentence's length check
   fail, and it simply has no mouth block.
+- **Kokoro v1.0 (2026-09-29)** was checked only in the Linux dev container,
+  against the real pinned pack: 532 of 532 English sentences (an American and
+  a British voice) got a mouth exact to the sample; the two texts with
+  Chinese characters get none, by design. Nobody has watched a v1.0 animal
+  talk, and nothing was run on Windows. The full numbers and how they were
+  taken are in `docs/LIPSYNC.md`, "Kokoro v1.0: the same exact timing".
 
 ---
 
@@ -17191,11 +17210,11 @@ in the PC's memory only, so the same voice twice is instant.
 
 ## What is different, said plainly
 
-- **The animals' mouths use the analysed-from-sound fallback on v1.0.**
-  `jarvis_mouth.py --prepare` builds its timing from the v0.19 model's own
-  graph and refuses v1.0's (it says so in words); `jarvis_speech` does not ask
-  it while v1.0 is installed. Your v0.19 timing file stays in `tts-old-...`.
-  Timing for v1.0 is not built.
+- **The animals' mouths follow Kokoro's own timing on v1.0 after one more
+  step** (2026-09-29): run the line under "Mouths that match the words" again
+  once the new pack is installed - it now works on v1.0 too. Until you do, the
+  mouths are worked out from the sound, as before. Your v0.19 timing file
+  stays in `tts-old-...` and is never paired with the new pack.
 - **No blended voices** (the studio's "Ashby" and "Clara" idea): they need a
   changed `voices.bin`; not built.
 - **Speed on your PC is not measured.** In the build container, a three-second

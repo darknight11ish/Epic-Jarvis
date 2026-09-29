@@ -768,15 +768,15 @@ def token_pieces(sentences: Sequence[str], tokens: dict, max_len: int = 511):
 #: text before anything else. A plain ":" becomes ",", and every run of
 #: white space (std::regex's "\s": space, tab, line feeds, form feed) one
 #: space - so a blank line no longer ends a sentence on v1.0.
-_ML_REPLACE = (("，", ","), (":", ","), ("、", ","), ("；", ";"), ("：", ":"),
-               ("。", "."), ("？", "?"), ("！", "!"))
+_ML_REPLACE = (("\uff0c", ","), (":", ","), ("\u3001", ","), ("\uff1b", ";"), ("\uff1a", ":"),
+               ("\u3002", "."), ("\uff1f", "?"), ("\uff01", "!"))
 _ML_SPACES = re.compile(r"[ \t\n\v\f\r]+")
 #: A run of Chinese characters is read from the pack's Chinese lexicon,
 #: which is not copied here: such a sentence gets no timing.
-_ML_CHINESE = re.compile("[一-鿿]")
+_ML_CHINESE = re.compile("[\u4e00-\u9fff]")
 #: What sherpa-onnx takes as a bare punctuation "sentence" (IsPunctuation):
 #: text that is exactly one of these is spoken as [0, that sound, 0].
-_ML_PUNCT = {";", ":", ",", ".", "!", "?", "—", "…", "\"", "(", ")", "“", "”"}
+_ML_PUNCT = {";", ":", ",", ".", "!", "?", "\u2014", "\u2026", "\"", "(", ")", "\u201c", "\u201d"}
 
 
 def multilang_text(text: str) -> str:
