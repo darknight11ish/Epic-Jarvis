@@ -136,6 +136,11 @@ ASSET = "obscura-x86_64-windows-stealth.zip"
 #: where this was written) - the owner sees a plain error if it does not.
 RELEASE_TAG = "v0.2.3"
 DOWNLOAD_URL = PROJECT_URL + "/releases/download/" + RELEASE_TAG + "/" + ASSET
+#: The SHA-256 of that archive as the release page LISTS it next to the file
+#: (read 2026-09-29 through a page reader, NOT by downloading the file and
+#: hashing it here - the owner compares it once with the page on their own
+#: screen). The install line refuses to unpack a download that differs.
+RELEASE_ZIP_SHA256 = "4d7311c69c3263bb8376055f9cb846968b75c77c444d4b5efa74b1018b456fb9"
 
 #: SHA-256 of obscura.exe to pin the download to, or "" while nobody has been
 #: able to read one from a real release. See "INSTALL AND CHECK" above.
@@ -776,9 +781,10 @@ def stop_all(why: str = "switched off") -> None:
 
 def install_line() -> str:
     """The ONE PowerShell line the owner pastes. Downloads the archive of the ONE
-    named release (RELEASE_TAG), unpacks it into Jarvis's own folder, and PRINTS
-    the SHA-256 of the archive and of obscura.exe for the owner to compare with
-    the release page. It does NOT run the program and does not tell Jarvis to
+    named release (RELEASE_TAG), unpacks it into Jarvis's own folder, and COMPARES
+    the archive's SHA-256 with RELEASE_ZIP_SHA256 (the value the release page
+    lists) BEFORE unpacking - a different file is deleted, not unpacked - and
+    PRINTS both checksums. It does NOT run the program and does not tell Jarvis to
     trust it: the owner compares first, then runs the check command the line
     prints (`--accept-new` only when replacing a file checked before). Jarvis's
     backend never downloads it. One line, kept to what Windows PowerShell 5.1
@@ -793,14 +799,18 @@ def install_line() -> str:
         f"$d = '{dest}'; New-Item -ItemType Directory -Force -Path $d | Out-Null; "
         f"Invoke-WebRequest -ErrorAction Stop -Uri '{DOWNLOAD_URL}' -OutFile \"$d\\obscura.zip\"; "
         "$z = (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.zip\").Hash; "
+        f"$w = '{RELEASE_ZIP_SHA256}'; "
+        "if ($z -ne $w) { Remove-Item -LiteralPath \"$d\\obscura.zip\"; "
+        "throw \"STOP: the download's SHA-256 ($z) is not the one expected ($w). Nothing was unpacked or run.\" }; "
         "Expand-Archive -ErrorAction Stop -Force -LiteralPath \"$d\\obscura.zip\" -DestinationPath $d; "
         "Remove-Item -LiteralPath \"$d\\obscura.zip\"; "
         "$e = (Get-FileHash -Algorithm SHA256 -LiteralPath \"$d\\obscura.exe\").Hash; "
         f"$h = '{here}'; "
         f"Write-Host \"Downloaded Obscura {RELEASE_TAG}. Nothing has been run yet.\"; "
         "Write-Host \"SHA-256 of the zip: $z\"; Write-Host \"SHA-256 of obscura.exe: $e\"; "
-        f"Write-Host \"Compare the zip's checksum with the SHA-256 GitHub shows for that file on {page} . "
-        "If they match, run this second command to check it: "
+        "Write-Host \"The zip matched the checksum this line expected ($w). Compare it ONCE with the "
+        f"SHA-256 GitHub shows for that file on {page} . "
+        "If they are the same, run this second command to check the program: "
         "Set-Location -LiteralPath '$h'; py -3 .\\jarvis_obscura.py --check   "
         "(add --accept-new only if you are replacing a file you checked before)\"")
 

@@ -341,7 +341,7 @@ def t_install_state():
 
 def t_install_line():
     line = OB.install_line()
-    check("the install line is ONE line", "\n" not in line and "\r" not in line and len(line) < 1400)
+    check("the install line is ONE line", "\n" not in line and "\r" not in line and len(line) < 1800)
     import re as _re
     check("it downloads the stealth Windows archive of ONE NAMED release from Obscura's own releases",
           OB.DOWNLOAD_URL in line and line.count("Invoke-WebRequest") == 1
@@ -357,6 +357,17 @@ def t_install_line():
     check("it PRINTS the checksum of the zip and of obscura.exe (Get-FileHash, SHA256), for the owner to compare",
           line.count("Get-FileHash -Algorithm SHA256") == 2 and "SHA-256 of the zip" in line
           and "SHA-256 of obscura.exe" in line and "Compare" in line)
+    import re as _re2
+    check("the expected checksum is a real SHA-256 (64 hex letters) and is the one in the line, once",
+          _re2.fullmatch(r"[0-9a-f]{64}", OB.RELEASE_ZIP_SHA256) is not None
+          and line.count(OB.RELEASE_ZIP_SHA256) == 1)
+    check("the zip is COMPARED with it before anything is unpacked, and a different file is deleted "
+          "and stops the line (throw), never unpacked",
+          "$z -ne $w" in line and line.index("$z -ne $w") < line.index("Expand-Archive")
+          and "throw" in line and line.index("throw") < line.index("Expand-Archive")
+          and line.index("Remove-Item -LiteralPath") < line.index("Expand-Archive"))
+    check("the line still tells the owner to check the expected value once against the release page",
+          "Compare it ONCE with the" in line and OB.RELEASE_TAG in line)
     check("it does NOT run the program: nothing before the printing runs py, the check or the exe",
           "py -3" not in head and "--check" not in head and "--accept-new" not in head
           and "Start-Process" not in line and "& '" not in line and "obscura.exe --" not in line)
