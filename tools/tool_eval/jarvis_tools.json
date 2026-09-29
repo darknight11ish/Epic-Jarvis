@@ -362,6 +362,53 @@
  {
   "type": "function",
   "function": {
+   "name": "tidy_inbox",
+   "description": "Archive, star, mark read or trash emails in the owner's inbox. The owner sees every email on a card first and can undo for 10 minutes. Name which emails. To only read the inbox, use email_check.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "action": {
+      "type": "string",
+      "enum": [
+       "archive",
+       "star",
+       "mark_read",
+       "trash"
+      ]
+     },
+     "from": {
+      "type": "string",
+      "description": "sender name or address"
+     },
+     "subject": {
+      "type": "string"
+     },
+     "words": {
+      "type": "string"
+     },
+     "newsletters": {
+      "type": "boolean",
+      "description": "bulk mail only"
+     },
+     "since_days": {
+      "type": "integer"
+     },
+     "older_than_days": {
+      "type": "integer"
+     },
+     "unread_only": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "action"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "notes_search",
    "description": "Search the owner's own notes (Obsidian or Joplin). Read-only. For facts Jarvis remembers about the owner, use memory_search. For the public web, use web_search.",
    "parameters": {
