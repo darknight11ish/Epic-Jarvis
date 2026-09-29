@@ -189,6 +189,8 @@ export function animalVoicesView(status) {
       semitones: a.semitones,
       pace: a.pace,
       changed: yes(a.changed),
+      // Its answer to the one-time question: "use", "keep" or null.
+      answer: a.answer === "use" || a.answer === "keep" ? a.answer : null,
       line: String(a.line || ""),
     }));
   if (!animals.length || !voices.length || !paces.length) {
