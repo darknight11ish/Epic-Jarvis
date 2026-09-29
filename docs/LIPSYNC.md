@@ -493,7 +493,8 @@ no block, and the apps do exactly what the sections above describe.
 `say()` only:
 
 1. **Words to speech sounds**, exactly as sherpa-onnx makes them for
-   Kokoro v0.19: espeak-ng (the espeak-ng library the `espeakng-loader`
+   Kokoro v0.19 (Kokoro v1.0 reads the text slightly differently first -
+   see "Kokoro v1.0: the same exact timing" below): espeak-ng (the espeak-ng library the `espeakng-loader`
    package ships - it has Windows builds; piper-phonemize, which sherpa-onnx
    uses inside, has none), reading the Kokoro download's own
    `espeak-ng-data` folder, clause by clause, the way piper-phonemize
@@ -508,7 +509,8 @@ no block, and the apps do exactly what the sections above describe.
 2. **Sounds to Kokoro's token numbers** (`tokens.txt`), split and padded as
    sherpa-onnx does (a 0 at each end, a space after every ".", at most 510
    a piece).
-3. **The durations model** (onnxruntime, one thread) with the same voice
+3. **The durations model** (onnxruntime, one thread; for v1.0 cut from its
+   own second output instead, below) with the same voice
    style row and speed: frames per sound, 1 frame = 600 samples = 25 ms.
    `model.durations.onnx` is Kokoro's graph walked backwards from node
    `/Cast_output_0` (Round -> Clip -> Cast, checked by the one-time step),
@@ -659,6 +661,121 @@ two Kokoro frames, not a share of each sound - and m/b/p energy troughs
   straight after a pause (the silence gate); the biggest one-frame step is
   0.326 at an f/v release, just over the 0.3 the tests allow elsewhere.
 
+### Kokoro v1.0: the same exact timing (2026-09-29)
+
+The owner's decision, 2026-09-29, when asked about the gap the v1.0 upgrade
+left ("the mouths use the analysed-from-sound fallback"): **"Build exact
+timing."** Built the same day. This is what was found and what was built.
+
+**In plain words.** The new voice pack (Kokoro v1.0) also works out how long
+each speech sound lasts before it speaks - and, unlike the old pack, its
+model file already carries those numbers as a second answer next to the
+sound. So the one-time step (`py -3 .\jarvis_mouth.py --prepare`, the same
+one line as before) cuts out just that part into a small file
+(`model.durations.onnx`, 56 MB, beside `model.onnx`) exactly as it did for
+the old pack, and the animals' mouths follow Kokoro's own timing again.
+The voice pack itself is only read. With no such file, or a file that does
+not belong to the pack that is installed, nothing changes: the apps work the
+mouth out from the sound, as before.
+
+**What the v1.0 model has (read off the real file, 2026-09-29, the pinned
+`kokoro-multi-lang-v1_0` download, `model.onnx` 325,560,556 bytes):**
+
+- Two declared outputs: `audio` (float) and a second one, int64, called
+  `onnx::Shape_3411` - an auto-made name, so it is never looked for by name.
+  It is `Squeeze( Cast_int64( Clip( Round( ReduceSum( Sigmoid( duration_proj )) / speed ))))`
+  - the same Round -> Clip -> Cast chain the old pack's `/Cast_output_0`
+  had, one Squeeze later. Inputs are the same three: `tokens`, `style`,
+  `speed`. The old pack's name `/Cast_output_0` also exists in v1.0 but is
+  something else (a Cast of a ReduceMax), which is why the old one-time step
+  refused v1.0: it followed the name into the wrong chain.
+- **It is the lengths, measured:** for "Hello, my name is Jarvis." the
+  output sums to 94 frames = 94 x 600 = 56,400 samples, and sherpa-onnx's
+  sound for that sentence is 56,400 samples. The slice (2,026 nodes, 45
+  weights, no noise nodes) gave exactly the model's own second output in
+  every test input, and takes 30-80 ms a sentence on one thread.
+- **What differs is the reading of the words**, not the timing: sherpa-onnx
+  reads v1.0 text with its own front end (`KokoroMultiLangLexicon`, read in
+  sherpa-onnx v1.13.8's source), which - with a `lang` and no lexicon, as
+  Jarvis runs it - (1) changes every ":" to ",", every wide Chinese mark to
+  its plain twin and every run of white space to one space (so a blank line
+  no longer ends a sentence), (2) sends the whole text to espeak-ng as
+  before, but (3) **joins a short sentence (10 sounds or fewer) onto the
+  one before it** when the two stay under 50 tokens (or the short one is
+  under 3 sounds), and (4) reads Chinese from the pack's own lexicon.
+  `jarvis_mouth.multilang_pieces()` copies (1)-(3); a text with Chinese gets
+  no mouth block (the length check would refuse it anyway). British voices
+  are read with `en-gb-x-rp` (`jarvis_kokoro.accent_lang`) - handed both to
+  the timing and to sherpa-onnx as the per-call language, as `_kokoro_generate`
+  does.
+- **The pin.** The one-time step makes a v1.0 copy only from the one file
+  `jarvis_kokoro.V1_MODEL` names (size and SHA-256, read off the pinned
+  download), and the copy records that fingerprint; `_Model` refuses a copy
+  that does not carry it, and `ready()` reports "made from a different voice
+  model" in plain words (an old copy left beside a new pack, or the other way
+  round, is never paired). It also runs the copy against the full model on
+  three inputs and keeps it only if the answers are equal.
+- **The sound's lead.** Kokoro's sound comes ahead of its plan (above,
+  `SOUND_LEAD`, 50 ms). Re-measured for v1.0 with the same method on both
+  packs - slide the planned "s / sh / f / th / z / zh" stretches against the
+  4-10 kHz energy of the raw sound and take the best-matching shift, per
+  sentence: **v0.19 -70 ms, v1.0 -70 ms** (median over 102 sentence pieces
+  each, three voices each; quarter to three-quarter range -89 to -65 and
+  -80 to -60). The same, so the same 50 ms is used for both.
+
+**Checked with the real v1.0 model** (dev container, sherpa-onnx 1.13.8, the
+pinned pack, 2026-09-29):
+
+- **532 of 532** English sentences got their mouth - every piece sherpa-onnx
+  spoke was exactly as long as the timing said, to the sample: 268 texts
+  (all 239 lines of the corpus fixture `backend/fixtures/mouth_corpus`, its
+  12 awkward "speak" texts and 17 more: "Ok", "?", ".", "One: two: three.",
+  runs of spaces, a blank line, a colon, ellipses, "10:30 a.m.", ten short
+  sentences in a row), each in an American voice (`af_heart`) and a British
+  one (`bm_george`, `en-gb-x-rp`). The 4 that got no mouth are the two texts
+  with Chinese characters, in both accents, by design.
+- Also exact, in `test_mouth.py` with `JARVIS_KOKORO_V1_DIR` (70 of 70): 5
+  voices x 14 texts - a deeper and a higher animal pitch, a fast and a slow
+  pace, two British voices; four of the texts are bare punctuation (".",
+  "(", "?!", "..."), which sherpa-onnx speaks on its own. Also exact, run by
+  hand: a 764-character sentence with no full stop (split at
+  510), a 3,149-character answer of 40 sentences, 150 short sentences in a
+  row, and a one-character sentence after a very long one.
+- **The old pack is unchanged:** the same code run on the real v0.19 pack
+  gave a `model.durations.onnx` **byte-identical** to the one the old code
+  made, the same timing for 36 sentence/voice pairs, and a mouth for all 36.
+- **Time:** the one-time step took 9.5 s here (it reads the 326 MB model,
+  fingerprints it and checks the copy against it). Timing a sentence is
+  30-80 ms on one thread against about 1.4 s for the sound.
+
+**Which voices file, and the robot (2026-09-29, folded in with the voices saved
+by name).** The timing copy belongs to the MODEL file (`model.onnx`, by size
+and fingerprint), never to one voices file. The style of each voice - the one
+input the timing needs besides the words - is read from whatever voices file
+Jarvis's voice engine is told to use (`jarvis_speech._sherpa_tts_paths()["voices"]`,
+the same paths `kokoro_speak` hands both sherpa-onnx and `jarvis_mouth`): the
+pack's `voices.bin`, or a larger file with blended voices added
+(`voices-jarvis.bin`) - the same layout, more rows. Each file is loaded as
+itself and read again if it is written again in place; a voice number the
+selected file has no row for gets no timing at all (never voice 0's), so that
+sentence is spoken with no mouth block. Nothing else changes: with no
+`model.durations.onnx`, a copy made for another model, or a voices file that
+is missing, `ready()` says so in words and every mouth is analysed from the
+sound, exactly as before. The robot (the fifth face, `bf_emma`, number 21 on
+v1.0, British voice, +2 semitones) is asked for its timing like the four
+animals - and its eyes pulse from the same track; `test_mouth.py` runs it
+(and a blended-voice number) through `say()` and, with the real pack, through
+the real model (`V1_VOICES["robot"]`; `JARVIS_KOKORO_VOICES` points the real
+run at another voices file). No sound, no mouth movement: a call that makes
+no sound gets no mouth block.
+
+**Not checked, said plainly:** nothing was run on Windows or the owner's PC
+(see "Limits"); nobody has looked at a v1.0 animal talking - only the
+numbers above; on Windows sherpa-onnx's front end converts text to wide
+characters, and whether an emoji or other rare character is handled the
+same there was not seen - any difference is caught by the same length check
+and gives that sentence no mouth, never a wrong one.
+
 ### Limits, said plainly
 
 - **Not run on Windows or on the owner's PC.** The Windows espeakng-loader
@@ -666,13 +783,13 @@ two Kokoro frames, not a share of each sound - and m/b/p energy troughs
   calls used and needs the Microsoft C++ runtime (`MSVCP140.dll`), which
   onnxruntime brings into the process first. If it cannot load, status
   says so and nothing else changes.
-- **Kokoro v0.19 only** (2026-09-29): with the v1.0 pack installed
-  (`docs/JARVIS-API.md` section 94) `jarvis_speech` does not ask
-  `jarvis_mouth` at all - `--prepare` builds its timing from the v0.19 model's
-  graph and refuses v1.0's, in words - so every mouth is analysed from the
-  sound, as for a custom voice. Timing for v1.0 is not built.
-- **Only the built-in Kokoro voice** (kokoro-en-v0_19, the model sherpa-onnx
-  speaks here). Custom voices and the "One moment." clip keep the sound
+- **Kokoro v0.19 and v1.0** (v1.0 since 2026-09-29, above): each needs its
+  own one-time step (`--prepare`) after the pack is installed - the copy
+  made for one pack is refused beside the other (`ready()` says so). Until
+  then, and for any sentence in doubt, the mouth is analysed from the sound.
+  A pack other than these two (a v1.1, say) is refused by the step.
+- **Only the built-in Kokoro voice** (the model sherpa-onnx speaks here).
+  Custom voices and the "One moment." clip keep the sound
   analysis (the "One moment." clip is made by jarvis_voice_flow.py, which
   was not changed).
 - **The timing is Kokoro's plan, not a measurement of the lips.** The
@@ -684,9 +801,16 @@ two Kokoro frames, not a share of each sound - and m/b/p energy troughs
 ### Tests
 
 `backend/test_mouth.py` (see "Tests" above); with `JARVIS_KOKORO_DIR` it
-also runs the real model in all four voices. The scratch scripts that made
+also runs the real model in all four voices, and with
+`JARVIS_KOKORO_V1_DIR` (an unpacked `kokoro-multi-lang-v1_0` folder) the same
+on v1.0 - plus, with no model at all, the v1.0 front end's pieces, the pin,
+and the one-time step on a toy model shaped like v1.0's graph (a decoy
+`/Cast_output_0` and the lengths as a declared second output).
+`backend/test_kokoro.py` checks `kokoro_speak` asks for the mouth on either
+pack. The scratch scripts that made
 the numbers above (the 144-sentence exactness run with the seeded copy, the
-comparison, the 48,424-line espeak check) were run in the dev container and
+comparison, the 48,424-line espeak check, and for v1.0 the 536-run stress
+test and the lead measurement) were run in the dev container and
 are not committed.
 
 ## Each animal's own voice (2026-09-28)

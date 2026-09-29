@@ -14754,12 +14754,28 @@ anything: the owner pastes the line.
 
 ### 94.6 Said plainly
 
-- **The animals' mouths fall back to "analysed from the sound" on v1.0.**
-  `jarvis_mouth`'s timing is built from the v0.19 model's own graph;
-  `jarvis_speech.kokoro_speak` does not ask it while v1.0 is installed.
-- **Nobody has listened** to a v1.0 voice or the British accent. The four
-  animals keep their four names; pitch and pace were measured to be close
-  (docs/CRITTERS.md), not judged by ear.
+- **The animals' mouths follow Kokoro's own timing on v1.0 too, once the
+  one-time step is done** (owner, 2026-09-29: "Build exact timing"). Kokoro
+  v1.0's model already carries the per-sound lengths as a second output;
+  `py -3 .\jarvis_mouth.py --prepare` (the same one line as before, run again
+  after the pack is installed) cuts them out into `model.durations.onnx`
+  beside `model.onnx`, only from the one pinned model file
+  (`jarvis_kokoro.V1_MODEL`), and `kokoro_speak` asks for the mouth on either
+  pack, reading v1.0's text the way sherpa-onnx does and handing a British
+  voice's accent on. Without the step, with a copy made for the other pack,
+  or for any sentence whose length is not exact to the sample, the mouth is
+  "analysed from the sound" as before (docs/LIPSYNC.md, "Kokoro v1.0: the same
+  exact timing"). Nothing in the API changed: same `jmth` chunk, same
+  `tts.mouth`.
+- **Nobody has listened** to a v1.0 voice or the British accent. The five
+  faces' voices keep their names (the robot is `bf_emma`, number 21 on v1.0,
+  and gets exact timing like the four animals); pitch and pace were measured
+  to be close (docs/CRITTERS.md), not judged by ear.
+- **The timing does not depend on one voices file**: it reads the voice styles
+  from whichever voices file the voice engine uses (the pack's `voices.bin`, or
+  a larger file with blended voices added, section 94.7) and gives a voice number that file
+  has no row for no mouth. The
+  mouth side is in docs/LIPSYNC.md, "Which voices file, and the robot".
 - **Blended voices are built** (the studio's "Ashby"/"Clara", section 94.7),
   but only in a copy of `voices.bin` that one more owner-run line makes.
 

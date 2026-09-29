@@ -76,6 +76,17 @@ V1_PACK = {
     "sha256": "c5f7e2d2caf082bc1d20fb70334a61d99d20b484500aad32e7cf84c128ea3298",
 }
 
+#: The voice model INSIDE V1_PACK (`model.onnx` in the folder above), read
+#: off the file that the pinned download unpacks to (2026-09-29): 325,560,556
+#: bytes. jarvis_mouth.py's one-time step (`--prepare`) makes the animals'
+#: exact mouth timing from this file and refuses any other, so the timing is
+#: only ever paired with the model it was checked against.
+V1_MODEL = {
+    "file": "model.onnx",
+    "bytes": 325_560_556,
+    "sha256": "b40f62b166ac8164b0627ef48a0b358eda0985e272fb03ef5252e7206305da11",
+}
+
 #: The pack Jarvis shipped with (its own line stays in backend/README.md).
 V019_PACK = {
     "name": "Kokoro v0.19",

@@ -1639,6 +1639,12 @@ animal choice saved as either goes back to the animal's own voice
 (`jarvis_kokoro.NEVER_FOR_ANIMALS`). British voices (`bf_*`, `bm_*`) are asked
 for British English on v1.0 only.
 
+**The mouths on v1.0** follow Kokoro's own timing too (2026-09-29, the owner's
+"Build exact timing"), once the one-time step has been run again for the new
+pack (`backend/README.md`, "Mouths that match the words"); until then they are
+worked out from the sound, as for any custom voice. Nothing about the animals
+themselves changes (`docs/LIPSYNC.md`, "Kokoro v1.0: the same exact timing").
+
 ### On a PC without a working graphics card
 
 If WebGL is blocked, or the graphics card cannot keep up, the desktop draws
