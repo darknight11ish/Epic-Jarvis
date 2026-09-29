@@ -89,8 +89,13 @@ def decode_png(data: bytes) -> Optional[tuple]:
         if chans is None or (ctype == 3 and len(plte) < 3):
             return None
         stride = w * chans
-        raw = zlib.decompress(b"".join(idat))
-        if len(raw) < (stride + 1) * h:
+        expected = (stride + 1) * h
+        # Unpack at most what the header says the picture holds (plus one byte to
+        # see an excess): a small file that inflates to gigabytes is refused, not
+        # unpacked (a "PNG bomb").
+        d = zlib.decompressobj()
+        raw = d.decompress(b"".join(idat), expected + 1)
+        if len(raw) != expected:
             return None
         rows = _unfilter(raw, w, h, chans)
         if rows is None:

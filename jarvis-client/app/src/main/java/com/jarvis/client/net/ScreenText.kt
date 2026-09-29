@@ -63,7 +63,9 @@ object ScreenText {
     /** What one flattening found: the words, how much was cut, how many boxes were skipped. */
     data class Words(val text: String, val leftOut: Int, val skippedPasswordBoxes: Int)
 
-    private val WORDY = Regex("(?i)(pass\\s?word|passcode|passwd|\\bcvv2?\\b|\\bcvc2?\\b|security\\s?code|\\bpin\\b|one[- ]time)")
+    // The short words are bounded by "not a letter or digit" rather than \\b: Java
+    // counts "_" as a word character, so \\bpin\\b missed "pin_code" and "card_cvv".
+    private val WORDY = Regex("(?i)(pass\\s?word|passcode|passwd|(?<![a-z0-9])cvv2?(?![a-z0-9])|(?<![a-z0-9])cvc2?(?![a-z0-9])|security\\s?code|(?<![a-z0-9])pin(?![a-z0-9])|one[-_ ]?time)")
 
     /** Only dots, stars, bullets and spaces: a masked box. */
     private val MASKED = Regex("^[\\s\\u2022\\u25CF\\u25CB\\u00B7*.\\u2217\\u2731-]+$")

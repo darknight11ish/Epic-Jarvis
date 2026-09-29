@@ -356,7 +356,7 @@ GROUPS = (
     # Jarvis Live (the owner's decision of 2026-09-28; jarvis_live.py): the
     # page promises every action, and starting Live is one (the review of
     # 2026-09-28). Decided in the code: no card, ever.
-    ("Talking with Jarvis", ["fixed:live"]),
+    ("Talking with Jarvis", ["fixed:live", "fixed:screen"]),
     ("Jarvis's own settings, memory and voice", [
         "change_own_config", "stop_asking_before_every_web_search", "learning_enable",
         "learning_auto_enable", "learning_sensitive_enable", "history_enable",
@@ -410,6 +410,17 @@ FIXED = {
                    "Your own tap or words (\"Hey Jarvis, let's talk\"). Every sentence is still "
                    "checked for your voice, and a card that comes up during Live still waits "
                    "for your tap. How far Live is trusted is a Voice setting."),
+    # "Look at this" and "Watch with me" (the owner's decision of 2026-09-28;
+    # jarvis_screen.py): the page promises every action. Decided in the code: no
+    # card - only the owner's own act on this PC, with a sign on screen. Removing
+    # an app from the "Never look at" list is a card (change_own_config).
+    "fixed:screen": ("Look at your screen (\"Look at this\") or watch with you (\"Watch with me\")",
+                     SAYS_NO_CARD,
+                     "Your own key or words, on this PC only. \"Watch with me\" shows a "
+                     "\"Jarvis is watching\" sign the whole time, pauses on password boxes and on apps "
+                     "you exclude, and Stop or \"stop everything\" ends it at once. What it reads "
+                     "counts as outside text and is never saved. Taking an app off the \"Never look "
+                     "at\" list asks with a card."),
     # "Solve it here" (the owner's decision of 2026-09-28; jarvis_handoff.py):
     # the page promises every action. Decided in the code: no card - only
     # the owner's own taps and typing pass, only while Jarvis is paused there.

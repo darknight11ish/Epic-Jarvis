@@ -161,7 +161,8 @@ def t_words():
     check("a secret alone on a line hides that line, and only that line",
           r.text == "one two\n[hidden]\nthree", r.text)
     r = hidden("Password: hunter2 and Password: swordfish")
-    check("two secrets on one line are two runs", r.text.count("[hidden]") == 2, r.text)
+    check("two secrets on one line are both hidden (a passphrase label hides the rest of its line)",
+          "hunter2" not in r.text and "swordfish" not in r.text and "[hidden]" in r.text, r.text)
     r = hidden("a " + TOKEN + " " + TOKEN + " b")
     check("neighbouring secret words are one run, so one box", r.text == "a [hidden] b"
           and r.hidden == 1 and len(r.boxes) == 1, r.text)
@@ -309,8 +310,33 @@ def t_hygiene():
                                       "from spacy")))
 
 
+def t_screen_audit_fixes():
+    r = hidden("Card 2221 0000 0000 0009")
+    check("a Mastercard 2-series number is hidden", "2221" not in r.text and r.hidden == 1, r.text)
+    r = hidden("Password:", "hunter2")
+    check("a password on the line below its label is hidden", "hunter2" not in r.text, r.text)
+    r = hidden("Password: correct horse battery staple")
+    check("a passphrase is hidden whole, not just its first word",
+          all(w not in r.text for w in ("correct", "horse", "battery", "staple")), r.text)
+    for line, secret in (("PIN 4821", "4821"), ("CVV: 123", "123"),
+                         ("Your verification code is 482913", "482913"),
+                         ("Your password is hunter22", "hunter22")):
+        r = hidden(line)
+        check(f"{line!r}: the value is hidden", secret not in r.text, r.text)
+    for line in ("Password: required", "Enter password:", "I have 3 pins", "Password: ****"):
+        r = hidden(line)
+        check(f"{line!r}: nothing to hide, left alone", r.hidden == 0, r.text)
+    import time
+    t0 = time.monotonic()
+    try:
+        S.redact(screen("a" * 9000))
+        check("a 9,000-character unbroken run is 'cannot check'", False)
+    except S.Unchecked:
+        check("a 9,000-character unbroken run is 'cannot check', at once", time.monotonic() - t0 < 1.0)
+
+
 def main():
-    for fn in (t_found, t_left_alone, t_lines, t_words, t_boxes, t_input_shapes, t_text,
+    for fn in (t_screen_audit_fixes, t_found, t_left_alone, t_lines, t_words, t_boxes, t_input_shapes, t_text,
                t_fail_closed, t_many, t_hygiene):
         try:
             fn()

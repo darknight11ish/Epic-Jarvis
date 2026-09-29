@@ -697,7 +697,8 @@ testers, scouts and integration scouts; `.claude/agents/`):
   3. **one pull request to `main`** with everything so far (the owner
   merges); 4. the voice upgrade (Kokoro v1.0, "Hear it" samples);
   5. finishing the screen feature ("Look at this" and "Watch with me"
-  working on the PC and phone); 6. inbox tidy by voice, **Undo for 10
+  working on the PC and phone) - **built (PR #34, 2026-09-29)**, with the
+  limits in `docs/ARCHITECTURE.md` section 8; 6. inbox tidy by voice, **Undo for 10
   minutes**; 7. talk-to-type on the PC, **held Right Ctrl** by default
   (changeable in Settings); 8. QR pairing with per-device keys; 9. the
   sneaky-instruction detector test.
@@ -740,7 +741,9 @@ testers, scouts and integration scouts; `.claude/agents/`):
   saved. What Jarvis sees is outside text. Screen images stay on the owner's
   own devices (the phone sends them only to the PC, over Tailscale/Meshnet).
   Full picture understanding needs the 12 GB card; with one card, Jarvis
-  reads the screen's text only. **Not** always-on watching with a history
+  reads the screen's text only (**changed 2026-09-29: "picture mode", a slow
+  picture reader on the processor, is built and off by default - see the
+  2026-09-29 screen block near the end of this file**). **Not** always-on watching with a history
   (Recall-style) - the owner declined it. Designed in
   `docs/SCREEN-DESIGN.md` before it is built.
   Owner's answers to the design (2026-09-28): **the question and Jarvis's

@@ -483,6 +483,22 @@ def t_both_apps_say_the_same_sentence():
           line == "Secrets in pictures you attach are covered with black boxes before Jarvis looks.")
 
 
+def t_a_png_that_inflates_far_past_its_header_is_refused():
+    import binascii, struct, zlib
+
+    def chunk(k, b):
+        return struct.pack(">I", len(b)) + k + b + struct.pack(">I", binascii.crc32(k + b) & 0xffffffff)
+
+    def png(w, h, raw):
+        return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+                + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b""))
+    fine = png(2, 2, (b"\0" + b"\x10" * 6) * 2)
+    check("a well-formed PNG still decodes", PIC.decode_png(fine) is not None)
+    bomb = png(10, 10, b"\0" * 20_000_000)         # a 10x10 header over 20 MB of picture data
+    check("a PNG whose data inflates far past its header is refused, not unpacked",
+          PIC.decode_png(bomb) is None)
+
+
 def t_the_module_is_shipped():
     import _where
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")

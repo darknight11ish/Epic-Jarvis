@@ -507,9 +507,9 @@ def t_a_voice_that_sounds_like_the_owner_is_never_used():
     OWNER["ok"] = False
     view = V.speaker_view()
     check("new prints: the saved voice is re-checked in the background, once, not on the GET "
-          "itself - until then it still speaks",
-          len(SPAWNED) == 1 and not CHECKED and V.speaker() == 44
-          and view["choice"] == "mix_clara")
+          "itself - until then the pack's default speaks (not checked is not fine)",
+          len(SPAWNED) == 1 and not CHECKED and V.speaker() == 3
+          and view["choice"] == "af_heart" and "being checked" in view["note"], view)
     V.speaker_view()
     check("asking again while it is queued does not queue another", len(SPAWNED) == 1)
     SPAWNED.pop()()
@@ -687,7 +687,10 @@ def t_a_saved_choice_that_cannot_be_spoken_is_never_a_wrong_voice():
           V.speaker() == 0 and "needs the newer voice pack" in view["note"], view)
     reset("v1", "ready")
     V._write_state(speaker="mix_ashby")
-    check("made and loaded: it is Ashby, and the saved name is the one in the file",
+    check("made and loaded but NOT checked yet (a restart): the default speaks, and the check is queued",
+          V.speaker() == 3 and V.speaker_name() == "af_heart")
+    V._BLEND_CHECKS[V._blend_key("mix_ashby")] = {"ok": True}
+    check("made, loaded and checked: it is Ashby, and the saved name is the one in the file",
           V.speaker() == 53 and json.loads(V._state_path().read_text())["speaker"] == "mix_ashby")
     reset("v1", "ready")
     V._write_state(speaker="em_santa")

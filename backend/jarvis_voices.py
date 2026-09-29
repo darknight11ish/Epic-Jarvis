@@ -455,6 +455,15 @@ def _builtin_now(kind: str) -> dict:
             # owner's own voice: never spoken. The pack's default speaks.
             return {"name": K.default_name(kind), "sid": K.default_sid(kind), "chosen": saved,
                     "fell_back": True, "custom": False, "refused": True}
+        if got in K.MIX and blend_verdict(got) is None:
+            # No kept check for the current voice prints (a restart, or the prints
+            # changed, or a check that could not run): "not checked" is not "fine".
+            # The pack's default speaks, and the check is started in the background
+            # so the blend is used once it has passed (the promise above the
+            # blend checks: the voice is not used until it can be checked).
+            _recheck_saved_blend(kind)
+            return {"name": K.default_name(kind), "sid": K.default_sid(kind), "chosen": saved,
+                    "fell_back": True, "custom": False, "unchecked": True}
         if got is not None:
             return {"name": got, "sid": K.sid_of(kind, got), "chosen": saved,
                     "fell_back": False, "custom": False}
@@ -563,6 +572,10 @@ def speaker_view() -> dict:
         if now.get("refused"):
             why = (blend_verdict(now["chosen"]) or {}).get("why", "")
             note = f"{why} {K.label_of(now['name'])} speaks instead.".strip()
+        elif now.get("unchecked"):
+            note = (f"You chose {chose}. It is being checked against your voice print first, "
+                    f"so it does not sound like you. Until that is done, "
+                    f"{K.label_of(now['name'])} speaks.")
         elif now["chosen"] in K.MIX and K.family(kind) == K.V1:
             made = K.blend_state(_voices_file()) == "ready"
             note = (f"You chose {chose}, which Jarvis has not loaded yet (see below). Until it "

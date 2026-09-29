@@ -1009,7 +1009,7 @@ def _newest_user(messages):
     return None
 
 
-def screen_mark(messages) -> str:
+def mark_of_messages(messages) -> str:
     """The `screen` mark on the newest user message, or "" - read off the
     request as the app sent it (the field is stripped before the model)."""
     i = _newest_user(messages)
@@ -1128,11 +1128,22 @@ def with_screen(messages: list, mark: str = "", *, engine=None,
                               "text": SCREEN_TEXT_SLOW if got.get("slow") else SCREEN_TEXT_EXPIRED})
         extra = _phone_picture_lines(pic_jobs)     # picture mode, when the owner turned it on
         if extra:
+            # The picture reader's words come from the screen too: the turn is a
+            # screen read (outside text) even when OCR found no words of its own.
+            info["read"] = True
             info["text"] = (info["text"] + "\n\n" + extra).strip()
             added.append({"type": "text", "text": extra})
             info["picture_said"] = _phone_picture_said(pic_jobs)
     except Exception:
-        return list(messages or []), {"read": False, "text": "", "note": "", "mode": ""}
+        # Fail closed: the screen's own parts (the phone's screen_text, and the
+        # pictures of a phone screen read) are dropped, never passed on raw.
+        safe = [p for p in parts
+                if not (isinstance(p, dict) and p.get("type") == "screen_text")
+                and not (mark == "phone" and _is_image(p))]
+        out = list(messages or [])
+        if idx < len(out):
+            out[idx] = dict(out[idx], content=safe)
+        return out, {"read": False, "text": "", "note": "", "mode": ""}
     msgs[idx] = dict(msgs[idx], content=kept + added)
     return msgs, info
 
@@ -1286,8 +1297,16 @@ class Screen:
         slept (its own checks stopped for SLEEP_GAP_S), so only it ends a
         session for that."""
         changed = False
+        need_snap = False
         with self._lock:
+            # A held look is dropped when its time is up, whether or not anyone asks
+            # (the words are not kept in memory, or shown as held, past FOLLOW_UP_S).
+            if self._look is not None and self.clock() - self._look.at > FOLLOW_UP_S:
+                self._look = None
+                changed = True
             if self.state not in (WATCHING, PAUSED):
+                if changed:
+                    self._emit()
                 return
             now = self.clock()
             if loop and self.last_tick and now - self.last_tick > SLEEP_GAP_S:
@@ -1298,19 +1317,30 @@ class Screen:
                 changed = True
             else:
                 self.last_tick = now
-                snap = self._snapshot()
-                why = pause_reason(snap, self.never)
-                if why == "lock_screen":
-                    self._end("locked")
-                    changed = True
-                else:
-                    new_state = PAUSED if why else WATCHING
-                    if new_state != self.state or why != self.pause:
-                        self.state, self.pause = new_state, why
+                need_snap = True
+            never = self.never
+        why = None
+        if need_snap:
+            # Reading Windows (UI Automation, a browser's address box) can take
+            # seconds, or hang on a frozen program: it is done OUTSIDE the lock,
+            # so Stop and the status never wait behind it.
+            snap = self._snapshot()
+            why = pause_reason(snap, never)
+            with self._lock:
+                if self.state in (WATCHING, PAUSED):     # not stopped while reading
+                    now = self.clock()
+                    if why == "lock_screen":
+                        self._end("locked")
                         changed = True
-                    if not self.warned and self.ends_at - now <= WARN_BEFORE_S:
-                        self.warned = True
-                        changed = True
+                    else:
+                        new_state = PAUSED if why else WATCHING
+                        if new_state != self.state or why != self.pause:
+                            self.state, self.pause = new_state, why
+                            changed = True
+                        if not self.warned and self.ends_at - now <= WARN_BEFORE_S:
+                            self.warned = True
+                            changed = True
+        with self._lock:
             ended = self.state == ENDED
         if changed:
             if ended:

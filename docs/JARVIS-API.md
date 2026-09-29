@@ -15435,6 +15435,17 @@ The two routes `backend/screen.patch` installs (`jarvis_screen.install`), for a 
 No verb answers with a word from the screen, a program, a site or a title. The phone reads `GET /api/screen` and sends only `stop`; it never sends `start` or `look`, and the PC would refuse it if it did. Its own looks travel inside `POST /api/chat` (62.6), not through these routes. The event `screen_watch` carries the status and nothing more.
 
 
+### 96.0 Known limits found by the 2026-09-29 audit (kept, not fixed)
+
+Written down so nobody has to rediscover them:
+
+- **A `screen: "look"` mark is honoured from any paired device.** Starting, asking and extending are PC-only, but the chat turn that USES a held look does not check who sent it. The apps never send the mark from the phone; a paired device that did would read the PC's held look (and use it up). Fixing it means the chat route stripping the mark from a non-local request (a patch), not yet done.
+- **The black-out mask does not unwrap Store (UWP) apps' real program names** (`jarvis_screen_win.py _exe_of_hwnd`; the front-window pause check in `jarvis_front.py` does). A Store app on the Never look at list that sits beside the picture may not be painted over. Windows-only code, not changed without a Windows machine.
+- **Session timing uses the wall clock** (`time.time`), so a clock set back can lengthen a session; the sleep check needs a jump forward. Left alone: a monotonic clock may not count time asleep on Windows, which the "PC slept" check relies on.
+- **A bare "Hey Jarvis" takes a look before the voice check** (`voice.rs ask_blocking`): with Watch on, the PC reads the screen's words into memory (nothing leaves the PC).
+- **The Never look at list stays "broken" until a restart** after one failed read; every look is refused meanwhile (the safe direction).
+- **Picture cleaning paints over secrets only.** It does not strip photo metadata (GPS, embedded thumbnails); a picture with nothing to hide goes on as it came. It never leaves the PC.
+
 ### 96.1 Picture mode: a slow picture reader on the processor (added 2026-09-29)
 
 The owner's decision (`CLAUDE.md`, 2026-09-29: "add it as a feature that can be enabled or disabled"). With ONE graphics card, "Look at this" and "Watch with me" read only the WORDS on the screen (section 62). This is an optional, **slow** extra: a small picture model - **MiniCPM-V 4.6** (OpenBMB, 1.3 B parameters, Apache-2.0) - that runs on the PC's **processor**, so it uses no graphics memory and the everyday chat model on the 8 GB card is not disturbed. It reverses the earlier "one card reads the screen's words only"; the owner chose it knowingly. Backend: `backend/jarvis_screen_picture.py` (a whole new module), the routes in `jarvis_screen.py`, the gate lines in `screen-picture.patch`. The camera, Live pictures and the two-card "Pictures" lane are unchanged and still wait for the 12 GB card.
