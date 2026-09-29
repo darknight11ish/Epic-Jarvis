@@ -316,7 +316,7 @@ await check("Jarvis's built-in voice: the PC's voices BY NAME and words, from ev
     assert.equal(sk.show, true, `${name}: no speaker block`);
     assert.ok(sk.choices.length >= 9, `${name}: ${sk.choices.length} voices`);
     for (const c of sk.choices) {
-      assert.match(c.id, /^[a-z]{2}(_[a-z]+)?$/, `${name}: "${c.id}" is a voice's name, not a number`);
+      assert.match(c.id, /^([a-z]{2}|mix)(_[a-z]+)?$/, `${name}: "${c.id}" is a voice's name, not a number`);
     }
     assert.equal(sk.title, "Jarvis's built-in voice", name);
     noRaw([sk.title, sk.detail, sk.note, ...sk.choices.map((c) => c.label)].join(" "));
@@ -333,7 +333,9 @@ await check("Jarvis's built-in voice: the PC's voices BY NAME and words, from ev
   assert.deepEqual(v1.choices.map((c) => c.id), ["af_heart", "af_bella", "af_nicole", "af_sarah", "am_michael",
     "am_fenrir", "am_puck", "bf_emma", "bf_isabella", "bm_george", "bm_lewis"]);
   assert.equal(v1.choice, "af_heart");
-  assert.equal(v1.note, "");
+  assert.match(v1.note, /^Ashby and Clara, two voices made for Jarvis, are not made yet\. To make them, run the one line /,
+    "the new pack, blends not made yet: the way to make them, in words");
+  assert.ok(v1.choices.every((c) => c.detail === ""), "no plain line on a voice that is not one of the two");
   // The owner's old NUMBER carried over: 9 was George, and the animals' choices moved too.
   const carried = CV.speakerView(V.carried_over);
   assert.equal(carried.choice, "bm_george", "the saved 9 is still George");
@@ -915,6 +917,73 @@ const hearButtons = (page) => page.evaluate(() =>
   [...document.querySelectorAll("#cv-speaker-choices .cv-choice button[data-hear]")].map((b) => b.dataset.hear));
 const hearSays = (page) => text(page, "cv-speaker-status");
 const hearOn = (page, voice) => page.click(`#cv-speaker-choices button[data-hear="${voice}"]`);
+
+/* ── Ashby and Clara: two voices blended for Jarvis (2026-09-29) ────────── */
+
+await check("Ashby and Clara: listed first with the PC's one plain line, a Hear it on each, chosen like any voice", async () => {
+  const st = V.pack_v1_blends;
+  const sk = CV.speakerView(st);
+  assert.deepEqual(sk.choices.map((c) => c.id).slice(0, 3), ["mix_ashby", "mix_clara", "af_heart"]);
+  assert.deepEqual(sk.choices.slice(0, 2).map((c) => c.label), ["Ashby (made for Jarvis)", "Clara (made for Jarvis)"]);
+  assert.match(sk.choices[0].detail, /^A warm British butler, calm and a little slower\./);
+  assert.match(sk.choices[1].detail, /^A warm woman's voice that leans British\./);
+  assert.ok(sk.choices.slice(2).every((c) => c.detail === ""), "only the two carry a line");
+  assert.equal(sk.note, "", "made and loaded: nothing left to say");
+  noRaw([sk.note, ...sk.choices.map((c) => `${c.label} ${c.detail}`)].join(" "));
+  const page = await open(st, { speaker: P("pack_v1_ashby") });
+  const shown = await page.evaluate(() => ({
+    rows: [...document.querySelectorAll("#cv-speaker-choices .cv-choice")].map((w) => ({
+      id: w.querySelector("input").value,
+      blurb: w.querySelector(".theme-blurb")?.textContent || "",
+      hear: w.querySelector("button[data-hear]")?.getAttribute("aria-label") || "",
+    })),
+  }));
+  assert.deepEqual(shown.rows.slice(0, 2).map((r) => [r.id, r.hear]),
+    [["mix_ashby", "Hear Ashby (made for Jarvis)"], ["mix_clara", "Hear Clara (made for Jarvis)"]]);
+  assert.equal(shown.rows[0].blurb, sk.choices[0].detail, "the line is under the name");
+  assert.ok(shown.rows.slice(2).every((r) => r.blurb === "" && r.hear), "the others: no line, still a Hear it");
+  await page.click('#cv-speaker-choices input[value="mix_ashby"]');
+  await page.waitForTimeout(200);
+  const sent = await calls(page, "set_voice_speaker");
+  const said = await text(page, "cv-speaker-status");
+  await page.close();
+  assert.deepEqual(sent, [{ speaker: "mix_ashby" }], "chosen by its name, like every voice");
+  assert.equal(said, "Jarvis's built-in voice is now Ashby (made for Jarvis).");
+  assert.doesNotMatch(said, /approv/i, "no card for a built-in voice");
+});
+
+await check("Ashby and Clara: Hear it asks the PC by name; the PC's refusals and the new-pack words are shown as they are", async () => {
+  const page = await open(V.pack_v1_blends, LONG_TRY);
+  await hearOn(page, "mix_clara");
+  await page.waitForTimeout(400);
+  const playing = await hearSays(page);
+  const asked = await calls(page, "hear_voice_sample");
+  const chosen = await calls(page, "set_voice_speaker");
+  await page.close();
+  assert.equal(playing, "Playing Clara (made for Jarvis).");
+  assert.deepEqual(asked, [{ voice: "mix_clara" }]);
+  assert.deepEqual(chosen, [], "Hear it never changes the voice Jarvis uses");
+  // A voice that sounds like the owner: not listed any more, and it says why.
+  const refused = CV.speakerView(V.pack_v1_ashby_refused_listed);
+  assert.deepEqual(refused.choices.slice(0, 2).map((c) => c.id), ["mix_clara", "af_heart"]);
+  assert.equal(refused.note, "Ashby sounds too much like your own voice, so Jarvis will not use it.");
+  assert.equal(CV.voiceReply(P("pack_v1_ashby_refused"), WHERE).text,
+    "Ashby sounds too much like your own voice, so Jarvis will not use it.");
+  assert.equal(CV.voiceReply(P("pack_v1_sample_refused"), WHERE).text,
+    "Ashby sounds too much like your own voice, so Jarvis will not use it.");
+  // The old pack: not listed, and the picker says they need the newer pack.
+  const old = CV.speakerView(V.pack_old);
+  assert.ok(!old.choices.some((c) => c.id.startsWith("mix_")));
+  assert.ok(old.note.endsWith("Ashby and Clara, two voices made for Jarvis, need the newer voice pack (Kokoro v1.0)."), old.note);
+  assert.equal(CV.voiceReply(P("pack_old_ashby"), WHERE).text, "Choose one of the listed voices.");
+  // The animals cannot be given either: their list is the pack's own eleven.
+  for (const st of [V.pack_v1_blends, V.pack_v1_ashby_chosen]) {
+    const ids = CV.animalVoicesView(st).voices.map((v) => v.id);
+    assert.ok(!ids.some((i) => i.startsWith("mix_")), `an animal's voice list has ${ids}`);
+  }
+  const chosen2 = CV.speakerView(V.pack_v1_ashby_chosen);
+  assert.equal(chosen2.choice, "mix_ashby");
+});
 
 await check("Hear it: the same words as the phone, and a button on every voice", async () => {
   assert.equal(CV.HEAR_LABEL, "Hear it");

@@ -79,9 +79,11 @@ export function speedView(status) {
  */
 export function speakerView(status) {
   const sk = obj(obj(status).speaker);
+  // `detail`: the PC's one plain line under a voice's name - only Ashby and
+  // Clara, the two voices made for Jarvis, carry one ("" for every other).
   const choices = (Array.isArray(sk.choices) ? sk.choices : [])
     .filter((c) => c && typeof c.id === "string" && c.id && typeof c.label === "string" && c.label)
-    .map((c) => ({ id: c.id, label: c.label }));
+    .map((c) => ({ id: c.id, label: c.label, detail: typeof c.detail === "string" ? c.detail.trim() : "" }));
   if (!choices.length) {
     return { show: false, choice: "", choices: [], title: "", detail: "", note: "" };
   }

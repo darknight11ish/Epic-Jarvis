@@ -39,6 +39,7 @@ the modules above; `--check` fails when the committed file is stale.
 """
 import array
 import base64
+import hashlib
 import io
 import json
 import math
@@ -601,6 +602,57 @@ def vpost(fn, body, g=None, spawn=run_now, check=not_owner):
     return fn(body, **kw)
 
 
+class Blends:
+    """Ashby and Clara (2026-09-29) installed the way the PC does it, with
+    stand-ins for the two things that cannot travel: the voice pack is a table
+    of random numbers of the real size (not the real 28 MB file), so the two
+    pins are pointed at it and at the file the real `K.build_blends` makes from
+    it (nothing is downloaded), and the owner check is a stand-in with fixed
+    words - "passes" (`owner_ok`) or "sounds like the owner".
+
+        with World(...) as w, Blends(w):
+            ...                     # the copy is beside the pack, loaded
+    """
+
+    OK = {"ok": True, "checked": 1, "fingerprint": "fixture-prints", "score": 0.12, "bar": 0.4,
+          "why": "it does not sound like your voice (its closest score was 0.12; 0.40 or "
+                 "more is refused)"}
+    SOUNDS_LIKE_THE_OWNER = {"ok": False, "refused": "owner_voice",
+                             "fingerprint": "fixture-prints", "score": 0.9, "bar": 0.4,
+                             "why": "this recording sounds too much like YOUR voice"}
+
+    def __init__(self, w, owner_ok=True):
+        self.w, self.owner_ok, self.patches = w, owner_ok, []
+
+    def __enter__(self):
+        tts = self.w.dir / "voice-models" / "tts"
+        tts.mkdir(parents=True, exist_ok=True)
+        table = np.random.default_rng(11).standard_normal((54, 510, 256)).astype(np.float32)
+        (tts / "voices.bin").write_bytes(table.tobytes())
+        made = K.make_blend_table(K._read_table(tts / "voices.bin"))
+        answer = dict(self.OK if self.owner_ok else self.SOUNDS_LIKE_THE_OWNER)
+        self.patches = [
+            mock.patch.object(K, "V1_VOICES_SHA256", K.file_sha256(tts / "voices.bin")),
+            mock.patch.object(K, "BLEND_SHA256", hashlib.sha256(made.tobytes()).hexdigest()),
+            mock.patch.object(VS, "owner_check", lambda samples, margin=None: dict(answer)),
+            mock.patch.object(VS, "prints_fingerprint", lambda: "fixture-prints"),
+            mock.patch.object(VS, "_spawn", lambda fn: None),
+        ]
+        for p in self.patches:
+            p.start()
+        ok, words = K.build_blends(str(tts))
+        assert ok, words
+        K._BLEND_OK.clear()
+        VS._BLEND_CHECKS.clear()
+        return self
+
+    def __exit__(self, *a):
+        for p in reversed(self.patches):
+            p.stop()
+        K._BLEND_OK.clear()
+        VS._BLEND_CHECKS.clear()
+
+
 def voices_cases():
     status, answers = {}, {}
 
@@ -747,6 +799,24 @@ def voices_cases():
                                                       {"speaker": "af_heart"})), w)
         status["pack_v1_chosen"] = scrub(VS.status(), w)
         answers["pack_v1_sky"] = scrub(answer(vpost(VS.set_speaker, {"speaker": "af_sky"})), w)
+    # Ashby and Clara (2026-09-29): the copy of the pack that holds them is
+    # beside it and loaded; the voice check passes, or one sounds like the owner.
+    with VoicesWorld() as w, Blends(w):
+        status["pack_v1_blends"] = scrub(VS.status(), w)
+        answers["pack_v1_ashby"] = scrub(answer(vpost(VS.set_speaker,
+                                                      {"speaker": "mix_ashby"})), w)
+        status["pack_v1_ashby_chosen"] = scrub(VS.status(), w)
+    with VoicesWorld() as w, Blends(w, owner_ok=False):
+        answers["pack_v1_ashby_refused"] = scrub(answer(vpost(VS.set_speaker,
+                                                              {"speaker": "mix_ashby"})), w)
+        status["pack_v1_ashby_refused_listed"] = scrub(VS.status(), w)
+    with VoicesWorld() as w, Blends(w, owner_ok=False):
+        answers["pack_v1_sample_refused"] = scrub(answer(vpost(VS.sample_voice,
+                                                               {"voice": "mix_ashby"})), w)
+    with VoicesWorld() as w:
+        install_pack(w, "v019")
+        answers["pack_old_ashby"] = scrub(answer(vpost(VS.set_speaker,
+                                                       {"speaker": "mix_ashby"})), w)
     with VoicesWorld() as w:
         install_pack(w, "v019")
         VS._state_path().parent.mkdir(parents=True, exist_ok=True)

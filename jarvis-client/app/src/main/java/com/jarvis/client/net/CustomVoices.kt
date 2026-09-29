@@ -150,8 +150,12 @@ object CustomVoices {
         val note: String = "",
     )
 
-    /** One built-in voice the PC offers: its id, and the word shown. */
-    data class SpeakerChoice(val id: String, val label: String)
+    /**
+     * One built-in voice the PC offers: its id, and the word shown. [detail]
+     * is the PC's one plain line under the name - only Ashby and Clara (the
+     * two voices made for Jarvis) carry one; "" for every other voice.
+     */
+    data class SpeakerChoice(val id: String, val label: String, val detail: String = "")
 
     /**
      * "Jarvis's built-in voice": which of Kokoro's own voices - the PC's own
@@ -406,7 +410,7 @@ object CustomVoices {
             val c = e as? JsonObject ?: return@mapNotNull null
             val id = c.str("id").ifBlank { return@mapNotNull null }
             val label = c.str("label").ifBlank { return@mapNotNull null }
-            SpeakerChoice(id, label)
+            SpeakerChoice(id, label, c.str("detail"))
         }
         if (choices.isEmpty()) return null
         return Speaker(

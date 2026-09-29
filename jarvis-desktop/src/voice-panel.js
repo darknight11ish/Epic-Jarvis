@@ -1096,6 +1096,8 @@ function paintChoiceRow(view, prefix, onChoose, onHear = null) {
     });
     const text = node("span", "theme-text");
     text.append(node("span", "theme-name", c.label));
+    // The PC's one plain line under the name, when it has one (Ashby, Clara).
+    if (c.detail) text.append(node("span", "theme-blurb", c.detail));
     const tick = node("span", "theme-check", "✓");
     tick.setAttribute("aria-hidden", "true");
     row.append(radio, text, tick);

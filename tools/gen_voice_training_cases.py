@@ -39,6 +39,7 @@ gen_voice_status_cases.py --check, and should run this one's too.
 """
 import array
 import base64
+import hashlib
 import io
 import json
 import math
@@ -461,6 +462,57 @@ def training_cases():
     return statuses, enroll
 
 
+class Blends:
+    """Ashby and Clara (2026-09-29) installed the way the PC does it, with
+    stand-ins for the two things that cannot travel: the voice pack is a table
+    of random numbers of the real size (not the real 28 MB file), so the two
+    pins are pointed at it and at the file the real `K.build_blends` makes from
+    it (nothing is downloaded), and the owner check is a stand-in with fixed
+    words - "passes" (`owner_ok`) or "sounds like the owner".
+
+        with World(...) as w, Blends(w):
+            ...                     # the copy is beside the pack, loaded
+    """
+
+    OK = {"ok": True, "checked": 1, "fingerprint": "fixture-prints", "score": 0.12, "bar": 0.4,
+          "why": "it does not sound like your voice (its closest score was 0.12; 0.40 or "
+                 "more is refused)"}
+    SOUNDS_LIKE_THE_OWNER = {"ok": False, "refused": "owner_voice",
+                             "fingerprint": "fixture-prints", "score": 0.9, "bar": 0.4,
+                             "why": "this recording sounds too much like YOUR voice"}
+
+    def __init__(self, w, owner_ok=True):
+        self.w, self.owner_ok, self.patches = w, owner_ok, []
+
+    def __enter__(self):
+        tts = self.w.dir / "voice-models" / "tts"
+        tts.mkdir(parents=True, exist_ok=True)
+        table = np.random.default_rng(11).standard_normal((54, 510, 256)).astype(np.float32)
+        (tts / "voices.bin").write_bytes(table.tobytes())
+        made = K.make_blend_table(K._read_table(tts / "voices.bin"))
+        answer = dict(self.OK if self.owner_ok else self.SOUNDS_LIKE_THE_OWNER)
+        self.patches = [
+            mock.patch.object(K, "V1_VOICES_SHA256", K.file_sha256(tts / "voices.bin")),
+            mock.patch.object(K, "BLEND_SHA256", hashlib.sha256(made.tobytes()).hexdigest()),
+            mock.patch.object(VO, "owner_check", lambda samples, margin=None: dict(answer)),
+            mock.patch.object(VO, "prints_fingerprint", lambda: "fixture-prints"),
+            mock.patch.object(VO, "_spawn", lambda fn: None),
+        ]
+        for p in self.patches:
+            p.start()
+        ok, words = K.build_blends(str(tts))
+        assert ok, words
+        K._BLEND_OK.clear()
+        VO._BLEND_CHECKS.clear()
+        return self
+
+    def __exit__(self, *a):
+        for p in reversed(self.patches):
+            p.stop()
+        K._BLEND_OK.clear()
+        VO._BLEND_CHECKS.clear()
+
+
 def voices_cases():
     statuses, posts = {}, {}
 
@@ -624,6 +676,28 @@ def voices_cases():
              posts)
         keep(w, "pack_v1_chosen", VO.status(), statuses)
         keep(w, "pack_v1_sky", post("/api/voice/voices/speaker", {"speaker": "af_sky"}), posts)
+    # Ashby and Clara (2026-09-29): the copy of the pack that holds them is
+    # beside it and loaded; the voice check passes, or one sounds like the owner.
+    with World("both") as w, Blends(w):
+        w.speaking()
+        keep(w, "pack_v1_blends", VO.status(), statuses)
+        keep(w, "pack_v1_ashby", post("/api/voice/voices/speaker", {"speaker": "mix_ashby"}),
+             posts)
+        keep(w, "pack_v1_ashby_chosen", VO.status(), statuses)
+    with World("both") as w, Blends(w, owner_ok=False):
+        w.speaking()
+        keep(w, "pack_v1_ashby_refused", post("/api/voice/voices/speaker",
+                                              {"speaker": "mix_ashby"}), posts)
+        keep(w, "pack_v1_ashby_refused_listed", VO.status(), statuses)
+    with World("both") as w, Blends(w, owner_ok=False):
+        w.speaking()
+        keep(w, "pack_v1_sample_refused", post("/api/voice/voices/sample",
+                                               {"voice": "mix_ashby"}), posts)
+    with World("both") as w:
+        # An old pack cannot be given a blend, and says why in the picker.
+        install_pack(w, "v019")
+        keep(w, "pack_old_ashby", post("/api/voice/voices/speaker", {"speaker": "mix_ashby"}),
+             posts)
     with World("both") as w:
         install_pack(w, "v019")
         VO._state_path().parent.mkdir(parents=True, exist_ok=True)
