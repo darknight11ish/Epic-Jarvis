@@ -283,6 +283,22 @@ Three changes, after checking a scouting report against the real code:
    budget. **Pause added:** the browser in front is a private window.
    Ten streaming-video sites join the built-in list.
 
+4. **Pictures the owner attaches to a chat are cleaned too** (owner, 2026-09-29:
+   "Yes, clean them too"). The screen-safety scouting noted that an ordinary
+   picture attached to a chat went through the chat code untouched, while only
+   screen looks were cleaned. Now every attached picture goes through the same
+   door (`jarvis_screen.clean_picture`, via `backend/jarvis_chat_picture.py`)
+   before any model - the second card's picture model, a main model, or the
+   words read for a model that cannot see - is shown it: secrets painted solid
+   black, `[hidden]` in the words; nothing to hide, the picture goes on exactly
+   as it came; a picture that cannot be checked is not handed on and the answer
+   says so in words (never silent). The note beside the answer says how many
+   places were covered (a count). Both apps say, under the attachment: "Secrets
+   in pictures you attach are covered with black boxes before Jarvis looks."
+   Same limits as above. "Photo to reminder" ("Find a date in it") gets the same check on its words, so a
+   proposed reminder never carries a key or card number. JARVIS-API section 36
+   and 62.13.
+
 Sources: Android MediaProjection and app screen sharing docs;
 VoiceInteractionSession reference; LiquidAI LFM2.5-VL-3B-GGUF; Ollama issue
 #13637; a Copilot Vision summary.

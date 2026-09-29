@@ -1298,10 +1298,20 @@ def t_hooks_are_no_ops_when_off():
     check("with it off, Ollama is not even asked for the context length", calls == [])
     pic = [{"role": "user", "content": [{"type": "text", "text": "what is this?"},
                                          {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}]}]
-    sent = _turn(pic, enabled={"calculator"})
+    # Since the owner's "Yes, clean them too" (2026-09-29) every attached picture is checked for
+    # secrets first, so this PC's text reader must be able to read it: a stand-in that finds no
+    # words at all (nothing to hide) lets the picture go on exactly as it came.
+    nothing_to_hide = {"ok": True, "text": "", "left_out": 0, "why": "", "lines": [], "size": None}
+    with mock.patch.object(AG, "_read_picture", lambda image: dict(nothing_to_hide)):
+        sent = _turn(pic, enabled={"calculator"})
     check("a picture, second card off: the main model gets it exactly as before, tools and all",
           sent[0][0].startswith("http://127.0.0.1:11434") and sent[0][1]["model"] == "qwen3:8b"
           and sent[0][1]["messages"] == pic and "tools" in sent[0][1])
+    with mock.patch.object(AG, "_read_picture", lambda image: {"ok": False, "why": "no reader here"}):
+        sent = _turn(pic, enabled={"calculator"})
+    check("... but a picture that cannot be checked for secrets is not sent to the model at all",
+          not any(AG._image_part(p) for m in sent[0][1]["messages"] if isinstance(m["content"], list)
+                  for p in m["content"]))
     import jarvis_router as R
     d = R.choose("look", local_model="qwen3:8b", lanes=["jarvis-escalate"], has_image=True)
     check("the router still keeps a picture local (unchanged)", d.lane == "qwen3:8b" and d.gate == "image")

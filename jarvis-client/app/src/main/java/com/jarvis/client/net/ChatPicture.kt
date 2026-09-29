@@ -114,7 +114,18 @@ object ChatPicture {
      */
     fun attachedLine(p: Ready, wordsOnly: Boolean = false): String =
         "Picture attached (${p.width} × ${p.height}, ${p.jpegBytes / 1024} KB). " +
-            if (wordsOnly) WORDS_ONLY else "It goes only to your PC."
+            (if (wordsOnly) WORDS_ONLY else "It goes only to your PC.") + " " + SECRETS_COVERED
+
+    /**
+     * The PC's own promise about an attached picture (2026-09-29, the owner's "Yes, clean
+     * them too"; backend `jarvis_chat_picture.py`): anything that looks like a key, a
+     * password, a card number, an email or an IP address is covered with solid black
+     * before any model looks, and a picture the PC cannot check is not used at all.
+     * The SAME words as the desktop's attachment chip and the backend's `OWNER_LINE`
+     * (`backend/test_chat_picture.py` checks all three).
+     */
+    const val SECRETS_COVERED =
+        "Secrets in pictures you attach are covered with black boxes before Jarvis looks."
 
     /** The PC reads the words in the picture, and nothing else of it. */
     const val WORDS_ONLY =

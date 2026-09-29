@@ -7313,6 +7313,68 @@ the owner's own words to the tool loop, whatever tag the app sent - the
 backend treats them as `picture_caption`, as chat history already recorded
 them. Nothing from the picture is ever learned as a fact.
 
+**Secrets in it are covered first (2026-09-29; the owner's "Yes, clean them
+too", `CLAUDE.md`; `backend/jarvis_chat_picture.py`).** Everything above used
+to be true of an ordinary attached picture as it came. It is not any more:
+BEFORE any model sees a picture attached to a chat - the second card's picture
+model, a main model that can see, or the words read for one that cannot - it
+goes through the same door a look at the screen does (section 62.13,
+`jarvis_screen.clean_picture`): the words are read WITH each word's position,
+and anything that looks like a key, token, password, card number (it must pass
+the check digit), IBAN, crypto wallet, email or IP address is painted **SOLID
+BLACK** in the picture (never a blur) and shown as `[hidden]` in the words.
+No new route and no new field.
+
+- **Nothing needed hiding:** the picture goes on exactly as it came - the same
+  bytes, the same message part, not even re-encoded.
+- **Something was hidden:** the cleaned PNG goes on instead; the original never
+  does. The model reads, after the picture, one line saying that N
+  private-looking places were hidden (a count, never what they were). The
+  answer's note (the `activity` event, as "reading the words in your picture"
+  is) says "covered N private-looking places in your picture with black before
+  Jarvis looked", or "checked your picture for keys, passwords and card
+  numbers: nothing needed hiding". Counts only.
+- **It cannot be checked - FAIL CLOSED:** no text reader (not Windows, no
+  text-recognition language), words read without positions, a JPEG (what both
+  apps attach) that Windows cannot open to paint on, a picture whose size is
+  not the size its words were read from, a picture that is not a `data:`
+  address (a web address is never fetched), more than three pictures (the
+  newest three are checked, the older ones withheld), the check failing or
+  taking too long, or `jarvis_chat_picture.py` not installed. The picture is
+  then **not handed to any model**. Two plain lines say so: the model gets "[A
+  picture was attached to this message but was NOT shown to any model: this PC
+  could not check it for private things ... Say so plainly and never guess what
+  it showed.]" and the **answer itself** (not only the model) carries "(The
+  picture you attached was not used: this PC could not check it for keys,
+  passwords and card numbers first - <why>. Nothing was sent anywhere.)".
+  **This changes one line above:** a picture Windows cannot read used to go to
+  a model Ollama could not say about "exactly as it came"; now it is withheld.
+- **The words are read once.** The words a text-only model gets come from the
+  same reading (`jarvis_chat_picture.reader_for`), with each hidden run shown
+  as `[hidden]`; the picture is never read a second time, and never raw.
+- **Unchanged:** the picture is still outside text, still never learned from,
+  still never sent to an online model, never written to disk or logged; words
+  sent with it are still a picture's caption, not the owner's own words. On one
+  graphics card no model sees pictures anyway (the words are read as before).
+- **Both apps** say, under an attached picture, in the same words: "Secrets in
+  pictures you attach are covered with black boxes before Jarvis looks."
+  (`jarvis_chat_picture.OWNER_LINE`; the desktop's attachment chip; the phone's
+  `ChatPicture.SECRETS_COVERED`; `backend/test_chat_picture.py` checks all
+  three). Neither app keeps or re-sends the picture after the message, and
+  neither shows the cleaned copy: the PC never sends one back.
+- **Not covered, said plainly:** the same limits as section 62.13 - a password
+  behind a show-password eye, text too small or stylised for Windows to read, a
+  QR code and a photo of a card have no shape a pattern can see. **Also
+  covered:** "Photo to reminder" (`POST /api/photo/scan`, section 83), the other
+  thing done with an attached picture: it never reaches a model, but the words it
+  shows and the titles it proposes come from the same check (`[hidden]` for a key
+  or card number, before a date or title is picked; a picture that cannot be
+  checked gives a 503 and no words), so a stored reminder never carries one.
+  **Not covered yet:** Jarvis Live's camera (built switched off, section 63) - when
+  it is switched on its pictures must go through this same door. Tested by `backend/test_chat_picture.py`; not run
+  on a real Windows PC (the owner's check is `tools\check_screen_safety.py`,
+  which uses the same door).
+
 **The apps.** `GET /api/second-card`'s `picture_text` (section 12) says
 whether it works; `why` is a plain sentence when it does not ("Windows has
 no text recognition for your language installed. Settings -> Time &
@@ -10607,8 +10669,9 @@ pattern is a guess from the SHAPE of words - a password shown with a
 show-password eye, or typed into a box with nothing written beside it, has no
 shape and is NOT hidden (the password-box check and the Never look at list are
 the other two locks); text the reader cannot read (tiny, stylised, in a QR code
-or a photo); and an ordinary picture attached to a chat (not a screen look),
-whose words `jarvis_agent` reads as before. Emails and IP addresses are hidden
+or a photo). (An ordinary picture attached to a chat, which was not covered
+here at first, is since the owner's "Yes, clean them too" of 2026-09-29: see
+**4** below.) Emails and IP addresses are hidden
 too (the owner asked for "anything that looks like a key, card number or
 password"); to leave them visible, take `"email"` and `"ip"` out of
 `jarvis_secrets.PII_KINDS`.
@@ -10641,6 +10704,18 @@ after a quarter of a second or 700 controls. The pause `private_window` (62.2)
 covers the browser in front. Not covered: a window whose program Windows will
 not name; a private window of a browser that does not say InPrivate, Incognito
 or Private Browsing in its title (Brave, Opera and Vivaldi are not confirmed).
+
+**4. A picture the owner ATTACHES to a chat goes through the same door**
+(2026-09-29, the owner's "Yes, clean them too"; section 36 has the whole
+behaviour). `jarvis_agent.run_local_turn` calls `clean_attached_pictures`
+(`backend/jarvis_chat_picture.py`, which asks `jarvis_screen.clean_picture` with
+`want_png=True`) on every picture in the turn's messages before the second
+card's picture model, a main model or the words read for a text-only model can
+see it: nothing to hide - the original goes on untouched; something hidden - the
+black-boxed PNG goes on and the original never does; cannot be checked - no
+picture goes on, and both the model's text and the answer itself say so. Counts
+only ever leave it. Shipped whole, no patch (`jarvis_agent.py` is a whole
+module); both apps say the same sentence under the attachment.
 
 **One-sided on purpose:** the window masking, the private-window pause and the
 streaming sites are the PC's; the phone has no windows to mask, Chrome's
@@ -12795,7 +12870,14 @@ from the picture".
 ### 83.2 How it finds a date - plain code, not the model
 
 1. The words: Windows' own text recognition (`jarvis_ocr.read_text`, section
-   36's reader), the picture on standard input, never written to disk.
+   36's reader), the picture on standard input, never written to disk. **Since
+   2026-09-29** ("Yes, clean them too", section 36) the words are checked for
+   anything that looks like a key, password or card number BEFORE a date or a
+   title is picked - each such run shows as `[hidden]` in `text` and in any
+   title, so a stored reminder never carries one; a picture that cannot be
+   checked gives 503 and no words (`jarvis_photo_remind._clean_words`, which
+   uses `jarvis_picture.clean` without painting - nothing here shows the picture
+   to a model). The 503 sentence is the checker's own reason.
 2. Dates and times: every run of up to six words is tried against
    `jarvis_quick.py`'s own parser - the one "remind me at 6 to ..." uses.
    It learned calendar dates for this (2026-09-28): "12 Oct", "Sat 12th

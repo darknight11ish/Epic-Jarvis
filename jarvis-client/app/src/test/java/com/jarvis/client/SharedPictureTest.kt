@@ -107,8 +107,15 @@ class SharedPictureTest {
         assertNull(ChatPicture.sharedRefusal(read))
         val p = ChatPicture.Ready("data:image/jpeg;base64,AA", 10, 20, 2048)
         assertEquals(
-            "Picture attached (10 × 20, 2 KB). " + ChatPicture.WORDS_ONLY,
+            "Picture attached (10 × 20, 2 KB). " + ChatPicture.WORDS_ONLY + " " +
+                ChatPicture.SECRETS_COVERED,
             ChatPicture.attachedLine(p, wordsOnly = true),
+        )
+        // Both lines end with the PC's promise about secrets (the desktop's chip says the same).
+        assertEquals(
+            "Picture attached (10 × 20, 2 KB). It goes only to your PC. " +
+                "Secrets in pictures you attach are covered with black boxes before Jarvis looks.",
+            ChatPicture.attachedLine(p, wordsOnly = false),
         )
         assertTrue(ChatPicture.WORDS_ONLY.contains("outside text"))
         // An older PC says nothing about it: not taken.

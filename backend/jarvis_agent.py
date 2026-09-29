@@ -4657,6 +4657,69 @@ def with_picture_text(messages: list, *, keep_picture: bool,
     return msgs, info
 
 
+def _any_picture(messages) -> bool:
+    """Is there a picture in ANY message (not only the newest)?"""
+    for m in messages or []:
+        c = m.get("content") if isinstance(m, dict) else None
+        if isinstance(c, list) and any(_image_part(p) for p in c):
+            return True
+    return False
+
+
+#: Said in place of a picture when the part that checks pictures (jarvis_chat_picture.py)
+#: cannot even be loaded - the same fail-closed line that module writes itself.
+PICTURE_WITHHELD_NO_CHECKER = (
+    "[A picture was attached to this message but was NOT shown to any model: this PC could not "
+    "check it for private things (a password, a key, a card number) first, because the part of "
+    "Jarvis that checks pictures is not installed. Say so plainly and never guess what it showed.]")
+
+
+def clean_attached_pictures(messages: list) -> tuple:
+    """(messages, info): every picture the owner attached, checked for keys,
+    passwords, card numbers, IBANs, wallets, emails and IP addresses and
+    those places painted SOLID BLACK BEFORE any model - the second card's
+    picture model, the main model, or the words read for a text-only model -
+    sees it (the owner's "Yes, clean them too", 2026-09-29; CLAUDE.md;
+    jarvis_chat_picture.py, which goes through the same door a look at the
+    screen does, jarvis_screen.clean_picture). Nothing to hide: the picture
+    as it came. A picture that cannot be checked is NOT passed on: a plain
+    line says it was withheld and why. `info` is jarvis_chat_picture's
+    (counts, "words", "note", "said"). Returns copies; never raises; fails
+    closed - without the module every picture is withheld."""
+    try:
+        import jarvis_chat_picture as CP
+        return CP.clean_messages(messages, reader=_read_picture)
+    except Exception:
+        msgs = []
+        for m in messages or []:
+            c = m.get("content") if isinstance(m, dict) else None
+            if isinstance(c, list) and any(_image_part(p) for p in c):
+                m = dict(m, content=[{"type": "text", "text": PICTURE_WITHHELD_NO_CHECKER}
+                                     if _image_part(p) else p for p in c])
+            msgs.append(m)
+        return msgs, {"pictures": 0, "passed": 0, "covered": 0, "hidden": 0, "withheld": 1,
+                      "why": ["the part of Jarvis that checks pictures is not installed"],
+                      "words": {}, "note": "",
+                      "said": ("(The picture you attached was not used: this PC could not check "
+                               "it for keys, passwords and card numbers first - the part of "
+                               "Jarvis that checks pictures is not installed. Nothing was sent "
+                               "anywhere.)")}
+
+
+def _cleaned_reader(words: Optional[dict]) -> Callable[[bytes], dict]:
+    """The text reader with_picture_text is given once the pictures have been
+    cleaned: it answers from the reading clean_attached_pictures already made
+    (each hidden run shown as [hidden]), so a picture is read once and its words
+    are never read from an uncleaned picture. A picture it does not know is
+    refused, never read raw."""
+    try:
+        import jarvis_chat_picture as CP
+        return CP.reader_for({"words": words or {}})
+    except Exception:
+        return lambda image: {"ok": False, "text": "", "left_out": 0,
+                              "why": "the picture could not be checked."}
+
+
 def _combined_choice(get_combined: Callable[[], object]) -> Optional["LaneChoice"]:
     """The `LaneChoice` for "One bigger model on both cards", or None - the
     fallback `choose_lane` reaches for once vision and long_context have
@@ -6223,6 +6286,26 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 say_step("tool_started", SCREEN_TOOL)
                 watch.took_in(SCREEN_TOOL, {"text": screen_info["text"]})
                 say_step("tool_finished", SCREEN_TOOL, ok=True)
+        # A picture the owner ATTACHED to the chat (the owner's "Yes, clean them
+        # too", 2026-09-29): before ANY model sees it - the second card's picture
+        # model, a main model that can see, or the words read for one that cannot
+        # - anything that looks like a key, password, card number, IBAN, wallet,
+        # email or IP address is painted SOLID BLACK; one that cannot be checked is
+        # not handed on at all and the answer says so itself (never left to the
+        # model). Nothing to hide: the picture goes on as it came. A count, never
+        # what was hidden, is the note beside the answer.
+        picture_words = None
+        if _any_picture(convo):
+            convo, picture_clean = clean_attached_pictures(convo)
+            picture_words = picture_clean.get("words") or {}
+            if picture_clean.get("note") and announce is not None:
+                try:
+                    announce(picture_clean["note"])
+                except Exception:
+                    pass
+            if picture_clean.get("said"):
+                tell_owner(picture_clean["said"])
+                said["gap"] = True           # the model's own words start a new paragraph
         if cur["feature"] != "vision" and newest_turn_has_image(convo):
             sees = _model_can_see_pictures(cur["url"], cur["model"])
             if sees is not True:
@@ -6231,7 +6314,12 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                         announce(PICTURE_TEXT_NOTE)
                     except Exception:
                         pass
-                convo, picture_text = with_picture_text(convo, keep_picture=sees is None)
+                # The words come from the cleaned reading above (each hidden run
+                # shown as [hidden]) - the picture is not read a second time, and
+                # never raw.
+                convo, picture_text = with_picture_text(
+                    convo, keep_picture=sees is None,
+                    read=_cleaned_reader(picture_words))
                 if picture_text["read"]:
                     # Exactly as a reading tool's result: counted, flagged,
                     # and what a card's arguments are checked against.

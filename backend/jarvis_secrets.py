@@ -452,7 +452,7 @@ def _layout(lines: list, joiner: str) -> tuple:
 
 def _find(text: str, kinds: Iterable[str], deadline: float) -> list:
     if len(text) > MAX_SCAN_CHARS:
-        raise Unchecked("there is too much small text on the screen to check")
+        raise Unchecked("there is too much small text in the picture to check")
     return _gitleaks_spans(text, deadline) + _pii_spans(text, kinds) + _own_spans(text)
 
 

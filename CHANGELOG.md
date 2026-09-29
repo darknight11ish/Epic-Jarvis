@@ -6,6 +6,24 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Secrets in pictures you attach to a chat are covered with black too
+  (2026-09-29, both apps).** Until now only "Look at this" and "Watch with me"
+  had anything that looks like a key, password, card number, IBAN, crypto
+  wallet, email or IP address painted solid black (never blurred) before a model
+  looked. A picture you attach to a chat now gets the same, on the PC, before
+  any model sees it - the second graphics card's picture model, the everyday
+  model, or the words read for a model that cannot see. Nothing to hide: the
+  picture goes on exactly as it was. A picture the PC cannot check (no text
+  reader, a JPEG it cannot open) is NOT sent to any model, and the answer says
+  so in words. The note beside the answer says how many places were covered
+  (a number, never what they were). Both apps say, under the attachment:
+  "Secrets in pictures you attach are covered with black boxes before Jarvis
+  looks." Same limits as the screen: a password behind a show-password eye,
+  tiny or stylised text and a QR code are not caught. "Photo to reminder" gets
+  the same check on its words, so a proposed reminder never carries a key or a
+  card number. Needs the new backend files (apply-patches.ps1 copies them) and
+  the new desktop and phone builds. Not run on a real Windows PC yet.
+
 - **Painted eyelids for the four animals (2026-09-29, both apps).** The red
   panda, pygmy owl, sea otter and monkey now have a lid of their own fur over
   the top of each eye, so the looks read at a glance: **waiting on you** a
