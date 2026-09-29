@@ -501,6 +501,10 @@ here rather than patched blind:
   id (`second-card-suggest.patch`, on `wellbeing.patch`'s flag and again on
   `run_local_turn`'s own check), and `note_correction` does not count a
   mark on that id. `test_wellbeing.py` runs the join end to end.
+- The crisis thumbs-down gap written down above is closed by the fix
+  recorded just above (2026-09-28, `jarvis_agent.note_crisis_turn`); the owner's
+  go-ahead of 2026-09-29 confirmed that fix, and nothing else about crisis
+  handling changed.
 
 Decided 2026-09-27, the owner's answers after the studio review (play
 testers, scouts and integration scouts; `.claude/agents/`):
@@ -923,6 +927,58 @@ Decided 2026-09-28, the owner's answers after the animal-face audits:
   face has been resting a while, now and then one plays, then it settles
   back. Calm, never during an approval or error, off under Still and in
   serious moments, with a switch in the animal options.
+- **Goodbye and hello when switching faces**, both apps: the leaving
+  animal or robot plays a short goodbye (about a second - a little wave or
+  bow, then out of view), then the incoming one a short hello (pops in, a
+  small bounce, a look at the owner). A non-animal face just fades on its
+  side. Under Still, calm motion or a serious moment it is a quick gentle
+  crossfade.
+- **Variety, never over the top:** every face gets several variants of each
+  kind of move (listening, thinking, talking gestures, resting moments,
+  the reaction as an approval or an error arrives), picked so the same one
+  never plays twice running - all within the existing comfort limits
+  (small, slow, eased, never busy). Still, calm and serious quieten them
+  as before; approval and error stay attentive and still.
+
+Decided 2026-09-29, the owner's answers on the small animal leftovers:
+- **Tighter drawing boundaries for the five faces**, for about 20-30% less
+  graphics work, provided nothing is cut off: every pose is compared
+  pixel for pixel with the old drawing before it is kept.
+- **A 60-frame cap while the AI model shares the graphics card waits for a
+  measurement from the owner's PC** (a one-line PowerShell check of the
+  graphics card while Jarvis talks, with and without a face showing). No cap
+  is built until those numbers are in.
+- **The owl's beak opens wider on quiet-to-normal speech**; loud words stay
+  about where they were, and it must stay cute, never a wide gape.
+- **A thumbs-down on a crisis-help answer is no longer counted** toward
+  "suggest the bigger model" - the owner's go-ahead for that one gap in the
+  2026-09-27 "written down, not fixed" note. Nothing else about crisis
+  handling changes; no crisis content is stored, counted or logged.
+
+Decided 2026-09-29, after the skeptical review of all five faces (the
+owner kept the ray-marched drawing; the review found expression, motion and
+one state bug to fix, not a new approach):
+- **An error gets a still mark on every face:** a thin ring with a gap at
+  the bottom, drawn by the apps over the face, never moving. It must not be
+  mistaken for the waiting-on-you clock or the not-connected ring.
+- **Fewer small idle moves when Jarvis is not being used:** breathing and
+  looking around stay; the small happenings (a tail flick, an ear turn, a
+  stretch) drop to about a quarter unless the owner has talked to Jarvis
+  lately or their pointer is on the face.
+- **A focus session no longer shows a sleeping animal:** the focus buddy
+  shows, not standby (a manual Quiet stays asleep).
+
+Decided 2026-09-29, after seeing the eyelid preview:
+- **The animals get painted eyelids** (red panda, pygmy owl, sea otter,
+  monkey): a lid of the surrounding fur over the top of each eye, so an
+  error looks worried (a sloped lid), waiting on you attentive (a level lid)
+  and dozing sleepy (a heavy lid). It is painted in the surface shading, not
+  in the shape, so it costs a little per pixel and nothing per march step;
+  each animal gets one new pose value on both apps. The robot has no
+  eyelids (its eyes carry the state). The lids obey the same rules as every
+  other look: nothing cute or new at an approval or error beyond the plain
+  worried or attentive lid, calm and Still quieten them, and the phone's
+  60,000 shader budget still holds.
 
 Decided 2026-09-28, after checking two Gemini reviews of the outside
 projects Jarvis names (`docs/AUDIT-2026-09-28-REPO-REFS.md` - read it

@@ -137,6 +137,75 @@ check("\"Maybe Bob made a map.\" closes the lips for the m / b / p, in every voi
   }
 });
 
+// The voice-speed check (2026-09-28). kokoro-panda-lips-slowest: "Okay.
+// Maybe Bob made a map." in the panda's voice at 0.7225 (an animal's Slower
+// times the owner's Slower, the slowest pace the apps offer);
+// kokoro-robot-lips-fastest: the same in the robot's voice at 1.3225 (Faster
+// times Faster, the fastest). Both made as say() makes them, each with the
+// PC's "jmth" mouth chunk.
+const PACED = ["panda-lips-slowest", "robot-lips-fastest"];
+// The best correlation of two channels over lags up to 80 ms either way.
+function bestCorr(a, b) {
+  let best = -1;
+  for (let lag = -8; lag <= 8; lag++) {
+    const x = [], y = [];
+    for (let i = 8; i < a.length - 8; i++) { x.push(a[i]); y.push(b[i + lag]); }
+    best = Math.max(best, corr(x, y));
+  }
+  return best;
+}
+// A 60 Hz screen's biggest step in open, wide or round.
+function screenStep(track) {
+  let prev = null, step = 0;
+  for (let s = -L.LEAD_S; s <= track.n / track.fps; s += 1 / 60) {
+    const o = L.sample(track, s), v = [o.open, o.wide, o.round];
+    if (prev) step = Math.max(step, ...v.map((x, i) => Math.abs(x - prev[i])));
+    prev = v;
+  }
+  return step;
+}
+
+check("at the slowest and the fastest pace the mouth still closes for m / b / p and between words, and never jumps", () => {
+  for (const name of PACED) {
+    const c = clips[name];
+    assert.ok(c, `${name} is missing`);
+    // From the sound alone (a custom voice, or a PC without the timing step):
+    // the "Okay." pause and the lips of "Maybe Bob made a map" - at 1.3225
+    // the syllables come about six a second and still each close.
+    assert.ok(closures(c.track.open) >= 5, `${name}: ${closures(c.track.open)} closures from the sound`);
+    // From the PC's timing (what both apps show when the chunk is there).
+    assert.ok(c.mouth, `${name} has no jmth chunk`);
+    const m = L.merge(c.track, c.mouth);
+    assert.notEqual(m, c.track, `${name}: the chunk was not merged`);
+    assert.ok(closures(m.open) >= 4, `${name}: ${closures(m.open)} closures from the PC's timing`);
+    // Faster speech must not make the mouth snap: the same limit at every pace.
+    for (const [which, t] of [["sound", c.track], ["timing", m]]) {
+      const s = screenStep(t);
+      assert.ok(s < 0.5, `${name} (${which}): a 60 Hz frame steps ${s.toFixed(2)}`);
+    }
+  }
+});
+
+check("the PC's mouth timing is made for the pace the sound was spoken at", () => {
+  // The chunk's opening follows the clip's own sound at both paces. A timing
+  // made for another pace drifts off the words as the sentence goes on:
+  // squeezed or stretched by 13-15 % it correlates under 0.35 here, and the
+  // slowest pace's timing on the fastest pace's sound about 0.
+  for (const name of PACED) {
+    const c = clips[name], m = L.merge(c.track, c.mouth);
+    const r = bestCorr(m.open, c.track.open);
+    assert.ok(r > 0.7, `${name}: the PC's opening correlates ${r.toFixed(3)} with the sound's`);
+    for (const k of [0.87, 1.15]) {
+      const s = Array.from(m.open, (_, i) => {
+        const x = i * k, a = Math.floor(x);
+        return a + 1 < m.n ? m.open[a] + (m.open[a + 1] - m.open[a]) * (x - a) : 0;
+      });
+      const w = bestCorr(s, c.track.open);
+      assert.ok(w < r - 0.3, `${name}: a timing ${k}x off still correlates ${w.toFixed(3)} (right one ${r.toFixed(3)})`);
+    }
+  }
+});
+
 check("oo looks round and ee looks spread", () => {
   const r = lipShape(clips["default-round"].track), w = lipShape(clips["default-wide"].track);
   // "Who knew the moon would glow so blue?" / "Please see these three sheep."

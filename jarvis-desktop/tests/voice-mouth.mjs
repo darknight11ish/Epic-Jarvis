@@ -153,7 +153,7 @@ await check("the animal's mouth follows the track at the playback clock", async 
 await check("speaking with no real voice keeps an animal's mouth shut", async () => {
   // A typed answer, Quiet mode, an answer kept on screen: the backend still
   // says `speaking`, but nothing is playing.
-  for (const face of ["redpanda", "pygmyowl", "seaotter", "monkey"]) {
+  for (const face of ["redpanda", "pygmyowl", "seaotter", "monkey", "robot"]) {
     const { page, frame, errors } = await host(face);
     await state(page, "speaking");
     // The state takes effect on the face's next drawn frame: wait for it

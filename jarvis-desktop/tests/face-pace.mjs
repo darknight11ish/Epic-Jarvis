@@ -188,14 +188,14 @@ await check("the pose files say when an idle happening plays, the same as the ph
   const ctx = { console };
   ctx.globalThis = ctx; ctx.window = ctx;
   vm.createContext(ctx);
-  for (const f of ["critter-pose.js", "critter-owl.js", "critter-otter.js", "critter-monkey.js"]) {
+  for (const f of ["critter-pose.js", "critter-owl.js", "critter-otter.js", "critter-monkey.js", "critter-robot.js"]) {
     vm.runInContext(fs.readFileSync(path.join(SRC, f), "utf8"), ctx, { filename: f });
   }
   const C = ctx.CritterPose;
   assert.equal(C.HAPPENING_S, SPEC.frame_rate.animals.happening_s);
   const gold = JSON.parse(fs.readFileSync(path.join(HERE, "..", "..", "jarvis-client", "app", "src", "test",
     "resources", "critter-busy-golden.json"), "utf8"));
-  for (const sp of ["redpanda", "pygmyowl", "seaotter", "monkey"]) {
+  for (const sp of ["redpanda", "pygmyowl", "seaotter", "monkey", "robot"]) {
     const got = gold.times.map((t) => (C.species[sp].busy("idle", t) ? "1" : "0")).join("");
     assert.equal(got, gold.busy[sp], `${sp}: run python3 tools/gen_critters.py`);
     const share = [...got].filter((c) => c === "1").length / got.length;

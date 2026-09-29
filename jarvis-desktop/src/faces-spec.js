@@ -631,6 +631,33 @@ window.JARVIS_SPEC = Object.freeze({
         "min": 0.05,
         "substeps_max": 1
       }
+    },
+    {
+      "archived": false,
+      "character": {
+        "note": "The fifth face (2026-09-28), from the owner's picture of a cute robot, in the animals' soft 3D style and counted as one of them for every option: a big rounded white helmet of a head with a ridge on top, a glossy dark-blue visor with a glowing rim, round ear pods with teal fins, an egg of a body with a teal shield on its chest, two mitten arms and no legs - it floats, with a soft shadow on the ground. No mouth and no orb: its glowing eyes carry the state colour and the expression, and pulse with Jarvis's real voice. All eight states: hovers with happy eyes and does small things when idle (now and then a zip round its own space, a wave or a polish of its visor), wide eyes and mittens up to listen, narrowed eyes looking up with a mitten to its chin to think, bright eyes pulsing with the voice as it talks, steady eyes and mittens a little forward for approval (no wave), powered down with its eyes a dim line for standby, a still, concerned look at an error, dozes where it floats when banked.",
+        "pose": "see the red panda's entry: the same scheme, in critter-robot.js and RobotPose.kt",
+        "shader": "jarvis-desktop/critters/common_head.sksl + robot.sksl + common_tail.sksl, generated into both apps by tools/gen_critters.py"
+      },
+      "dim": "3d",
+      "geometry": "sphere-traced soft-body character",
+      "heavy": false,
+      "id": "robot",
+      "integrates_per_frame": false,
+      "name": "Robot",
+      "render": {
+        "fit": 1.0,
+        "max_px": 1800,
+        "supersample_max": 2.0,
+        "target_fps": 60
+      },
+      "speed": {
+        "curve": "log",
+        "default": 1.0,
+        "max": 6.0,
+        "min": 0.05,
+        "substeps_max": 1
+      }
     }
   ],
   "frame_rate": {
@@ -722,7 +749,7 @@ window.JARVIS_SPEC = Object.freeze({
       "levels_why": "The ids stay low/medium/high/max so settings saved before the rename still work. The lowest is 'Lower', not 'Battery saver': the phone already has a Battery saver switch, which overrides all of this. desktop_scale is the share of the screen's own pixels the animal is traced at, then enlarged; desktop_supersample 2 traces 2x2 samples per screen pixel and averages them down (the audit measured edge error 9.4 -> 3.2 on 255 for the panda at 240 px). phone_trace is the share of the phone's full resolution the animal is traced at before it is enlarged.",
       "no_shadow_below_px": 200,
       "no_shadow_why": "The soft shadow is skipped (uNoShadow = 1) when the animal's square is drawn under 200 device pixels, or at Lower: at that size it is a few pixels of shading, and it is about a sixth of the panda's cost.",
-      "note": "Owner, 2026-09-28: 'Sharp animals on capable hardware'. The four animal faces (red panda, pygmy owl, sea otter, monkey) are ray-traced per pixel, so how many pixels they are traced at decides how sharp their edges are and how much graphics work they cost. Both apps read these numbers: the desktop from this file (faces-spec.js), the phone from Kotlin constants that SpecDriftTest holds to it.",
+      "note": "Owner, 2026-09-28: 'Sharp animals on capable hardware'. The four animal faces (red panda, pygmy owl, sea otter, monkey) and the robot are ray-traced per pixel, so how many pixels they are traced at decides how sharp their edges are and how much graphics work they cost. Both apps read these numbers: the desktop from this file (faces-spec.js), the phone from Kotlin constants that SpecDriftTest holds to it.",
       "rest_fps": {
         "auto_happening": 0,
         "auto_headroom": 60,
@@ -2059,6 +2086,12 @@ window.JARVIS_SPEC = Object.freeze({
         "kind": "sdf_raymarch",
         "web": "WebGL2 fragment shader, one pass, full display resolution; flat canvas sticker as the fallback.",
         "why": "A character built from about twenty blended rounded shapes, lit with soft shadows, occlusion and the orb as a point light. Like nucleus, one full lighting solve per pixel."
+      },
+      "robot": {
+        "android": "RuntimeShader (AGSL), same source, traced at reduced resolution and enlarged like the panda.",
+        "kind": "sdf_raymarch",
+        "web": "WebGL2 fragment shader; flat canvas robot as the fallback.",
+        "why": "The same scheme as the red panda: a helmet, visor, ear pods and fins, an egg of a body and two mittens, with its eyes painted on the visor instead of an orb, and a soft shadow on the ground."
       },
       "seaotter": {
         "android": "RuntimeShader (AGSL), same source, traced at reduced resolution and enlarged like the panda.",

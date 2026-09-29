@@ -19,7 +19,7 @@
  * @module sky-settings
  */
 
-import { announce, currentLink, linkWords, onLink } from "./jarvis-link.js";
+import { announce, currentLink, linkWords, onEvent, onLink } from "./jarvis-link.js";
 import { startSkyFeed, storeSky } from "./sky-feed.js";
 
 const TAURI = globalThis.__TAURI__;
@@ -215,6 +215,9 @@ if (el.box) {
   // While Settings is open it keeps the faces' copy fresh too, and re-reads
   // when it comes back into view (a card answered on the phone, say).
   startSkyFeed({ invoke });
+  // The PC's `sky` doorbell (a change on the phone, or asked of Jarvis):
+  // this section shows it at once.
+  onEvent((frame) => { if (frame && frame.kind === "sky" && !busy) load(); });
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) load();
   });

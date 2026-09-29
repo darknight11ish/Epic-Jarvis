@@ -90,6 +90,13 @@ KOKORO_FRAME = 600            #: samples per Kokoro duration frame (25 ms at 24 
 #: two Kokoro frames - slightly under the measured lead, so the mouth is
 #: never pulled ahead of the sound by this correction. The clip's length,
 #: and the sample-exact check, are untouched.
+#: Over the whole speed range (the voice-speed check, 2026-09-28: raw
+#: Kokoro at speeds 0.4 to 2.4, six voices) the m/b/p lead is NOT quite
+#: fixed: a median of about 80 ms at speeds 0.4-0.7, 52 ms at 1.0 and
+#: 30-38 ms at 1.45-2.4 (the spread is wide). Kept fixed on purpose: with
+#: the apps' own 50 ms lead (lipsync.js LEAD_S) the mouth still comes 13-29
+#: ms before the sound at every pace from 0.5x to 2x (196 real clips,
+#: docs/LIPSYNC.md "At every pace") - the early side, where nobody notices.
 SOUND_LEAD = 2 * KOKORO_FRAME  #: samples of the raw sound (50 ms at 24 kHz)
 DURATION_NODE = "/Cast_output_0"  #: Kokoro v0.19's per-sound durations (after Round -> Clip)
 DURATIONS_FILE = "model.durations.onnx"

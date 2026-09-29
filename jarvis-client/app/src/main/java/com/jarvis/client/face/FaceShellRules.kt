@@ -25,7 +25,17 @@ object FaceWords {
      */
     const val OFFLINE = "Jarvis isn't connected"
 
-    fun spoken(state: FaceState, offline: Boolean): String = if (offline) OFFLINE else when (state) {
+    /**
+     * Said while a focus session has put Jarvis on Quiet and the animal shows
+     * its focus buddy (owner, 2026-09-29). Still true that it will not speak:
+     * a focus session is on Quiet, and the one thing it does say is the short
+     * line naming a distraction. The desktop says the same
+     * (faces.html `FACE_WORDS`).
+     */
+    const val FOCUS = "Jarvis is working beside you in your focus session and will not speak, except to name a distraction"
+
+    fun spoken(state: FaceState, offline: Boolean, focusQuiet: Boolean = false): String = if (offline) OFFLINE else when (state) {
+        FaceState.IDLE -> if (focusQuiet) FOCUS else "Jarvis is idle"
         FaceState.ERROR -> "Jarvis has a problem"
         FaceState.APPROVAL -> "Jarvis is waiting for your decision"
         FaceState.LISTENING -> "Jarvis is listening"
@@ -33,8 +43,31 @@ object FaceWords {
         FaceState.SPEAKING -> "Jarvis is speaking"
         FaceState.BANKED -> "Jarvis has notes saved for later"
         FaceState.STANDBY -> "Jarvis is on standby and will not speak"
-        FaceState.IDLE -> "Jarvis is idle"
     }
+}
+
+/**
+ * Whether a resting Jarvis is asleep (standby) or awake.
+ *
+ * Standby and Quiet both read as asleep, with one exception (owner,
+ * 2026-09-29): a focus session puts Jarvis on Quiet, and it then shows the
+ * focus buddy - awake, working beside the owner - not a sleeping animal that
+ * wakes to say "YouTube can wait" and dozes off again. The PC records why it
+ * is Quiet ([why]: `capabilities.power.why`); only its own sentence for a
+ * focus session counts, so a Quiet the owner sets by hand ("the owner, from
+ * ...") stays asleep. The desktop's `restingAsleep` (jarvis-link.js) and the
+ * tray (tray.rs `spec_state`) follow the same rule.
+ */
+object RestingFace {
+    /** `jarvis_focus.WHY`: what the PC records when a focus session goes Quiet. */
+    const val FOCUS_WHY = "the focus session"
+
+    /** True when Quiet is the focus session's own. */
+    fun focusQuiet(power: String, why: String?): Boolean = power == "quiet" && why == FOCUS_WHY
+
+    /** True when the resting face should be asleep. */
+    fun asleep(power: String, why: String?): Boolean =
+        (power == "standby" || power == "quiet") && !focusQuiet(power, why)
 }
 
 /**

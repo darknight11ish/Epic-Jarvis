@@ -60,8 +60,8 @@ const float3 CREAM = float3(0.930, 0.830, 0.680);
 const float3 DARK = float3(0.034, 0.012, 0.007);
 const float3 INK = float3(0.004, 0.004, 0.006);
 
-// Where the camera looks, how far back it sits, and the sphere the animal
-// fits inside (rays that miss it are not marched at all).
+// Where the camera looks, how far back it sits, and the outer sphere the animal
+// fits inside (nothing is drawn beyond it; animalSpan, below, is tighter).
 const float3 CAM_TARGET = float3(0.0, -0.08, 0.0);
 const float CAM_DIST = 3.35;
 const float CAM_PITCH = 0.0;
@@ -97,8 +97,7 @@ float partTorso(float3 b) {
 }
 // One piece per leg: the thigh, reaching forward into the foot.
 float partLegs(float3 b) {
-    float3 bs = float3(abs(b.x), b.y, b.z);
-    return sdEllipsoid(bs - float3(0.205, 0.075, -0.22), float3(0.14, 0.11, 0.26));
+    return sdEllipsoid(float3(abs(b.x) - 0.205, b.y - 0.075, b.z + 0.22), float3(0.14, 0.11, 0.26));
 }
 // The rounded end of each arm is its paw.
 float partArms(float3 p) {
@@ -149,9 +148,8 @@ float mouthCarve(float3 h) { return mouthShape(h) + max(0.02 - 0.08 * uMouth.x, 
 // The head (head frame, unscaled): skull, cheek fluff, muzzle and eyebrow
 // puffs, with the mouth carved out of it.
 float partHead(float3 h) {
-    float3 hs = float3(abs(h.x), h.y, h.z);
     float d = sdEllipsoid(h - float3(0.0, 0.34, 0.0), float3(0.45, 0.37, 0.39));
-    d = smin(d, sdEllipsoid(hs - float3(0.25, 0.21, -0.09), float3(0.22, 0.17, 0.20)), 0.10);
+    d = smin(d, sdEllipsoid(float3(abs(h.x) - 0.25, h.y - 0.21, h.z + 0.09), float3(0.22, 0.17, 0.20)), 0.10);
     // The muzzle; its lower edge - the chin - drops as the jaw opens, and
     // it pushes forward a little for an "oo".
     d = smin(d, sdEllipsoid(h - float3(0.0, 0.205, -0.29) + float3(0.0, 0.045, 0.012) * uMouth.xxz,
@@ -176,6 +174,34 @@ float partEyes(float3 h) {
     float2 ea = eyeAt();
     float3 ep = float3(abs(h.x) - ea.x, h.y - ea.y, h.z + 0.31);
     return sdEllipsoid(ep, float3(0.074, max(0.008, 0.084 * open), 0.055));
+}
+
+// Where along a ray the animal can be. Each part has a sphere round it,
+// placed from where the part is in THIS pose (the body and head through the
+// pose's own frames), with a margin of a few pixels - a ray that passes a
+// part by less than that can still be taken for a hit. A ray that meets none
+// of them is not marched at all, and one that does is marched no further than
+// the last of them (clipSpan, common_head.sksl). Measured against the single
+// sphere this replaces: docs/CRITTERS.md, "The bounding volumes".
+float3 fromBody(float3 q) { return uBodyPos + q.x * uBodyR0 + q.y * uBodyR1 + q.z * uBodyR2; }
+float3 fromHead(float3 h) { return uNeck + HEAD_S * (h.x * uHeadR0 + h.y * uHeadR1 + h.z * uHeadR2); }
+float2 animalSpan(float3 ro, float3 rd) {
+    float2 s = float2(1e9, -1e9);
+    s = addSphere(s, ro, rd, fromBody(float3(0.0, 0.31, 0.02)), 0.50);                              // torso
+    s = addSphere(s, ro, rd, fromBody(float3(0.0, 0.075, -0.22)), 0.52);                            // legs
+    s = addSphere(s, ro, rd, fromHead(float3(0.0, 0.32, -0.05)), 0.70);                             // skull, muzzle, nose, eyes
+    s = addSphere(s, ro, rd, fromHead(float3(-0.265, 0.60, 0.04) + 0.13 * uEarL1), 0.28);           // ears
+    s = addSphere(s, ro, rd, fromHead(float3(0.265, 0.60, 0.04) + 0.13 * uEarR1), 0.28);
+    s = addSphere(s, ro, rd, 0.5 * (uShL + uPawL), 0.5 * length(uPawL - uShL) + 0.16);              // arms
+    s = addSphere(s, ro, rd, 0.5 * (uShR + uPawR), 0.5 * length(uPawR - uShR) + 0.16);
+    float3 tA = 0.5 * (uTail1.xyz + uTail2.xyz);                                                    // tail, in two
+    float rA = max(max(length(uTail0.xyz - tA), length(uTail1.xyz - tA)), max(length(uTail2.xyz - tA), length(uTail3.xyz - tA)));
+    s = addSphere(s, ro, rd, tA, rA + max(max(uTail0.w, uTail1.w), max(uTail2.w, uTail3.w)) + 0.08);
+    float3 tB = 0.5 * (uTail3.xyz + uTail4.xyz);
+    float rB = max(max(length(uTail2.xyz - tB), length(uTail3.xyz - tB)), max(length(uTail4.xyz - tB), length(uTail5.xyz - tB)));
+    s = addSphere(s, ro, rd, tB, rB + max(max(uTail2.w, uTail3.w), max(uTail4.w, uTail5.w)) + 0.08);
+    s = addSphere(s, ro, rd, uOrb.xyz, uOrb.w + 0.08);                                              // the orb
+    return clipSpan(ro, rd, s, CAM_TARGET, BOUND_R);
 }
 
 // The whole panda: distance to the nearest surface. This is the function the
@@ -295,7 +321,10 @@ float3 earColour(float3 e) {
 // means: 0 fur, above 0 glossy, -1 matte without fur, -2 inside a mouth).
 float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
-    if (id == ID_EYE) return float4(INK, 1.0);
+    if (id == ID_EYE) {
+        float4 l = eyeLid(INK, RUST * 1.3, h, eyeAt(), 0.101, h.x < 0.0 ? uFace.x : uFace.y);
+        return float4(l.rgb, 1.0 - l.w);
+    }
     if (id == ID_NOSE) return float4(INK * 2.0, 0.6);
     if (id == ID_HEAD) {
         // The painted mouth on the front of the muzzle, and the walls of
@@ -328,7 +357,7 @@ float3 sparkle(float id, float3 pos) {
     float2 sparkAt = float2(-0.024 + 0.014 * uLook.x, 0.028 + 0.010 * uLook.y);
     float spark = 1.0 - smoothstep(0.012, 0.021, length(q - sparkAt));
     float spark2 = 1.0 - smoothstep(0.005, 0.009, length(q - sparkAt - float2(0.036, -0.036)));
-    float lit = smoothstep(0.02, 0.2, min(uFace.x, uFace.y));
+    float lit = smoothstep(0.02, 0.2, min(uFace.x, uFace.y)) * (1.0 - uLid.x);
     return float3(1.6) * max(spark, spark2 * 0.8) * lit * (h.z < -0.28 ? 1.0 : 0.0);
 }
 
@@ -337,4 +366,10 @@ float3 sparkle(float id, float3 pos) {
 // meets something, and map() there; -1 for nothing.)
 float2 stuckRay(float3 ro, float3 rd) {
     return float2(-1.0, 0.0);
+}
+
+// Its shadow on the ground below (common_tail.sksl draws it where a ray
+// misses): none - it has its own seat, perch, vine or water.
+float ground(float3 ro, float3 rd) {
+    return 0.0;
 }

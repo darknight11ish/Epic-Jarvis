@@ -93,6 +93,7 @@ import {
   savedLine,
 } from "./security-settings.js";
 import {
+  FACE_TUNING_KEY,
   FRAME_RATES,
   FRAME_RATE_NOTE,
   loadFaceTuning,
@@ -627,9 +628,8 @@ paintTextSize();
    phone. The face frames in the widget and the HUD read the same key. */
 let faceTuning = loadFaceTuning();
 const faceAuto = $("face-auto");
-// "Keep the animal still": every face page on this computer reads it from
-// the same key (faces.html FACE_STILL), eased in over about a second.
-const faceStill = $("face-still");
+// "Keep the animal still" moved to "Animal options" (animal-settings.js,
+// 2026-09-28): it is shared with the phone now, kept on the PC.
 const faceStatus = $("face-status");
 
 function choiceRow(box, options, label, onPick) {
@@ -647,7 +647,6 @@ function choiceRow(box, options, label, onPick) {
 
 function paintFaceTuning() {
   if (faceAuto) faceAuto.checked = faceTuning.autoAdjust;
-  if (faceStill) faceStill.checked = faceTuning.still === true;
   const mark = (id, value) => {
     const box = $(id);
     if (!box) return;
@@ -700,13 +699,14 @@ if (faceAuto) {
   faceAuto.addEventListener("change", () =>
     setFaceTuning({ ...faceTuning, autoAdjust: faceAuto.checked }));
 }
-if (faceStill) {
-  faceStill.addEventListener("change", () =>
-    setFaceTuning({ ...faceTuning, still: faceStill.checked },
-      faceStill.checked ? "Saved on this computer. The animal will keep still."
-        : "Saved on this computer. The animal moves as usual."));
-}
 paintFaceTuning();
+// Changed in another window - "make the animal sharper" asked in the Jarvis
+// bar (main.js applies it here) - so these rows never show an old choice.
+window.addEventListener("storage", (event) => {
+  if (event.key !== FACE_TUNING_KEY && event.key !== null) return;
+  faceTuning = loadFaceTuning();
+  paintFaceTuning();
+});
 
 /* Shared with your phone: whether the face and state colours actually reach
    the phone, from get_appearance's own answer. Read on open and when the

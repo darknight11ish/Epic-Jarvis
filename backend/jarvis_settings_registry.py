@@ -72,6 +72,20 @@ choice function, picked because each already has a proven `handle_*`/
   * loosen_asks_first     - jarvis_asks_first.handle_tier()   (PC_ONLY_ACTIONS)
   * enable_reading_tool   - jarvis_asks_first.handle_tools()  (PC_ONLY_ACTIONS)
 
+ANIMAL OPTIONS (2026-09-28, the owner's "Jarvis can change any of them when
+asked") are adjustable too, each through the exact function its switch
+already calls - see "Animal options" at the end of this file:
+  * the shared switches ("Keep the animal still", listening nods, focus
+    buddy, small acknowledgements, petting, seasonal touches)
+                          - jarvis_animal.set_switch()   (at once, no card)
+  * the sun and moon      - jarvis_sky.handle_post({"show": ...})
+  * the weather source    - jarvis_sky.handle_post({"weather": ...}): off
+                            and Home Assistant at once; Open-Meteo raises
+                            its ONE approval card, never skipped
+  * sharpness and frame rate are per device, so the PC changes nothing:
+    jarvis_quick.py names the change in X-Jarvis-Route (`face_tuning`) and
+    the app that asked changes itself (jarvis_animal.step_device).
+
 Left OUT of "adjust", on purpose, said plainly rather than guessed at:
   * Voice (speed, built-in speaker, the better voice, voice follows the
     face - that last one IS a single on/off, but it lives on the voice
@@ -136,6 +150,12 @@ SECTIONS: tuple = (
     Section("connection", ("connection", "the connection settings", "where jarvis is running")),
     Section("faq", ("the faq", "frequently asked questions", "help")),
     Section("appearance-card", ("appearance", "the theme", "how jarvis looks", "the face")),
+    # "Animal options" (2026-09-28): every animal-face option in one place.
+    # Desktop: its own card in settings.html. Phone: inside Appearance, so
+    # the phone's Settings scrolls to its Appearance row (SettingsScreen.kt
+    # SETTINGS_ITEM_INDEX), whose button opens it.
+    Section("animal-options", ("animal options", "the animal's options", "animal settings",
+                               "the animal's settings", "the animal settings")),
     Section("voice", ("voice", "voice settings", "my voice", "how jarvis listens")),
     Section("manner", ("how jarvis talks", "manner", "warm and brief", "plain mode")),
     Section("briefing-settings", ("the morning briefing", "briefing settings")),
@@ -476,3 +496,63 @@ _BOOL_BY_NAME = {_bare(name): b for b in BOOL_SETTINGS for name in b.names}
 
 def find_bool_setting(words: str):
     return _BOOL_BY_NAME.get(_bare(words))
+
+
+# --------------------------------------------------------------------------
+#   Animal options (2026-09-28): the shared switches, the sun and moon and
+#   the weather source - each through the function its own switch calls.
+#   jarvis_quick._animal is the grammar; this is the one place it acts.
+# --------------------------------------------------------------------------
+
+
+def find_animal_switch(words: str) -> Optional[str]:
+    """The shared animal switch `words` names exactly (jarvis_animal's own
+    alias list - never typed twice), or None."""
+    try:
+        import jarvis_animal as AN
+    except Exception:
+        return None
+    return AN.find_switch(words)
+
+
+def set_animal_switch(key: str, on: bool, *, peer=None, local=None) -> Outcome:
+    """At once, from either app or by asking: cosmetic, no card - the same
+    jarvis_animal.set_switch POST /api/animal calls."""
+    try:
+        import jarvis_animal as AN
+    except Exception:
+        return _missing("the animal options")
+    code, out = AN.set_switch(key, bool(on))
+    return _say(code, out)
+
+
+def _sky_here(peer, local) -> bool:
+    try:
+        import jarvis_sky as SK
+        return SK._from_this_pc(peer, local)
+    except Exception:
+        return False
+
+
+def set_sky_show(on: bool, *, peer=None, local=None) -> Outcome:
+    """"Show the sun and moon behind the face": at once either way, the
+    same jarvis_sky.handle_post({"show": ...}) both apps' switch calls."""
+    try:
+        import jarvis_sky as SK
+    except Exception:
+        return _missing("the sun, moon and weather")
+    code, out = SK.handle_post({"show": bool(on)}, here=_sky_here(peer, local))
+    return _say(code, out)
+
+
+def set_weather_source(source: str, *, peer=None, local=None) -> Outcome:
+    """The weather source: "off" and "home_assistant" at once; "open_meteo"
+    raises jarvis_sky's ONE approval card (it sends the rough position to
+    the internet) and changes nothing until it is approved - the same
+    jarvis_sky.handle_post({"weather": ...}) both apps' choices call."""
+    try:
+        import jarvis_sky as SK
+    except Exception:
+        return _missing("the sun, moon and weather")
+    code, out = SK.handle_post({"weather": source}, here=_sky_here(peer, local))
+    return _say(code, out)

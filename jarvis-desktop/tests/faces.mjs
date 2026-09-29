@@ -649,7 +649,7 @@ await check("every animal's shader is within the size Android's compiler accepts
   }
 });
 
-const ANIMALS = ["redpanda", "pygmyowl", "seaotter", "monkey"];
+const ANIMALS = ["redpanda", "pygmyowl", "seaotter", "monkey", "robot"];
 
 await check("every animal is handed every real state, not a borrowed movement", async () => {
   // Most faces have four motion tables and the shell borrows for the other
@@ -663,6 +663,9 @@ await check("every animal is handed every real state, not a borrowed movement", 
   const got = await page.evaluate((ids) => ids.map((id) => {
     const th = THEME[id], api = CritterPose.species[id];
     const pose = (st, t = 3) => api.uniforms(api.pose(st, st, 9, t, 0, {}));
+    // The animals' eyes are uFace's first two; the robot's (no fur, no
+    // mouth) are uEyes' first two, in the same units.
+    const eyes = (U) => (U.uFace || U.uEyes).slice(0, 2);
     // Waiting on you: attentive and STILL - eyes wide open on you, and
     // nothing moving but the breath. (It used to wave; the owner's call,
     // 2026-09-28: no wave at what may be a serious moment.)
@@ -670,16 +673,16 @@ await check("every animal is handed every real state, not a borrowed movement", 
     const first = pose("approval", 3);
     for (let t = 3.1; t < 6; t += 0.1) {
       const now = pose("approval", t);
-      for (const k of ["uPawL", "uPawR", "uWingL0", "uWingR0", "uHeadR0"]) {
+      for (const k of ["uPawL", "uPawR", "uWingL0", "uWingR0", "uHandL", "uHandR", "uHeadR0"]) {
         if (first[k]) first[k].forEach((v, i) => { moved = Math.max(moved, Math.abs(v - now[k][i])); });
       }
     }
-    const waitEyes = Math.max(...[3, 3.5, 4, 4.5, 5].map((t) => pose("approval", t).uFace[0]));
+    const waitEyes = Math.max(...[3, 3.5, 4, 4.5, 5].map((t) => eyes(pose("approval", t))[0]));
     return {
       id,
       states: th ? Object.keys(th.st) : null,
-      standbyEyes: pose("standby").uFace.slice(0, 2),
-      idleEyes: pose("idle").uFace.slice(0, 2),
+      standbyEyes: eyes(pose("standby")),
+      idleEyes: eyes(pose("idle")),
       moved, waitEyes,
     };
   }), ANIMALS);

@@ -468,7 +468,14 @@ fn spec_state(link: &LinkState) -> &'static str {
     // "things are waiting silently" is more worth a glance than "asleep", and
     // the two never contradict each other because a banked system with budget
     // to spend is not a state the arbiter can produce.
+    //
+    // One exception (owner, 2026-09-29): a focus session puts Jarvis on Quiet,
+    // and the animal then shows its focus buddy, awake and working beside the
+    // owner - so the icon reads "idle", the same as the faces
+    // (jarvis-link.js surfaceState). Only that Quiet: a Quiet the owner set by
+    // hand, and standby of any kind, still read as asleep.
     match link.power.as_str() {
+        "quiet" if link.power_set_by.as_deref() == Some("focus") => "idle",
         "standby" | "quiet" => "standby",
         _ => "idle",
     }
@@ -967,6 +974,7 @@ fn power_label(link: &LinkState) -> String {
         Some("schedule") => " · quiet hours",
         Some("idle") => " · idle timer",
         Some("standby_schedule") => " · standby schedule",
+        Some("focus") => " · focus session",
         _ => "",
     };
     // The "· read-only" that used to end this row is gone: the submenu
@@ -1530,6 +1538,34 @@ mod tests {
         assert_eq!(spec_state(&l), "error");
     }
 
+    /// A focus session's Quiet is not asleep (owner, 2026-09-29): the faces
+    /// show the focus buddy, so the icon reads idle. A Quiet set by hand, or
+    /// any standby, still reads as asleep. CONTROL: without the `focus` arm in
+    /// `spec_state` the first assertion says "standby".
+    #[test]
+    fn a_focus_sessions_quiet_is_awake_and_a_hand_set_one_is_asleep() {
+        let mut l = link();
+        l.power = "quiet".into();
+        l.power_set_by = Some("focus".into());
+        assert_eq!(spec_state(&l), "idle", "focus Quiet shows the buddy");
+        assert_eq!(power_label(&l), "Power: quiet · focus session");
+        l.power_set_by = Some("override".into());
+        assert_eq!(spec_state(&l), "standby", "a hand-set Quiet stays asleep");
+        l.power_set_by = None;
+        assert_eq!(spec_state(&l), "standby");
+        l.power = "standby".into();
+        l.power_set_by = Some("focus".into());
+        assert_eq!(
+            spec_state(&l),
+            "standby",
+            "only Quiet is the focus session's"
+        );
+        l.power = "quiet".into();
+        l.power_set_by = Some("focus".into());
+        l.connected = false;
+        assert_eq!(spec_state(&l), "standby", "not connected is asleep");
+    }
+
     /// Never the approval colour while acting is blocked, and not connected
     /// is asleep (the owner's rule, 2026-09-28) - with the hollow icon.
     #[test]
@@ -1964,6 +2000,58 @@ mod tests {
                     "{name} on {label}: the strongest edge measures {r:.2}:1, under 3:1"
                 );
             }
+        }
+    }
+
+    /// The "not connected" icon is the hollow ring (`filled == false`), and
+    /// its edge must stand out on both taskbars too (owner, 2026-09-29: the
+    /// faces' not-connected ring was 1.65:1 against the ground and was raised
+    /// to about 4:1; the tray icon did not need it, and this is the proof).
+    /// The ring is the thick body of the icon, and the two-tone outline round
+    /// it (dark outside, light just inside) has contrast against whichever
+    /// taskbar it sits on, whatever the fill colour - standby's grey at
+    /// its dimmest included.
+    #[test]
+    fn the_hollow_not_connected_icon_has_an_edge_against_both_taskbars() {
+        const WHITE: Rgb = Rgb {
+            r: 243,
+            g: 243,
+            b: 243,
+        };
+        const BLACK: Rgb = Rgb {
+            r: 32,
+            g: 32,
+            b: 32,
+        };
+        let standby = shade(
+            Rgb {
+                r: 107,
+                g: 125,
+                b: 148,
+            },
+            0.6,
+        );
+        let buf = draw_pixels(standby, standby, false, None);
+        // The middle of the icon is EMPTY (hollow), not a disc.
+        let mid = ((ICON_SIZE / 2) * ICON_SIZE + ICON_SIZE / 2) as usize * 4;
+        assert_eq!(
+            buf[mid + 3],
+            0,
+            "the middle of the not-connected icon is filled"
+        );
+        for (bg, label) in [(WHITE, "a light taskbar"), (BLACK, "a dark one")] {
+            let mut best = 1.0f64;
+            for i in (0..buf.len()).step_by(4) {
+                let px = &buf[i..i + 4];
+                if px[3] == 0 {
+                    continue;
+                }
+                best = best.max(ratio(over(px, bg), bg));
+            }
+            assert!(
+                best >= 3.0,
+                "the hollow icon on {label}: the strongest edge measures {best:.2}:1, under 3:1"
+            );
         }
     }
 

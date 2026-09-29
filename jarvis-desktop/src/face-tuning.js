@@ -73,11 +73,11 @@ export const FACE_TUNING_DEFAULT = Object.freeze({
   frameRate: "auto",
   speed: 1,
   autoAdjust: true,
-  // "Keep the animal still" (owner, 2026-09-28): an animal face only
-  // breathes and blinks - no looking around, gestures or little idle
-  // happenings. Off unless chosen. Every face page on this computer reads it
-  // (faces.html FACE_STILL); the other faces ignore it. The phone has its
-  // own switch (Appearance), since this whole object never leaves this PC.
+  // "Keep the animal still" as this computer kept it before 2026-09-28's
+  // "Animal options" made it shared with the phone (kept on the PC now,
+  // animal-shared.js). Still read, for two things only: the one-time move
+  // of an "on" to the PC (jarvis-link.js), and an older PC that cannot
+  // share it yet (animal-settings.js offers the switch here then).
   still: false,
 });
 

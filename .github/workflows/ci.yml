@@ -172,6 +172,33 @@ jobs:
           python tools/gen_sky.py --check
           python tools/gen_sky_cases.py --check
           node jarvis-desktop/tests/sky.mjs
+      # "Animal options" (2026-09-28): what GET /api/animal answers and the
+      # one rule for "make the animal sharper", made by jarvis_animal.py, for
+      # both apps - so their fallback words and their stepping cannot drift.
+      - name: Animal options - both apps' contract matches jarvis_animal.py
+        run: |
+          python tools/gen_animal_cases.py --check
+          node jarvis-desktop/tests/animal-settings.mjs
+      # The animals' new behaviours as the desktop feeds them (the moments'
+      # relay, the lock rules) and the faces at every speed of Jarvis's
+      # voice (the phrase-end finder, the robot's eye pulse). Both also run,
+      # whole, in the frontend job's every-suite loop; here - with no browser
+      # installed - animal-behaviours runs its browser-free half and skips
+      # the face page, as sky.mjs does, and voice-speed needs no browser.
+      - name: Animal behaviours and voice speed - the browser-free checks
+        run: |
+          node jarvis-desktop/tests/animal-behaviours.mjs
+          node jarvis-desktop/tests/voice-speed.mjs
+          node jarvis-desktop/tests/animal-motion.mjs
+          node jarvis-desktop/tests/animal-lids.mjs
+      # Seasonal touches (leaves, snow, blossom, fireflies, a few holidays)
+      # are worked out twice - season.js on the desktop, Season.kt on the
+      # phone - and the phone's SeasonTest checks its copy against a fixture
+      # the JavaScript writes.
+      - name: Seasonal touches - the phone's golden fixture matches season.js
+        run: |
+          python tools/gen_season.py --check
+          node jarvis-desktop/tests/season.mjs
       # A command registered in lib.rs but missing from build.rs's own ACL
       # export list has no permission at all, and every window's call to it
       # is refused at runtime - a compile-time-invisible break that bit two

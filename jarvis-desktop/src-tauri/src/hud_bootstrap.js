@@ -276,11 +276,27 @@
     document.addEventListener("DOMContentLoaded", paintLink, { once: true });
   }
 
+  var lastPower = "";
+  function powerChanged(link) {
+    if (!link || typeof link.power !== "string") return;
+    var by = typeof link.power_set_by === "string" ? link.power_set_by : "";
+    var key = link.power + "|" + by;
+    if (key === lastPower) return;
+    lastPower = key;
+    var detail = { power: link.power, set_by: by };
+    window.__jarvisPower = detail;
+    window.dispatchEvent(new CustomEvent("jarvis-power", { detail: detail }));
+  }
+
   function linkChanged(link) {
     // Read before the early return below, so a payload that only flips
     // `stale` (not `connected`) still updates the gate in section 4.
     linkStale = !!(link && link.stale);
     lastLink = link || null;
+    // The power mode and who set it, for the page's face: a focus session's
+    // Quiet shows the focus buddy, a Quiet set by hand shows a sleeping
+    // animal. Two words, nothing else from the link.
+    powerChanged(link);
     // Every call, not only when `connected` flips: stale comes and goes
     // while connected stays true.
     paintLink();
