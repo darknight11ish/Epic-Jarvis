@@ -29,6 +29,7 @@ import com.jarvis.client.net.JarvisApi
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.BigModel
 import com.jarvis.client.net.Hardware
+import com.jarvis.client.net.InboxTidy
 import com.jarvis.client.net.PcHelp
 import com.jarvis.client.net.SecondCard
 import com.jarvis.client.net.StatusInfo
@@ -742,6 +743,21 @@ object JarvisRuntime {
                     runCatching { sky() }
                     delay(com.jarvis.client.net.SkySettings.POLL_MS)
                 }
+            }
+        }
+
+        // Inbox tidy (docs/JARVIS-API.md section 92): the newest tidy still
+        // open to Undo, read every POLL_MS while connected - a tiny read of
+        // counts and words, never a sender or a subject. The clock ticks even
+        // while the link is down, so an Undo whose ten minutes are up goes.
+        scope.launch {
+            while (true) {
+                if (_link.value == LinkState.CONNECTED) {
+                    runCatching { refreshInboxTidy() }
+                } else {
+                    _inboxTidyClock.value = SystemClock.elapsedRealtime()
+                }
+                delay(InboxTidy.POLL_MS)
             }
         }
 
@@ -3156,7 +3172,11 @@ object JarvisRuntime {
         try {
             val result = if (approve) api.approve(item.id) else api.deny(item.id)
             when (result) {
-                is ApiResult.Ok -> refreshPending()
+                is ApiResult.Ok -> {
+                    refreshPending()
+                    // An inbox tidy approved here: its Undo strip shows at once.
+                    if (approve && item.action == "tidy_inbox") watchInboxTidyQuickly()
+                }
                 is ApiResult.Failed -> {
                     if (result.error == ApiError.AlreadyHandled) {
                         // Routine when the desktop and the phone are both open.
@@ -5946,6 +5966,85 @@ object JarvisRuntime {
                 if (action == "undo" && it.done) _profileTick.update { n -> n + 1 }
             }
             is ApiResult.Failed -> com.jarvis.client.net.ForgetRange.Outcome(false, false, "Not done. " + describe(r.error))
+        }
+    }
+
+    // -------------------------------------------------- inbox tidy ----
+    // docs/JARVIS-API.md section 92 (the owner's decision of 2026-09-28) -
+    // see [com.jarvis.client.net.InboxTidy] and the Undo strip on Home
+    // (ui/screens/HomeScreen.kt, InboxTidyPlate). The tidy itself is asked
+    // for in chat and decided on an ordinary approval card; this only shows
+    // the ten minutes of Undo the PC keeps, and sends the tap.
+
+    private val _inboxTidy = MutableStateFlow<InboxTidy.Held?>(null)
+
+    /** The PC's last word on the newest tidy still open to Undo, and when it was read. */
+    val inboxTidy: StateFlow<InboxTidy.Held?> = _inboxTidy.asStateFlow()
+
+    private val _inboxTidyClock = MutableStateFlow(0L)
+
+    /** Goes up on every poll, so the strip's minutes run down and an Undo that has run out goes. */
+    val inboxTidyClock: StateFlow<Long> = _inboxTidyClock.asStateFlow()
+
+    private val _inboxTidyBusy = MutableStateFlow(false)
+
+    /** True while an Undo is on its way, so a second tap cannot send it twice. */
+    val inboxTidyBusy: StateFlow<Boolean> = _inboxTidyBusy.asStateFlow()
+
+    /** [inboxTidyUndo], on the runtime's own scope (the screen may go away mid-flight). */
+    fun inboxTidyUndoDetached() {
+        scope.launch { inboxTidyUndo() }
+    }
+
+    /** Re-reads the status. A failed read changes nothing: the last answer keeps aging. */
+    suspend fun refreshInboxTidy() {
+        when (val r = api.inboxTidyCall(false)) {
+            is ApiResult.Ok -> {
+                _inboxTidy.value = if (InboxTidy.missing(r.value)) {
+                    null
+                } else {
+                    InboxTidy.Held(InboxTidy.parseStatus(r.value.body), SystemClock.elapsedRealtime())
+                }
+            }
+            is ApiResult.Failed -> Unit
+        }
+        _inboxTidyClock.value = SystemClock.elapsedRealtime()
+    }
+
+    /**
+     * Undo the newest tidy - one tap, no card. Held on a stale link (rule 4:
+     * it acts on the owner's mailbox). The PC's own sentence says what came
+     * back; it is shown as the notice, and the strip re-reads itself.
+     */
+    suspend fun inboxTidyUndo(): InboxTidy.Outcome {
+        if (actionBlocker() != null) return InboxTidy.Outcome(false, InboxTidy.w("stale"))
+        // While the lists are hidden the strip says only that the inbox was
+        // tidied; Undo waits for the unlock (the strip disables the button
+        // too - this is the check that does not depend on the screen).
+        if (privateListsHidden) return InboxTidy.Outcome(false, InboxTidy.w("locked"))
+        if (!_inboxTidyBusy.compareAndSet(false, true)) {
+            return InboxTidy.Outcome(false, "Already on its way.")
+        }
+        try {
+            val out = when (val r = api.inboxTidyCall(true)) {
+                is ApiResult.Ok -> InboxTidy.undoOutcome(r.value)
+                is ApiResult.Failed -> InboxTidy.Outcome(false, "Not undone. " + describe(r.error))
+            }
+            _notice.value = out.message
+            refreshInboxTidy()
+            return out
+        } finally {
+            _inboxTidyBusy.value = false
+        }
+    }
+
+    /** A few quick reads right after a tidy card was approved on this phone, so the strip shows at once. */
+    private fun watchInboxTidyQuickly() {
+        scope.launch {
+            repeat(6) {
+                delay(3_000L)
+                runCatching { refreshInboxTidy() }
+            }
         }
     }
 
