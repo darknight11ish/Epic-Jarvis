@@ -911,8 +911,17 @@ def _plan_step_dispatch(tools: dict, names: list, checker, watch: "_TurnWatch",
     tool can never be named by a step at all (see _PLAN_EXCLUDED_STEPS's
     own docstring for the rest of that list, and why)."""
     cache: dict = {}   # id(step) -> (tool, state, checked_args, verdict)
+    # A result-filled step is a fresh copy `jarvis_plan.run()` makes for each
+    # step and drops once the next one starts. CPython hands a freed object's
+    # id to the next object made, so without this list a later filled step
+    # could land on an earlier one's cache entry and run THAT step's tool
+    # again under its already-approved card instead of asking its own
+    # (bug audit 2026-09-29). Keeping every step seen alive for as long as
+    # this dispatcher lives means an id is never reused.
+    alive: list = []
 
     def _resolve(step):
+        alive.append(step)
         key = id(step)
         if key in cache:
             return cache[key]

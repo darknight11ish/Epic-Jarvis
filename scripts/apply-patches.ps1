@@ -995,7 +995,7 @@ $SHIPPED = @(
     'jarvis_app_workspace.py'    # app projects, a separate copy per task, one card with the full diff before a merge; runs nothing; no tool yet
     'jarvis_apps.py'             # apps-in-projects.patch: an app inside Projects - its tasks, a task's whole change, Merge (ONE risky card) and Discard; a change is pasted in on the PC only; runs nothing
     # --- "Goals with one card per step" (goals.patch) ---
-    'jarvis_goals.py'            # goals.patch: a goal's own plan and weekly check-in; accepting raises one card, like a repeating reminder; every acting step still asks through ordinary chat
+    'jarvis_goals.py'            # goals.patch: a goal's own plan and weekly check-in; accepting sets up the check-in with no card (a plain repeat); every acting step still asks through ordinary chat
     # --- "One card, several steps" (plan-gate.patch) ---
     'jarvis_plan.py'             # plan-gate.patch: the plan card's own module - SWITCHED OFF until tools/tool_eval's real results clear the bar; see its own docstring
     # --- reading phone notifications (2026-09-28, phone-notifications.patch) ---

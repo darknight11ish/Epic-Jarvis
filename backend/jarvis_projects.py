@@ -35,13 +35,13 @@ WHAT IS BUILT HERE, AND WHAT IS NOT (build steps 1 and 2 only)
     project chat context and project-labelled facts (step 4), both apps'
     screens (step 3), and anything the Shareable switch would one day let
     go out (it is only a switch here; nothing is ever sent).
-  * GOALS: jarvis_goals.py exists only on the continuation branch
-    (claude/jarvis-continuation-03kls1), not here. So the link is kept on
-    THIS side: a project lists goal ids (`goals`). The goals.db `project`
+  * GOALS: jarvis_goals.py is on main now, but the link is not built yet
+    (cohesiveness audit, 2026-09-29): a project lists goal ids (`goals`) on
+    THIS side, and no screen sets or shows them. The goals.db `project`
     column, `GET /api/goals?project=<id>`, and a goal step's measure
-    ({"bench": ..., "target": ...}) come after that branch merges - the
-    design's "one extra field, no second goals system" is unchanged. Until
-    then a goal id here is not checked against goals.db (it cannot be).
+    ({"bench": ..., "target": ...}) are still to come - the design's "one
+    extra field, no second goals system" is unchanged. Until then a goal id
+    here is not checked against goals.db.
   * CHATS: the chat-history `project` column waits for step 4 - nothing
     can set it until /api/chat carries a project id.
 
@@ -281,8 +281,8 @@ def clean_notes(notes) -> list:
 
 
 def clean_goals(goals) -> list:
-    """Goal ids from jarvis_goals.py (continuation branch). Kept as given;
-    not checked against goals.db, which is not on this branch."""
+    """Goal ids from jarvis_goals.py. Kept as given; not yet checked against
+    goals.db (the project <-> goal link is not built; see the module note)."""
     if goals is None:
         return []
     if not isinstance(goals, list):

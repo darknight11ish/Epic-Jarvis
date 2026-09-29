@@ -883,6 +883,17 @@ def _move_by_copy(conn, uid: int, dst: str) -> Optional[int]:
     return new_uid
 
 
+def _set_flag(conn, uid: int, flag: str) -> None:
+    """Add `flag` to the selected folder's message `uid`. imaplib raises only
+    on BAD, so a NO (a read-only folder, a permission refusal) comes back as a
+    plain answer: it is checked here, or the email would be counted as changed
+    and an Undo record kept for a change that never happened (bug audit
+    2026-09-29). The move paths already check theirs."""
+    typ, _ = conn.uid("STORE", str(uid), "+FLAGS.SILENT", flag)
+    if typ != "OK":
+        raise RuntimeError("the server refused to change the flag")
+
+
 def _move(conn, caps: set, uid: int, dst: str) -> Optional[int]:
     """Move the selected folder's message `uid` to `dst`. Returns its new
     UID when the server tells us."""
@@ -1090,13 +1101,13 @@ def run(p: Plan, *, approved: bool = False, connect: Optional[Callable] = None,
                     if "\\seen" in flags:
                         skipped += 1
                         continue
-                    conn.uid("STORE", str(it.uid), "+FLAGS.SILENT", "(\\Seen)")
+                    _set_flag(conn, it.uid, "(\\Seen)")
                     done.append({"uid": it.uid, "id": it.message_id})
                 elif p.action == "star":
                     if "\\flagged" in flags:
                         skipped += 1
                         continue
-                    conn.uid("STORE", str(it.uid), "+FLAGS.SILENT", "(\\Flagged)")
+                    _set_flag(conn, it.uid, "(\\Flagged)")
                     done.append({"uid": it.uid, "id": it.message_id})
                 elif gmail:
                     if p.action == "trash":

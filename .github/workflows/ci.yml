@@ -65,7 +65,12 @@ jobs:
 
   frontend:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # 90, was 45. The suites run one after another in this one job and have
+    # grown to about 45 minutes: main's run for PR #29 took 43, and PR #30's
+    # merge was CANCELLED at the 45-minute limit with every test still passing
+    # (2026-09-29). Raising the limit skips nothing; if it keeps growing, split
+    # the loop below across a matrix instead.
+    timeout-minutes: 90
     defaults:
       run:
         working-directory: jarvis-desktop

@@ -195,10 +195,11 @@ full-duplex voice models (skip the voice check and cards), GPL audio tools
 
 ## Decided but not built yet (don't propose these as new)
 
-QR pairing with per-device keys; the plan
-card; the animals' mouths timed by Kokoro v1.0 itself (built for v0.19
+The animals' mouths timed by Kokoro v1.0 itself (built for v0.19
 only); blended voices; the
 12 GB card's long-context lane; the memory re-ranker bake-off; the
-feasibility audit's small items. (Talk-to-type, the Today page and the
-overnight tidy, review cards only, are built - merged from `main`.) The owner's full list of
+feasibility audit's small items. (Talk-to-type, the Today page, the
+overnight tidy, review cards only, QR pairing with per-device keys and Goals are
+built and on main; the plan card is built and switched off until its
+safety test passes.) The owner's full list of
 decisions is in `CLAUDE.md`.

@@ -280,6 +280,20 @@ def t_what_is_backed_up_and_what_is_excluded():
           and manifest["databases"].get("memory.db", {}).get("facts") == 1, manifest)
     check("projects.db is on the list of databases backed up (Projects feature audit, "
           "2026-09-28)", "projects.db" in B.SOURCE_DBS)
+    check("goals.db is on the list of databases backed up (cohesiveness audit, 2026-09-29): "
+          "its weekly check-ins live in schedule.db", "goals.db" in B.SOURCE_DBS)
+    # Every database file name a backend module opens must be on the list, so
+    # the next one added cannot be forgotten the way projects.db and goals.db
+    # each were once.
+    import re as _re
+    opened = set()
+    for mod in sorted(HERE.glob("jarvis_*.py")):
+        if mod.name == "jarvis_backup.py":
+            continue
+        opened |= set(_re.findall(r"[\"']([A-Za-z0-9_-]+\.db)[\"']",
+                                  mod.read_text(encoding="utf-8")))
+    check("every .db a backend module names is backed up (or written down here)",
+          opened <= set(B.SOURCE_DBS), sorted(opened - set(B.SOURCE_DBS)))
     check("the settings JSON is in", "settings/folders.json" in names)
     check("notes are in", "notes/todo.md" in names
           and zf_read(zip_bytes, "notes/todo.md") == b"buy milk")

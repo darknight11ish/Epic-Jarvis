@@ -209,7 +209,12 @@ CODE_GROUPS, CODE_GROUP_LEN = 4, 5
 #: that make them, 2026-09-27 - see the module docstring). projects.db
 #: (jarvis_projects.py: projects, their benchmarks and every number the
 #: owner logged) joined on 2026-09-28, found by the Projects feature audit.
-SOURCE_DBS = ("memory.db", "chat-history.db", "schedule.db", "feedback.db", "projects.db")
+#: goals.db (jarvis_goals.py) joined on 2026-09-29, found by the cohesiveness
+#: audit: schedule.db WAS backed up, and it holds each goal's weekly check-in
+#: job, so a restore brought back check-ins whose goals were gone - and Stop
+#: tracking (the only way to remove one) needs the goal.
+SOURCE_DBS = ("memory.db", "chat-history.db", "schedule.db", "feedback.db", "projects.db",
+              "goals.db")
 
 MISSING = "backup.py could not be reached - run apply-patches.ps1 on this PC"
 NO_CRYPTO = ("Backing up needs the `cryptography` package, which is not installed on this "

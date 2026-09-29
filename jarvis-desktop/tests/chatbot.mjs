@@ -450,6 +450,22 @@ await check("Brain, running: a re-read does not wipe limits being typed, or take
   assert.equal(focused, "chatbot-new-messages");
 });
 
+await check("Brain, running: a re-read does not throw a keyboard user off Stop", async () => {
+  // Bug audit 2026-09-29: the poll rebuilt the Pause/Stop buttons and the
+  // focus went back to the page every few seconds.
+  const page = await workTab({ chatbot: { status: CASES.running } });
+  await page.getByRole("button", { name: "Stop", exact: true }).focus();
+  const before = await page.evaluate(() => window.__chatbot.reads);
+  await page.evaluate(() => window.__emit("jarvis-event",
+    { kind: "activity", id: 9, data: { value: "working", detail: "Talking to Gemini: message 3 of 4." } }));
+  await page.waitForTimeout(600);
+  const after = await page.evaluate(() => window.__chatbot.reads);
+  const focused = await page.evaluate(() => document.activeElement && document.activeElement.textContent);
+  await page.close();
+  assert.ok(after > before, "it did not read again");
+  assert.equal(focused, "Stop");
+});
+
 await check("Brain, paused at a captcha: the PC's words, Resume and Stop", async () => {
   const page = await workTab({ chatbot: { status: CASES.paused_captcha } });
   const text = await page.locator("#chatbot").innerText();

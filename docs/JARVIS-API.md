@@ -13744,11 +13744,10 @@ Projects and more"), designed in `docs/PROJECTS-DESIGN.md`; this section is
 its **build steps 1 to 3**. `backend/jarvis_projects.py` (shipped
 whole), `projects.patch`, `projects.db` in the settings folder.
 **Both apps call these routes since build step 3 (2026-09-28)** - see
-61.6; `tools/check_parity.py` lists them as `ported`.
+88.6; `tools/check_parity.py` lists them as `ported`.
 
-Numbered 61: section 59 is Goals on the continuation branch
-(`claude/jarvis-continuation-03kls1`, not merged here yet) and 60 the
-chatbot driver.
+Numbered 88 since the audit integration merge: section 59 is Goals and 60
+the plan card, both now on main.
 
 **What is not here yet, said plainly:** running a benchmark's command (the
 fence, build step 6) - a coding benchmark's command is kept as words and
@@ -13757,9 +13756,11 @@ marked `"runnable": false`; Jarvis changing code (`project_edit`, after the
 facts (step 4); the chat-history `project` column (step 4 - nothing can
 set it until `/api/chat` carries a project id); and anything the Shareable
 switch would one day let out (it is a switch only; nothing is ever sent).
-Goals live on the continuation branch, so a project keeps a list of goal
-ids on its own side; the goals.db `project` column and a goal step's
-measure come after that branch merges.
+Goals (section 59) are on main now, but the link is not built yet: a
+project still keeps a list of goal ids on its own side, unchecked, and
+neither app can set or show them; the goals.db `project` column, the
+`GET /api/goals?project=` filter and a goal step's measure are still to come
+(cohesiveness audit, 2026-09-29).
 
 ### 88.1 Who may do what, and which ask first
 
@@ -13876,7 +13877,7 @@ written only if the benchmark still has the words the card showed; a
 rename, a new unit, the owner's own new mark or a delete while it waits
 makes a late yes change nothing. **Renaming a benchmark or changing its
 unit checks the name again**: a mark taken off comes back when the new
-words still look like health or money. The quick command (61.4) follows
+words still look like health or money. The quick command (88.4) follows
 the same marks.
 
 ### 88.6 The apps (build step 3, 2026-09-28)
