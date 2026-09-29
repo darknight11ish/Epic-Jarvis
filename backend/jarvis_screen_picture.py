@@ -1302,12 +1302,29 @@ def note_suffix(glance) -> str:
         if job is None:
             return " only"
         if job.pending():
-            return " only (the picture reader is still working)"
+            return " and picture when ready (slow mode)"
         if job.ok():
             return " and picture (slow mode)"
         return f" only ({SHORT_WORDS.get(job.why, SHORT_WORDS['error'])})"
     except Exception:
         return " only"
+
+
+def owner_line(glance) -> str:
+    """One plain sentence the ANSWER ITSELF carries when picture mode was on and
+    the picture was not used - written by code (jarvis_agent puts it in the
+    answer), so the owner is told even if the model does not pass it on. ""
+    when the picture was used, or picture mode was off for this look."""
+    try:
+        job = getattr(glance, "picture", None)
+        if job is None or job.ok():
+            return ""
+        if job.pending():
+            return ("(Picture mode: the picture was still being read, so this answer uses the "
+                    "words only. Ask again in a moment to include it.)")
+        return f"(Picture mode: {why_words(job.why)} This answer uses the words only.)"
+    except Exception:
+        return "(Picture mode: the picture was not used, so this answer uses the words only.)"
 
 
 # --------------------------------------------------------------------------

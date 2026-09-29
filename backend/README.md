@@ -17528,8 +17528,10 @@ Settings, "Looking at your screen: pictures" on the phone) has a switch, one
 line saying what state it is in, the measured speed once you have one (never a
 guess), and the one PowerShell line below. When it is on and you ask Jarvis to
 look, the answer's note says `words and picture (slow mode)`. If the picture
-model is missing, too slow or breaks, the note says `words only (why)` and
-Jarvis says so - it never quietly does less.
+model is missing, too slow or breaks, the note says `words only (why)` and the
+answer itself starts with one plain sentence - `(Picture mode: ... This answer
+uses the words only.)` - written by the code, not left to the model. Jarvis
+never quietly does less.
 
 **Kept safe.** Before any picture reaches the model, anything that looks like a
 key, a card number or a password is blacked out; **if that part is not
@@ -17594,7 +17596,9 @@ model away with `ollama rm minicpm-v:4.6`.
   (`GET /api/screen/picture`).
 - `jarvis_screen.py`: a look hands its picture to the job (`_take`), a question
   waits a little for it, the description joins the words as outside text, the
-  note says what was used, and the two routes are answered here.
+  note says what was used, and the picture route is answered here.
+- `jarvis_agent.py`: three lines - the answer itself carries the "(Picture mode:
+  ...)" sentence when the picture was not used.
 - `screen-picture.patch` (new, last): two lines in `jarvis_gate.py` (a "no" is
   not a standing rule; the notice's words).
 - `rebuilt/jarvis-framework.toml`: `screen_picture_enable = "ask"` and an

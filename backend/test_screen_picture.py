@@ -651,8 +651,11 @@ def t_a_slow_reader_never_holds_the_words_hostage():
     check("after the wait, the question gets the WORDS and a plain line saying the picture is "
           "still being read", got["part"] and FAKE_WORDS in got["part"]
           and SP.PICTURE_PENDING in got["part"], (got["part"] or "")[:200])
-    check("the note says the picture reader is still working",
-          "still working" in got["note"], got["note"])
+    check("the note says the picture comes when it is ready, not that it is words only",
+          "picture when ready" in got["note"] and "words only" not in got["note"], got["note"])
+    check("the answer itself will say so, by code",
+          "still being read" in got["picture_said"] and "words only" in got["picture_said"],
+          got["picture_said"])
     gate.set()
     for _ in range(200):
         if e._look.picture.ready.is_set():
@@ -672,6 +675,105 @@ def t_a_failing_reader_falls_back_to_words_and_says_so_in_the_answer():
           "took longer than" in out["part"] and "Tell the owner" in out["part"])
     check("the note shown with the answer says words only, and why",
           out["note"].endswith("words only (the picture reader was too slow)"), out["note"])
+
+
+def t_the_answer_itself_says_when_the_picture_was_not_used():
+    """Never silent, not even if the model does not pass the line on: code
+    writes one plain sentence into the ANSWER (jarvis_agent's tell_owner)."""
+    r = Rig()
+    g, job = r.look()
+    check("a picture that was used needs no sentence", SP.owner_line(g) == "")
+    check("picture mode off: no sentence", SP.owner_line(SC.Glance(at=0.0, mode="look")) == "")
+    for why, words in (("slow", "took longer than"), ("not_installed", "is not installed"),
+                       ("no_cleaner", "blacks out secrets"), ("error", "ran into an error")):
+        j = SP.Job()
+        j.finish(why=why)
+        held = types.SimpleNamespace(picture=j)
+        line = SP.owner_line(held)
+        check(f"{why}: one plain sentence for the answer, in brackets, ending 'words only.)'",
+              line.startswith("(Picture mode: ") and words in line and line.endswith(
+                  "This answer uses the words only.)"), line)
+    pending = types.SimpleNamespace(picture=SP.Job())
+    check("still being read: it says ask again in a moment",
+          "Ask again in a moment" in SP.owner_line(pending))
+    e = engine()
+    r2 = Rig(error=SP.LaneError("slow"))
+    e.look_at_this()
+    got = e.take_for_turn()
+    check("take_for_turn hands the sentence up", "took longer than" in got["picture_said"], got)
+    msgs, info = SC.with_screen([{"role": "user", "screen": "look", "content": "what is this?"}],
+                                "look", engine=e)
+    check("with_screen carries it in info, never in the messages the model reads",
+          "took longer than" in info["picture_said"]
+          and "(Picture mode:" not in json.dumps(msgs), info["picture_said"])
+    r3 = Rig(error=SP.LaneError("slow"))
+    msgs, info = SC.with_screen(_phone_messages(), "phone",
+                                read=lambda image: {"ok": True, "text": FAKE_WORDS})
+    check("a phone screenshot's turn carries it too", "took longer than" in info["picture_said"],
+          info["picture_said"])
+    r4 = Rig(enabled=False)
+    msgs, info = SC.with_screen(_phone_messages(), "phone",
+                                read=lambda image: {"ok": True, "text": FAKE_WORDS})
+    check("switch off: nothing is said (as before)", info["picture_said"] == "")
+
+
+def t_the_running_answer_carries_the_sentence():
+    """End to end through jarvis_agent.run_local_turn: the streamed answer
+    itself holds the plain sentence when the picture was not used."""
+    sys.path.insert(0, str(HERE / "rebuilt"))
+    require_shipped("jarvis_agent.py", "jarvis_ocr.py", "jarvis_chat_log.py",
+                    "jarvis_stop_all.py")
+    import copy
+    import jarvis_agent as AG
+    import _ollama_wire as W
+    AG._manner_now = lambda *a, **k: None
+
+    def run(rig_kwargs):
+        rig = Rig(**rig_kwargs)
+        e = engine()
+        e.look_at_this(wait=False)
+        req_msgs = [{"role": "user", "content": "what does this show?", "provenance": "typed",
+                     "screen": "look"}]
+        passed = [{k: v for k, v in m.items() if k not in ("provenance", "screen")}
+                  for m in req_msgs]
+        request = {"model": "jarvis-primary", "stream": True, "messages": copy.deepcopy(req_msgs)}
+        wire, sent = [], []
+
+        def opener(url, body):
+            sent.append(json.loads(json.dumps(body)))
+            return W.FakeResponse(W.stream([("content", "It shows a window."), ("done", "stop")]))
+        saved = (SC.ENGINE, AG._get_json)
+        SC.ENGINE = e
+        AG._get_json = lambda url, payload=None, *a, **k: (
+            {"capabilities": ["completion", "tools"]} if url.endswith("/api/show")
+            else (_ for _ in ()).throw(OSError("no network in this test")))
+        AG._SEES_CACHE.clear()
+        AG._TOOLS_CACHE.clear()
+        try:
+            AG.run_local_turn(passed, "jarvis-primary", ollama_url="http://127.0.0.1:11434",
+                              stream_out=wire.append, open_stream=opener, enabled_tools=None,
+                              context_length=16384, request=request, on_step=lambda s: None,
+                              record_chain=lambda s: None, keepalive_seconds=60,
+                              status_delay=60, lane_choice=None)
+        finally:
+            SC.ENGINE, AG._get_json = saved
+        return b"".join(x if isinstance(x, bytes) else str(x).encode() for x in wire).decode(
+            "utf-8", "replace"), sent, rig
+
+    text, sent, rig = run(dict(error=SP.LaneError("slow")))
+    check("a slow picture reader: the streamed ANSWER carries the plain sentence",
+          "(Picture mode: The picture reader took longer than" in text.replace("\\n", " ")
+          or "Picture mode: The picture reader took longer than" in text, text[:400])
+    check("... and the model still answered from the words", "It shows a window." in text)
+    check("... in a paragraph of its own, after the sentence",
+          "\\n\\nIt shows a window." in text, text[:600])
+    check("... and its text also holds the plain line for the model",
+          any("took longer than" in json.dumps(m) for m in sent[0]["messages"]))
+    text, sent, rig = run(dict())
+    check("a picture that worked: no such sentence in the answer",
+          "Picture mode:" not in text, text[:300])
+    text, sent, rig = run(dict(enabled=False))
+    check("picture mode off: the answer is as before, no sentence", "Picture mode:" not in text)
 
 
 def t_dropping_or_stopping_cancels_the_picture():
@@ -1199,7 +1301,8 @@ def t_the_one_line_is_one_line_and_safe_for_powershell():
     check("one line, no newline", "\n" not in line and "\r" not in line)
     check("the pull comes first, then the measure, in this backend's own folder",
           line.startswith("ollama pull 'minicpm-v:4.6'; Push-Location -LiteralPath '")
-          and line.endswith("--measure; Pop-Location") and str(HERE).replace("'", "''") in line,
+          and line.endswith("--measure; Pop-Location")
+          and str(Path(SP.__file__).resolve().parent).replace("'", "''") in line,
           line)
     check("the backend never pulls anything itself: no /api/pull, no ollama pull command",
           "/api/pull" not in _code() and not re.search(r'\[[^\]\n]*["\']pull["\']', _code()))

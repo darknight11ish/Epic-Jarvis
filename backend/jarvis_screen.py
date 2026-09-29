@@ -734,6 +734,15 @@ def _picture_lines(g: Glance) -> str:
     return SP.model_lines(g) if SP is not None else ""
 
 
+def _picture_said(g: Glance) -> str:
+    """The plain sentence the answer itself carries when picture mode was on and
+    its picture was not used (jarvis_screen_picture.owner_line) - "" otherwise."""
+    if g.picture is None:
+        return ""
+    SP = _picture_module()
+    return SP.owner_line(g) if SP is not None else ""
+
+
 def _picture_note(g: Glance) -> str:
     """What follows "words" in the note: " only" - or, with picture mode on,
     " and picture (slow mode)" / " only (why)"."""
@@ -787,6 +796,13 @@ def _phone_picture_lines(jobs) -> str:
         SP.wait_for(held)
         out.append(SP.model_lines(held))
     return "\n\n".join(x for x in out if x)
+
+
+def _phone_picture_said(jobs) -> str:
+    SP = _picture_module()
+    if SP is None:
+        return ""
+    return " ".join(x for x in (SP.owner_line(_Held(j)) for j in jobs if j is not None) if x)
 
 
 def _cancel_picture(g: Optional[Glance]) -> None:
@@ -907,7 +923,7 @@ def with_screen(messages: list, mark: str = "", *, engine=None,
     `info`: {"read": bool (words were added), "text": the words (for the
     planted-instruction check - never stored), "note", "mode"}. Never
     changes `messages` itself; never raises."""
-    info = {"read": False, "text": "", "note": "", "mode": ""}
+    info = {"read": False, "text": "", "note": "", "mode": "", "picture_said": ""}
     msgs = list(messages or [])
     idx = _newest_user(msgs)
     if idx is None:
@@ -961,7 +977,8 @@ def with_screen(messages: list, mark: str = "", *, engine=None,
             eng = engine or ENGINE
             got = eng.take_for_turn()
             if got.get("part"):
-                info.update(read=True, text=got["part"], note=got.get("note") or "")
+                info.update(read=True, text=got["part"], note=got.get("note") or "",
+                            picture_said=got.get("picture_said") or "")
                 added.append({"type": "text", "text": got["part"]})
             else:
                 added.append({"type": "text",
@@ -970,6 +987,7 @@ def with_screen(messages: list, mark: str = "", *, engine=None,
         if extra:
             info["text"] = (info["text"] + "\n\n" + extra).strip()
             added.append({"type": "text", "text": extra})
+            info["picture_said"] = _phone_picture_said(pic_jobs)
     except Exception:
         return list(messages or []), {"read": False, "text": "", "note": "", "mode": ""}
     msgs[idx] = dict(msgs[idx], content=kept + added)
@@ -1305,7 +1323,8 @@ class Screen:
                 if self._look is g:
                     self._look = None
             self._emit()
-        return {"part": model_part(g), "note": looked_note(g), "expired": False}
+        return {"part": model_part(g), "note": looked_note(g), "expired": False,
+                "picture_said": _picture_said(g)}
 
     def follow_up(self) -> Optional[str]:
         """The held look's model part for a follow-up question within

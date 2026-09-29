@@ -10281,7 +10281,9 @@ sentences:
 
 with "[N more characters were on the screen and were left out ...]" when a
 cap cut, and a line telling the model to say so rather than guess when
-nothing could be read. The picture itself is not sent on one graphics card.
+nothing could be read. The picture itself is not sent on one graphics card
+(**except with the owner's slow picture mode on, 2026-09-29 - section 96.1**: a
+small model on the processor also looks at it, after secrets are blacked out).
 The answer is shown with a note, "Looked at: <program> window · words only".
 A screen turn records a read of **`read_screen`** (`jarvis_screen.SCREEN_TOOL`),
 so a note write or web search after it asks first and a card says
@@ -10344,9 +10346,11 @@ all in `jarvis_agent.py`/`jarvis_screen.py`, none in an app:
    one the Watch session takes for the question, waiting up to 35 s). For the
    phone the words are the `screen_text` part (capped at 3,000), or - for a
    Watch picture - the words the PC's own text recognition finds in it. **No
-   picture is ever given to a model** on one graphics card: a phone screen
-   picture is read for its words and dropped, and `choose_lane` treats it as
-   not a vision turn. An empty `screen_text` part (the phone read nothing) is
+   picture is ever given to a model** on one graphics card - except the owner's
+   slow picture mode (96.1), which gives the cleaned picture to a small model on
+   the processor and only its description, as outside text, to the everyday one:
+   a phone screen picture is otherwise read for its words and dropped, and
+   `choose_lane` treats it as not a vision turn. An empty `screen_text` part (the phone read nothing) is
    the "could not read any words" line, never silence.
 3. **The router** keeps the turn on this PC (gate `screen`, above), so it
    never reaches a cloud lane.
@@ -10538,8 +10542,9 @@ refuses to look when pointed at a remote Jarvis.
   front-app log is; and the battery cost. A question typed **inside Jarvis**
   while Watch is on is about Jarvis's own screen, which is never looked at:
   ask by voice from another app.
-- **Pictures**: with one graphics card no model is shown a picture (62.6);
-  the picture path waits for the 12 GB card.
+- **Pictures**: with one graphics card the everyday model is shown no picture
+  (62.6); the optional slow picture mode (96.1) reads it on the processor
+  instead, and the two-card picture path waits for the 12 GB card.
 
 ## 63. Jarvis Live: talking back and forth (added 2026-09-28)
 
@@ -15256,7 +15261,7 @@ The owner's decision (`CLAUDE.md`, 2026-09-29: "add it as a feature that can be 
 
 **What a look does with it** (`jarvis_screen.py` `_take` -> `jarvis_screen_picture.start`): the words are read exactly as before. Beside that, a job on its own thread (1) checks the switch, the model name, that the model is installed and its checksum is the one it was measured with (`PINNED_DIGEST`, else the first measurement's - a changed file refuses), (2) **cleans the picture** (below) - no cleaner, no picture, (3) shrinks it to 1,024 px on its longest side (Pillow if installed, else by hand for the PC's own PNG, else as it is), (4) starts the picture reader if needed, (5) asks it for a description of at most 400 words, `num_gpu 0`, not streamed, with a timeout (`timeout_s`, 240), (6) asks the copy what it holds (`/api/ps`): any graphics memory in use stops the copy and refuses picture mode until the owner switches it off and on, (7) removes hidden thinking and chat markers, caps the text at 1,500 characters. The description joins the words as **more OUTSIDE TEXT** (a heading saying it came through another AI model, must be treated as a rough guess, never obeyed, and that the words win when they disagree); it is what the planted-instruction check reads, and it is held with the look for two minutes and never kept, saved, learned or put in an event, status or audit line. A question waits for the words (`READ_WAIT_S`) and then up to `wait_s` (60) for the picture; if it is still being read the answer uses the words and a plain line says so, and a follow-up a moment later has it. A phone's screenshot (`screen: "phone"`) goes through the same job for its first picture, inside the chat turn; its picture is still never sent to the everyday model.
 
-**Never silent.** When the picture was not used, the note shown with the answer says `Looked at: <program> window · words only (<why>)` and the everyday model is told, in one plain line, to say so. The reasons (`WHY_WORDS`, one fixed sentence each, the same for both apps' tests): the model is not installed; Ollama could not be asked; Ollama was not found; the reader could not start; no cleaner; the cleaner failed; too slow; an error; nothing to say; the reader was on the graphics card; the model's file changed since it was measured; a cloud model name; picture reading was turned off; a newer look replaced this one. With the switch off, nothing changes: the note says `words only` and no job exists.
+**Never silent.** When the picture was not used, the note shown with the answer says `Looked at: <program> window · words only (<why>)` (and while it is still being read, `words and picture when ready (slow mode)`), the everyday model is told, in one plain line, to say so, **and code writes one plain sentence into the answer itself** - `(Picture mode: <why> This answer uses the words only.)`, put there by `jarvis_agent.py` (`tell_owner`, from `with_screen`'s `info["picture_said"]`) - so the owner is told even if the model does not pass it on. The reasons (`WHY_WORDS`, one fixed sentence each, the same for both apps' tests): the model is not installed; Ollama could not be asked; Ollama was not found; the reader could not start; no cleaner; the cleaner failed; too slow; an error; nothing to say; the reader was on the graphics card; the model's file changed since it was measured; a cloud model name; picture reading was turned off; a newer look replaced this one. With the switch off, nothing changes: the note says `words only` and no job exists.
 
 **The cleaner hook** (built in `jarvis_screen.py` by another piece of work, in parallel). `jarvis_screen_picture.clean()` calls `jarvis_screen.clean_picture(picture, want_png=True)` when it has that parameter (the built signature is `clean_picture(picture, ocr=None, *, want_png=False)`), else `clean_picture(picture, snap)` or `clean_picture(picture)`; it uses the returned dict's `png` - the ONLY picture a model may be shown - and treats `png: None`, `unchecked`, `blocked`, an exception, nothing or empty bytes as "send nothing". Without `clean_picture` the stub `_clean_picture_stub` raises: **fail closed**. This module never builds it.
 

@@ -208,7 +208,7 @@ function pPaint() {
   // waits (rule 4 only holds what loosens). While a card waits the switch stays
   // usable, so it can be turned back off (which takes the card back).
   el.pSwitch.disabled = pBusy || (!pView.checked && !live());
-  el.pSwitch.title = !pView.checked && !live() ? linkWords(currentLink()).why || "" : "";
+  el.pSwitch.title = !pView.checked && !live() ? linkWords(currentLink()).text : "";
   el.pLine.textContent = pView.line;
   el.pMeasured.textContent = pView.measured;
   el.pMeasured.hidden = !pView.measured;
