@@ -157,7 +157,13 @@ ONNX Runtime 1.22.0 (Microsoft), MIT - https://github.com/microsoft/onnxruntime
 sherpa-onnx (k2-fsa), Apache-2.0 - https://github.com/k2-fsa/sherpa-onnx
   The PC's speech-to-text, spoken replies and Silero VAD. The model files
   the owner downloads carry their own licences: NVIDIA Parakeet TDT 0.6B v2
-  (CC-BY-4.0), Kokoro-82M v0.19 (Apache-2.0), Silero VAD (MIT), 3D-Speaker
+  (CC-BY-4.0), Kokoro-82M v0.19 and v1.0 (Apache-2.0; v1.0 is sherpa-onnx's
+  kokoro-multi-lang-v1_0 release, 350 MB, pinned in backend/jarvis_kokoro.py
+  and installed by the owner with the one line in backend/README.md - its own
+  LICENSE file is the Apache-2.0 text; it also carries espeak-ng-data
+  (GPL-3, see espeak-ng below), English and Chinese pronunciation lists and
+  Chinese text rules that Jarvis does not use, each under its own licence;
+  nothing of it is shipped here), Silero VAD (MIT), 3D-Speaker
   CAM++ (Apache-2.0), and - for "very strict" - NVIDIA NeMo TitaNet-Large
   (the licence its NGC model card states).
   Custom voices (backend/jarvis_voices.py, 2026-09-24) add two more
