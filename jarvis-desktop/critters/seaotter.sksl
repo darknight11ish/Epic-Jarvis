@@ -299,7 +299,7 @@ float4 material(float id, float3 pos, float3 n) {
     float3 v = normalize(eyePos() - pos);
     float edge = smoothstep(0.55, 0.92, 1.0 - abs(dot(n, v)));
     if (id == ID_EYE) {
-        float4 l = eyeLid(INK, FACE * 0.95, h, eyeAt(), 0.048);
+        float4 l = eyeLid(INK, FACE * 0.95, h, eyeAt(), 0.048, h.x < 0.0 ? uFace.x : uFace.y);
         return float4(l.rgb, 1.0 - l.w);
     }
     if (id == ID_NOSE) return float4(INK * 2.0, 0.7);

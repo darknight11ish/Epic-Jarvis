@@ -500,7 +500,9 @@ object OtterPose {
                 (1f - ease((x - 1.4f) / 0.8f))
             val lid = k * toward(eyesClose(x), lids, ex)
             p[EYE_L] = f[EYE_L] * lid; p[EYE_R] = f[EYE_R] * lid
-            CritterPose.lidNod(p, f, LID, 1f - lid)   // the painted lid comes down as the eyes close
+            // The painted lid comes down with the eyes' drooping, not with the squint of the stretch laid on it.
+            val droop = (1f - 0.35f * ease((x - 0.2f) / 0.8f)) * (1f - ease((x - 1.4f) / 0.8f))
+            CritterPose.lidNod(p, f, LID, 1f - k * toward(eyesClose(x), droop, ex))
             // Its paws (and the pebble) stay where they were until 1.2 s.
             val hold = e * (1f - ease((x - 1.2f) / 1.2f))
             for (i in PAW_LX..PAW_RZ) p[i] = toward(p[i], f[i], hold)

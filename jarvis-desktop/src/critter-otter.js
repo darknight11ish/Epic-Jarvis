@@ -425,7 +425,9 @@
         * (1 - ease((x - 1.4) / 0.8));
       const lid = k * toward(eyesClose(x), lids, E);
       P.eyeL = F.eyeL * lid; P.eyeR = F.eyeR * lid;
-      lidNod(P, F, 1 - lid);   // the painted lid comes down as the eyes close
+      // The painted lid comes down with the eyes' drooping, not with the squint of the stretch laid on it.
+      const droop = (1 - 0.35 * ease((x - 0.2) / 0.8)) * (1 - ease((x - 1.4) / 0.8));
+      lidNod(P, F, 1 - k * toward(eyesClose(x), droop, E));
       // Its paws (and the pebble in them) stay where they were until 1.2 s,
       // then take 1.2 s to come up over its eyes; the stretch is over by 1.4 s.
       const hold = e * (1 - ease((x - 1.2) / 1.2));

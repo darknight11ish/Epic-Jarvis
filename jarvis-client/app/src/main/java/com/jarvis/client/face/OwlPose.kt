@@ -483,7 +483,9 @@ object OwlPose {
             val lids = (1f - 0.5f * ease(x / 0.7f) - 0.5f * ease((x - 1.6f) / 0.7f)) * (1f - bump((x - 0.85f) / 0.65f))
             val lid = k * toward(eyesClose(x), lids, ex)
             p[EYE_L] = f[EYE_L] * lid; p[EYE_R] = f[EYE_R] * lid
-            CritterPose.lidNod(p, f, LID, 1f - lid)   // the painted lid comes down as the eyes close
+            // The painted lid comes down with the eyes' drooping, not with the slow blink laid on it.
+            val droop = 1f - 0.5f * ease(x / 0.7f) - 0.5f * ease((x - 1.6f) / 0.7f)
+            CritterPose.lidNod(p, f, LID, 1f - k * toward(eyesClose(x), droop, ex))
             val head = e * (1f - ease((x - 1.6f) / 1.2f))
             p[NECK_DROP] = toward(p[NECK_DROP], f[NECK_DROP], head)
             p[HEAD_PITCH] = toward(p[HEAD_PITCH], f[HEAD_PITCH], head)

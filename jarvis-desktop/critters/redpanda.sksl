@@ -322,7 +322,7 @@ float3 earColour(float3 e) {
 float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
     if (id == ID_EYE) {
-        float4 l = eyeLid(INK, RUST * 1.3, h, eyeAt(), 0.101);
+        float4 l = eyeLid(INK, RUST * 1.3, h, eyeAt(), 0.101, h.x < 0.0 ? uFace.x : uFace.y);
         return float4(l.rgb, 1.0 - l.w);
     }
     if (id == ID_NOSE) return float4(INK * 2.0, 0.6);

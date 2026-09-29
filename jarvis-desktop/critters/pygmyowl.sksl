@@ -285,7 +285,7 @@ float3 eyeColour(float3 h) {
 float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
     if (id == ID_EYE) {
-        float4 l = eyeLid(eyeColour(h), CREAM, h, eyeAt(), 0.142);
+        float4 l = eyeLid(eyeColour(h), CREAM, h, eyeAt(), 0.142, h.x < 0.0 ? uFace.x : uFace.y);
         return float4(l.rgb, 1.0 - l.w);
     }
     if (id == ID_BEAK) {

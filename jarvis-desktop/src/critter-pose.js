@@ -1589,7 +1589,11 @@
         - 0.50 * ease((x - 2.1) / 0.5)) * (1 - bump((x - 0.55) / 0.45)) * (1 - bump((x - 1.85) / 0.35));
       const lid = k * toward(eyesClose(x), lids, E);
       P.eyeL = F.eyeL * lid; P.eyeR = F.eyeR * lid;
-      lidNod(P, F, 1 - lid);   // the painted lid comes down as the eyes close
+      // The painted lid comes down with the eyes' drooping - not with the two
+      // quick blinks laid on it (the eye's own squash does those).
+      const droop = 1 - 0.45 * ease(x / 0.6) - 0.30 * ease((x - 0.95) / 0.6) + 0.25 * ease((x - 1.55) / 0.3)
+        - 0.50 * ease((x - 2.1) / 0.5);
+      lidNod(P, F, 1 - k * toward(eyesClose(x), droop, E));
       // How far down the head has gone: sags, nods, catches, and drops.
       const down = 0.2 * ease(x / 0.9) + 0.35 * ease((x - 0.95) / 0.6) - 0.2 * ease((x - 1.55) / 0.45)
         + 0.65 * ease((x - 2.0) / 1.0);

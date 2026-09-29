@@ -451,7 +451,9 @@
       const lids = (1 - 0.5 * ease(x / 0.7) - 0.5 * ease((x - 1.6) / 0.7)) * (1 - bump((x - 0.85) / 0.65));
       const lid = k * toward(eyesClose(x), lids, E);
       P.eyeL = F.eyeL * lid; P.eyeR = F.eyeR * lid;
-      lidNod(P, F, 1 - lid);   // the painted lid comes down as the eyes close
+      // The painted lid comes down with the eyes' drooping, not with the slow blink laid on it.
+      const droop = 1 - 0.5 * ease(x / 0.7) - 0.5 * ease((x - 1.6) / 0.7);
+      lidNod(P, F, 1 - k * toward(eyesClose(x), droop, E));
       const head = e * (1 - ease((x - 1.6) / 1.2));
       P.neckDrop = toward(P.neckDrop, F.neckDrop, head);
       P.headPitch = toward(P.headPitch, F.headPitch, head);

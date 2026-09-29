@@ -1368,7 +1368,10 @@ object CritterPose {
                 0.50f * ease((x - 2.1f) / 0.5f)) * (1f - bump((x - 0.55f) / 0.45f)) * (1f - bump((x - 1.85f) / 0.35f))
             val lid = k * toward(eyesClose(x), lids, ex)
             p[EYE_L] = f[EYE_L] * lid; p[EYE_R] = f[EYE_R] * lid
-            lidNod(p, f, LID, 1f - lid)   // the painted lid comes down as the eyes close
+            // The painted lid comes down with the eyes' drooping - not with the two quick blinks laid on it.
+            val droop = 1f - 0.45f * ease(x / 0.6f) - 0.30f * ease((x - 0.95f) / 0.6f) + 0.25f * ease((x - 1.55f) / 0.3f) -
+                0.50f * ease((x - 2.1f) / 0.5f)
+            lidNod(p, f, LID, 1f - k * toward(eyesClose(x), droop, ex))
             val down = 0.2f * ease(x / 0.9f) + 0.35f * ease((x - 0.95f) / 0.6f) - 0.2f * ease((x - 1.55f) / 0.45f) +
                 0.65f * ease((x - 2.0f) / 1.0f)
             val up = e * (1f - down)

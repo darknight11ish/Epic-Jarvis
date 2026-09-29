@@ -135,19 +135,24 @@ float2 clipSpan(float3 ro, float3 rd, float2 parts, float3 c, float r) {
     return float2(o.x, min(parts.y, o.y));
 }
 
-// THE PAINTED EYELID (preview). An animal's eyes can only squash up and down,
-// which reads as a wink or a blink and cannot be sloped. This lays a lid of
-// the surrounding fur over the top of the eye, with a thin darker crease along
-// its edge, sloped by uLid.y. It is worked out in the surface shading (once a
+// THE PAINTED EYELID. An animal's eyes can only squash up and down, which
+// reads as a wink or a blink and cannot be sloped. This lays a lid of the
+// surrounding fur over the top of the eye, with a thin darker crease along its
+// edge, sloped by uLid.y. It is worked out in the surface shading (once a
 // pixel, on the eyes only), not in map(), so the march does not pay for it.
 // `h` is the point in the head's own frame, `ea` the eye's middle there, `r`
 // the eye's height when open at its widest; returns the colour and, in w, how covered it is.
-float4 eyeLid(float3 ink, float3 fur, float3 h, float2 ea, float r) {
+// The lid gives way to an eye that is shutting: a shut eye is its own thin
+// dark line (a blink, or asleep), and a lid laid over that would rub it out
+// and leave the animal with no eyes - so the lid fades out as the eye squashes
+// under 0.3 (`open`, the same number partEyes squashes it by).
+float4 eyeLid(float3 ink, float3 fur, float3 h, float2 ea, float r, float open) {
     float side = h.x < 0.0 ? -1.0 : 1.0;
+    float lid = uLid.x * smoothstep(0.03, 0.3, open);
     float2 q = float2(side * h.x - ea.x, h.y - ea.y);
-    float d = q.y - r * (1.0 - 2.0 * uLid.x) + uLid.x * uLid.y * 0.8 * q.x;
+    float d = q.y - r * (1.0 - 2.0 * lid) + lid * uLid.y * 0.8 * q.x;
     float cov = smoothstep(-0.004, 0.004, d);
-    float crease = (1.0 - smoothstep(0.0, 0.007, abs(d))) * smoothstep(0.02, 0.1, uLid.x);
+    float crease = (1.0 - smoothstep(0.0, 0.007, abs(d))) * smoothstep(0.02, 0.1, lid);
     return float4(mix(ink, fur, cov) * (1.0 - 0.4 * crease), cov);
 }
 
@@ -569,7 +574,7 @@ float3 earColour(float3 e) {
 float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
     if (id == ID_EYE) {
-        float4 l = eyeLid(INK, RUST * 1.3, h, eyeAt(), 0.101);
+        float4 l = eyeLid(INK, RUST * 1.3, h, eyeAt(), 0.101, h.x < 0.0 ? uFace.x : uFace.y);
         return float4(l.rgb, 1.0 - l.w);
     }
     if (id == ID_NOSE) return float4(INK * 2.0, 0.6);
@@ -1021,19 +1026,24 @@ float2 clipSpan(float3 ro, float3 rd, float2 parts, float3 c, float r) {
     return float2(o.x, min(parts.y, o.y));
 }
 
-// THE PAINTED EYELID (preview). An animal's eyes can only squash up and down,
-// which reads as a wink or a blink and cannot be sloped. This lays a lid of
-// the surrounding fur over the top of the eye, with a thin darker crease along
-// its edge, sloped by uLid.y. It is worked out in the surface shading (once a
+// THE PAINTED EYELID. An animal's eyes can only squash up and down, which
+// reads as a wink or a blink and cannot be sloped. This lays a lid of the
+// surrounding fur over the top of the eye, with a thin darker crease along its
+// edge, sloped by uLid.y. It is worked out in the surface shading (once a
 // pixel, on the eyes only), not in map(), so the march does not pay for it.
 // `h` is the point in the head's own frame, `ea` the eye's middle there, `r`
 // the eye's height when open at its widest; returns the colour and, in w, how covered it is.
-float4 eyeLid(float3 ink, float3 fur, float3 h, float2 ea, float r) {
+// The lid gives way to an eye that is shutting: a shut eye is its own thin
+// dark line (a blink, or asleep), and a lid laid over that would rub it out
+// and leave the animal with no eyes - so the lid fades out as the eye squashes
+// under 0.3 (`open`, the same number partEyes squashes it by).
+float4 eyeLid(float3 ink, float3 fur, float3 h, float2 ea, float r, float open) {
     float side = h.x < 0.0 ? -1.0 : 1.0;
+    float lid = uLid.x * smoothstep(0.03, 0.3, open);
     float2 q = float2(side * h.x - ea.x, h.y - ea.y);
-    float d = q.y - r * (1.0 - 2.0 * uLid.x) + uLid.x * uLid.y * 0.8 * q.x;
+    float d = q.y - r * (1.0 - 2.0 * lid) + lid * uLid.y * 0.8 * q.x;
     float cov = smoothstep(-0.004, 0.004, d);
-    float crease = (1.0 - smoothstep(0.0, 0.007, abs(d))) * smoothstep(0.02, 0.1, uLid.x);
+    float crease = (1.0 - smoothstep(0.0, 0.007, abs(d))) * smoothstep(0.02, 0.1, lid);
     return float4(mix(ink, fur, cov) * (1.0 - 0.4 * crease), cov);
 }
 
@@ -1418,7 +1428,7 @@ float3 eyeColour(float3 h) {
 float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
     if (id == ID_EYE) {
-        float4 l = eyeLid(eyeColour(h), CREAM, h, eyeAt(), 0.142);
+        float4 l = eyeLid(eyeColour(h), CREAM, h, eyeAt(), 0.142, h.x < 0.0 ? uFace.x : uFace.y);
         return float4(l.rgb, 1.0 - l.w);
     }
     if (id == ID_BEAK) {
@@ -1871,19 +1881,24 @@ float2 clipSpan(float3 ro, float3 rd, float2 parts, float3 c, float r) {
     return float2(o.x, min(parts.y, o.y));
 }
 
-// THE PAINTED EYELID (preview). An animal's eyes can only squash up and down,
-// which reads as a wink or a blink and cannot be sloped. This lays a lid of
-// the surrounding fur over the top of the eye, with a thin darker crease along
-// its edge, sloped by uLid.y. It is worked out in the surface shading (once a
+// THE PAINTED EYELID. An animal's eyes can only squash up and down, which
+// reads as a wink or a blink and cannot be sloped. This lays a lid of the
+// surrounding fur over the top of the eye, with a thin darker crease along its
+// edge, sloped by uLid.y. It is worked out in the surface shading (once a
 // pixel, on the eyes only), not in map(), so the march does not pay for it.
 // `h` is the point in the head's own frame, `ea` the eye's middle there, `r`
 // the eye's height when open at its widest; returns the colour and, in w, how covered it is.
-float4 eyeLid(float3 ink, float3 fur, float3 h, float2 ea, float r) {
+// The lid gives way to an eye that is shutting: a shut eye is its own thin
+// dark line (a blink, or asleep), and a lid laid over that would rub it out
+// and leave the animal with no eyes - so the lid fades out as the eye squashes
+// under 0.3 (`open`, the same number partEyes squashes it by).
+float4 eyeLid(float3 ink, float3 fur, float3 h, float2 ea, float r, float open) {
     float side = h.x < 0.0 ? -1.0 : 1.0;
+    float lid = uLid.x * smoothstep(0.03, 0.3, open);
     float2 q = float2(side * h.x - ea.x, h.y - ea.y);
-    float d = q.y - r * (1.0 - 2.0 * uLid.x) + uLid.x * uLid.y * 0.8 * q.x;
+    float d = q.y - r * (1.0 - 2.0 * lid) + lid * uLid.y * 0.8 * q.x;
     float cov = smoothstep(-0.004, 0.004, d);
-    float crease = (1.0 - smoothstep(0.0, 0.007, abs(d))) * smoothstep(0.02, 0.1, uLid.x);
+    float crease = (1.0 - smoothstep(0.0, 0.007, abs(d))) * smoothstep(0.02, 0.1, lid);
     return float4(mix(ink, fur, cov) * (1.0 - 0.4 * crease), cov);
 }
 
@@ -2282,7 +2297,7 @@ float4 material(float id, float3 pos, float3 n) {
     float3 v = normalize(eyePos() - pos);
     float edge = smoothstep(0.55, 0.92, 1.0 - abs(dot(n, v)));
     if (id == ID_EYE) {
-        float4 l = eyeLid(INK, FACE * 0.95, h, eyeAt(), 0.048);
+        float4 l = eyeLid(INK, FACE * 0.95, h, eyeAt(), 0.048, h.x < 0.0 ? uFace.x : uFace.y);
         return float4(l.rgb, 1.0 - l.w);
     }
     if (id == ID_NOSE) return float4(INK * 2.0, 0.7);
@@ -2769,19 +2784,24 @@ float2 clipSpan(float3 ro, float3 rd, float2 parts, float3 c, float r) {
     return float2(o.x, min(parts.y, o.y));
 }
 
-// THE PAINTED EYELID (preview). An animal's eyes can only squash up and down,
-// which reads as a wink or a blink and cannot be sloped. This lays a lid of
-// the surrounding fur over the top of the eye, with a thin darker crease along
-// its edge, sloped by uLid.y. It is worked out in the surface shading (once a
+// THE PAINTED EYELID. An animal's eyes can only squash up and down, which
+// reads as a wink or a blink and cannot be sloped. This lays a lid of the
+// surrounding fur over the top of the eye, with a thin darker crease along its
+// edge, sloped by uLid.y. It is worked out in the surface shading (once a
 // pixel, on the eyes only), not in map(), so the march does not pay for it.
 // `h` is the point in the head's own frame, `ea` the eye's middle there, `r`
 // the eye's height when open at its widest; returns the colour and, in w, how covered it is.
-float4 eyeLid(float3 ink, float3 fur, float3 h, float2 ea, float r) {
+// The lid gives way to an eye that is shutting: a shut eye is its own thin
+// dark line (a blink, or asleep), and a lid laid over that would rub it out
+// and leave the animal with no eyes - so the lid fades out as the eye squashes
+// under 0.3 (`open`, the same number partEyes squashes it by).
+float4 eyeLid(float3 ink, float3 fur, float3 h, float2 ea, float r, float open) {
     float side = h.x < 0.0 ? -1.0 : 1.0;
+    float lid = uLid.x * smoothstep(0.03, 0.3, open);
     float2 q = float2(side * h.x - ea.x, h.y - ea.y);
-    float d = q.y - r * (1.0 - 2.0 * uLid.x) + uLid.x * uLid.y * 0.8 * q.x;
+    float d = q.y - r * (1.0 - 2.0 * lid) + lid * uLid.y * 0.8 * q.x;
     float cov = smoothstep(-0.004, 0.004, d);
-    float crease = (1.0 - smoothstep(0.0, 0.007, abs(d))) * smoothstep(0.02, 0.1, uLid.x);
+    float crease = (1.0 - smoothstep(0.0, 0.007, abs(d))) * smoothstep(0.02, 0.1, lid);
     return float4(mix(ink, fur, cov) * (1.0 - 0.4 * crease), cov);
 }
 
@@ -3207,7 +3227,7 @@ float3 headColour(float3 h) {
 float4 material(float id, float3 pos, float3 n) {
     float3 h = toHead(pos);
     if (id == ID_EYE) {
-        float4 l = eyeLid(INK, PEACH, h, eyeAt(), 0.079);
+        float4 l = eyeLid(INK, PEACH, h, eyeAt(), 0.079, h.x < 0.0 ? uFace.x : uFace.y);
         return float4(l.rgb, 1.0 - l.w);
     }
     if (id == ID_NOSE) return float4(float3(0.080, 0.022, 0.012), 0.6);
@@ -3687,19 +3707,24 @@ float2 clipSpan(float3 ro, float3 rd, float2 parts, float3 c, float r) {
     return float2(o.x, min(parts.y, o.y));
 }
 
-// THE PAINTED EYELID (preview). An animal's eyes can only squash up and down,
-// which reads as a wink or a blink and cannot be sloped. This lays a lid of
-// the surrounding fur over the top of the eye, with a thin darker crease along
-// its edge, sloped by uLid.y. It is worked out in the surface shading (once a
+// THE PAINTED EYELID. An animal's eyes can only squash up and down, which
+// reads as a wink or a blink and cannot be sloped. This lays a lid of the
+// surrounding fur over the top of the eye, with a thin darker crease along its
+// edge, sloped by uLid.y. It is worked out in the surface shading (once a
 // pixel, on the eyes only), not in map(), so the march does not pay for it.
 // `h` is the point in the head's own frame, `ea` the eye's middle there, `r`
 // the eye's height when open at its widest; returns the colour and, in w, how covered it is.
-float4 eyeLid(float3 ink, float3 fur, float3 h, float2 ea, float r) {
+// The lid gives way to an eye that is shutting: a shut eye is its own thin
+// dark line (a blink, or asleep), and a lid laid over that would rub it out
+// and leave the animal with no eyes - so the lid fades out as the eye squashes
+// under 0.3 (`open`, the same number partEyes squashes it by).
+float4 eyeLid(float3 ink, float3 fur, float3 h, float2 ea, float r, float open) {
     float side = h.x < 0.0 ? -1.0 : 1.0;
+    float lid = uLid.x * smoothstep(0.03, 0.3, open);
     float2 q = float2(side * h.x - ea.x, h.y - ea.y);
-    float d = q.y - r * (1.0 - 2.0 * uLid.x) + uLid.x * uLid.y * 0.8 * q.x;
+    float d = q.y - r * (1.0 - 2.0 * lid) + lid * uLid.y * 0.8 * q.x;
     float cov = smoothstep(-0.004, 0.004, d);
-    float crease = (1.0 - smoothstep(0.0, 0.007, abs(d))) * smoothstep(0.02, 0.1, uLid.x);
+    float crease = (1.0 - smoothstep(0.0, 0.007, abs(d))) * smoothstep(0.02, 0.1, lid);
     return float4(mix(ink, fur, cov) * (1.0 - 0.4 * crease), cov);
 }
 
