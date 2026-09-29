@@ -7,8 +7,8 @@ number as the last part - `0.2.57` is a build of 0.2.
 ## Not in a numbered version yet
 
 - **The "driven openly" rule is gone (2026-09-29, your decision).** You asked
-  several times, after being told the risk each time, for Jarvis's browsers to
-  use stealth for everything, so the old rule "nothing that hides that a
+  several times, after being told the risk each time, for stealth to be on for everything the
+  new headless browser runs, so the old rule "nothing that hides that a
   program is driving, nothing that dodges a site's bot checks" no longer
   exists. The approval cards for chatbot websites no longer say "never hides
   that it is a program". What did not change: Jarvis never solves a captcha
@@ -32,15 +32,20 @@ number as the last part - `0.2.57` is a build of 0.2.
   runs** (your decision): it looks like an ordinary Chrome. That does **not**
   solve captchas, a site can still block or ban it, and signing in to a real
   account with any automated browser can get the account closed - so Jarvis
-  never signs in with it, never types a password, and at a captcha or a sign-in
-  page it stops and tells you to ask again with the visible browser. **Off to
+  never types a password with it and never solves a captcha, and at a captcha
+  or a sign-in page it recognises it stops and tells you to ask again with the
+  visible browser (a sign-in that starts with only a username or email box may
+  not be recognised). **Off to
   start; turning it on is one approval card**; off is instant. Every page it
   opens and every click and box it fills is still listed on the same approval
   card as the visible browser's, and what it reads counts as outside text. It
   cannot reach your own network, uses no proxy, keeps no cookies, saves no files
   and opens no network port. You install it with **one PowerShell line** shown in
-  Settings (Jarvis never downloads it itself); its checksum is remembered and a
-  different file is refused. **A real Obscura has not been run yet** (nothing here
+  Settings (Jarvis never downloads it itself): it downloads one named release,
+  prints its checksums for you to compare and does not run it; a second command
+  it prints checks it, and its checksum is then remembered and a different file
+  is refused. It stops itself after 3 idle minutes, and the words it types and
+  the addresses it opens are checked first. **A real Obscura has not been run yet** (nothing here
   could run a Windows program): `py -3 tools\check_obscura.py` is the real check.
   The chatbot driver and the support chats still use the visible browser, because
   they must hand a captcha to you in a window. Needs the new backend files
