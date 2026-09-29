@@ -621,6 +621,18 @@ one state bug to fix, not a new approach):
 - **A focus session no longer shows a sleeping animal:** the focus buddy
   shows, not standby (a manual Quiet stays asleep).
 
+Decided 2026-09-29, after seeing the eyelid preview:
+- **The animals get painted eyelids** (red panda, pygmy owl, sea otter,
+  monkey): a lid of the surrounding fur over the top of each eye, so an
+  error looks worried (a sloped lid), waiting on you attentive (a level lid)
+  and dozing sleepy (a heavy lid). It is painted in the surface shading, not
+  in the shape, so it costs a little per pixel and nothing per march step;
+  each animal gets one new pose value on both apps. The robot has no
+  eyelids (its eyes carry the state). The lids obey the same rules as every
+  other look: nothing cute or new at an approval or error beyond the plain
+  worried or attentive lid, calm and Still quieten them, and the phone's
+  60,000 shader budget still holds.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
