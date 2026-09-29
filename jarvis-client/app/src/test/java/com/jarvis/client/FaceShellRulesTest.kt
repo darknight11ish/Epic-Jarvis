@@ -184,6 +184,25 @@ class FaceShellRulesTest {
         assertTrue(view.contains("FaceWords.spoken(state, offline, focusQuiet)"))
     }
 
+    @Test
+    fun `the phone's sentences are the ones the desktop says, from one list`() {
+        // jarvis-desktop/tests/fixtures/face-words.json, which face-words.js is held to
+        // in tests/face-watchdog.mjs. Owner, 2026-09-29: the desktop says the phone's sentences.
+        val doc = kotlinx.serialization.json.Json.parseToJsonElement(
+            repoFile("jarvis-desktop/tests/fixtures/face-words.json").readText(),
+        ).let { it as kotlinx.serialization.json.JsonObject }
+        fun text(e: kotlinx.serialization.json.JsonElement?) = (e as kotlinx.serialization.json.JsonPrimitive).content
+        val states = doc["states"] as kotlinx.serialization.json.JsonObject
+        assertEquals("all eight states are in the list", FaceState.values().size, states.size)
+        for (s in FaceState.values()) {
+            assertEquals("$s", text(states[s.name.lowercase()]), FaceWords.spoken(s, offline = false))
+        }
+        assertEquals(text(doc["offline"]), FaceWords.OFFLINE)
+        assertEquals(text(doc["offline"]), FaceWords.spoken(FaceState.IDLE, offline = true))
+        assertEquals(text(doc["focus"]), FaceWords.FOCUS)
+        assertEquals(text(doc["focus"]), FaceWords.spoken(FaceState.IDLE, offline = false, focusQuiet = true))
+    }
+
     private fun repoFile(rel: String): java.io.File {
         var dir: java.io.File? = java.io.File(System.getProperty("user.dir") ?: ".").absoluteFile
         while (dir != null) {

@@ -421,15 +421,15 @@ await check("the floating face: no approval pose on a stale link, then standby w
   const ringOff = await frame.evaluate(RING);
   await page.close();
 
-  assert.deepEqual(live, { st: "approval", off: false, label: "Jarvis's face: approval" });
+  assert.deepEqual(live, { st: "approval", off: false, label: "Jarvis is waiting for your decision" });
   assert.notEqual(stale.st, "approval", "an approval face on a stale link");
   assert.equal(stale.off, false, "the ring came before the grace was up");
-  assert.equal(staleStatus, "");
+  assert.equal(staleStatus, "Jarvis is speaking", "the live region says what the face shows");
   assert.deepEqual(offline, { st: "standby", off: true, label: "Jarvis isn't connected" });
   assert.equal(offlineStatus, "Jarvis isn't connected");
   assert.ok(ringOn.ring > ringOn.outside + 20, `no ring: ${JSON.stringify(ringOn)}`);
-  assert.deepEqual(back, { st: "idle", off: false, label: "Jarvis's face: idle" });
-  assert.equal(backStatus, "");
+  assert.deepEqual(back, { st: "idle", off: false, label: "Jarvis is idle" });
+  assert.equal(backStatus, "Jarvis is idle");
   assert.ok(ringOff.ring < ringOff.outside + 8, `the ring stayed: ${JSON.stringify(ringOff)}`);
 });
 
@@ -446,7 +446,7 @@ await check("banked shows its notches on the desktop: the waiting count reaches 
 
 await check("the widget sends the face the same signal as the floating face", () => {
   const widget = read("src/widget.js"), floating = read("src/floating.js");
-  assert.match(widget, /type: "jarvis-hud-face", \.\.\.faceSignal\(currentLink\(\)\)/);
+  assert.match(widget, /const signal = faceSignal\(currentLink\(\)\);\n  const message = \{ type: "jarvis-hud-face", \.\.\.signal \}/);
   assert.match(floating, /faceSignal\(currentLink\(\)\)/);
   assert.doesNotMatch(widget + floating, /surfaceState\(currentLink\(\)\)/, "a face fed surfaceState alone has no ring");
 });
@@ -457,11 +457,86 @@ await check("faceSignal and surfaceState: the rules in one place", async () => {
                  attention: { pending: 2, banked: false } };
   const down = { ...live, connected: false, stale: true };
   assert.equal(L.OFFLINE_GRACE_MS, 12000, "the phone's grace is 12 s");
-  assert.deepEqual(L.faceSignal(live), { state: "approval", offline: false, waiting: 2, serious: false });
+  assert.deepEqual(L.faceSignal(live), { state: "approval", offline: false, waiting: 2, serious: false, focus: false });
   // A link object that is not the window's own has no history: down is offline.
-  assert.deepEqual(L.faceSignal(down), { state: "standby", offline: true, waiting: 2, serious: false });
+  assert.deepEqual(L.faceSignal(down), { state: "standby", offline: true, waiting: 2, serious: false, focus: false });
   assert.equal(L.surfaceState({ ...live, stale: true }), "standby");
   assert.equal(L.surfaceState(live), "approval");
+});
+
+/* ── What a screen reader is told (owner, 2026-09-29): the phone's sentences ─ */
+
+const WORDS_FIXTURE = JSON.parse(read("tests/fixtures/face-words.json"));
+
+await check("the desktop says the phone's eight sentences, plus not connected and a focus session", async () => {
+  const W = await import("../src/face-words.js");
+  assert.deepEqual({ ...W.STATE_WORDS }, WORDS_FIXTURE.states);
+  assert.equal(W.OFFLINE_WORDS, WORDS_FIXTURE.offline);
+  assert.equal(W.FOCUS_WORDS, WORDS_FIXTURE.focus);
+  for (const [state, words] of Object.entries(WORDS_FIXTURE.states)) {
+    assert.equal(W.faceWords({ state }), words);
+    assert.equal(W.faceWords({ state, offline: true }), WORDS_FIXTURE.offline, "not connected wins");
+    // A focus session changes the resting face's sentence and no other.
+    assert.equal(W.faceWords({ state, focus: true }), state === "idle" ? WORDS_FIXTURE.focus : words);
+  }
+  assert.equal(W.faceWords({ state: "no-such-state" }), WORDS_FIXTURE.states.idle, "never a raw id");
+  assert.match(WORDS_FIXTURE.states.standby, /will not speak/);
+  assert.match(WORDS_FIXTURE.focus, /will not speak/, "the focus sentence must keep 'will not speak' true");
+  // Nothing says the old raw word.
+  for (const words of Object.values(WORDS_FIXTURE.states)) assert.doesNotMatch(words, /face:/);
+});
+
+await check("the floating face's live region and its frame's label say the same sentences", async () => {
+  const page = await K.open(browser, base, "floating.html", {}, { width: 240, height: 240 });
+  const frame = await faceFrame(page);
+  const said = async (l) => {
+    await page.evaluate((x) => window.__emit("jarvis-link", x), l);
+    await page.waitForTimeout(250);
+    return [await page.locator("#face-status").textContent(),
+            await frame.evaluate(() => document.getElementById("display-canvas").getAttribute("aria-label"))];
+  };
+  const S = WORDS_FIXTURE.states;
+  const rest = { ...LIVE };
+  const got = {
+    idle: await said(rest),
+    error: await said({ ...rest, activity: "error" }),
+    approval: await said({ ...rest, approvals: 1 }),
+    listening: await said({ ...rest, activity: "listening" }),
+    thinking: await said({ ...rest, activity: "thinking" }),
+    speaking: await said({ ...rest, activity: "speaking" }),
+    banked: await said({ ...rest, attention: { ...rest.attention, pending: 3, banked: true } }),
+    standby: await said({ ...rest, power: "standby" }),
+    quietByHand: await said({ ...rest, power: "quiet", power_set_by: "override" }),
+    focus: await said({ ...rest, power: "quiet", power_set_by: "focus" }),
+  };
+  await page.close();
+  for (const state of Object.keys(S)) assert.deepEqual(got[state], [S[state], S[state]], state);
+  assert.deepEqual(got.quietByHand, [S.standby, S.standby], "a Quiet set by hand is asleep");
+  assert.deepEqual(got.focus, [WORDS_FIXTURE.focus, WORDS_FIXTURE.focus], "a focus session's Quiet");
+});
+
+await check("the widget's live region says what the face shows, while the face is showing", async () => {
+  const page = await K.open(browser, base, "widget.html",
+    { pending: [], prefs: { expanded: true } }, { width: 320, height: 460 });
+  await page.waitForFunction(() => document.getElementById("face-frame").getAttribute("src"), null, { timeout: 8000 });
+  const say = async (l) => {
+    await page.evaluate((x) => window.__emit("jarvis-link", x), l);
+    await page.waitForTimeout(250);
+    return page.locator("#face-status").textContent();
+  };
+  const listening = await say({ ...LIVE, activity: "listening" });
+  const focus = await say({ ...LIVE, power: "quiet", power_set_by: "focus" });
+  const byHand = await say({ ...LIVE, power: "quiet", power_set_by: "override" });
+  const offline = await say({ ...LIVE, connected: false, stale: true });
+  const role = await page.locator("#face-status").getAttribute("aria-live");
+  await page.close();
+  assert.equal(listening, WORDS_FIXTURE.states.listening);
+  assert.equal(focus, WORDS_FIXTURE.focus);
+  assert.equal(byHand, WORDS_FIXTURE.states.standby);
+  assert.equal(role, "polite");
+  // (The widget's link goes offline only after the 12 s grace, like every window: the words then are
+  // the state's, until it is up. The floating window's test above waits the grace out.)
+  assert.ok(offline.length > 0);
 });
 
 /* ── The two still rings: not connected, and error (owner, 2026-09-29) ───── */

@@ -1060,7 +1060,10 @@ const reactor = (() => {
     // - this page's own offline, which already shows as standby. No
     // `waiting`: this page never shows banked, it has no attention budget.
     // `serious`: see above.
-    if (w) w.postMessage({ type:"jarvis-hud-face", state:faceState(), offline:!S.online,
+    // `focus`: the resting face is a focus session's Quiet - only the words differ.
+    const st = faceState();
+    if (w) w.postMessage({ type:"jarvis-hud-face", state:st, offline:!S.online,
+                           focus: S.online && st === "idle" && S.power === "quiet" && S.powerBy === "focus",
                            serious:serious(), appearance }, "/");
   }
 

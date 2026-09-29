@@ -6783,6 +6783,8 @@ let LIVE_STATE = "idle";
 /** True while the window driving this frame cannot reach Jarvis: the face
  *  shows standby with the hollow ring (drawOfflineRing). */
 let LIVE_OFFLINE = false;
+/** True while the resting face is a focus session's Quiet (only the words differ). */
+let LIVE_FOCUS = false;
 
 /** Port of `attention::face_state()`. */
 function faceStateFromActivity(activity, banked) {
@@ -6830,8 +6832,14 @@ async function bootDisplay() {
   canvas.setAttribute("role", "img");
   document.body.appendChild(canvas);
   let spoken = "";
+  // The same sentences the phone says (face-words.js), once that module has
+  // loaded; until then (and if it cannot) the raw state word, as before.
+  let wordsOf = null;
+  import("./face-words.js").then((m) => { wordsOf = m.faceWords; describe(); }).catch(() => {});
   const describe = () => {
-    const words = LIVE_OFFLINE ? "Jarvis isn't connected" : "Jarvis's face: " + LIVE_STATE;
+    const words = wordsOf
+      ? wordsOf({ state: LIVE_STATE, offline: LIVE_OFFLINE, focus: LIVE_FOCUS })
+      : (LIVE_OFFLINE ? "Jarvis isn't connected" : "Jarvis's face: " + LIVE_STATE);
     if(words !== spoken){ spoken = words; canvas.setAttribute("aria-label", words); }
     document.documentElement.setAttribute("data-face-offline", String(LIVE_OFFLINE));
   };
@@ -7178,6 +7186,7 @@ async function bootDisplay() {
       // (jarvis-link.js faceSignal); this adds the ring. Anything but `true`
       // means connected, so an older sender that never sends it draws none.
       LIVE_OFFLINE = data.offline === true;
+      LIVE_FOCUS = data.focus === true;
       // A serious moment, if the embedding page passes the `wellbeing`
       // frame's `serious` on (section 38.1). Absent: unchanged.
       if (typeof data.serious === "boolean") setSerious(data.serious);
@@ -7213,7 +7222,7 @@ async function bootDisplay() {
       // while Jarvis cannot be reached, never "approval" while Approve is
       // blocked (rule 4), and banked's waiting count.
       const f = typeof faceSignal === "function" ? faceSignal(link) : { state: specState(link), offline: false, waiting: 0 };
-      LIVE_STATE = f.state; LIVE_OFFLINE = f.offline; HUD.waiting = f.waiting;
+      LIVE_STATE = f.state; LIVE_OFFLINE = f.offline; LIVE_FOCUS = f.focus === true; HUD.waiting = f.waiting;
     });
     start();
   } catch (error) { /* browser preview, or the module failed to load: stay idle */ }

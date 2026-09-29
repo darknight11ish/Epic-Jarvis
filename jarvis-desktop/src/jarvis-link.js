@@ -556,16 +556,27 @@ export function linkOffline(state = link, now = Date.now()) {
  *   ring (faces.html drawOfflineRing). Then `state` is always "standby".
  * - `waiting`: how many things the budget is holding back - banked's
  *   notches, the phone's `attention.pending`.
+ * - `focus`: the resting face is a focus session's Quiet (the focus buddy);
+ *   the words for a screen reader say so (face-words.js).
  */
 export function faceSignal(state = link, now = Date.now()) {
   const offline = !linkLive(state) && linkOffline(state, now);
   const pending = Number((state && state.attention && state.attention.pending) || 0);
+  const shown = surfaceState(state, now);
   return {
-    state: surfaceState(state, now),
+    state: shown,
     offline,
     waiting: Number.isFinite(pending) && pending > 0 ? pending : 0,
     serious: faceSerious(now),
+    // The resting face is a focus session's Quiet (the focus buddy), not
+    // asleep: only the screen reader's words differ (face-words.js).
+    focus: !offline && shown === "idle" && focusQuiet(state),
   };
+}
+
+/** True when the PC is Quiet because a focus session put it there. */
+export function focusQuiet(state = link) {
+  return Boolean(state && state.power === "quiet" && state.powerSetBy === "focus");
 }
 
 /* ---------------------------------------------------------------------- *

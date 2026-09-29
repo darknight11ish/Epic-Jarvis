@@ -41,6 +41,7 @@ import { TARGETS, fileNote, loadTargets, noTargetsLine, targetName } from "./not
 import { EMAIL_APPROVE, EMAIL_DETAIL, isEmailCard } from "./email-sending.js";
 import { CARD_KICKER, cardTitle } from "./card-words.js";
 import { isHeavy } from "./heavy-approve.js";
+import { faceWords } from "./face-words.js";
 import { relayFaceVoice } from "./face-voice.js";
 import { relayFaceMoments } from "./face-moments.js";
 import { startSkyFeed } from "./sky-feed.js";
@@ -100,6 +101,7 @@ const dom = {
   shell: $("widget-shell"),
   tray: $("widget-tray"),
   faceWrap: $("face-wrap"),
+  faceStatus: $("face-status"),
   faceFrame: $("face-frame"),
 
   focusStrip: $("focus-strip"),
@@ -416,7 +418,15 @@ function postFace() {
   // notches) and `serious` (a crisis answer's calm, plain pose, section
   // 38.1) - jarvis-link.js faceSignal. The widget's own offline row says it
   // in words.
-  const message = { type: "jarvis-hud-face", ...faceSignal(currentLink()) };
+  const signal = faceSignal(currentLink());
+  const message = { type: "jarvis-hud-face", ...signal };
+  // What the face shows, in words, for a screen reader: the frame is hidden
+  // from it (aria-hidden), so this live region says it, in the phone's
+  // sentences (face-words.js). Only while the face is on screen.
+  if (dom.faceStatus) {
+    const words = faceWords(signal);
+    if (dom.faceStatus.textContent !== words) dom.faceStatus.textContent = words;
+  }
   if (faceAppearance) message.appearance = faceAppearance;
   try {
     frame.contentWindow.postMessage(message, location.origin);

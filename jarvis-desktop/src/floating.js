@@ -11,6 +11,7 @@
  */
 
 import { currentLink, faceSignal, onEvent, onLink, onSerious, start as startLink } from "./jarvis-link.js";
+import { faceWords } from "./face-words.js";
 import { relayFaceVoice } from "./face-voice.js";
 import { relayFaceMoments } from "./face-moments.js";
 import { startSkyFeed } from "./sky-feed.js";
@@ -34,12 +35,15 @@ const frame = document.getElementById("face-frame");
 /** The owner's appearance document, as this window last read it. */
 let faceAppearance = null;
 
-/** The one thing this window says to a screen reader: the face itself is
- *  hidden from it (decorative), so "not connected" is said here instead. */
+/** What this window says to a screen reader: the face itself is hidden from
+ *  it (decorative), so what it shows is said here instead, in the same eight
+ *  plain sentences the phone says, plus "Jarvis isn't connected" and the
+ *  focus session's (face-words.js). A polite live region: it speaks when the
+ *  face changes, and does not interrupt. */
 const status = document.getElementById("face-status");
-function sayConnection(offline) {
+function sayFace(signal) {
   if (!status) return;
-  const words = offline ? "Jarvis isn't connected" : "";
+  const words = faceWords(signal);
   if (status.textContent !== words) status.textContent = words;
 }
 
@@ -47,7 +51,7 @@ function sayConnection(offline) {
  *  message shape widget.js's `postFace` sends. */
 function postFace() {
   const signal = faceSignal(currentLink());
-  sayConnection(signal.offline);
+  sayFace(signal);
   if (!frame || !frame.contentWindow) return;
   // state, plus `offline` (the "not connected" ring), `waiting` (banked's
   // notches) and `serious` (a crisis answer's calm, plain pose, section
