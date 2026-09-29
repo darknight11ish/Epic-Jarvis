@@ -105,7 +105,7 @@ on a throwaway copy instead.
 | `wiki.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The wiki builder.** Adds `GET /api/wiki` (the documents in your vault's `Jarvis Wiki/Sources` and their state) and `GET`/`POST /api/wiki/ingest` ("Add to wiki": the second card's model proposes pages, then ONE approval card, `wiki_update`, before anything is written), and the approval notice's words for it. After `second-card.patch` (textual). Needs `jarvis_wiki.py` — see its own section, at the end, and `docs/SECOND-CARD.md`, "Wiki builder". |
 | `big-model.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **The big model (slow), all switched off.** Adds `GET`/`POST /api/big-model` (three switches; each ON is one approval card, `big_model_enable`), `GET /api/deep` and `POST /api/deep/ask` (deep questions, answered in the background), and the approval notice's words for the new action. Last in the list, after `wiki.patch` (textual). Needs `jarvis_big_model.py` — see its own section, at the end, and `docs/BIG-MODEL.md`. |
 | `approval-expiry.patch` | `jarvis_gate.py` | **Approval cards expired with no warning on any screen.** Adds `expires_in` (seconds left) to each `/api/pending` row, so the phone, desktop and HUD can count down. Needs `approval-notice.patch` (textual) — see its own section, at the end. |
-| `voices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Custom voices: Jarvis speaking in a voice you recorded.** Adds `GET /api/voice/voices` and `POST /api/voice/voices/create`, `/active`, `/delete` and `/better` (adding a voice and switching to one are each one approval card, `custom_voice`; the better voice on the second card is `better_voice_enable`), and the approval notice's words for both. Last in the list, after `big-model.patch` (textual). Needs `jarvis_voices.py` (and `jarvis_f5_worker.py` for the better voice) - see its own section, at the very end. |
+| `voices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Custom voices: Jarvis speaking in a voice you recorded.** Adds `GET /api/voice/voices` and `POST /api/voice/voices/create`, `/active`, `/delete` and `/better` (adding a voice and switching to one are each one approval card, `custom_voice`; the better voice on the second card is `better_voice_enable`), and the approval notice's words for both. Last in the list, after `big-model.patch` (textual). Needs `jarvis_voices.py` (and `jarvis_f5_worker.py` for the better voice) - see its own section, at the very end. Since 2026-09-29 its sound block also serves `POST /api/voice/voices/sample` ("Hear it": one fixed line in a named built-in voice, changes nothing) and needs `jarvis_kokoro.py` (Kokoro v1.0, voices by name) - "Kokoro v1.0 voices, saved by name", at the very end. |
 | `voice-flow.patch` | `jarvis_hud.py` | **Interrupting Jarvis by talking, the delay in numbers, and "One moment."** `?source=barge_in` on `/api/voice/utterance` answers only "stop or not" (the owner's voice or the word "stop"; never the TV, never Jarvis's own voice) and is never transcribed; `&waited_ms=` is passed on for the delay's numbers; adds `GET /api/voice/moment` (the "One moment." clip in the voice in use now). Last in the list, after `voice-mic.patch` and `voices.patch` (textual). Needs `jarvis_voice_flow.py` - see "The voice flow", at the very end. |
 | `chat-history.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Chat history kept on this PC, encrypted** (the owner's decision, 2026-09-24). `/api/chat` records the newest question and the local answer, takes the apps' bookkeeping fields off before any model sees them (`provenance`, `conversation_id`, `device`, and since 2026-09-25 `interrupted` - the voice flow's cut-off sentence), and gains `GET /api/history`, `/api/history/conversation`, `POST /api/history/delete` and `/api/history/settings` (ON is one approval card, `history_enable`). Last in the list, after `learning-asks.patch`. Needs `jarvis_chat_log.py` and the `cryptography` package - see its own section, after learning-asks. |
 | `auto-learn.patch` | `jarvis_hud.py`, `jarvis_gate.py`, `jarvis_extract.py` | **Jarvis learns automatically, from your own words only** (the owner's decision, 2026-09-24). A proposal is saved without a card only when every check in `jarvis_auto_learn.py` passes; the rest stay cards, each saying why. Adds `GET /api/memory/learning`, `GET /api/memory/auto`, `POST /api/memory/learning/auto` and `/sensitive` (each ON is one approval card), `jarvis_extract.accept_auto()`, facts that keep their proposal's source, the learner's refusal of an Ollama cloud model, and quote marks round recalled facts. Last in the list, after `chat-history.patch`. Needs `jarvis_auto_learn.py` - see its own section, after chat-history. |
@@ -16955,3 +16955,136 @@ Tailscale or NordVPN Meshnet - pairing is refused over anything else.
   agree word for word; EFF's own page could not be reached from here, so its
   licence (CC BY 3.0 US) is as EFF has published it elsewhere - re-read it
   on EFF's page when convenient.
+
+
+# Kokoro v1.0 voices, saved by name, and "Hear it": `jarvis_kokoro.py` (2026-09-29)
+
+The owner's decision of 2026-09-28: better-rated voices, a real British
+accent, a "Hear it" button on every voice in both apps, the choice saved by
+the voice's **name** instead of a number, and the owner's current choice
+carrying over. Route and words: `docs/JARVIS-API.md` section 91.
+
+## In plain words
+
+Jarvis's built-in voice is Kokoro. Until now the pack was Kokoro v0.19 (11
+voices) and the voice you picked was saved as a bare number. A number means a
+different voice in a different pack - number 9 is George in the old pack and
+Sarah in Kokoro v1.0 - so it is now saved as the voice's name (`bm_george`).
+
+Nothing changes until you install the new pack. **With the old pack,
+everything works as before**; the voice list is now the same nine names (Sky
+and Adam are no longer offered, but if you had chosen one it stays yours), each
+with a **Hear it** button, and a line says a better pack is available.
+
+## Upgrade the voice pack to Kokoro v1.0
+
+One line, 350 MB. Paste it into PowerShell (any folder), then restart Jarvis:
+
+```powershell
+$ProgressPreference = 'SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $base = if ($env:OPENJARVIS_CONFIG_DIR) { $env:OPENJARVIS_CONFIG_DIR } elseif ($env:JARVIS_CONFIG_DIR) { $env:JARVIS_CONFIG_DIR } else { "$env:USERPROFILE\.openjarvis" }; $m = Join-Path $base 'voice-models'; New-Item -ItemType Directory -Force -Path $m | Out-Null; $f = Join-Path $env:TEMP 'jarvis-tts-v1.tar.bz2'; Write-Host 'Downloading the new voices (350 MB)...'; Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/kokoro-multi-lang-v1_0.tar.bz2' -OutFile $f; if ((Get-FileHash $f -Algorithm SHA256).Hash -ne 'C5F7E2D2CAF082BC1D20FB70334A61D99D20B484500AAD32E7CF84C128EA3298') { Remove-Item $f; Write-Host 'That is not the expected file, so nothing was installed. Run this line again.' -ForegroundColor Red } else { tar -xjf $f -C $m; Remove-Item $f; $d = Join-Path $m 'tts'; if (Test-Path $d) { Rename-Item $d ('tts-old-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }; Rename-Item (Join-Path $m 'kokoro-multi-lang-v1_0') 'tts'; Write-Host "OK - the new voices are in $d. Restart Jarvis to hear them." -ForegroundColor Green }
+```
+
+What it does, in order:
+
+1. Downloads `kokoro-multi-lang-v1_0.tar.bz2` (349,906,910 bytes) from
+   sherpa-onnx's own GitHub release into your temp folder.
+2. Checks the file's SHA-256 against the value pinned in
+   `backend\jarvis_kokoro.py` (`V1_PACK`). **If it is not the same file it
+   deletes it and installs nothing** - your voice stays as it is.
+3. Unpacks it into `voice-models`, moves your current `voice-models\tts` to
+   `voice-models\tts-old-<date>-<time>` and puts the new pack in as
+   `voice-models\tts`. About 385 MB on disk.
+
+**Going back:** rename the new `tts` folder to anything, rename `tts-old-...`
+back to `tts`, restart Jarvis. Delete the old folder yourself once you are
+happy (it is about 330 MB).
+
+**Not a second copy of what you have:** the pack is the official sherpa-onnx
+release of Kokoro v1.0 (Apache-2.0, `THIRD-PARTY-NOTICES.txt`). The SHA-256 in
+the line above is `V1_PACK["sha256"]` in `jarvis_kokoro.py` - the ONE place it
+is written. `backend\test_kokoro.py` checks that this line and that constant
+say the same thing, and the line is never offered if the constant is empty.
+
+## What carries over
+
+- **Your voice choice.** The first time the PC answers `GET
+  /api/voice/voices` after this change, a saved number becomes the name it
+  meant (`9` -> `bm_george`), written once into `voices\state.json`. Nothing
+  else in that file changes. `[voice] tts_speaker_id` in
+  `jarvis-framework.toml` keeps its OLD numbering (0 = the default American
+  voice, 9 = George) whichever pack is installed.
+- **The old default voice.** The old pack's plain `af` (a mix of Bella and
+  Sarah) is `af_heart` on Kokoro v1.0 - the pack's own default American
+  woman. Measured alike (middle pitch of one sentence: 205 Hz and 203 Hz).
+- **The animals.** They are now saved by name too. Panda = Bella, owl =
+  Nicole, otter = Sarah, monkey = Michael - the same four names exist in both
+  packs. Measured, not listened to (one sentence, middle pitch in Hz, v0.19
+  then v1.0): Bella 207 then 198, Nicole 160 then 156, Sarah 205 then 197,
+  Michael 126 then 121, each sentence within 8% as long. **The sea otter is
+  never `af_sky`**: Sky is not offered to anyone, and an animal choice saved
+  as Sky or Adam goes back to the animal's own voice.
+- **What is offered.** Kokoro v1.0: Heart, Bella, Nicole, Sarah (American
+  women), Michael, Fenrir, Puck (American men), Emma, Isabella (British women),
+  George, Lewis (British men) - best rated first. The old pack: the nine of
+  those it has. Left out on purpose: names that match voices another company
+  withdrew or uses (Sky, Alloy, Echo, Onyx, Nova, Fable), the lowest-rated
+  voices, and every non-English voice. `docs/studio-2026-09-27/voice-lineup.md`
+  has the reasons.
+
+## Real British pronunciation
+
+On Kokoro v1.0 the British voices (`bf_*`, `bm_*`) are asked for espeak-ng's
+British English (`en-gb-x-rp`, one `lang` per sentence); American voices and
+the old pack are spoken exactly as before. `[voice] tts_lang_british` names a
+different espeak-ng voice. Checked with the real pack in sherpa-onnx 1.13.8:
+`en-gb` alone is refused ("Failed to set eSpeak-ng voice"), `en-gb-x-rp` works
+and changes the sound (the same sentence in George came out 2.91 s against
+2.97 s in American English). **Nobody listened.**
+
+## Hear it
+
+A **Hear it** button on every voice in "Jarvis's built-in voice", in both apps.
+`POST /api/voice/voices/sample {"voice": "bm_george"}` answers a short WAV of
+one fixed line ("Hello, I'm Jarvis. This is how I sound.") in that voice, at
+your speaking speed. It changes nothing (no setting, no card, no event, nothing
+logged), it can never be a voice you recorded, and it is not held on a stale
+link. The apps refuse it while Jarvis is talking or listening, while the talk
+button or Jarvis Live has the microphone, and while App lock is locked, and
+stop it the moment a question or answer starts. The last few samples are kept
+in the PC's memory only, so the same voice twice is instant.
+
+## What is different, said plainly
+
+- **The animals' mouths use the analysed-from-sound fallback on v1.0.**
+  `jarvis_mouth.py --prepare` builds its timing from the v0.19 model's own
+  graph and refuses v1.0's (it says so in words); `jarvis_speech` does not ask
+  it while v1.0 is installed. Your v0.19 timing file stays in `tts-old-...`.
+  Timing for v1.0 is not built.
+- **No blended voices** (the studio's "Ashby" and "Clara" idea): they need a
+  changed `voices.bin`; not built.
+- **Speed on your PC is not measured.** In the build container, a three-second
+  sentence took about 1.4 s with four threads, the same class as v0.19; the
+  first sentence after starting also loads the 326 MB model.
+
+## Not checked, said plainly
+
+- Nobody has listened to any v1.0 voice or to the British accent.
+- The SHA-256 came from ONE download of GitHub's release file made in the build
+  container. The same route gave the old v0.19 file the same SHA-256 this
+  README already pinned, and the file unpacked and spoke in every offered voice,
+  so it is not a shot in the dark - but no second source was compared (GitHub's
+  release page could not be read there). If the release page shows a SHA-256 next
+  to `kokoro-multi-lang-v1_0.tar.bz2`, it should match; the install line checks it
+  again on your PC and installs nothing if it differs.
+- The voices' order was matched to the real files, number for number: every
+  row of each pack's `voices.bin` against the arrays kokoro-onnx publishes under
+  names (all 11 and all 54 matched).
+- The phone's Compose screen is read carefully by eye; CI is its only compiler.
+
+## Test it
+
+`py -3 backend\test_kokoro.py` (no network, no model). With the real pack
+unpacked: `$env:JARVIS_KOKORO_V1_DIR = "...\voice-models\tts"; py -3
+backend\test_kokoro.py` speaks in every offered voice with the real model.
+The rules both apps are tested against: `python3 tools/gen_voice_training_cases.py
+--check` and `python3 tools/gen_phone_voice_cases.py --check`.

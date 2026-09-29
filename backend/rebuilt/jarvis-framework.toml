@@ -1033,7 +1033,8 @@ stt_engine = "sherpa-onnx"
 # sherpa_stt_kind = "nemo_transducer"   # or "sense_voice"; normally guessed from the files
 # stt_threads = 4                       # CPU threads for speech-to-text (default: 4, or 2 on a small PC)
 # tts_threads = 4                       # CPU threads for the voice (the same default)
-# tts_speaker_id = 0                    # Kokoro voice: 0 = American female; 9 = British male (bm_george)
+# tts_speaker_id = 0                    # Kokoro voice, in the OLD numbering only: 0 = American female; 9 = British male (bm_george). Better: pick a voice by name in either app (Settings / Voices) - that choice wins over this line
+# tts_lang_british = "en-gb-x-rp"       # Kokoro v1.0 only: the espeak-ng voice the British voices (bf_*, bm_*) are asked for
 # vad_enabled = true                    # Silero VAD trims silence and drops clips with no speech
 #
 # Custom voices (jarvis_voices.py). All optional; these are the defaults.

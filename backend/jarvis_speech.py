@@ -2725,7 +2725,7 @@ def kokoro_speak(engine, text: str, sid: int, speed: float, semitones: float = 0
     its pause-shortening off and shortens the pauses with an exact copy of
     sherpa-onnx's own (checked byte for byte, docs/LIPSYNC.md); whenever it
     cannot, this speaks exactly as it always did."""
-    if mouth is not None:
+    if mouth is not None and not _pack_is_v1():
         try:
             import jarvis_mouth
             got = jarvis_mouth.speak(engine, text, sid, speed, semitones, pitch_up=pitch_up,
@@ -2740,10 +2740,63 @@ def kokoro_speak(engine, text: str, sid: int, speed: float, semitones: float = 0
             mouth.append(got[2])
             return got[0], got[1]
     f = 2.0 ** (float(semitones or 0.0) / 12.0)
-    audio = engine.generate(text, sid=int(sid), speed=float(speed) / f)
+    audio = _kokoro_generate(engine, text, int(sid), float(speed) / f)
     if audio is None or len(audio.samples) == 0:
         return None
     return pitch_up(audio.samples, semitones), audio.sample_rate
+
+
+def _pack_is_v1() -> bool:
+    """Kokoro v1.0 is installed. jarvis_mouth's timing (`--prepare`) is made
+    from the v0.19 model's own graph and refuses v1.0's, so on v1.0 the
+    mouths are analysed from the sound instead (docs/LIPSYNC.md) - the
+    owner's fallback. Skipping it here means an old timing file left beside a
+    new model can never be paired with it. Never raises."""
+    V = _voices_mod()
+    fn = getattr(V, "pack_kind", None) if V is not None else None
+    if fn is None:
+        return False
+    try:
+        return fn() == "v1"
+    except Exception:
+        return False
+
+
+def accent_lang(sid: int) -> Optional[str]:
+    """The espeak voice to ask Kokoro for with voice number `sid`, or None
+    for the engine's own default: Kokoro v1.0's British voices are asked for
+    British English (jarvis_voices.accent_lang -> jarvis_kokoro), everything
+    else - the old pack, an American voice, a PC with no jarvis_voices.py -
+    is spoken exactly as before. Never raises."""
+    V = _voices_mod()
+    fn = getattr(V, "accent_lang", None) if V is not None else None
+    if fn is None:
+        return None
+    try:
+        lang = fn(int(sid))
+    except Exception:
+        return None
+    return lang if isinstance(lang, str) and lang.strip() else None
+
+
+def _kokoro_generate(engine, text: str, sid: int, speed: float):
+    """engine.generate(...) for one sentence, asking for the voice's accent
+    when it has one (a per-call `lang`, Kokoro v1.0 only). Falls back to the
+    plain call - the engine's own language - when this sherpa-onnx cannot be
+    asked (no GenerationConfig) or answers with no sound for the accent."""
+    lang = accent_lang(sid)
+    if lang:
+        try:
+            cfg = sherpa_onnx.GenerationConfig()
+            cfg.sid = int(sid)
+            cfg.speed = float(speed)
+            cfg.extra = {"lang": lang}
+            audio = engine.generate(text, cfg)
+            if audio is not None and len(audio.samples) > 0:
+                return audio
+        except Exception:
+            pass  # speak as before, in the engine's own language
+    return engine.generate(text, sid=int(sid), speed=float(speed))
 
 
 def tts_speed(voices_module=None) -> float:
