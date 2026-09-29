@@ -590,8 +590,15 @@ def speaker_view() -> dict:
         note = (note + " " if note else "") + (
             f"While the {fv['name']} face is showing, its own voice speaks instead "
             f"(\"{FACE_VOICE_TITLE}\" is on); this choice is used the rest of the time.")
+    # The one PowerShell line that makes Ashby and Clara, only while it is
+    # what the note asks the owner to do (the pack is v1.0 and they are not
+    # made, or the made file is not the expected one). "" otherwise.
+    make_line = ""
+    if K.family(kind) == K.V1 and kind != K.V1MIX and K.blend_state(_voices_file()) != "ready":
+        make_line = K.MAKE_LINE
     return {"choice": choice, "value": now["sid"], "default": K.default_name(kind),
             "title": SPEAKER_TITLE, "detail": SPEAKER_DETAIL, "note": note,
+            "make_line": make_line,
             "choices": rows, "pack": K.pack_words(kind)}
 
 

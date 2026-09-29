@@ -168,6 +168,8 @@ object CustomVoices {
         val title: String = SPEAKER_TITLE,
         val detail: String = "",
         val note: String = "",
+        /** The one PowerShell line that makes Ashby and Clara, or "" when there is nothing to run. */
+        val makeLine: String = "",
     )
 
     /**
@@ -419,6 +421,7 @@ object CustomVoices {
             title = sk.str("title").ifBlank { SPEAKER_TITLE },
             detail = sk.str("detail"),
             note = sk.str("note"),
+            makeLine = sk.str("make_line"),
         )
     }
 

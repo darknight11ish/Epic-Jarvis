@@ -28,6 +28,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -42,6 +44,7 @@ import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.TextInput
 import com.jarvis.client.ui.parts.Toggle
+import com.jarvis.client.ui.parts.liveStatus
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.voice.VoiceTraining
 import kotlinx.coroutines.launch
@@ -573,8 +576,11 @@ private fun SpeakerPlate(
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
-    // Which voice is being heard, and the words under the list.
+    val clipboard = LocalClipboardManager.current
+    // Which voice is being heard, which row the words belong to (kept after
+    // it ends, so an error stays next to the voice that caused it), and the words.
     var hearing by remember { mutableStateOf<String?>(null) }
+    var saidFor by remember { mutableStateOf<String?>(null) }
     var said by remember { mutableStateOf("") }
     Plate {
         Text(sk.title, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
@@ -596,21 +602,42 @@ private fun SpeakerPlate(
                             enabled = !busy && linkBlocker == null,
                             onClick = { if (c.id != sk.choice) onSet(c.id) },
                         )
-                        Quiet(
-                            CustomVoices.HEAR_LABEL,
-                            modifier = Modifier.semantics { contentDescription = "Hear ${c.label}" },
-                            enabled = hearing == null,
-                            onClick = {
-                                hearing = c.id
-                                said = CustomVoices.TRY_ASKING
-                                scope.launch {
-                                    try {
-                                        said = onHear(c.id, c.label) { words -> said = words }
-                                    } finally {
-                                        hearing = null
+                        if (hearing == c.id) {
+                            // While a sample plays (or the PC is making it), this row's
+                            // button becomes Stop. Stopping cuts the sound and the wait.
+                            Quiet(
+                                "Stop",
+                                color = chrome.badInk,
+                                modifier = Modifier.semantics { contentDescription = "Stop the sample of ${c.label}" },
+                                onClick = { runCatching { JarvisRuntime.voice.stopSamples() } },
+                            )
+                        } else {
+                            Quiet(
+                                CustomVoices.HEAR_LABEL,
+                                modifier = Modifier.semantics { contentDescription = "Hear ${c.label}" },
+                                enabled = hearing == null,
+                                onClick = {
+                                    hearing = c.id
+                                    saidFor = c.id
+                                    said = CustomVoices.TRY_ASKING
+                                    scope.launch {
+                                        try {
+                                            said = onHear(c.id, c.label) { words -> said = words }
+                                        } finally {
+                                            hearing = null
+                                        }
                                     }
-                                }
-                            },
+                                },
+                            )
+                        }
+                    }
+                    // The status sits under the voice that was tapped, not below the whole list.
+                    if (saidFor == c.id && said.isNotBlank()) {
+                        Text(
+                            said,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textMid,
+                            modifier = Modifier.liveStatus(),
                         )
                     }
                     if (c.detail.isNotBlank()) {
@@ -619,13 +646,22 @@ private fun SpeakerPlate(
                 }
             }
         }
-        if (said.isNotBlank()) {
-            Gap(6)
-            Text(said, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
-        }
         if (sk.note.isNotBlank()) {
             Gap(6)
             Text(sk.note, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        }
+        // The line that makes Ashby and Clara: copy it, paste it into PowerShell
+        // on the PC, then restart Jarvis (the same way the picture-mode line works).
+        if (sk.makeLine.isNotBlank()) {
+            Quiet(
+                "Copy the line",
+                onClick = { clipboard.setText(AnnotatedString(sk.makeLine)) },
+            )
+            Text(
+                "Paste it into PowerShell on your PC, then restart Jarvis.",
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+            )
         }
         if (linkBlocker != null) {
             Gap(4)

@@ -2468,6 +2468,7 @@ request.
              "value": 3,                  sherpa-onnx's own `sid` in the installed pack
              "default": "af_heart",       the pack's own default voice ("af" on the old pack)
              "title": "Jarvis's built-in voice", "detail": str, "note": str,
+             "make_line": str,            the one PowerShell line that makes Ashby and Clara, "" unless the note asks for it (the phone shows a "Copy the line" button; absent on an older PC: no button)
              "choices": [{"id": "af_heart", "label": "American (female) - Heart"}, ...],   9-12 by pack: section 94
              "pack": {"kind": "v1" | "v019" | "", "name": "Kokoro v1.0", "voices": 54}},   absent on an older PC: show nothing
  "face_voice": {"enabled": bool,          the switch, the master (off unless turned on; off = no animal voice)
