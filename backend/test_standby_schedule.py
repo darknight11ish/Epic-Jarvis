@@ -121,6 +121,15 @@ class World:
         self.s = S.Scheduler(path, clock=self.clock, gate=self.gate,
                              tier_of=lambda a: self.tier, spawn=self.spawn,
                              publish=lambda k, d: self.events.append((k, d)))
+        # ROOT CAUSE of a load-only flake (found 2026-09-29): the code under
+        # test reaches the scheduler through jarvis_schedule.get(), and
+        # get() STARTS the scheduler's own loop thread. That thread ticks
+        # against this hand-moved clock, so on a busy machine it could fire
+        # a due job (and run its end) a moment before, or at the same time
+        # as, the test's own `tick()` - the test's tick then found nothing
+        # due, or read the job's note before the loop's run had written it.
+        # Every tick here is driven by the test, so nothing may start it.
+        self.s.start = lambda: self.s
 
     def spawn(self, fn):
         fn()

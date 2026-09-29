@@ -3042,9 +3042,21 @@ def learner_model() -> tuple:
     return str(url).rstrip("/"), model
 
 
+#: Seconds the HTTP call outlasts the deadline by - see ollama_caller.
+_SOCKET_SLACK = 2.0
+
+
 def ollama_caller(url: str, model: str, timeout: float = MODEL_TIMEOUT) -> Callable:
     """ask(prompt) -> text or None: one non-streamed answer from this PC's
-    Ollama. Never through a proxy (jarvis_local_http). Raises nothing."""
+    Ollama. Never through a proxy (jarvis_local_http). Raises nothing.
+
+    `timeout` is the DEADLINE the caller of ask() enforces (_with_deadline),
+    and it is that deadline that says "took too long". The HTTP call gets a
+    little longer (_SOCKET_SLACK) so it is only a backstop that frees the
+    thread. With the same number on both, a slow model made the two race:
+    on a quiet PC the deadline won, on a busy one the socket's own timeout
+    could win, and a plain timeout was reported as "did not answer" (still
+    treated as sensitive, but with the wrong words)."""
     def ask(prompt: str) -> Optional[str]:
         import urllib.error
         import urllib.request
@@ -3057,10 +3069,11 @@ def ollama_caller(url: str, model: str, timeout: float = MODEL_TIMEOUT) -> Calla
             try:
                 try:
                     import jarvis_local_http
-                    resp = jarvis_local_http.urlopen(req, timeout)
+                    resp = jarvis_local_http.urlopen(req, timeout + _SOCKET_SLACK)
                 except ImportError:
                     resp = urllib.request.build_opener(
-                        urllib.request.ProxyHandler({})).open(req, timeout=timeout)
+                        urllib.request.ProxyHandler({})).open(
+                            req, timeout=timeout + _SOCKET_SLACK)
                 with resp as r:
                     out = json.loads(r.read().decode("utf-8") or "{}")
             except urllib.error.HTTPError as exc:

@@ -1009,6 +1009,17 @@ def _wait(cond, seconds=5.0):
     return cond()
 
 
+def _thread_ended(seconds=10.0):
+    """The instant watch's thread is gone, not merely marked closed. Its state
+    flips to "off"/"stopped" a moment BEFORE the thread returns, and a regular
+    look in that moment sees a live thread and (correctly) does not start a
+    second one - so a test that ticks straight after the state flips, on a busy
+    machine, found nothing to open. Wait for the thread itself."""
+    TM.IDLE.join(seconds)
+    t = TM.IDLE.thread
+    return t is None or not t.is_alive()
+
+
 def _fast_idle():
     saved = {k: getattr(TM, k) for k in ("IDLE_TICK", "IDLE_DEBOUNCE", "IDLE_LIST_SECONDS",
                                          "IDLE_BACKOFF", "IDLE_TIMEOUT")}
@@ -1060,6 +1071,7 @@ def t_instant_email_idle():
         # the watch told once and ended: the connection closes by itself
         check("no email watch left: it closes", _wait(lambda: TM.IDLE.status()["state"]
                                                       == "off"), TM.IDLE.status())
+        check("... and its connection thread has really ended", _thread_ended(), TM.IDLE.thread)
 
         j2 = TM.add({"source": "email", "sender": "Sam"})
         w.s.tick()
@@ -1081,6 +1093,7 @@ def t_instant_email_idle():
         check("Stop everything closes it, and says so", TM.STOPPED_WORDS in said["stopped"]
               and _wait(lambda: not TM.IDLE.healthy())
               and TM.IDLE.status()["state"] == "stopped", said)
+        check("... and its connection thread has really ended", _thread_ended(), TM.IDLE.thread)
         w.clock.t = now + 1200
         w.s.tick()
         check("... its next regular look opens it again (the watch carries on)",
