@@ -5,13 +5,15 @@ Written after the audits of 2026-09-28
 It builds on [`INSTALL.md`](INSTALL.md) ("Updating everything"); where the two
 differ, this page is newer.
 
-**Read this first (updated after pull requests #23 and #25 were merged).**
+**Read this first (updated after pull requests #23, #25 and #27 were merged).**
 Everything the sessions had built by the evening of 2026-09-28 is now on
 `main`: the five branches (chatbot compare, Jarvis Live, Goals, phone
 notifications, the monkey, Lockdown, Today and the rest) came in with #23,
 and **QR-code pairing with a key per device**, the audits' fixes and the
 one-time animal-voice question came in with #25 (and a small follow-up
-after it). So:
+after it). **Pull request #27 then brought in signed approvals from the
+phone (phase 2 of pairing) and the app builder inside Projects, and
+customer-support chats.** So:
 
 - **Use Round 1's steps 1, 2 and 4** (backend, desktop, quick check) as the
   update steps - they still work - but **not its step 3**: that names an
@@ -20,9 +22,11 @@ after it). So:
 - **Then "After it is merged"** (it says how to get the right phone build
   and how to try the new pairing), then the **checklist** and the
   **measurements**.
-- **Not on `main` yet:** work other sessions pushed afterwards - mainly
-  customer-support chats (research session) and the animal-options page
-  (animal-face session). It arrives in its own later pull request.
+- **Not on `main` yet:** work other sessions pushed afterwards - mainly the
+  animal-options page (animal-face session). It arrives in its own later
+  pull request. Signed approvals and apps in Projects are on `main` but
+  have only been compiled and tested by GitHub, never on your real PC and
+  phone: the checklist below is how you find out.
 
 Every PowerShell command below is **one line**: copy the whole line, paste,
 press Enter. Each was checked for PowerShell 5.1 (the one Windows comes
@@ -164,9 +168,8 @@ first (each fails safe if wrong):
    not accept" every time, tell me and do not retire the old shared key.
 
 If any fail, do not press **Retire the old shared key**; send back what you
-saw. Not built yet: the fingerprint-signed "yes" for risky cards on the
-phone (phase 2 of the design), and the check that the phone's security
-chip is genuine (left out on purpose, see design section 9).
+saw. Not built, on purpose: the check that the phone's security chip is
+genuine (see design section 9).
 
 ---
 
