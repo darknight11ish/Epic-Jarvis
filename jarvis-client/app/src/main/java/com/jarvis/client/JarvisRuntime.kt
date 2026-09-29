@@ -6308,7 +6308,11 @@ object JarvisRuntime {
     /** Re-reads the status. A failed read changes nothing: the last answer keeps aging. */
     suspend fun refreshInboxTidy() {
         when (val r = api.inboxTidyCall(false)) {
-            is ApiResult.Ok -> {
+            // A 503 from the status route is the PC hitting a passing error, not
+            // "no such feature": like a failed read it changes nothing, so an
+            // open Undo strip is not wiped for up to 20 seconds (bug audit
+            // 2026-09-29; the desktop already keeps it).
+            is ApiResult.Ok -> if (r.value.code != 503) {
                 _inboxTidy.value = if (InboxTidy.missing(r.value)) {
                     null
                 } else {

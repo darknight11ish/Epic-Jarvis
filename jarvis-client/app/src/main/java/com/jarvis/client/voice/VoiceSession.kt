@@ -812,7 +812,11 @@ class VoiceSession(
         progress: (String) -> Unit,
     ): String {
         val seen = turnsStarted.get()
-        if (voiceBusy()) return busy
+        // Another sample already sounding counts as busy too: a second one
+        // opened a second AudioTrack over the first, and the first's end
+        // cleared the flag that lets a talk-button press cut the second
+        // (bug audit 2026-09-29).
+        if (voiceBusy() || tryPlaying) return busy
         return when (val r = ask()) {
             is ApiResult.Ok -> when (val t = r.value) {
                 is CustomVoices.Tried.Refused -> t.why
@@ -842,6 +846,9 @@ class VoiceSession(
         done: String,
         progress: (String) -> Unit,
     ): String {
+        // Looked at again here: the PC's answer took time, and another sample
+        // may have started meanwhile.
+        if (tryPlaying) return busy
         tryCut = false
         tryPlaying = true
         try {
@@ -887,6 +894,14 @@ class VoiceSession(
         tryCut = true
         speaker.stop()
     }
+
+    /**
+     * The Voices screen was left: a "Try it" or "Hear it" clip still playing
+     * stops now instead of running on for its last few seconds over whatever
+     * the owner went to (bug audit 2026-09-29). Does the same as
+     * [turnStarting], which is what stops one for a question.
+     */
+    fun stopSamples() = turnStarting()
 
     /**
      * Opens the microphone.
