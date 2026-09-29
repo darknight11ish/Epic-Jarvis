@@ -1512,7 +1512,7 @@ class ChatLog:
                 "continue_why": (CRISIS_CONTINUE_WHY if crisis
                                  else "" if kind in CONTINUABLE else CONTINUE_WHY[kind])}
 
-    def search(self, query, limit=SEARCH_DEFAULT) -> dict:
+    def search(self, query, limit=SEARCH_DEFAULT, kind=None) -> dict:
         """Search what was said in the kept conversations (GET
         /api/history/search, docs/JARVIS-API.md section 71; the owner's
         choice of 2026-09-28, under their answer of 2026-09-27: "A search
@@ -1540,14 +1540,20 @@ class ChatLog:
         With history OFF the kept conversations are still searched, as the
         list still lists them - and nothing new is kept by searching.
 
-        Returns status() plus {"query_ok", "conversations": [a list() row
+        `kind` (one of KINDS; anything else is ignored) searches only that
+        kind, so "Live only" and a typed search combine (the second chat
+        audit, 2026-09-28, finding 8: the search used to return every kind
+        while the filter still said "Live only").
+
+        Returns status() plus {"query_ok", "kind", "conversations": [a list() row
         plus "snippet" and "hits"], "more", "partial", "searched"}; or, for
         search words that are too short or too long, {"query_ok": false,
         "why": "<plain sentence>"} and no conversation."""
         self._housekeeping()
         out = self.status()
+        kind = kind if kind in KINDS else None
         out.update(query_ok=True, why="", conversations=[], more=False,
-                   partial=False, searched=0)
+                   partial=False, searched=0, kind=kind)
         terms, why = search_terms(query)
         if terms is None:
             out.update(query_ok=False, why=why)
@@ -1567,8 +1573,9 @@ class ChatLog:
             convs = c.execute(
                 "SELECT c.id, c.title, c.started, c.updated, c.device,"
                 " COALESCE(c.kind, 'chat'), c.project FROM conversations c"
-                " ORDER BY c.updated DESC, c.id DESC LIMIT ?",
-                (SEARCH_SCAN_MAX + 1,)).fetchall()
+                + (" WHERE COALESCE(c.kind, 'chat') = ?" if kind is not None else "")
+                + " ORDER BY c.updated DESC, c.id DESC LIMIT ?",
+                ([kind] if kind is not None else []) + [SEARCH_SCAN_MAX + 1]).fetchall()
         if len(convs) > SEARCH_SCAN_MAX:
             convs = convs[:SEARCH_SCAN_MAX]
             out["partial"] = True
@@ -1946,11 +1953,11 @@ def put_back(held: dict) -> dict:
     return _log().put_back(held)
 
 
-def search(query, limit=SEARCH_DEFAULT) -> dict:
+def search(query, limit=SEARCH_DEFAULT, kind=None) -> dict:
     """GET /api/history/search's answer (ChatLog.search). For the apps'
     History screens only: nothing a model or a chat turn can call reaches
     this (docs/JARVIS-API.md section 71)."""
-    return _log().search(query, limit=limit)
+    return _log().search(query, limit=limit, kind=kind)
 
 
 # ------------------------------------------------------ turning it back on
@@ -2208,7 +2215,7 @@ def handle_get(path: str, query: str = "") -> tuple:
             limit = int(q.get("limit", SEARCH_DEFAULT))
         except (TypeError, ValueError):
             limit = SEARCH_DEFAULT
-        return 200, log.search(q.get("q", ""), limit=limit)
+        return 200, log.search(q.get("q", ""), limit=limit, kind=q.get("kind") or None)
     if path == "/api/history/conversation":
         cid = q.get("id", "")
         if not _CID.fullmatch(cid or ""):

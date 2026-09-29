@@ -167,6 +167,8 @@ class Compare:
     ended_words: str = ""
     paused_code: str = ""
     paused_why: str = ""
+    #: Kept in chat history, or not and why (see jarvis_chatbot.history_answer).
+    history: dict = field(default_factory=dict)
 
 
 def _new_id() -> str:
@@ -605,7 +607,7 @@ def _finish(c: Compare, code: str, d: CB.Deps, *, words: str = "") -> None:
         else:
             use_model = False
     c.summary = summarise(c, d, use_model=use_model)
-    keep_in_history(c, d)
+    c.history = CB.history_answer(keep_in_history(c, d))
     d.audit("compare_ended", {"compare": c.id, "code": code, "n": _sent(c)})
     try:
         d.activity("idle", "")
@@ -989,6 +991,7 @@ def compare_view(c: Compare, *, transcripts: bool = True) -> dict:
             "max_minutes": c.limits.max_minutes, "never_send": list(c.limits.never_send),
             "paused": c.paused_why, "ended": c.ended_words, "problem": c.problem,
             "summary": dict(c.summary) if c.summary else None,
+            "history": dict(c.history) if c.history else None,
             # A conversation in a comparison has no summary of its own.
             "members": [dict(CB.session_view(m, transcript=transcripts), summary=None)
                         for m in c.members],

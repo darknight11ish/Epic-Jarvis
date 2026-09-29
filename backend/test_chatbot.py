@@ -1172,6 +1172,38 @@ def t_outside_text():
               for _, d_ in AUDIT), AUDIT[:3])
 
 
+def t_the_view_says_whether_it_was_kept_in_history():
+    """The second chat audit (2026-09-28), phone B4: both apps promised
+    "kept in History" whatever happened. The view now carries the PC's own
+    answer: kept, or not and why."""
+    import dataclasses
+    clean()
+    kept = []
+    d = dataclasses.replace(deps(), keep_history=lambda cid, title, rows, kind:
+                            kept.append((cid, title, kind)) or {"recorded": True, "rows": len(rows)})
+    s, d, *_ = go(FakeBot(), d, max_turns=2)
+    v = CB.session_view(s)
+    check("kept: the view says so, with no reason", v["history"] == {"kept": True, "why": ""}, v["history"])
+    check("...and it really went to History as a chatbot conversation",
+          kept and kept[0][0] == s.id and kept[0][2] == "chatbot", kept)
+    clean()
+    d = dataclasses.replace(deps(), keep_history=lambda cid, title, rows, kind:
+                            {"recorded": False, "why": "chat history is off"})
+    s, d, *_ = go(FakeBot(), d, max_turns=2)
+    v = CB.session_view(s)
+    check("not kept: the PC's own reason, in its words",
+          v["history"] == {"kept": False, "why": "chat history is off"}, v["history"])
+    clean()
+    d = dataclasses.replace(deps(), keep_history=lambda *a: (_ for _ in ()).throw(RuntimeError("x")))
+    s, d, *_ = go(FakeBot(), d, max_turns=2)
+    check("a writer that breaks is 'not kept', never 'kept'",
+          CB.session_view(s)["history"]["kept"] is False, CB.session_view(s)["history"])
+    s2, _ = session(FakeBot())
+    check("a conversation that has not ended says nothing yet", CB.session_view(s2)["history"] is None)
+    check("history_answer: nothing at all is 'not kept', with a plain why",
+          CB.history_answer(None) == {"kept": False, "why": "the PC did not say why"})
+
+
 def t_shipped_and_listed():
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     check("shipped: in _where.SHIPPED and apply-patches.ps1",

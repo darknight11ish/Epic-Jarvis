@@ -555,6 +555,11 @@ class Session:
     #: summary of its own - the comparison writes ONE for all of them - and
     #: is never "the latest conversation" in view().
     compare: str = ""
+    #: Whether the finished conversation was kept in chat history, and if
+    #: not why - the PC's own answer (keep_in_history), so both apps say what
+    #: is true instead of promising History (the second chat audit,
+    #: 2026-09-28, phone B4). {} until it ends.
+    history: dict = field(default_factory=dict)
     adapter: Any = field(default=None, repr=False, compare=False)
 
 
@@ -1855,7 +1860,7 @@ def _end_now(s: Session, code: str, words: str, d: Deps) -> None:
             use_model = False
     s.summary = summarise(s, d, use_model=use_model)
     if not s.compare:
-        keep_in_history(s, d)
+        s.history = history_answer(keep_in_history(s, d))
     d.audit("ended", {"session": s.id, "code": code, "n": s.turns_used})
     try:
         d.activity("idle", "")
@@ -1883,6 +1888,16 @@ def history_rows(s: Session, *, name: str = "") -> list:
             rows.append({"provenance": "chatbot_jarvis",
                          "text": f"Jarvis to {name}: {t.get('text') or ''}", "at": t.get("at")})
     return rows
+
+
+def history_answer(got) -> dict:
+    """What the apps are told about History: {"kept": bool, "why": str} from
+    keep_in_history's answer - a plain sentence when it was not kept."""
+    got = got if isinstance(got, dict) else {}
+    if got.get("recorded") is True:
+        return {"kept": True, "why": ""}
+    why = str(got.get("why") or "").strip() or "the PC did not say why"
+    return {"kept": False, "why": why}
 
 
 def keep_in_history(s: Session, d: Optional[Deps] = None) -> dict:
@@ -2155,7 +2170,8 @@ def session_view(s: Session, *, transcript: bool = True) -> dict:
            "max_minutes": s.limits.max_minutes, "never_send": list(s.limits.never_send),
            "paused": s.paused_why, "ended": s.ended_words, "question": s.question,
            "problem": s.problem, "summary": dict(s.summary) if s.summary else None,
-           "usage": dict(s.usage) if s.usage else None, "read_aloud": False}
+           "usage": dict(s.usage) if s.usage else None, "read_aloud": False,
+           "history": dict(s.history) if s.history else None}
     if s.compare:
         out["compare"] = s.compare
     if transcript:

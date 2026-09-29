@@ -176,10 +176,14 @@ WORDS = {
                      "never read aloud."),
     "summary_title": "What Jarvis found",
     # Since the chat audit (2026-09-28) a finished conversation is kept in
-    # the encrypted History (jarvis_chat_log.record_chatbot).
-    "summary_note": ("Written on this PC from the chatbot's words, so it is outside text too. "
-                     "Once it ends, the conversation and this summary are kept in History, "
-                     "marked as outside text."),
+    # the encrypted History (jarvis_chat_log.record_chatbot) - when history is
+    # on and the PC could write it. The apps no longer promise it: they say
+    # what the PC said (`history`, below; the second chat audit, phone B4).
+    "summary_note": ("Written on this PC from the chatbot's words, so it is outside text too."),
+    "history_kept": "Kept in your encrypted chat history on the PC.",
+    "history_not_kept": "Not kept in your chat history: {why}",
+    "history_open": "Open in History",
+    "history_open_title": "Read it, or delete it, in History.",
     "claim_sourced": "it gave a source (not checked by Jarvis)",
     "claim_unsourced": "no source given",
     "open_title": "Still open",
@@ -192,8 +196,8 @@ WORDS = {
                    "browser window Jarvis uses."),
     "missing": ("Your PC's Jarvis cannot talk to chatbots yet - run apply-patches.ps1 on "
                 "the PC."),
-    "gone": ("That conversation is no longer in memory: Jarvis on the PC restarted. A "
-             "conversation that finished is kept in History."),
+    "gone": ("That conversation is no longer in memory: Jarvis on the PC restarted. If chat "
+             "history is on, a conversation that finished is in History."),
     "hidden": ("The goal and the conversation are hidden until you confirm it is you."),
     "version": "Version",
     "notify_running": "Talking to {name}, {used} of {max}",
@@ -211,8 +215,7 @@ WORDS = {
     "compare_title": "Comparing chatbots",
     "compare_summary_title": "Where they agree and disagree",
     "compare_summary_note": ("Written on this PC from the chatbots' words, so it is outside "
-                             "text too. Once it ends, every conversation and this summary are "
-                             "kept in History, marked as outside text."),
+                             "text too."),
     "agree_title": "They agree",
     "disagree_title": "They disagree",
     "sources_title": "Sources each gave (not checked by Jarvis)",
@@ -222,8 +225,8 @@ WORDS = {
     "compare_too_many": "Pick at most {max} chatbots in this version.",
     "compare_not_enough": ("Fewer than two chatbots can be reached from this PC, so there is "
                            "nothing to compare yet."),
-    "compare_gone": ("That comparison is no longer in memory: Jarvis on the PC restarted. A "
-                     "comparison that finished is kept in History."),
+    "compare_gone": ("That comparison is no longer in memory: Jarvis on the PC restarted. If "
+                     "chat history is on, a comparison that finished is in History."),
     "notify_compare_running": "Comparing {count} chatbots: asking {name}, {at} of {count}",
     "notify_compare_waiting": "Waiting for your yes to ask {count} chatbots",
     "notify_compare_paused": "Paused: comparing {count} chatbots",
