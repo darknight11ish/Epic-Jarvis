@@ -691,6 +691,11 @@ const answerMemory = createAnswerMemory({
   },
 });
 
+/** The Undo strip for an inbox tidy (inbox-tidy.js), mounted just below.
+ *  Declared BEFORE it is mounted: a `let` used above its own line is a
+ *  ReferenceError at load, which took the whole bar down. */
+let inboxTidyView = null;
+
 /**
  * "Inbox tidy by voice" (inbox-tidy.js; JARVIS-API.md section 92): ten
  * minutes of Undo after a tidy card was approved. The card itself is decided
@@ -767,9 +772,6 @@ const live = {
 
 /** How many prompts `state.promptHistory` keeps. Older ones fall off the front. */
 const PROMPT_HISTORY_LIMIT = 50;
-
-/** The Undo strip for an inbox tidy (inbox-tidy.js), mounted below. */
-let inboxTidyView = null;
 
 /** `idle` | `streaming` | `done` | `error` | `approval`. */
 function setPhase(phase) {
