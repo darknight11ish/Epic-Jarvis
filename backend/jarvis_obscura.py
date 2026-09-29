@@ -421,6 +421,12 @@ def _kill_tree(p) -> None:
             p.kill()
         except Exception:
             pass
+    # A killed program is gone a moment later, not at that instant: wait (a few
+    # seconds at most) so that "stopped" means stopped when this returns.
+    try:
+        p.wait(timeout=5)
+    except Exception:
+        pass
 
 
 # --------------------------------------------------------------------------
