@@ -499,6 +499,54 @@ await check("the animal voice question in Settings: one click answers it, no car
   assert.deepEqual(greyed, [true, true], "greyed on a stale link (rule 4)");
 });
 
+/* Changing your mind later (the owner, 2026-09-28): a small button on each
+   animal's row once the one-time question was answered. Builds its own
+   answers on top of the real `face_showing` status. */
+const withAnswers = (answers) => {
+  const copy = JSON.parse(JSON.stringify(V.face_showing));
+  copy.face_voice.animals.forEach((a, i) => { a.answer = answers[i]; });
+  return copy;
+};
+const mindButtons = (page) => page.evaluate(() =>
+  [...document.querySelectorAll("#cv-animals-list .cv-animal")].map((r) => {
+    const b = [...r.querySelectorAll("button")].find((x) => /^(Use its own voice|Keep my voice)$/.test(x.textContent));
+    return b && !b.hidden ? { text: b.textContent, disabled: b.disabled } : null;
+  }));
+
+await check("change your mind: 'Use its own voice' after keep, 'Keep my voice' after use, nothing before an answer", async () => {
+  const st = withAnswers(["keep", "use", null, "keep"]);
+  assert.deepEqual(CV.animalVoicesView(st).animals.map((a) => a.answer), ["keep", "use", null, "keep"]);
+  const page = await open(st, {
+    faceOfferAnswer: { ok: true, http: 200, message: "The Red Panda speaks in its own voice now.",
+      face_voice: { enabled: true } },
+  });
+  const shown = await mindButtons(page);
+  await page.click('.cv-animal[data-face="redpanda"] button:text-is("Use its own voice")');
+  await page.waitForTimeout(250);
+  const first = await calls(page, "answer_face_voice_offer");
+  const said = await page.evaluate(() =>
+    document.querySelector('.cv-animal[data-face="redpanda"] .status').textContent);
+  await page.click('.cv-animal[data-face="pygmyowl"] button:text-is("Keep my voice")');
+  await page.waitForTimeout(250);
+  const both = await calls(page, "answer_face_voice_offer");
+  await page.close();
+  assert.deepEqual(shown, [
+    { text: "Use its own voice", disabled: false },
+    { text: "Keep my voice", disabled: false },
+    null,
+    { text: "Use its own voice", disabled: false },
+  ]);
+  assert.deepEqual(first, [{ face: "redpanda", answer: "use" }]);
+  assert.equal(said, "The Red Panda speaks in its own voice now.");
+  assert.deepEqual(both, [{ face: "redpanda", answer: "use" }, { face: "pygmyowl", answer: "keep" }],
+    "any animal, not only the one showing");
+
+  const stale = await open(st, {}, { link: { stale: true } });
+  const greyed = await mindButtons(stale);
+  await stale.close();
+  assert.deepEqual(greyed.map((b) => b && b.disabled), [true, true, null, true], "greyed on a stale link (rule 4)");
+});
+
 await check("each animal's voice: the PC's rows, choices and words, from every real status", async () => {
   for (const [name, st] of Object.entries(V)) {
     const av = CV.animalVoicesView(st);
