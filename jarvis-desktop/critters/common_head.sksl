@@ -12,7 +12,8 @@
 // This part holds what every animal shares: the uniforms the host sets for
 // all of them, and the small shape and colour helpers. The animal's own file
 // supplies its body (map, mapLite, partAt) and its colouring (material,
-// sparkle) plus where the camera looks (CAM_TARGET, CAM_DIST, BOUND_R). The
+// sparkle), where the camera looks (CAM_TARGET, CAM_DIST, BOUND_R) and where
+// along a ray it can be (animalSpan: a sphere round each part). The
 // shared end (common_tail.sksl) does the rest: the march, the soft outline,
 // the lighting, the orb and its glow.
 //
@@ -94,6 +95,38 @@ float smin(float a, float b, float k) {
     return min(a, b) - h * h * 0.25 / k;
 }
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
+
+// Where a ray runs inside a sphere: (where it goes in, where it comes out),
+// or (1e9, -1e9) - "nowhere", which the callers' min and max take as empty -
+// when it misses. Each animal's animalSpan() (common_tail.sksl asks it) joins
+// these to say where along a ray the animal can be, so the march only looks
+// there.
+float2 sphereSpan(float3 ro, float3 rd, float3 c, float r) {
+    float3 oc = ro - c;
+    float b = dot(oc, rd);
+    float disc = b * b - (dot(oc, oc) - r * r);
+    if (disc <= 0.0) return float2(1e9, -1e9);
+    float sq = sqrt(disc);
+    return float2(-b - sq, -b + sq);
+}
+
+// The stretch of a ray that is in either of two spans: from the first way in
+// to the last way out (the gap between, if any, is marched too - it is cheap
+// compared with a second march).
+float2 joinSpan(float2 a, float2 b) { return float2(min(a.x, b.x), max(a.y, b.y)); }
+// One more part's sphere added to the span so far (start from float2(1e9, -1e9), which is empty).
+float2 addSphere(float2 s, float3 ro, float3 rd, float3 c, float r) { return joinSpan(s, sphereSpan(ro, rd, c, r)); }
+// The span the march really uses. It STARTS where the outer sphere (the one
+// round the camera's target, which is what used to be the only bound) lets
+// the ray in - the same first step as ever, so a ray that meets the animal
+// takes exactly the steps it always took and draws the same pixel - and ENDS
+// where the ray leaves the animal's parts, or the outer sphere, whichever
+// comes first. A ray that meets no part has an empty span and is not marched
+// at all.
+float2 clipSpan(float3 ro, float3 rd, float2 parts, float3 c, float r) {
+    float2 o = sphereSpan(ro, rd, c, r);
+    return float2(o.x, min(parts.y, o.y));
+}
 
 // The orb: held, not grown, so never blended into the body.
 float orbDist(float3 p) { return length(p - uOrb.xyz) - uOrb.w; }

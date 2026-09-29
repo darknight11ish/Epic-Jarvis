@@ -931,9 +931,30 @@ that moment**. Three numbers make a shape, each 0 to 1:
 
 | Number | Panda and otter | Owl |
 |---|---|---|
-| **open** | the jaw drops: the little smile under the nose stays as the upper lip, and a lower lip curves down away from it, with dark red inside and a muted pink tongue low down; the chin and the cream muzzle patch move down with it | the lower half of the beak drops (quickly at first, so half-open speech already shows a clear gap) and tucks back toward the face, showing the dark inside |
-| **wide** ("ee", "s", teeth) | the corners pull out and up and the opening gets thinner, with a pale row of teeth under the upper lip | the lower half gets wider and flatter, and gapes a little less |
+| **open** | the jaw drops: the little smile under the nose stays as the upper lip, and a lower lip curves down away from it, with dark red inside and a muted pink tongue low down; the chin and the cream muzzle patch move down with it | the lower half of the beak drops (very quickly at first: from about a fifth open it is nearly at its full drop, so everyday speech shows a clear gap; louder words gape about as far as before) and tucks back toward the face, showing the dark inside |
+| **wide** ("ee", "s", teeth) | the corners pull out and up and the opening gets thinner, with a pale row of teeth under the upper lip | the lower half gets wider and flatter, and gapes a little less (about 15% each for wide and for round) |
 | **round** ("oo", "o", "w") | narrower, taller and pushed a little forward | a slightly smaller gape |
+
+**The owl's beak opens wider on ordinary speech (owner, 2026-09-29).** The
+two halves of the beak overlap when it is shut, so no gap shows until the
+lower half has dropped about half way - and the old curve only got there at
+open 0.5, so at 96 px most speech (open 0.3 to 0.5) looked as if the beak
+barely moved, and at 400 px it showed a 2 to 4 pixel gap. The drop is now
+`1 - (1 - open)^7` (`gape()` in `pygmyowl.sksl`): 0.2 gives 79% of the full
+drop, 0.3 gives 92%, 0.5 gives 99%, and 1 is exactly the old full drop. The
+"a little less" for a wide or round sound is now about 15% each, taken
+before and after the curve, so it still shows at moderate opens. Shut is
+exactly as before: the closed beak, in any wide or round, and the owl at rest
+are pixel-for-pixel unchanged (checked on 120 resting poses and 9 shapes at
+96 and 400 px), so an "m", "b" or "p" still shuts it fully. Pictures, before
+above after, for opens 0 to 1, plain, "ee" and "oo":
+`docs/critters/owl-beak-96px.png` and `docs/critters/owl-beak-400px.png`.
+Nothing else depended on the old curve (no test or golden reads it). The
+opening moves smoothly and steadily (checked in steps of 0.01): the steepest
+part is the first few hundredths, where the lower half moves under one pixel
+at 400 px per hundredth of open, and it never opens wider than the old full
+open. The owl's shader grew from 48,916 to 51,937 (the curve is worked out
+where the beak is drawn, in every march step); the limit is 60,000.
 
 **One mouth, not two drawings.** For the panda and the otter the shut
 mouth - a short stem down from the nose and a small smile - is the same
@@ -1232,6 +1253,84 @@ takes, and the size the animal is traced at against the size it is shown.
 **Not yet measured on real hardware.** Whether Auto reaches Maximum depends
 on the owner's graphics card and phone; the rules and pacing are tested,
 the speed is not.
+
+### The bounding volumes (owner, 2026-09-29: "tighter, provided nothing is cut off")
+
+Before it marches a ray, each animal's shader asks which stretch of that ray
+could be inside the animal at all (`animalSpan` in the animal's `.sksl`). It
+used to be one sphere round the whole animal, big enough for its widest
+stretch, its goodbye and its zip - which covered almost the whole picture,
+so nearly every pixel was marched. Now there is a small sphere round each
+**part**, placed from where that part is in this very pose (the body and head
+through the pose's own frames): torso, legs, head, each ear or wing, each arm,
+the tail in pieces, the orb - the owl's branch in three, the monkey's vine in
+six, the otter's pool as a flat slab cut by a round column. A ray that meets
+none of them is not marched. A ray that meets one is marched from **exactly
+where it always started** (the old sphere's way in) to the last part it
+leaves - so the steps it takes, and the pixel it draws, are the ones it always
+drew. (`common_head.sksl`: `sphereSpan`, `addSphere`, `clipSpan`.) The old
+sphere stays as the outer limit, so nothing new can appear beyond it either.
+Each sphere is the part's own extent plus a margin of about four pixels at
+96 px, because a ray that only skims a part can still be taken for a hit.
+
+**What it saves** (measured 2026-09-29, before and after, the same poses):
+
+| Face | Pixels marched | March steps | Time in the browser's software WebGL |
+|---|---|---|---|
+| Red panda | 100% to 64% | -31% | 0.52x (48% less) |
+| Pygmy owl | 100% to 59% | -37% | 0.81x (19% less) |
+| Sea otter | 98% to 61% | -31% | 0.91x (9% less) |
+| Monkey | 100% to 73% | -29% | 0.56x (44% less) |
+| Robot | 100% to 61% | -47% | 0.72x (28% less) |
+
+The step counts are exact (counted in the shader over 30 poses each, 128 px)
+and do not depend on the machine. The times are the browser's software WebGL
+on the build machine - there is no graphics card here - with old and new
+drawn alternately on the same poses, best of 14; they wobbled by a few
+percent from run to run, and a real card will differ. The otter and owl gain
+least because their misses were already cheap (a pool and a branch fill much
+of the picture and are hits, which cost the same as before). Please measure
+on the real card: the Faces window's readout under the full-size face.
+
+**The proof that nothing is cut off.** For each face the old and the new
+shader were drawn side by side through Skia (the phone's AGSL) at 128 px:
+1,200 pictures per face (60 poses in each of ten kinds - every state with
+looks and mouths, the idle happenings and cute moments, the robot's zip, the
+monkey's swing, the owl's turns, talking gestures, hello and goodbye when
+switching, waking and falling asleep, petting, the focus stretch, arriving at
+approval or an error - each from the front and from one of six other sides,
+some at 0.6 zoom so the whole scene is in view), 19.7 million pixels a face.
+Pixels that differ by more than 8/255:
+
+| Face | Pixels differing (of 19.7 million) | Most in one picture | Largest step |
+|---|---|---|---|
+| Red panda | 164 | 4 | 217/255 |
+| Pygmy owl | 136 | 2 | 159/255 |
+| Sea otter | 0 | 0 | 0 |
+| Monkey | 23 | 2 | 150/255 |
+| Robot | 4 | 1 | 226/255 |
+
+The differing pixels are single pixels along an edge (a ray that only grazes
+the animal can go either way once it stops early; a few are the old
+drawing's own see-through-or-not specks, which the shorter march no longer
+makes), never a patch. The same comparison through the desktop's own WebGL
+(300 pictures a face at 128 px) gave 91, 59, 0, 17 and 2 pixels. A first
+version with tighter pool bounds cut 10 pixels a picture along the otter's
+pool rim seen edge-on; widening the slab fixed it (0 now). The largest step
+is big because it is one pixel flipping between animal and background.
+
+**A permanent check.** `tests/face-bounds.mjs` (in `test:ui`) draws about 100
+poses per animal from four sides with the real shader and with the same
+shader minus the tight volumes (`animalSpan` replaced by the single outer
+sphere) and fails if one picture differs by more than 8 pixels or the average
+is over 0.7 a picture (measured: at most 3, and under 0.3). Its CONTROL
+shrinks every part's sphere to half and must see the difference.
+
+**Size.** Panda 59,729, owl 48,916, otter 54,898, monkey 59,728, robot 44,965
+(limit 60,000; the panda and monkey have about 270 left, so a new part on
+either must save what it adds). **To change a part**: move or resize its
+sphere in `animalSpan` in the same commit - the check above fails if a part
+pokes out.
 
 ### Adding another animal
 

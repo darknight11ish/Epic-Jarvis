@@ -18,7 +18,8 @@ internal object CritterShaders {
 // This part holds what every animal shares: the uniforms the host sets for
 // all of them, and the small shape and colour helpers. The animal's own file
 // supplies its body (map, mapLite, partAt) and its colouring (material,
-// sparkle) plus where the camera looks (CAM_TARGET, CAM_DIST, BOUND_R). The
+// sparkle), where the camera looks (CAM_TARGET, CAM_DIST, BOUND_R) and where
+// along a ray it can be (animalSpan: a sphere round each part). The
 // shared end (common_tail.sksl) does the rest: the march, the soft outline,
 // the lighting, the orb and its glow.
 //
@@ -100,6 +101,38 @@ float smin(float a, float b, float k) {
     return min(a, b) - h * h * 0.25 / k;
 }
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
+
+// Where a ray runs inside a sphere: (where it goes in, where it comes out),
+// or (1e9, -1e9) - "nowhere", which the callers' min and max take as empty -
+// when it misses. Each animal's animalSpan() (common_tail.sksl asks it) joins
+// these to say where along a ray the animal can be, so the march only looks
+// there.
+float2 sphereSpan(float3 ro, float3 rd, float3 c, float r) {
+    float3 oc = ro - c;
+    float b = dot(oc, rd);
+    float disc = b * b - (dot(oc, oc) - r * r);
+    if (disc <= 0.0) return float2(1e9, -1e9);
+    float sq = sqrt(disc);
+    return float2(-b - sq, -b + sq);
+}
+
+// The stretch of a ray that is in either of two spans: from the first way in
+// to the last way out (the gap between, if any, is marched too - it is cheap
+// compared with a second march).
+float2 joinSpan(float2 a, float2 b) { return float2(min(a.x, b.x), max(a.y, b.y)); }
+// One more part's sphere added to the span so far (start from float2(1e9, -1e9), which is empty).
+float2 addSphere(float2 s, float3 ro, float3 rd, float3 c, float r) { return joinSpan(s, sphereSpan(ro, rd, c, r)); }
+// The span the march really uses. It STARTS where the outer sphere (the one
+// round the camera's target, which is what used to be the only bound) lets
+// the ray in - the same first step as ever, so a ray that meets the animal
+// takes exactly the steps it always took and draws the same pixel - and ENDS
+// where the ray leaves the animal's parts, or the outer sphere, whichever
+// comes first. A ray that meets no part has an empty span and is not marched
+// at all.
+float2 clipSpan(float3 ro, float3 rd, float2 parts, float3 c, float r) {
+    float2 o = sphereSpan(ro, rd, c, r);
+    return float2(o.x, min(parts.y, o.y));
+}
 
 // The orb: held, not grown, so never blended into the body.
 float orbDist(float3 p) { return length(p - uOrb.xyz) - uOrb.w; }
@@ -257,8 +290,8 @@ const float3 CREAM = float3(0.930, 0.830, 0.680);
 const float3 DARK = float3(0.034, 0.012, 0.007);
 const float3 INK = float3(0.004, 0.004, 0.006);
 
-// Where the camera looks, how far back it sits, and the sphere the animal
-// fits inside (rays that miss it are not marched at all).
+// Where the camera looks, how far back it sits, and the outer sphere the animal
+// fits inside (nothing is drawn beyond it; animalSpan, below, is tighter).
 const float3 CAM_TARGET = float3(0.0, -0.08, 0.0);
 const float CAM_DIST = 3.35;
 const float CAM_PITCH = 0.0;
@@ -373,6 +406,34 @@ float partEyes(float3 h) {
     float2 ea = eyeAt();
     float3 ep = float3(abs(h.x) - ea.x, h.y - ea.y, h.z + 0.31);
     return sdEllipsoid(ep, float3(0.074, max(0.008, 0.084 * open), 0.055));
+}
+
+// Where along a ray the animal can be. Each part has a sphere round it,
+// placed from where the part is in THIS pose (the body and head through the
+// pose's own frames), with a margin of a few pixels - a ray that passes a
+// part by less than that can still be taken for a hit. A ray that meets none
+// of them is not marched at all, and one that does is marched no further than
+// the last of them (clipSpan, common_head.sksl). Measured against the single
+// sphere this replaces: docs/CRITTERS.md, "The bounding volumes".
+float3 fromBody(float3 q) { return uBodyPos + q.x * uBodyR0 + q.y * uBodyR1 + q.z * uBodyR2; }
+float3 fromHead(float3 h) { return uNeck + HEAD_S * (h.x * uHeadR0 + h.y * uHeadR1 + h.z * uHeadR2); }
+float2 animalSpan(float3 ro, float3 rd) {
+    float2 s = float2(1e9, -1e9);
+    s = addSphere(s, ro, rd, fromBody(float3(0.0, 0.31, 0.02)), 0.50);                              // torso
+    s = addSphere(s, ro, rd, fromBody(float3(0.0, 0.075, -0.22)), 0.52);                            // legs
+    s = addSphere(s, ro, rd, fromHead(float3(0.0, 0.32, -0.05)), 0.70);                             // skull, muzzle, nose, eyes
+    s = addSphere(s, ro, rd, fromHead(float3(-0.265, 0.60, 0.04) + 0.13 * uEarL1), 0.28);           // ears
+    s = addSphere(s, ro, rd, fromHead(float3(0.265, 0.60, 0.04) + 0.13 * uEarR1), 0.28);
+    s = addSphere(s, ro, rd, 0.5 * (uShL + uPawL), 0.5 * length(uPawL - uShL) + 0.16);              // arms
+    s = addSphere(s, ro, rd, 0.5 * (uShR + uPawR), 0.5 * length(uPawR - uShR) + 0.16);
+    float3 tA = 0.5 * (uTail1.xyz + uTail2.xyz);                                                    // tail, in two
+    float rA = max(max(length(uTail0.xyz - tA), length(uTail1.xyz - tA)), max(length(uTail2.xyz - tA), length(uTail3.xyz - tA)));
+    s = addSphere(s, ro, rd, tA, rA + max(max(uTail0.w, uTail1.w), max(uTail2.w, uTail3.w)) + 0.08);
+    float3 tB = 0.5 * (uTail3.xyz + uTail4.xyz);
+    float rB = max(max(length(uTail2.xyz - tB), length(uTail3.xyz - tB)), max(length(uTail4.xyz - tB), length(uTail5.xyz - tB)));
+    s = addSphere(s, ro, rd, tB, rB + max(max(uTail2.w, uTail3.w), max(uTail4.w, uTail5.w)) + 0.08);
+    s = addSphere(s, ro, rd, uOrb.xyz, uOrb.w + 0.08);                                              // the orb
+    return clipSpan(ro, rd, s, CAM_TARGET, BOUND_R);
 }
 
 // The whole panda: distance to the nearest surface. This is the function the
@@ -545,8 +606,8 @@ float ground(float3 ro, float3 rd) {
 // ---- SHARED END of every animal face's shader (see common_head.sksl) ----
 //
 // Needs from the animal's part: map(), mapLite(), partAt(), material(),
-// sparkle(), stuckRay(), ground(), and the constants CAM_TARGET, CAM_DIST,
-// CAM_PITCH, BOUND_R and MARCH_STEPS.
+// sparkle(), stuckRay(), ground(), animalSpan(), and the constants CAM_TARGET,
+// CAM_DIST, CAM_PITCH, BOUND_R and MARCH_STEPS.
 
 // The surface's direction at p, from how map() changes a hair away along
 // each axis. d0 is map() at p itself, which the march has already measured
@@ -604,11 +665,12 @@ float4 critter(float2 p) {
     float halo = uOrbGlow * 0.030 * uOrb.w / max(orbMiss * orbMiss, 0.0004) *
                  (1.0 - smoothstep(0.0, 0.55, orbMiss));
 
-    // Skip rays that miss the animal's bounding sphere altogether.
-    float3 oc2 = ro - target;
-    float bb = dot(oc2, rd);
-    float cc = dot(oc2, oc2) - BOUND_R * BOUND_R;
-    float disc = bb * bb - cc;
+    // Skip rays that miss the animal's bounding volume altogether, and march
+    // the rest only from where they go in to where they come out. The
+    // animal's own animalSpan() says where that is (from where it is in this
+    // very pose); the sphere round the camera's target is the outer limit
+    // nothing is drawn past.
+    float2 span = animalSpan(ro, rd);
     float hitT = -1.0;
     float id = 0.0;
     // A soft outline. A ray either hits or misses, so without this the edge
@@ -620,14 +682,13 @@ float4 critter(float2 p) {
     float fp = max(uPx, 0.00001) / (3.1 * max(uZoom, 0.1));  // a pixel's width, per unit of distance
     // (Kept as distance over t while marching - pixels times fp, the same
     // thing one multiply cheaper per step. t is never 0: the camera is
-    // always outside the bounding sphere.)
+    // always outside the bounding volume.)
     float bestR = 1000.0;
     float bestT = 0.0;
     float d0 = 0.0;
-    if (disc > 0.0) {
-        float sq = sqrt(disc);
-        float t = max(0.0, -bb - sq);
-        float tMax = -bb + sq;
+    if (span.x < span.y) {
+        float t = max(0.0, span.x);
+        float tMax = span.y;
         // MARCH_STEPS steps, set by each animal. The size limit
         // (common_head.sksl) is what sets it: the march is by far the largest
         // part of the program, one map() per step, so an animal with a
@@ -825,7 +886,8 @@ half4 main(float2 fragCoord) {
 // This part holds what every animal shares: the uniforms the host sets for
 // all of them, and the small shape and colour helpers. The animal's own file
 // supplies its body (map, mapLite, partAt) and its colouring (material,
-// sparkle) plus where the camera looks (CAM_TARGET, CAM_DIST, BOUND_R). The
+// sparkle), where the camera looks (CAM_TARGET, CAM_DIST, BOUND_R) and where
+// along a ray it can be (animalSpan: a sphere round each part). The
 // shared end (common_tail.sksl) does the rest: the march, the soft outline,
 // the lighting, the orb and its glow.
 //
@@ -907,6 +969,38 @@ float smin(float a, float b, float k) {
     return min(a, b) - h * h * 0.25 / k;
 }
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
+
+// Where a ray runs inside a sphere: (where it goes in, where it comes out),
+// or (1e9, -1e9) - "nowhere", which the callers' min and max take as empty -
+// when it misses. Each animal's animalSpan() (common_tail.sksl asks it) joins
+// these to say where along a ray the animal can be, so the march only looks
+// there.
+float2 sphereSpan(float3 ro, float3 rd, float3 c, float r) {
+    float3 oc = ro - c;
+    float b = dot(oc, rd);
+    float disc = b * b - (dot(oc, oc) - r * r);
+    if (disc <= 0.0) return float2(1e9, -1e9);
+    float sq = sqrt(disc);
+    return float2(-b - sq, -b + sq);
+}
+
+// The stretch of a ray that is in either of two spans: from the first way in
+// to the last way out (the gap between, if any, is marched too - it is cheap
+// compared with a second march).
+float2 joinSpan(float2 a, float2 b) { return float2(min(a.x, b.x), max(a.y, b.y)); }
+// One more part's sphere added to the span so far (start from float2(1e9, -1e9), which is empty).
+float2 addSphere(float2 s, float3 ro, float3 rd, float3 c, float r) { return joinSpan(s, sphereSpan(ro, rd, c, r)); }
+// The span the march really uses. It STARTS where the outer sphere (the one
+// round the camera's target, which is what used to be the only bound) lets
+// the ray in - the same first step as ever, so a ray that meets the animal
+// takes exactly the steps it always took and draws the same pixel - and ENDS
+// where the ray leaves the animal's parts, or the outer sphere, whichever
+// comes first. A ray that meets no part has an empty span and is not marched
+// at all.
+float2 clipSpan(float3 ro, float3 rd, float2 parts, float3 c, float r) {
+    float2 o = sphereSpan(ro, rd, c, r);
+    return float2(o.x, min(parts.y, o.y));
+}
 
 // The orb: held, not grown, so never blended into the body.
 float orbDist(float3 p) { return length(p - uOrb.xyz) - uOrb.w; }
@@ -1113,11 +1207,20 @@ float partEyes(float3 h) {
     return sdEllipsoid(ep, float3(0.118, max(0.010, 0.118 * open), 0.075));
 }
 // How far the beak gapes: uMouth's open, a little less for a round sound
-// and flatter for a wide one - eased out (quick at first, gentle at the
-// top), so the everyday half-open of speech already shows a clear gap.
+// and flatter for a wide one - eased out steeply (very quick at first, flat
+// at the top): the lower half of the beak starts to overlap the upper one, so
+// no gap shows until it has dropped about half way, and an everyday vowel
+// (open 0.3 to 0.5) has to be there already or the beak seems to barely
+// move - at 96 pixels the whole full-open gap is under two pixels.
+// 1 - (1 - open)^7: 0.2 gives 0.79 of the full gape, 0.3 gives 0.92 and
+// 0.5 gives 0.99; louder words gape about as far as before (1 is 1, as
+// it was). Shut is 0, exactly as before.
 float gape() {
-    float e = uMouth.x * (1.0 - 0.3 * uMouth.z) * (1.0 - 0.3 * uMouth.y);
-    return e * (2.0 - e);
+    float k = (1.0 - 0.15 * uMouth.z) * (1.0 - 0.15 * uMouth.y);
+    float q = 1.0 - uMouth.x * k;
+    float q2 = q * q;
+    float q4 = q2 * q2;
+    return k * (1.0 - q4 * q2 * q);
 }
 // A small hooked beak: an upper half, and a lower half that drops to speak -
 // wider and flatter for a wide sound - with the dark of the open mouth
@@ -1139,6 +1242,29 @@ float beakIn(float3 h) {
                        float3(0.012 + 0.024 * g + 0.010 * uMouth.y, 0.012 + 0.034 * g, 0.030 + 0.006 * g));
 }
 float partBeak(float3 h) { return min(min(beakUp(h), beakLo(h)), beakIn(h)); }
+
+// Where along a ray the animal can be. Each part has a sphere round it,
+// placed from where the part is in THIS pose (the body and head through the
+// pose's own frames), with a margin of a few pixels - a ray that passes a
+// part by less than that can still be taken for a hit. A ray that meets none
+// of them is not marched at all, and one that does is marched no further than
+// the last of them (clipSpan, common_head.sksl). Measured against the single
+// sphere this replaces: docs/CRITTERS.md, "The bounding volumes".
+float3 fromBody(float3 q) { return uBodyPos + q.x * uBodyR0 + q.y * uBodyR1 + q.z * uBodyR2; }
+float3 fromHead(float3 h) { return uNeck + h.x * uHeadR0 + h.y * uHeadR1 + h.z * uHeadR2; }
+float2 animalSpan(float3 ro, float3 rd) {
+    float2 s = float2(1e9, -1e9);
+    s = addSphere(s, ro, rd, fromBody(float3(0.0, 0.36, 0.03)), 0.58);                              // body, belly and feet
+    s = addSphere(s, ro, rd, fromHead(float3(0.0, 0.30, 0.0)), 0.60);                               // head, eyes, beak
+    s = addSphere(s, ro, rd, fromBody(float3(-0.32, 0.64, 0.04) + 0.05 * uWingL0 - 0.28 * uWingL1 + 0.02 * uWingL2), 0.44);   // wings
+    s = addSphere(s, ro, rd, fromBody(float3(0.32, 0.64, 0.04) + 0.05 * uWingR0 - 0.28 * uWingR1 + 0.02 * uWingR2), 0.44);
+    float3 br = BRANCH_B - BRANCH_A;                                                                // the branch, in three
+    s = addSphere(s, ro, rd, BRANCH_A + br * (1.0 / 6.0), 0.46);
+    s = addSphere(s, ro, rd, BRANCH_A + br * 0.5, 0.46);
+    s = addSphere(s, ro, rd, BRANCH_A + br * (5.0 / 6.0), 0.46);
+    s = addSphere(s, ro, rd, uOrb.xyz, uOrb.w + 0.08);                                              // the orb
+    return clipSpan(ro, rd, s, CAM_TARGET, BOUND_R);
+}
 
 float map(float3 p) {
     float3 b = toBody(p);
@@ -1309,8 +1435,8 @@ float ground(float3 ro, float3 rd) {
 // ---- SHARED END of every animal face's shader (see common_head.sksl) ----
 //
 // Needs from the animal's part: map(), mapLite(), partAt(), material(),
-// sparkle(), stuckRay(), ground(), and the constants CAM_TARGET, CAM_DIST,
-// CAM_PITCH, BOUND_R and MARCH_STEPS.
+// sparkle(), stuckRay(), ground(), animalSpan(), and the constants CAM_TARGET,
+// CAM_DIST, CAM_PITCH, BOUND_R and MARCH_STEPS.
 
 // The surface's direction at p, from how map() changes a hair away along
 // each axis. d0 is map() at p itself, which the march has already measured
@@ -1368,11 +1494,12 @@ float4 critter(float2 p) {
     float halo = uOrbGlow * 0.030 * uOrb.w / max(orbMiss * orbMiss, 0.0004) *
                  (1.0 - smoothstep(0.0, 0.55, orbMiss));
 
-    // Skip rays that miss the animal's bounding sphere altogether.
-    float3 oc2 = ro - target;
-    float bb = dot(oc2, rd);
-    float cc = dot(oc2, oc2) - BOUND_R * BOUND_R;
-    float disc = bb * bb - cc;
+    // Skip rays that miss the animal's bounding volume altogether, and march
+    // the rest only from where they go in to where they come out. The
+    // animal's own animalSpan() says where that is (from where it is in this
+    // very pose); the sphere round the camera's target is the outer limit
+    // nothing is drawn past.
+    float2 span = animalSpan(ro, rd);
     float hitT = -1.0;
     float id = 0.0;
     // A soft outline. A ray either hits or misses, so without this the edge
@@ -1384,14 +1511,13 @@ float4 critter(float2 p) {
     float fp = max(uPx, 0.00001) / (3.1 * max(uZoom, 0.1));  // a pixel's width, per unit of distance
     // (Kept as distance over t while marching - pixels times fp, the same
     // thing one multiply cheaper per step. t is never 0: the camera is
-    // always outside the bounding sphere.)
+    // always outside the bounding volume.)
     float bestR = 1000.0;
     float bestT = 0.0;
     float d0 = 0.0;
-    if (disc > 0.0) {
-        float sq = sqrt(disc);
-        float t = max(0.0, -bb - sq);
-        float tMax = -bb + sq;
+    if (span.x < span.y) {
+        float t = max(0.0, span.x);
+        float tMax = span.y;
         // MARCH_STEPS steps, set by each animal. The size limit
         // (common_head.sksl) is what sets it: the march is by far the largest
         // part of the program, one map() per step, so an animal with a
@@ -1589,7 +1715,8 @@ half4 main(float2 fragCoord) {
 // This part holds what every animal shares: the uniforms the host sets for
 // all of them, and the small shape and colour helpers. The animal's own file
 // supplies its body (map, mapLite, partAt) and its colouring (material,
-// sparkle) plus where the camera looks (CAM_TARGET, CAM_DIST, BOUND_R). The
+// sparkle), where the camera looks (CAM_TARGET, CAM_DIST, BOUND_R) and where
+// along a ray it can be (animalSpan: a sphere round each part). The
 // shared end (common_tail.sksl) does the rest: the march, the soft outline,
 // the lighting, the orb and its glow.
 //
@@ -1671,6 +1798,38 @@ float smin(float a, float b, float k) {
     return min(a, b) - h * h * 0.25 / k;
 }
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
+
+// Where a ray runs inside a sphere: (where it goes in, where it comes out),
+// or (1e9, -1e9) - "nowhere", which the callers' min and max take as empty -
+// when it misses. Each animal's animalSpan() (common_tail.sksl asks it) joins
+// these to say where along a ray the animal can be, so the march only looks
+// there.
+float2 sphereSpan(float3 ro, float3 rd, float3 c, float r) {
+    float3 oc = ro - c;
+    float b = dot(oc, rd);
+    float disc = b * b - (dot(oc, oc) - r * r);
+    if (disc <= 0.0) return float2(1e9, -1e9);
+    float sq = sqrt(disc);
+    return float2(-b - sq, -b + sq);
+}
+
+// The stretch of a ray that is in either of two spans: from the first way in
+// to the last way out (the gap between, if any, is marched too - it is cheap
+// compared with a second march).
+float2 joinSpan(float2 a, float2 b) { return float2(min(a.x, b.x), max(a.y, b.y)); }
+// One more part's sphere added to the span so far (start from float2(1e9, -1e9), which is empty).
+float2 addSphere(float2 s, float3 ro, float3 rd, float3 c, float r) { return joinSpan(s, sphereSpan(ro, rd, c, r)); }
+// The span the march really uses. It STARTS where the outer sphere (the one
+// round the camera's target, which is what used to be the only bound) lets
+// the ray in - the same first step as ever, so a ray that meets the animal
+// takes exactly the steps it always took and draws the same pixel - and ENDS
+// where the ray leaves the animal's parts, or the outer sphere, whichever
+// comes first. A ray that meets no part has an empty span and is not marched
+// at all.
+float2 clipSpan(float3 ro, float3 rd, float2 parts, float3 c, float r) {
+    float2 o = sphereSpan(ro, rd, c, r);
+    return float2(o.x, min(parts.y, o.y));
+}
 
 // The orb: held, not grown, so never blended into the body.
 float orbDist(float3 p) { return length(p - uOrb.xyz) - uOrb.w; }
@@ -1821,6 +1980,7 @@ const float CAM_DIST = 3.30;
 const float CAM_PITCH = 0.50;
 const float BOUND_R = 1.25;
 const int MARCH_STEPS = 48;
+
 // The pool: a thin round disc of water, this wide.
 const float POOL_R = 1.02;
 
@@ -1908,6 +2068,41 @@ float partEyes(float3 h) {
 float waterAt(float3 p) {
     float slab = max(p.y - uWater.x, (uWater.x - 0.05) - p.y);
     return smax(slab, length(p.xz) - POOL_R, 0.04);
+}
+
+// Where along a ray the animal can be. Each part has a sphere round it,
+// placed from where the part is in THIS pose (the body and head through the
+// pose's own frames), with a margin of a few pixels - a ray that passes a
+// part by less than that can still be taken for a hit. A ray that meets none
+// of them is not marched at all, and one that does is marched no further than
+// the last of them (clipSpan, common_head.sksl). Measured against the single
+// sphere this replaces: docs/CRITTERS.md, "The bounding volumes".
+float3 fromBody(float3 q) { return uBodyPos + q.x * uBodyR0 + q.y * uBodyR1 + q.z * uBodyR2; }
+float3 fromHead(float3 h) { return uNeck + h.x * uHeadR0 + h.y * uHeadR1 + h.z * uHeadR2; }
+// The pool: a thin flat disc, so its box - a slab of height, cut by a round
+// column - is far tighter than a sphere round it.
+float2 poolSpan(float3 ro, float3 rd) {
+    float iy = 1.0 / (rd.y < 0.0 ? min(rd.y, -1e-4) : max(rd.y, 1e-4));
+    float ta = (uWater.x - 0.30 - ro.y) * iy;
+    float tb = (uWater.x + 0.25 - ro.y) * iy;
+    float a = max(dot(rd.xz, rd.xz), 1e-6);
+    float b = dot(ro.xz, rd.xz);
+    float disc = b * b - a * (dot(ro.xz, ro.xz) - (POOL_R + 0.25) * (POOL_R + 0.25));
+    if (disc <= 0.0) return float2(1e9, -1e9);
+    float sq = sqrt(disc);
+    float2 r = float2(max(min(ta, tb), (-b - sq) / a), min(max(ta, tb), (-b + sq) / a));
+    return r.x < r.y ? r : float2(1e9, -1e9);
+}
+float2 animalSpan(float3 ro, float3 rd) {
+    float2 s = poolSpan(ro, rd);                                                                    // the water
+    s = addSphere(s, ro, rd, fromBody(float3(-0.20, 0.0, 0.0)), 0.52);                              // body, in three
+    s = addSphere(s, ro, rd, fromBody(float3(0.17, 0.0, 0.0)), 0.55);
+    s = addSphere(s, ro, rd, fromBody(float3(0.66, 0.06, 0.0)), 0.44);                              // tail and feet
+    s = addSphere(s, ro, rd, fromHead(float3(0.0)), 0.52);                                          // head
+    s = addSphere(s, ro, rd, 0.5 * (uShL + uPawL), 0.5 * length(uPawL - uShL) + 0.16);              // arms
+    s = addSphere(s, ro, rd, 0.5 * (uShR + uPawR), 0.5 * length(uPawR - uShR) + 0.16);
+    s = addSphere(s, ro, rd, uOrb.xyz, uOrb.w + 0.08);                                              // the pebble
+    return clipSpan(ro, rd, s, CAM_TARGET, BOUND_R);
 }
 
 float map(float3 p) {
@@ -2118,8 +2313,8 @@ float ground(float3 ro, float3 rd) {
 // ---- SHARED END of every animal face's shader (see common_head.sksl) ----
 //
 // Needs from the animal's part: map(), mapLite(), partAt(), material(),
-// sparkle(), stuckRay(), ground(), and the constants CAM_TARGET, CAM_DIST,
-// CAM_PITCH, BOUND_R and MARCH_STEPS.
+// sparkle(), stuckRay(), ground(), animalSpan(), and the constants CAM_TARGET,
+// CAM_DIST, CAM_PITCH, BOUND_R and MARCH_STEPS.
 
 // The surface's direction at p, from how map() changes a hair away along
 // each axis. d0 is map() at p itself, which the march has already measured
@@ -2177,11 +2372,12 @@ float4 critter(float2 p) {
     float halo = uOrbGlow * 0.030 * uOrb.w / max(orbMiss * orbMiss, 0.0004) *
                  (1.0 - smoothstep(0.0, 0.55, orbMiss));
 
-    // Skip rays that miss the animal's bounding sphere altogether.
-    float3 oc2 = ro - target;
-    float bb = dot(oc2, rd);
-    float cc = dot(oc2, oc2) - BOUND_R * BOUND_R;
-    float disc = bb * bb - cc;
+    // Skip rays that miss the animal's bounding volume altogether, and march
+    // the rest only from where they go in to where they come out. The
+    // animal's own animalSpan() says where that is (from where it is in this
+    // very pose); the sphere round the camera's target is the outer limit
+    // nothing is drawn past.
+    float2 span = animalSpan(ro, rd);
     float hitT = -1.0;
     float id = 0.0;
     // A soft outline. A ray either hits or misses, so without this the edge
@@ -2193,14 +2389,13 @@ float4 critter(float2 p) {
     float fp = max(uPx, 0.00001) / (3.1 * max(uZoom, 0.1));  // a pixel's width, per unit of distance
     // (Kept as distance over t while marching - pixels times fp, the same
     // thing one multiply cheaper per step. t is never 0: the camera is
-    // always outside the bounding sphere.)
+    // always outside the bounding volume.)
     float bestR = 1000.0;
     float bestT = 0.0;
     float d0 = 0.0;
-    if (disc > 0.0) {
-        float sq = sqrt(disc);
-        float t = max(0.0, -bb - sq);
-        float tMax = -bb + sq;
+    if (span.x < span.y) {
+        float t = max(0.0, span.x);
+        float tMax = span.y;
         // MARCH_STEPS steps, set by each animal. The size limit
         // (common_head.sksl) is what sets it: the march is by far the largest
         // part of the program, one map() per step, so an animal with a
@@ -2398,7 +2593,8 @@ half4 main(float2 fragCoord) {
 // This part holds what every animal shares: the uniforms the host sets for
 // all of them, and the small shape and colour helpers. The animal's own file
 // supplies its body (map, mapLite, partAt) and its colouring (material,
-// sparkle) plus where the camera looks (CAM_TARGET, CAM_DIST, BOUND_R). The
+// sparkle), where the camera looks (CAM_TARGET, CAM_DIST, BOUND_R) and where
+// along a ray it can be (animalSpan: a sphere round each part). The
 // shared end (common_tail.sksl) does the rest: the march, the soft outline,
 // the lighting, the orb and its glow.
 //
@@ -2480,6 +2676,38 @@ float smin(float a, float b, float k) {
     return min(a, b) - h * h * 0.25 / k;
 }
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
+
+// Where a ray runs inside a sphere: (where it goes in, where it comes out),
+// or (1e9, -1e9) - "nowhere", which the callers' min and max take as empty -
+// when it misses. Each animal's animalSpan() (common_tail.sksl asks it) joins
+// these to say where along a ray the animal can be, so the march only looks
+// there.
+float2 sphereSpan(float3 ro, float3 rd, float3 c, float r) {
+    float3 oc = ro - c;
+    float b = dot(oc, rd);
+    float disc = b * b - (dot(oc, oc) - r * r);
+    if (disc <= 0.0) return float2(1e9, -1e9);
+    float sq = sqrt(disc);
+    return float2(-b - sq, -b + sq);
+}
+
+// The stretch of a ray that is in either of two spans: from the first way in
+// to the last way out (the gap between, if any, is marched too - it is cheap
+// compared with a second march).
+float2 joinSpan(float2 a, float2 b) { return float2(min(a.x, b.x), max(a.y, b.y)); }
+// One more part's sphere added to the span so far (start from float2(1e9, -1e9), which is empty).
+float2 addSphere(float2 s, float3 ro, float3 rd, float3 c, float r) { return joinSpan(s, sphereSpan(ro, rd, c, r)); }
+// The span the march really uses. It STARTS where the outer sphere (the one
+// round the camera's target, which is what used to be the only bound) lets
+// the ray in - the same first step as ever, so a ray that meets the animal
+// takes exactly the steps it always took and draws the same pixel - and ENDS
+// where the ray leaves the animal's parts, or the outer sphere, whichever
+// comes first. A ray that meets no part has an empty span and is not marched
+// at all.
+float2 clipSpan(float3 ro, float3 rd, float2 parts, float3 c, float r) {
+    float2 o = sphereSpan(ro, rd, c, r);
+    return float2(o.x, min(parts.y, o.y));
+}
 
 // The orb: held, not grown, so never blended into the body.
 float orbDist(float3 p) { return length(p - uOrb.xyz) - uOrb.w; }
@@ -2796,6 +3024,43 @@ float partEyes(float3 h) {
     return sdEllipsoid(ep, float3(0.052, max(0.007, 0.066 * open), 0.042));
 }
 
+// Where along a ray the animal can be. Each part has a sphere round it,
+// placed from where the part is in THIS pose (the body and head through the
+// pose's own frames), with a margin of a few pixels - a ray that passes a
+// part by less than that can still be taken for a hit. A ray that meets none
+// of them is not marched at all, and one that does is marched no further than
+// the last of them (clipSpan, common_head.sksl). Measured against the single
+// sphere this replaces: docs/CRITTERS.md, "The bounding volumes".
+float3 fromBody(float3 q) { return uBodyPos + q.x * uBodyR0 + q.y * uBodyR1 + q.z * uBodyR2; }
+float3 fromHead(float3 h) { return uNeck + HEAD_S * (h.x * uHeadR0 + h.y * uHeadR1 + h.z * uHeadR2); }
+// Where the vine is at x (partVine's own curve): its middle there.
+float3 vineAt(float x) {
+    float dx = x - uVine.z;
+    return float3(x, uVine.x - 0.035 * x * x - uVine.w / (1.0 + 18.0 * dx * dx), uVine.y);
+}
+float2 animalSpan(float3 ro, float3 rd) {
+    float2 s = float2(1e9, -1e9);
+    s = addSphere(s, ro, rd, uBodyPos, 0.36);                                                       // torso
+    s = addSphere(s, ro, rd, fromBody(uKneeL), max(length(float3(-0.085, -0.13, 0.0) - uKneeL), length(uFootL - uKneeL)) + 0.20);   // legs
+    s = addSphere(s, ro, rd, fromBody(uKneeR), max(length(float3(0.085, -0.13, 0.0) - uKneeR), length(uFootR - uKneeR)) + 0.20);
+    s = addSphere(s, ro, rd, fromHead(float3(0.0, 0.38, 0.0)), 0.78);                               // head and ears
+    s = addSphere(s, ro, rd, uElbA, max(length(uShA - uElbA), length(uHandA - uElbA)) + 0.15);      // arms
+    s = addSphere(s, ro, rd, uElbB, max(length(uShB - uElbB), length(uHandB - uElbB)) + 0.15);
+    float3 tA = 0.5 * (uTail1.xyz + uTail2.xyz);                                                    // tail, in two
+    float rA = max(max(length(uTail0.xyz - tA), length(uTail1.xyz - tA)), max(length(uTail2.xyz - tA), length(uTail3.xyz - tA)));
+    s = addSphere(s, ro, rd, tA, rA + max(max(uTail0.w, uTail1.w), uTail2.w) + 0.08);
+    float rB = max(length(uTail2.xyz - uTail3.xyz), length(uTail4.xyz - uTail3.xyz));
+    s = addSphere(s, ro, rd, uTail3.xyz, rB + max(uTail2.w, uTail3.w) + 0.08);
+    s = addSphere(s, ro, rd, uOrb.xyz, 0.27);                                                       // the banana
+    s = addSphere(s, ro, rd, vineAt(-1.10), 0.36);                                                  // the vine, in six
+    s = addSphere(s, ro, rd, vineAt(-0.66), 0.36);
+    s = addSphere(s, ro, rd, vineAt(-0.22), 0.36);
+    s = addSphere(s, ro, rd, vineAt(0.22), 0.36);
+    s = addSphere(s, ro, rd, vineAt(0.66), 0.36);
+    s = addSphere(s, ro, rd, vineAt(1.10), 0.36);
+    return clipSpan(ro, rd, s, CAM_TARGET, BOUND_R);
+}
+
 // The whole monkey, its vine and its banana: distance to the nearest
 // surface. The march calls this over and over, so it returns the distance
 // only; which part was hit is asked once, afterwards, by partAt().
@@ -2946,8 +3211,8 @@ float ground(float3 ro, float3 rd) {
 // ---- SHARED END of every animal face's shader (see common_head.sksl) ----
 //
 // Needs from the animal's part: map(), mapLite(), partAt(), material(),
-// sparkle(), stuckRay(), ground(), and the constants CAM_TARGET, CAM_DIST,
-// CAM_PITCH, BOUND_R and MARCH_STEPS.
+// sparkle(), stuckRay(), ground(), animalSpan(), and the constants CAM_TARGET,
+// CAM_DIST, CAM_PITCH, BOUND_R and MARCH_STEPS.
 
 // The surface's direction at p, from how map() changes a hair away along
 // each axis. d0 is map() at p itself, which the march has already measured
@@ -3005,11 +3270,12 @@ float4 critter(float2 p) {
     float halo = uOrbGlow * 0.030 * uOrb.w / max(orbMiss * orbMiss, 0.0004) *
                  (1.0 - smoothstep(0.0, 0.55, orbMiss));
 
-    // Skip rays that miss the animal's bounding sphere altogether.
-    float3 oc2 = ro - target;
-    float bb = dot(oc2, rd);
-    float cc = dot(oc2, oc2) - BOUND_R * BOUND_R;
-    float disc = bb * bb - cc;
+    // Skip rays that miss the animal's bounding volume altogether, and march
+    // the rest only from where they go in to where they come out. The
+    // animal's own animalSpan() says where that is (from where it is in this
+    // very pose); the sphere round the camera's target is the outer limit
+    // nothing is drawn past.
+    float2 span = animalSpan(ro, rd);
     float hitT = -1.0;
     float id = 0.0;
     // A soft outline. A ray either hits or misses, so without this the edge
@@ -3021,14 +3287,13 @@ float4 critter(float2 p) {
     float fp = max(uPx, 0.00001) / (3.1 * max(uZoom, 0.1));  // a pixel's width, per unit of distance
     // (Kept as distance over t while marching - pixels times fp, the same
     // thing one multiply cheaper per step. t is never 0: the camera is
-    // always outside the bounding sphere.)
+    // always outside the bounding volume.)
     float bestR = 1000.0;
     float bestT = 0.0;
     float d0 = 0.0;
-    if (disc > 0.0) {
-        float sq = sqrt(disc);
-        float t = max(0.0, -bb - sq);
-        float tMax = -bb + sq;
+    if (span.x < span.y) {
+        float t = max(0.0, span.x);
+        float tMax = span.y;
         // MARCH_STEPS steps, set by each animal. The size limit
         // (common_head.sksl) is what sets it: the march is by far the largest
         // part of the program, one map() per step, so an animal with a
@@ -3226,7 +3491,8 @@ half4 main(float2 fragCoord) {
 // This part holds what every animal shares: the uniforms the host sets for
 // all of them, and the small shape and colour helpers. The animal's own file
 // supplies its body (map, mapLite, partAt) and its colouring (material,
-// sparkle) plus where the camera looks (CAM_TARGET, CAM_DIST, BOUND_R). The
+// sparkle), where the camera looks (CAM_TARGET, CAM_DIST, BOUND_R) and where
+// along a ray it can be (animalSpan: a sphere round each part). The
 // shared end (common_tail.sksl) does the rest: the march, the soft outline,
 // the lighting, the orb and its glow.
 //
@@ -3308,6 +3574,38 @@ float smin(float a, float b, float k) {
     return min(a, b) - h * h * 0.25 / k;
 }
 float smax(float a, float b, float k) { return -smin(-a, -b, k); }
+
+// Where a ray runs inside a sphere: (where it goes in, where it comes out),
+// or (1e9, -1e9) - "nowhere", which the callers' min and max take as empty -
+// when it misses. Each animal's animalSpan() (common_tail.sksl asks it) joins
+// these to say where along a ray the animal can be, so the march only looks
+// there.
+float2 sphereSpan(float3 ro, float3 rd, float3 c, float r) {
+    float3 oc = ro - c;
+    float b = dot(oc, rd);
+    float disc = b * b - (dot(oc, oc) - r * r);
+    if (disc <= 0.0) return float2(1e9, -1e9);
+    float sq = sqrt(disc);
+    return float2(-b - sq, -b + sq);
+}
+
+// The stretch of a ray that is in either of two spans: from the first way in
+// to the last way out (the gap between, if any, is marched too - it is cheap
+// compared with a second march).
+float2 joinSpan(float2 a, float2 b) { return float2(min(a.x, b.x), max(a.y, b.y)); }
+// One more part's sphere added to the span so far (start from float2(1e9, -1e9), which is empty).
+float2 addSphere(float2 s, float3 ro, float3 rd, float3 c, float r) { return joinSpan(s, sphereSpan(ro, rd, c, r)); }
+// The span the march really uses. It STARTS where the outer sphere (the one
+// round the camera's target, which is what used to be the only bound) lets
+// the ray in - the same first step as ever, so a ray that meets the animal
+// takes exactly the steps it always took and draws the same pixel - and ENDS
+// where the ray leaves the animal's parts, or the outer sphere, whichever
+// comes first. A ray that meets no part has an empty span and is not marched
+// at all.
+float2 clipSpan(float3 ro, float3 rd, float2 parts, float3 c, float r) {
+    float2 o = sphereSpan(ro, rd, c, r);
+    return float2(o.x, min(parts.y, o.y));
+}
 
 // The orb: held, not grown, so never blended into the body.
 float orbDist(float3 p) { return length(p - uOrb.xyz) - uOrb.w; }
@@ -3539,6 +3837,24 @@ float partArms(float3 p) {
     return min(l, r);
 }
 
+// Where along a ray the animal can be. Each part has a sphere round it,
+// placed from where the part is in THIS pose (the body and head through the
+// pose's own frames), with a margin of a few pixels - a ray that passes a
+// part by less than that can still be taken for a hit. A ray that meets none
+// of them is not marched at all, and one that does is marched no further than
+// the last of them (clipSpan, common_head.sksl). Measured against the single
+// sphere this replaces: docs/CRITTERS.md, "The bounding volumes".
+float3 fromBody(float3 q) { return uBodyPos + q.x * uBodyR0 + q.y * uBodyR1 + q.z * uBodyR2; }
+float3 fromHead(float3 h) { return uNeck + h.x * uHeadR0 + h.y * uHeadR1 + h.z * uHeadR2; }
+float2 animalSpan(float3 ro, float3 rd) {
+    float2 s = float2(1e9, -1e9);
+    s = addSphere(s, ro, rd, uBodyPos, 0.46);                                                       // the egg
+    s = addSphere(s, ro, rd, fromHead(HC), 0.82);                                                   // helmet, pods, fins
+    s = addSphere(s, ro, rd, 0.5 * (uShL + uHandL), 0.5 * length(uHandL - uShL) + 0.21);            // arms
+    s = addSphere(s, ro, rd, 0.5 * (uShR + uHandR), 0.5 * length(uHandR - uShR) + 0.21);
+    return clipSpan(ro, rd, s, CAM_TARGET, BOUND_R);
+}
+
 // The whole robot: distance to the nearest surface. The march calls this
 // over and over, so it returns the distance only; which part was hit is
 // asked once, afterwards, by partAt().
@@ -3706,8 +4022,8 @@ float ground(float3 ro, float3 rd) {
 // ---- SHARED END of every animal face's shader (see common_head.sksl) ----
 //
 // Needs from the animal's part: map(), mapLite(), partAt(), material(),
-// sparkle(), stuckRay(), ground(), and the constants CAM_TARGET, CAM_DIST,
-// CAM_PITCH, BOUND_R and MARCH_STEPS.
+// sparkle(), stuckRay(), ground(), animalSpan(), and the constants CAM_TARGET,
+// CAM_DIST, CAM_PITCH, BOUND_R and MARCH_STEPS.
 
 // The surface's direction at p, from how map() changes a hair away along
 // each axis. d0 is map() at p itself, which the march has already measured
@@ -3765,11 +4081,12 @@ float4 critter(float2 p) {
     float halo = uOrbGlow * 0.030 * uOrb.w / max(orbMiss * orbMiss, 0.0004) *
                  (1.0 - smoothstep(0.0, 0.55, orbMiss));
 
-    // Skip rays that miss the animal's bounding sphere altogether.
-    float3 oc2 = ro - target;
-    float bb = dot(oc2, rd);
-    float cc = dot(oc2, oc2) - BOUND_R * BOUND_R;
-    float disc = bb * bb - cc;
+    // Skip rays that miss the animal's bounding volume altogether, and march
+    // the rest only from where they go in to where they come out. The
+    // animal's own animalSpan() says where that is (from where it is in this
+    // very pose); the sphere round the camera's target is the outer limit
+    // nothing is drawn past.
+    float2 span = animalSpan(ro, rd);
     float hitT = -1.0;
     float id = 0.0;
     // A soft outline. A ray either hits or misses, so without this the edge
@@ -3781,14 +4098,13 @@ float4 critter(float2 p) {
     float fp = max(uPx, 0.00001) / (3.1 * max(uZoom, 0.1));  // a pixel's width, per unit of distance
     // (Kept as distance over t while marching - pixels times fp, the same
     // thing one multiply cheaper per step. t is never 0: the camera is
-    // always outside the bounding sphere.)
+    // always outside the bounding volume.)
     float bestR = 1000.0;
     float bestT = 0.0;
     float d0 = 0.0;
-    if (disc > 0.0) {
-        float sq = sqrt(disc);
-        float t = max(0.0, -bb - sq);
-        float tMax = -bb + sq;
+    if (span.x < span.y) {
+        float t = max(0.0, span.x);
+        float tMax = span.y;
         // MARCH_STEPS steps, set by each animal. The size limit
         // (common_head.sksl) is what sets it: the march is by far the largest
         // part of the program, one map() per step, so an animal with a
