@@ -404,7 +404,7 @@ function applyFaceVisibility() {
   // default colours. And an event sent to this window is delivered to its
   // top-level page, never to a frame inside it, so the frame could not have
   // followed a change anyway. See `postFace`.
-  if (dom.faceFrame) dom.faceFrame.src = show ? "faces.html?mode=display&feed=parent" : "";
+  if (dom.faceFrame) dom.faceFrame.src = show ? "faces.html?mode=display&feed=parent&clip=circle" : "";
 }
 
 /** The owner's appearance document, as this window last read it. */

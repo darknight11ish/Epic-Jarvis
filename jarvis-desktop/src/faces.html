@@ -1484,6 +1484,11 @@ function paintSeason(s, g, w, h, state){
 // from the surface's own `offline`). An animal on standby then shows the
 // hollow ring alone and no sleeping Zs - "not connected" is not "asleep".
 let FACE_OFFLINE = false;
+// The frame sits in a round window (the widget's 120 px circle: `&clip=circle`
+// in its address), so the sleeping Zs are kept inside the circle. `s.round`
+// does the same for one surface (tests).
+const FRAME_ROUND = new URLSearchParams(location.search).get("clip") === "circle";
+let FACE_ROUND = false;
 // Seconds the Zs take to fade out (or back in) when the link drops (or
 // comes back) while the animal sleeps.
 const ZS_FADE_S = 0.5;
@@ -1860,6 +1865,17 @@ function critterFace(o){
       const Z = CritterPose.ZS;
       const list = CritterPose.zs(t, ov, m ? e(m.calmR) : (CALM.matches ? 1 : 0));
       const k = Math.min(w, h) / 2;
+      // In a round window (the widget's circle) a z near the corner is cut
+      // off by the edge. Pull each z's anchor toward the centre until the
+      // whole letter (its half-diagonal, plus a little) is inside 0.94 of the
+      // circle - position only, the size and the motion are the same.
+      if(FACE_ROUND){
+        for(const z of list){
+          const reach = 0.94 - z[2] * 0.6, d = Math.hypot(z[0], z[1]);
+          if(d > reach && d > 0){ const f = Math.max(0, reach) / d; z[0] *= f; z[1] *= f; }
+        }
+      }
+      seen.maxR = list.reduce((m, z) => z[3] > 0.004 ? Math.max(m, Math.hypot(z[0], z[1]) + z[2] * 0.6) : m, 0);
       g.save();
       g.strokeStyle = lift(boundTint(st), Z.LIGHTEN);
       g.lineCap = "round"; g.lineJoin = "round";
@@ -5356,6 +5372,7 @@ function drawSurface(s, dt, state){
   FACE_DIM = sleepDim(FACE_DIM_AWAKE, state === "standby" ? 1 : 0);
   // Not connected: an animal on standby shows no Zs (critterFace.drawZs).
   FACE_OFFLINE = s.offline === true;
+  FACE_ROUND = FRAME_ROUND || s.round === true;
   const timed = GPUOK && isShaderFace(th) && typeof GPU !== "undefined";
   if(timed) GPU.begin(s);
   withOverride(th, motion, col, () => {

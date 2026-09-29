@@ -670,6 +670,47 @@ await check("the error ring does not move: the same pixels a second later, and u
   assert.doesNotMatch(fn, /s\.clock|fxAge|performance\.now|globalAlpha|Math\.sin/, "the error ring reads a clock or fades");
 });
 
+/* ── The sleeping Zs stay inside the widget's round window ─────────────────── */
+
+await check("in the widget's 120 px circle every z stays inside it; without the circle the panda's and monkey's do not", async () => {
+  const page = await editor();
+  const run = (round) => page.evaluate(([SRC, round]) => {
+    const out = {};
+    const realNow = performance.now;
+    let fake = realNow.call(performance);
+    performance.now = () => fake;
+    for (const id of ["redpanda", "pygmyowl", "seaotter", "monkey", "robot"]) {
+      const s = (0, eval)(SRC)(id);
+      s.ctx.canvas.style.width = "120px"; s.ctx.canvas.style.height = "120px";
+      sizeSurface(s);
+      s.round = round;
+      let max = 0, seenAny = 0;
+      for (let i = 0; i < 700; i++) {
+        fake += 1000 / 30; drawSurface(s, 1 / 30, "standby");
+        const z = window.__faceZs;
+        if (i > 150 && z && z.shown > 0) { seenAny++; max = Math.max(max, z.maxR || 0); }
+      }
+      out[id] = { max: +max.toFixed(3), seenAny };
+    }
+    performance.now = realNow;
+    return out;
+  }, [SURFACE.toString(), round]);
+  const clipped = await run(true);
+  const free = await run(false);
+  await page.close();
+  console.log("      farthest z edge, in units of the circle's radius (clipped / free):",
+    JSON.stringify(Object.fromEntries(Object.keys(clipped).map((k) => [k, [clipped[k].max, free[k].max]]))));
+  for (const [id, r] of Object.entries(clipped)) {
+    assert.ok(r.seenAny > 20, `${id}: no Zs were drawn to measure`);
+    assert.ok(r.max <= 0.95, `${id}: a z reaches ${r.max} of the circle's radius (the edge is 1)`);
+  }
+  // The regression: unclipped, at least the two animals the review named poke out.
+  assert.ok(free.redpanda.max > 1 || free.monkey.max > 1,
+    "no z pokes out of the circle without the fix, so this test proves nothing: " + JSON.stringify(free));
+  // The widget asks for the circle.
+  assert.match(read("src/widget.js"), /faces\.html\?mode=display&feed=parent&clip=circle/);
+});
+
 /* ── A focus session is not a sleeping animal (owner, 2026-09-29) ────────── */
 
 await check("a focus session's Quiet shows the focus buddy (idle); a hand-set Quiet, or any standby, stays asleep", async () => {
