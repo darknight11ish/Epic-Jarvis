@@ -2281,7 +2281,13 @@ fn run_vad_loop(
                             // fresh look now, before the answer - the program
                             // the owner is in is still in front (look.rs). No
                             // session, no request.
-                            crate::look::ask_blocking(&app);
+                            // Only when the server's voice check said it was the
+                            // owner (it already does before it ever answers with
+                            // `wake_heard`; this keeps a look from ever depending
+                            // on that alone).
+                            if reply.is_owner {
+                                crate::look::ask_blocking(&app);
+                            }
                             let _ = app.emit(VOICE_HEARD, reply);
                         }
                         Ok(reply) if !reply.live_elsewhere.is_empty() => {

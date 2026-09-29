@@ -865,6 +865,18 @@ def t_a_look_mark_counts_only_from_this_pc():
     check("a body that is not a dict never raises", SC.drop_remote_look_marks(None, "1.2.3.4") == 0)
 
 
+def t_a_never_look_list_that_could_not_be_read_is_read_again():
+    w = World()
+    p = w.never.path
+    p.write_text("{not json", encoding="utf-8")
+    w.never.load()
+    check("an unreadable list refuses looks", w.never.broken is True)
+    p.write_text('{"added": [], "removed": []}', encoding="utf-8")
+    out = w.engine.look_at_this()
+    check("once it can be read again, the next look reads it and works",
+          w.never.broken is False and out.get("ok") is True, out)
+
+
 def t_a_failed_phone_read_drops_the_screen_parts():
     msgs = [{"role": "user", "content": [{"type": "text", "text": "hi"},
                                          {"type": "screen_text", "text": "secret words"}]}]

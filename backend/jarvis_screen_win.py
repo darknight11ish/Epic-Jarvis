@@ -572,15 +572,41 @@ def _exe_of_hwnd(hwnd) -> str:
     kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
     pid = wintypes.DWORD()
     user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-    h = kernel32.OpenProcess(0x1000, False, pid.value)      # PROCESS_QUERY_LIMITED_INFORMATION
-    if not h:
-        return ""
-    try:
-        size = wintypes.DWORD(1024)
-        buf = ctypes.create_unicode_buffer(1024)
-        return buf.value if kernel32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)) else ""
-    finally:
-        kernel32.CloseHandle(h)
+    def exe_of_pid(p) -> str:
+        h = kernel32.OpenProcess(0x1000, False, p)          # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return ""
+        try:
+            size = wintypes.DWORD(1024)
+            buf = ctypes.create_unicode_buffer(1024)
+            return buf.value if kernel32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)) else ""
+        finally:
+            kernel32.CloseHandle(h)
+
+    exe = exe_of_pid(pid.value)
+    if ntpath.basename(exe).lower() == "applicationframehost.exe":
+        # A Store (UWP) app: the frame belongs to ApplicationFrameHost and the app
+        # itself is a child window of another process - the same unwrap
+        # jarvis_front.py does for the window in front, so the black-out mask
+        # sees the real program name (a Store app on the Never look at list is
+        # painted over). Any failure keeps the frame host's own name.
+        try:
+            found = []
+            proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+
+            def each(child, _l):
+                cpid = wintypes.DWORD()
+                user32.GetWindowThreadProcessId(child, ctypes.byref(cpid))
+                if cpid.value and cpid.value != pid.value:
+                    found.append(cpid.value)
+                    return False
+                return True
+            user32.EnumChildWindows(hwnd, proc(each), 0)
+            if found:
+                exe = exe_of_pid(found[0]) or exe
+        except Exception:
+            pass
+    return exe
 
 
 def _list_windows() -> Optional[list]:

@@ -386,6 +386,14 @@ class NeverLook:
             self._added = [e for e in added if e]
             self._removed = [e for e in removed if e]
 
+    def retry_if_broken(self) -> None:
+        """One transient read error (an antivirus lock, a file being written)
+        must not refuse every look until Jarvis restarts: a broken list is read
+        again when it is next needed, and stays broken (looks refused, the safe
+        direction) only while it really cannot be read."""
+        if self.broken:
+            self.load()
+
     @staticmethod
     def _entry(e) -> Optional[tuple]:
         if not isinstance(e, dict) or e.get("kind") not in KINDS:
@@ -1319,6 +1327,7 @@ class Screen:
                 self.last_tick = now
                 need_snap = True
             never = self.never
+        never.retry_if_broken()
         why = None
         if need_snap:
             # Reading Windows (UI Automation, a browser's address box) can take
@@ -1355,6 +1364,7 @@ class Screen:
         if not self.built():
             return None, "not_built"
         before = self._snapshot()
+        self.never.retry_if_broken()
         why = pause_reason(before, self.never)
         if why:
             return None, why
