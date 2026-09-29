@@ -120,6 +120,9 @@ fn main() {
             // "Erase the words" names the chat it would also delete: a read.
             "brain_fact_chat",
             "chat_continue_open",
+            // Is the private lists' "Hide" on? Yes or no, nothing read. The
+            // Jarvis bar hides its thread of earlier answers with it.
+            "chat_thread_hidden",
             // "History of this fact" (section 71): every version of one
             // fact, hidden like every memory list. Brain only.
             "brain_fact_history",

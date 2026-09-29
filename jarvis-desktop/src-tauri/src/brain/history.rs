@@ -99,7 +99,11 @@ pub(crate) const SEARCH_STILL_HIDDEN: &str = "Your chat history is hidden. Press
 /// are tidied (runs of spaces become one) and every byte that is not a
 /// plain letter, digit or `-._~` is percent-encoded, so nothing the owner
 /// types can start a second parameter.
-pub(crate) fn search_path(query: &str, limit: Option<u32>) -> Result<String, String> {
+pub(crate) fn search_path(
+    query: &str,
+    limit: Option<u32>,
+    kind: Option<&str>,
+) -> Result<String, String> {
     let words = query.split_whitespace().collect::<Vec<_>>().join(" ");
     if words.chars().count() < 2 {
         return Err("Type at least two letters to search what was said.".to_string());
@@ -110,10 +114,18 @@ pub(crate) fn search_path(query: &str, limit: Option<u32>) -> Result<String, Str
         ));
     }
     let limit = limit.unwrap_or(SEARCH_DEFAULT).clamp(1, SEARCH_MAX);
-    Ok(format!(
+    let mut path = format!(
         "/api/history/search?q={}&limit={limit}",
         commands::encode_path_segment(&words)
-    ))
+    );
+    // "Live only" and a typed search combine (the second chat audit,
+    // 2026-09-28, finding 8): the same kinds the list may be narrowed to.
+    match kind.filter(|k| !k.is_empty()) {
+        None => {}
+        Some(k) if KINDS.contains(&k) => path.push_str(&format!("&kind={k}")),
+        Some(k) => return Err(format!("{k:?} is not a kind of conversation History keeps")),
+    }
+    Ok(path)
 }
 
 /// [`brain_history_search`]'s reading of the answer.
@@ -183,6 +195,16 @@ pub(crate) fn continue_answer(status: u16, body: &str) -> Result<serde_json::Val
         });
     if !CONTINUABLE.contains(&kind) || others {
         return Err(NOT_CONTINUABLE.to_string());
+    }
+    // The PC's own "no" (a chat titled "A difficult moment" is kept but not
+    // carried on - the second chat audit, 2026-09-28): its own plain reason.
+    if conv.get("continuable").and_then(|c| c.as_bool()) == Some(false) {
+        let why = conv
+            .get("continue_why")
+            .and_then(|w| w.as_str())
+            .filter(|w| !w.trim().is_empty())
+            .unwrap_or(NOT_CONTINUABLE);
+        return Err(why.to_string());
     }
     Ok(conv)
 }
@@ -403,6 +425,17 @@ pub async fn chat_continue_open(app: AppHandle, id: String) -> Result<serde_json
     continue_answer(status, &body)
 }
 
+/// Are the private lists hidden right now ("Hide memory lists and chat
+/// history")? The Jarvis bar asks before it draws the folded thread of
+/// earlier answers (the owner's decision, 2026-09-28, after the second chat
+/// audit: the thread hides with the rest of the chat history; the answer on
+/// screen, being asked about right now, does not). Nothing is read from the
+/// PC and nothing is returned but yes or no.
+#[tauri::command]
+pub async fn chat_thread_hidden(app: AppHandle) -> bool {
+    crate::lock::private_hidden(&app)
+}
+
 /// [`brain_fact_chat`]'s reading: the PC's `{"id", "conversation": null |
 /// {...}}`, or - from a PC without the route (404, 501) - `{"available":
 /// false}`, and "Erase the words" then asks as it did before, without
@@ -463,8 +496,9 @@ pub async fn brain_history_search(
     app: AppHandle,
     query: String,
     limit: Option<u32>,
+    kind: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let path = search_path(&query, limit)?;
+    let path = search_path(&query, limit, kind.as_deref())?;
     if crate::lock::private_hidden(&app) {
         return Err(SEARCH_STILL_HIDDEN.to_string());
     }
@@ -678,29 +712,43 @@ mod tests {
     #[test]
     fn a_search_is_sent_only_within_the_pcs_limits_and_cannot_add_a_parameter() {
         assert_eq!(
-            search_path("dentist", None).unwrap(),
+            search_path("dentist", None, None).unwrap(),
             "/api/history/search?q=dentist&limit=20"
         );
         assert_eq!(
-            search_path("  mill   road ", Some(500)).unwrap(),
+            search_path("  mill   road ", Some(500), None).unwrap(),
             "/api/history/search?q=mill%20road&limit=50"
         );
         // Nothing the owner types can start a second parameter or become a space.
-        let odd = search_path("a&limit=100000#x+y=z", Some(3)).unwrap();
+        let odd = search_path("a&limit=100000#x+y=z", Some(3), None).unwrap();
         assert_eq!(
             odd,
             "/api/history/search?q=a%26limit%3D100000%23x%2By%3Dz&limit=3"
         );
-        assert!(search_path("café ☕", None)
+        assert!(search_path("café ☕", None, None)
             .unwrap()
             .contains("caf%C3%A9%20%E2%98%95"));
-        assert!(search_path("a", None).is_err());
-        assert!(search_path("   ", None).is_err());
-        assert!(search_path(&"x".repeat(101), None).is_err());
+        assert!(search_path("a", None, None).is_err());
+        assert!(search_path("   ", None, None).is_err());
+        assert!(search_path(&"x".repeat(101), None, None).is_err());
         assert!(
-            search_path(&"é".repeat(100), None).is_ok(),
+            search_path(&"é".repeat(100), None, None).is_ok(),
             "characters, not bytes"
         );
+    }
+
+    #[test]
+    fn a_search_can_be_narrowed_to_one_kind_and_only_a_real_one() {
+        assert_eq!(
+            search_path("dentist", None, Some("live")).unwrap(),
+            "/api/history/search?q=dentist&limit=20&kind=live"
+        );
+        assert_eq!(
+            search_path("dentist", None, Some("")).unwrap(),
+            "/api/history/search?q=dentist&limit=20"
+        );
+        assert!(search_path("dentist", None, Some("live&limit=100")).is_err());
+        assert!(search_path("dentist", None, Some("imported")).is_err());
     }
 
     #[test]

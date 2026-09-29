@@ -886,6 +886,7 @@ pub fn run() {
             brain::history::brain_continue_chat,
             brain::history::brain_fact_chat,
             brain::history::chat_continue_open,
+            brain::history::chat_thread_hidden,
             brain::fact_history::brain_fact_history,
             brain::conversation_facts::brain_conversation_facts,
             brain::history::brain_history_delete,

@@ -675,6 +675,11 @@ fn emit_private_hidden(app: &AppHandle) {
     ) {
         eprintln!("[jarvis] unable to tell the Brain to hide its lists: {err}");
     }
+    // The Jarvis bar hides its thread of earlier answers the same moment
+    // (the second chat audit, 2026-09-28).
+    if let Err(err) = app.emit_to(crate::QUICKBAR_LABEL, crate::events::PRIVATE_HIDDEN, ()) {
+        eprintln!("[jarvis] unable to tell the Jarvis bar to hide its thread: {err}");
+    }
 }
 
 // ---------------------------------------------------------------------------
