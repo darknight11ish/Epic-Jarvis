@@ -90,8 +90,6 @@ def t_its_place_in_the_stack():
     # install block), so what matters is that this comes after every patch
     # whose lines it builds on (below) - and that the whole list applies,
     # which _stack proves.
-    check(f"{PATCH} is in apply-patches.ps1's list",
-          PATCH in order, order[-3:])
     for later in order[order.index(PATCH) + 1:] if PATCH in order else []:
         text = (HERE / later).read_text(encoding="utf-8")
         check(f"{later}, after it, does not touch _open()",

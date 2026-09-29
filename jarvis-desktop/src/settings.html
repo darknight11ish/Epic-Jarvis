@@ -751,6 +751,25 @@
               <div class="choices" id="vt-handsfree" role="group" aria-label="Hands-free: how far a question started with Hey Jarvis is trusted"></div>
               <p class="note" id="vt-handsfree-note"></p>
             </div>
+            <div id="vt-screen-box" hidden>
+              <h3 class="subhead">Answers about your screen or the camera after "Hey Jarvis"</h3>
+              <div class="choices" id="vt-screen" role="group" aria-label="Answers about your screen or the camera after Hey Jarvis, under Only trust the talk button"></div>
+              <p class="note" id="vt-screen-note"></p>
+            </div>
+            <div id="vt-live-box" hidden>
+              <h3 class="subhead">How far Jarvis Live is trusted</h3>
+              <div class="choices" id="vt-live" role="group" aria-label="How far Jarvis Live is trusted, under Only trust the talk button"></div>
+              <p class="note" id="vt-live-note"></p>
+            </div>
+            <!-- When App lock ends Jarvis Live on this PC (the owner's
+                 decision, 2026-09-28): a PC setting, kept by Jarvis on the
+                 PC (the voice setting `live_end`), so the looser choice can
+                 be an approval card. The phone keeps App lock's own rule. -->
+            <div id="vt-live-end-box" hidden>
+              <h3 class="subhead">End Jarvis Live on this PC</h3>
+              <div class="choices" id="vt-live-end" role="group" aria-label="When Jarvis Live ends on this PC, with App lock on"></div>
+              <p class="note" id="vt-live-end-note"></p>
+            </div>
             <!-- Talk-to-type on this PC (talk_type.rs; docs/JARVIS-API.md
                  section 72). This PC only: it types into this PC's programs,
                  so the phone has no such switch (ARCHITECTURE section 8). -->
@@ -774,25 +793,6 @@
               <h3 class="subhead">Voice-ID model</h3>
               <div class="choices" id="vt-voiceid" role="group" aria-label="Voice-ID model: which model tells your voice from other people's"></div>
               <p class="note" id="vt-voiceid-note"></p>
-            </div>
-            <div id="vt-screen-box" hidden>
-              <h3 class="subhead">Answers about your screen or the camera after "Hey Jarvis"</h3>
-              <div class="choices" id="vt-screen" role="group" aria-label="Answers about your screen or the camera after Hey Jarvis, under Only trust the talk button"></div>
-              <p class="note" id="vt-screen-note"></p>
-            </div>
-            <div id="vt-live-box" hidden>
-              <h3 class="subhead">How far Jarvis Live is trusted</h3>
-              <div class="choices" id="vt-live" role="group" aria-label="How far Jarvis Live is trusted, under Only trust the talk button"></div>
-              <p class="note" id="vt-live-note"></p>
-            </div>
-            <!-- When App lock ends Jarvis Live on this PC (the owner's
-                 decision, 2026-09-28): a PC setting, kept by Jarvis on the
-                 PC (the voice setting `live_end`), so the looser choice can
-                 be an approval card. The phone keeps App lock's own rule. -->
-            <div id="vt-live-end-box" hidden>
-              <h3 class="subhead">End Jarvis Live on this PC</h3>
-              <div class="choices" id="vt-live-end" role="group" aria-label="When Jarvis Live ends on this PC, with App lock on"></div>
-              <p class="note" id="vt-live-end-note"></p>
             </div>
             <p class="sc-line" id="vt-setting-waiting" data-tone="warn" hidden></p>
             <p class="note">

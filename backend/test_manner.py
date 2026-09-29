@@ -625,6 +625,50 @@ def t_from_now_on_temporary_chat_stays_in_that_chat_only():
             tmp.cleanup()
 
 
+def t_from_now_on_in_a_game_stays_in_the_chat_even_after_the_window_slides():
+    """The second chat audit (2026-09-28), finding 7, reproduced: the quick
+    path tested only `temporary is True`, so in a role-play chat "from now
+    on, be more plain" was written to manner.json for good. It now asks the
+    same game check the chat route does - and, with the conversation id, a
+    game whose first message has slid out of the re-sent window is still one."""
+    import jarvis_intake as JI
+    JI.forget_games_for_tests()
+    with Folder():
+        sched, tmp = _quick_sched()
+        if sched is None:
+            check("skipped: no Scheduler", True)
+            tmp.cleanup()
+            return
+        try:
+            cid = "conv-game-quick-1"
+            game = {"messages": [
+                {"role": "user", "content": "let's roleplay, you're a knight", "provenance": "typed"},
+                {"role": "assistant", "content": "Sir Rowan bows."},
+                {"role": "user", "content": "from now on, be more plain", "provenance": "typed"}],
+                "conversation_id": cid}
+            res = Q.answer_turn(game, sched=sched)
+            check("in a game: applies for this chat only, says so",
+                  res is not None and "for this chat" in res.reply, res and res.reply)
+            check("in a game: never written to manner.json", M.current() == "warm")
+            check("in a game: this conversation reads plain", M.current(cid) == "plain")
+            # Fifteen moves later the app re-sends only its newest messages.
+            slid = {"messages": [
+                {"role": "assistant", "content": "The door creaks."},
+                {"role": "user", "content": "from now on be warmer", "provenance": "typed"}],
+                "conversation_id": cid}
+            res = Q.answer_turn(slid, sched=sched)
+            check("the game started 12 messages ago and is no longer re-sent: still a game",
+                  res is not None and "for this chat" in res.reply and M.current() == "warm",
+                  res and res.reply)
+            other = dict(slid, conversation_id="conv-not-a-game-2")
+            res = Q.answer_turn(other, sched=sched)
+            check("the same window in a chat that was never a game is an ordinary chat",
+                  res is not None and "for this chat" not in res.reply, res and res.reply)
+        finally:
+            JI.forget_games_for_tests()
+            tmp.cleanup()
+
+
 def t_from_now_on_temporary_chat_needs_a_real_conversation_id():
     with Folder():
         sched, tmp = _quick_sched()

@@ -58,7 +58,7 @@ object Projects {
         "coding_on_pc" to "A coding project's folder is chosen on your PC. Make coding projects there.",
         "set_on_pc" to "Set on your PC",
         "instructions" to "How Jarvis should work on this",
-        "instructions_under" to "In your own words. Jarvis reads this in this project's chats.",
+        "instructions_under" to "In your own words. Saved for later: Jarvis does not read this in chats yet.",
         "notes" to "Project notes",
         "notes_under" to "Short lines to keep in mind for this project, one per line.",
         "save" to "Save",

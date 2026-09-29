@@ -723,7 +723,21 @@ and no network - the model's own words playing along never turn this on or
 off, and a game does not "end" partway through a conversation once it has
 started. `X-Jarvis-Route`'s `"temporary": true` and the fixed system line
 appear exactly as for a manually-started one, so an app that shows a
-temporary-chat marker shows it here too, unprompted. The problem this
+temporary-chat marker shows it here too, unprompted. **Since the chat audit
+(2026-09-28)** both apps really do: an answer whose route header says
+`"temporary": true` for a question the app did NOT send as temporary can
+only be a game or role-play the PC spotted, and under it both say "This
+looks like a game or role-play, so it's a temporary chat: nothing is kept or
+learned." (and "Remember: is off in a temporary chat." when `remember_off`)
+- `memory-used.js` `temporaryOutcome` -> `"game"`, phone
+`TemporaryChat.notes`. Before that nothing was shown, and - worse, found by
+the same audit against a real chat log - the game's turns WERE kept:
+`games-temporary.patch` handed `jarvis_chat_log.record_turn` the request
+without the flag, and `record_turn` decides from the flag alone. It now
+hands it a copy with `"temporary": true` (`test_games_temp_chat.py`, against
+a real `ChatLog`). Jarvis Live's mark on a spoken message (`live: true`,
+§63) is one of the fields taken off before any model sees the conversation
+(`temporary-chat.patch`'s `_CHAT_CLIENT_FIELDS`), like `temporary`. The problem this
 solves: with automatic learning on by default (2026-09-24), a made-up
 character or scenario could otherwise be filed as a fact about the owner.
 Without `jarvis_intake.py`, or on any error, nothing is detected and chat
@@ -1400,7 +1414,7 @@ neither app says it would.
 | `/api/memory/learning/auto` | POST | `{"enabled": bool}` | `brain_memory_learning_auto` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Learn automatically" (on by default). The shape of `/api/memory/learning`: **OFF** 200 at once, never a card, withdraws a waiting ON; **ON** 202 `{"waiting": true, ...}` and ONE approval card, action `learning_auto_enable`; on only when it is approved. Already on: 200, no card. A second ON while one waits: 202, no second card. Tier other than `ask`: **503**. Bad body: `400`. Every reply carries the `GET /api/memory/learning` fields (not `enabled`). |
 | `/api/memory/learning/sensitive` | POST | `{"enabled": bool}` | `brain_memory_learning_sensitive` (ON held on a stale link) | `JarvisApi.setAutoLearn` (the same hold) | `auto-learn.patch` - **§19**. "Also remember sensitive topics automatically" (off by default). The same shape, action `learning_sensitive_enable`. |
 | `/api/history/settings` | POST | `{"enabled": bool}` or `{"keep_days": 0 \| 30 \| 90 \| 365}` (one per request) | `brain_history_settings` (ON and every keep change held on a stale link) | `JarvisApi.setHistory` / `setHistoryKeepDays` (the same holds) | `chat-history.patch`, `jarvis_chat_log.py`, 2026-09-24 - **§18**. The same shape as `/api/memory/learning`: **ON asks first** - **202** `{"waiting": true, ...}` and ONE approval card under the action `history_enable`; on only when it is approved. ON while already on: 200, no card. A second ON while one waits: 202, no second card. A toml tier other than `ask`: **503**. **OFF**: 200 at once, never a card, withdraws a waiting ON; what is kept stays. `keep_days`: 200 at once, the reply says how many conversations it deleted. Anything else: `400`. Every reply carries the `/api/history` status fields. |
-| `/api/history/delete` | POST | `{"id": "<conversation id>"}` | `brain_history_delete`, after a confirm; held on a stale link | `JarvisRuntime.deleteHistory`, after a confirm; held on a stale link | `chat-history.patch` - **§18**. One conversation per request, `200 {"ok": true}` or `404`. **There is no delete-all** - a list, or any other key, is `400`. |
+| `/api/history/delete` | POST | `{"id": "<conversation id>"}` | `brain_history_delete`, after a confirm; held on a stale link | `JarvisRuntime.deleteHistory`, after a confirm; held on a stale link | `chat-history.patch` - **§18**. One conversation per request, `200 {"ok": true}` or `404`. **There is no delete-all** - a list, or any other key, is `400`. The one bulk exception is `/api/memory/forget_range` below (§64). |
 | `/api/memory/forget_range` | GET, POST | GET: none. POST: `{"from", "to", "facts": [<int>], "chats": ["<id>"]}` - the ids still ticked | `brain/forget_range.rs` `forget_range_read` / `forget_range_write` (`"forget"`: refused while the list is hidden, held on a stale link) | `JarvisRuntime.forgetRangeRead` / `forgetRangeWrite("forget")`, held on a stale link | `forget-range.patch` - **§64**. GET: the status (a card waiting, the 10-minute Undo, the days a spoken request filled in). POST: **202** and ONE approval card, action `memory_forget_range`, listing every item; nothing changes before a person approves. `409` a card already waiting, an Undo still open, or the list changed since it was read (`"changed": true`). |
 | `/api/memory/forget_range/preview` | GET | `?preset=<id>` or `?from=YYYY-MM-DD[THH:MM]&to=...`, and `&kinds=facts,chats` | `forget_range_read` (the words taken out while the private lists are hidden or App lock has locked Jarvis) | `JarvisRuntime.forgetRangeRead` | **§64**. The facts SAVED in those days and the chats that overlap them, oldest first, each with its label - at most 200 together, else counts only. A read: never held. |
 | `/api/memory/forget_range/undo` | POST | `{}` | `forget_range_write("undo")`, never held | `JarvisRuntime.forgetRangeWrite("undo")`, never held | **§64**. Within 10 minutes of the card's approval: every fact un-forgotten and every chat written back. One tap, **no card**. `409` when there is nothing to undo. |
@@ -3520,14 +3534,16 @@ is compacted with `VACUUM` after a delete, at most once an hour.
 
 ```json
 {"enabled": true, "recording": true, "why_not": "", "waiting": false,
- "keep_days": 0, "encrypted": true,
+ "keep_days": 0, "encrypted": true, "kind": null,
  "conversations": [{"id": "...", "title": "...", "started": 1790000000,
    "updated": 1790000300, "turns": 6, "device": "phone",
-   "has_voice": true, "tainted": false}]}
+   "has_voice": true, "tainted": false, "kind": "chat", "project": null}]}
 ```
 
 Newest first. `limit` 1-100, default 30; `before` pages to older ones
-(pass the last row's `updated`). `has_voice` is true when any message was
+(pass the last row's `updated`). `&kind=` (since 2026-09-28, §18.6): only
+that kind - `chat`, `live`, `support`, `chatbot` or `compare`; anything
+else is ignored, and the answer's `kind` says which was used (null: all). `has_voice` is true when any message was
 `voice` or `voice_unverified`. When the history cannot be opened the list is
 empty and `why_not` says why.
 
@@ -3535,12 +3551,23 @@ empty and `why_not` says why.
 
 ```json
 {"id": "...", "title": "...", "tainted": false,
+ "kind": "chat", "project": null, "started": 1790000000, "updated": 1790000300,
+ "continuable": true, "continue_why": "",
  "turns": [{"role": "user", "text": "...", "at": 1790000000,
             "provenance": "typed", "read_outside": false, "answer_kept": true},
            {"role": "assistant", "text": "...", "at": 1790000004}]}
 ```
 
-`404` if there is no such conversation. `answer_kept: false` on a user turn
+`history` (`{"enabled", "recording", "why_not"}`, since 2026-09-29, §18.7):
+whether NEW messages are being kept right now, for the "history is off"
+line on "Continue this chat". `kind`, `project`, `started`, `updated`,
+`continuable` and `continue_why`
+since 2026-09-28 (§18.6): `continuable` is true for a `chat` or a `live`
+session; otherwise `continue_why` is the sentence both apps show instead of
+"Continue this chat". A `support` record's rows are role `support`, a
+`chatbot` or `compare` record's role `chatbot` (their `provenance` says who
+wrote each: `chatbot_jarvis`, `chatbot_reply`, `chatbot_note`,
+`chatbot_summary`). `404` if there is no such conversation. `answer_kept: false` on a user turn
 means its answer was not kept (a cloud answer, or one that did not finish).
 Both apps say so under that question (ease-of-use audit 2026-09-27, #1d),
 in one sentence: "Jarvis's answer to this was not kept: it came from a cloud
@@ -3576,7 +3603,12 @@ everything back. Nothing else deletes in bulk.
   second card. A "no" on this card is never turned into a proposed memory
   (`gate-outcome.patch`'s list).
 - `{"keep_days": 0 | 30 | 90 | 365}` - 200 at once; the reply says how many
-  conversations the change deleted.
+  conversations the change deleted. **A customer-support record is never
+  deleted by it** (the owner, 2026-09-28: auto-delete asks before removing
+  a support chat - this is the ask: it is kept, and the reply says how many
+  were kept back, "Customer-support chat records are not deleted by this -
+  delete one yourself in History if you want it gone."). Both apps put that
+  sentence in the confirm before a shorter period.
 - Anything else - `400`.
 
 Every reply carries the same status fields as `GET /api/history`.
@@ -3653,6 +3685,229 @@ chats, including voice, on this PC, encrypted. Nothing leaves this PC."
 - **Checked only against a stand-in of the owner's `jarvis_hud.py`** built
   from the whole patch stack, not against the real file.
 
+### 18.6 Kinds, "Continue this chat", and the conversation you are in (the chat audit, 2026-09-28)
+
+The owner's decisions "Chats, after the chat audit" and "History marks Live
+sessions" (CLAUDE.md), after `docs/studio-2026-09-28/chat-audit-*.md`. The
+words both apps use, and worked examples of every rule below, are
+`tools/gen_history_cases.py`'s `history-cases.json` (the desktop's
+`tests/history.mjs` and the phone's `HistoryContractTest` read the same
+file).
+
+**Kinds** (`jarvis_chat_log.KINDS`; one column, `conversations.kind`, and
+an empty `project` for Projects step 4, both added in place to a history
+kept before them - a support record's rows make it `support`, everything
+else `chat`):
+
+| kind | what | in the list | Continue |
+|---|---|---|---|
+| `chat` | an ordinary chat, typed or spoken | no tag | yes |
+| `live` | a Jarvis Live session (its first message came with `live: true`) | "Live · 12 min · Today 14:05" in place of the date | yes |
+| `support` | a customer-support chat's record (§65.5) | "Support chat" | no - "A customer-support record can't be continued: it is the company's words and what was sent in your name, kept as your record." |
+| `chatbot` | a conversation Jarvis had with another AI (§87), kept when it ends | "Chat with an AI" | no - its replies are outside text, not a conversation with Jarvis |
+| `compare` | "Ask several and compare" (§87.7): every chatbot's conversation and the summary, as ONE record | "Comparison" | no, for the same reason |
+
+`chatbot` and `compare` records (`jarvis_chat_log.record_chatbot`, from
+`jarvis_chatbot.keep_in_history` and `jarvis_chatbot_compare.keep_in_history`)
+are the shape of a support record: every row role `chatbot` (never `user`,
+so the learner never reads a word), `read_outside: true`, tainted, never in
+the live-turn registry, and on screen only - both apps show them read-only
+with who wrote each line ("Sent by Jarvis", "The other AI (outside text)",
+"Note", "Summary (outside text)"). Nothing is kept while a test suite runs
+(`JARVIS_SUITE_RUNNING`, `backend/_where.py`). There is **no `imported`
+kind**: chats brought in from ChatGPT, Claude, Gemini or DeepSeek (§85)
+only propose facts and are not added to History.
+
+**Titles.** A conversation that held a **crisis** turn (§38: the answering
+loop's own flag, or the crisis help line's phrase check) is titled "A
+difficult moment" - from its first turn, or from the crisis turn on -
+never with the owner's words. A chat that began with shared text is titled
+with what the owner asked, not with the shared text.
+
+**Show.** Both apps: "Show" - All chats / Live only / Support chats / Chats
+with other AIs / Comparisons - asks the PC for one kind (`?kind=`), and
+says "No conversations of that kind are kept." for none.
+
+**Continue this chat** (both apps, from an opened chat or Live session).
+The app reads the conversation (`GET /api/history/conversation`) and makes
+it the conversation it is in: the SAME `conversation_id`, so what follows is
+filed with it and the PC's own "read outside text" mark carries over (it is
+decided from the PC's record, never from the app); the kept questions and
+their answers, oldest first, skipping a question whose answer was not kept
+(`answer_kept: false`), a Live side remark, shared text sitting right before
+a typed message (it is outside text; a shared-only turn is loaded, with its
+"shared" tag), and any `support`/`chatbot` row; then only the newest that fit the
+app's own re-send limits (10 pairs, 18,000 characters - §18.1), saying
+"3 older questions were not loaded - Jarvis reads back only the newest
+ones." (with the count) when some did not, and "1 earlier question was left
+out: its answer was not kept." (with the count) when some had no kept answer
+(the second chat audit, 2026-09-28). Each question keeps its tag. Desktop: the Brain's
+Continue (`brain_continue_chat`, the id only) brings up the Jarvis bar,
+which reads the chat itself (`chat_continue_open`, refused in Rust for any
+other kind and while the private lists are hidden). Phone: History's
+Continue (`JarvisRuntime.continueChat`) carries it on on Home. A temporary
+chat is never in History; carrying on a kept chat turns Temporary off and
+says so. Busy while an answer is arriving.
+
+**Move it here** (§63): the Live session carries its chat's id
+(`conversation_id` in the Live status; sent with `start`, or once with
+`active` for a session started by voice or from the tray), and the device
+that takes Live over carries on THAT chat, the same way (with nothing in
+History to read back - history off - it takes over the id alone).
+
+**The conversation you are in**, both apps:
+
+- The whole conversation so far is on screen as a folded, scrolling thread
+  ("Earlier in this chat · 3 questions") above the current question - every
+  finished pair, not only the model's re-send window (capped at 100). On
+  screen only; never read aloud, never kept by the app. Since the second
+  chat audit (2026-09-28, §18.7) it lands on the newest pair, draws the line
+  "Jarvis reads from here down. What is above stays on screen only." where
+  the model's window begins, and is **hidden while "Hide memory lists and
+  chat history" is on** (the owner's decision), on both apps.
+- **A new conversation after 30 quiet minutes**: the next question starts a
+  new one, and one quiet line says "It's been a while, so this is a new
+  conversation. The last one is in History." Never mid-Live.
+- **"Earlier chats"** opens History: the Jarvis bar's header and empty
+  state (and the tray's "Chat history…"); the phone's Home, beside
+  Temporary chat.
+- **Deleted elsewhere**: deleting the chat the app is in - Delete in
+  History (with §79's facts or not), "Erase the words" with "Also delete the
+  chat it came from", or "Forget a time frame" approved (§64) - starts a new
+  conversation there, saying "That chat was deleted, so this is a new
+  conversation. Nothing from it is sent to Jarvis again." (it used to come
+  back under a new title with its old words still going to the model).
+  Desktop: the Brain leaves the deleted ids (never a word) for the bar
+  (`chat-history.js` `tellChatsGone`); phone: `JarvisRuntime.chatsGone`.
+- Desktop: Esc says what it does ("Esc end chat"), and the next time the bar
+  opens it says "Chat ended. Kept chats are in Brain > History." (also when
+  a temporary chat ends a kept one). Phone: "New conversation.", a temporary
+  chat started or ended, and the other lines above are said on Home and read
+  out by TalkBack.
+
+**History, both apps:** the list first (the phone's two settings are under
+"History settings" at its end); dates with the time and Today / Yesterday,
+the same in both apps ("Today 14:05", "Sat 12 Sep 18:30"), and "messages",
+never "turns"; "Forget a time frame…" at the top; Jarvis's answers without
+their markdown marks (desktop: the bar's own renderer, which escapes first;
+phone: the marks taken off) and Copy on each (the private copy); the search
+box named for screen readers ("Search what was said in your chats"). What
+the search does is §71's, unchanged: two letters or more search the kept
+words on the PC for the screen only; one letter, or an older PC, filters
+the LOADED list by title, and says so ("No loaded conversations match that
+search. "Load older" may bring in more to search.").
+
+**Not built** (proposals, for the owner): rename, pin, archive, branching,
+edit-and-resend, and any wider chat-word search.
+
+### 18.7 After the second chat audit (2026-09-28)
+
+`docs/studio-2026-09-28/chat-audit2-{memory,desktop,phone}.md` and the
+owner's answers (CLAUDE.md, "After the second chat audit"). Everything here
+is additive; an older PC or app simply lacks it.
+
+- **A continued chat's own words count again after a restart** (the owner's
+  decision). `ChatLog._seed` calls `_rehydrate(cid)`: it re-registers, in
+  the live-turn registry, the most recent 60 user rows of a chat or Live
+  chat that the PC holds in its encrypted record, when their provenance is
+  `typed` or `voice` (with their stored voice-check facts) and the row did
+  not read outside text - decided from the PC's record, never from the
+  request. Shared, pasted, clipboard, picture, chatbot, support and imported
+  text is never re-registered, and a chat titled "A difficult moment" (a
+  crisis turn) is not re-registered and cannot be continued (`get()` says
+  `continuable: false` with `CRISIS_CONTINUE_WHY`). Forgotten and erased
+  facts stay forgotten: the "hush" floor a Forget or Erase sets on a
+  conversation is stored in the history database (`meta` table, key
+  `hush:<cid>`) as well as in memory, so a restart cannot bring the words
+  back to the learner. It is dropped with the chat and travels with
+  "Forget a time frame"'s take-out and Undo.
+- **A game stays a game.** `jarvis_intake` keeps a bounded set of
+  conversation ids the PC judged to be a game or role-play
+  (`is_game_conversation`): once a conversation was a game it stays
+  temporary after the apps' window has slid past the first message, and the
+  quick path and the "next time" hint use the same check. The route's
+  `temporary` header still says so; the phone shows no "last one is in
+  History" line for it.
+- **A hand-accepted fact keeps its chat.** `auto_learn_notes` records the
+  conversation a proposal came from (also when learning is off), and
+  `_fact_meta` copies it onto the fact when the owner accepts the card by
+  hand, so "Erase the words … also delete the chat" and "Facts this chat
+  taught" (§79) find it.
+- **Search combines with Show**: `GET /api/history/search` takes `kind`
+  like `GET /api/history` (§71). Both apps pass the chosen kind and search
+  again when it changes; an older PC that ignores it is narrowed by the app.
+- **Every delete dialog says what stays**: "Facts Jarvis learned stay.
+  Copies in older backups stay until they age out." (single delete;
+  keep-days; erase-with-chat, which also says how many OTHER facts the chat
+  taught and that they stay; "Forget a time frame"'s card: "Facts you did
+  not tick stay. …"). The locked backup's own note (§ backup) also names
+  deleted chats.
+- **"Forget a time frame" starts a chat that spills over the days unticked**
+  ("Also has messages from outside these days. Tick it only if the whole
+  chat should go."); it used to be ticked.
+- **Facts a chat taught, on an opened chat** (chat and Live kinds): both
+  apps read §79's route and show the facts (read-only), or "Your memory
+  lists are hidden, so they are not shown here." while they are hidden.
+  "read outside text" now marks the answer that read it, not "You"; a
+  support or chatbot record has its own note above it.
+- **Chatbot and comparison chats say whether they were kept.** A session and
+  a comparison carry `history: {kept, why}` once they end (§87.3 views), and
+  the summary notes no longer promise History: "Kept in your encrypted chat
+  history on the PC." / "Not kept in your chat history: <why>", with "Open in
+  History" when kept, on both apps (the support plate had the same line).
+- **The phone**: History says at the top whether it is on ("Change" opens
+  the settings); Live starting or ending on Home says where the chat went;
+  Home's thread lands on the newest pair, shows the newest 20 with "Show
+  older", and the note under it says "started a new conversation" once the
+  chat has been quiet 30 minutes; a temporary chat or game never says "the
+  last one is in History"; a chat deleted by a shorter "keep for" limit or
+  an erase the phone could not name is noticed by re-reading Home's chat;
+  "Forget a time frame" is no longer taken as done by an older "done" left
+  by an earlier one (`last.at` against the time before the card).
+- **Desktop**: the thread hides with the private lists (`chat_thread_hidden`
+  command, also allowed for the Jarvis bar); a game shows "This looks like a
+  game, so nothing in it is kept or learned."; Continue is refused while Jarvis Live is on here.
+
+**The owner's answers of 2026-09-29** (CLAUDE.md, "After the second chat
+audit"; words in `tools/gen_history_cases.py` and `backend/jarvis_live.py`,
+both apps read the same generated fixtures):
+
+- **A crisis question and its answer do not stay in the thread.** A turn whose
+  `X-Jarvis-Route` carries `"wellbeing": "crisis"` (§38 - the flag the PC
+  already sends, no new field) is never added to the scrollable thread or to
+  what the model is re-sent (`ChatHistory.keepsInThread` /
+  `chat-history.js` `keepsInThread`; phone `ChatSession.send`, desktop
+  `finishStream`). The help answer shows once, as the current answer with its
+  calm panel; the next question, "New conversation", or leaving the chat
+  (Esc on the desktop) takes it off the screen, and it is never in the
+  thread. The PC still keeps the chat in History, titled "A difficult
+  moment" (§18.6) - none of that changed. Without the flag (a PC that has not
+  applied `wellbeing.patch`) the app cannot tell, and the turn is handled as
+  any other.
+- **"Continue this chat" says when history is off.** `GET
+  /api/history/conversation` now also carries `"history": {"enabled",
+  "recording", "why_not"}` - the same three words the list's status already
+  uses (§18.3), read when the conversation is opened, so no extra request.
+  `enabled: false` adds "Chat history is off, so new messages in this chat
+  will not be kept."; `enabled: true` with `recording: false` (history is on
+  but cannot keep anything, e.g. its key is missing) adds "Chat history cannot
+  keep anything right now, so new messages in this chat will not be kept.";
+  a PC that sends no `history` (an older one), or an answer that is not a
+  clear yes or no, adds nothing - the apps never guess. One line after the
+  others ("Carrying on ..."), the same words on both apps
+  (`continuedHistoryLine`). Not said for "Move it here" (Live's own chat).
+- **Live says when Temporary is on.** "Temporary is on - this Live session
+  will not be kept in History." (`jarvis_live.SEEN["temporary_on"]`, in the
+  status's `seen` table, so the apps' shared `live-cases.json` holds it).
+  Phone: a line on the Live screen while Temporary is on, before Live starts
+  as well as during it. Desktop: a line in the Jarvis bar's Live strip while
+  Live is on here and Temporary is on. Nothing changes what Temporary does.
+
+**Not built** (waiting on the owner or the second card): renaming, pinning,
+archiving, branching, editing and resending, wider chat-word search; larger
+re-send limits for two cards (the line above the thread tells the truth
+about today's limits).
+
 ---
 
 ## 19. Automatic learning (added 2026-09-24)
@@ -3686,7 +3941,7 @@ and Saved automatically (`net/AutoLearn.kt`, `AutoLearnPlate.kt`); `ported`
 in `tools/check_parity.py`.
 Every route needs the pairing token and passes the origin check.
 
-Deleting a conversation from History does not forget facts learned from it - use Forget in Saved automatically. (Since 2026-09-28 Delete offers them, none ticked - §79.)
+Deleting a conversation from History does not forget facts learned from it - use Forget in Saved automatically, or "Forget a time frame" (§64) for some days. (Since 2026-09-28 Delete offers them, none ticked - §79.)
 
 ### 19.1 The two settings
 
@@ -3742,8 +3997,13 @@ ALL of these, or it stays a card. The words in quotes are what the card's
    TAINT is not forgotten (security review G1, 2026-09-26): a conversation
    the backend meets for the first time since it started, with earlier
    turns in the request, is tainted unless the history database holds every
-   one of those turns and none read outside text - so after a restart its
-   next turns are "the conversation read outside text", a card.
+   one of those turns and none read outside text. Since the second chat
+   audit (2026-09-28, §18.7) the PC also re-registers the owner's OWN typed
+   and spoken messages of such a chat from its encrypted record (never
+   shared, pasted, chatbot, support or crisis text, and never a row that
+   read outside text), so after a restart or "Continue this chat" facts learned
+   from those messages save without a card again; a Forget or Erase floor
+   on the conversation survives the restart.
    - a turn it did not see arrive (re-sent or made-up history, or older than
      the registry): "from a message this PC did not see arrive ..."
    - no valid `conversation_id` on the request: "the app did not say which
@@ -7106,6 +7366,10 @@ tools (...) after reading outside text.").
 CLAUDE.md, "Decided 2026-09-27, the owner's answers": "Crisis help line:
 United States - 988 (Suicide & Crisis Lifeline) and 911." and "Crisis
 messages are never learned from and never counted."
+**Kept in History, titled "A difficult moment"** (the owner, 2026-09-28,
+"Chats, after the chat audit"; §18.6): the chat is kept like any other,
+but its title is never the owner's words - from its first turn when it
+started with the crisis turn, from that turn on otherwise.
 `backend/jarvis_wellbeing.py`, `docs/CUTTING-EDGE-2026-09-26-round4-wellbeing.md`
 section 1 (research; this section is what was actually built, with the
 report's UK/Ireland numbers swapped for the US ones above - not the
@@ -7200,6 +7464,12 @@ that flag (today, until `wellbeing.patch` is confirmed and applied), the
 message still arrives and is shown as an ordinary answer, with its markdown
 (`**988**`, `**call 911**`) rendered the way any other bold text in an
 answer already is.
+
+**Not in the thread** (the owner, 2026-09-29; §18.7). With the flag, the
+turn's question and help answer stay on screen as the current answer only:
+neither app adds them to the scrollable thread or to what the model is
+re-sent, so the next question takes them away for good. The PC still keeps
+the chat in History as "A difficult moment".
 
 **Rules.** Rule 1: the check, the fixed texts and the note all run and stay
 on this PC; nothing about a crisis turn is sent anywhere else. Rule 4:
@@ -10127,6 +10397,7 @@ sent as the `live` event on every change (the same object).
  "paused": "card"|"cards_unknown"|"other_voices"|"voice_trouble"|null, "pause_words": str|null,
  "muted": bool, "muted_why": "owner"|"call"|"mic_in_use"|null, "muted_words": str|null,
  "started_by": "button"|"tray"|"hotkey"|"voice"|null, "started_at": float|null,
+ "conversation_id": str|null,
  "hint": "other_voices"|"voice_trouble"|null, "hint_words": str|null,
  "ending_soon": bool, "ended": str|null, "ended_words": str|null,
  "ended_say": str|null, "ended_device": str|null, "ended_ago_s": int|null,
@@ -10137,6 +10408,13 @@ sent as the `live` event on every change (the same object).
  "camera": {"ready": bool, "why": str}}
 ```
 
+- `conversation_id` (the chat audit, 2026-09-28) - the chat this session's
+  words go in: the id the starting app sent with `start`, or - for a session
+  started by voice or from the tray - the first one an app names with
+  `active`. Null while off, or before any app has named one. An opaque id,
+  never a word. "Move it here" sends it back with `start` and the app that
+  takes Live over carries on THAT chat (§18.6) - the phone used to carry on
+  whatever chat Home was in, the desktop to start a new one.
 - `started_at` - when this session started, on the PC's clock (the same
   clock as an approval card's `created`). An app uses it to tell a card
   raised in THIS session (which pauses Live and hides the tap buttons) from
@@ -10185,9 +10463,9 @@ One action per request; only these fixed words are read.
 
 | Body | What it does | Held on a stale link? |
 |---|---|---|
-| `{"do": "start", "device", "by"?: "button"\|"tray"\|"hotkey", "minutes"?}` | Starts Live on that device (ends one on the other). **No card** ("What asks first" lists it as a fixed row, "Start Jarvis Live - does it without asking"). 409 with `"needs": "voice"` and, in `error`, "Jarvis Live didn't start: it needs your voice trained first - Settings, then Voice." (the phone's: "- Settings, then Train my voice.") until the owner's voice print and the better voice model are there; both apps add a button that goes there. On Standby it starts and says "Waking up, a few seconds"; otherwise it loads the everyday model. Returns `status` and the `say` line | Yes |
-| `{"do": "stop", "why"?: "owner"\|"app_lock"\|"locked", "device"?}` | Ends it | **Never** |
-| `{"do": "active", "device"?}` | The owner typed, or tapped a quick answer, in Live: the quiet clock starts again, as a spoken sentence does. Nothing typed comes here (the words go to the chat route as usual); it can only keep open a session that is already on | **Never** |
+| `{"do": "start", "device", "by"?: "button"\|"tray"\|"hotkey", "minutes"?, "conversation_id"?}` | Starts Live on that device (ends one on the other). **No card** ("What asks first" lists it as a fixed row, "Start Jarvis Live - does it without asking"). 409 with `"needs": "voice"` and, in `error`, "Jarvis Live didn't start: it needs your voice trained first - Settings, then Voice." (the phone's: "- Settings, then Train my voice.") until the owner's voice print and the better voice model are there; both apps add a button that goes there. On Standby it starts and says "Waking up, a few seconds"; otherwise it loads the everyday model. Returns `status` and the `say` line | Yes |
+| `{"do": "stop", "why"?: "owner"\|"app_lock"\|"locked"\|"screen_lock", "device"?}` | Ends it. `screen_lock` ("The phone's screen locked.") is the phone's, under its "End Live when: Only when the phone's screen locks" (63.4) | **Never** |
+| `{"do": "active", "device"?, "conversation_id"?}` | The owner typed, or tapped a quick answer, in Live: the quiet clock starts again, as a spoken sentence does. `conversation_id` names the session's chat when it has none yet (a voice or tray start; the first one wins). Nothing typed comes here (the words go to the chat route as usual); it can only keep open a session that is already on | **Never** |
 | `{"do": "extend", "minutes"?}` | More time (20 by default), never more than 2 hours ahead | Yes |
 | `{"do": "resume"}` | "Carry on" after a voice pause | Yes |
 | `{"do": "mute"\|"unmute", "why"?: "owner"\|"call"\|"mic_in_use", "device"?}` | The microphone closes; the session and its time carry on; the quiet clock stands still. A call or another program ending never undoes the OWNER's Mute | **Never** |
@@ -10272,6 +10550,45 @@ the words couldn't be made out - say it again" and keeps listening.
   owner ends it, and says `ended_say` when it ended by itself. Each session
   is a new conversation in the app; "Resume Live" continues the old one.
 
+**The Live extras (the owner's decisions of 2026-09-28).** No new route;
+each uses the ones above.
+- **PC hotkey** "Start or end Jarvis Live" (`hotkeys.rs` `toggle_live`),
+  **off until the owner picks a key** in Settings -> Shortcuts (the hint
+  suggests Alt+Shift+L, checked free of every shipped key; clashes are
+  refused by name like any other). Start sends `"by": "hotkey"` and is held
+  on a stale link and while App lock would ask, like the tray's row; End is
+  never held.
+- **Phone Quick Settings tile** (`LiveTileService`): End in the tile, never
+  held; Start opens the app, which starts Live after App lock (a microphone
+  service may only start from an app in front). It shows "12 min left" from
+  `minutes_left` while Live is on here.
+- **Phone headset button** (a media session, only while Live runs here):
+  press = stop Jarvis talking (not under "Don't interrupt"), hold = Mic off /
+  Mic on. It never approves, denies or starts anything. Android gives the
+  button to the app that played sound last, and some phones open their
+  assistant on a hold; the Live screen says so.
+- **"Live ended - Resume"** (phone): after Live ended here and the PC says
+  `resumable`, a notification kept on the phone offers Resume Live for the
+  rest of `limits.resume_s`; Resume opens the app and starts Live in the
+  same chat (after App lock; held on a stale link).
+- **A Bluetooth headset's microphone** is preferred on the phone while one
+  is connected (Android's communication device plus the recorder's
+  preferred input; no Bluetooth permission), falling back to the phone's
+  own; the Live screen says which ("Microphone: your Bluetooth headset
+  (Buds)"). On the PC Windows picks the microphone (the default one), and the
+  Voice settings already say which it is.
+- **"Talk about this in Live"** (phone): a second entry in the Share sheet
+  (text only). The text waits on the Live screen as a "Shared text" chip and
+  goes, on Send, as its own message tagged `provenance: "shared"` - outside
+  text, exactly as a share to Home (section 18): the chat counts as having
+  read it, and nothing is learned from it.
+- **"End Live when"** (phone, Security screen), the same setting as the PC's
+  `live_end`: with App lock on, "When App lock would ask again" (default) or
+  "Only when the phone's screen locks" (then the phone reports
+  `why: "screen_lock"`). The looser choice asks for the fingerprint or PIN,
+  like every loosening there; back is instant. With App lock off neither
+  ends Live, as before. Saved on the phone only.
+
 ### 63.5 Trust: `hands_free_live`
 
 Under "Only trust the talk button" (§16): `live_trust_fully` (default:
@@ -10344,6 +10661,15 @@ apps' words and the real answers: `forget-range-cases.json`
   may carry a time of day ("this morning": midnight to 11:59 am).
 - **At most 200 facts and chats together.** More: `too_many`, the counts
   only, no list, and "Choose fewer days" - nothing can be forgotten from it.
+- **Each chat carries its kind** (since the chat audit, 2026-09-28, §18.6:
+  `"kind"` and `"ticked"` on every chat of the preview). A
+  **customer-support chat's record starts UNticked** - the owner's "Forget
+  a time frame asks before removing a support chat": it is listed, tagged
+  "Support chat", with "A customer-support chat record - kept unless you
+  tick it.", goes only if the owner ticks it, and the card then names it
+  ("This is a customer-support chat's record - you ticked it, so it is
+  deleted too."). Both apps keep a support chat the owner ticked ticked when
+  the list is read again.
 
 ### 64.2 The routes
 
@@ -10443,8 +10769,14 @@ this forgets, and "Erase the words" is per fact. A spoken "yes" or
 
 ### 64.6 What the apps must do
 
-- Show the list with **every item ticked**, the owner free to untick any;
-  send **only the ticked ids**, in one request. Never approve anything.
+- Show the list with **every item ticked** (except a support record, which
+  starts unticked - §64.1), the owner free to untick any; send **only the
+  ticked ids**, in one request. Never approve anything.
+- Once the PC says the card was approved (the status's `last.outcome`
+  "done"), an app that was IN one of the deleted chats starts a new
+  conversation and says so (§18.6). And History reads its list again at
+  once after a change or an Undo (desktop: it used to wait for its 15-second
+  re-read).
 - **"Forget these" waits for a live link** (rule 4) and, on the desktop, is
   refused while the list's words are hidden (the owner must be able to
   read what goes); **Undo is never held**.
@@ -10454,6 +10786,263 @@ this forgets, and "Erase the words" is per fact. A spoken "yes" or
   hidden - the counts and the days stay - until Show is confirmed. The
   status (an open Undo) carries no words and stays.
 - The words are the contract's (`words`), in both apps.
+
+## 65. Customer-support chats - Jarvis chats with a company's support for you (added 2026-09-28; built, not yet tried against a real site)
+
+**What it is.** The owner's decisions of 2026-09-28 (CLAUDE.md,
+"Customer-support chats"; design: `docs/CHATBOT-DRIVER-DESIGN.md`,
+"Customer-support chats", sections 1-10). A separate mode of the chatbot
+driver, because the other side is a company acting on the owner's REAL
+account, often a real person. Groupon first. Jarvis sends the messages
+itself, in the owner's name, at a person's pace, in a browser window the
+owner can see on the PC - never hiding from the site's bot detection, no
+captcha solving.
+
+- **ONE card per chat** (gate action `support_chat`, tier `ask` only, a
+  risky approval: Windows Hello on the PC, a screen lock on the phone)
+  lists the company and its help page, **that company's terms risk**, the
+  goal, and **every detail Jarvis may give, word for word** - "Jarvis may
+  give these, and nothing else". Passwords, PINs, security questions and
+  answers, payment card numbers and their digits, ID numbers (a Social
+  Security number, a passport), sign-in details, one-time codes and bank
+  account numbers are **refused on the card**.
+- **EVERY offer gets its own card** (`support_offer`, tier `ask` only,
+  risky): the agent's words, and the exact reply that would be sent
+  ("Yes, I accept that. Thank you."). Nothing is accepted before that
+  card's yes. The apps offer Decline, Say something else and Take over -
+  never Accept.
+- **No opening "I'm an AI" line**: Jarvis writes in the owner's name.
+  **It never claims to be human**: "are you a bot?" (and "am I talking to
+  Alex?") is caught by plain code; Jarvis sends nothing, pauses and hands
+  the question to the owner, who answers in the window.
+- **Identity checks** (the last digits of a card, security questions,
+  codes, a birth date) and **a detail not on the card** are handed to the
+  owner, never answered by Jarvis.
+- The company's words are **outside text**: never learned from, never read
+  aloud. The whole chat is kept in the **encrypted chat history** as a
+  "Support chat" record.
+
+`backend/jarvis_support.py` (the rules) and `backend/jarvis_support_widget.py`
+(the window, on the chatbot websites' shared base `jarvis_chatbot_web.py`),
+both shipped whole. The routes are in `jarvis_chatbot_routes.py`
+(chatbot-routes.patch already installs it: no route patch of its own); the
+gate's risk lines are `support-chat.patch`. Desktop: Brain -> Work ->
+"Chat with customer support for me" (`support.js`, `brain.js`,
+`brain/support.rs`). Phone: Brain -> the same card (`SupportPlate.kt`,
+`net/Support.kt`) and an ongoing notification. Both apps' words and the
+real answers: `support-cases.json` (`tools/gen_support_cases.py`).
+
+### 65.1 Routes
+
+| route | what | card | stale link |
+|---|---|---|---|
+| `GET /api/chatbot/status` (`?support=sup_<12 hex>`) | also carries `support` (the latest chat still going, or the one named; `null` for none or one gone after a restart), `companies`, `support_tier` | - | a read |
+| `POST /api/chatbot/support/start` | `{company, address?, goal, details: [{name, value}], max_messages?, max_minutes?, max_queue_minutes?}`; 202 `{support, asking: true, message}`. A refused plan is a 400 with the reason in a sentence, and no card; another chat or conversation going is a 409 | ONE `support_chat` card | held |
+| `POST /api/chatbot/support/stop` | `{id}` - a running chat within a few seconds, a paused one at once; its window closes | never | never held |
+| `POST /api/chatbot/support/takeover` | `{id}` - Jarvis stops sending within a few seconds and pauses (`paused_code: "takeover"`); the owner types in the window; Resume (`/api/task/resume`, its own card) carries on, with what the owner typed kept as theirs | never | never held |
+| `POST /api/chatbot/support/answer` | `{id, offer, choice, text?}` about the waiting offer, `choice` one of `decline`, `say`, `takeover`. Decline sends "Thank you, but I'd rather not accept that. Is there another option?"; say sends the owner's own words through the same last check; **"accept" is refused (400)**, and so are say-words that read as accepting ("yes", "ok", "I agree", "go ahead"...) - the only yes that can leave is one an offer card showed | never (the offer's own card is the only accept) | decline and say held; takeover not |
+| `GET /api/chatbot/support/export?id=` | `{filename, text, note}` - the transcript as plain text for the desktop's "Export transcript"; writes nothing (the desktop saves where the owner picks, and says the file is NOT encrypted) | - | a read (desktop only, ARCHITECTURE §8) |
+
+Pause and Resume are `/api/task/pause` and `/api/task/resume` (the chat
+runs as a `jarvis_task_control` task, tool `support_chat`); Stop everything
+stops it. While a support chat is going no chatbot conversation or
+comparison starts, and the other way round (one window, one driver model).
+
+### 65.2 `companies` and `support_tier`
+
+`companies`: `[{id, name, host, help_url, terms, verified}]` - Groupon
+(`groupon`, help page `https://www.groupon.com/customer-support`, **not
+verified**: the page could not be reached when this was written; the
+owner's check says whether it is right) and `other` ("Another company (its
+help page)"): the owner types an `https://` address with a public name,
+which becomes the only host the window opens. **Any further company preset
+is the owner's OK first.**
+
+`support_tier` - the chatbot driver's own version logic
+(`jarvis_chatbot.choose_tier`): `{id, name, words, why, messages_default,
+messages_max, minutes_default, minutes_max, queue_default, queue_max}`.
+
+| | one graphics card (the limited version) | two graphics cards (the full version) |
+|---|---|---|
+| the driver model | Jarvis's own, on the card the owner chats on | on the second card's "Longer conversations" lane, once the owner switches `[chatbot] full_version` on after measuring |
+| what it reads | the goal, the details and the **last six** messages | the whole chat |
+| messages (default, most) | 15, 25 | 25, 40 |
+| minutes of chat, from the first answer | 30, 45 | 30, 60 |
+| minutes in the queue | 45, 120 | 45, 120 |
+
+The numbers are proposals (only the queue's are the design's); they are
+the owner's to change. On one card a support reply goes ahead of the
+owner's own chat for its few seconds (the agent is not kept waiting); the
+offer check is plain code either way, so a small model cannot miss one.
+
+### 65.3 `support`
+
+```json
+{"id": "sup_000000000003", "company": "groupon", "company_name": "Groupon",
+ "help_url": "https://www.groupon.com/customer-support", "goal": "...",
+ "details": [{"name": "Order number", "value": "..."}],
+ "state": "running", "tier": "one_card", "tier_name": "...",
+ "messages_used": 2, "max_messages": 15, "minutes_used": 0.2, "max_minutes": 30,
+ "queue_minutes": 0.1, "max_queue_minutes": 45, "in_queue": false,
+ "queue_position": null, "agent": "Priya", "waiting_for_chat": false,
+ "paused": "", "paused_code": "", "take_over": false, "ended": "",
+ "question": "", "problem": "", "terms": "...",
+ "offer": {"id": 1, "words": "...", "reply": "Yes, I accept that. Thank you.",
+           "state": "waiting", "card": "waiting", "holds": 0, "holds_most": 3,
+           "said": "", "choice": ""},
+ "offers": [{"id": 1, "state": "waiting"}], "reference": "",
+ "summary": null, "saved": "", "read_aloud": false,
+ "transcript": [{"who": "jarvis", "n": 1, "text": "...", "at": 0, "outside_text": false, "move": "reply"},
+                {"who": "system", "text": "You are number 2 in the queue.", "outside_text": true, "source": "support_transcript"},
+                {"who": "company", "text": "...", "outside_text": true, "source": "support_transcript"},
+                {"who": "note", "kind": "offer", "offer": 1, "text": "An offer card was raised: ..."}]}
+```
+
+- `state`: `asking` (the card waits) -> `running` -> `paused` / `done` /
+  `stopped`; `refused` when the card said no.
+- `who`: `jarvis` (sent by Jarvis in the owner's name; `button: true` for a
+  menu button it pressed), `owner` (typed by the owner - in the window
+  during Take over, or through "Say something else"), `company` and
+  `system` (the company's side: outside text, ALWAYS, whatever the flag
+  says), `note` (Jarvis's own notes: an offer card raised or answered, a
+  question handed over).
+- `waiting_for_chat`: the window is open but the owner has not opened the
+  company's chat yet (Jarvis never clicks the page's "Chat with us"
+  button); Jarvis waits up to 10 minutes.
+- `offer.card`: `waiting` (the card is up), `no` (it was not approved:
+  nothing accepted; the owner chooses Decline, Say something else or Take
+  over), `yes`. `holds`: how many "One moment please" lines went.
+- `paused_code`: `takeover`, `bot_question`, `identity`, `unlisted`,
+  `handover` (the driver was not sure), `offer_timeout`, `quiet` (no answer
+  after "Are you still there?" and 10 more minutes), `blocked` (two
+  messages in a row failed the last check), `captcha`, `login`, `unusual`,
+  `other` (e.g. "a chat window from <host>, which Jarvis does not
+  recognise"), `paused`. `question`: the agent's words that were handed
+  over.
+- `summary` (at the end): `{answer, agreed, open, reference, by_model,
+  outside_text: true, read_aloud: false}` - written on the PC from the
+  chat.
+- `saved`: `"yes"` when kept in the encrypted history, else why not
+  (history off, for example).
+
+### 65.4 The support last check (`jarvis_support.support_check`)
+
+Right before every message leaves - Jarvis's own, a fixed line, a menu
+button, the owner's "Say something else": empty, too long or hidden
+characters; a **payment card number** (13-19 digits passing the card
+checksum), a **Social-Security-shaped number**, a password- or key-shaped
+value, a one-time code or sign-in link, or a message saying it is a person
+- blocked **even if listed**. Then each listed value is hidden exactly as
+written (an email address regardless of case), and the rest must hold no
+email address, phone or other long number, street address or postcode, and
+repeat no saved fact; nor the credential, ID, bank-account, health or
+crisis words of the chatbot mode's private list. (The words that are the
+subject of a support chat itself - email, bank, invoice, finance, files,
+"credit card" as words - are left out of the topic list; the VALUES are
+what is guarded.) A blocked message gets one rewrite; a second pauses the
+chat.
+
+### 65.5 The record and the export
+
+At the end the whole chat is written to the encrypted chat history
+(`jarvis_chat_log.record_support`) as ONE conversation titled "Support chat
+with <company> - <date>": the details card, every line with its time and
+author, each offer card and its answer, the reference number. Every row is
+role `support` (never `user`), with its author as `provenance`
+(`support_company`, `support_jarvis`, `support_owner`, `support_note`) and
+`read_outside: true`; it never enters the live-turn registry, so the
+learner reads none of it (`eval/learner_cases.jsonl` r06). Both apps'
+History show it, each line with its author ("The company (outside text)",
+"Sent by Jarvis in your name", "You", "Note"). History being off keeps
+nothing, and the chat says so (`saved`).
+
+**Since the chat audit (2026-09-28; the owner's "Support chats: export
+stays, and auto-delete and Forget a time frame ask before removing a
+support chat"):** the record's History kind is `support` (tagged "Support
+chat", never continued - §18.6). "Delete conversations older than" never
+deletes one and says so; "Forget a time frame" lists one unticked (§64.1);
+Delete in History asks once more ("This is the record of a customer-support
+chat - what the company said and what was sent in your name. Delete it
+anyway?"). "Export transcript" stays, the one named exception to "no
+plain-text path" (ARCHITECTURE §5). "History search finds it", in the
+design, holds for §71's word search (two letters or more), not for the
+one-letter title filter.
+
+The audit log gets ids, counts, the company and each detail's NAME when it
+is sent (`support.detail_sent`) - never a value, the goal or a word of the
+chat.
+
+### 65.6 What the apps must do
+
+- The form: the company (and its terms risk), the goal ("Jarvis writes its
+  own messages from these words, in your name"), detail rows (a name and
+  its exact value), the limits; Start asks for the card and sends nothing
+  itself. **Start waits for a live link** (rule 4).
+- A waiting offer: its words, the exact reply its card would send, and
+  Decline / Say something else / Take over - **never an Accept button**.
+  Decline and Say wait for a live link; Take over and Stop never do.
+- A question handed over: its words, and that Jarvis never answers it.
+- The company's words in the outside-text style; nothing here read aloud.
+- Hidden lists (desktop Rust / phone plate): the goal, the details, the
+  transcript, the question, the offer's words and the summary are not
+  shown until Show is confirmed; Export needs them shown.
+- The phone's ongoing notification: "Chat with Groupon: offer waiting"
+  (and the other `notify_*` lines), with Stop; a locked phone shows only
+  "Jarvis is chatting with customer support for you."
+- A chat paused at a captcha, a sign-in page or an "unusual activity" page
+  can be handed to the phone - "Solve it here" (87.8). The owner's identity
+  checks and "are you a bot?" questions are NOT: those are answered in the
+  window on the PC, as before.
+
+### 65.7 The window, and a chat in a frame from another host
+
+`jarvis_support_widget.SupportWidget` opens ONLY the help page's host by
+itself (the shared base's `_goto_here`); any other top-level page pauses.
+It clicks the message box, the chat's Send button, and - only with the
+driver naming its exact label, after the last check - one of the chat's own
+menu buttons; never the page's launcher, a link, an attachment or "email me
+the transcript". Most chat widgets live in an **iframe from the chat
+maker's own host**: Jarvis reads and types inside such a frame ONLY when it
+sits where that maker's widget is known to sit on the page AND the frame's
+own address is on that maker's host list (or the company's own hosts; a
+frame with no address of its own belongs to the page it is in). Anything
+else: "a chat window from <host>, which Jarvis does not recognise", and a
+pause. The vendor table (Zendesk, Intercom, LivePerson, Gorgias, Freshchat,
+Salesforce, and an unbranded fallback on `role="log"`) is **NOT VERIFIED**:
+written without access to any of these widgets. The unbranded fallback is
+held narrow: only the nearest part of the page around a `role="log"` list
+that also holds a text area (never the whole page), only a text area or a
+textbox, and only a button labelled Send - a site's search box or a form's
+submit button is never taken for a chat.
+
+The owner's commands on the PC (one line each, PowerShell, in Jarvis's
+folder):
+
+    py -3 jarvis_support_widget.py sign-in groupon
+    py -3 jarvis_support_widget.py check groupon
+    py -3 jarvis_support_widget.py forget-sign-ins
+
+`check` reads only and sends nothing: it opens the help page, waits for the
+owner to open the chat by hand, and prints PASS or FAIL for the page, the
+chat maker it recognised, the chat frame's host, the message box, the Send
+button, the chat's lines and its menu buttons (labels only), saving the
+report in `<settings folder>\chatbot\support-check.txt`. A help page's
+address may follow the company name (`check groupon https://...`) when the
+preset is wrong.
+
+### 65.8 Not built, said plainly
+
+- **Never tried against a real site**: Groupon's help address, every vendor
+  selector and host are guesses until the owner's `check` (build step 8).
+- "Find it for me" on a detail row (Jarvis looking a value up locally): not
+  built - every value is typed by the owner.
+- A request for a detail not on the card is handed to the owner (Take over
+  and type it in the window), not turned into its own card adding that one
+  value as the design sketched.
+- A search box in History (support records are listed and opened like any
+  chat; no History search exists yet in either app).
+- The prompt-injection detector's warning (the owner's "test two, keep the
+  winner") is not wired to support chats yet.
 
 ---
 
@@ -10656,7 +11245,7 @@ handed to the AI".
 
 | Route | Method | Answers |
 |---|---|---|
-| `GET /api/history/search?q=<words>&limit=<1-50, default 20>` | GET | **200** the `GET /api/history` status fields (`enabled`, `recording`, `why_not`, `keep_days`, ...) plus `query_ok` (bool), `why` (a sentence when `query_ok` is false), `conversations` (each a `/api/history` row plus `hits` - how many messages hold a search word - and `snippet`), `more` (there were more matches than `limit`), `partial` (the scan stopped early) and `searched` (how many conversations were looked at). **200 with `query_ok: false`** and a sentence for words that are too short (fewer than two letters once one-letter words are skipped) or too long (more than 8 words or 100 characters). `503` without chat history on the PC; `501` from a `jarvis_chat_log.py` older than this section. Token + origin. |
+| `GET /api/history/search?q=<words>&limit=<1-50, default 20>[&kind=<chat|live|support|chatbot|compare>]` | GET | **200** the `GET /api/history` status fields (`enabled`, `recording`, `why_not`, `keep_days`, ...) plus `query_ok` (bool), `why` (a sentence when `query_ok` is false), `conversations` (each a `/api/history` row plus `hits` - how many messages hold a search word - and `snippet`), `more` (there were more matches than `limit`), `partial` (the scan stopped early) and `searched` (how many conversations were looked at). **200 with `query_ok: false`** and a sentence for words that are too short (fewer than two letters once one-letter words are skipped) or too long (more than 8 words or 100 characters). `503` without chat history on the PC; `501` from a `jarvis_chat_log.py` older than this section. Token + origin. |
 
 `snippet` is `{"role": "user" | "assistant" | "title", "at", "before",
 "after", "parts": [{"text", "hit"}]}` - a short piece (at most 180
@@ -11459,7 +12048,9 @@ model can call reaches it.
 
 1. The PC is asked which facts the chat taught. None, or a PC without this
    route: Delete asks exactly as before ("Deleting a chat does not forget
-   facts Jarvis learned from it. Forget those one by one in the Brain.").
+   facts Jarvis learned from it. To forget what Jarvis learned over some
+   days, use Forget a time frame." - since the chat audit; it used to say
+   "Forget those one by one in the Brain.").
 2. Some: they are listed under the chat - desktop: below its row; phone:
    in the open conversation - **each with a tick box, NONE ticked**:
    "Jarvis learned 2 facts from this chat. They are kept unless you tick
@@ -11503,6 +12094,27 @@ apps' words together.
 
 **Not checked:** the phone half is not compiled here (CI compiles it);
 the desktop's Rust tests compile but run only on Windows.
+
+### 79.4 The other direction names the chat (the chat audit, 2026-09-28)
+
+`GET /api/memory/fact-chat?id=<fact id>` -> `200 {"id", "conversation":
+null | {"id", "title", "updated", "kind"}}` (`jarvis_brain_reads.fact_chat`,
+the same `brain-reads.patch` install; `jarvis_chat_log.brief()` gives the
+title without opening a message). `conversation` is null when the fact
+records no chat (a card accepted by hand, an older fact) or that chat is no
+longer kept. `400` for anything but one whole-number id, `404` for no such
+fact. A read; it deletes nothing. Not a tool.
+
+"Erase the words" -> "Also delete the chat it came from" now names the chat
+first - `Also delete the chat it came from: "<title>" (<when>)?` - and is
+not offered at all when none is on record; after it, "Erased. No chat was
+on record for this fact, so no chat was deleted." instead of a bare
+"Erased.". A PC without the route asks as before. While the private lists
+are hidden the desktop's Rust takes the title out (`brain_fact_chat`),
+saying only that there is one. Desktop: `brain.js` `eraseFact` and the
+bar's `answer-memory.js`; phone: `AutoLearnPlate.kt` (the whole row one
+checkbox for TalkBack). If the chat went and the app was in it, a new
+conversation starts (§18.6).
 
 ---
 
@@ -12644,7 +13256,7 @@ One adapter family speaking the OpenAI-style "Chat Completions" API
 plus that service's answer-length cap field - see "The hard stop" below -
 one answer back), registered as one chatbot per service so the card names
 the exact service, host and model. `chatbots[].kind` is `"api"` for these,
-`"website"` for Gemini and `"local"` for 60.4.2.
+`"website"` for Gemini and `"local"` for 87.4.2.
 
 | id | name | base address | default model | address checked |
 |---|---|---|---|---|
@@ -12839,7 +13451,7 @@ its **own spare account** used only by Jarvis. The last four in the table
 (DeepSeek, Grok, Le Chat, Meta AI) are the studio's reading of "other
 commonly used" - the owner can drop any of them.
 
-Everything in 60.4 applies to every one of them, word for word: it lives in
+Everything in 87.4 applies to every one of them, word for word: it lives in
 ONE shared base, `backend/jarvis_chatbot_web.py` (the browser thread, the
 visible `headless=False` window with Playwright's own defaults, the fixed
 typing pace, the host lock, "the reply is finished", every `needs_owner`
@@ -12912,10 +13524,20 @@ the default prices against each company's price page.
 
 Starting a conversation by saying it ("ask Gemini for me about ...") -
 today only the form starts one; task notes to a running conversation ("ask
-it about X too"); keeping the transcript in the encrypted chat history
-(today it is in memory only and lost on a restart); the two-card version's
+it about X too"); the two-card version's
 measurements; checking the selectors of every website on the owner's PC (the
 self-checks in §87.4 and §87.5).
+
+**Kept in History since the chat audit (2026-09-28).** A finished
+conversation, and a finished comparison as ONE record, is kept in the
+encrypted chat history (kinds `chatbot` and `compare`, §18.6): outside
+text, never learned from, never read aloud, read-only in both apps' History.
+While it runs it is still in memory only: a restart mid-conversation loses
+it ("That conversation is no longer in memory: Jarvis on the PC restarted. A
+conversation that finished is kept in History."). The summary's note says
+where it will be kept. The desktop keeps the last conversation's and
+comparison's IDS (never a word) across closing the Brain window, so a
+finished summary no longer vanishes with it (desktop B2 of the chat audit).
 
 ### 87.7 Ask several and compare (`jarvis_chatbot_compare.py`, 2026-09-28)
 
@@ -13020,6 +13642,92 @@ Activity lines: each conversation's own, prefixed "Comparing (2 of 3): ",
 and "You paused the comparison. ..." - the phone's `isChatbotActivity`
 knows both, and "Continuing chatbot_compare..." after a Resume.
 
+### 87.8 "Solve it here" - a captcha or sign-in page handed to the phone (`jarvis_handoff.py`, 2026-09-28)
+
+The owner's decision (CLAUDE.md, "A captcha can be handed to the owner's
+phone"): when a chatbot website (87.4, 87.5) or a customer-support chat (65)
+pauses at a captcha, a sign-in page or an "unusual activity" page, the phone
+gets an alert and offers **"Solve it here"**: a live picture of THAT ONE
+browser window, sent PC to phone over the owner's own link, never saved, and
+the owner's taps and typing passed to that window only while Jarvis is
+paused there. Solving it in the window on the PC still works. Jarvis itself
+never solves a captcha. Every rule is `jarvis_handoff.py`'s; the routes are
+answered by `jarvis_chatbot_routes.py` (shipped whole - no patch).
+
+**What starts one.** Only a session paused with the code `captcha`, `login`
+or `unusual` (the adapter's own "needs the owner" words, 87.4), whose adapter
+is a browser window. Never: a running session, any other pause (a card, an
+"are you a bot?" question, an identity check, Pause), a comparison's
+conversation (a chatbot at a captcha is left out of a comparison, not
+paused), an API service or the second local AI (no window).
+
+**`GET /api/chatbot/status`** also carries `handoff` - never a picture, never
+a word from the page:
+
+```json
+{"available": true, "kind": "chatbot", "id": "chat_...", "site": "Gemini",
+ "reason": "captcha", "reason_words": "a captcha (a \"prove you are a person\" check)",
+ "title": "Gemini needs you",
+ "text": "Jarvis paused: a captcha (...). Solve it here, or in the window on the PC.",
+ "active": "ho_...", "ended": {}}
+```
+
+`{"available": false, "active": "", "ended": {...}}` when nothing waits.
+`kind` is `chatbot` or `support`; `active` is the hand-off going on now for
+that session, or `""`.
+
+| Route | Body / query | What it does |
+|---|---|---|
+| `POST /api/chatbot/handoff/start` | `{"kind", "id"}` | Starts passing that one window on - **no card** (nothing leaves the owner's devices; nothing is done but what the owner does). The hosts the window may show meanwhile are fixed now: the site's own, its sign-in hosts, and the one it shows at this moment. One hand-off at a time: a new one ends the old. 409 with the reason when nothing waits. Returns `handoff` (`ho_` + 16 hex), `frames_per_s`, `idle_s` |
+| `GET /api/chatbot/handoff/frame?h=` | | ONE picture: Playwright's own screenshot of that ONE page (never the screen, another window or a tab) as a JPEG in page pixels, base64 in `jpeg`, with `width`, `height`, `seq`. Kept nowhere - not on disk, not in memory after the answer. At most 2 a second (429 with `retry_ms`) |
+| `POST /api/chatbot/handoff/input` | `{"h", "type": "tap", "x", "y"}` (fractions 0..1 of the last picture), `{"type": "text", "text"}` (1-200 characters, no control characters), `{"type": "key", "key"}` (Enter, Backspace, Delete, Tab, Escape, Space, the arrows - nothing that reaches the browser itself), `{"type": "scroll", "dy"}` (capped at 1500) | ONE input from the owner, to that page only. At most 30 in 3 seconds. The audit line has counts and key names, never typed text |
+| `POST /api/chatbot/handoff/end` | `{"h"}` | Ends it. Never held, never a card |
+
+**Every picture and every input checks again**, first, that the session is
+still paused at that same code with that same window, and that the window
+shows one of the fixed hosts - and checks the host again after an input.
+Otherwise the answer is **410** with `ended` and the sentence in `error`:
+`resumed` (the owner pressed Resume, or the session runs again), `stopped`,
+`left` (the window went to another site - nothing more is passed on),
+`closed`, `idle` (no picture asked for 45 seconds: the phone left the
+screen), `time` (15 minutes), `stop_all` (Stop everything ends it too),
+`replaced`, `owner`. The words are `jarvis_handoff.ENDED`; the sentences the
+apps show are `jarvis_handoff.WORDS` (`tools/gen_handoff_cases.py` writes
+both apps' `handoff-cases.json` from the real routes).
+
+**What the apps must do.**
+- **Phone** (`net/Handoff.kt`, `ui/screens/HandoffScreen.kt`,
+  `service/HandoffNotifier.kt`): an alert when `handoff` becomes available -
+  its own channel, **always kept on the phone** (`setLocalOnly(true)`), the
+  site and the reason only; while App lock or "Hide memory lists and chat
+  history" is on, only "A website Jarvis is using needs you", and the lock
+  screen always shows only that. "Solve it here" opens the screen (behind
+  App lock, as ever): the picture is asked for about once a second only
+  while the screen is in front and the app unlocked (it is not composed
+  behind the lock screen), held in memory for the screen only, and
+  screenshots of Jarvis are blocked while it shows. A tap on the picture
+  goes as fractions; a tap on the margin goes nowhere; typing is masked on a
+  sign-in page and never kept in the app's saved state. **Input is held on a
+  stale link** ("The link to your PC is catching up, so your taps and typing
+  are held until it is back."); End and "Solve it on the PC instead" never
+  are. The screen says plainly: "Some captchas refuse taps passed on from a
+  phone this way. If it keeps saying no, solve it on the PC instead." The
+  Brain's chatbot and support plates show "Solve it here" on the paused
+  session too.
+- **Desktop** (`src/handoff.js`): the window is right there, so the Brain's
+  Work tab shows the same alert on the paused session ("Gemini needs you on
+  this PC", pointing at the browser window). It **never calls** the picture
+  or input routes (`tests/handoff.mjs` checks) - one-sided on purpose
+  (ARCHITECTURE.md section 8).
+
+**Said plainly.** A tap passed on this way reaches the page as Playwright's
+own mouse event; a captcha may tell, and refuse it. A site that opens a new
+window or tab for a sign-in is finished on the PC: only the first window is
+passed on. A typed password travels over the owner's own link (Tailscale or
+Meshnet, scrambled) and through the PC's memory for that one input; it is
+never logged or kept. Tried against a fake page in a real Chromium
+(`test_handoff.py`); not yet against a real captcha.
+
 ## 88. Projects: projects, life benchmarks and their numbers (added 2026-09-28)
 
 > **Renumbered in the audit integration merge (2026-09-28):** this section was §61 on the `claude/jarvis-ai-assistant-research-ff37vy` branch; §61 is already taken on main's side (reading phone notifications). References that came with that branch were renumbered with it.
@@ -13055,7 +13763,7 @@ measure come after that branch merges.
 | Clear a project's folder | no | either app (Jarvis sees less) |
 | Shareable **on** | **one card**, `change_own_config` at tier `ask` | either app |
 | Shareable off | no, instant (a waiting card is withdrawn) | either app |
-| Define, edit, delete a number benchmark; log a number; remove one number | no | either app, or the owner's own words ("I ran 5 km", 60.4) |
+| Define, edit, delete a number benchmark; log a number; remove one number | no | either app, or the owner's own words ("I ran 5 km", 88.4) |
 | Write or change a coding benchmark's command | no card (nothing runs); the words are kept | **PC only** |
 | Take the owner's own private mark off a benchmark | no card, instant | either app |
 | Take off a private mark Jarvis made from the name ("5k time" read as money) | **one card**, `change_own_config` at tier `ask` - afterwards its numbers may be read aloud (the owner, 2026-09-28) | either app |
@@ -13102,7 +13810,7 @@ ids), `benchmarks` (a count), `benchmark_list`, `created`, `changed`,
 `target`, `sensitive`, `sensitive_why` (`"health"`, `"money"`, another
 sensitive topic, or `"you marked it"`), `marked_by_you`,
 `keep_on_screen`, `keep_on_screen_words`, `results` (a count), `latest`
-(`{"id", "value", "at"}` or `null`), `change` (60.3), `created`,
+(`{"id", "value", "at"}` or `null`), `change` (88.3), `created`,
 `changed`, and the private mark's state (2026-09-28): `mark_auto` (the
 topic the name looks like, or `""`), `mark_auto_removed` (the owner took
 it off with a card), `unmark` (`"card"`, `"instant"` or `""` - how the
@@ -13181,6 +13889,12 @@ picker, then `{"folder"}` to this PC's Jarvis; held on a stale link).
 what is the PC's: a coding project and its folder, and a benchmark's
 command, show "Set on your PC" (the PC refuses them from the phone too:
 ARCHITECTURE section 8). It creates life projects only.
+
+Under the instructions both apps say "In your own words. Saved for later:
+Jarvis does not read this in chats yet." - since the chat audit
+(2026-09-28): they used to promise "Jarvis reads this in this project's
+chats", and project chats are step 4, not built. (History already has the
+`project` column for them, empty.)
 
 Both show: the list and New project; instructions and notes (Save); the
 Shareable switch (ON asks with a card, OFF is instant and works on a stale

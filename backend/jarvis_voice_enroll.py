@@ -86,6 +86,10 @@ on this one (docs/JARVIS-API.md, "The stricter voice check", has the JSON):
     {"mode": "memory", "value": "memory_aloud"|"memory_on_screen"}
     {"mode": "sensitive_memory", "value": "sensitive_on_screen"|"sensitive_aloud"}
     {"mode": "hands_free", "value": "same_as_button"|"button_only"}
+    {"mode": "hands_free_screen", "value": "screen_on_screen"|"screen_aloud"}
+    {"mode": "hands_free_live", "value": "live_trust_fully"|"live_button_start_only"|
+                                         "live_like_hey_jarvis"}
+    {"mode": "live_end", "value": "live_end_app_lock"|"live_end_windows_lock"}
     {"mode": "talk_to_type", "value": "off"|"on"}   (since 2026-09-28)
     {"mode": "wake_confirm", "value": "one"|"both"}  ("Better voice", 2026-09-28:
         "both" - a second "hey Jarvis" detector must agree - is the stricter
@@ -94,10 +98,6 @@ on this one (docs/JARVIS-API.md, "The stricter voice check", has the JSON):
         "resnet221", the unmeasured newer model, is the card; "titanet" at once)
         Either choice that needs something installed is refused (409, in
         words) before any card while it is not - jarvis_voice.setting_blocker.
-    {"mode": "hands_free_screen", "value": "screen_on_screen"|"screen_aloud"}
-    {"mode": "hands_free_live", "value": "live_trust_fully"|"live_button_start_only"|
-                                         "live_like_hey_jarvis"}
-    {"mode": "live_end", "value": "live_end_app_lock"|"live_end_windows_lock"}
         Tightening applies at once. Loosening raises ONE card
         (change_own_config), and changes nothing until it is approved.
         `voice_is_enough` is refused unless the check is very strict;
@@ -644,8 +644,8 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
         # The same: scores, no card.
         return measure(doc, measure_fn=measure_fn)
     if mode in ("strictness", "privacy", "memory", "sensitive_memory", "hands_free",
-                "talk_to_type", "wake_confirm", "voice_id_model",
-                "hands_free_screen", "hands_free_live", "live_end"):
+                "hands_free_screen", "hands_free_live", "live_end",
+                "talk_to_type", "wake_confirm", "voice_id_model"):
         # Tightening is allowed while a card waits; loosening checks itself.
         return stage_setting(doc, mode, gate=gate, tier_of=tier_of, spawn=spawn)
     if mode not in ("enroll", "threshold", "train"):
@@ -962,47 +962,6 @@ _SETTING_WORDS = {
         "If you did not just do this, say no.\n\n"
         "If you say no: nothing changes - \"Hey Jarvis\" questions stay on the "
         "stricter setting."),
-    # The owner's decision, 2026-09-27: "Talk-to-type on the PC: one approval
-    # card to switch it on, then no card each time". Off is at once.
-    ("talk_to_type", "on"): (
-        "Turn on talk-to-type on this PC?\n\n"
-        "Then you can hold the talk-to-type key on this PC (Settings, Shortcuts - "
-        "Alt+Shift+T unless you changed it), speak, and Jarvis types what you said "
-        "into the program in front: an email, a document, a chat box. There is no "
-        "card each time.\n\n"
-        "Your voice is checked first, then turned into words on this PC only - "
-        "nothing is sent anywhere, and the words are not kept in chat history. "
-        "Jarvis will not type into a password box, and does not type while it is "
-        "locked.\n\n"
-        "You can turn it off again at any time, and that is instant.\n\n"
-        "If you did not just do this, say no.\n\n"
-        "If you say no: nothing changes - talk-to-type stays off."),
-    # "Better voice" (the owner's group, 2026-09-28): with both detectors on,
-    # going back to the first one alone lets Jarvis wake more easily.
-    ("wake_confirm", "one"): (
-        "Go back to ONE \"hey Jarvis\" detector?\n\n"
-        "Now two different detectors must both hear \"hey Jarvis\" before Jarvis "
-        "wakes. With one, Jarvis wakes more easily - on the phrase, and more often by "
-        "mistake on something that only sounds like it. Your voice is still checked "
-        "every time before anything is written down or done.\n\n"
-        "If you did not just do this, say no.\n\n"
-        "If you say no: nothing changes - both detectors must still agree."),
-    # The same day: the newer voice-ID model has not been measured on real
-    # voices, so choosing it is the looser choice.
-    ("voice_id_model", "resnet221"): (
-        "Use the newer voice-ID model to tell your voice from other people's?\n\n"
-        "It is WeSpeaker's ResNet221. It has NOT been measured on real voices here, so "
-        "Jarvis holds it to general bars and cannot say how well it keeps other people "
-        "out. Tried on computer-made voices, at those general bars it let in far more "
-        "of the other voices than the model you use now - run the measurement in "
-        "backend/README.md (\"Better voice\") before choosing it. It is also slower "
-        "(about half a second a sentence on a small processor). Like every voice "
-        "check, it cannot tell your voice from a recording or a copy of it.\n\n"
-        "If your voice print has nothing from this model yet, Jarvis will ask you to "
-        "train your voice again before very strict lets you in.\n\n"
-        "You can go back to the measured one at any time, and that is instant.\n\n"
-        "If you did not just do this, say no.\n\n"
-        "If you say no: nothing changes - the measured stronger model stays."),
     # The owner's decision, 2026-09-28: under "only trust the talk button",
     # an answer about the screen - or, since Jarvis Live, about what the
     # camera sees (read_camera follows the same screen_aloud) - to a "Hey
@@ -1049,6 +1008,47 @@ _SETTING_WORDS = {
         "voice, but that check cannot tell a recording of you from you.\n\n"
         "If you did not just do this, say no.\n\n"
         "If you say no: nothing changes - Live ends when App lock would ask again."),
+    # The owner's decision, 2026-09-27: "Talk-to-type on the PC: one approval
+    # card to switch it on, then no card each time". Off is at once.
+    ("talk_to_type", "on"): (
+        "Turn on talk-to-type on this PC?\n\n"
+        "Then you can hold the talk-to-type key on this PC (Settings, Shortcuts - "
+        "Alt+Shift+T unless you changed it), speak, and Jarvis types what you said "
+        "into the program in front: an email, a document, a chat box. There is no "
+        "card each time.\n\n"
+        "Your voice is checked first, then turned into words on this PC only - "
+        "nothing is sent anywhere, and the words are not kept in chat history. "
+        "Jarvis will not type into a password box, and does not type while it is "
+        "locked.\n\n"
+        "You can turn it off again at any time, and that is instant.\n\n"
+        "If you did not just do this, say no.\n\n"
+        "If you say no: nothing changes - talk-to-type stays off."),
+    # "Better voice" (the owner's group, 2026-09-28): with both detectors on,
+    # going back to the first one alone lets Jarvis wake more easily.
+    ("wake_confirm", "one"): (
+        "Go back to ONE \"hey Jarvis\" detector?\n\n"
+        "Now two different detectors must both hear \"hey Jarvis\" before Jarvis "
+        "wakes. With one, Jarvis wakes more easily - on the phrase, and more often by "
+        "mistake on something that only sounds like it. Your voice is still checked "
+        "every time before anything is written down or done.\n\n"
+        "If you did not just do this, say no.\n\n"
+        "If you say no: nothing changes - both detectors must still agree."),
+    # The same day: the newer voice-ID model has not been measured on real
+    # voices, so choosing it is the looser choice.
+    ("voice_id_model", "resnet221"): (
+        "Use the newer voice-ID model to tell your voice from other people's?\n\n"
+        "It is WeSpeaker's ResNet221. It has NOT been measured on real voices here, so "
+        "Jarvis holds it to general bars and cannot say how well it keeps other people "
+        "out. Tried on computer-made voices, at those general bars it let in far more "
+        "of the other voices than the model you use now - run the measurement in "
+        "backend/README.md (\"Better voice\") before choosing it. It is also slower "
+        "(about half a second a sentence on a small processor). Like every voice "
+        "check, it cannot tell your voice from a recording or a copy of it.\n\n"
+        "If your voice print has nothing from this model yet, Jarvis will ask you to "
+        "train your voice again before very strict lets you in.\n\n"
+        "You can go back to the measured one at any time, and that is instant.\n\n"
+        "If you did not just do this, say no.\n\n"
+        "If you say no: nothing changes - the measured stronger model stays."),
 }
 
 #: What each loosening card is about, for the card's `what` line.
@@ -1075,14 +1075,14 @@ def settings_view() -> dict:
             # "" from a jarvis_voice.py older than this setting.
             "sensitive_memory": s.get("sensitive_memory", ""),
             "hands_free": s.get("hands_free", ""),
+            "hands_free_screen": s.get("hands_free_screen", ""),
+            "hands_free_live": s.get("hands_free_live", ""),
+            "live_end": s.get("live_end", ""),
             # "" from a jarvis_voice.py older than talk-to-type (2026-09-28).
             "talk_to_type": s.get("talk_to_type", ""),
             # "" from a jarvis_voice.py older than "Better voice" (2026-09-28).
             "wake_confirm": s.get("wake_confirm", ""),
             "voice_id_model": s.get("voice_id_model", ""),
-            "hands_free_screen": s.get("hands_free_screen", ""),
-            "hands_free_live": s.get("hands_free_live", ""),
-            "live_end": s.get("live_end", ""),
             "voice_is_enough_allowed": s["strictness"] == v.VERY_STRICT}
 
 

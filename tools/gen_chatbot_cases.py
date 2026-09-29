@@ -44,12 +44,18 @@ numbers, not this machine's spending. fresh() deletes the file.
 """
 import dataclasses
 import json
+import os
 import sys
 import tempfile
 import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+# The same answer wherever this runs - on its own, inside a test suite (which
+# sets this), on Linux or on the owner's PC: "kept in History" is decided by
+# the machine (Credential Manager, the chat log), so the fixtures pin it to
+# the suite's own "a test suite is running".
+os.environ["JARVIS_SUITE_RUNNING"] = "1"
 BACKEND = ROOT / "backend"
 for p in (BACKEND, BACKEND / "rebuilt"):
     if str(p) not in sys.path:

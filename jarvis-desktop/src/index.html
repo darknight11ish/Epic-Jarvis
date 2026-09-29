@@ -230,6 +230,7 @@
             <span id="jarvis-live-detail"></span>
           </div>
           <p class="jarvis-live-hint" id="jarvis-live-hint" hidden></p>
+          <p class="jarvis-live-hint jarvis-live-temporary" id="jarvis-live-temporary" hidden></p>
           <div class="jarvis-live-actions">
             <button id="jarvis-live-move" class="text-button" type="button" hidden>Move it here</button>
             <button id="jarvis-live-fix" class="text-button" type="button" hidden>Open Settings, then Voice</button>
@@ -365,6 +366,13 @@
         <section class="primer" id="primer" aria-label="What you can do here">
           <h2 class="sr-only">What you can do here</h2>
           <div id="sayable-list"></div>
+          <!-- "Earlier chats" (the chat audit, 2026-09-28): the Brain's
+               History, where "Continue this chat" carries one on here; and,
+               after Esc ended a chat, where it went (main.js closeCard). -->
+          <p class="primer-chats">
+            <button class="text-button" type="button" id="earlier-chats-primer">Earlier chats</button>
+            <span class="chat-ended-note" id="chat-ended-note" hidden></span>
+          </p>
           <ul class="primer-list">
             <!-- Only the note apps the PC says are set up are shown (main.js
                  syncNotePrimer). Until it answers, none are - and the last
@@ -630,6 +638,7 @@
                    only once there is one, and not while an answer is
                    arriving. Esc clears it too, with the card. -->
               <button class="text-button" type="button" id="new-conversation" hidden>New conversation</button>
+              <button class="text-button" type="button" id="earlier-chats">Earlier chats</button>
               <button class="text-button" type="button" id="stop" title="Stop generating" hidden>Stop</button>
             </div>
           </header>
@@ -641,9 +650,22 @@
               completed answer to fold away, and it clears when the window is
               dismissed rather than surviving into the next time it opens.
             -->
+            <!-- The one quiet line about the chat itself: a new conversation
+                 after 30 quiet minutes, a chat carried on from History, a
+                 chat deleted elsewhere (main.js showChatNote). -->
+            <p class="chat-note" id="chat-note" hidden></p>
+            <!-- After 30 quiet minutes: the chat that just ended, back
+                 (main.js showCarryOn). Only for a chat that was kept. -->
+            <button class="text-button carry-on-last" type="button" id="carry-on-last" hidden>Carry on the last chat</button>
+            <!-- Since the chat audit (2026-09-28): the whole conversation so
+                 far, not only the last answer - "Earlier in this chat · 3
+                 questions", folded, scrolling inside itself. -->
             <details class="previous-answer" id="previous-answer" hidden>
               <summary id="previous-answer-summary"></summary>
-              <article class="markdown" id="previous-answer-body"></article>
+              <!-- A scrolling region that keyboard and screen-reader users can
+                   reach and name (the second chat audit, 2026-09-28). -->
+              <article class="markdown thread" id="previous-answer-body" role="region"
+                       aria-label="Earlier in this chat" tabindex="0"></article>
             </details>
             <!--
               No `aria-live` here, deliberately. `paint()` reassigns this
@@ -654,6 +676,8 @@
               state. The stream is announced once when it starts and once when
               it finishes, through the shared region in jarvis-link.js.
             -->
+            <!-- The question this answer is for (main.js paintYouLine). -->
+            <p class="you-line" id="you-line" hidden></p>
             <article class="markdown" id="answer"></article>
             <div class="cursor" id="cursor" hidden aria-hidden="true"></div>
             <!-- Jarvis Live's tap buttons, under the answer they answer (the
@@ -731,7 +755,10 @@
                  `#primer`, which is visible BEFORE the first answer rather
                  than only after it. `Esc` stays: it is the one key whose
                  meaning changes with the card open (stop, then dismiss). -->
-            <span class="keys"><kbd>Esc</kbd> dismiss</span>
+            <!-- Esc ends the chat (it is kept in History when history is on);
+                 said so since the chat audit, 2026-09-28 - it used to say
+                 "dismiss" and the chat went without a word. -->
+            <span class="keys" title="Esc: end chat"><kbd>Esc</kbd> end chat</span>
           </footer>
         </section>
       </div>

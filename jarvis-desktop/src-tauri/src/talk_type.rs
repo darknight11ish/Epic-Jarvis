@@ -300,7 +300,9 @@ fn may_act(app: &AppHandle) -> Result<(), &'static str> {
 fn mic_free(app: &AppHandle) -> Result<(), &'static str> {
     // Live first: its listener is the same one "hey Jarvis" uses, so the
     // check below would blame "hey Jarvis" - and a paused Live has no
-    // listener open at all, yet will want the microphone back.
+    // listener open at all, yet will want the microphone back. (Jarvis Live
+    // owns the microphone while it is on, also while closed for a pause,
+    // exactly as for the talk button - voice.rs start_voice_capture.)
     if crate::voice::LIVE_MODE.load(Ordering::SeqCst) {
         return Err(MIC_LIVE);
     }

@@ -58,21 +58,6 @@ object VoiceStrict {
     const val SAME_AS_BUTTON = "same_as_button"
     const val BUTTON_ONLY = "button_only"
     /**
-     * "Better voice" (the owner's group, 2026-09-28; docs/JARVIS-API.md
-     * section 80). A second "hey Jarvis" detector on the PC that must agree
-     * with the first: ONE (the default, today's behaviour) or BOTH (the
-     * stricter choice, at once; going back to one asks first). It runs on the
-     * PC, on every "hey Jarvis" clip - this phone's included.
-     */
-    const val WAKE_ONE = "one"
-    const val WAKE_BOTH = "both"
-    /**
-     * Which stronger voice-ID model the PC uses: the measured one (the
-     * default, at once) or the newer, unmeasured one (asks first).
-     */
-    const val MODEL_TITANET = "titanet"
-    const val MODEL_RESNET = "resnet221"
-    /**
      * Answers about the screen after "Hey Jarvis", under "only trust the
      * talk button" (the owner's decision, 2026-09-28): kept on screen by
      * default; "read aloud" is the looser choice and asks first.
@@ -88,6 +73,21 @@ object VoiceStrict {
     const val LIVE_BUTTON_START_ONLY = "live_button_start_only"
     const val LIVE_LIKE_WAKE = "live_like_hey_jarvis"
     val LIVE_ORDER: List<String> = listOf(LIVE_TRUST_FULLY, LIVE_BUTTON_START_ONLY, LIVE_LIKE_WAKE)
+    /**
+     * "Better voice" (the owner's group, 2026-09-28; docs/JARVIS-API.md
+     * section 80). A second "hey Jarvis" detector on the PC that must agree
+     * with the first: ONE (the default, today's behaviour) or BOTH (the
+     * stricter choice, at once; going back to one asks first). It runs on the
+     * PC, on every "hey Jarvis" clip - this phone's included.
+     */
+    const val WAKE_ONE = "one"
+    const val WAKE_BOTH = "both"
+    /**
+     * Which stronger voice-ID model the PC uses: the measured one (the
+     * default, at once) or the newer, unmeasured one (asks first).
+     */
+    const val MODEL_TITANET = "titanet"
+    const val MODEL_RESNET = "resnet221"
 
     /** The `mode`s that change a setting, and what each value is called on the wire. */
     const val STRICTNESS = "strictness"
@@ -95,10 +95,10 @@ object VoiceStrict {
     const val MEMORY = "memory"
     const val SENSITIVE_MEMORY = "sensitive_memory"
     const val HANDS_FREE = "hands_free"
-    const val WAKE_CONFIRM = "wake_confirm"
-    const val VOICE_ID_MODEL = "voice_id_model"
     const val HANDS_FREE_SCREEN = "hands_free_screen"
     const val HANDS_FREE_LIVE = "hands_free_live"
+    const val WAKE_CONFIRM = "wake_confirm"
+    const val VOICE_ID_MODEL = "voice_id_model"
 
     /** `repeat.very_strict` / `repeat.balanced` - since the PC's voice module started. */
     data class Counts(
@@ -178,6 +178,18 @@ object VoiceStrict {
          */
         val handsFree: String = "",
         /**
+         * "screen_on_screen", "screen_aloud", or "" from a PC older than that
+         * setting (the screen then does not offer it). Any other value the PC
+         * sends is read as the strict one, "screen_on_screen".
+         */
+        val handsFreeScreen: String = "",
+        /**
+         * Jarvis Live's trust: one of [LIVE_ORDER], or "" from a PC older than
+         * that setting (the screen then does not offer it). Any other value
+         * the PC sends is read as the strictest, "live_like_hey_jarvis".
+         */
+        val handsFreeLive: String = "",
+        /**
          * "Better voice": "one", "both", or "" from a PC older than it (not
          * offered). Any other value is read as the strict one, "both".
          */
@@ -191,18 +203,6 @@ object VoiceStrict {
         val blocked: Map<String, String> = emptyMap(),
         /** `wake.confirm.note`: "both" is chosen but the PC cannot run the second detector. */
         val wakeConfirmNote: String = "",
-        /**
-         * "screen_on_screen", "screen_aloud", or "" from a PC older than that
-         * setting (the screen then does not offer it). Any other value the PC
-         * sends is read as the strict one, "screen_on_screen".
-         */
-        val handsFreeScreen: String = "",
-        /**
-         * Jarvis Live's trust: one of [LIVE_ORDER], or "" from a PC older than
-         * that setting (the screen then does not offer it). Any other value
-         * the PC sends is read as the strictest, "live_like_hey_jarvis".
-         */
-        val handsFreeLive: String = "",
         val voiceIsEnoughAllowed: Boolean = false,
         /** A spoken command needs at least this many seconds of speech (0 = not said). */
         val minCommandSeconds: Double = 0.0,
@@ -312,20 +312,6 @@ object VoiceStrict {
         else -> BUTTON_ONLY
     }
 
-    /** `gate.wake_confirm` as the screen reads it: "" stays "", "one" stays, anything else is "both". */
-    fun wakeConfirm(raw: String): String = when (raw) {
-        "" -> ""
-        WAKE_ONE -> WAKE_ONE
-        else -> WAKE_BOTH
-    }
-
-    /** `gate.voice_id_model` as the screen reads it: "" stays "", "resnet221" stays, anything else is "titanet". */
-    fun voiceIdModel(raw: String): String = when (raw) {
-        "" -> ""
-        MODEL_RESNET -> MODEL_RESNET
-        else -> MODEL_TITANET
-    }
-
     /**
      * `gate.hands_free_screen` as the screen reads it: "" (an older PC - not
      * offered) stays "", the two known values stay, and anything else is the
@@ -345,6 +331,20 @@ object VoiceStrict {
      * choice, which was not what the PC had).
      */
     fun handsFreeLive(raw: String): String = if (raw in LIVE_ORDER) raw else ""
+
+    /** `gate.wake_confirm` as the screen reads it: "" stays "", "one" stays, anything else is "both". */
+    fun wakeConfirm(raw: String): String = when (raw) {
+        "" -> ""
+        WAKE_ONE -> WAKE_ONE
+        else -> WAKE_BOTH
+    }
+
+    /** `gate.voice_id_model` as the screen reads it: "" stays "", "resnet221" stays, anything else is "titanet". */
+    fun voiceIdModel(raw: String): String = when (raw) {
+        "" -> ""
+        MODEL_RESNET -> MODEL_RESNET
+        else -> MODEL_TITANET
+    }
 
     /** Reads the stricter check out of a whole `/api/voice/status` body. Never throws. */
     fun parse(status: JsonObject?): View {
@@ -370,6 +370,12 @@ object VoiceStrict {
             handsFree = handsFree(gate.str("hands_free").ifEmpty {
                 settings?.str("hands_free").orEmpty()
             }),
+            handsFreeScreen = handsFreeScreen(gate.str("hands_free_screen").ifEmpty {
+                settings?.str("hands_free_screen").orEmpty()
+            }),
+            handsFreeLive = handsFreeLive(gate.str("hands_free_live").ifEmpty {
+                settings?.str("hands_free_live").orEmpty()
+            }),
             wakeConfirm = wakeConfirm(gate.str(WAKE_CONFIRM).ifEmpty {
                 settings?.str(WAKE_CONFIRM).orEmpty()
             }),
@@ -380,12 +386,6 @@ object VoiceStrict {
                 listOf(WAKE_CONFIRM, VOICE_ID_MODEL).associateWith { b.str(it) }.filterValues { it.isNotEmpty() }
             }.orEmpty(),
             wakeConfirmNote = status?.obj("wake")?.obj("confirm")?.str("note").orEmpty(),
-            handsFreeScreen = handsFreeScreen(gate.str("hands_free_screen").ifEmpty {
-                settings?.str("hands_free_screen").orEmpty()
-            }),
-            handsFreeLive = handsFreeLive(gate.str("hands_free_live").ifEmpty {
-                settings?.str("hands_free_live").orEmpty()
-            }),
             voiceIsEnoughAllowed = settings?.flag("voice_is_enough_allowed") ?: false,
             minCommandSeconds = settings?.num("min_command_seconds") ?: 0.0,
             rounds = training?.flag("rounds") ?: false,
@@ -471,17 +471,17 @@ object VoiceStrict {
         MEMORY to setOf(MEMORY_ON_SCREEN, MEMORY_ALOUD),
         SENSITIVE_MEMORY to setOf(SENSITIVE_ON_SCREEN, SENSITIVE_ALOUD),
         HANDS_FREE to setOf(BUTTON_ONLY, SAME_AS_BUTTON),
-        WAKE_CONFIRM to setOf(WAKE_BOTH, WAKE_ONE),
-        VOICE_ID_MODEL to setOf(MODEL_TITANET, MODEL_RESNET),
         HANDS_FREE_SCREEN to setOf(SCREEN_ON_SCREEN, SCREEN_ALOUD),
         HANDS_FREE_LIVE to LIVE_ORDER.toSet(),
+        WAKE_CONFIRM to setOf(WAKE_BOTH, WAKE_ONE),
+        VOICE_ID_MODEL to setOf(MODEL_TITANET, MODEL_RESNET),
     )
 
     /**
      * `{"mode": "strictness" | "privacy" | "memory" | "sensitive_memory" |
-     * "hands_free" | "wake_confirm" | "voice_id_model" | "hands_free_screen" |
-     * "hands_free_live", "value": ...}`. Only this app's fixed words go in, and only
-     * a value of that setting's own.
+     * "hands_free" | "hands_free_screen" | "hands_free_live" | "wake_confirm" |
+     * "voice_id_model", "value": ...}`. Only this app's fixed words go in, and
+     * only a value of that setting's own.
      */
     fun settingBody(setting: String, value: String): String {
         val values = requireNotNull(VALUES[setting]) { "not a voice setting: $setting" }
@@ -509,9 +509,9 @@ object VoiceStrict {
             (setting == MEMORY && value == MEMORY_ALOUD) ||
             (setting == SENSITIVE_MEMORY && value == SENSITIVE_ALOUD) ||
             (setting == HANDS_FREE && value == SAME_AS_BUTTON) ||
+            (setting == HANDS_FREE_SCREEN && value == SCREEN_ALOUD) ||
             (setting == WAKE_CONFIRM && value == WAKE_ONE) ||
-            (setting == VOICE_ID_MODEL && value == MODEL_RESNET) ||
-            (setting == HANDS_FREE_SCREEN && value == SCREEN_ALOUD)
+            (setting == VOICE_ID_MODEL && value == MODEL_RESNET)
 
     // ------------------------------------------------------------ answers --
 

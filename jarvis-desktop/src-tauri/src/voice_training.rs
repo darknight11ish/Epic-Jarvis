@@ -710,19 +710,6 @@ pub(crate) fn voice_setting(
         // default) raises the voice card and is held on a stale link.
         ("hands_free", "button_only") => Ok(("hands_free", "button_only", false)),
         ("hands_free", "same_as_button") => Ok(("hands_free", "same_as_button", true)),
-        // Talk-to-type on the PC (the owner's decision, 2026-09-27): OFF at
-        // once; ON raises the voice card and is held on a stale link.
-        ("talk_to_type", "off") => Ok(("talk_to_type", "off", false)),
-        ("talk_to_type", "on") => Ok(("talk_to_type", "on", true)),
-        // "Better voice" (2026-09-28, docs/JARVIS-API.md section 80). Two
-        // "hey Jarvis" detectors that must agree only narrows when Jarvis
-        // wakes, so it applies at once; going back to one raises the voice
-        // card. The newer, unmeasured voice-ID model raises the card; the
-        // measured one applies at once.
-        ("wake_confirm", "both") => Ok(("wake_confirm", "both", false)),
-        ("wake_confirm", "one") => Ok(("wake_confirm", "one", true)),
-        ("voice_id_model", "titanet") => Ok(("voice_id_model", "titanet", false)),
-        ("voice_id_model", "resnet221") => Ok(("voice_id_model", "resnet221", true)),
         // Answers about the screen after "Hey Jarvis", under "Only trust the
         // talk button" (the owner's decision, 2026-09-28). Keeping them on
         // screen is the default and applies at once; reading them aloud
@@ -750,6 +737,19 @@ pub(crate) fn voice_setting(
         // on a stale link).
         ("live_end", "live_end_app_lock") => Ok(("live_end", "live_end_app_lock", false)),
         ("live_end", "live_end_windows_lock") => Ok(("live_end", "live_end_windows_lock", true)),
+        // Talk-to-type on the PC (the owner's decision, 2026-09-27): OFF at
+        // once; ON raises the voice card and is held on a stale link.
+        ("talk_to_type", "off") => Ok(("talk_to_type", "off", false)),
+        ("talk_to_type", "on") => Ok(("talk_to_type", "on", true)),
+        // "Better voice" (2026-09-28, docs/JARVIS-API.md section 80). Two
+        // "hey Jarvis" detectors that must agree only narrows when Jarvis
+        // wakes, so it applies at once; going back to one raises the voice
+        // card. The newer, unmeasured voice-ID model raises the card; the
+        // measured one applies at once.
+        ("wake_confirm", "both") => Ok(("wake_confirm", "both", false)),
+        ("wake_confirm", "one") => Ok(("wake_confirm", "one", true)),
+        ("voice_id_model", "titanet") => Ok(("voice_id_model", "titanet", false)),
+        ("voice_id_model", "resnet221") => Ok(("voice_id_model", "resnet221", true)),
         _ => Err("That is not one of the voice settings.".to_string()),
     }
 }
@@ -1710,36 +1710,6 @@ mod tests {
         assert!(voice_setting("hands_free_screen", "same_as_button").is_err());
         assert!(voice_setting("hands_free", "screen_aloud").is_err());
         assert!(voice_setting("mode", "broad").is_err());
-        // Talk-to-type (2026-09-28): on is the card, off is at once.
-        assert_eq!(
-            voice_setting("talk_to_type", "on"),
-            Ok(("talk_to_type", "on", true))
-        );
-        assert_eq!(
-            voice_setting("talk_to_type", "off"),
-            Ok(("talk_to_type", "off", false))
-        );
-        assert!(voice_setting("talk_to_type", "yes").is_err());
-        // "Better voice" (2026-09-28): both detectors and the measured model
-        // at once; one detector and the unmeasured model are the card.
-        assert_eq!(
-            voice_setting("wake_confirm", "both"),
-            Ok(("wake_confirm", "both", false))
-        );
-        assert_eq!(
-            voice_setting("wake_confirm", "one"),
-            Ok(("wake_confirm", "one", true))
-        );
-        assert_eq!(
-            voice_setting("voice_id_model", "titanet"),
-            Ok(("voice_id_model", "titanet", false))
-        );
-        assert_eq!(
-            voice_setting("voice_id_model", "resnet221"),
-            Ok(("voice_id_model", "resnet221", true))
-        );
-        assert!(voice_setting("voice_id_model", "resnet293").is_err());
-        assert!(voice_setting("wake_confirm", "on").is_err());
         // Jarvis Live's three choices: the strictest never loosens.
         assert_eq!(
             voice_setting("hands_free_live", "live_like_hey_jarvis"),
@@ -1783,6 +1753,36 @@ mod tests {
             "unknown: held"
         );
         assert!(!live_trust_loosens("live_like_hey_jarvis", None));
+        // Talk-to-type (2026-09-28): on is the card, off is at once.
+        assert_eq!(
+            voice_setting("talk_to_type", "on"),
+            Ok(("talk_to_type", "on", true))
+        );
+        assert_eq!(
+            voice_setting("talk_to_type", "off"),
+            Ok(("talk_to_type", "off", false))
+        );
+        assert!(voice_setting("talk_to_type", "yes").is_err());
+        // "Better voice" (2026-09-28): both detectors and the measured model
+        // at once; one detector and the unmeasured model are the card.
+        assert_eq!(
+            voice_setting("wake_confirm", "both"),
+            Ok(("wake_confirm", "both", false))
+        );
+        assert_eq!(
+            voice_setting("wake_confirm", "one"),
+            Ok(("wake_confirm", "one", true))
+        );
+        assert_eq!(
+            voice_setting("voice_id_model", "titanet"),
+            Ok(("voice_id_model", "titanet", false))
+        );
+        assert_eq!(
+            voice_setting("voice_id_model", "resnet221"),
+            Ok(("voice_id_model", "resnet221", true))
+        );
+        assert!(voice_setting("voice_id_model", "resnet293").is_err());
+        assert!(voice_setting("wake_confirm", "on").is_err());
     }
 
     #[test]

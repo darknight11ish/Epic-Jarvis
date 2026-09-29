@@ -13,6 +13,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,6 +71,7 @@ import kotlinx.coroutines.launch
 internal fun ChatbotSection(
     canAct: Boolean,
     privateHidden: Boolean = false,
+    onOpenHistory: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
@@ -79,19 +81,25 @@ internal fun ChatbotSection(
     var missing by remember { mutableStateOf(false) }
     var gone by remember { mutableStateOf(false) }
     var readError by remember { mutableStateOf<String?>(null) }
-    var which by remember { mutableStateOf("") }
-    var goal by remember { mutableStateOf("") }
-    var messages by remember { mutableStateOf("") }
-    var minutes by remember { mutableStateOf("") }
-    var never by remember { mutableStateOf("") }
-    var newMessages by remember { mutableStateOf("") }
-    var newMinutes by remember { mutableStateOf("") }
-    var newNever by remember { mutableStateOf("") }
-    var limitsFor by remember { mutableStateOf("") }
+    // The form is saveable (the chat audit, 2026-09-28, phone B3): this plate
+    // sits in Brain's scrolling list, and plain `remember` lost what was
+    // typed when it scrolled away or the phone turned. The goal is words the
+    // owner is about to send to an outside chatbot anyway (never memory,
+    // email or files - rule 1), so keeping them in the screen's saved state
+    // hides nothing new; Android keeps that state only for this screen.
+    var which by rememberSaveable { mutableStateOf("") }
+    var goal by rememberSaveable { mutableStateOf("") }
+    var messages by rememberSaveable { mutableStateOf("") }
+    var minutes by rememberSaveable { mutableStateOf("") }
+    var never by rememberSaveable { mutableStateOf("") }
+    var newMessages by rememberSaveable { mutableStateOf("") }
+    var newMinutes by rememberSaveable { mutableStateOf("") }
+    var newNever by rememberSaveable { mutableStateOf("") }
+    var limitsFor by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
-    var several by remember { mutableStateOf(false) }
-    var picked by remember { mutableStateOf(setOf<String>()) }
+    var several by rememberSaveable { mutableStateOf(false) }
+    var picked by rememberSaveable { mutableStateOf(setOf<String>()) }
     var compareGone by remember { mutableStateOf(false) }
     // Which one this plate started or saw going last, so that one's end
     // stays on screen when both a conversation and a comparison have ended.
@@ -233,6 +241,7 @@ internal fun ChatbotSection(
                     if (showCompare && c != null) {
                         ComparePart(
                             c = c, canAct = canAct, busy = busy, privateHidden = privateHidden,
+                            onOpenHistory = onOpenHistory,
                             onAction = { action ->
                                 perform {
                                     when (action) {
@@ -246,6 +255,7 @@ internal fun ChatbotSection(
                     } else if (s != null) {
                         SessionPart(
                             v = v, s = s, canAct = canAct, busy = busy, privateHidden = privateHidden,
+                            onOpenHistory = onOpenHistory,
                             newMessages = newMessages, newMinutes = newMinutes, newNever = newNever,
                             onNewMessages = { newMessages = it.filter(Char::isDigit).take(3) },
                             onNewMinutes = { newMinutes = it.filter(Char::isDigit).take(3) },
@@ -363,6 +373,7 @@ private fun SessionPart(
     onNewNever: (String) -> Unit,
     onAction: (String) -> Unit,
     onLimits: () -> Unit,
+    onOpenHistory: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     Text(
@@ -373,6 +384,12 @@ private fun SessionPart(
     if (s.live) {
         Text(Chatbot.statusLine(s), style = MaterialTheme.typography.bodySmall,
             color = if (s.state == "paused") chrome.warnInk else chrome.textMid)
+    }
+    // "Solve it here": paused at a captcha, a sign-in page or an "unusual
+    // activity" page (com.jarvis.client.net.Handoff).
+    val waiting by JarvisRuntime.handoffOffer.collectAsState()
+    if (s.state == "paused" && waiting?.kind == "chatbot" && waiting?.id == s.id) {
+        Quiet(com.jarvis.client.net.Handoff.HERE_BUTTON, onClick = { JarvisRuntime.openHandoff() })
     }
     if (s.state != "refused") {
         Text(Chatbot.progressLine(s), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
@@ -464,6 +481,7 @@ private fun SessionPart(
                 Pill("outside text", color = chrome.warnInk)
             }
             Text(Chatbot.SUMMARY_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            HistoryLine(s.history, onOpenHistory)
             if (summary.answer.isNotEmpty()) {
                 Text(summary.answer, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
             }
@@ -514,6 +532,21 @@ private fun TurnPart(name: String, t: Chatbot.Turn) {
 }
 
 /** A small heading and its bullet lines, inside the comparison's summary. */
+/**
+ * "Kept in your encrypted chat history" - or why not - and, when kept, a way
+ * to it (the second chat audit, phone C5). Nothing when the PC did not say.
+ */
+@Composable
+internal fun HistoryLine(h: Chatbot.HistoryAnswer?, onOpenHistory: (() -> Unit)?) {
+    val chrome = LocalChrome.current
+    val line = Chatbot.historyLine(h)
+    if (line.isEmpty()) return
+    Text(line, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    if (h != null && h.kept && onOpenHistory != null) {
+        Quiet(Chatbot.HISTORY_OPEN, onClick = onOpenHistory)
+    }
+}
+
 @Composable
 private fun SummaryLines(title: String, lines: List<String>) {
     if (lines.isEmpty()) return
@@ -530,6 +563,7 @@ private fun ComparePart(
     busy: Boolean,
     privateHidden: Boolean,
     onAction: (String) -> Unit,
+    onOpenHistory: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     Text(
@@ -597,6 +631,7 @@ private fun ComparePart(
                 Pill("outside text", color = chrome.warnInk)
             }
             Text(Chatbot.COMPARE_SUMMARY_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+            HistoryLine(c.history, onOpenHistory)
             if (sm.answer.isNotEmpty()) {
                 Text(sm.answer, style = MaterialTheme.typography.bodySmall, color = chrome.textHi)
             }

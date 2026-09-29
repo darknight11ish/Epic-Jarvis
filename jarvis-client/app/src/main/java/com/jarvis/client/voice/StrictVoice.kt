@@ -153,73 +153,6 @@ object StrictVoice {
     const val HANDS_FREE_TITLE = "Hands-free (\"Hey Jarvis\")"
 
     /**
-     * "Better voice" (the owner's group, 2026-09-28): a second "hey Jarvis"
-     * detector on the PC that must agree with the first. One is the default
-     * (today's behaviour, marked "(default)"); two is the stricter choice and
-     * applies at once; going back to one asks first. It checks every "hey
-     * Jarvis" clip on the PC - this phone's too - so the phone's own listener
-     * is unchanged. Two cannot be chosen while the PC does not have the
-     * second detector ([blockedWhy]).
-     */
-    val WAKE_CONFIRM: List<Choice> = listOf(
-        Choice(
-            VoiceStrict.WAKE_ONE,
-            "One detector (default)",
-            "One detector listens for \"hey Jarvis\", as before. Your voice is still checked every " +
-                "time before anything is written down or done.",
-        ),
-        Choice(
-            VoiceStrict.WAKE_BOTH,
-            "Two detectors must agree",
-            "A second, differently built detector (microWakeWord) must also hear \"hey Jarvis\" " +
-                "within a second. Fewer false wake-ups; it may miss you a little more often. " +
-                "Measure it on your PC first (the backend README, \"Better voice\").",
-        ),
-    )
-
-    const val WAKE_CONFIRM_TITLE = "Second \"hey Jarvis\" check"
-
-    /**
-     * Which stronger voice-ID model the PC uses (the same day). The measured
-     * one is the default and applies at once; the newer, unmeasured one asks
-     * first and cannot be chosen until its file is on the PC. Nothing
-     * switches by itself.
-     */
-    val VOICE_ID_MODEL: List<Choice> = listOf(
-        Choice(
-            VoiceStrict.MODEL_TITANET,
-            "The stronger one (measured) (recommended)",
-            "NVIDIA's TitaNet. Its bars were measured on real voices. It tells your voice from other " +
-                "people's. It cannot tell your voice from a recording or a copy of it.",
-        ),
-        Choice(
-            VoiceStrict.MODEL_RESNET,
-            "The newer one (not measured yet)",
-            "WeSpeaker's ResNet221. Not measured on real voices here, so Jarvis cannot say how well it " +
-                "keeps other people out; on computer-made voices it let in far more of them. It is " +
-                "slower, too. It cannot tell your voice from a recording or a copy of it either.",
-        ),
-    )
-
-    const val VOICE_ID_MODEL_TITLE = "Voice-ID model"
-
-    /** The choice of each "Better voice" setting that needs something installed on the PC. */
-    private val NEEDS_INSTALL = mapOf(
-        VoiceStrict.WAKE_CONFIRM to VoiceStrict.WAKE_BOTH,
-        VoiceStrict.VOICE_ID_MODEL to VoiceStrict.MODEL_RESNET,
-    )
-
-    /**
-     * Why [value] cannot be chosen for [setting] now - the PC's own words
-     * (`gate.settings.blocked`), as a sentence - or null. Never for a choice
-     * that is already on: going back is always allowed.
-     */
-    fun blockedWhy(setting: String, value: String, view: VoiceStrict.View): String? {
-        if (NEEDS_INSTALL[setting] != value || current(setting, view) == value) return null
-        return view.blocked[setting]?.takeIf { it.isNotBlank() }?.let { VoiceRounds.sentence(it) }
-    }
-
-    /**
      * Answers about the screen ("Look at this", "Watch with me") to a
      * question started with "Hey Jarvis", under "Only trust the talk
      * button" (the owner's decision, 2026-09-28): kept on screen by default;
@@ -290,6 +223,73 @@ object StrictVoice {
         "This only matters when \"Only trust the talk button\" is chosen above. With \"Same as the " +
             "talk button\", answers about your screen or the camera are read aloud already."
 
+    /**
+     * "Better voice" (the owner's group, 2026-09-28): a second "hey Jarvis"
+     * detector on the PC that must agree with the first. One is the default
+     * (today's behaviour, marked "(default)"); two is the stricter choice and
+     * applies at once; going back to one asks first. It checks every "hey
+     * Jarvis" clip on the PC - this phone's too - so the phone's own listener
+     * is unchanged. Two cannot be chosen while the PC does not have the
+     * second detector ([blockedWhy]).
+     */
+    val WAKE_CONFIRM: List<Choice> = listOf(
+        Choice(
+            VoiceStrict.WAKE_ONE,
+            "One detector (default)",
+            "One detector listens for \"hey Jarvis\", as before. Your voice is still checked every " +
+                "time before anything is written down or done.",
+        ),
+        Choice(
+            VoiceStrict.WAKE_BOTH,
+            "Two detectors must agree",
+            "A second, differently built detector (microWakeWord) must also hear \"hey Jarvis\" " +
+                "within a second. Fewer false wake-ups; it may miss you a little more often. " +
+                "Measure it on your PC first (the backend README, \"Better voice\").",
+        ),
+    )
+
+    const val WAKE_CONFIRM_TITLE = "Second \"hey Jarvis\" check"
+
+    /**
+     * Which stronger voice-ID model the PC uses (the same day). The measured
+     * one is the default and applies at once; the newer, unmeasured one asks
+     * first and cannot be chosen until its file is on the PC. Nothing
+     * switches by itself.
+     */
+    val VOICE_ID_MODEL: List<Choice> = listOf(
+        Choice(
+            VoiceStrict.MODEL_TITANET,
+            "The stronger one (measured) (recommended)",
+            "NVIDIA's TitaNet. Its bars were measured on real voices. It tells your voice from other " +
+                "people's. It cannot tell your voice from a recording or a copy of it.",
+        ),
+        Choice(
+            VoiceStrict.MODEL_RESNET,
+            "The newer one (not measured yet)",
+            "WeSpeaker's ResNet221. Not measured on real voices here, so Jarvis cannot say how well it " +
+                "keeps other people out; on computer-made voices it let in far more of them. It is " +
+                "slower, too. It cannot tell your voice from a recording or a copy of it either.",
+        ),
+    )
+
+    const val VOICE_ID_MODEL_TITLE = "Voice-ID model"
+
+    /** The choice of each "Better voice" setting that needs something installed on the PC. */
+    private val NEEDS_INSTALL = mapOf(
+        VoiceStrict.WAKE_CONFIRM to VoiceStrict.WAKE_BOTH,
+        VoiceStrict.VOICE_ID_MODEL to VoiceStrict.MODEL_RESNET,
+    )
+
+    /**
+     * Why [value] cannot be chosen for [setting] now - the PC's own words
+     * (`gate.settings.blocked`), as a sentence - or null. Never for a choice
+     * that is already on: going back is always allowed.
+     */
+    fun blockedWhy(setting: String, value: String, view: VoiceStrict.View): String? {
+        if (NEEDS_INSTALL[setting] != value || current(setting, view) == value) return null
+        return view.blocked[setting]?.takeIf { it.isNotBlank() }?.let { VoiceRounds.sentence(it) }
+    }
+
     const val PRIVACY_ONLY_VERY_STRICT =
         "\"Voice check is enough\" can only be chosen while the check is very strict."
 
@@ -342,10 +342,10 @@ object StrictVoice {
         VoiceStrict.MEMORY -> MEMORY
         VoiceStrict.SENSITIVE_MEMORY -> SENSITIVE_MEMORY
         VoiceStrict.HANDS_FREE -> HANDS_FREE
-        VoiceStrict.WAKE_CONFIRM -> WAKE_CONFIRM
-        VoiceStrict.VOICE_ID_MODEL -> VOICE_ID_MODEL
         VoiceStrict.HANDS_FREE_SCREEN -> HANDS_FREE_SCREEN
         VoiceStrict.HANDS_FREE_LIVE -> HANDS_FREE_LIVE
+        VoiceStrict.WAKE_CONFIRM -> WAKE_CONFIRM
+        VoiceStrict.VOICE_ID_MODEL -> VOICE_ID_MODEL
         else -> PRIVACY
     }
 
@@ -355,10 +355,10 @@ object StrictVoice {
         VoiceStrict.MEMORY -> view.memory
         VoiceStrict.SENSITIVE_MEMORY -> view.sensitiveMemory
         VoiceStrict.HANDS_FREE -> view.handsFree
-        VoiceStrict.WAKE_CONFIRM -> view.wakeConfirm
-        VoiceStrict.VOICE_ID_MODEL -> view.voiceIdModel
         VoiceStrict.HANDS_FREE_SCREEN -> view.handsFreeScreen
         VoiceStrict.HANDS_FREE_LIVE -> view.handsFreeLive
+        VoiceStrict.WAKE_CONFIRM -> view.wakeConfirm
+        VoiceStrict.VOICE_ID_MODEL -> view.voiceIdModel
         else -> view.privacy
     }
 

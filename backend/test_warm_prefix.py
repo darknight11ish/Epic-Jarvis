@@ -432,6 +432,11 @@ def t_after_learning():
         out = AG.warm_after_learning(learner=lambda: (fake.url, MODEL), spawn=_inline)
         check("the last question went to the bigger model on both cards: nothing sent",
               out["state"] == "skipped" and len(fake.chats()) == n, out)
+        # A game now stays a game for the rest of its conversation id (a
+        # game's own id is remembered), so the plain question below is a
+        # new conversation: forget the pirate game first.
+        import jarvis_intake
+        jarvis_intake.forget_games_for_tests()
         real_turn(fake, enabled=EVERY)
         out = AG.warm_after_learning(learner=lambda: (_ for _ in ()).throw(RuntimeError()),
                                      spawn=_inline)

@@ -727,6 +727,106 @@ await check("hands-free: \"only trust the talk button\" is at once; going back a
   assert.match(rust, /\("hands_free", "button_only"\) => \{?\s*Ok\(\("hands_free", "button_only", false\)\)/);
 });
 
+/** The same status with the sixth setting ("hands_free_screen") at
+ *  `value`, or, with `value` undefined, from a PC older than it. */
+const withScreen = (st, value, where = "settings") => {
+  const c = JSON.parse(JSON.stringify(st));
+  delete c.gate.settings.hands_free_screen;
+  delete c.gate.hands_free_screen;
+  if (value === undefined) return c;
+  if (where === "settings") c.gate.settings.hands_free_screen = value;
+  else c.gate.hands_free_screen = value;
+  return c;
+};
+
+await check("answers about your screen or the camera after \"Hey Jarvis\": on screen by default, the agreed words, and only when the PC has it", async () => {
+  assert.deepEqual(VT.HANDS_FREE_SCREEN.map(VT.choiceText), ["Keep on screen (recommended)", "Read aloud"]);
+  assert.equal(VT.HANDS_FREE_SCREEN[0].detail,
+    "With \"Only trust the talk button\" chosen, a question about your screen or the camera that starts with \"Hey Jarvis\" gets a written answer only.");
+  assert.equal(VT.HANDS_FREE_SCREEN[1].detail,
+    "Those answers are read aloud, even with \"Only trust the talk button\" chosen. Anyone near the speaker will hear them.");
+  assert.equal(VT.SCREEN_ONLY_WHEN_STRICT_NOTE,
+    "This only matters when \"Only trust the talk button\" is chosen above. With \"Same as the talk button\", answers about your screen or the camera are read aloud already.");
+  assert.equal(VT.loosens("hands_free_screen", "screen_aloud"), true);
+  assert.equal(VT.loosens("hands_free_screen", "screen_on_screen"), false);
+  // The REAL status (the backend's own, regenerated) carries it.
+  assert.equal(VT.settingsView(S.strong_ready).handsFreeScreen, "screen_on_screen");
+  assert.equal(VT.settingsView(withScreen(S.strong_ready, "screen_aloud", "gate")).handsFreeScreen, "screen_aloud");
+  assert.equal(VT.settingsView(withScreen(S.strong_ready, "loud")).handsFreeScreen, "");
+  assert.equal(VT.settingsView(withScreen(S.strong_ready)).handsFreeScreen, "");
+
+  // Under "Same as the talk button" (the real status's default): shown,
+  // with the note that it only matters under the stricter choice - and
+  // both choices can still be pressed.
+  const page = await open(S.strong_ready);
+  const got = await page.evaluate(() => ({
+    shown: !document.getElementById("vt-screen-box").hidden,
+    title: document.querySelector("#vt-screen-box h3").textContent,
+    labels: [...document.querySelectorAll("#vt-screen button")].map((b) => b.textContent),
+    pressed: document.querySelector('#vt-screen button[aria-pressed="true"]').dataset.value,
+    disabled: [...document.querySelectorAll("#vt-screen button")].map((b) => b.disabled),
+  }));
+  const note = await text(page, "vt-screen-note");
+  await page.close();
+  assert.equal(got.shown, true, "not offered by a PC that reports it");
+  assert.equal(got.title, "Answers about your screen or the camera after \"Hey Jarvis\"");
+  assert.deepEqual(got.labels, ["Keep on screen (recommended)", "Read aloud"]);
+  assert.equal(got.pressed, "screen_on_screen");
+  assert.deepEqual(got.disabled, [false, false]);
+  assert.equal(note, `${VT.HANDS_FREE_SCREEN[0].detail} ${VT.SCREEN_ONLY_WHEN_STRICT_NOTE}`);
+  assert.equal(VT.screenCovered(VT.settingsView(S.strong_ready)), true);
+  // Under "Only trust the talk button": no such note - this is where it matters.
+  const strict = await open(withHandsFree(S.strong_ready, "button_only"));
+  const strictNote = await text(strict, "vt-screen-note");
+  await strict.close();
+  assert.equal(strictNote, VT.HANDS_FREE_SCREEN[0].detail);
+  assert.equal(VT.screenCovered(VT.settingsView(withHandsFree(S.strong_ready, "button_only"))), false);
+  // A PC without it: not offered at all.
+  const old = await open(withScreen(S.strong_ready));
+  const hidden = await old.evaluate(() => document.getElementById("vt-screen-box").hidden);
+  await old.close();
+  assert.equal(hidden, true);
+});
+
+await check("answers about your screen: keeping them on screen is at once; Read aloud asks, and is held on a stale link", async () => {
+  const strict = withHandsFree(S.strong_ready, "button_only");
+  // Read aloud -> keep on screen: sent at once, even on a stale link.
+  const tighten = await open(withScreen(strict, "screen_aloud"), { link: { stale: true } });
+  await tighten.click('#vt-screen button[data-value="screen_on_screen"]');
+  await tighten.waitForTimeout(150);
+  const sentTight = await calls(tighten, "set_voice_setting");
+  await tighten.close();
+  assert.deepEqual(sentTight, [{ setting: "hands_free_screen", value: "screen_on_screen" }]);
+  // Keep on screen -> read aloud, on a stale link: nothing sent, and it says why.
+  const held = await open(strict, { link: { stale: true } });
+  await held.click('#vt-screen button[data-value="screen_aloud"]');
+  await held.waitForTimeout(150);
+  const none = await calls(held, "set_voice_setting");
+  const said = await text(held, "vt-setting-status");
+  await held.close();
+  assert.deepEqual(none, []);
+  assert.match(said, /catching up/);
+  // On a live link it is sent - the PC answers with the card.
+  const live = await open(strict);
+  await live.click('#vt-screen button[data-value="screen_aloud"]');
+  await live.waitForTimeout(150);
+  const sent = await calls(live, "set_voice_setting");
+  await live.close();
+  assert.deepEqual(sent, [{ setting: "hands_free_screen", value: "screen_aloud" }]);
+  // The waiting line and the last-card lines name it, in the same shape.
+  assert.match(VT.settingWaitingLine({ setting: "hands_free_screen", value: "screen_aloud" }, WHERE),
+    /^Waiting for your approval to change answers about your screen or the camera after "Hey Jarvis" to "Read aloud"\./);
+  const card = { ...S.balanced.gate.training.last, setting: "hands_free_screen", value: "screen_aloud" };
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "setting_changed" }, strict), "Approved: \"Read aloud\" is on now.");
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "denied" }, strict), "You said no, so \"Keep on screen\" stays.");
+  assert.equal(W.lastTrainingLine({ ...card, outcome: "refused", reason: "no" }, strict),
+    "Your PC refused the change to answers about your screen or the camera after \"Hey Jarvis\": no.");
+  // CONTROL: the Rust knows the setting, and holds only its loosening.
+  const rust = read("src-tauri/src/voice_training.rs");
+  assert.match(rust, /\("hands_free_screen", "screen_aloud"\) => \{?\s*Ok\(\("hands_free_screen", "screen_aloud", true\)\)/);
+  assert.match(rust, /\("hands_free_screen", "screen_on_screen"\) => \{?\s*Ok\(\("hands_free_screen", "screen_on_screen", false\)\)/);
+});
+
 /** The same status with talk-to-type at `value`, or, with `value`
  *  undefined, from a PC older than it. */
 const withTalkType = (st, value, where = "settings") => {
@@ -898,106 +998,6 @@ await check("better voice: two detectors at once, back to one is a card; the new
   assert.match(rust, /\("wake_confirm", "both"\) => \{?\s*Ok\(\("wake_confirm", "both", false\)\)/);
   assert.match(rust, /\("voice_id_model", "resnet221"\) => \{?\s*Ok\(\("voice_id_model", "resnet221", true\)\)/);
   assert.match(rust, /\("voice_id_model", "titanet"\) => \{?\s*Ok\(\("voice_id_model", "titanet", false\)\)/);
-});
-
-/** The same status with the sixth setting ("hands_free_screen") at
- *  `value`, or, with `value` undefined, from a PC older than it. */
-const withScreen = (st, value, where = "settings") => {
-  const c = JSON.parse(JSON.stringify(st));
-  delete c.gate.settings.hands_free_screen;
-  delete c.gate.hands_free_screen;
-  if (value === undefined) return c;
-  if (where === "settings") c.gate.settings.hands_free_screen = value;
-  else c.gate.hands_free_screen = value;
-  return c;
-};
-
-await check("answers about your screen or the camera after \"Hey Jarvis\": on screen by default, the agreed words, and only when the PC has it", async () => {
-  assert.deepEqual(VT.HANDS_FREE_SCREEN.map(VT.choiceText), ["Keep on screen (recommended)", "Read aloud"]);
-  assert.equal(VT.HANDS_FREE_SCREEN[0].detail,
-    "With \"Only trust the talk button\" chosen, a question about your screen or the camera that starts with \"Hey Jarvis\" gets a written answer only.");
-  assert.equal(VT.HANDS_FREE_SCREEN[1].detail,
-    "Those answers are read aloud, even with \"Only trust the talk button\" chosen. Anyone near the speaker will hear them.");
-  assert.equal(VT.SCREEN_ONLY_WHEN_STRICT_NOTE,
-    "This only matters when \"Only trust the talk button\" is chosen above. With \"Same as the talk button\", answers about your screen or the camera are read aloud already.");
-  assert.equal(VT.loosens("hands_free_screen", "screen_aloud"), true);
-  assert.equal(VT.loosens("hands_free_screen", "screen_on_screen"), false);
-  // The REAL status (the backend's own, regenerated) carries it.
-  assert.equal(VT.settingsView(S.strong_ready).handsFreeScreen, "screen_on_screen");
-  assert.equal(VT.settingsView(withScreen(S.strong_ready, "screen_aloud", "gate")).handsFreeScreen, "screen_aloud");
-  assert.equal(VT.settingsView(withScreen(S.strong_ready, "loud")).handsFreeScreen, "");
-  assert.equal(VT.settingsView(withScreen(S.strong_ready)).handsFreeScreen, "");
-
-  // Under "Same as the talk button" (the real status's default): shown,
-  // with the note that it only matters under the stricter choice - and
-  // both choices can still be pressed.
-  const page = await open(S.strong_ready);
-  const got = await page.evaluate(() => ({
-    shown: !document.getElementById("vt-screen-box").hidden,
-    title: document.querySelector("#vt-screen-box h3").textContent,
-    labels: [...document.querySelectorAll("#vt-screen button")].map((b) => b.textContent),
-    pressed: document.querySelector('#vt-screen button[aria-pressed="true"]').dataset.value,
-    disabled: [...document.querySelectorAll("#vt-screen button")].map((b) => b.disabled),
-  }));
-  const note = await text(page, "vt-screen-note");
-  await page.close();
-  assert.equal(got.shown, true, "not offered by a PC that reports it");
-  assert.equal(got.title, "Answers about your screen or the camera after \"Hey Jarvis\"");
-  assert.deepEqual(got.labels, ["Keep on screen (recommended)", "Read aloud"]);
-  assert.equal(got.pressed, "screen_on_screen");
-  assert.deepEqual(got.disabled, [false, false]);
-  assert.equal(note, `${VT.HANDS_FREE_SCREEN[0].detail} ${VT.SCREEN_ONLY_WHEN_STRICT_NOTE}`);
-  assert.equal(VT.screenCovered(VT.settingsView(S.strong_ready)), true);
-  // Under "Only trust the talk button": no such note - this is where it matters.
-  const strict = await open(withHandsFree(S.strong_ready, "button_only"));
-  const strictNote = await text(strict, "vt-screen-note");
-  await strict.close();
-  assert.equal(strictNote, VT.HANDS_FREE_SCREEN[0].detail);
-  assert.equal(VT.screenCovered(VT.settingsView(withHandsFree(S.strong_ready, "button_only"))), false);
-  // A PC without it: not offered at all.
-  const old = await open(withScreen(S.strong_ready));
-  const hidden = await old.evaluate(() => document.getElementById("vt-screen-box").hidden);
-  await old.close();
-  assert.equal(hidden, true);
-});
-
-await check("answers about your screen: keeping them on screen is at once; Read aloud asks, and is held on a stale link", async () => {
-  const strict = withHandsFree(S.strong_ready, "button_only");
-  // Read aloud -> keep on screen: sent at once, even on a stale link.
-  const tighten = await open(withScreen(strict, "screen_aloud"), { link: { stale: true } });
-  await tighten.click('#vt-screen button[data-value="screen_on_screen"]');
-  await tighten.waitForTimeout(150);
-  const sentTight = await calls(tighten, "set_voice_setting");
-  await tighten.close();
-  assert.deepEqual(sentTight, [{ setting: "hands_free_screen", value: "screen_on_screen" }]);
-  // Keep on screen -> read aloud, on a stale link: nothing sent, and it says why.
-  const held = await open(strict, { link: { stale: true } });
-  await held.click('#vt-screen button[data-value="screen_aloud"]');
-  await held.waitForTimeout(150);
-  const none = await calls(held, "set_voice_setting");
-  const said = await text(held, "vt-setting-status");
-  await held.close();
-  assert.deepEqual(none, []);
-  assert.match(said, /catching up/);
-  // On a live link it is sent - the PC answers with the card.
-  const live = await open(strict);
-  await live.click('#vt-screen button[data-value="screen_aloud"]');
-  await live.waitForTimeout(150);
-  const sent = await calls(live, "set_voice_setting");
-  await live.close();
-  assert.deepEqual(sent, [{ setting: "hands_free_screen", value: "screen_aloud" }]);
-  // The waiting line and the last-card lines name it, in the same shape.
-  assert.match(VT.settingWaitingLine({ setting: "hands_free_screen", value: "screen_aloud" }, WHERE),
-    /^Waiting for your approval to change answers about your screen or the camera after "Hey Jarvis" to "Read aloud"\./);
-  const card = { ...S.balanced.gate.training.last, setting: "hands_free_screen", value: "screen_aloud" };
-  assert.equal(W.lastTrainingLine({ ...card, outcome: "setting_changed" }, strict), "Approved: \"Read aloud\" is on now.");
-  assert.equal(W.lastTrainingLine({ ...card, outcome: "denied" }, strict), "You said no, so \"Keep on screen\" stays.");
-  assert.equal(W.lastTrainingLine({ ...card, outcome: "refused", reason: "no" }, strict),
-    "Your PC refused the change to answers about your screen or the camera after \"Hey Jarvis\": no.");
-  // CONTROL: the Rust knows the setting, and holds only its loosening.
-  const rust = read("src-tauri/src/voice_training.rs");
-  assert.match(rust, /\("hands_free_screen", "screen_aloud"\) => \{?\s*Ok\(\("hands_free_screen", "screen_aloud", true\)\)/);
-  assert.match(rust, /\("hands_free_screen", "screen_on_screen"\) => \{?\s*Ok\(\("hands_free_screen", "screen_on_screen", false\)\)/);
 });
 
 await check("the guided test: 20 sentences, one request, the result in words", async () => {

@@ -689,10 +689,12 @@ $PATCHES = @(
     # index, nothing written) and GET /api/memory/fact-history ("history of
     # this fact" - an erased version never with its words). Reads for the
     # apps only; nothing here reaches the AI model. Its jarvis_hud.py
-    # context is answer-sources.patch's own install block, so it goes after
-    # it - last, like every new patch. second-card-suggest.patch, above it
-    # in this list, touches a different part of the file (the POST route
-    # chain). Needs jarvis_brain_reads.py copied in; without it the banner
+    # context was answer-sources.patch's own install block; since GitHub's
+    # main was merged with the research branch (2026-09-28) it is
+    # forget-range.patch's install block, the last of that branch's chain
+    # (projects -> chatbot-routes -> live -> forget-range), so it goes after
+    # it. second-card-suggest.patch touches a different part of the file
+    # (the POST route chain). Needs jarvis_brain_reads.py copied in; without it the banner
     # says so and the two routes are simply not there (404).
     'brain-reads.patch'
     # Warm-up with words, after a learning pass (speed fix, 2026-09-28): one
@@ -783,6 +785,20 @@ $PATCHES = @(
     # and jarvis_sky_places.py copied in; without them, or on any error, the
     # banner says so and the route answers 503 - the faces are drawn as before.
     'sky.patch'
+    # "Chat with customer support for me" (the owner's decisions of
+    # 2026-09-28; JARVIS-API section 65): the gate's _RISK lines for
+    # `support_chat` (ONE card per support chat, listing every detail
+    # Jarvis may give) and `support_offer` (ONE card per offer; nothing is
+    # accepted without it) - both leave this PC and cannot be taken back,
+    # so their approvals are risky ones - and their lines in the "a no is
+    # not a standing rule" list. Two hunks in jarvis_gate.py whose context
+    # is forget-range.patch's own lines, so it goes after it - last, like
+    # every new patch, but before devices.patch, which must stay the very last
+    # (its hunk in jarvis_hud.py has to come before every install() block, and
+    # backend/test_devices.py checks it is last); devices.patch's gate hunks
+    # are at other lines. No route of its own: chatbot-routes.patch already
+    # installs jarvis_chatbot_routes.py, which reaches jarvis_support.py.
+    'support-chat.patch'
     # Pairing a phone by QR code, with a key per device (the owner's
     # decisions of 2026-09-24 and 2026-09-28; docs/PAIRING-DESIGN.md phase 1,
     # docs/JARVIS-API.md section 90). Three hunks: two in jarvis_gate.py - the
@@ -1005,6 +1021,11 @@ $SHIPPED = @(
     'jarvis_live_photo_test.py'  # the camera's photo test: run once, when the 12 GB card is in; a pass is what lets the camera switch appear on the phone
     # --- "Forget a time frame" (2026-09-28): a checked list, ONE card, 10 minutes to undo ---
     'jarvis_forget_range.py'     # forget-range.patch: GET/POST /api/memory/forget_range, /preview and /undo; jarvis_quick.py (already SHIPPED) calls it for "forget what you learned last week"
+    # --- "Chat with customer support for me" (2026-09-28): Groupon first; the details card, an offer card per offer, identity checks and "are you a bot?" handed to the owner ---
+    'jarvis_support.py'          # the support chat's rules: the details card, the last check before every message, offers, the transcript; routes in jarvis_chatbot_routes.py, risk lines in support-chat.patch
+    'jarvis_support_widget.py'   # the support window on the chatbot websites' shared base: the company's help page, its chat widget (Zendesk, Intercom, LivePerson, Gorgias, Freshchat, Salesforce, unbranded); needs Playwright (not installed by this script)
+    # --- "Solve it here" (2026-09-28): a captcha or sign-in page handed to the owner's phone ---
+    'jarvis_handoff.py'          # one picture at a time of the ONE paused browser window, and the owner's own taps and typing to it, only while paused there; routes in jarvis_chatbot_routes.py
     # --- the sun, the moon and the weather behind the animals (2026-09-28, sky.patch) ---
     'jarvis_sky.py'              # sky.patch: GET/POST /api/sky - show the sun and moon, the town (PC only), the weather source (Open-Meteo ON is one card)
     'jarvis_sky_places.py'       # the towns jarvis_sky.py finds a place in, carried on this PC (GeoNames, CC BY 4.0) - never looked up online

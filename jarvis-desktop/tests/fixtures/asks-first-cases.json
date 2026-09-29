@@ -422,6 +422,31 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "support_chat",
+       "fixed": false,
+       "id": "support_chat",
+       "note": "Always asks: one card lists every detail Jarvis may give in that chat. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Chat with a company's customer support for you"
+      },
+      {
+       "action": "support_offer",
+       "fixed": false,
+       "id": "support_offer",
+       "note": "Always asks, one card per offer, showing the exact reply - nothing is accepted without it. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:handoff",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "says": "Does it without asking",
+       "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
      ],
      "title": "The internet"
@@ -1350,6 +1375,31 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "support_chat",
+       "fixed": false,
+       "id": "support_chat",
+       "note": "Always asks: one card lists every detail Jarvis may give in that chat. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Chat with a company's customer support for you"
+      },
+      {
+       "action": "support_offer",
+       "fixed": false,
+       "id": "support_offer",
+       "note": "Always asks, one card per offer, showing the exact reply - nothing is accepted without it. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:handoff",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "says": "Does it without asking",
+       "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
      ],
      "title": "The internet"
@@ -2274,6 +2324,31 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "support_chat",
+       "fixed": false,
+       "id": "support_chat",
+       "note": "Always asks: one card lists every detail Jarvis may give in that chat. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Chat with a company's customer support for you"
+      },
+      {
+       "action": "support_offer",
+       "fixed": false,
+       "id": "support_offer",
+       "note": "Always asks, one card per offer, showing the exact reply - nothing is accepted without it. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:handoff",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "says": "Does it without asking",
+       "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
      ],
      "title": "The internet"
@@ -3192,6 +3267,31 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "support_chat",
+       "fixed": false,
+       "id": "support_chat",
+       "note": "Always asks: one card lists every detail Jarvis may give in that chat. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Chat with a company's customer support for you"
+      },
+      {
+       "action": "support_offer",
+       "fixed": false,
+       "id": "support_offer",
+       "note": "Always asks, one card per offer, showing the exact reply - nothing is accepted without it. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:handoff",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "says": "Does it without asking",
+       "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
      ],
      "title": "The internet"
@@ -4110,6 +4210,31 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "support_chat",
+       "fixed": false,
+       "id": "support_chat",
+       "note": "Always asks: one card lists every detail Jarvis may give in that chat. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Chat with a company's customer support for you"
+      },
+      {
+       "action": "support_offer",
+       "fixed": false,
+       "id": "support_offer",
+       "note": "Always asks, one card per offer, showing the exact reply - nothing is accepted without it. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:handoff",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "says": "Does it without asking",
+       "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
      ],
      "title": "The internet"
@@ -5041,6 +5166,31 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "support_chat",
+       "fixed": false,
+       "id": "support_chat",
+       "note": "Always asks: one card lists every detail Jarvis may give in that chat. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Chat with a company's customer support for you"
+      },
+      {
+       "action": "support_offer",
+       "fixed": false,
+       "id": "support_offer",
+       "note": "Always asks, one card per offer, showing the exact reply - nothing is accepted without it. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:handoff",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "says": "Does it without asking",
+       "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
      ],
      "title": "The internet"
@@ -5965,6 +6115,31 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Hold a conversation with an AI chatbot for you"
+      },
+      {
+       "action": "support_chat",
+       "fixed": false,
+       "id": "support_chat",
+       "note": "Always asks: one card lists every detail Jarvis may give in that chat. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Chat with a company's customer support for you"
+      },
+      {
+       "action": "support_offer",
+       "fixed": false,
+       "id": "support_offer",
+       "note": "Always asks, one card per offer, showing the exact reply - nothing is accepted without it. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "fixed": true,
+       "id": "fixed:handoff",
+       "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. Resume still asks with a card.",
+       "says": "Does it without asking",
+       "title": "Solve a captcha or sign-in page from your phone (\"Solve it here\")"
       }
      ],
      "title": "The internet"

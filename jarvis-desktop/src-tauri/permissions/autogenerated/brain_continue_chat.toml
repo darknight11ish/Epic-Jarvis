@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-continue-chat"
+description = "Enables the brain_continue_chat command without any pre-configured scope."
+commands.allow = ["brain_continue_chat"]
+
+[[permission]]
+identifier = "deny-brain-continue-chat"
+description = "Denies the brain_continue_chat command without any pre-configured scope."
+commands.deny = ["brain_continue_chat"]

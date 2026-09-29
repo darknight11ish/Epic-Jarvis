@@ -63,6 +63,14 @@ REPO = _HERE.parent
 #: them, so nothing there needs the variable.
 BACKEND = Path(os.environ.get("JARVIS_BACKEND") or _HERE).resolve()
 
+#: Every suite imports this file. A suite run on the owner's PC (with
+#: JARVIS_BACKEND set, or by apply-patches.ps1) must never write the made-up
+#: conversations it runs into the owner's real chat history: the modules that
+#: keep a finished conversation there on their own (jarvis_chatbot's
+#: keep_in_history) keep nothing while this is set. A suite that tests the
+#: keeping hands in its own ChatLog.
+os.environ["JARVIS_SUITE_RUNNING"] = "1"
+
 # Prepended, not appended: if a stale copy of a module is ever left in this
 # folder, the one in BACKEND is the one under test and must win.
 _b = str(BACKEND)
@@ -312,6 +320,15 @@ SHIPPED = (
     # "Forget a time frame" (2026-09-28): a checked list, ONE card, 10
     # minutes to undo; GET/POST /api/memory/forget_range (forget-range.patch)
     "jarvis_forget_range.py",
+    # "Chat with customer support for me" (2026-09-28): the support chat's
+    # rules and its window on the chatbot websites' shared base. No route
+    # patch: chatbot-routes.patch already installs jarvis_chatbot_routes.py,
+    # which reaches it; the gate's risk lines are support-chat.patch.
+    "jarvis_support.py",
+    "jarvis_support_widget.py",
+    # "Solve it here" (2026-09-28): a captcha or sign-in page handed to the
+    # owner's phone. No patch: jarvis_chatbot_routes.py answers its routes.
+    "jarvis_handoff.py",
     # the sun, the moon and the weather behind the animal faces, and the
     # town list it finds a place in without going online (sky.patch)
     "jarvis_sky.py", "jarvis_sky_places.py",

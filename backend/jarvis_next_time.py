@@ -375,7 +375,9 @@ def should_look(watch_words: str, *, request=None, messages=None, crisis: bool =
         pass
     try:
         import jarvis_intake
-        if jarvis_intake.game_or_roleplay(list(messages or [])):
+        if jarvis_intake.game_or_roleplay(
+                list(messages or []),
+                request.get("conversation_id") if isinstance(request, dict) else None):
             return False
     except Exception:
         pass

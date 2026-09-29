@@ -49,10 +49,23 @@ import kotlinx.coroutines.launch
  * answer is arriving ([enabled]): Stop is the control for that.
  */
 @Composable
-internal fun TemporaryChatStrip(on: Boolean, empty: Boolean, enabled: Boolean, onToggle: () -> Unit) {
+internal fun TemporaryChatStrip(
+    on: Boolean,
+    empty: Boolean,
+    enabled: Boolean,
+    onToggle: () -> Unit,
+    /** "Earlier chats" (the chat audit, 2026-09-28): History. Null: not offered. */
+    onEarlierChats: (() -> Unit)? = null,
+) {
     val chrome = LocalChrome.current
     if (!on) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = if (onEarlierChats != null) Arrangement.SpaceBetween else Arrangement.End,
+        ) {
+            if (onEarlierChats != null) {
+                Quiet(com.jarvis.client.net.ChatHistory.EARLIER_CHATS, color = chrome.textMid, onClick = onEarlierChats)
+            }
             Quiet(TemporaryChat.START, color = chrome.textMid, enabled = enabled, onClick = onToggle)
         }
         return

@@ -1173,7 +1173,15 @@ class JarvisApi(
     // shapes, the words and the rules; these only carry them.
 
     /** `GET /api/history`: the switch and one page of conversations, newest first. */
-    suspend fun history(before: Long? = null): ApiResult<JsonObject> = probe(ChatLog.listPath(before))
+    suspend fun history(before: Long? = null, kind: String? = null): ApiResult<JsonObject> =
+        probe(ChatLog.listPath(before, kind = kind))
+
+    /**
+     * `GET /api/memory/fact-chat?id=` (the chat audit, 2026-09-28): which chat
+     * a fact came from - its title and when - so "Also delete the chat it
+     * came from" names it first. A read; it deletes nothing.
+     */
+    suspend fun factChat(path: String): ApiResult<JsonObject> = probe(path)
 
     /** `GET /api/history/conversation`: one conversation, read-only. 404 when it is gone. */
     suspend fun historyConversation(id: String): ApiResult<JsonObject> = probe(ChatLog.conversationPath(id))
@@ -1521,6 +1529,88 @@ class JarvisApi(
             val target = url(path) ?: return@withContext ApiResult.Failed(
                 noAddress(),
             )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Chatbot.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * `GET /api/chatbot/status?support=`, for the support chat [id] names or,
+     * with none, the latest one still going ([Support.parse]). A read.
+     */
+    suspend fun supportStatus(id: String?): ApiResult<JsonObject> =
+        probe(if (id != null && Support.validId(id)) "${Support.STATUS_PATH}?support=$id" else Support.STATUS_PATH)
+
+    /**
+     * `POST /api/chatbot/support/start`, `/stop`, `/takeover` or `/answer`,
+     * with a body made by [Support.startBody], [Support.idBody] or
+     * [Support.answerBody]. Any other path is refused here, before anything
+     * is sent. The status and body come back whole ([Chatbot.Reply]): a 400
+     * or 409 carries the PC's own sentence.
+     */
+    suspend fun supportWrite(path: String, json: String): ApiResult<Chatbot.Reply> {
+        if (path !in Support.WRITE_PATHS) {
+            return ApiResult.Failed(ApiError.Malformed("not a support chat route"))
+        }
+        return rawPost(path, json)
+    }
+
+    /**
+     * "Solve it here" (JARVIS-API §87.8): `POST /api/chatbot/handoff/start`,
+     * `/input` or `/end`, with a body made by [Handoff.startBody],
+     * [Handoff.tapBody] and the rest, or [Handoff.endBody]. Any other path is
+     * refused here, before anything is sent. The status and body come back
+     * whole: a 410 says the hand-off ended, and why.
+     */
+    suspend fun handoffWrite(path: String, json: String): ApiResult<Chatbot.Reply> {
+        if (path !in Handoff.WRITE_PATHS) {
+            return ApiResult.Failed(ApiError.Malformed("not a hand-off route"))
+        }
+        return rawPost(path, json)
+    }
+
+    /**
+     * `GET /api/chatbot/handoff/frame?h=` - ONE picture of the paused browser
+     * window, as the PC's JSON (a base64 JPEG). Held in memory by the screen
+     * that asked, never written anywhere. The status and body come back whole
+     * (a 429 "too soon", a 410 "ended").
+     */
+    suspend fun handoffFrame(h: String): ApiResult<Chatbot.Reply> =
+        withContext(Dispatchers.IO) {
+            if (!Handoff.validHid(h)) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a hand-off"))
+            }
+            val target = url("${Handoff.FRAME_PATH}?h=$h") ?: return@withContext ApiResult.Failed(noAddress())
+            val req = Request.Builder().url(target).get().authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    when (resp.code) {
+                        401, 403 -> ApiResult.Failed(ApiError.BadToken)
+                        404 -> ApiResult.Failed(ApiError.NotFound)
+                        else -> ApiResult.Ok(Chatbot.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /** One POST whose status and body come back whole - for [supportWrite]. */
+    private suspend fun rawPost(path: String, json: String): ApiResult<Chatbot.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
             val body = json.toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
             runCatching {

@@ -788,12 +788,6 @@ def _match(text, now: float) -> Optional[Intent]:
                     r"|(?:clear|empty|delete)\s+(?:my|the)\s+todo\s+list", s):
         return Intent("bulk")
 
-    # --- "make me a widget ..." (jarvis_widgets.py, 2026-09-28) ---------------
-    # Before timers and reminders: "make me a widget with a 10-minute timer
-    # button" is about a widget, not a timer to set now.
-    if _WIDGET.fullmatch(s):
-        return Intent("widget_make", {"words": str(text)})
-
     # --- "forget what you learned last week" (jarvis_forget_range.py) ----------
     # Before everything that starts with "delete"/"remove": this one names
     # what Jarvis learned or the chats, and a time frame. It only ever fills
@@ -801,6 +795,12 @@ def _match(text, now: float) -> Optional[Intent]:
     got = _forget_range(s, now)
     if got is not None:
         return got
+
+    # --- "make me a widget ..." (jarvis_widgets.py, 2026-09-28) ---------------
+    # Before timers and reminders: "make me a widget with a 10-minute timer
+    # button" is about a widget, not a timer to set now.
+    if _WIDGET.fullmatch(s):
+        return Intent("widget_make", {"words": str(text)})
 
     # --- focus sessions (jarvis_focus.py) --------------------------------------
     got = _focus(s)
@@ -2788,16 +2788,16 @@ class Result:
     # the section id both apps already use for their own settings screen, so
     # they can jump there. None for every other answer made here.
     open_settings: Optional[str] = None
+    # "Forget a time frame" (jarvis_forget_range.py, 2026-09-28): the place in
+    # Brain both apps open - "forget-range" - after "forget what you learned
+    # last week" filled in its list. Navigation only; nothing is removed.
+    open_brain: Optional[str] = None
     # "Where did I put ...?" (2026-09-28): the saved facts the answer quotes,
     # by id, and how many of them are sensitive - so X-Jarvis-Route says the
     # answer used memory, both apps show "Used 1 memory" with Forget, and a
     # sensitive one stays on screen like any memory answer (route_fields).
     facts: list = field(default_factory=list)
     facts_sensitive: int = 0
-    # "Forget a time frame" (jarvis_forget_range.py, 2026-09-28): the place in
-    # Brain both apps open - "forget-range" - after "forget what you learned
-    # last week" filled in its list. Navigation only; nothing is removed.
-    open_brain: Optional[str] = None
 
 
 def _join(items: list) -> str:
@@ -3709,7 +3709,7 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None,
     # jarvis_hud.py's own _temporary_chat(body) makes; needed here for
     # "from now on ..." (2026-09-27), which keeps a temporary chat's style
     # change in that chat only, never written to manner.json.
-    temporary = isinstance(body, dict) and body.get("temporary") is True
+    temporary = _temporary_body(body)
     text = newest_own_words(body)
     res = None if text is None else answer(text, sched=sched, now=now,
                                            conversation=conversation, seen=seen,
@@ -3731,6 +3731,21 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None,
             pass
         res.reply = in_manner(res.reply, manner)
     return res
+
+
+def _temporary_body(body) -> bool:
+    """Is this request a temporary chat? `temporary: true`, or a game or
+    role-play the PC has seen in this conversation - the same test the chat
+    route makes (jarvis_hud._temporary_chat, games-temporary.patch). This
+    path used to read the flag alone, so in a role-play chat "where is my
+    passport" was answered from saved memory and "from now on, be plainer"
+    was written to manner.json for good (the second chat audit,
+    2026-09-28, finding 7, reproduced). Without jarvis_intake: the flag."""
+    try:
+        import jarvis_intake
+        return bool(jarvis_intake.temporary_body(body))
+    except Exception:
+        return isinstance(body, dict) and body.get("temporary") is True
 
 
 def _forget_set(sched, conversation) -> None:

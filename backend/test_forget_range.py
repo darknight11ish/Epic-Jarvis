@@ -306,6 +306,12 @@ def t_the_list():
     spills = {c["id"]: c["spills"] for c in p["chats"]}
     check("the one that started the day before is marked: the whole chat goes",
           spills == {"conv-spills-0002": True, "conv-inside-0001": False}, spills)
+    ticks = {c["id"]: c["ticked"] for c in p["chats"]}
+    check("a chat with messages from outside the days starts UNticked (finding 10, "
+          "2026-09-28); one wholly inside starts ticked",
+          ticks == {"conv-spills-0002": False, "conv-inside-0001": True}, ticks)
+    check("its warning says to tick it only if the whole chat should go",
+          "Tick it only if the whole chat should go" in FR.WORDS["spills"])
     first = p["chats"][1]
     check("a chat's title, days and messages", first["title"] == "Plan the trip to Rome"
           and first["label"] == "4 September · 2 messages" and first["turns"] == 2, first)
@@ -407,9 +413,42 @@ def t_the_card():
                   "saved 3 September", "4 September · 2 messages", "Undo",
                   "Saying yes out loud does not approve it"):
         check(f"the card says {words!r}", words in prompt, prompt)
+    check("the card says what stays (the second chat audit): unticked facts and older backups",
+          "Facts you did not tick stay. Copies in older backups stay until they age out." in prompt, prompt)
     check("the unticked fact is not on the card", "pears" not in prompt)
     check("the card's detail says it stays on this PC", detail["leaves_this_pc"] is False
           and detail["text"] == prompt and detail["facts"] == 2 and detail["chats"] == 2)
+
+
+def t_support_records_ask_first():
+    """The owner, 2026-09-28: "Forget a time frame" asks before removing a
+    customer-support chat's record. It is listed, NOT ticked to start with,
+    with a line saying so; ticked, the card names it."""
+    w = _world_with_things()
+    w.clock.t = at(2026, 9, 5, 10)
+    got = w.log.record_support("sup-groupon-001", "Groupon: refund",
+                               [{"provenance": "support_company", "text": "We can refund",
+                                 "at": at(2026, 9, 5, 10)}])
+    check("a support record is kept", got.get("recorded"), got)
+    out = w.preview("2026-09-01", "2026-09-15")
+    items = {c["id"]: c for c in out["chats"]}
+    sup = items.get("sup-groupon-001") or {}
+    check("the support record is listed, with its kind", sup.get("kind") == "support", sup)
+    check("...and starts UNticked; an ordinary chat starts ticked",
+          sup.get("ticked") is False and items["conv-trip-00001"]["ticked"] is True, items)
+    check("the words say it is kept unless ticked",
+          "kept unless you tick it" in FR.WORDS["support"])
+    w.gate.answer = "approved"
+    code, _ = w.ask(_body(w, facts=[], chats=["sup-groupon-001"]))
+    check("ticked by the owner: one card", code == 202)
+    FR._timer, real = w.timers, FR._timer
+    try:
+        w.spawn.run()
+    finally:
+        FR._timer = real
+    prompt = w.gate.asked[-1][2]
+    check("the card names it a customer-support record",
+          "customer-support chat's record" in prompt, prompt)
 
 
 def t_denied_changes_nothing():

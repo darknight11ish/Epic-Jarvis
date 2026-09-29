@@ -43,7 +43,7 @@ await check("every bindable action is listed", async () => {
   const page = await open();
   const list = await rows(page);
   await page.close();
-  assert.equal(list.length, 8, `${list.length} rows, expected 8`);
+  assert.equal(list.length, 9, `${list.length} rows, expected 9`);
   assert.equal(list[0].name, "Show or hide the Jarvis bar");
   assert.equal(list[0].key, "Alt + Space");
   // "Stop everything" (2026-09-25): listed like the others, so it can be
@@ -117,8 +117,51 @@ await check("the Rust list and this stand-in agree", async () => {
   const rs = all.slice(at, all.indexOf("\n];", at));
   const ids = [...rs.matchAll(/\bid: "([a-z_]+)",/g)].map((m) => m[1]);
   assert.deepEqual(ids, K.HOTKEYS.map((h) => h.id));
-  const defaults = [...rs.matchAll(/default: "([^"]+)",/g)].map((m) => m[1]);
+  const defaults = [...rs.matchAll(/default: "([^"]*)",/g)].map((m) => m[1]);
   assert.deepEqual(defaults, K.HOTKEYS.map((h) => h.default));
+});
+
+await check("Jarvis Live's key is off until picked, can be picked, and turned off again (owner, 2026-09-28)", async () => {
+  const page = await open();
+  let live = (await rows(page)).find((r) => r.name === "Start or end Jarvis Live");
+  assert.ok(live, "the Live key is not listed");
+  assert.equal(live.key, "Off - pick a key");
+  assert.equal(live.state, "off", `said "${live.state}"`);
+  assert.doesNotMatch(live.state, /another app|different key|not bound/i);
+  const hint = await page.locator(".hotkey").filter({ hasText: "Start or end Jarvis Live" })
+    .locator(".hotkey-hint").innerText();
+  assert.match(hint, /Alt\+Shift\+L/, "the hint does not suggest Alt+Shift+L");
+  // Saving the others with it off says all of them bound - off is not refused.
+  await page.locator("#save-hotkeys").click();
+  await page.waitForTimeout(200);
+  assert.match(await page.locator("#hotkey-status").innerText(), /all of them bound/i);
+  // Pick Alt+Shift+L.
+  await page.locator(".hotkey").filter({ hasText: "Start or end Jarvis Live" }).locator(".hotkey-key").click();
+  await page.keyboard.press("Alt+Shift+L");
+  await page.locator("#save-hotkeys").click();
+  await page.waitForTimeout(200);
+  live = (await rows(page)).find((r) => r.name === "Start or end Jarvis Live");
+  assert.equal(live.key, "Alt + Shift + L");
+  assert.equal(live.state, "working");
+  // Turn it off again.
+  const off = page.locator(".hotkey").filter({ hasText: "Start or end Jarvis Live" }).locator(".hotkey-off");
+  assert.equal(await off.count(), 1, "no Turn off button once a key is picked");
+  await off.click();
+  await page.locator("#save-hotkeys").click();
+  await page.waitForTimeout(200);
+  live = (await rows(page)).find((r) => r.name === "Start or end Jarvis Live");
+  const saved = await page.evaluate(() => window.__calls.filter((c) => c[0] === "set_hotkeys").pop());
+  await page.close();
+  assert.equal(live.key, "Off - pick a key");
+  assert.equal(saved[1].bindings.toggle_live, "", "turning it off did not save a blank key");
+  // No other row gets a Turn off button (their keys ship on).
+  // And the key does what it says: lib.rs hands it to live::toggle as "hotkey".
+  const lib = read("src-tauri/src/lib.rs");
+  assert.match(lib, /"toggle_live" => crate::live::toggle\(app, "hotkey"\)/);
+  const liveRs = read("src-tauri/src/live.rs");
+  const toggle = liveRs.slice(liveRs.indexOf("pub fn toggle(app: &AppHandle"));
+  assert.match(toggle.slice(0, 900), /stop\(&app, "owner"\)/);
+  assert.match(toggle.slice(0, 900), /start\(&app, Some\(by\), None\)/);
 });
 
 await check("Win is shown as Win, not Super", async () => {
@@ -348,8 +391,13 @@ await check("CONTROL: the page still works when nothing is refused", async () =>
   const list = await rows(page);
   assert.deepEqual(page.__errors, [], page.__errors.join(" | "));
   await page.close();
-  assert.ok(list.every((r) => r.bound === "true"));
-  assert.ok(list.every((r) => /working/i.test(r.state)));
+  // Jarvis Live's key ships off (the owner's decision of 2026-09-28): it
+  // says "off", and every key that ships on is working.
+  const on = list.filter((r) => r.name !== "Start or end Jarvis Live");
+  assert.equal(on.length, list.length - 1);
+  assert.ok(on.every((r) => r.bound === "true"));
+  assert.ok(on.every((r) => /working/i.test(r.state)));
+  assert.equal(list.find((r) => r.name === "Start or end Jarvis Live").state, "off");
 });
 
 await browser.close();

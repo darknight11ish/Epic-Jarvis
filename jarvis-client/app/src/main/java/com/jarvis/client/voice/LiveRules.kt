@@ -72,6 +72,7 @@ object LiveRules {
         "not_for_me" to "(not for Jarvis)",
         "trouble" to "Heard you, but the words couldn't be made out - say it again",
         "busy_mic" to "Jarvis Live is already listening - just talk",
+        "temporary_on" to "Temporary is on - this Live session will not be kept in History.",
     )
 
     /** How each device is named (jarvis_live.DEVICE_WORDS): never "desktop". */
@@ -487,11 +488,28 @@ object LiveRules {
 
     // -- what the phone sends (POST /api/voice/live) ------------------------
 
-    /** Only these fixed words go out; nothing heard ever does. */
-    fun startBody(): String = "{\"do\":\"start\",\"device\":\"$ME\",\"by\":\"button\"}"
+    /**
+     * Only these fixed words go out; nothing heard ever does. [conversationId]:
+     * the chat the session's words go in (the chat audit, 2026-09-28) - a
+     * fresh one for a new session, this phone's own for "Resume Live", the
+     * other device's for "Move it here" - so the PC can name it to the other
+     * app, which then carries on the SAME chat. An id that is not one (8-64
+     * of `[A-Za-z0-9_-]`) is left out, never sent.
+     */
+    fun startBody(conversationId: String? = null): String =
+        "{\"do\":\"start\",\"device\":\"$ME\",\"by\":\"button\"" + cidField(conversationId) + "}"
 
-    /** Why the phone ends Live: the owner (End Live), or App lock would lock the app. */
-    val END_REASONS: List<String> = listOf("owner", "app_lock")
+    private val CID = Regex("[A-Za-z0-9_-]{8,64}")
+
+    private fun cidField(conversationId: String?): String =
+        conversationId?.takeIf { CID.matches(it) }?.let { ",\"conversation_id\":\"$it\"" }.orEmpty()
+
+    /**
+     * Why the phone ends Live: the owner (End Live), App lock would lock the
+     * app, or - under the Security screen's "End Live when: Only when the
+     * phone's screen locks" - the phone's screen lock came on.
+     */
+    val END_REASONS: List<String> = listOf("owner", "app_lock", "screen_lock")
 
     fun stopBody(why: String = "owner"): String =
         "{\"do\":\"stop\",\"why\":\"${if (why in END_REASONS) why else "owner"}\",\"device\":\"$ME\"}"
@@ -504,6 +522,18 @@ object LiveRules {
 
     /** The owner typed or tapped in Live: the PC's quiet clock starts again. */
     const val ACTIVE_BODY = "{\"do\":\"active\",\"device\":\"$ME\"}"
+
+    /**
+     * [ACTIVE_BODY] naming this phone's chat, once, for a session that has
+     * none yet - one started by "Hey Jarvis, let's talk" (the chat audit,
+     * 2026-09-28): the PC keeps the first id it is told and ignores later ones.
+     */
+    fun activeBody(conversationId: String?): String =
+        "{\"do\":\"active\",\"device\":\"$ME\"" + cidField(conversationId) + "}"
+
+    /** The chat a running session's words go in, from the PC's Live status
+     *  (`conversation_id`, JARVIS-API.md section 63.1), or null. */
+    fun sessionChat(raw: String?): String? = raw?.takeIf { CID.matches(it) }
 
     /** Why the phone mutes: the owner's Mic off, or a phone or video call. */
     val MUTE_WHYS: List<String> = listOf("owner", "call")

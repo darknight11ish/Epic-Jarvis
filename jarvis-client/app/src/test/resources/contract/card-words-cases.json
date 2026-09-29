@@ -291,6 +291,14 @@
       "title": "Jarvis wants to stop asking before every web search"
     },
     {
+      "action": "support_chat",
+      "title": "Jarvis wants to chat with a company's customer support for you"
+    },
+    {
+      "action": "support_offer",
+      "title": "Jarvis wants to accept an offer from customer support in your name"
+    },
+    {
       "action": "switch_model",
       "title": "Jarvis wants to switch to a different AI model"
     },

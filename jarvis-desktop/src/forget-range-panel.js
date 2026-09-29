@@ -25,9 +25,13 @@
  */
 
 import { announce, currentLink, linkWords, onLink, onQueue } from "./jarvis-link.js";
+import { tellChatsGone } from "./chat-history.js";
 import {
   allTicked,
   BRAIN_PLACE_KEY,
+  chatKindTag,
+  HISTORY_CHANGED,
+  HISTORY_PLACE,
   dayOf,
   fill,
   forgetBody,
@@ -136,12 +140,39 @@ function say(message, tone = "") {
 
 /* ── Reading ──────────────────────────────────────────────────────────── */
 
+/** What the last status said about removals - when it changes (a card
+ *  approved, an Undo, the ten minutes over), History's list is read again
+ *  (the chat audit, 2026-09-28: it used to wait for its 15-second re-read). */
+let removalSeen = "";
+/** The chats on the card now waiting, for the Jarvis bar once approved. */
+let pendingChats = [];
+
+function removalMark(s) {
+  if (!s) return "";
+  const last = s.last ? `${s.last.outcome}` : "";
+  const undo = s.undo ? `${s.undo.chats}/${s.undo.facts}` : "";
+  return `${last}|${undo}`;
+}
+
 async function readStatusNow() {
   try {
     state.status = readStatus(await invoke("forget_range_read", {}));
     state.error = "";
   } catch (error) {
     state.error = errorText(error);
+  }
+  const mark = removalMark(state.status);
+  if (mark !== removalSeen) {
+    const first = removalSeen === "";
+    removalSeen = mark;
+    if (!first) window.dispatchEvent(new CustomEvent(HISTORY_CHANGED));
+    // Approved: the chats on the card are gone - the Jarvis bar, if it is
+    // in one of them, starts a new chat and says so (the chat audit).
+    const last = state.status && state.status.last;
+    if (!first && last && last.outcome === "done" && pendingChats.length) {
+      tellChatsGone(pendingChats);
+      pendingChats = [];
+    }
   }
   const a = state.status && state.status.asked;
   if (a && a.id && a.id !== state.askedSeen) {
@@ -173,13 +204,20 @@ async function readPreviewNow() {
     return;
   }
   // What the owner unticked stays unticked when the list is read again
-  // (after a card, an Undo, or "the list changed"); anything new is ticked.
-  const unticked = state.preview && state.preview.available
-    ? [...allTicked(state.preview)].filter((k) => !state.ticked.has(k)) : [];
+  // (after a card, an Undo, or "the list changed"); anything new is ticked -
+  // except a customer-support record, which stays as the owner left it: a
+  // support chat they ticked stays ticked (the chat audit, 2026-09-28).
+  const had = state.preview && state.preview.available ? allTicked(state.preview) : null;
+  const unticked = had ? [...had].filter((k) => !state.ticked.has(k)) : [];
+  const tickedExtra = had ? [...state.ticked].filter((k) => !had.has(k)) : [];
   try {
     state.preview = readPreview(await invoke("forget_range_read", previewArgs()));
     state.ticked = state.preview.available ? allTicked(state.preview) : new Set();
     for (const k of unticked) state.ticked.delete(k);
+    if (state.preview.available) {
+      const listed = new Set(state.preview.chats.map((x) => `chat:${x.id}`));
+      for (const k of tickedExtra) if (listed.has(k)) state.ticked.add(k);
+    }
     say("");
   } catch (error) {
     state.preview = null;
@@ -206,14 +244,23 @@ export async function showForgetRange() {
  * the History tab first.
  */
 export function takePlace(freshMs = 60_000) {
+  return takeAnyPlace(freshMs) === PLACE;
+}
+
+/**
+ * The place the Jarvis bar left (PLACE, or HISTORY_PLACE for "Earlier
+ * chats"), taken once and only while fresh; "" for none.
+ */
+export function takeAnyPlace(freshMs = 60_000) {
   let left = null;
   try {
     left = JSON.parse(localStorage.getItem(BRAIN_PLACE_KEY) || "null");
     if (left) localStorage.removeItem(BRAIN_PLACE_KEY);
   } catch {
-    return false;
+    return "";
   }
-  return Boolean(left && left.place === PLACE && Date.now() - Number(left.at) < freshMs);
+  if (!left || Date.now() - Number(left.at) >= freshMs) return "";
+  return left.place === PLACE || left.place === HISTORY_PLACE ? left.place : "";
 }
 
 /** After the History tab is shown for the Jarvis bar's request. */
@@ -242,6 +289,7 @@ async function forgetNow() {
   }
   try {
     const out = await invoke("forget_range_write", { action: "forget", body });
+    pendingChats = body.chats.slice();
     say(String((out && out.message) || WORDS.waiting), "ok");
   } catch (error) {
     say(errorText(error), "bad");
@@ -427,8 +475,11 @@ function listPart(s) {
   if (p.kinds.includes("chats") && p.chats.length) {
     part.append(el("h3", "fr-head", `${WORDS.chats_head} (${p.chats.length})`));
     const rows = el("div", "rows");
-    for (const x of p.chats) rows.append(item(`chat:${x.id}`, x.title, x.label, [],
-      x.spills ? WORDS.spills : ""));
+    for (const x of p.chats) {
+      rows.append(item(`chat:${x.id}`, x.title, x.label, [chatKindTag(x.kind)].filter(Boolean),
+        [x.kind === "support" ? WORDS.support : "", x.spills ? WORDS.spills : ""]
+          .filter(Boolean).join(" ")));
+    }
     part.append(rows);
   }
   const n = forgetBody(p, state.ticked);

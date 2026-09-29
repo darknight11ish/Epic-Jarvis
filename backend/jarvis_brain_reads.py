@@ -23,6 +23,14 @@ The owner's choice of 2026-09-28 (docs/RESEARCH-AUDIT-2026-09-28.md section
         forgets nothing: each ticked fact is then forgotten through the
         ordinary Forget route, one at a time.
 
+    GET /api/memory/fact-chat?id=<fact id>
+        (the chat audit, 2026-09-28) "Which chat did this fact come from?":
+        for "Erase the words"'s "Also delete the chat it came from", which
+        now names that chat - its title and when - before asking, and does
+        not offer to delete a chat that is not on record. The fact's own
+        meta names the conversation; jarvis_chat_log.brief() gives its
+        title without opening a message. It deletes nothing.
+
     GET /api/pc/help
         (2026-09-28; JARVIS-API section 84) "PC help": five plain answers
         about this PC - why it is slow, how full the drives are, what is using
@@ -52,13 +60,16 @@ answers 501 with a sentence saying to update, and nothing else changes.
 """
 from __future__ import annotations
 
-from urllib.parse import urlsplit
+import json
+import re
+from urllib.parse import parse_qs, urlsplit
 
 SEARCH_PATH = "/api/history/search"
 FACT_HISTORY_PATH = "/api/memory/fact-history"
 CONVERSATION_FACTS_PATH = "/api/memory/conversation-facts"
 PC_HELP_PATH = "/api/pc/help"
-PATHS = (SEARCH_PATH, FACT_HISTORY_PATH, CONVERSATION_FACTS_PATH, PC_HELP_PATH)
+FACT_CHAT_PATH = "/api/memory/fact-chat"
+PATHS = (SEARCH_PATH, FACT_HISTORY_PATH, CONVERSATION_FACTS_PATH, PC_HELP_PATH, FACT_CHAT_PATH)
 
 UPDATE = ("This PC's Jarvis is missing part of this feature. Run apply-patches.ps1 on the PC "
           "to update it.")
@@ -108,7 +119,52 @@ def handle_get(path: str, query: str = "") -> tuple:
         except Exception:
             return 503, {"available": False, "error": UPDATE}
         return jarvis_pc_help.handle_get(query)
+    if path == FACT_CHAT_PATH:
+        return fact_chat(query)
     return 404, {"error": "no such route"}
+
+
+_CID = re.compile(r"[A-Za-z0-9_-]{8,64}")
+
+
+def fact_chat(query: str) -> tuple:
+    """GET /api/memory/fact-chat?id=<fact id>: {"id", "conversation": null |
+    {"id", "title", "updated", "kind"}}. `conversation` is null when the
+    fact records no conversation (a card the owner accepted by hand, an
+    older fact) or that conversation is no longer kept. 400 for anything but
+    one whole-number id; 404 for no such fact. A read."""
+    try:
+        raw = (parse_qs(query or "", keep_blank_values=True).get("id") or [""])[0]
+        fid = int(raw)
+        if fid <= 0 or str(fid) != raw.strip():
+            raise ValueError
+    except (TypeError, ValueError):
+        return 400, {"error": "need ?id=<one fact id>"}
+    try:
+        import jarvis_memory
+        row = jarvis_memory.store().get(fid)
+    except Exception as exc:
+        return 503, {"error": f"memory layer not readable ({type(exc).__name__})"}
+    if row is None:
+        return 404, {"error": "no fact with that id"}
+    meta = row.get("meta")
+    try:
+        meta = json.loads(meta) if isinstance(meta, str) else meta
+    except (TypeError, ValueError):
+        meta = None
+    cid = meta.get("conversation_id") if isinstance(meta, dict) else None
+    out = {"id": fid, "conversation": None}
+    if not (isinstance(cid, str) and _CID.fullmatch(cid)):
+        return 200, out
+    try:
+        import jarvis_chat_log
+        brief = getattr(jarvis_chat_log, "brief", None)
+        got = brief(cid) if brief is not None else None
+    except Exception:
+        got = None
+    if got:
+        out["conversation"] = {k: got.get(k) for k in ("id", "title", "updated", "kind")}
+    return 200, out
 
 
 def install(handler_cls, *, origin_ok, token_ok, read_body=None) -> str:

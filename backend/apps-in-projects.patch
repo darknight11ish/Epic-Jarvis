@@ -26,10 +26,10 @@
      # section 87): GET /api/chatbot/status, POST /api/chatbot/start (ONE
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -164,6 +164,7 @@
-     "phone_notifications_read",  # jarvis_phone_notifications.py acts only on tier "ask" (phone-notifications.patch)
-     "chatbot_session",  # jarvis_chatbot.py acts only on tier "ask": ONE card per conversation (chatbot.patch)
+@@ -166,6 +166,7 @@
      "memory_forget_range",  # jarvis_forget_range.py acts only on tier "ask": ONE card per time frame (forget-range.patch)
+     "support_chat",  # jarvis_support.py acts only on tier "ask": ONE card per support chat, listing every detail it may give (support-chat.patch)
+     "support_offer",  # jarvis_support.py acts only on tier "ask": ONE card per offer; nothing is accepted without it (support-chat.patch)
 +    "app_merge_change",  # jarvis_apps.py acts only on tier "ask": ONE card per change added to an app (apps-in-projects.patch)
  })
  

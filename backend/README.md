@@ -1,3 +1,4 @@
+
 # Backend patches
 
 > Architecture, invariants and the permission model every capability must use:
@@ -145,15 +146,16 @@ on a throwaway copy instead.
 | `rules-first-relay.patch` | `jarvis_hud.py` | **The Jarvis rules stay first on a turn with no tools enabled** (the owner's 2026-09-25 decision: the rules are never dropped). One hunk in the relay's `_open()`, right after `chat-history.patch`'s `_chat_client_fields_off` lines: for the local model only, `jarvis_agent.keep_rules_first()` - the same call the tool loop already makes. Last in the list. Needs nothing new copied in. See "The rules on a turn with no tools", at the very end. |
 | `cloud-say-yes.patch` | `jarvis_hud.py` | **"Try the cloud model" - the owner's yes for one question** (the owner's "yes, build it now", 2026-09-27; `docs/ARCHITECTURE.md` "Cloud / API keys"). One line added to the chat turn's already-existing `jarvis_router.choose()` call: `owner_said_yes=bool(body.get("cloud_yes"))`. Every gate in `choose()` still runs first and in the same order - private, tainted, a picture, no lane, no budget - so this can only ever turn THIS question's own gate 6 from `"offer"` into `"escalate"`, for a question that had already cleared every other gate on its own merits; a yes never carries a private, tainted or picture turn out. Both apps' "Try the cloud model" button (`docs/JARVIS-API.md` §18.1, §4 "`offer` in `X-Jarvis-Route`") sends `cloud_yes: true` only when the owner actually pressed it, resending the exact same question and nothing else. **Real, verified against the owner's own `jarvis_hud.py` by hand, not a `_stack.py` stand-in**: no earlier patch's hunk had ever touched this call site before, so `_stack.stand_in()` could not check it against the real file (it would have materialised the hunk's own claimed pre-image instead of failing) - see the patch's own comment, and `test_cloud_say_yes.py`, which round-trips it against the real, hand-verified lines instead of a derived fixture. Its context is the router call itself, `second-card-suggest.patch`'s own new code above it in this table notwithstanding (that patch touches a different, unrelated part of `jarvis_hud.py`). `goals.patch`, after it in this table, touches a third, separate part again (the startup install() block), so the two never interact. Needs no new module - `jarvis_router.py`'s `owner_said_yes` parameter has accepted this since 2026-09-24, unused until now. |
 | `goals.patch` | `jarvis_hud.py` | **"Goals with one card per step"** (the owner's "build it now", 2026-09-27, after the Jarvis evaluation; `docs/creativity-2026-09-25/future.md` idea 3, the feasibility audit's I63/I64). One call at start-up, `jarvis_goals.install(Handler, ...)`, answers `GET`/`POST /api/goals` and `POST /api/goals/<id>/accept`\|`step`\|`stop`. A goal starts as a draft (the owner's own words, plus a plan they typed or asked Jarvis to suggest in an ordinary chat message first - this module calls no model itself, see its own docstring for why); accepting it raises exactly ONE approval card, through `jarvis_schedule.py`'s existing `schedule_repeat` mechanism (the same one a repeating reminder or the morning briefing already uses), which approves nothing that acts - it only lets a weekly, deterministic, model-free check-in exist. Marking a step done and stopping a goal need no card, immediate, like ticking off a to-do. **Not the same thing as "the plan card"** (I61, still gated behind the multi-step safety tests) - Goals never batches an approval; every acting step still goes through the ordinary chat/tool gate, one card each, exactly as today. Last in the list; its context is `answer-sources.patch`'s own new route block. Needs `jarvis_goals.py` - without it, or on any error, the banner says so and the routes answer 503. See `test_goals.py`. |
-| `brain-reads.patch` | `jarvis_hud.py` | **The Brain upgrades** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §71). One install()-shaped hunk at start-up - `jarvis_brain_reads.install(Handler, ...)` - whose context is `answer-sources.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/history/search?q=` ("search what was said": `jarvis_chat_log.ChatLog.search` opens each kept turn in memory for that one search - no index, nothing written) and `GET /api/memory/fact-history?id=` ("history of this fact": `jarvis_memory.fact_history_view`, an erased version never with its words). Reads for the apps only; nothing reaches the AI model. Needs `jarvis_brain_reads.py`; without it the banner says so and the two routes are not there. See "The Brain upgrades", at the very end. |
-| `photo-reminder.patch` | `jarvis_hud.py` | **Photo to reminder** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §83). One install()-shaped hunk at start-up - `jarvis_photo_remind.install(Handler, ...)` - whose context is `brain-reads.patch`'s own install block, so it goes after it, last like every new patch. It answers `POST /api/photo/scan`: the words in a picture read by Windows (`jarvis_ocr.py`), a date, time and title found by `jarvis_quick.py`'s own parser, and a PROPOSED reminder sent back - nothing set up, nothing kept, outside text. Needs `jarvis_photo_remind.py`; without it the banner says so and the route is not there. See "Photo to reminder", at the very end. |
-| `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude or Gemini** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
 | `forget-range.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Forget a time frame"** (the owner's decision of 2026-09-28; docs/JARVIS-API.md section 64). Adds `GET /api/memory/forget_range` and `/preview` (what Jarvis learned and the chats from some days, as a list the owner unticks), `POST /api/memory/forget_range` (ONE approval card, `memory_forget_range`, listing every item - nothing changes before a person approves) and `/undo` (10 minutes, no card), and the gate's risk line for the new action (local, not reversible: a risky approval). Last in the list: its context is `chatbot.patch`'s gate lines and `live.patch`'s install block. Needs `jarvis_forget_range.py` - see "Forget a time frame", at the very end. |
-| `second-card-suggest.patch` | `jarvis_hud.py` | **Noticing a conversation could use the bigger model** (CLAUDE.md, 2026-09-27's "Both, with a setting" answer). One small hunk, right after `feedback.patch`'s own `POST /api/feedback/mark` block: an optional `conversation_id` in that route's body, used only when the mark is a real "wrong" that changed, to bump `jarvis_second_card`'s per-conversation, in-memory "correction" count (`jarvis_agent.note_correction`) - never written to `feedback.db`. Everything else this feature needs (the counters, the phrase check, the threshold gate, the offer itself) is ordinary code in the whole modules `jarvis_agent.py` and `jarvis_second_card.py`, which need no patch. Last in the list; its context is `feedback.patch`'s own mark-route block. See "Noticing a conversation could use the bigger model", after the second-card section. |
+| `support-chat.patch` | `jarvis_gate.py` | **"Chat with customer support for me": the gate's words for its two cards** (the owner's decisions of 2026-09-28; docs/JARVIS-API.md section 65). Two hunks: `support_chat` (ONE card per chat, listing every detail Jarvis may give) and `support_offer` (ONE card per offer) get their `_RISK` lines (`"no", "outbound"` - they leave this PC and cannot be taken back, so approving either is a risky approval) and join the list of actions whose "no" proposes no standing rule. No route of its own: `chatbot-routes.patch` already installs `jarvis_chatbot_routes.py`, which reaches `jarvis_support.py`. Last in the list: its context is `forget-range.patch`'s own gate lines. See "Chat with customer support for me", at the very end. |
+| `brain-reads.patch` | `jarvis_hud.py` | **The Brain upgrades** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §71). One install()-shaped hunk at start-up - `jarvis_brain_reads.install(Handler, ...)` - whose context is `phone-notifications.patch`'s own install block (since GitHub's `main` was merged with the research branch, 2026-09-28, it sits right after that patch; the projects -> chatbot-routes -> live -> forget-range chain, and `support-chat.patch`, which touches only `jarvis_gate.py`, come after it). It answers `GET /api/history/search?q=` ("search what was said": `jarvis_chat_log.ChatLog.search` opens each kept turn in memory for that one search - no index, nothing written) and `GET /api/memory/fact-history?id=` ("history of this fact": `jarvis_memory.fact_history_view`, an erased version never with its words). Reads for the apps only; nothing reaches the AI model. Needs `jarvis_brain_reads.py`; without it the banner says so and the two routes are not there. See "The Brain upgrades", at the very end. |
+| `photo-reminder.patch` | `jarvis_hud.py` | **Photo to reminder** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §83). One install()-shaped hunk at start-up - `jarvis_photo_remind.install(Handler, ...)` - whose context is `brain-reads.patch`'s own install block, so it goes after it, last like every new patch. It answers `POST /api/photo/scan`: the words in a picture read by Windows (`jarvis_ocr.py`), a date, time and title found by `jarvis_quick.py`'s own parser, and a PROPOSED reminder sent back - nothing set up, nothing kept, outside text. Needs `jarvis_photo_remind.py`; without it the banner says so and the route is not there. See "Photo to reminder", at the very end. |
+| `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude, Gemini or DeepSeek** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
 | `sky.patch` | `jarvis_hud.py` | **The sun, the moon and the weather behind the animal faces** (the owner's decisions of 2026-09-28). Adds `GET /api/sky` and `POST /api/sky` (ONE change: show on or off, the town - this PC only - forget the town, or the weather source; Open-Meteo ON is ONE approval card). Its context is `answer-sources.patch`'s own startup `install()` block, so it goes last. Needs `jarvis_sky.py` and `jarvis_sky_places.py` copied in; without them, or on any error, the banner says so and the route answers 503 - the faces are drawn exactly as before. See "The sky behind the animals", at the very end. |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Three lines in `jarvis_gate.py`: the cards `pair_device`, `unretire_shared_key` and (phase 2, 2026-09-29, signed approvals from the phone) `register_approval_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; all three are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list but for `apps-in-projects.patch`, which builds on its lines: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 | `apps-in-projects.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **An app inside a Jarvis project: its tasks and the merge card** (the owner's decisions of 2026-09-28 and 2026-09-29; `docs/APPS-IN-PROJECTS-DESIGN.md`, `docs/JARVIS-API.md` section 92). One block in `jarvis_hud.py` right after `projects.patch`'s own: `jarvis_apps.install(...)` adds `GET /api/projects/<id>/app/tasks/<task>` and `POST .../app/tasks`, `.../files` (a change pasted in - PC only), `.../merge` (ONE risky approval card) and `.../discard`. Two lines in `jarvis_gate.py`: `app_merge_change` joins `_NO_RULE_FROM_DENIAL` (a no is never a standing rule) and `_RISK` as `("no", "local", ...)` - it cannot be undone yet, so it is a RISKY card (Windows Hello on the PC, the screen lock on the phone), approved on either device. Last in the list: its context is `projects.patch`'s, `forget-range.patch`'s and `devices.patch`'s lines. Needs `jarvis_apps.py` (with `jarvis_projects.py` and `jarvis_app_workspace.py`); without it, or on any error, the banner says "apps NOT ON" and the app routes are simply not there. See "Apps in Projects", at the very end. |
 | `history-import.patch` | `jarvis_hud.py` | **Bring in chats from ChatGPT, Claude, Gemini or DeepSeek** (the owner's choice, 2026-09-28; `docs/JARVIS-API.md` §85). One install()-shaped hunk at start-up - `jarvis_history_import.install(Handler, ...)` - whose context is `photo-reminder.patch`'s own install block, so it goes after it, last like every new patch. It answers `GET /api/memory/import_chats` and `POST .../start` (this PC only, no card) and `.../cancel`: the Brain's button runs `import_history.run()` in the background, and every possible fact waits in the review queue for its own yes. Needs `jarvis_history_import.py` and `import_history.py` (both shipped now); without them the banner says so and the routes are not there. See "`import_history.py`". |
+| `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 
 ## All but two of the patches apply, and that is correct
 
@@ -360,7 +362,6 @@ No git? `patch -p1 --forward -i <name>.patch` does the same, with `--dry-run`
 for the check.
 
 ---
-
 # `memory-safety.patch` — apply this one first
 
 Five defects, each found by executing the code rather than reading it, each
@@ -6334,11 +6335,74 @@ stand-in of `jarvis_hud.py` built from the whole patch stack, never to the
 real file, and nothing here has run on the owner's PC or against a real
 Credential Manager.
 
+**Since the chat audit (2026-09-28; docs/JARVIS-API.md section 18.6)** -
+all in `jarvis_chat_log.py`, shipped whole, so no patch changed for it:
+
+- Each conversation has a **kind** (`chat`, `live`, `support`, `chatbot`,
+  `compare`) and an empty `project` column, added in place to a history
+  kept before them. `GET /api/history?kind=` lists one kind; an opened
+  conversation says whether "Continue this chat" may carry it on
+  (`continuable`, `continue_why`).
+- A finished chatbot conversation and a comparison are kept whole
+  (`record_chatbot`, from `jarvis_chatbot.py` and
+  `jarvis_chatbot_compare.py`), every row role `chatbot` - never `user`, so
+  the learner reads none of it - outside text, read-only. Test suites never
+  write into your real History (`_where.py` sets `JARVIS_SUITE_RUNNING`).
+- A chat with a crisis turn is titled "A difficult moment"; a chat that
+  began with shared text is titled with what you asked.
+- "Delete conversations older than" never deletes a customer-support record
+  and says how many it kept.
+- `brief()`: one chat's title and when, for "Erase the words", which now
+  names the chat it would also delete (`GET /api/memory/fact-chat`,
+  `jarvis_brain_reads.py`).
+- `jarvis_live.py`: the Live session carries its chat's `conversation_id`,
+  so "Move it here" carries on the same chat.
+- `jarvis_forget_range.py`: a support record is listed unticked.
+
+**Since the second chat audit (2026-09-28; docs/JARVIS-API.md section 18.7)**:
+
+- `jarvis_chat_log.py`: `_rehydrate` puts a continued chat's own typed and
+  spoken messages (from the encrypted record only, never shared, pasted,
+  chatbot, support, crisis or outside-text rows) back in the live-turn
+  registry after a restart or "Continue this chat", so learned facts save
+  again instead of waiting as cards; a Forget or Erase floor (`hush:<cid>`
+  in the `meta` table) keeps forgotten and erased words out for good. A
+  chat titled "A difficult moment" cannot be continued. `search()` takes a
+  `kind`.
+- `jarvis_intake.py`: the ids of conversations that were games are kept
+  (bounded), so a game stays temporary after the apps' window slides; the
+  quick path, `jarvis_agent._looks_temporary` and `jarvis_next_time` ask the
+  same question. `games-temporary.patch` passes the conversation id.
+- `jarvis_auto_learn.py` + `auto-learn.patch`: a proposal remembers its
+  conversation (`auto_learn_notes.conversation_id`), and a fact accepted by
+  hand keeps it, so "Erase the words ... also delete the chat" finds it.
+- `jarvis_chatbot.py` / `jarvis_chatbot_compare.py`: a finished session says
+  whether it went to History (`history: {kept, why}`).
+- `jarvis_forget_range.py`: a chat that spills outside the days starts
+  unticked, and the card says what stays.
+- `jarvis_backup.py`: the backup's note also names deleted chats.
+- Tests: `test_auto_learn.py`, `test_chat_log.py`, `test_chat_kinds.py`,
+  `test_games_temp_chat.py`, `test_manner.py`, `test_forget_range.py`,
+  `test_brain_reads.py`, `test_chatbot.py`.
+- Since 2026-09-29 (docs/JARVIS-API.md section 18.7; both files are shipped
+  whole, so no patch changed): `jarvis_chat_log.py`'s `get()` adds
+  `history: {enabled, recording, why_not}` to `GET /api/history/conversation`,
+  so "Continue this chat" can say when new messages will not be kept;
+  `jarvis_live.py`'s `SEEN` gains `temporary_on` ("Temporary is on - this Live
+  session will not be kept in History."). Tests: `test_chat_log.py`,
+  `test_live.py`; the apps' shared words are regenerated by
+  `tools/gen_history_cases.py` and `tools/gen_live_cases.py`.
+- `games-temporary.patch` now really keeps a game or role-play out of
+  History (it handed `record_turn` the request without the temporary flag),
+  and `temporary-chat.patch` takes Jarvis Live's `live` mark off before any
+  model sees a message (`test_games_temp_chat.py`, `test_temporary_chat.py`,
+  `test_chat_kinds.py`).
+
 **Test.** From the repository folder, with `JARVIS_BACKEND` set to your
 backend folder:
 
 ```powershell
-$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_chat_log.py
+$env:JARVIS_BACKEND = "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 backend\test_chat_log.py; py -3 backend\test_chat_kinds.py
 ```
 
 ## auto-learn.patch - Jarvis learns automatically, from your own words only
@@ -6514,7 +6578,7 @@ fact's words; left alone) and a `documents` table that is not Jarvis's.
 - The conversation the fact was learned from, in chat history, still has
   the words UNLESS you also checked "Also delete the chat it came from"
   (2026-09-27) - otherwise delete it yourself in History (Brain, History on
-  the PC; Mind, Chat history on the phone). Either way, a fact with no
+  the PC; Brain, Chat history on the phone). Either way, a fact with no
   conversation_id on record (it never had one, or an earlier erase already
   stripped it) has nothing for the flag to delete.
 - Windows backups, System Restore points and the drive's own free space are
@@ -9282,7 +9346,7 @@ asleep. It holds only what Jarvis can already read on this PC:
 When it arrives, both apps say only **"Jarvis: your morning briefing is
 ready."** - on the lock screen and in the Windows toast, whatever your
 privacy settings. The briefing itself is in the app: the desktop's Brain,
-Work tab, and the phone's Mind. "Hide memory lists and chat history" (and
+Work tab, and the phone's Brain. "Hide memory lists and chat history" (and
 the desktop's Windows Hello setting) hides its lines and keeps the counts.
 It is read aloud only when you ask, and then under your private-answers
 voice setting, like a calendar answer.
@@ -14101,7 +14165,7 @@ the routes. **Not in either app yet** (step 3).
 - **Goals** live on the continuation branch (`jarvis_goals.py`), not
   here, so a project keeps a list of goal ids on its own side for now.
 - **Benchmarks** are named measurements. A life benchmark is a number the
-  owner logs - by a tap, or by saying "I ran 5 km" / "log 5 km run" (60.4:
+  owner logs - by a tap, or by saying "I ran 5 km" / "log 5 km run" (88.4:
   only when a benchmark fits). Each has dated results for a chart, and
   "better or worse than last time" when the owner said which way is
   better. A coding benchmark keeps its command, word for word, marked
@@ -15022,7 +15086,7 @@ near its limit drops out after one message and the other carries on.
 ## Not checked, said plainly
 
 - **Every default price** (in `DEFAULT_PRICES` and `docs/JARVIS-API.md`
-  60.4.1). None could be checked; `grok-4.6` had no known price at all and
+  87.4.1). None could be checked; `grok-4.6` had no known price at all and
   uses Grok 4's as a cautious guess. The price-page addresses are from
   memory too.
 - **Whether each service reports `usage` the way the code reads it** (all
@@ -15253,6 +15317,12 @@ all of it is in the files shipped whole):
 - `tools/gen_live_cases.py`: the new words, buttons and rules for both
   apps, including the tap-button examples that used to come out garbled
   and the one "Interrupting Jarvis" setting's carry-over rule.
+- The Live extras (2026-09-28): `jarvis_live.py` takes one more end
+  reason from an app, `screen_lock` ("The phone's screen locked."), for the
+  phone's own "End Live when: Only when the phone's screen locks". The PC
+  hotkey, the phone's tile, headset button, "Live ended - Resume", Bluetooth
+  microphone and "Talk about this in Live" use the existing routes
+  (docs/JARVIS-API.md 63.4).
 
 Nothing new to run on the PC beyond `apply-patches.ps1` as usual.
 
@@ -16574,6 +16644,64 @@ the desktop's widget window. Contract: `docs/JARVIS-API.md` section 86.
   only on Windows.
 ---
 
+# Solve it here: a captcha handed to your phone, `jarvis_handoff.py` (2026-09-28)
+
+## In plain words
+
+When a chatbot website or a customer-support chat that Jarvis is using
+stops at a captcha, a sign-in page or an "unusual activity" page, your phone
+gets an alert ("Gemini needs you") and offers **Solve it here**: a live
+picture of that one browser window on your PC, and your own taps and typing
+passed back to it - only while Jarvis is paused there. Nothing is saved on
+either side. Jarvis never solves it for you. The PC's Brain shows the same
+alert, and the window is right there too. When it is done, press Resume
+(Resume asks with a card, as always).
+
+## What to do on the PC
+
+Nothing new: `scripts\apply-patches.ps1` copies `jarvis_handoff.py` beside
+the other chatbot files. No patch - `jarvis_chatbot_routes.py` (already
+shipped whole) answers its four routes. It needs Playwright, like the
+chatbot websites themselves.
+
+## What the code does
+
+- `offer()` - on `GET /api/chatbot/status` as `handoff`: which session is
+  paused at one of the three pages, its site and its reason. Never a picture.
+- `start()` - `POST /api/chatbot/handoff/start`: no card. Fixes the hosts the
+  window may show meanwhile (the site's, its sign-in hosts, and the one it
+  shows now).
+- `frame()` - `GET /api/chatbot/handoff/frame?h=`: ONE screenshot of that
+  one page, as a JPEG, handed back and not kept. At most two a second.
+- `send_input()` - `POST /api/chatbot/handoff/input`: one tap (fractions of
+  the picture), a few typed characters, one key from a short list, or a
+  scroll. At most 30 in 3 seconds. The audit line has counts only.
+- Every picture and input first checks the session is STILL paused at that
+  page, in that window, on those hosts - else it ends ("resumed", "left",
+  "closed", "idle" after 45 seconds unlooked-at, "time" after 15 minutes,
+  "stop_all").
+
+## Test it
+
+`py -3 backend\test_handoff.py` - the rules check in code (the only page
+calls are one screenshot and the owner's own input, both after the "still
+paused there" check) and in behaviour, and a real Chromium window against a
+fake page on this PC (skips itself without Playwright). Both apps' words and
+answers: `python3 tools/gen_handoff_cases.py --check`.
+
+## Not checked, said plainly
+
+- Not tried against a real captcha or sign-in page. Some captchas can tell a
+  tap passed on this way (Playwright's own mouse event) and refuse it; the
+  phone says so and offers "Solve it on the PC instead".
+- A site that opens a NEW window or tab (some "Sign in with Google" pop-ups)
+  is finished on the PC: only the first window is passed on.
+- A password typed on the phone for a sign-in page travels over your own
+  link (Tailscale or Meshnet, scrambled) and through the PC's memory for
+  that one input; it is never logged or kept.
+- The phone's screen, alert and notification are compiled only by CI; the
+  pure logic (`net/Handoff.kt`) and its test were compiled and run here.
+
 # Forget a time frame: `forget-range.patch` (2026-09-28)
 
 ## In plain words
@@ -16636,6 +16764,127 @@ The words and real answers both apps are tested against:
   drawn.
 - A Home Assistant weather device whose attributes run past 500 characters
   (`jarvis_home`'s cap) loses its wind; the condition still draws.
+
+---
+# Chat with customer support for me: `support-chat.patch` (2026-09-28)
+
+## In plain words
+
+Jarvis can now chat with a company's customer support for you - Groupon
+first - in your name, in a browser window you can see on the PC. You fill
+in a short form in either app: the company, what you want done ("refund
+order 1234, the spa closed"), and each detail Jarvis may give (a name and
+its exact value, like "Order number: 4481902217"). ONE approval card shows
+all of it, and the company's terms risk (your real account could be
+closed). On a yes, a window opens on the company's help page; you open the
+chat there yourself (its Chat button) and Jarvis starts. Every offer - a
+refund, a credit, a cancellation - gets its own card, and nothing is
+accepted until you approve it. If the agent asks "are you a bot?", or for
+the last digits of your card, a security answer or a code, Jarvis sends
+nothing and hands it to you: you answer in the window, then press Resume.
+Jarvis never says it is a person, and never sends a password, a card
+number or an ID number.
+
+## What to do on the PC
+
+Run `apply-patches.ps1` as usual. It copies `jarvis_support.py` and
+`jarvis_support_widget.py` in and applies `support-chat.patch` near the end, just before `devices.patch` (the
+gate's words for the two new cards). Your settings file needs no change: a
+file without the `support_chat` / `support_offer` lines asks anyway, and
+the shipped one says `"ask"`. The window needs Playwright, the same as the
+chatbot websites (if you already did it for Gemini, skip this):
+
+```
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 -m pip install playwright; py -3 -m playwright install chromium
+```
+
+## Build step 8 - yours, on Groupon's real help page
+
+Nothing here has been tried against a real site. Three one-line commands,
+each pasted into PowerShell on its own.
+
+**1. Sign in to your own Groupon account in Jarvis's support window** (it
+has its own browser profile; Jarvis never sees the password). Close the
+window when you are signed in:
+
+```
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_support_widget.py sign-in groupon
+```
+
+**2. The check - it only READS; it types, sends and presses nothing.** When
+the window opens, click Groupon's own "Chat" / "Contact us" button yourself
+and wait. It prints PASS or FAIL for each thing Jarvis needs, and saves the
+same lines in `C:\Users\pcadmin\.openjarvis\chatbot\support-check.txt`:
+
+```
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_support_widget.py check groupon; Write-Host "Saved in $env:USERPROFILE\.openjarvis\chatbot\support-check.txt"
+```
+
+If the help page's address in Jarvis is wrong (the check says "a page on
+..." or finds no chat), put the right one after `groupon`:
+`py -3 jarvis_support_widget.py check groupon https://<the real help page>`
+- and send me the saved file either way, so the preset and the selectors
+can be fixed.
+
+**3. One real chat**, from either app: Brain -> "Chat with customer support
+for me", Groupon, a real goal and the details you allow. Watch the window.
+
+To forget every sign-in the support window keeps (it deletes that browser
+profile and nothing else):
+
+```
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_support_widget.py forget-sign-ins
+```
+
+## What the code does
+
+- **The details card** (`support_chat`): the company, its help page and
+  terms risk, the goal, and every detail word for word. Passwords, PINs,
+  security answers, card numbers, ID numbers, sign-in details, codes and
+  bank account numbers are refused on the form.
+- **The last check before every message** hides each listed value exactly
+  as written, then blocks anything else personal (an unlisted email, phone
+  number, long number or address, a saved fact about you). Card numbers,
+  Social-Security-shaped numbers, passwords, keys, codes and "I'm a real
+  person" are blocked even if listed.
+- **Offers** (`support_offer`): plain code looks for an offer in every
+  agent message (tested over 100 written agent lines: 55 offers, none
+  missed; no needless card over the 45 others), and the model can say
+  "offer" too. The card shows the agent's words and the exact reply
+  ("Yes, I accept that. Thank you."). While it waits, Jarvis tells the
+  agent "One moment please, I'm just checking that." at most every 2
+  minutes, 3 times, then pauses. A yes that comes after the pause accepts
+  nothing. In the apps: Decline, Say something else, Take over - never
+  Accept.
+- **Handed to you:** "are you a bot?" (or "am I talking to Alex?"),
+  identity checks, a detail not on the card - nothing is sent.
+- **One or two graphics cards:** the chatbot driver's own logic. One card
+  (today): Jarvis's own model reads the goal, the details and the last six
+  messages. Two cards: the whole chat, once you switch `[chatbot]
+  full_version` on after measuring.
+- **The record:** the whole chat is kept in your encrypted chat history as
+  "Support chat with Groupon - <date>", and "Export transcript" on the PC
+  saves a plain (NOT encrypted) text file where you pick.
+
+## Test it
+
+`py -3 backend\test_support_chat.py` (the rules, no browser, no network)
+and `py -3 backend\test_support_widget.py` (a real browser window against
+fake help pages on this PC, one per chat maker; it skips itself without
+Playwright). Both apps' words and answers:
+`python3 tools/gen_support_cases.py --check`.
+
+## Not checked, said plainly
+
+- Not tried against Groupon or any real chat widget. The help address and
+  every selector and host in the vendor table are guesses (NOT VERIFIED)
+  until your check.
+- Groupon's terms reportedly forbid automated use (a search summary; the
+  page could not be read). Your real account could be closed.
+- The phone's screen (`SupportPlate.kt`) is compiled only by CI; its pure
+  logic (`net/Support.kt`) and test were compiled and run here.
+- The limits (15 messages, 30 minutes of chat, 45 in the queue on one
+  card) are proposals.
 
 # Pairing a phone by QR code: `jarvis_devices.py`, `devices.patch` (2026-09-28)
 

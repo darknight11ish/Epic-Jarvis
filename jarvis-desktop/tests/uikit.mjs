@@ -473,6 +473,9 @@ export const HOTKEYS = [
     accelerator: "Alt+Shift+F", default: "Alt+Shift+F", registered: true, error: null },
   { id: "talk_to_type", label: "Talk-to-type", hint: "Hold it and speak, then let go: Jarvis types what you said into the program in front. A quick tap keeps it listening until you press it again. Works once talk-to-type is on (Settings, Voice).",
     accelerator: "Alt+Shift+T", default: "Alt+Shift+T", registered: true, error: null },
+  // Jarvis Live's key ships OFF (the owner's decision of 2026-09-28).
+  { id: "toggle_live", label: "Start or end Jarvis Live", hint: "Off until you pick a key - Alt+Shift+L is free for it. Starting is held while the connection is catching up or App lock would ask; ending never is.",
+    accelerator: "", default: "", registered: false, error: null },
 ];
 
 export const UPDATE_NONE = {
@@ -481,7 +484,7 @@ export const UPDATE_NONE = {
 };
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals,
-  folders, historyImport, widgets, chatbot, devices }) {
+  folders, chatbot, support, historyImport, widgets, devices }) {
   const listeners = {};
   window.__calls = [];
   window.__emailSending = emailSending || null;
@@ -822,7 +825,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return null;
           case "reset_hotkeys":
             window.__hotkeys = window.__hotkeys.map((h) => ({
-              ...h, accelerator: h.default, registered: true, error: null,
+              ...h, accelerator: h.default, registered: Boolean(h.default), error: null,
             }));
             return window.__hotkeys;
           case "set_hotkeys": {
@@ -830,6 +833,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             // written, so a rejected save leaves the bindings untouched.
             const seen = new Map();
             for (const [id, accel] of Object.entries(args.bindings)) {
+              // Blank: an action left off (hotkeys.rs skips it).
+              if (!accel) continue;
               const mods = String(accel).split("+").slice(0, -1);
               if (!mods.length) throw new Error(`${id}: \`${accel}\` has no modifier.`);
               const key = String(accel).toLowerCase();
@@ -841,8 +846,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__hotkeys = window.__hotkeys.map((h) => ({
               ...h,
               accelerator: args.bindings[h.id] ?? h.accelerator,
-              // The scenario decides which combinations the "OS" refuses.
-              registered: !(window.__refuse || []).includes(args.bindings[h.id] ?? h.accelerator),
+              // The scenario decides which combinations the "OS" refuses. A
+              // blank one is off: not registered, and no error.
+              registered: Boolean(args.bindings[h.id] ?? h.accelerator)
+                && !(window.__refuse || []).includes(args.bindings[h.id] ?? h.accelerator),
               error: (window.__refuse || []).includes(args.bindings[h.id] ?? h.accelerator)
                 ? "HotKey already registered"
                 : null,
@@ -1869,6 +1876,47 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             return { ok: true, message: cmd === "chatbot_pause" ? "Pausing at the next step." : "Resume asks you first." };
           }
+          // brain/support.rs ("Chat with customer support for me").
+          // `window.__support` is null - a PC without support chats, answered
+          // as `null` - unless the scenario names `support: {status, named?,
+          // startRefuses?}`: real GET /api/chatbot/status answers from
+          // fixtures/support-cases.json. Every change is recorded in
+          // window.__supportCalls; start, decline and say are refused on a
+          // stale link, as Rust does.
+          case "support_status": {
+            const s = window.__support;
+            if (!s) return null;
+            s.reads += 1;
+            s.ids.push(args.id);
+            const out = args.id && s.named ? s.named : s.status;
+            return JSON.parse(JSON.stringify(out));
+          }
+          case "support_start":
+          case "support_stop":
+          case "support_takeover":
+          case "support_answer":
+          case "support_export": {
+            window.__supportCalls.push({ cmd, ...args });
+            const held = cmd === "support_start"
+              || (cmd === "support_answer" && args.choice !== "takeover");
+            if (state.stale && held) {
+              throw new Error("the event stream is stale, so this cannot be confirmed live - nothing can be sent until it reconnects");
+            }
+            const s = window.__support;
+            if (cmd === "support_start") {
+              if (s.startRefuses) throw new Error(s.startRefuses);
+              return { ok: true, asking: true, support: "sup_000000000001",
+                message: "Nothing has been sent yet. An approval card shows the company, your goal and every detail Jarvis may give; the chat starts only if you approve it." };
+            }
+            if (cmd === "support_export") return { saved: "C:\\Users\\me\\jarvis-support-groupon.txt" };
+            if (cmd === "support_stop") {
+              return { ok: true, support: args.id, message: "Stopping. Nothing more is sent; messages already sent stay sent. The window closes." };
+            }
+            if (cmd === "support_takeover") {
+              return { ok: true, support: args.id, message: "Jarvis stops sending within a few seconds. Type in the chat window on the PC; press Resume when you want Jarvis to carry on." };
+            }
+            return { ok: true, support: args.id, message: "Declining: Jarvis sends the polite no within a few seconds." };
+          }
           case "brain_schedule_add_todo": {
             window.__scheduleCalls.push({ cmd, ...args });
             const sc = window.__schedule;
@@ -1988,13 +2036,17 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           }
           case "brain_history_list": {
             const h = window.__history;
-            h.reads.push({ before: args.before, limit: args.limit });
+            h.reads.push(args.kind ? { before: args.before, limit: args.limit, kind: args.kind }
+              : { before: args.before, limit: args.limit });
             if (h.listFails) throw new Error(h.listFails);
             if (h.missing) {
               return { available: false, why: "This PC's Jarvis does not keep chat history yet. " +
                 "Update the backend by running apply-patches.ps1, then open this again." };
             }
-            const all = [...h.conversations].sort((a, b) => b.updated - a.updated);
+            // `kind` narrows the list, as GET /api/history?kind= does.
+            const all = [...h.conversations]
+              .filter((c) => !args.kind || (c.kind || "chat") === args.kind)
+              .sort((a, b) => b.updated - a.updated);
             const older = args.before == null ? all : all.filter((c) => c.updated < args.before);
             const page = older.slice(0, args.limit || 30);
             const out = JSON.parse(JSON.stringify({ ...h.status, conversations: page }));
@@ -2021,6 +2073,52 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             return JSON.parse(JSON.stringify(t));
           }
+          // "Continue this chat" (the chat audit, 2026-09-28): the Brain
+          // names the chat (brain/history.rs brain_continue_chat, the id
+          // only); the bar reads it itself (chat_continue_open) - refused,
+          // as Rust refuses, for a record that is not a chat or a Live
+          // session, and while the private lists are hidden.
+          case "brain_continue_chat": {
+            const h = window.__history;
+            h.continued = h.continued || [];
+            h.continued.push(args.id);
+            return null;
+          }
+          // Is "Hide memory lists and chat history" on? (brain/history.rs
+          // chat_thread_hidden - yes or no; the bar hides its thread with it.)
+          case "chat_thread_hidden": {
+            const sec = window.__security || {};
+            return Boolean(sec.hidden && !sec.revealed);
+          }
+          case "chat_continue_open": {
+            const h = window.__history;
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              throw new Error("Your chat history is hidden. Press Show on the Brain's History tab " +
+                "and confirm it is you with Windows Hello first.");
+            }
+            const t = h.transcripts[args.id];
+            if (!t) {
+              throw new Error("That conversation is no longer kept on this PC. It was deleted, " +
+                "or it was older than the keep setting.");
+            }
+            if (!["chat", "live", undefined].includes(t.kind)) {
+              throw new Error("That conversation can't be continued: it is a record of a chat " +
+                "with someone other than Jarvis.");
+            }
+            return JSON.parse(JSON.stringify(t));
+          }
+          // "Which chat did this fact come from?" (GET /api/memory/fact-chat):
+          // `factChat` maps a fact id to its chat ({id, title, updated, kind})
+          // or null; a fact not in it is from a PC that cannot say.
+          case "brain_fact_chat": {
+            const h = window.__history;
+            h.factChatReads = h.factChatReads || [];
+            h.factChatReads.push(args.id);
+            const map = h.factChat || null;
+            if (!map || !(String(args.id) in map)) return { available: false };
+            return { id: args.id, conversation: map[String(args.id)] };
+          }
           // brain/history.rs brain_history_search, over the stubbed
           // transcripts, the way jarvis_chat_log.ChatLog.search answers:
           // every word somewhere in the conversation, case ignored, newest
@@ -2030,6 +2128,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "brain_history_search": {
             const h = window.__history;
             h.searches.push(args.query);
+            h.searchKinds = h.searchKinds || [];
+            h.searchKinds.push(args.kind || null);
             const sec = window.__security;
             if (sec.hidden && !sec.revealed) {
               throw new Error("Your chat history is hidden. Press Show on the Brain's History tab " +
@@ -2045,6 +2145,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const found = [];
             const all = [...h.conversations].sort((a, b) => b.updated - a.updated);
             for (const c of all) {
+              // The kind chosen in "Show" narrows the search too (finding 8).
+              if (args.kind && (c.kind || "chat") !== args.kind) continue;
               const turns = (h.transcripts[c.id] && h.transcripts[c.id].turns) || [];
               if (!words.every((w) => has(c.title, w) || turns.some((t) => has(t.text, w)))) continue;
               const hitTurns = turns.filter((t) => words.some((w) => has(t.text, w)));
@@ -2342,6 +2444,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__focusCalls = [];
   window.__chatbot = chatbot ? JSON.parse(JSON.stringify({ reads: 0, ids: [], compares: [], ...chatbot })) : null;
   window.__chatbotCalls = [];
+  window.__support = support ? JSON.parse(JSON.stringify({ reads: 0, ids: [], ...support })) : null;
+  window.__supportCalls = [];
   window.__briefing = briefing ? JSON.parse(JSON.stringify({
     briefing: null, setups: [], sources: {}, reads: 0, fails: null, ...briefing })) : null;
   window.__briefingCalls = [];

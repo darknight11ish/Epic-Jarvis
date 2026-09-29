@@ -498,7 +498,17 @@ fun BrainScreen(
             // Pause/Resume/Stop, new limits, the summary (ChatbotPlate.kt) -
             // the desktop's Brain -> Work, the same card.
             item(key = "chatbot") {
-                ChatbotSection(canAct = canAct, privateHidden = privateHidden)
+                ChatbotSection(canAct = canAct, privateHidden = privateHidden, onOpenHistory = onOpenHistory)
+            }
+
+            // "Chat with customer support for me" (the owner's decisions of
+            // 2026-09-28): start one (ONE card listing every detail), the chat
+            // with the company's words marked outside text, a waiting offer
+            // (Decline / Say something else / Take over - accepting is only
+            // the offer's own card), Take over / Resume / Stop, the summary
+            // (SupportPlate.kt) - the desktop's Brain -> Work, the same card.
+            item(key = "support") {
+                SupportSection(canAct = canAct, privateHidden = privateHidden, onOpenHistory = onOpenHistory)
             }
 
             // "Morning briefing" (the owner's decisions of 2026-09-25): the

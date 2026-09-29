@@ -74,6 +74,38 @@ object MemoryErase {
     /** Said after an erase that also deleted the chat it came from. */
     const val ERASED_AND_CHAT_DELETED = "Erased, and the chat it came from is deleted too."
 
+    /** Said when no chat was on record for the fact (a card accepted by hand, an older fact,
+     *  or a chat already deleted) - honest, rather than a bare "Erased." (the chat audit,
+     *  2026-09-28). The desktop says the same. */
+    const val ERASED_NO_CHAT = "Erased. No chat was on record for this fact, so no chat was deleted."
+
+    /** The checkbox, naming the chat (its title and when) once the PC has said which. */
+    fun chatNamed(title: String?, whenWords: String?): String =
+        "Also delete the chat it came from: \"${title?.trim()?.ifEmpty { null } ?: "its title is hidden"}\" " +
+            "(${whenWords?.ifEmpty { null } ?: "date unknown"})?"
+
+    /**
+     * What stays when the chat goes too, under the checkbox (the second chat
+     * audit, 2026-09-28): the chat's OTHER facts stay - how many - and what
+     * older backups keep; a support record says what it is. The desktop's
+     * second question says the same.
+     */
+    fun chatStays(others: Int, kind: String?): String {
+        val backups = ChatLog.DELETE_STAYS.removePrefix("Facts Jarvis learned stay. ")
+        val stays = if (others > 0) {
+            (if (others == 1) "1 other fact" else "$others other facts") +
+                " Jarvis learned in that chat ${if (others == 1) "stays" else "stay"}. $backups"
+        } else {
+            ChatLog.DELETE_STAYS
+        }
+        return if (kind == "support") {
+            "$stays This is the record of a customer-support chat - what the company said and what was " +
+                "sent in your name."
+        } else {
+            stays
+        }
+    }
+
     /** A 404 that said "no such fact": nothing left to erase. */
     const val ALREADY_GONE = "Jarvis had no such fact any more."
 
@@ -86,18 +118,26 @@ object MemoryErase {
     /** What the PC answered, kept whole: the status and the JSON body, if any. */
     data class Reply(val code: Int, val body: JsonObject?)
 
+    /** The PC deleted the chat the fact came from, too. */
+    fun chatDeleted(reply: Reply): Boolean = reply.code in 200..299 && reply.body?.flag("chat_deleted") == true
+
     /**
      * Whether the words are gone now (so the row leaves the list), and the
-     * sentence to show.
+     * sentence to show. [askedChat]: the chat was asked about (or the PC said
+     * none is on record) - a bare "Erased." would then hide that no chat went.
      */
-    fun said(reply: Reply): Pair<Boolean, String> {
+    fun said(reply: Reply, askedChat: Boolean = false): Pair<Boolean, String> {
         val b = reply.body
         val error = b?.text("error")?.let { DesktopWrite.asSentence(it) }
         return when {
             reply.code in 200..299 -> if (b?.flag("ok") == false) {
                 false to ("Not erased. " + (error ?: "Your PC said no, without a reason."))
             } else {
-                true to (if (b?.flag("chat_deleted") == true) ERASED_AND_CHAT_DELETED else ERASED)
+                true to when {
+                    b?.flag("chat_deleted") == true -> ERASED_AND_CHAT_DELETED
+                    askedChat -> ERASED_NO_CHAT
+                    else -> ERASED
+                }
             }
             reply.code == 404 && b?.text("reason") == "no_such_fact" -> true to ALREADY_GONE
             reply.code == 404 || reply.code == 501 -> false to TOO_OLD

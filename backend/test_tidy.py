@@ -130,7 +130,8 @@ def extract():
     x._cfg = lambda k, d=None: d
     body = [line for line in src.splitlines()
             if line.startswith(("RETIRE_SOURCE = ", "AUTO_SOURCES = ", "MERGE_SOURCE = "))]
-    for name in ("_accept_retire", "_accept_merge", "_accept", "_fact_source", "_fact_meta"):
+    for name in ("_accept_retire", "_accept_merge", "_accept", "_fact_source", "_fact_meta",
+                 "_proposal_chat"):
         body.append(_stack.function_text(src, name))
     exec(compile("\n\n".join(body), "<jarvis_extract.py stand-in>", "exec"), x.__dict__)
     return x

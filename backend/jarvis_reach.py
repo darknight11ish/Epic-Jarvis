@@ -256,6 +256,9 @@ class Ctx:
     # Chatbot conversations (jarvis_chatbot.py): {"routed": bool, "chatbots":
     # jarvis_chatbot.choices()}; None: read them.
     chatbot: Optional[dict] = None
+    # Customer-support chats (jarvis_support.py): {"routed": bool, "ready":
+    # "" or why not, "companies": [names]}; None: read them.
+    support: Optional[dict] = None
 
 
 def _gate_action(lookup: str) -> Optional[str]:
@@ -839,6 +842,64 @@ def _chatbot(ctx: Ctx) -> dict:
                 "or sign-in page. What the chatbot says is outside text.")
 
 
+def _support_status() -> dict:
+    """jarvis_support's own companies and whether its window can open here
+    (Playwright only - opens nothing)."""
+    try:
+        import jarvis_chatbot as CB
+        import jarvis_support as S
+        try:
+            import jarvis_support_widget as SW
+            why = str(SW.ready() or "")
+        except Exception as exc:
+            why = f"the support window is not on this PC ({type(exc).__name__})"
+        return {"routed": bool(getattr(CB, "ROUTED", False)), "ready": why,
+                "companies": [c.name for c in S.COMPANIES.values()]}
+    except Exception:
+        return {"routed": False, "ready": "", "companies": [], "missing": True}
+
+
+def _support_chat(ctx: Ctx) -> dict:
+    """Customer-support chats (jarvis_support.py and jarvis_support_widget.py,
+    the owner's decisions of 2026-09-28): Jarvis chats with a company's
+    customer support in the owner's name, on the owner's own account, in a
+    browser window the owner can see. One named way out: the help page of
+    the company the owner picks on the card (Groupon first) and its chat
+    maker's host."""
+    name = "Customer-support chats"
+    st = ctx.support if ctx.support is not None else _support_status()
+    if st.get("missing"):
+        return _row("support_chat", name, "not_set_up", "", ASK_NA,
+                    "Not set up: this PC's Jarvis has no customer-support chats yet.")
+    tier = "ask"
+    try:
+        tier = str(ctx.tier("support_chat"))
+    except Exception:
+        pass
+    if tier == "never":
+        return _row("support_chat", name, "blocked", "", ASK_NEVER,
+                    "Your settings say never, so Jarvis never chats with customer support "
+                    "for you.")
+    why = str(st.get("ready") or "")
+    if why:
+        return _row("support_chat", name, "not_set_up", "", ASK_NA,
+                    ("Not set up: " + why).strip())
+    if not st.get("routed"):
+        return _row("support_chat", name, "off", "", ASK_NA,
+                    "Ready on this PC, but neither app can start a support chat yet - run "
+                    "apply-patches.ps1 on the PC.")
+    companies = _join([str(c) for c in st.get("companies") or []]) or "a company you pick"
+    return _row("support_chat", name, "on",
+                "the help page of the company on the card (" + companies + ", or one whose "
+                "help page you type) and its chat window's own host (a browser window you "
+                "can see)", ASK_EVERY,
+                "Chats with a company's customer support for you, in your name, on your own "
+                "account there: one approval card per chat lists every detail Jarvis may "
+                "give, and every offer (a refund, a credit, a cancellation) gets its own card "
+                "- nothing is accepted without it. Identity checks and \"are you a bot?\" are "
+                "handed to you. The company's words are outside text.")
+
+
 #: jarvis_chatbot_api's own notes: no_key_words(), CANNOT_READ and
 #: no_limit_words() (a key but no monthly money limit yet: not used until
 #: one is set - the owner's decision of 2026-09-28).
@@ -962,6 +1023,7 @@ KINDS = (
     ("browser", _browser),
     ("chatbot", _chatbot),
     ("chatbot_api", _chatbot_api),
+    ("support_chat", _support_chat),
     ("phone_control", _phone),
     ("shell", _shell),
     ("plugins", _plugins),

@@ -2673,7 +2673,7 @@
   "folder_none": "No folder yet.",
   "folder_under": "Only a folder on \"Folders Jarvis may look in\" (Settings), or one inside it.",
   "instructions": "How Jarvis should work on this",
-  "instructions_under": "In your own words. Jarvis reads this in this project's chats.",
+  "instructions_under": "In your own words. Saved for later: Jarvis does not read this in chats yet.",
   "kind_coding": "Coding - a folder on your PC",
   "kind_life": "Life - numbers you track",
   "latest": "Latest",
