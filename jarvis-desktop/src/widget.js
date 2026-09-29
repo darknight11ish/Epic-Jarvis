@@ -55,6 +55,21 @@ import {
   readFocus,
   toneOf as focusToneOf,
 } from "./focus.js";
+import {
+  APPEARED_WORDS as SCREEN_APPEARED,
+  POLL_MS as SCREEN_POLL_MS,
+  STOP_TITLE as SCREEN_STOP_TITLE,
+  nextScreenWork,
+  secondsRunning,
+} from "./screen-work.js";
+import {
+  FACE_OPTION as BOARD_FACE_OPTION,
+  LOCKED_OPENS_BAR as BOARD_LOCKED_OPENS_BAR,
+  hideView as boardHideView,
+  NEVER_HELD as BOARD_NEVER_HELD,
+  paint as paintBoardBlocks,
+  viewOf as boardViewOf,
+} from "./widget-board.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -103,6 +118,9 @@ const dom = {
   faceWrap: $("face-wrap"),
   faceStatus: $("face-status"),
   faceFrame: $("face-frame"),
+  board: $("board"),
+  boardPick: $("board-pick"),
+  boardBlocks: $("board-blocks"),
 
   focusStrip: $("focus-strip"),
   focusClock: $("focus-clock"),
@@ -110,6 +128,10 @@ const dom = {
   focusPause: $("focus-pause"),
   focusLock: $("focus-lock"),
   focusStop: $("focus-stop"),
+
+  screenStrip: $("screen-strip"),
+  screenClock: $("screen-clock"),
+  screenStop: $("screen-stop"),
 
   netDot: $("net-dot"),
   offline: $("widget-offline"),
@@ -365,6 +387,106 @@ for (const b of [dom.focusPause, dom.focusLock, dom.focusStop]) {
 }
 
 /* ==========================================================================
+   "Jarvis is working on your screen, 0:42 - Stop" (screen-work.js)
+
+   Asked of the PC every two seconds, and only while the event stream says
+   Jarvis is working - an idle Jarvis costs no requests. Rust answers from
+   GET /api/task's running list (screen_work.rs), so the line shows only
+   while a screen-control plan really runs. When the stream stops saying
+   "working" the PC is asked once more, and a failed last ask hides the line
+   rather than leaving a stale clock running. Stop is Stop everything,
+   never held: not by a stale link, not by App lock.
+   ========================================================================== */
+
+const screenWork = { view: null, poll: null, tick: null, loading: false, again: false };
+
+async function loadScreenWork({ hideOnError = false } = {}) {
+  if (!IS_TAURI) return;
+  if (screenWork.loading) {
+    // Asked again while an ask is out: once more afterwards, and a "last
+    // ask" (hide on failure) is never downgraded by an ordinary poll.
+    screenWork.again = { hideOnError: hideOnError || Boolean(screenWork.again && screenWork.again.hideOnError) };
+    return;
+  }
+  screenWork.loading = true;
+  try {
+    const got = await invokeStrict("screen_work");
+    paintScreenWork(nextScreenWork(screenWork.view, got, Date.now()));
+  } catch (error) {
+    // Nothing new is known. Keep the line while Jarvis still reports it is
+    // working; drop it once it does not.
+    if (hideOnError) paintScreenWork(null);
+  } finally {
+    screenWork.loading = false;
+  }
+  if (screenWork.again) {
+    const next = screenWork.again;
+    screenWork.again = false;
+    await loadScreenWork(next);
+  }
+}
+
+function screenTickOnce() {
+  if (!screenWork.view || !dom.screenClock) return;
+  dom.screenClock.textContent = focusClock(secondsRunning(screenWork.view, Date.now()));
+}
+
+function paintScreenWork(view) {
+  if (!dom.screenStrip) return;
+  const appeared = Boolean(view) && !screenWork.view;
+  screenWork.view = view;
+  dom.screenStrip.hidden = !view;
+  if (view) {
+    screenTickOnce();
+    if (!screenWork.tick) screenWork.tick = setInterval(screenTickOnce, 1000);
+    // Once, when it appears - never the clock every second.
+    if (appeared) announce(SCREEN_APPEARED);
+  } else if (screenWork.tick) {
+    clearInterval(screenWork.tick);
+    screenWork.tick = null;
+  }
+  syncSize();
+}
+
+/** Called on every link report: ask while working, stop asking after. */
+function syncScreenPolling(link) {
+  const working = Boolean(link && link.connected && link.activity === "working");
+  if (working && !screenWork.poll) {
+    loadScreenWork();
+    screenWork.poll = setInterval(() => loadScreenWork(), SCREEN_POLL_MS);
+  } else if (!working && screenWork.poll) {
+    clearInterval(screenWork.poll);
+    screenWork.poll = null;
+    loadScreenWork({ hideOnError: true });
+  } else if (!working && screenWork.view) {
+    loadScreenWork({ hideOnError: true });
+  }
+}
+
+async function screenStop() {
+  const b = dom.screenStop;
+  if (!b || b.disabled) return;
+  b.disabled = true;
+  try {
+    await invokeStrict("stop_everything");
+    // The notification says what was stopped; this says it was sent.
+    flash("Stop sent.", "ok",
+      "Stop everything sent. Jarvis stops before its next step; steps already done stay done. A notification says what was stopped.");
+  } catch (error) {
+    flash(String((error && error.message) || error), "bad");
+  } finally {
+    b.disabled = false;
+  }
+  // The line goes when the PC says the plan has ended, not on this click.
+  setTimeout(() => loadScreenWork(), 800);
+}
+
+if (dom.screenStop) {
+  dom.screenStop.title = SCREEN_STOP_TITLE;
+  dom.screenStop.addEventListener("click", screenStop);
+}
+
+/* ==========================================================================
    Expand / collapse / pin
    ========================================================================== */
 
@@ -395,7 +517,8 @@ for (const b of [dom.focusPause, dom.focusLock, dom.focusStop]) {
  * boot on the queue read to close a gap nobody can see.
  */
 function applyFaceVisibility() {
-  const show = state.expanded && !state.approval;
+  // "Your widget" takes the face's place while one is chosen and drawn.
+  const show = state.expanded && !state.approval && !(board.id && board.view);
   if (dom.faceWrap) dom.faceWrap.hidden = !show;
   // `feed=parent`: this window tells the face what to wear and what state to
   // show, the way the HUD does. The frame used to ask for the owner's face
@@ -404,7 +527,159 @@ function applyFaceVisibility() {
   // default colours. And an event sent to this window is delivered to its
   // top-level page, never to a frame inside it, so the frame could not have
   // followed a change anyway. See `postFace`.
-  if (dom.faceFrame) dom.faceFrame.src = show ? "faces.html?mode=display&feed=parent&clip=circle" : "";
+  // Only when it changes: setting the same address again restarts the load
+  // (and "Your widget" repaints call this after every read).
+  const src = show ? "faces.html?mode=display&feed=parent&clip=circle" : "";
+  if (dom.faceFrame && (dom.faceFrame.getAttribute("src") || "") !== src) dom.faceFrame.src = src;
+}
+
+/* ==========================================================================
+   "Your widget" (widget-board.js; JARVIS-API.md section 86)
+
+   One of the widgets the owner described in the Brain, drawn in place of
+   the face. Which one is a per-window convenience kept in this window's
+   own storage (never the widget's contents). Read when the tray opens,
+   when the choice changes, on a schedule or focus event, and once a minute
+   while it is on screen. Rust (brain/widgets.rs widget_board) takes the
+   private words out while App lock is on or the lists are hidden; the
+   buttons go through ONE command with a closed list of five.
+   ========================================================================== */
+
+const BOARD_KEY = "jarvis.widgetBoard";
+const BOARD_READ_MS = 60000;
+const board = { id: "", names: [], view: null, loading: false, again: false, timer: null };
+
+function boardChoice() {
+  try {
+    return localStorage.getItem(BOARD_KEY) || "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function saveBoardChoice(id) {
+  try {
+    if (id) localStorage.setItem(BOARD_KEY, id);
+    else localStorage.removeItem(BOARD_KEY);
+  } catch (error) {
+    /* private mode: the choice lasts until the window closes */
+  }
+}
+
+async function loadBoard() {
+  if (!IS_TAURI || !dom.board) return;
+  if (board.loading) {
+    board.again = true;
+    return;
+  }
+  board.loading = true;
+  try {
+    const got = await invokeStrict("widget_board", { id: board.id || null });
+    if (got && got.available !== false) {
+      board.names = Array.isArray(got.widgets) ? got.widgets : [];
+      if (board.id && !board.names.some((w) => w && w.id === board.id)) {
+        board.id = "";
+        saveBoardChoice("");
+      }
+      const view = got.shown ? boardViewOf(got.shown) : null;
+      board.view = view && got.hidden ? boardHideView(view) : view;
+    } else {
+      board.names = [];
+      board.view = null;
+    }
+  } catch (error) {
+    // Not read: keep what is on screen; the offline row already says why.
+    console.warn("[widget] could not read the widget:", error);
+  } finally {
+    board.loading = false;
+  }
+  if (board.again) {
+    board.again = false;
+    await loadBoard();
+    return;
+  }
+  paintBoard();
+}
+
+function boardCanPress(action) {
+  return BOARD_NEVER_HELD.includes(action) || linkWords(currentLink()).canAct;
+}
+
+/** Under App lock the tiles that act open the locked Jarvis bar instead
+ *  (the owner, 2026-09-28) - like the approval's Approve. Stop everything
+ *  and Brief me (which opens the Brain behind the lock) are unchanged. */
+function boardOpensBar(action) {
+  return state.appLock && !BOARD_NEVER_HELD.includes(action);
+}
+
+async function pressBoard(action, btn) {
+  if (boardOpensBar(action)) {
+    flash(BOARD_LOCKED_OPENS_BAR);
+    try {
+      // Rust refuses to act under App lock too: it only opens the bar.
+      await invokeStrict("widget_board_action", { action });
+    } catch (error) {
+      flash(String((error && error.message) || error), "bad");
+    }
+    return;
+  }
+  if (!boardCanPress(action)) return;
+  btn.disabled = true;
+  try {
+    const said = await invokeStrict("widget_board_action", { action });
+    flash(String(said || "Done."));
+  } catch (error) {
+    flash(String((error && error.message) || error), "bad");
+  } finally {
+    btn.disabled = !boardCanPress(action);
+  }
+  setTimeout(loadBoard, 1500);
+}
+
+function paintBoard() {
+  if (!dom.board) return;
+  dom.board.hidden = !board.names.length;
+  if (dom.boardPick) {
+    const options = [new Option(BOARD_FACE_OPTION, "")];
+    board.names.forEach((w, i) => {
+      options.push(new Option(w.name || `Widget ${i + 1}`, w.id));
+    });
+    dom.boardPick.replaceChildren(...options);
+    dom.boardPick.value = board.id;
+  }
+  const view = board.id ? board.view : null;
+  dom.boardBlocks.hidden = !view;
+  paintBoardBlocks(dom.boardBlocks, view, { canPress: boardCanPress, onPress: pressBoard });
+  applyFaceVisibility();
+  syncBoardTimer();
+  syncSize();
+}
+
+/** Greys the buttons again when the link changes, without a read. */
+function syncBoardButtons() {
+  if (!dom.boardBlocks) return;
+  for (const b of dom.boardBlocks.querySelectorAll("button[data-action]")) {
+    b.disabled = !boardCanPress(b.dataset.action);
+  }
+}
+
+function syncBoardTimer() {
+  const want = state.expanded && Boolean(board.id);
+  if (want && !board.timer) board.timer = setInterval(loadBoard, BOARD_READ_MS);
+  if (!want && board.timer) {
+    clearInterval(board.timer);
+    board.timer = null;
+  }
+}
+
+if (dom.boardPick) {
+  dom.boardPick.addEventListener("change", () => {
+    board.id = dom.boardPick.value || "";
+    board.view = null;
+    saveBoardChoice(board.id);
+    paintBoard();
+    loadBoard();
+  });
 }
 
 /** The owner's appearance document, as this window last read it. */
@@ -459,6 +734,8 @@ function applyExpanded(expanded) {
   dom.tray.hidden = !expanded;
   dom.btnToggle.title = expanded ? "Collapse (E)" : "Expand (E)";
   applyFaceVisibility();
+  syncBoardTimer();
+  if (expanded) loadBoard();
   syncSize();
 }
 
@@ -1375,7 +1652,13 @@ listen("approval-resolved", (event) => {
 
   // App lock first, so a card already waiting is never drawn in full.
   applyAppLock(await readAppLock());
-  listen("security-changed", (event) => applyAppLock(event.payload && event.payload.appLock));
+  listen("security-changed", (event) => {
+    applyAppLock(event.payload && event.payload.appLock);
+    // Rust decides again whether the widget's private words come back.
+    loadBoard();
+  });
+  listen("private-hidden", () => loadBoard());
+  board.id = boardChoice();
 
   // Restore the mode the user left the widget in.
   const prefs = await invoke("get_widget_prefs");
@@ -1393,6 +1676,8 @@ startLink();
   // link comes back; counted down here once a second in between.
   onEvent((frame) => {
     if (frame && frame.kind === "focus") loadFocus();
+    // "Your widget": a timer, reminder or focus change may be on it.
+    if (frame && board.id && (frame.kind === "focus" || frame.kind === "schedule")) loadBoard();
   });
   loadFocus();
 
@@ -1437,6 +1722,8 @@ startLink();
 
     syncApprovalButtons();
     syncFocusButtons();
+    syncScreenPolling(link);
+    syncBoardButtons();
     if (link.connected && !focus.readOnce) loadFocus();
     syncSize();
   });

@@ -112,14 +112,32 @@ class MemoryEraseTest {
     }
 
     @Test
+    fun theChatQuestionSaysWhatStaysWhenTheChatGoes() {
+        // The chat's OTHER facts stay, and older backups keep copies (the second chat audit).
+        val none = MemoryErase.chatStays(0, "chat")
+        assertTrue(none.startsWith("Facts Jarvis learned stay."))
+        assertTrue(none.contains("Copies in older backups stay until they age out."))
+        assertTrue(MemoryErase.chatStays(1, "chat").startsWith("1 other fact Jarvis learned in that chat stays."))
+        assertTrue(MemoryErase.chatStays(3, "live").startsWith("3 other facts Jarvis learned in that chat stay."))
+        assertTrue(MemoryErase.chatStays(2, "support").contains("customer-support chat"))
+        assertFalse(MemoryErase.chatStays(2, "chat").contains("customer-support"))
+    }
+
+    @Test
     fun theWiringOffersItBesideForgetAndHoldsItOnAStaleLink() {
         val main = "jarvis-client/app/src/main/java/com/jarvis/client"
         val plate = repoFile("$main/ui/screens/AutoLearnPlate.kt").readText()
         assertTrue(plate.contains("Text(MemoryErase.CONFIRM"))
-        assertTrue(plate.contains("JarvisRuntime.eraseAutoFact(fact.id, alsoChat)"))
-        // "Also delete the chat it came from": a real checkbox, unchecked by default.
-        assertTrue(plate.contains("Checkbox(checked = alsoDeleteChat"))
-        assertTrue(plate.contains("Text(MemoryErase.ALSO_CHAT_LABEL"))
+        assertTrue(plate.contains("JarvisRuntime.eraseAutoFact(\n"))
+        assertTrue(plate.contains("fact.id,\n                                                alsoChat,"))
+        // "Also delete the chat it came from": a real checkbox, unchecked by
+        // default - the whole row one checkbox for TalkBack (the chat audit,
+        // 2026-09-28), naming the chat once the PC has said which.
+        assertTrue(plate.contains("Checkbox(checked = alsoDeleteChat, onCheckedChange = null)"))
+        assertTrue(plate.contains(".toggleable(\n                                        value = alsoDeleteChat,"))
+        assertTrue(plate.contains("MemoryErase.ALSO_CHAT_LABEL"))
+        assertTrue(plate.contains("MemoryErase.chatNamed("))
+        assertTrue(plate.contains("JarvisRuntime.factChat(id)"))
         assertTrue(plate.contains("if (busyId == fact.id && erasing) MemoryErase.BUSY else MemoryErase.LABEL"))
         // Greyed on a stale link, the same guard as Forget's.
         val erase = plate.substring(plate.indexOf("MemoryErase.BUSY else MemoryErase.LABEL"))

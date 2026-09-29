@@ -63,6 +63,14 @@ REPO = _HERE.parent
 #: them, so nothing there needs the variable.
 BACKEND = Path(os.environ.get("JARVIS_BACKEND") or _HERE).resolve()
 
+#: Every suite imports this file. A suite run on the owner's PC (with
+#: JARVIS_BACKEND set, or by apply-patches.ps1) must never write the made-up
+#: conversations it runs into the owner's real chat history: the modules that
+#: keep a finished conversation there on their own (jarvis_chatbot's
+#: keep_in_history) keep nothing while this is set. A suite that tests the
+#: keeping hands in its own ChatLog.
+os.environ["JARVIS_SUITE_RUNNING"] = "1"
+
 # Prepended, not appended: if a stale copy of a module is ever left in this
 # folder, the one in BACKEND is the one under test and must win.
 _b = str(BACKEND)
@@ -159,6 +167,9 @@ SHIPPED = (
     # "tell me when ..." - a kind of job on the one scheduler (not a tool)
     "jarvis_tellme.py",
     # focus sessions (focus.patch): a kind of job on the one scheduler
+    # what is in front on this PC: the one reader focus sessions and
+    # "Watch with me" share (split out of jarvis_focus.py, no patch)
+    "jarvis_front.py",
     "jarvis_focus.py",
     # "What asks first" and "Lights, plugs and fans without a card" (asks-first.patch)
     "jarvis_asks_first.py",
@@ -196,12 +207,138 @@ SHIPPED = (
     # result this turn, by reference; GET /api/chat/sources
     # (feasibility I42/I132, answer-sources.patch)
     "jarvis_sources.py",
+    # the app builder's workspace: app projects, a separate copy per task, one
+    # card showing the full diff before anything reaches the app; runs nothing
+    # (docs/APP-BUILDER-DESIGN.md, milestone A - no patch, no tool yet)
+    "jarvis_app_workspace.py",
+    # an app inside Projects: its tasks, a task's whole change, and the ONE
+    # merge card; routes installed by apps-in-projects.patch (2026-09-29,
+    # docs/APPS-IN-PROJECTS-DESIGN.md - screens, merge card and a change
+    # pasted in on the PC; no model tool, nothing runs)
+    "jarvis_apps.py",
+    # "Goals with one card per step" (the owner's "build it now",
+    # 2026-09-27; goals.patch): a goal's own plan and weekly check-in.
+    "jarvis_goals.py",
+    # "One card, several steps" (the owner's own words, 2026-09-28;
+    # plan-gate.patch): SWITCHED OFF until tools/tool_eval clears the bar.
+    "jarvis_plan.py",
+    # Reading phone notifications (2026-09-26 decision, built 2026-09-28;
+    # phone-notifications.patch): off by default, ON is one approval card,
+    # OFF is instant; never sees a notification's own text - that lives on
+    # the phone.
+    "jarvis_phone_notifications.py",
+    # The Brain upgrades (2026-09-28, brain-reads.patch): GET
+    # /api/history/search and /api/memory/fact-history, for the apps only
+    # (and, since the memory dates group, /api/memory/conversation-facts)
+    "jarvis_brain_reads.py",
+    # "remind me next time I talk about X": a kind on the one scheduler,
+    # brought up beside the question by jarvis_agent.py - no patch
+    "jarvis_next_time.py",
+    # "ring my phone": ONE ring_phone event the phone rings for - no patch
+    "jarvis_find_phone.py",
+    # "Where did I put ...?" (2026-09-28): the places the owner said,
+    # answered without the model; jarvis_quick.py and jarvis_auto_learn.py
+    # call it, no patch
+    "jarvis_places.py",
+    # The overnight tidy (2026-09-28): "Still true?" and "Which is true
+    # now?" review cards only, a kind of job on the one scheduler, no patch
+    "jarvis_tidy.py",
+    # "Better voice" (2026-09-28): the second "hey Jarvis" detector
+    # (microWakeWord); jarvis_speech.py and jarvis_voice.py call it
+    "jarvis_microwake.py",
+    # Today cards (2026-09-28): the owner's own words shown on the Today
+    # part of both apps at a time, on chosen days - a kind of job on the one
+    # scheduler, no card, no patch
+    "jarvis_today.py",
+    # "Photo to reminder" (2026-09-28, photo-reminder.patch): POST
+    # /api/photo/scan reads a picture's dates with plain code and PROPOSES a
+    # reminder; it sets nothing up itself
+    "jarvis_photo_remind.py",
+    # "PC help" (2026-09-28): why is my PC slow, how full is my disk, what is
+    # using the graphics card - read-only, answered without the model;
+    # jarvis_quick.py and jarvis_brain_reads.py (GET /api/pc/help) call it
+    "jarvis_pc_help.py",
+    # "Smarter answers" (2026-09-28): the "I've done it" check at the end of
+    # an answer; jarvis_agent.py calls it, and the tool test shares its
+    # pattern - no patch
+    "jarvis_claims.py",
+    # "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek" (2026-09-28,
+    # history-import.patch): the importer itself, and the Brain button's
+    # background run of it - every fact it finds waits for a yes
+    "import_history.py",
+    "jarvis_history_import.py",
+    # "Widgets you describe" (2026-09-28): a small checked description (never
+    # code) of what a home-screen / desktop widget shows; switched on by
+    # jarvis_brain_reads.install(), no patch of its own
+    "jarvis_widgets.py",
+    # A conversation with an AI chatbot for the owner: the driver, the last
+    # check, one card per conversation
+    "jarvis_chatbot.py",
+    # Projects, build steps 1 and 2: projects, life benchmarks and their
+    # numbers in projects.db; GET/POST /api/projects (projects.patch)
+    "jarvis_projects.py",
+    # ... and its Gemini website adapter: a visible browser window, driven
+    # openly, stopping at any captcha or sign-in page (chatbot.patch gives
+    # the gate its _RISK line)
+    "jarvis_chatbot_gemini.py",
+    # ...and its routes, /api/chatbot/* (chatbot-routes.patch)
+    "jarvis_chatbot_routes.py",
+    # ... what every chatbot website adapter shares (the visible window, the
+    # typing, the host lock, every "needs the owner" page, sign-in and
+    # self-check), and the other chatbot websites, each a thin site file
+    # driven the same open way (2026-09-28, "the chatbot driver becomes
+    # versatile")
+    "jarvis_chatbot_web.py",
+    "jarvis_chatbot_chatgpt.py",
+    "jarvis_chatbot_claude.py",
+    "jarvis_chatbot_copilot.py",
+    "jarvis_chatbot_perplexity.py",
+    "jarvis_chatbot_deepseek.py",
+    "jarvis_chatbot_grok.py",
+    "jarvis_chatbot_lechat.py",
+    "jarvis_chatbot_metaai.py",
+    # ... its API adapters (OpenAI-style Chat Completions: OpenAI, DeepSeek,
+    # Mistral, xAI, OpenRouter, Groq; keys in Credential Manager) and "a
+    # second AI on this PC" (another Ollama model, loopback only). No patch
+    # of their own: jarvis_chatbot.py loads both.
+    "jarvis_chatbot_api.py",
+    "jarvis_chatbot_local.py",
+    # "Look at this" and "Watch with me", build steps 1 and 2: the session
+    # rules, pause rules, caps and the Never look at list (no route yet, no
+    # patch; the Windows readers are step 3)
+    "jarvis_screen.py",
+    # "Ask several and compare": several of the conversations above, ONE
+    # card, ONE summary. No patch of its own: jarvis_chatbot.py loads it and
+    # chatbot-routes.patch already installs the routes that reach it.
+    "jarvis_chatbot_compare.py",
+    # Jarvis Live (2026-09-28): the session and the rules jarvis_speech
+    # follows for `source=live`; GET/POST /api/voice/live (live.patch)
+    "jarvis_live.py",
+    # ... and the camera's photo test, run once when the second card is in
+    # (no patch: the owner runs it by hand)
+    "jarvis_live_photo_test.py",
+    # "Forget a time frame" (2026-09-28): a checked list, ONE card, 10
+    # minutes to undo; GET/POST /api/memory/forget_range (forget-range.patch)
+    "jarvis_forget_range.py",
+    # "Chat with customer support for me" (2026-09-28): the support chat's
+    # rules and its window on the chatbot websites' shared base. No route
+    # patch: chatbot-routes.patch already installs jarvis_chatbot_routes.py,
+    # which reaches it; the gate's risk lines are support-chat.patch.
+    "jarvis_support.py",
+    "jarvis_support_widget.py",
+    # "Solve it here" (2026-09-28): a captcha or sign-in page handed to the
+    # owner's phone. No patch: jarvis_chatbot_routes.py answers its routes.
+    "jarvis_handoff.py",
     # the sun, the moon and the weather behind the animal faces, and the
     # town list it finds a place in without going online (sky.patch)
     "jarvis_sky.py", "jarvis_sky_places.py",
     # every animal option in one place: "Keep the animal still" and the
     # behaviour switches, shared by both apps (animal.patch)
     "jarvis_animal.py",
+    # pairing a phone by QR code, with a key per device (devices.patch,
+    # docs/PAIRING-DESIGN.md phase 1): the check on every request's key,
+    # the registry of key hashes, the pairing session and its card
+    "jarvis_devices.py",
 )
 
 

@@ -12,6 +12,7 @@
     "core:window:default",
     "core:webview:allow-set-webview-zoom",
     "core:webview:allow-internal-toggle-devtools",
-    "appearance"
+    "appearance",
+    "face-voice-offer"
   ]
 }

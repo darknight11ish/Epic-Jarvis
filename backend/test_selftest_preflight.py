@@ -36,7 +36,12 @@ made from the whole patch stack (backend/_stack.py). What is proved:
   * the chat question is skipped while tools are on, unless --with-chat;
   * calendar and email are only said to be set up, unless --with-reads;
     web search is tested only when it is on and a provider is chosen;
-  * a check that raises is its own FAIL and the rest still run.
+  * a check that raises is its own FAIL and the rest still run;
+  * the phone-reach check (newcomer play test, 2026-09-27): no phone
+    address is a WARN, a home-network one a FAIL, Tailscale/Meshnet off or
+    moved a FAIL, Jarvis not listening there a FAIL with the fix that fits
+    where the address came from, and a missing firewall rule a WARN with
+    the exact one-line fix - every Windows call faked.
 """
 from __future__ import annotations
 
@@ -225,7 +230,8 @@ def t_the_registry():
     keys = [k for k, _t, _f in S.PREFLIGHT]
     want = ["backend", "handshake", "model", "chat", "patches", "modules", "private_files",
             "gate", "stop_all", "scheduler", "folders", "instant_email", "events", "voice",
-            "reach", "home", "sleep", "data_health", "credentials"]
+            "reach", "home", "sleep", "phone", "data_health", "credentials", "screen",
+            "engine_config"]
     check("every check the owner asked for is registered, in order", keys == want, keys)
     check("each has a title", all(t for _k, t, _f in S.PREFLIGHT))
     try:
@@ -553,6 +559,19 @@ def t_folders_and_instant_email():
     check("connected: PASS", _rows(rows, "instant_email")[0][0] == S.PASS)
 
 
+def t_screen_says_not_built_yet():
+    """"Look at this" and "Watch with me" (2026-09-28): build steps 1 and 2
+    are the rules only, so the check says plainly that it is not built on
+    this PC yet - a skip, never a PASS it has not earned, never a FAIL."""
+    live, _fake, _ollama = _live()
+    _p, f, _w, _s, rows, text = _run(live, only={"backend", "screen"})
+    sc = _rows(rows, "screen")
+    check("one screen row, a skip", len(sc) == 1 and sc[0][0] == S.SKIP, sc)
+    check("... that says it is not built on this PC yet",
+          sc and "not built on this PC yet" in sc[0][1], sc)
+    check("... and that there is nothing to fix", sc and "Nothing to fix" in sc[0][2], sc)
+
+
 def t_data_health():
     """data-health.patch and jarvis_data_health.py (feasibility I97): the
     check turns the route's own "ok"/"warn" rows into PASS/WARN, never
@@ -724,6 +743,43 @@ def t_sleep_on_mains_power_is_a_warning():
           S.pf_sleep(S.Live(power=lambda: "nothing here"))[0][0] == S.WARN)
 
 
+def t_a_hidden_llama_cpp_settings_file_is_a_warning():
+    """The research audit, 2026-09-28 (section 6, item 3): Ollama's engine
+    reads llama.cpp's config.ini from %PROGRAMDATA% and %APPDATA% - a hidden
+    place for a setting to come from. WARN (never FAIL), with the names of
+    the settings in it (never their values) and the one line that renames it."""
+    d = Path(tempfile.mkdtemp(prefix="jarvis-llama-ini-"))
+    try:
+        pd, ad = d / "ProgramData", d / "AppData"
+        pd.mkdir()
+        ad.mkdir()
+        env = {"PROGRAMDATA": str(pd), "APPDATA": str(ad)}
+        rows = S.pf_engine_config(S.Live(env=env))
+        check("no config.ini: PASS", rows[0][0] == S.PASS and len(rows) == 1, rows)
+        (ad / "llama.cpp").mkdir()
+        (ad / "llama.cpp" / "config.ini").write_text(
+            "; mine\n[server]\nctx-size = 2048\ncache-ram=99999\nsecret-thing = hunter2\n",
+            encoding="utf-8")
+        rows = S.pf_engine_config(S.Live(env=env))
+        check("an %APPDATA% config.ini: one WARN naming it", len(rows) == 1
+              and rows[0][0] == S.WARN and "%APPDATA%\\llama.cpp\\config.ini" in rows[0][1],
+              rows)
+        check("... listing the settings' names, never their values",
+              "ctx-size, cache-ram, secret-thing" in rows[0][2] and "hunter2" not in rows[0][2]
+              and "2048" not in rows[0][2], rows[0][2])
+        check("... with the one PowerShell line that renames it",
+              "Rename-Item -Path" in rows[0][2] and "config.ini.off" in rows[0][2]
+              and "\n" not in rows[0][2], rows[0][2])
+        (pd / "llama.cpp").mkdir()
+        (pd / "llama.cpp" / "config.ini").write_text("", encoding="utf-8")
+        rows = S.pf_engine_config(S.Live(env=env))
+        check("both places: a WARN for each, %PROGRAMDATA% first",
+              [r[0] for r in rows] == [S.WARN, S.WARN] and "PROGRAMDATA" in rows[0][1], rows)
+        check("not Windows: SKIP", S.pf_engine_config(S.Live(env={}))[0][0] == S.SKIP)
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def t_a_folder_without_jarvis_hud_says_so_once():
     """Ease-of-use audit 2026-09-27 #8b: the wrong folder is ONE message
     with the line to run, not a FAIL per check."""
@@ -759,6 +815,157 @@ def t_readme_line_is_one_line():
              and l.startswith("$env:")]
     check("backend/README.md gives the owner a one-line command", len(lines) >= 1, lines)
     check("and it says where the output goes", any("preflight.txt" in l for l in lines), lines)
+
+
+# ------------------------------------------------------- the phone check --
+
+def _phone_live(*, up=True, desktop=None, env=None, owns=True, listed=("100.101.1.2",),
+                connects=True, firewall=("Jarvis backend (private mesh only)",), backend=None):
+    calls = {"connects": [], "firewall": []}
+
+    def connect(addr, port):
+        calls["connects"].append((addr, port))
+        return connects
+
+    def fw(port):
+        calls["firewall"].append(port)
+        return None if firewall is None else list(firewall)
+
+    live = S.Live(env=dict(env or {}), backend=backend or tempfile.mkdtemp(prefix="jarvis-pf-"),
+                  phone={"desktop": lambda: desktop,
+                         "addresses": lambda: None if listed is None else list(listed),
+                         "owns": lambda addr: owns,
+                         "connects": connect,
+                         "firewall": fw})
+    live.up = up
+    return live, calls
+
+
+def _statuses(rows):
+    return [r[0] for r in rows]
+
+
+def t_phone_no_address_is_a_warning_with_the_address_to_type():
+    live, calls = _phone_live(desktop=None)
+    rows = S.pf_phone(live)
+    check("no phone address: one WARN, nothing else asked",
+          _statuses(rows) == [S.WARN] and not calls["connects"] and not calls["firewall"], rows)
+    check("and the fix names the box and this PC's own mesh address",
+          "Let my phone reach this" in rows[0][2] and "100.101.1.2" in rows[0][2], rows)
+    # This PC only (the default) is no phone address either.
+    live, _c = _phone_live(desktop={"bind_address": "127.0.0.1"}, env={"JARVIS_HUD_BIND": "127.0.0.1"})
+    check("127.0.0.1 counts as no phone address", _statuses(S.pf_phone(live)) == [S.WARN])
+
+
+def t_phone_home_network_address_fails():
+    live, calls = _phone_live(desktop={"bind_address": "192.168.1.20", "supervise": True})
+    rows = S.pf_phone(live)
+    check("a home-network address is a FAIL", _statuses(rows) == [S.FAIL], rows)
+    check("and it says which box it came from and what to type",
+          "Let my phone reach this" in rows[0][2] and "100.101.1.2" in rows[0][2], rows)
+    check("nothing was connected to", not calls["connects"])
+
+
+def t_phone_all_good():
+    live, calls = _phone_live(desktop={"bind_address": "100.101.1.2", "supervise": True})
+    rows = S.pf_phone(live)
+    check("address set, mesh on, Jarvis listening, firewall rule: all PASS",
+          _statuses(rows) == [S.PASS] * 4, rows)
+    check("it connected to the mesh address on Jarvis's port, once",
+          calls["connects"] == [("100.101.1.2", S.DEFAULT_PORT)], calls)
+    check("the firewall was asked about Jarvis's port", calls["firewall"] == [S.DEFAULT_PORT])
+
+
+def t_phone_mesh_off_or_moved():
+    live, calls = _phone_live(desktop={"bind_address": "100.101.1.2"}, owns=False, listed=[])
+    rows = S.pf_phone(live)
+    check("Tailscale/Meshnet off on the PC: FAIL, listening skipped, firewall still read",
+          _statuses(rows) == [S.PASS, S.FAIL, S.SKIP, S.PASS] and not calls["connects"], rows)
+    check("and the fix says to switch it on", "switch it on" in rows[1][2], rows)
+    live, _c = _phone_live(desktop={"bind_address": "100.101.1.2"}, owns=False,
+                           listed=["192.168.1.20", "100.90.0.7"])
+    rows = S.pf_phone(live)
+    check("the mesh address moved: FAIL naming the new one",
+          rows[1][0] == S.FAIL and "100.90.0.7" in rows[1][1] and "100.90.0.7" in rows[1][2], rows)
+
+
+def t_phone_not_listening_gives_the_fix_that_fits():
+    live, _c = _phone_live(desktop={"bind_address": "100.101.1.2", "supervise": False},
+                           connects=False)
+    rows = S.pf_phone(live)
+    check("not listening, desktop not starting Jarvis: FAIL naming the switch",
+          rows[2][0] == S.FAIL and "Let Jarvis Desktop start and stop Jarvis" in rows[2][2], rows)
+    live, _c = _phone_live(desktop={"bind_address": "100.101.1.2", "supervise": True},
+                           connects=False)
+    rows = S.pf_phone(live)
+    check("not listening, desktop starts Jarvis: restart it there",
+          rows[2][0] == S.FAIL and "Stop, then Start" in rows[2][2], rows)
+    live, _c = _phone_live(env={"JARVIS_HUD_BIND": "100.101.1.2"}, connects=False)
+    rows = S.pf_phone(live)
+    check("an address from JARVIS_HUD_BIND is found, and the fix is a restart",
+          "JARVIS_HUD_BIND" in rows[0][1] and rows[2][0] == S.FAIL
+          and rows[2][2] == "Restart Jarvis so it reads the address.", rows)
+    live, calls = _phone_live(desktop={"bind_address": "100.101.1.2"}, up=False)
+    rows = S.pf_phone(live)
+    check("Jarvis down: listening is skipped, not failed",
+          rows[2][0] == S.SKIP and not calls["connects"], rows)
+
+
+def t_phone_firewall():
+    live, _c = _phone_live(desktop={"bind_address": "100.101.1.2", "supervise": True},
+                           firewall=[])
+    rows = S.pf_phone(live)
+    line = S.FIREWALL_LINE.replace("PORT", str(S.DEFAULT_PORT))
+    check("no firewall rule: WARN (a rule for Python may still let it in)",
+          rows[-1][0] == S.WARN, rows)
+    check("with the exact one-line fix from INSTALL.md, run as administrator",
+          line in rows[-1][2] and "administrator" in rows[-1][2] and "\n" not in rows[-1][2], rows)
+    install = (HERE.parent / "docs" / "INSTALL.md").read_text(encoding="utf-8")
+    check("that line is the one INSTALL.md gives", line in install)
+    live, _c = _phone_live(desktop={"bind_address": "100.101.1.2", "supervise": True},
+                           firewall=None)
+    check("rules that cannot be read: WARN", S.pf_phone(live)[-1][0] == S.WARN)
+    if os.name != "nt":
+        live, _c = _phone_live(desktop={"bind_address": "100.101.1.2", "supervise": True})
+        live.phone.pop("firewall")
+        check("not Windows: the firewall row is a skip", S.pf_phone(live)[-1][0] == S.SKIP)
+
+
+def t_phone_address_sources():
+    appdata = Path(tempfile.mkdtemp(prefix="jarvis-appdata-"))
+    try:
+        store = appdata / S.DESKTOP_ID / S.DESKTOP_STORE
+        store.parent.mkdir(parents=True)
+        store.write_text(json.dumps({"bind_address": " 100.64.0.9 ", "supervise": True}),
+                         encoding="utf-8")
+        desktop = S._desktop_settings({"APPDATA": str(appdata)})
+        check("Jarvis Desktop's own settings file is read from %APPDATA%",
+              S.phone_address(desktop, {}, appdata) == ("100.64.0.9", "desktop", True), desktop)
+        check("no APPDATA: no desktop settings", S._desktop_settings({}) is None)
+        backend = appdata / "backend"
+        backend.mkdir()
+        (backend / "jarvis-framework.toml").write_text(
+            '[security]\nbind_address = "100.70.1.1"\n', encoding="utf-8")
+        got = S.phone_address(None, {}, backend)
+        check("[security] bind_address in the settings file counts (Python 3.11+)",
+              got[:2] == ("100.70.1.1", "config") or sys.version_info < (3, 11), got)
+        check("the desktop box comes first",
+              S.phone_address({"bind_address": "100.64.0.9"}, {"JARVIS_HUD_BIND": "100.70.2.2"},
+                              backend)[1] == "desktop")
+    finally:
+        shutil.rmtree(appdata, ignore_errors=True)
+    check("mesh addresses are 100.64.0.0/10 only",
+          S.mesh_address("100.64.0.1") and S.mesh_address("100.127.255.255")
+          and not S.mesh_address("100.128.0.1") and not S.mesh_address("100.63.0.1")
+          and not S.mesh_address("192.168.1.2") and not S.mesh_address("100.64.0")
+          and not S.mesh_address("100.64.0.256") and not S.mesh_address("my-pc.nord"))
+
+
+def t_phone_powershell_is_windows_only():
+    if os.name != "nt":
+        check("no PowerShell call off Windows", S._powershell("Get-Date") is None)
+    check("the firewall query and address query are one line each",
+          "\n" not in S.FIREWALL_QUERY and "\n" not in S.ADDRESS_QUERY)
 
 
 def main() -> int:

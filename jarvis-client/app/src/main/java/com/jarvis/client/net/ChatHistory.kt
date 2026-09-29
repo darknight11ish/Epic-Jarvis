@@ -197,6 +197,13 @@ object ChatHistory {
         asking: List<UserTurn>,
         picture: String? = null,
         interrupted: String? = null,
+        /**
+         * Jarvis Live (docs/LIVE-DESIGN.md): the newest message was SAID in a
+         * Live conversation - `live: true` on it, so the PC adds its Live
+         * note (short answers, choices in words, side talk answered with the
+         * marker only). Never on the history, never on a typed message.
+         */
+        live: Boolean = false,
     ): JsonArray =
         buildJsonArray {
             for (ex in window) {
@@ -208,7 +215,11 @@ object ChatHistory {
                 // voice flow, docs/JARVIS-API.md section 17, 6): on the
                 // NEWEST message only, never replayed with the history.
                 val cut = interrupted?.takeIf { i == asking.lastIndex && it.isNotBlank() }
-                if (picture != null && i == asking.lastIndex) {
+                val liveHere = live && i == asking.lastIndex && u.provenance == Provenance.VOICE
+                if (liveHere) {
+                    val base = userTurn(u) + (if (cut != null) mapOf("interrupted" to JsonPrimitive(cut)) else emptyMap())
+                    add(JsonObject(base + ("live" to JsonPrimitive(true))))
+                } else if (picture != null && i == asking.lastIndex) {
                     add(
                         buildJsonObject {
                             put("role", "user")
@@ -242,9 +253,20 @@ object ChatHistory {
         conversationId: String? = null,
         interrupted: String? = null,
         temporary: Boolean = false,
+        /**
+         * `true` only when the owner just said yes to [CloudOffer]'s "Try
+         * the cloud model" for THIS one question
+         * ([ChatSession.tryCloudForLast]) - never sent as `false`, like
+         * [temporary]. `cloud_yes` is the real field name
+         * `backend/cloud-say-yes.patch` reads, verified against the
+         * owner's real `jarvis_hud.py` (2026-09-27) - see [CloudOffer]'s
+         * own doc.
+         */
+        cloudYes: Boolean = false,
+        live: Boolean = false,
     ): String =
         buildJsonObject {
-            put("messages", messages(window, asking, picture, interrupted))
+            put("messages", messages(window, asking, picture, interrupted, live))
             put("has_image", picture != null)
             put("stream", true)
             put("auto", true)
@@ -253,7 +275,245 @@ object ChatHistory {
             }
             put("device", DEVICE)
             if (temporary) put(TemporaryChat.FIELD, true)
+            if (cloudYes) put("cloud_yes", true)
         }.toString()
+
+    // ------------------------------------------- the chat audit (2026-09-28) ---
+    //
+    // "Continue this chat" and a new conversation after 30 quiet minutes (the
+    // owner's decisions, CLAUDE.md "Chats, after the chat audit"). The
+    // desktop's chat-history.js does the same, and both apps' tests hold
+    // them to tools/gen_history_cases.py's worked examples
+    // (contract/history-cases.json).
+
+    /** A new conversation starts after this long with nothing said. */
+    const val IDLE_NEW_MS = 30L * 60 * 1000
+
+    /** Said, quietly, when it happens. */
+    const val IDLE_NEW_LINE = "It's been a while, so this is a new conversation. The last one is in History."
+
+    /** The same for a temporary chat or a game: it was never kept, so there is
+     *  no "last one in History" (the second chat audit, 2026-09-28, phone B1). */
+    const val IDLE_NEW_LINE_TEMPORARY = "It's been a while, so this is a new conversation."
+
+    /**
+     * Under a chat that has gone quiet for [IDLE_NEW_MS]: the next question
+     * will start a new one, said BEFORE it is sent (it used to be said only
+     * after, and "Your next question follows on from the last 3" stayed on
+     * screen the whole time - phone C1).
+     */
+    const val IDLE_NEXT_LINE =
+        "It's been a while, so your next question starts a new conversation. The last one is in History."
+    const val IDLE_NEXT_LINE_TEMPORARY = "It's been a while, so your next question starts a new conversation."
+
+    /** Said when the owner starts a new conversation by hand, and the old one was kept. */
+    const val NEW_CONVERSATION_KEPT = "New conversation. The last one is in History."
+
+    /** Appended to the words about a temporary chat starting, when the chat before it was kept. */
+    const val LAST_IN_HISTORY = " The chat before it is in History."
+
+    /** Jarvis Live started here, and the chat Home was in was kept (phone worst-three #1). */
+    const val LIVE_STARTED_NOTE = "Jarvis Live started a new conversation. The one before it is in History."
+
+    /** Jarvis Live ended: its session is its own chat in History. */
+    const val LIVE_ENDED_NOTE = "Live ended. If chat history is on, this session is in History."
+
+    /** "Continue this chat" is refused while Live runs here: it would swap the chat under it. */
+    const val CONTINUE_LIVE = "Jarvis Live is on here. End Live first, then continue the chat."
+
+    /** An id this PC could never have made. */
+    const val CONTINUE_INVALID = "That is not a conversation this PC keeps."
+
+    /** Whether the next question starts a new conversation: there is one going, and nothing
+     *  was said in it for [IDLE_NEW_MS]. */
+    fun idleExpired(lastAtMs: Long, nowMs: Long, hasConversation: Boolean): Boolean =
+        hasConversation && lastAtMs > 0 && nowMs - lastAtMs >= IDLE_NEW_MS
+
+    /* Home's words for the chat it is in - the desktop's Jarvis bar says the same. */
+    const val EARLIER_CHATS = "Earlier chats"
+    const val EARLIER_CHATS_TITLE = "Your kept chats, in History."
+    /** "3 older questions were not loaded - ..." - with the count (the second chat audit, 2026-09-28). */
+    fun continuedTrimmed(n: Int): String =
+        (if (n == 1) "1 older question was" else "${n.coerceAtLeast(0)} older questions were") +
+            " not loaded - Jarvis reads back only the newest ones."
+
+    /** "2 earlier questions were left out: ..." - a pair whose answer was not kept is not carried on. */
+    fun continuedSkipped(n: Int): String =
+        if (n == 1) {
+            "1 earlier question was left out: its answer was not kept."
+        } else {
+            "${n.coerceAtLeast(0)} earlier questions were left out: their answers were not kept."
+        }
+    const val CONTINUED_TAINTED =
+        "Jarvis read outside text earlier in this chat, so writing notes and some other actions ask you first."
+    const val CONTINUED_NOTHING =
+        "None of its answers were kept, so Jarvis has nothing to read back. New questions are still " +
+            "filed with this chat."
+    const val CONTINUED_TEMPORARY_OFF = "Temporary chat is off: a continued chat is kept."
+
+    /**
+     * Chat history is off, or cannot keep anything right now: what was said in
+     * the chat can be read, but what is said from now on is not filed with it
+     * (the owner, 2026-09-29). The desktop's Jarvis bar says the same words
+     * (tools/gen_history_cases.py).
+     */
+    const val CONTINUED_HISTORY_OFF = "Chat history is off, so new messages in this chat will not be kept."
+    const val CONTINUED_HISTORY_STUCK =
+        "Chat history cannot keep anything right now, so new messages in this chat will not be kept."
+
+    /**
+     * The line "Continue this chat" adds when the PC says new messages will
+     * not be kept, or null when they will be - or when the PC does not say
+     * (an older PC, or an answer that is not a clear yes or no: never a guess).
+     */
+    fun continuedHistoryLine(keeping: ChatLog.Keeping?): String? = when {
+        keeping == null -> null
+        keeping.enabled == false -> CONTINUED_HISTORY_OFF
+        keeping.enabled == true && keeping.recording == false -> CONTINUED_HISTORY_STUCK
+        else -> null
+    }
+
+    /**
+     * Does a finished question and answer join Home's scrollable thread, and
+     * what the model is re-sent? Not a crisis turn (the owner, 2026-09-29): the
+     * help answer shows once, on screen, and is gone with the next question.
+     * The PC still keeps the chat in History, as "A difficult moment".
+     */
+    fun keepsInThread(crisis: Boolean): Boolean = !crisis
+    const val CONTINUE_BUSY = "Wait for the answer to finish, then continue the chat."
+    const val CHAT_GONE =
+        "That chat was deleted, so this is a new conversation. Nothing from it is sent to Jarvis again."
+    const val MOVED_HERE = "Carrying on the same chat here."
+    const val NEW_CONVERSATION = "New conversation."
+
+    fun continuedLine(title: String?): String = "Carrying on \"${title?.trim()?.ifEmpty { null } ?: "(no title)"}\"."
+
+    /** The most finished pairs Home's thread shows (chat-history.js THREAD_MAX). */
+    const val THREAD_MAX = 100
+
+    /**
+     * [thread] with one more finished pair on the end, capped at
+     * [THREAD_MAX]. Unlike [commit], nothing is trimmed to fit the model:
+     * this is what Home SHOWS of the conversation (the owner's decision,
+     * 2026-09-28: "the whole current conversation as a scrollable thread"),
+     * not what is re-sent.
+     */
+    fun addToThread(thread: List<Exchange>, asked: List<UserTurn>, answer: String): List<Exchange> {
+        val kept = asked.filter { it.text.isNotBlank() }
+        if (kept.isEmpty() || answer.isBlank()) return thread
+        return (thread + Exchange(kept, answer)).takeLast(THREAD_MAX)
+    }
+
+    /**
+     * The finished pairs above the one on screen: all of [thread], less its
+     * last pair when that is the question Home is showing with its answer.
+     * A pair joins the thread only once its answer has finished, so while
+     * [streaming] the question on screen is not in it yet. (The answer's
+     * words are not compared: reading them here would redraw Home on every
+     * streamed word.)
+     */
+    fun threadBefore(
+        thread: List<Exchange>,
+        question: String?,
+        streaming: Boolean,
+        // False when the question on screen got no answer (it failed, or came
+        // back empty): its pair is not in the thread, so the LAST pair is an
+        // older one that happens to have the same words, and must stay
+        // (the second chat audit, 2026-09-28, phone B3).
+        answered: Boolean = true,
+    ): List<Exchange> {
+        val last = thread.lastOrNull() ?: return thread
+        return if (!streaming && answered && question != null && last.question == question) {
+            thread.dropLast(1)
+        } else {
+            thread
+        }
+    }
+
+    fun threadSummary(n: Int): String =
+        if (n == 1) "Earlier in this chat · 1 question" else "Earlier in this chat · $n questions"
+
+    /**
+     * The line drawn in the thread where what Jarvis reads back begins: the
+     * thread shows the whole conversation, but only the newest questions go to
+     * the model with the next one (the second chat audit, 2026-09-28). The
+     * desktop's bar says the same.
+     */
+    const val THREAD_READS_FROM = "Jarvis reads from here down. What is above stays on screen only."
+
+    /**
+     * How many of the thread's first pairs are above that line: the thread
+     * holds [threadLen] pairs and the model is re-sent the newest [windowLen]
+     * of them. 0: all of it is read, no line is drawn.
+     */
+    fun pairsAboveReadLine(threadLen: Int, windowLen: Int): Int {
+        val t = threadLen.coerceAtLeast(0)
+        val w = windowLen.coerceAtLeast(0)
+        return (t - minOf(t, w)).coerceAtLeast(0)
+    }
+
+    private val KNOWN = setOf("typed", "voice", "shared", "clipboard", "pasted", "picture_caption")
+
+    /**
+     * "Continue this chat": the kept messages of a History conversation
+     * ([ChatLog.Transcript]) as this chat's window - each question whose
+     * answer was kept, with that answer, oldest first; a question whose
+     * answer was not kept, or with no answer after it, is skipped, and so is
+     * a Live side remark. Then only the newest pairs that fit [MAX_EXCHANGES]
+     * and [MAX_CHARS] - a live chat's own limits. [Continued.trimmedCount]:
+     * older pairs were left out, and Home says how many; [Continued.skipped]:
+     * questions left out because no answer was kept, said the same way. A
+     * support or chatbot row is never loaded. A tag this app does not know
+     * goes as "unknown" - never the owner's own words.
+     */
+    fun continueWindow(turns: List<ChatLog.Turn>): Continued {
+        val pairs = ArrayDeque<Exchange>()
+        var pending: ChatLog.Turn? = null
+        var skipped = 0
+        // Shared text right before the owner's own question is not a question
+        // of its own: outside text goes back only with the answer it got.
+        fun unanswered(p: ChatLog.Turn?) = p != null && p.provenance != "shared"
+        for (t in turns) {
+            when (t.role) {
+                "user" -> {
+                    if (unanswered(pending)) skipped += 1
+                    if (!t.answerKept && t.text.isNotBlank()) skipped += 1
+                    pending = t.takeIf { it.answerKept && it.text.isNotBlank() }
+                }
+                "assistant" -> {
+                    val q = pending
+                    if (q != null && t.text.isNotBlank() && !sideTalk(t.text)) {
+                        val tag = q.provenance?.takeIf { it in KNOWN } ?: "unknown"
+                        pairs.addLast(Exchange(listOf(UserTurn(q.text, tag)), t.text))
+                    } else if (unanswered(q) && t.text.isBlank()) {
+                        skipped += 1
+                    }
+                    pending = null
+                }
+                else -> {
+                    if (unanswered(pending)) skipped += 1
+                    pending = null
+                }
+            }
+        }
+        if (unanswered(pending)) skipped += 1
+        var trimmedCount = 0
+        while (pairs.isNotEmpty() && !fits(pairs, MAX_EXCHANGES, MAX_CHARS)) {
+            pairs.removeFirst()
+            trimmedCount += 1
+        }
+        return Continued(pairs.toList(), trimmedCount, skipped)
+    }
+
+    /** What "Continue this chat" loads: the [window], and what was left out and why. */
+    data class Continued(val window: List<Exchange>, val trimmedCount: Int, val skipped: Int) {
+        val trimmed: Boolean get() = trimmedCount > 0
+    }
+
+    private fun sideTalk(answer: String): Boolean {
+        val a = answer.trim().lowercase().replace(Regex("\\.+$"), "").trim()
+        return a == "[not for me]" || a == "(not for jarvis)"
+    }
 
     private fun userTurn(u: UserTurn): JsonObject = buildJsonObject {
         put("role", "user")

@@ -80,7 +80,13 @@ import kotlinx.coroutines.CancellationException
  * Last, for the same reason as the others above.
  */
 enum class Screen {
-    HOME, BRAIN, INBOX, CHECKS, APPEARANCE, FAQ, VOICE, SECURITY, VOICE_CHECK, VOICES, HISTORY, SETTINGS
+    HOME, BRAIN, INBOX, CHECKS, APPEARANCE, FAQ, VOICE, SECURITY, VOICE_CHECK, VOICES, HISTORY, SETTINGS,
+
+    /** Jarvis Live (ui/screens/LiveScreen.kt). Last, for the same reason as the others. */
+    LIVE,
+
+    /** "Solve it here" (ui/screens/HandoffScreen.kt). Last, for the same reason. */
+    HANDOFF,
 }
 
 /**

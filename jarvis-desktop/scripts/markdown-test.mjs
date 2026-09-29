@@ -62,6 +62,13 @@ for (const input of previouslyHung) {
 const cases = [
   ["**bold**", "<strong>bold</strong>"],
   ["*em*", "<em>em</em>"],
+  ["_em_", "<em>em</em>"],
+  ["a _quiet_ word.", "a <em>quiet</em> word."],
+  // The app's own notes, written with underscores (main.js).
+  ["_The server closed the stream without sending content._",
+   "<em>The server closed the stream without sending content.</em>"],
+  ['_(Answer cut short: it reached the length limit. Ask "go on" for the rest.)_',
+   "<em>(Answer cut short:"],
   ["# Heading", "<h1>Heading</h1>"],
   ["#### Small", "<h4>Small</h4>"],
   ["- a\n- b", "<ul><li>a</li><li>b</li></ul>"],
@@ -86,6 +93,27 @@ for (const [input, expected] of cases) {
     `renders ${JSON.stringify(input).slice(0, 40)}`,
     out.includes(expected),
     `expected to contain ${JSON.stringify(expected)}, got ${JSON.stringify(out).slice(0, 160)}`
+  );
+}
+
+/* -------------------------------------------------------------------------
+ * Underscores that are NOT emphasis: inside a word, inside code, in a URL,
+ * or a lone one. Each must come out with its underscores, and no <em>.
+ * ---------------------------------------------------------------------- */
+const notItalic = [
+  ["snake_case_name", "snake_case_name"],
+  ["call my_func_name now", "my_func_name"],
+  ["`a _b_ c`", "<code>a _b_ c</code>"],
+  ["see https://e.com/a_b_c", "https://e.com/a_b_c"],
+  ["_private", "_private"],
+  ["a _ b _ c", "a _ b _ c"],
+];
+for (const [input, kept] of notItalic) {
+  const out = renderMarkdown(input);
+  check(
+    `not italic: ${JSON.stringify(input)}`,
+    out.includes(kept) && !out.includes("<em>"),
+    `got ${JSON.stringify(out).slice(0, 160)}`
   );
 }
 
@@ -215,7 +243,7 @@ for (let i = 0; i < ROUNDS; i++) {
   }
 }
 
-const total = previouslyHung.length + cases.length + hostile.length + urlCases.length + 3;
+const total = previouslyHung.length + cases.length + notItalic.length + hostile.length + urlCases.length + 3;
 if (failures) {
   console.error(`\n${failures} failure(s) across ${total} cases + ${ROUNDS} fuzz inputs`);
   process.exit(1);

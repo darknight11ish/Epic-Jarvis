@@ -34,7 +34,9 @@ tzdata; sys_platform == "win32"        # calendar: time-zone data, so an event s
 #
 #   playwright   the "browser_control" tool (jarvis_browser_control.py), which
 #                stays OFF until [tools].enabled in jarvis-framework.toml names
-#                it. Also needs a browser downloaded. One line:
+#                it; and Jarvis's chatbot website windows for the chatbot
+#                driver (jarvis_chatbot_web.py and its site files, Gemini
+#                first), which are not reachable from the apps yet. Apache-2.0. Also needs a browser downloaded. One line:
 #                    py -3 -m pip install playwright; py -3 -m playwright install chromium
 #   speechbrain  an older, much heavier voice check (rebuilt jarvis_voice.py),
 #   torch        used only if sherpa-onnx's speaker model is not set up. The
@@ -51,3 +53,10 @@ tzdata; sys_platform == "win32"        # calendar: time-zone data, so an event s
 #                FLAC files on this PC (`py -3 jarvis_voice.py --build-cohort
 #                <folder>`, rebuilt jarvis_voice.py). Nothing else reads FLAC;
 #                backend\README.md "The stricter voice check" has the line.
+#   pymicro-wakeword  the second "hey Jarvis" detector (jarvis_microwake.py),
+#                used only when you choose "both detectors must agree" in
+#                Settings, Voice (off by default). Apache-2.0; brings
+#                pymicro-features (Apache-2.0) and a TensorFlow Lite library
+#                inside its own wheel. backend\README.md, "Better voice", has
+#                the one line that installs version 2.5.0 with its hashes
+#                checked. Without it the setting cannot be switched on.

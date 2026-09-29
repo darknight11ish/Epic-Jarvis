@@ -116,7 +116,9 @@ await check("both gate buttons describe the risk", async () => {
 });
 
 await check("selecting a graph node is announced and keeps focus", async () => {
-  const page = await K.open(browser, base, "brain.html", { pending: [] },
+  // Galaxy draws the people and things facts name (2026-09-28).
+  const page = await K.open(browser, base, "brain.html",
+    { pending: [], brain: { ...K.BRAIN, memory_entities: K.makeEntities() } },
     { width: 1100, height: 700 });
   await page.waitForTimeout(2600);
   // Galaxy is Memory's default now (the rail trim) and sits behind
@@ -125,10 +127,10 @@ await check("selecting a graph node is announced and keeps focus", async () => {
   await page.locator("#tab-galaxy").click();
   await page.waitForTimeout(200);
   await page.evaluate(WATCH);
-  await page.fill("#graph-search", "Reasoning");
+  await page.fill("#graph-search", "Priya");
   await page.waitForTimeout(500);
   const spoken = await page.evaluate(() => window.__spoken);
-  assert.ok(spoken.some((s) => /Reasoning/.test(s.text)),
+  assert.ok(spoken.some((s) => /Priya/.test(s.text)),
     `selection was silent. saw: ${JSON.stringify(spoken)}`);
   // Click a neighbour; focus must not fall to <body>.
   await page.locator("#node-links button").first().click();
@@ -202,8 +204,8 @@ await check("the rail is one tab stop, and the arrows move inside it", async () 
     selected: document.querySelector('[aria-selected="true"]').id,
     tab0: [...document.querySelectorAll('[role="tab"]')].filter((t) => t.tabIndex === 0).length,
   }));
-  assert.equal(after.focused, "tab-live", "ArrowDown did not move to the next tab");
-  assert.equal(after.selected, "tab-live", "selection did not follow focus");
+  assert.equal(after.focused, "tab-now", "ArrowDown did not move to the next tab");
+  assert.equal(after.selected, "tab-now", "selection did not follow focus");
   assert.equal(after.tab0, 1, "the roving tabindex did not rove");
 
   await page.keyboard.press("End");

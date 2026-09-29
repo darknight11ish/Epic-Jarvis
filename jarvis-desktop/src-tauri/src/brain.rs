@@ -37,22 +37,31 @@ use crate::commands;
 
 pub mod auto_learn;
 pub mod briefing;
+pub mod chatbot;
+pub mod conversation_facts;
+pub mod fact_history;
 pub mod focus;
+pub mod forget_range;
+pub mod goals;
 pub mod history;
+pub mod history_import;
+pub mod photo_reminder;
 pub mod profile;
+pub mod projects;
 mod routes;
 pub mod schedule;
 pub mod shared;
 pub mod sources;
+pub mod support;
 pub mod used;
+pub mod widgets;
 use routes::{first_line, route_for};
 
-/// Reads are small JSON except the graph, which walks several SQLite files and
-/// a skills directory. Two budgets rather than one, so a slow graph cannot be
-/// mistaken for a hung backend and a hung backend is not waited on for a
-/// minute.
+/// Reads are small JSON. The graph (`/api/graph`), which walks several SQLite
+/// files and a skills directory, used to have a longer budget of its own; the
+/// Brain no longer reads it (Galaxy is drawn from the people-and-things list
+/// since 2026-09-28 - privacy finding B1, routes.rs), so one budget is left.
 const READ_TIMEOUT: Duration = Duration::from_secs(15);
-const GRAPH_TIMEOUT: Duration = Duration::from_secs(45);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(20);
 
 // ---------------------------------------------------------------------------
@@ -103,12 +112,10 @@ pub async fn brain_read(
         let base = base.clone();
         let headers = headers.clone();
         set.spawn(async move {
-            let budget = if path == "/api/graph" {
-                GRAPH_TIMEOUT
-            } else {
-                READ_TIMEOUT
-            };
-            (section, get_json_status(&base, path, headers, budget).await)
+            (
+                section,
+                get_json_status(&base, path, headers, READ_TIMEOUT).await,
+            )
         });
     }
 
@@ -465,15 +472,18 @@ pub async fn brain_memory_learning(
     .await
 }
 
-/// Answers the daily overnight-tidy card ("not built yet" - switching it on
-/// only records the wish; nothing runs).
+/// Answers the daily overnight-tidy card, and turns the tidy off again.
+/// Since 2026-09-28 switching it on starts the overnight tidy
+/// (backend/jarvis_tidy.py): once a day it may raise "Still true?" and
+/// "Which is true now?" review cards - cards only, no fact changes by
+/// itself.
 ///
 /// Independent fields because the card offers independent actions:
 /// "enable" sends `enabled`, "stop asking" sends `remind`, and "not now"
 /// sends `not_now` (backend/briefing.patch): each "not now" keeps the card
 /// quiet on the PC for 1 day, then 7, then 30 (jarvis_backoff.py). An older
 /// PC answers it with nothing written - the card then returns tomorrow, as
-/// before.
+/// before. "Turn off overnight tidying" sends `enabled: false` alone.
 #[tauri::command]
 pub async fn brain_memory_sleep_time(
     app: AppHandle,
@@ -488,6 +498,17 @@ pub async fn brain_memory_sleep_time(
             &app,
             "/api/memory/sleep_time",
             serde_json::json!({ "not_now": true }),
+        )
+        .await;
+    }
+    if enabled == Some(false) && remind.is_none() && not_now.is_none() {
+        // Turning the overnight tidy OFF only makes Jarvis do less (no more
+        // nightly cards), so, like "not now", it is never held on a stale
+        // link (2026-09-28; the phone's JarvisRuntime.setSleepTime agrees).
+        return post(
+            &app,
+            "/api/memory/sleep_time",
+            serde_json::json!({ "enabled": false }),
         )
         .await;
     }
@@ -593,11 +614,28 @@ fn export_file_name(unix_seconds: u64) -> String {
     format!("jarvis-memory-{y:04}-{m:02}-{d:02}.json")
 }
 
+/// What a "Save as" dialog offers: its file type, extension and title.
+pub(crate) struct SaveAs {
+    pub name: &'static str,
+    pub spec: &'static str,
+    pub ext: &'static str,
+    pub title: &'static str,
+}
+
+/// The memory export's dialog.
+pub(crate) const JSON_FILE: SaveAs = SaveAs {
+    name: "JSON file",
+    spec: "*.json",
+    ext: "json",
+    title: "Save everything Jarvis remembers",
+};
+
 /// The Windows "Save as" dialog, and nothing else.
 #[cfg(windows)]
-mod save_dialog {
+pub(crate) mod save_dialog {
+    use super::SaveAs;
     use std::path::PathBuf;
-    use windows::core::{w, HSTRING};
+    use windows::core::{HSTRING, PCWSTR};
     use windows::Win32::Foundation::ERROR_CANCELLED;
     use windows::Win32::System::Com::{
         CoCreateInstance, CoInitializeEx, CoTaskMemFree, CoUninitialize, CLSCTX_INPROC_SERVER,
@@ -609,8 +647,21 @@ mod save_dialog {
         SIGDN_FILESYSPATH,
     };
 
+    /// A support chat's transcript ("Export transcript", brain/support.rs).
+    pub(crate) const TEXT_FILE: SaveAs = SaveAs {
+        name: "Text file",
+        spec: "*.txt",
+        ext: "txt",
+        title: "Save the support chat's transcript",
+    };
+
     /// `Ok(None)` when the owner cancelled.
     pub fn pick(suggested: &str) -> Result<Option<PathBuf>, String> {
+        pick_as(suggested, &super::JSON_FILE)
+    }
+
+    /// The dialog for `kind`. `Ok(None)` when the owner cancelled.
+    pub fn pick_as(suggested: &str, kind: &SaveAs) -> Result<Option<PathBuf>, String> {
         // SAFETY: plain COM calls on this thread, which is ours alone and is
         // initialised as a single-threaded apartment first. Every pointer
         // handed out by COM is released: the interfaces by their Drop, the
@@ -620,25 +671,29 @@ mod save_dialog {
             if init.is_err() {
                 return Err(format!("could not open the save dialog: {init:?}"));
             }
-            let out = show(suggested);
+            let out = show(suggested, kind);
             CoUninitialize();
             out
         }
     }
 
-    unsafe fn show(suggested: &str) -> Result<Option<PathBuf>, String> {
+    unsafe fn show(suggested: &str, kind: &SaveAs) -> Result<Option<PathBuf>, String> {
         let fail = |e: windows::core::Error| format!("the save dialog failed: {e}");
         let dialog: IFileSaveDialog =
             CoCreateInstance(&FileSaveDialog, None, CLSCTX_INPROC_SERVER).map_err(fail)?;
+        // Kept alive until the dialog has read them: the filter holds bare
+        // pointers into these two strings.
+        let name = HSTRING::from(kind.name);
+        let spec = HSTRING::from(kind.spec);
         let types = [COMDLG_FILTERSPEC {
-            pszName: w!("JSON file"),
-            pszSpec: w!("*.json"),
+            pszName: PCWSTR(name.as_ptr()),
+            pszSpec: PCWSTR(spec.as_ptr()),
         }];
         dialog.SetFileTypes(&types).map_err(fail)?;
-        dialog.SetDefaultExtension(w!("json")).map_err(fail)?;
         dialog
-            .SetTitle(w!("Save everything Jarvis remembers"))
+            .SetDefaultExtension(&HSTRING::from(kind.ext))
             .map_err(fail)?;
+        dialog.SetTitle(&HSTRING::from(kind.title)).map_err(fail)?;
         dialog
             .SetFileName(&HSTRING::from(suggested))
             .map_err(fail)?;
@@ -663,9 +718,22 @@ mod save_dialog {
 
 /// Not Windows: this app is only built for Windows; say so rather than guess.
 #[cfg(not(windows))]
-mod save_dialog {
+pub(crate) mod save_dialog {
+    use super::SaveAs;
+
+    pub(crate) const TEXT_FILE: SaveAs = SaveAs {
+        name: "Text file",
+        spec: "*.txt",
+        ext: "txt",
+        title: "Save the support chat's transcript",
+    };
+
     pub fn pick(_suggested: &str) -> Result<Option<std::path::PathBuf>, String> {
         Err("saving the memory export needs the Windows save dialog".to_string())
+    }
+
+    pub fn pick_as(_suggested: &str, _kind: &SaveAs) -> Result<Option<std::path::PathBuf>, String> {
+        Err("saving a file needs the Windows save dialog".to_string())
     }
 }
 

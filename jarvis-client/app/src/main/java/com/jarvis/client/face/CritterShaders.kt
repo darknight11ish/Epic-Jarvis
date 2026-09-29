@@ -70,6 +70,12 @@ const float ID_ORB = 9.0;
 
 float3 toLinear(float3 c) { return pow(clamp(c, 0.0, 1.0), float3(2.2)); }
 
+// 2D & 3D Signed Distance Functions by Inigo Quilez
+// https://iquilezles.org/articles/distfunctions2d/
+// https://iquilezles.org/articles/distfunctions/
+// The ellipsoid bound, the capsule, the smooth minimum and the 2D ellipse
+// below follow his published formulas (THIRD-PARTY-NOTICES.txt).
+
 // Inigo Quilez's distance bounds. An ellipsoid has no exact distance
 // formula; this one is close enough near the surface, which is all the
 // march needs.
@@ -961,6 +967,12 @@ const float ID_ORB = 9.0;
 
 float3 toLinear(float3 c) { return pow(clamp(c, 0.0, 1.0), float3(2.2)); }
 
+// 2D & 3D Signed Distance Functions by Inigo Quilez
+// https://iquilezles.org/articles/distfunctions2d/
+// https://iquilezles.org/articles/distfunctions/
+// The ellipsoid bound, the capsule, the smooth minimum and the 2D ellipse
+// below follow his published formulas (THIRD-PARTY-NOTICES.txt).
+
 // Inigo Quilez's distance bounds. An ellipsoid has no exact distance
 // formula; this one is close enough near the surface, which is all the
 // march needs.
@@ -1815,6 +1827,12 @@ const float PI = 3.14159265;
 const float ID_ORB = 9.0;
 
 float3 toLinear(float3 c) { return pow(clamp(c, 0.0, 1.0), float3(2.2)); }
+
+// 2D & 3D Signed Distance Functions by Inigo Quilez
+// https://iquilezles.org/articles/distfunctions2d/
+// https://iquilezles.org/articles/distfunctions/
+// The ellipsoid bound, the capsule, the smooth minimum and the 2D ellipse
+// below follow his published formulas (THIRD-PARTY-NOTICES.txt).
 
 // Inigo Quilez's distance bounds. An ellipsoid has no exact distance
 // formula; this one is close enough near the surface, which is all the
@@ -2718,6 +2736,12 @@ const float PI = 3.14159265;
 const float ID_ORB = 9.0;
 
 float3 toLinear(float3 c) { return pow(clamp(c, 0.0, 1.0), float3(2.2)); }
+
+// 2D & 3D Signed Distance Functions by Inigo Quilez
+// https://iquilezles.org/articles/distfunctions2d/
+// https://iquilezles.org/articles/distfunctions/
+// The ellipsoid bound, the capsule, the smooth minimum and the 2D ellipse
+// below follow his published formulas (THIRD-PARTY-NOTICES.txt).
 
 // Inigo Quilez's distance bounds. An ellipsoid has no exact distance
 // formula; this one is close enough near the surface, which is all the
@@ -3641,6 +3665,12 @@ const float PI = 3.14159265;
 const float ID_ORB = 9.0;
 
 float3 toLinear(float3 c) { return pow(clamp(c, 0.0, 1.0), float3(2.2)); }
+
+// 2D & 3D Signed Distance Functions by Inigo Quilez
+// https://iquilezles.org/articles/distfunctions2d/
+// https://iquilezles.org/articles/distfunctions/
+// The ellipsoid bound, the capsule, the smooth minimum and the 2D ellipse
+// below follow his published formulas (THIRD-PARTY-NOTICES.txt).
 
 // Inigo Quilez's distance bounds. An ellipsoid has no exact distance
 // formula; this one is close enough near the surface, which is all the

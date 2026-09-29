@@ -1,0 +1,2707 @@
+{
+ "app_limits": {
+  "blocks": 2000000,
+  "card_diff": 60000,
+  "open_tasks": 10,
+  "task_title": 120
+ },
+ "app_merge_card": "Add Jarvis's change to your app \"notes-app\": Add a dark mode\n\nYou pasted this change in on your PC.\n\n2 file(s):\n  src/App.tsx  (+3 -0)\n  src/theme.css  (+1 -0)\n\nNothing is run: this only changes the app's files. Saying no keeps the change aside, and your app stays as it is.\n\nThe full change:\n\ndiff --git a/src/App.tsx b/src/App.tsx\nnew file mode 100644\nindex 0000000..5ae39b2\n--- /dev/null\n+++ b/src/App.tsx\n@@ -0,0 +1,3 @@\n+export default function App() {\n+  return <h1>Notes</h1>;\n+}\ndiff --git a/src/theme.css b/src/theme.css\nnew file mode 100644\nindex 0000000..a56a647\n--- /dev/null\n+++ b/src/theme.css\n@@ -0,0 +1 @@\n+:root { color-scheme: dark; }\n",
+ "app_words": {
+  "cant_run": "Jarvis cannot run this yet. Run it yourself and log the number.",
+  "card_waiting": "A card for this app is already waiting - answer it first.",
+  "delete_app_project_q": "Delete the project \"{name}\"? Its benchmarks and every number logged go with it. The app's files stay on this PC and can be added back later. This cannot be undone.",
+  "deleted_app_kept": "Deleted. The app's files stay on this PC and can be added back.",
+  "outcomes": {
+   "conflict": "Not added - the change did not fit the app's newer version. Nothing was changed; discard it and ask again.",
+   "denied": "Not added - you said no. The change is kept aside.",
+   "failed": "Not added - something went wrong. Nothing was changed.",
+   "merged": "Added to your app.",
+   "refused": "Not added.",
+   "stale": "Not added - the app or the change moved after the card was shown. Look at the new card.",
+   "timed_out": "Not added - the card timed out. The change is kept aside.",
+   "unsaved": "Not added - the app's own folder has changes that are not saved in git.",
+   "withdrawn": "Not added - the change was thrown away before you answered."
+  },
+  "pasted_line": "You pasted this change in on your PC."
+ },
+ "cases": {
+  "app_denied": {
+   "ok": true,
+   "project": {
+    "app": {
+     "git_ok": true,
+     "main": {
+      "at": 1790000000.0,
+      "head": "8dc2396",
+      "subject": "Jarvis: Add a dark mode",
+      "versions": 3
+     },
+     "merge": {
+      "last": {
+       "at": 1790000000.0,
+       "message": "Not added - you said no. The change is kept aside.",
+       "outcome": "denied",
+       "task": "000000000002"
+      },
+      "waiting": null
+     },
+     "name": "notes-app",
+     "said": "",
+     "tasks": [
+      {
+       "added": 1,
+       "files": 1,
+       "older_main": true,
+       "removed": 0,
+       "source": "pasted",
+       "started": 1790000000.0,
+       "task": "000000000002",
+       "title": "Try a login page",
+       "waiting": false
+      }
+     ],
+     "title": "Notes app",
+     "type": "web"
+    },
+    "benchmark_list": [],
+    "benchmarks": 0,
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "folder": null,
+    "goals": [],
+    "id": "00000000000000000000000000000001",
+    "instructions": "",
+    "kind": "coding",
+    "max": {
+     "benchmarks": 12,
+     "instructions": 1500,
+     "note": 200,
+     "notes": 10
+    },
+    "name": "Notes app",
+    "notes": [],
+    "shareable": false,
+    "shareable_last": null,
+    "shareable_waiting": false,
+    "shareable_waiting_words": "",
+    "work_list": {
+     "name": "notes app",
+     "title": "Notes app list"
+    }
+   }
+  },
+  "app_fresh": {
+   "ok": true,
+   "project": {
+    "app": {
+     "git_ok": true,
+     "main": {
+      "at": 1790000000.0,
+      "head": "eb189c4",
+      "subject": "Start Notes app",
+      "versions": 1
+     },
+     "merge": {
+      "last": null,
+      "waiting": null
+     },
+     "name": "notes-app",
+     "said": "",
+     "tasks": [],
+     "title": "Notes app",
+     "type": "web"
+    },
+    "benchmark_list": [],
+    "benchmarks": 0,
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "folder": null,
+    "goals": [],
+    "id": "00000000000000000000000000000001",
+    "instructions": "",
+    "kind": "coding",
+    "max": {
+     "benchmarks": 12,
+     "instructions": 1500,
+     "note": 200,
+     "notes": 10
+    },
+    "name": "Notes app",
+    "notes": [],
+    "shareable": false,
+    "shareable_last": null,
+    "shareable_waiting": false,
+    "shareable_waiting_words": "",
+    "work_list": {
+     "name": "notes app",
+     "title": "Notes app list"
+    }
+   }
+  },
+  "app_merged": {
+   "ok": true,
+   "project": {
+    "app": {
+     "git_ok": true,
+     "main": {
+      "at": 1790000000.0,
+      "head": "8dc2396",
+      "subject": "Jarvis: Add a dark mode",
+      "versions": 3
+     },
+     "merge": {
+      "last": {
+       "at": 1790000000.0,
+       "message": "Added to your app.",
+       "outcome": "merged",
+       "task": "000000000001"
+      },
+      "waiting": null
+     },
+     "name": "notes-app",
+     "said": "",
+     "tasks": [
+      {
+       "added": 0,
+       "files": 0,
+       "older_main": true,
+       "removed": 0,
+       "source": "empty",
+       "started": 1790000000.0,
+       "task": "000000000002",
+       "title": "Try a login page",
+       "waiting": false
+      }
+     ],
+     "title": "Notes app",
+     "type": "web"
+    },
+    "benchmark_list": [],
+    "benchmarks": 0,
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "folder": null,
+    "goals": [],
+    "id": "00000000000000000000000000000001",
+    "instructions": "",
+    "kind": "coding",
+    "max": {
+     "benchmarks": 12,
+     "instructions": 1500,
+     "note": 200,
+     "notes": 10
+    },
+    "name": "Notes app",
+    "notes": [],
+    "shareable": false,
+    "shareable_last": null,
+    "shareable_waiting": false,
+    "shareable_waiting_words": "",
+    "work_list": {
+     "name": "notes app",
+     "title": "Notes app list"
+    }
+   }
+  },
+  "app_no_git": {
+   "ok": true,
+   "project": {
+    "app": {
+     "git_ok": false,
+     "main": null,
+     "merge": {
+      "last": null,
+      "waiting": null
+     },
+     "name": "notes-app",
+     "said": "Git is not installed on this PC (https://git-scm.com), so Jarvis cannot keep app projects yet.",
+     "tasks": [],
+     "title": "Notes app",
+     "type": "web"
+    },
+    "benchmark_list": [],
+    "benchmarks": 0,
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "folder": null,
+    "goals": [],
+    "id": "00000000000000000000000000000006",
+    "instructions": "",
+    "kind": "coding",
+    "max": {
+     "benchmarks": 12,
+     "instructions": 1500,
+     "note": 200,
+     "notes": 10
+    },
+    "name": "Notes app",
+    "notes": [],
+    "shareable": false,
+    "shareable_last": null,
+    "shareable_waiting": false,
+    "shareable_waiting_words": "",
+    "work_list": {
+     "name": "notes app",
+     "title": "Notes app list"
+    }
+   }
+  },
+  "app_tasks": {
+   "ok": true,
+   "project": {
+    "app": {
+     "git_ok": true,
+     "main": {
+      "at": 1790000000.0,
+      "head": "eb189c4",
+      "subject": "Start Notes app",
+      "versions": 1
+     },
+     "merge": {
+      "last": null,
+      "waiting": null
+     },
+     "name": "notes-app",
+     "said": "",
+     "tasks": [
+      {
+       "added": 4,
+       "files": 2,
+       "older_main": false,
+       "removed": 0,
+       "source": "pasted",
+       "started": 1790000000.0,
+       "task": "000000000001",
+       "title": "Add a dark mode",
+       "waiting": false
+      },
+      {
+       "added": 0,
+       "files": 0,
+       "older_main": false,
+       "removed": 0,
+       "source": "empty",
+       "started": 1790000000.0,
+       "task": "000000000002",
+       "title": "Try a login page",
+       "waiting": false
+      }
+     ],
+     "title": "Notes app",
+     "type": "web"
+    },
+    "benchmark_list": [],
+    "benchmarks": 0,
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "folder": null,
+    "goals": [],
+    "id": "00000000000000000000000000000001",
+    "instructions": "",
+    "kind": "coding",
+    "max": {
+     "benchmarks": 12,
+     "instructions": 1500,
+     "note": 200,
+     "notes": 10
+    },
+    "name": "Notes app",
+    "notes": [],
+    "shareable": false,
+    "shareable_last": null,
+    "shareable_waiting": false,
+    "shareable_waiting_words": "",
+    "work_list": {
+     "name": "notes app",
+     "title": "Notes app list"
+    }
+   }
+  },
+  "app_waiting": {
+   "ok": true,
+   "project": {
+    "app": {
+     "git_ok": true,
+     "main": {
+      "at": 1790000000.0,
+      "head": "eb189c4",
+      "subject": "Start Notes app",
+      "versions": 1
+     },
+     "merge": {
+      "last": null,
+      "waiting": "000000000001"
+     },
+     "name": "notes-app",
+     "said": "",
+     "tasks": [
+      {
+       "added": 4,
+       "files": 2,
+       "older_main": false,
+       "removed": 0,
+       "source": "pasted",
+       "started": 1790000000.0,
+       "task": "000000000001",
+       "title": "Add a dark mode",
+       "waiting": true
+      },
+      {
+       "added": 0,
+       "files": 0,
+       "older_main": false,
+       "removed": 0,
+       "source": "empty",
+       "started": 1790000000.0,
+       "task": "000000000002",
+       "title": "Try a login page",
+       "waiting": false
+      }
+     ],
+     "title": "Notes app",
+     "type": "web"
+    },
+    "benchmark_list": [],
+    "benchmarks": 0,
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "folder": null,
+    "goals": [],
+    "id": "00000000000000000000000000000001",
+    "instructions": "",
+    "kind": "coding",
+    "max": {
+     "benchmarks": 12,
+     "instructions": 1500,
+     "note": 200,
+     "notes": 10
+    },
+    "name": "Notes app",
+    "notes": [],
+    "shareable": false,
+    "shareable_last": null,
+    "shareable_waiting": false,
+    "shareable_waiting_words": "",
+    "work_list": {
+     "name": "notes app",
+     "title": "Notes app list"
+    }
+   }
+  },
+  "bench_empty": {
+   "benchmark": {
+    "better": null,
+    "change": null,
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "id": "00000000000000000000000000000010",
+    "keep_on_screen": false,
+    "keep_on_screen_words": "",
+    "kind": "number",
+    "latest": null,
+    "mark_auto": "",
+    "mark_auto_removed": false,
+    "marked_by_you": false,
+    "name": "Score",
+    "points": [],
+    "points_shown": 0,
+    "results": 0,
+    "sensitive": false,
+    "sensitive_why": "",
+    "target": null,
+    "unit": "",
+    "unmark": "",
+    "unmark_last": null,
+    "unmark_waiting": false
+   },
+   "ok": true
+  },
+  "bench_run": {
+   "benchmark": {
+    "better": "higher",
+    "change": {
+     "by": 1.5,
+     "direction": "up",
+     "said": "Better than last time (up 1.5).",
+     "target_reached": false,
+     "verdict": "better"
+    },
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "id": "00000000000000000000000000000002",
+    "keep_on_screen": false,
+    "keep_on_screen_words": "",
+    "kind": "number",
+    "latest": {
+     "at": 1789395200.0,
+     "id": "00000000000000000000000000000008",
+     "value": 12.0
+    },
+    "mark_auto": "",
+    "mark_auto_removed": false,
+    "marked_by_you": false,
+    "name": "Long run",
+    "points": [
+     {
+      "at": 1788185600.0,
+      "id": "00000000000000000000000000000006",
+      "value": 8.0
+     },
+     {
+      "at": 1788790400.0,
+      "id": "00000000000000000000000000000007",
+      "value": 10.5
+     },
+     {
+      "at": 1789395200.0,
+      "id": "00000000000000000000000000000008",
+      "value": 12.0
+     }
+    ],
+    "points_shown": 3,
+    "results": 3,
+    "sensitive": false,
+    "sensitive_why": "",
+    "target": 21.1,
+    "unit": "km",
+    "unmark": "",
+    "unmark_last": null,
+    "unmark_waiting": false
+   },
+   "ok": true
+  },
+  "bench_weight": {
+   "benchmark": {
+    "better": "lower",
+    "change": {
+     "by": 0.6000000000000085,
+     "direction": "down",
+     "said": "Better than last time (down 0.6).",
+     "target_reached": null,
+     "verdict": "better"
+    },
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "id": "00000000000000000000000000000003",
+    "keep_on_screen": true,
+    "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
+    "kind": "number",
+    "latest": {
+     "at": 1789395200.0,
+     "id": "0000000000000000000000000000000a",
+     "value": 73.6
+    },
+    "mark_auto": "health",
+    "mark_auto_removed": false,
+    "marked_by_you": false,
+    "name": "Weight",
+    "points": [
+     {
+      "at": 1788790400.0,
+      "id": "00000000000000000000000000000009",
+      "value": 74.2
+     },
+     {
+      "at": 1789395200.0,
+      "id": "0000000000000000000000000000000a",
+      "value": 73.6
+     }
+    ],
+    "points_shown": 2,
+    "results": 2,
+    "sensitive": true,
+    "sensitive_why": "health",
+    "target": null,
+    "unit": "kg",
+    "unmark": "card",
+    "unmark_last": null,
+    "unmark_waiting": false
+   },
+   "ok": true
+  },
+  "coding": {
+   "ok": true,
+   "project": {
+    "app": null,
+    "benchmark_list": [
+     {
+      "better": "higher",
+      "change": null,
+      "changed": 1790000000.0,
+      "command": "pytest -q",
+      "created": 1790000000.0,
+      "id": "0000000000000000000000000000000e",
+      "keep_on_screen": false,
+      "keep_on_screen_words": "",
+      "kind": "command",
+      "latest": null,
+      "mark_auto": "",
+      "mark_auto_removed": false,
+      "marked_by_you": false,
+      "name": "tests",
+      "not_runnable_why": "Running a benchmark's command comes in a later step - nothing runs yet. The command is kept, word for word.",
+      "results": 0,
+      "runnable": false,
+      "sensitive": false,
+      "sensitive_why": "",
+      "target": null,
+      "unit": "",
+      "unmark": "",
+      "unmark_last": null,
+      "unmark_waiting": false
+     },
+     {
+      "better": "lower",
+      "change": null,
+      "changed": 1790000000.0,
+      "created": 1790000000.0,
+      "id": "0000000000000000000000000000000f",
+      "keep_on_screen": false,
+      "keep_on_screen_words": "",
+      "kind": "number",
+      "latest": null,
+      "mark_auto": "",
+      "mark_auto_removed": false,
+      "marked_by_you": false,
+      "name": "Startup",
+      "results": 0,
+      "sensitive": false,
+      "sensitive_why": "",
+      "target": 800.0,
+      "unit": "ms",
+      "unmark": "",
+      "unmark_last": null,
+      "unmark_waiting": false
+     }
+    ],
+    "benchmarks": 2,
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "folder": {
+     "listed": true,
+     "name": "jarvis-desktop",
+     "path": "C:\\Users\\owner\\Code\\jarvis-desktop",
+     "said": ""
+    },
+    "goals": [],
+    "id": "0000000000000000000000000000000d",
+    "instructions": "",
+    "kind": "coding",
+    "max": {
+     "benchmarks": 12,
+     "instructions": 1500,
+     "note": 200,
+     "notes": 10
+    },
+    "name": "Jarvis Desktop",
+    "notes": [],
+    "shareable": false,
+    "shareable_last": null,
+    "shareable_waiting": false,
+    "shareable_waiting_words": "",
+    "work_list": {
+     "name": "jarvis desktop",
+     "title": "Jarvis desktop list"
+    }
+   }
+  },
+  "life": {
+   "ok": true,
+   "project": {
+    "app": null,
+    "benchmark_list": [
+     {
+      "better": "higher",
+      "change": {
+       "by": 1.5,
+       "direction": "up",
+       "said": "Better than last time (up 1.5).",
+       "target_reached": false,
+       "verdict": "better"
+      },
+      "changed": 1790000000.0,
+      "created": 1790000000.0,
+      "id": "00000000000000000000000000000002",
+      "keep_on_screen": false,
+      "keep_on_screen_words": "",
+      "kind": "number",
+      "latest": {
+       "at": 1789395200.0,
+       "id": "00000000000000000000000000000008",
+       "value": 12.0
+      },
+      "mark_auto": "",
+      "mark_auto_removed": false,
+      "marked_by_you": false,
+      "name": "Long run",
+      "results": 3,
+      "sensitive": false,
+      "sensitive_why": "",
+      "target": 21.1,
+      "unit": "km",
+      "unmark": "",
+      "unmark_last": null,
+      "unmark_waiting": false
+     },
+     {
+      "better": "lower",
+      "change": {
+       "by": 0.6000000000000085,
+       "direction": "down",
+       "said": "Better than last time (down 0.6).",
+       "target_reached": null,
+       "verdict": "better"
+      },
+      "changed": 1790000000.0,
+      "created": 1790000000.0,
+      "id": "00000000000000000000000000000003",
+      "keep_on_screen": true,
+      "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
+      "kind": "number",
+      "latest": {
+       "at": 1789395200.0,
+       "id": "0000000000000000000000000000000a",
+       "value": 73.6
+      },
+      "mark_auto": "health",
+      "mark_auto_removed": false,
+      "marked_by_you": false,
+      "name": "Weight",
+      "results": 2,
+      "sensitive": true,
+      "sensitive_why": "health",
+      "target": null,
+      "unit": "kg",
+      "unmark": "card",
+      "unmark_last": null,
+      "unmark_waiting": false
+     },
+     {
+      "better": "lower",
+      "change": {
+       "by": 0.75,
+       "direction": "down",
+       "said": "Better than last time (down 0.75).",
+       "target_reached": null,
+       "verdict": "better"
+      },
+      "changed": 1790000000.0,
+      "created": 1790000000.0,
+      "id": "00000000000000000000000000000004",
+      "keep_on_screen": true,
+      "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
+      "kind": "number",
+      "latest": {
+       "at": 1789913600.0,
+       "id": "0000000000000000000000000000000c",
+       "value": 26.75
+      },
+      "mark_auto": "money",
+      "mark_auto_removed": false,
+      "marked_by_you": false,
+      "name": "5k time",
+      "results": 2,
+      "sensitive": true,
+      "sensitive_why": "money",
+      "target": null,
+      "unit": "min",
+      "unmark": "card",
+      "unmark_last": null,
+      "unmark_waiting": false
+     },
+     {
+      "better": null,
+      "change": null,
+      "changed": 1790000000.0,
+      "created": 1790000000.0,
+      "id": "00000000000000000000000000000005",
+      "keep_on_screen": true,
+      "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
+      "kind": "number",
+      "latest": null,
+      "mark_auto": "",
+      "mark_auto_removed": false,
+      "marked_by_you": true,
+      "name": "Stretching",
+      "results": 0,
+      "sensitive": true,
+      "sensitive_why": "you marked it",
+      "target": null,
+      "unit": "min",
+      "unmark": "instant",
+      "unmark_last": null,
+      "unmark_waiting": false
+     }
+    ],
+    "benchmarks": 4,
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "folder": null,
+    "goals": [],
+    "id": "00000000000000000000000000000001",
+    "instructions": "Keep me honest about training. Race is 12 April.",
+    "kind": "life",
+    "max": {
+     "benchmarks": 12,
+     "instructions": 1500,
+     "note": 200,
+     "notes": 10
+    },
+    "name": "Half marathon",
+    "notes": [
+     "Long runs on Sundays",
+     "Knee: stop if it hurts"
+    ],
+    "shareable": false,
+    "shareable_last": null,
+    "shareable_waiting": false,
+    "shareable_waiting_words": "",
+    "work_list": {
+     "name": "half marathon",
+     "title": "Half marathon list"
+    }
+   }
+  },
+  "life_answered": {
+   "ok": true,
+   "project": {
+    "app": null,
+    "benchmark_list": [
+     {
+      "better": "higher",
+      "change": {
+       "by": 1.5,
+       "direction": "up",
+       "said": "Better than last time (up 1.5).",
+       "target_reached": false,
+       "verdict": "better"
+      },
+      "changed": 1790000000.0,
+      "created": 1790000000.0,
+      "id": "00000000000000000000000000000002",
+      "keep_on_screen": false,
+      "keep_on_screen_words": "",
+      "kind": "number",
+      "latest": {
+       "at": 1789395200.0,
+       "id": "00000000000000000000000000000008",
+       "value": 12.0
+      },
+      "mark_auto": "",
+      "mark_auto_removed": false,
+      "marked_by_you": false,
+      "name": "Long run",
+      "results": 3,
+      "sensitive": false,
+      "sensitive_why": "",
+      "target": 21.1,
+      "unit": "km",
+      "unmark": "",
+      "unmark_last": null,
+      "unmark_waiting": false
+     },
+     {
+      "better": "lower",
+      "change": {
+       "by": 0.6000000000000085,
+       "direction": "down",
+       "said": "Better than last time (down 0.6).",
+       "target_reached": null,
+       "verdict": "better"
+      },
+      "changed": 1790000000.0,
+      "created": 1790000000.0,
+      "id": "00000000000000000000000000000003",
+      "keep_on_screen": true,
+      "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
+      "kind": "number",
+      "latest": {
+       "at": 1789395200.0,
+       "id": "0000000000000000000000000000000a",
+       "value": 73.6
+      },
+      "mark_auto": "health",
+      "mark_auto_removed": false,
+      "marked_by_you": false,
+      "name": "Weight",
+      "results": 2,
+      "sensitive": true,
+      "sensitive_why": "health",
+      "target": null,
+      "unit": "kg",
+      "unmark": "card",
+      "unmark_last": null,
+      "unmark_waiting": false
+     },
+     {
+      "better": "lower",
+      "change": {
+       "by": 0.75,
+       "direction": "down",
+       "said": "Better than last time (down 0.75).",
+       "target_reached": null,
+       "verdict": "better"
+      },
+      "changed": 1790000000.0,
+      "created": 1790000000.0,
+      "id": "00000000000000000000000000000004",
+      "keep_on_screen": false,
+      "keep_on_screen_words": "",
+      "kind": "number",
+      "latest": {
+       "at": 1789913600.0,
+       "id": "0000000000000000000000000000000c",
+       "value": 26.75
+      },
+      "mark_auto": "money",
+      "mark_auto_removed": true,
+      "marked_by_you": false,
+      "name": "5k time",
+      "results": 2,
+      "sensitive": false,
+      "sensitive_why": "",
+      "target": null,
+      "unit": "min",
+      "unmark": "",
+      "unmark_last": {
+       "at": 1790000000.0,
+       "message": "The private mark is off. Jarvis may read these numbers aloud now.",
+       "outcome": "off",
+       "why": ""
+      },
+      "unmark_waiting": false
+     },
+     {
+      "better": null,
+      "change": null,
+      "changed": 1790000000.0,
+      "created": 1790000000.0,
+      "id": "00000000000000000000000000000005",
+      "keep_on_screen": false,
+      "keep_on_screen_words": "",
+      "kind": "number",
+      "latest": null,
+      "mark_auto": "",
+      "mark_auto_removed": false,
+      "marked_by_you": false,
+      "name": "Stretching",
+      "results": 0,
+      "sensitive": false,
+      "sensitive_why": "",
+      "target": null,
+      "unit": "min",
+      "unmark": "",
+      "unmark_last": null,
+      "unmark_waiting": false
+     }
+    ],
+    "benchmarks": 4,
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "folder": null,
+    "goals": [],
+    "id": "00000000000000000000000000000001",
+    "instructions": "Keep me honest about training. Race is 12 April.",
+    "kind": "life",
+    "max": {
+     "benchmarks": 12,
+     "instructions": 1500,
+     "note": 200,
+     "notes": 10
+    },
+    "name": "Half marathon",
+    "notes": [
+     "Long runs on Sundays",
+     "Knee: stop if it hurts"
+    ],
+    "shareable": false,
+    "shareable_last": {
+     "at": 1790000000.0,
+     "message": "Shareable stays off - you said no.",
+     "outcome": "denied",
+     "why": ""
+    },
+    "shareable_waiting": false,
+    "shareable_waiting_words": "",
+    "work_list": {
+     "name": "half marathon",
+     "title": "Half marathon list"
+    }
+   }
+  },
+  "life_waiting": {
+   "ok": true,
+   "project": {
+    "app": null,
+    "benchmark_list": [
+     {
+      "better": "higher",
+      "change": {
+       "by": 1.5,
+       "direction": "up",
+       "said": "Better than last time (up 1.5).",
+       "target_reached": false,
+       "verdict": "better"
+      },
+      "changed": 1790000000.0,
+      "created": 1790000000.0,
+      "id": "00000000000000000000000000000002",
+      "keep_on_screen": false,
+      "keep_on_screen_words": "",
+      "kind": "number",
+      "latest": {
+       "at": 1789395200.0,
+       "id": "00000000000000000000000000000008",
+       "value": 12.0
+      },
+      "mark_auto": "",
+      "mark_auto_removed": false,
+      "marked_by_you": false,
+      "name": "Long run",
+      "results": 3,
+      "sensitive": false,
+      "sensitive_why": "",
+      "target": 21.1,
+      "unit": "km",
+      "unmark": "",
+      "unmark_last": null,
+      "unmark_waiting": false
+     },
+     {
+      "better": "lower",
+      "change": {
+       "by": 0.6000000000000085,
+       "direction": "down",
+       "said": "Better than last time (down 0.6).",
+       "target_reached": null,
+       "verdict": "better"
+      },
+      "changed": 1790000000.0,
+      "created": 1790000000.0,
+      "id": "00000000000000000000000000000003",
+      "keep_on_screen": true,
+      "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
+      "kind": "number",
+      "latest": {
+       "at": 1789395200.0,
+       "id": "0000000000000000000000000000000a",
+       "value": 73.6
+      },
+      "mark_auto": "health",
+      "mark_auto_removed": false,
+      "marked_by_you": false,
+      "name": "Weight",
+      "results": 2,
+      "sensitive": true,
+      "sensitive_why": "health",
+      "target": null,
+      "unit": "kg",
+      "unmark": "card",
+      "unmark_last": null,
+      "unmark_waiting": false
+     },
+     {
+      "better": "lower",
+      "change": {
+       "by": 0.75,
+       "direction": "down",
+       "said": "Better than last time (down 0.75).",
+       "target_reached": null,
+       "verdict": "better"
+      },
+      "changed": 1790000000.0,
+      "created": 1790000000.0,
+      "id": "00000000000000000000000000000004",
+      "keep_on_screen": true,
+      "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
+      "kind": "number",
+      "latest": {
+       "at": 1789913600.0,
+       "id": "0000000000000000000000000000000c",
+       "value": 26.75
+      },
+      "mark_auto": "money",
+      "mark_auto_removed": false,
+      "marked_by_you": false,
+      "name": "5k time",
+      "results": 2,
+      "sensitive": true,
+      "sensitive_why": "money",
+      "target": null,
+      "unit": "min",
+      "unmark": "card",
+      "unmark_last": null,
+      "unmark_waiting": true
+     },
+     {
+      "better": null,
+      "change": null,
+      "changed": 1790000000.0,
+      "created": 1790000000.0,
+      "id": "00000000000000000000000000000005",
+      "keep_on_screen": true,
+      "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
+      "kind": "number",
+      "latest": null,
+      "mark_auto": "",
+      "mark_auto_removed": false,
+      "marked_by_you": true,
+      "name": "Stretching",
+      "results": 0,
+      "sensitive": true,
+      "sensitive_why": "you marked it",
+      "target": null,
+      "unit": "min",
+      "unmark": "instant",
+      "unmark_last": null,
+      "unmark_waiting": false
+     }
+    ],
+    "benchmarks": 4,
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "folder": null,
+    "goals": [],
+    "id": "00000000000000000000000000000001",
+    "instructions": "Keep me honest about training. Race is 12 April.",
+    "kind": "life",
+    "max": {
+     "benchmarks": 12,
+     "instructions": 1500,
+     "note": 200,
+     "notes": 10
+    },
+    "name": "Half marathon",
+    "notes": [
+     "Long runs on Sundays",
+     "Knee: stop if it hurts"
+    ],
+    "shareable": false,
+    "shareable_last": null,
+    "shareable_waiting": true,
+    "shareable_waiting_words": "Waiting for your yes on the approval card.",
+    "work_list": {
+     "name": "half marathon",
+     "title": "Half marathon list"
+    }
+   }
+  },
+  "list_adopted": {
+   "available": true,
+   "empty": "",
+   "max": 30,
+   "ok": true,
+   "projects": [
+    {
+     "app": {
+      "merge_waiting": false,
+      "name": "notes-app",
+      "tasks": 1,
+      "type": "web"
+     },
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000001",
+     "kind": "coding",
+     "name": "Notes app",
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "notes app",
+      "title": "Notes app list"
+     }
+    },
+    {
+     "app": {
+      "merge_waiting": false,
+      "name": "old-notes",
+      "tasks": 0,
+      "type": "android"
+     },
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000002",
+     "kind": "coding",
+     "name": "Old notes",
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "old notes",
+      "title": "Old notes list"
+     }
+    }
+   ],
+   "title": "Projects",
+   "unlinked_apps": []
+  },
+  "list_after_delete": {
+   "available": true,
+   "empty": "",
+   "max": 30,
+   "ok": true,
+   "projects": [
+    {
+     "app": {
+      "merge_waiting": false,
+      "name": "old-notes",
+      "tasks": 0,
+      "type": "android"
+     },
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000002",
+     "kind": "coding",
+     "name": "Old notes",
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "old notes",
+      "title": "Old notes list"
+     }
+    },
+    {
+     "app": null,
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000005",
+     "kind": "life",
+     "name": "Half marathon",
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "half marathon",
+      "title": "Half marathon list"
+     }
+    }
+   ],
+   "title": "Projects",
+   "unlinked_apps": [
+    {
+     "name": "notes-app",
+     "title": "Notes app",
+     "type": "web"
+    }
+   ]
+  },
+  "list_app": {
+   "available": true,
+   "empty": "",
+   "max": 30,
+   "ok": true,
+   "projects": [
+    {
+     "app": {
+      "merge_waiting": false,
+      "name": "notes-app",
+      "tasks": 0,
+      "type": "web"
+     },
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000001",
+     "kind": "coding",
+     "name": "Notes app",
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "notes app",
+      "title": "Notes app list"
+     }
+    }
+   ],
+   "title": "Projects",
+   "unlinked_apps": [
+    {
+     "name": "old-notes",
+     "title": "Old notes",
+     "type": "android"
+    }
+   ]
+  },
+  "list_empty": {
+   "available": true,
+   "empty": "No projects yet.",
+   "max": 30,
+   "ok": true,
+   "projects": [],
+   "title": "Projects",
+   "unlinked_apps": []
+  },
+  "list_two": {
+   "available": true,
+   "empty": "",
+   "max": 30,
+   "ok": true,
+   "projects": [
+    {
+     "app": null,
+     "benchmarks": 4,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000001",
+     "kind": "life",
+     "name": "Half marathon",
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "half marathon",
+      "title": "Half marathon list"
+     }
+    },
+    {
+     "app": null,
+     "benchmarks": 2,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": {
+      "listed": true,
+      "name": "jarvis-desktop",
+      "path": "C:\\Users\\owner\\Code\\jarvis-desktop",
+      "said": ""
+     },
+     "goals": [],
+     "id": "0000000000000000000000000000000d",
+     "kind": "coding",
+     "name": "Jarvis Desktop",
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "jarvis desktop",
+      "title": "Jarvis desktop list"
+     }
+    }
+   ],
+   "title": "Projects",
+   "unlinked_apps": []
+  },
+  "task_empty": {
+   "ok": true,
+   "task": {
+    "added": 0,
+    "diff": "",
+    "files": 0,
+    "list": [],
+    "older_main": false,
+    "refused": "This task has not changed anything yet.",
+    "removed": 0,
+    "source": "empty",
+    "started": 1790000000.0,
+    "task": "000000000002",
+    "title": "Try a login page",
+    "too_big": false,
+    "waiting": false
+   }
+  },
+  "task_pasted": {
+   "ok": true,
+   "task": {
+    "added": 4,
+    "diff": "diff --git a/src/App.tsx b/src/App.tsx\nnew file mode 100644\nindex 0000000..5ae39b2\n--- /dev/null\n+++ b/src/App.tsx\n@@ -0,0 +1,3 @@\n+export default function App() {\n+  return <h1>Notes</h1>;\n+}\ndiff --git a/src/theme.css b/src/theme.css\nnew file mode 100644\nindex 0000000..a56a647\n--- /dev/null\n+++ b/src/theme.css\n@@ -0,0 +1 @@\n+:root { color-scheme: dark; }\n",
+    "files": 2,
+    "list": [
+     {
+      "added": "3",
+      "path": "src/App.tsx",
+      "removed": "0"
+     },
+     {
+      "added": "1",
+      "path": "src/theme.css",
+      "removed": "0"
+     }
+    ],
+    "older_main": false,
+    "refused": "",
+    "removed": 0,
+    "source": "pasted",
+    "started": 1790000000.0,
+    "task": "000000000001",
+    "title": "Add a dark mode",
+    "too_big": false,
+    "waiting": false
+   }
+  },
+  "task_too_big": {
+   "ok": true,
+   "task": {
+    "added": 1400,
+    "diff": "",
+    "files": 1,
+    "list": [
+     {
+      "added": "1400",
+      "path": "big.txt",
+      "removed": "0"
+     }
+    ],
+    "older_main": false,
+    "refused": "This change is too big to show on one card (1 file) - ask Jarvis to split it into smaller steps.",
+    "removed": 0,
+    "source": "pasted",
+    "started": 1790000000.0,
+    "task": "000000000003",
+    "title": "A huge change",
+    "too_big": true,
+    "waiting": false
+   }
+  }
+ },
+ "limits": {
+  "bench_name": 40,
+  "benchmarks": 12,
+  "instructions": 1500,
+  "name": 60,
+  "note": 200,
+  "notes": 10,
+  "projects": 30,
+  "unit": 16
+ },
+ "missing": {
+  "body": {
+   "error": "not found"
+  },
+  "status": 404
+ },
+ "numbers": [
+  {
+   "text": "5 km",
+   "unit": "km",
+   "value": 5
+  },
+  {
+   "text": "72.5 kg",
+   "unit": "kg",
+   "value": 72.5
+  },
+  {
+   "text": "10000 steps",
+   "unit": "steps",
+   "value": 10000
+  },
+  {
+   "text": "$200",
+   "unit": "$",
+   "value": 200
+  },
+  {
+   "text": "12.5%",
+   "unit": "%",
+   "value": 12.5
+  },
+  {
+   "text": "0.125",
+   "unit": "",
+   "value": 0.125
+  },
+  {
+   "text": "26.75 min",
+   "unit": "min",
+   "value": 26.75
+  },
+  {
+   "text": "-3 °C",
+   "unit": "°C",
+   "value": -3
+  },
+  {
+   "text": "21.1 km",
+   "unit": "km",
+   "value": 21.1
+  },
+  {
+   "text": "1000000",
+   "unit": "",
+   "value": 1000000.0
+  }
+ ],
+ "posts": {
+  "adopt": {
+   "body": {
+    "ok": true,
+    "project": {
+     "app": {
+      "git_ok": true,
+      "main": {
+       "at": 1790000000.0,
+       "head": "2c22635",
+       "subject": "Start Old notes",
+       "versions": 1
+      },
+      "merge": {
+       "last": null,
+       "waiting": null
+      },
+      "name": "old-notes",
+      "said": "",
+      "tasks": [],
+      "title": "Old notes",
+      "type": "android"
+     },
+     "benchmark_list": [],
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000002",
+     "instructions": "",
+     "kind": "coding",
+     "max": {
+      "benchmarks": 12,
+      "instructions": 1500,
+      "note": 200,
+      "notes": 10
+     },
+     "name": "Old notes",
+     "notes": [],
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "old notes",
+      "title": "Old notes list"
+     }
+    }
+   },
+   "status": 200
+  },
+  "adopt_after_delete": {
+   "body": {
+    "ok": true,
+    "project": {
+     "app": {
+      "git_ok": false,
+      "main": null,
+      "merge": {
+       "last": null,
+       "waiting": null
+      },
+      "name": "notes-app",
+      "said": "Git is not installed on this PC (https://git-scm.com), so Jarvis cannot keep app projects yet.",
+      "tasks": [],
+      "title": "Notes app",
+      "type": "web"
+     },
+     "benchmark_list": [],
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000006",
+     "instructions": "",
+     "kind": "coding",
+     "max": {
+      "benchmarks": 12,
+      "instructions": 1500,
+      "note": 200,
+      "notes": 10
+     },
+     "name": "Notes app",
+     "notes": [],
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "notes app",
+      "title": "Notes app list"
+     }
+    }
+   },
+   "status": 200
+  },
+  "adopt_again": {
+   "body": {
+    "error": "That app already has a project.",
+    "ok": false
+   },
+   "status": 409
+  },
+  "adopt_missing": {
+   "body": {
+    "error": "There is no app folder with that name.",
+    "ok": false
+   },
+   "status": 404
+  },
+  "app_and_folder": {
+   "body": {
+    "error": "A project has a folder or an app, not both.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "app_bad_type": {
+   "body": {
+    "error": "An app is \"web\" or \"android\".",
+    "ok": false
+   },
+   "status": 400
+  },
+  "app_on_life": {
+   "body": {
+    "error": "Only a coding project can be an app.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "bench_command_pc": {
+   "body": {
+    "benchmark": {
+     "better": "higher",
+     "change": null,
+     "changed": 1790000000.0,
+     "command": "pytest -q",
+     "created": 1790000000.0,
+     "id": "0000000000000000000000000000000e",
+     "keep_on_screen": false,
+     "keep_on_screen_words": "",
+     "kind": "command",
+     "latest": null,
+     "mark_auto": "",
+     "mark_auto_removed": false,
+     "marked_by_you": false,
+     "name": "tests",
+     "not_runnable_why": "Running a benchmark's command comes in a later step - nothing runs yet. The command is kept, word for word.",
+     "results": 0,
+     "runnable": false,
+     "sensitive": false,
+     "sensitive_why": "",
+     "target": null,
+     "unit": "",
+     "unmark": "",
+     "unmark_last": null,
+     "unmark_waiting": false
+    },
+    "ok": true
+   },
+   "status": 200
+  },
+  "command_from_phone": {
+   "body": {
+    "error": "A benchmark's command is written on the PC only.",
+    "ok": false,
+    "pc_only": true
+   },
+   "status": 403
+  },
+  "create_app": {
+   "body": {
+    "ok": true,
+    "project": {
+     "app": {
+      "git_ok": true,
+      "main": {
+       "at": 1790000000.0,
+       "head": "eb189c4",
+       "subject": "Start Notes app",
+       "versions": 1
+      },
+      "merge": {
+       "last": null,
+       "waiting": null
+      },
+      "name": "notes-app",
+      "said": "",
+      "tasks": [],
+      "title": "Notes app",
+      "type": "web"
+     },
+     "benchmark_list": [],
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000001",
+     "instructions": "",
+     "kind": "coding",
+     "max": {
+      "benchmarks": 12,
+      "instructions": 1500,
+      "note": 200,
+      "notes": 10
+     },
+     "name": "Notes app",
+     "notes": [],
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "notes app",
+      "title": "Notes app list"
+     }
+    }
+   },
+   "status": 200
+  },
+  "create_app_no_git": {
+   "body": {
+    "error": "Git is not installed on this PC (https://git-scm.com), so Jarvis cannot keep app projects yet.",
+    "ok": false
+   },
+   "status": 503
+  },
+  "create_coding_pc": {
+   "body": {
+    "ok": true,
+    "project": {
+     "app": null,
+     "benchmark_list": [],
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": {
+      "listed": true,
+      "name": "jarvis-desktop",
+      "path": "C:\\Users\\owner\\Code\\jarvis-desktop",
+      "said": ""
+     },
+     "goals": [],
+     "id": "0000000000000000000000000000000d",
+     "instructions": "",
+     "kind": "coding",
+     "max": {
+      "benchmarks": 12,
+      "instructions": 1500,
+      "note": 200,
+      "notes": 10
+     },
+     "name": "Jarvis Desktop",
+     "notes": [],
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "jarvis desktop",
+      "title": "Jarvis desktop list"
+     }
+    }
+   },
+   "status": 200
+  },
+  "create_life": {
+   "body": {
+    "ok": true,
+    "project": {
+     "app": null,
+     "benchmark_list": [],
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000001",
+     "instructions": "Keep me honest about training. Race is 12 April.",
+     "kind": "life",
+     "max": {
+      "benchmarks": 12,
+      "instructions": 1500,
+      "note": 200,
+      "notes": 10
+     },
+     "name": "Half marathon",
+     "notes": [
+      "Long runs on Sundays",
+      "Knee: stop if it hurts"
+     ],
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "half marathon",
+      "title": "Half marathon list"
+     }
+    }
+   },
+   "status": 200
+  },
+  "create_life_for_app": {
+   "body": {
+    "ok": true,
+    "project": {
+     "app": null,
+     "benchmark_list": [],
+     "benchmarks": 0,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000005",
+     "instructions": "",
+     "kind": "life",
+     "max": {
+      "benchmarks": 12,
+      "instructions": 1500,
+      "note": 200,
+      "notes": 10
+     },
+     "name": "Half marathon",
+     "notes": [],
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "half marathon",
+      "title": "Half marathon list"
+     }
+    }
+   },
+   "status": 200
+  },
+  "delete": {
+   "body": {
+    "deleted": true,
+    "ok": true
+   },
+   "status": 200
+  },
+  "delete_app": {
+   "body": {
+    "app_kept": "notes-app",
+    "deleted": true,
+    "ok": true
+   },
+   "status": 200
+  },
+  "discard": {
+   "body": {
+    "discarded": true,
+    "ok": true
+   },
+   "status": 200
+  },
+  "discard_again": {
+   "body": {
+    "error": "No such task.",
+    "ok": false
+   },
+   "status": 404
+  },
+  "folder_from_phone": {
+   "body": {
+    "error": "A project's folder is chosen on the PC only, from \"Folders Jarvis may look in\".",
+    "ok": false,
+    "pc_only": true
+   },
+   "status": 403
+  },
+  "log": {
+   "body": {
+    "benchmark": {
+     "better": "lower",
+     "change": {
+      "by": 0.75,
+      "direction": "down",
+      "said": "Better than last time (down 0.75).",
+      "target_reached": null,
+      "verdict": "better"
+     },
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "id": "00000000000000000000000000000004",
+     "keep_on_screen": true,
+     "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
+     "kind": "number",
+     "latest": {
+      "at": 1789913600.0,
+      "id": "0000000000000000000000000000000c",
+      "value": 26.75
+     },
+     "logged": {
+      "at": 1789913600.0,
+      "id": "0000000000000000000000000000000c",
+      "value": 26.75
+     },
+     "mark_auto": "money",
+     "mark_auto_removed": false,
+     "marked_by_you": false,
+     "name": "5k time",
+     "results": 2,
+     "sensitive": true,
+     "sensitive_why": "money",
+     "target": null,
+     "unit": "min",
+     "unmark": "card",
+     "unmark_last": null,
+     "unmark_waiting": false
+    },
+    "ok": true
+   },
+   "status": 200
+  },
+  "merge_card_raised": {
+   "body": {
+    "message": "Waiting for your approval. Your app stays as it is unless you approve the card.",
+    "ok": true,
+    "waiting": true
+   },
+   "status": 202
+  },
+  "merge_card_twice": {
+   "body": {
+    "error": "A card for this app is already waiting - answer it first.",
+    "ok": false
+   },
+   "status": 409
+  },
+  "merge_empty": {
+   "body": {
+    "error": "This task has not changed anything yet.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "merge_no": {
+   "body": {
+    "message": "Waiting for your approval. Your app stays as it is unless you approve the card.",
+    "ok": true,
+    "waiting": true
+   },
+   "status": 202
+  },
+  "merge_too_big": {
+   "body": {
+    "error": "This change is too big to show on one card (1 file) - ask Jarvis to split it into smaller steps.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "merge_yes": {
+   "body": {
+    "message": "Waiting for your approval. Your app stays as it is unless you approve the card.",
+    "ok": true,
+    "waiting": true
+   },
+   "status": 202
+  },
+  "name_twice": {
+   "body": {
+    "error": "There is already a project with that name.",
+    "ok": false
+   },
+   "status": 409
+  },
+  "no_such": {
+   "body": {
+    "error": "no such project, benchmark or number",
+    "ok": false
+   },
+   "status": 404
+  },
+  "paste": {
+   "body": {
+    "ok": true,
+    "task": {
+     "added": 4,
+     "diff": "diff --git a/src/App.tsx b/src/App.tsx\nnew file mode 100644\nindex 0000000..5ae39b2\n--- /dev/null\n+++ b/src/App.tsx\n@@ -0,0 +1,3 @@\n+export default function App() {\n+  return <h1>Notes</h1>;\n+}\ndiff --git a/src/theme.css b/src/theme.css\nnew file mode 100644\nindex 0000000..a56a647\n--- /dev/null\n+++ b/src/theme.css\n@@ -0,0 +1 @@\n+:root { color-scheme: dark; }\n",
+     "files": 2,
+     "list": [
+      {
+       "added": "3",
+       "path": "src/App.tsx",
+       "removed": "0"
+      },
+      {
+       "added": "1",
+       "path": "src/theme.css",
+       "removed": "0"
+      }
+     ],
+     "older_main": false,
+     "refused": "",
+     "removed": 0,
+     "source": "pasted",
+     "started": 1790000000.0,
+     "task": "000000000001",
+     "title": "Add a dark mode",
+     "too_big": false,
+     "waiting": false
+    }
+   },
+   "status": 200
+  },
+  "paste_bad_path": {
+   "body": {
+    "error": "Refused the file name '../escape.txt'.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "paste_big": {
+   "body": {
+    "ok": true,
+    "task": {
+     "added": 1400,
+     "diff": "",
+     "files": 1,
+     "list": [
+      {
+       "added": "1400",
+       "path": "big.txt",
+       "removed": "0"
+      }
+     ],
+     "older_main": false,
+     "refused": "This change is too big to show on one card (1 file) - ask Jarvis to split it into smaller steps.",
+     "removed": 0,
+     "source": "pasted",
+     "started": 1790000000.0,
+     "task": "000000000003",
+     "title": "A huge change",
+     "too_big": true,
+     "waiting": false
+    }
+   },
+   "status": 200
+  },
+  "paste_from_phone": {
+   "body": {
+    "error": "A change is pasted in on the PC only.",
+    "ok": false,
+    "pc_only": true
+   },
+   "status": 403
+  },
+  "paste_no_blocks": {
+   "body": {
+    "error": "No <<<FILE>>> blocks were found.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "paste_nothing_changed": {
+   "body": {
+    "error": "Nothing in that paste would change the app: files git keeps out (such as .env) and files that are already the same are left out.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "paste_second": {
+   "body": {
+    "ok": true,
+    "task": {
+     "added": 1,
+     "diff": "diff --git a/login.html b/login.html\nnew file mode 100644\nindex 0000000..cddb6e3\n--- /dev/null\n+++ b/login.html\n@@ -0,0 +1 @@\n+<form></form>\n",
+     "files": 1,
+     "list": [
+      {
+       "added": "1",
+       "path": "login.html",
+       "removed": "0"
+      }
+     ],
+     "older_main": true,
+     "refused": "",
+     "removed": 0,
+     "source": "pasted",
+     "started": 1790000000.0,
+     "task": "000000000002",
+     "title": "Try a login page",
+     "too_big": false,
+     "waiting": false
+    }
+   },
+   "status": 200
+  },
+  "paste_while_waiting": {
+   "body": {
+    "error": "A card for this change is waiting - answer it first.",
+    "ok": false
+   },
+   "status": 409
+  },
+  "shareable_off": {
+   "body": {
+    "changed": false,
+    "message": "Shareable is off. Nothing from this project can be shared.",
+    "ok": true,
+    "project": {
+     "app": null,
+     "benchmark_list": [
+      {
+       "better": "higher",
+       "change": {
+        "by": 1.5,
+        "direction": "up",
+        "said": "Better than last time (up 1.5).",
+        "target_reached": false,
+        "verdict": "better"
+       },
+       "changed": 1790000000.0,
+       "created": 1790000000.0,
+       "id": "00000000000000000000000000000002",
+       "keep_on_screen": false,
+       "keep_on_screen_words": "",
+       "kind": "number",
+       "latest": {
+        "at": 1789395200.0,
+        "id": "00000000000000000000000000000008",
+        "value": 12.0
+       },
+       "mark_auto": "",
+       "mark_auto_removed": false,
+       "marked_by_you": false,
+       "name": "Long run",
+       "results": 3,
+       "sensitive": false,
+       "sensitive_why": "",
+       "target": 21.1,
+       "unit": "km",
+       "unmark": "",
+       "unmark_last": null,
+       "unmark_waiting": false
+      },
+      {
+       "better": "lower",
+       "change": {
+        "by": 0.6000000000000085,
+        "direction": "down",
+        "said": "Better than last time (down 0.6).",
+        "target_reached": null,
+        "verdict": "better"
+       },
+       "changed": 1790000000.0,
+       "created": 1790000000.0,
+       "id": "00000000000000000000000000000003",
+       "keep_on_screen": true,
+       "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
+       "kind": "number",
+       "latest": {
+        "at": 1789395200.0,
+        "id": "0000000000000000000000000000000a",
+        "value": 73.6
+       },
+       "mark_auto": "health",
+       "mark_auto_removed": false,
+       "marked_by_you": false,
+       "name": "Weight",
+       "results": 2,
+       "sensitive": true,
+       "sensitive_why": "health",
+       "target": null,
+       "unit": "kg",
+       "unmark": "card",
+       "unmark_last": null,
+       "unmark_waiting": false
+      },
+      {
+       "better": "lower",
+       "change": {
+        "by": 0.75,
+        "direction": "down",
+        "said": "Better than last time (down 0.75).",
+        "target_reached": null,
+        "verdict": "better"
+       },
+       "changed": 1790000000.0,
+       "created": 1790000000.0,
+       "id": "00000000000000000000000000000004",
+       "keep_on_screen": true,
+       "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
+       "kind": "number",
+       "latest": {
+        "at": 1789913600.0,
+        "id": "0000000000000000000000000000000c",
+        "value": 26.75
+       },
+       "mark_auto": "money",
+       "mark_auto_removed": false,
+       "marked_by_you": false,
+       "name": "5k time",
+       "results": 2,
+       "sensitive": true,
+       "sensitive_why": "money",
+       "target": null,
+       "unit": "min",
+       "unmark": "card",
+       "unmark_last": null,
+       "unmark_waiting": true
+      },
+      {
+       "better": null,
+       "change": null,
+       "changed": 1790000000.0,
+       "created": 1790000000.0,
+       "id": "00000000000000000000000000000005",
+       "keep_on_screen": true,
+       "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
+       "kind": "number",
+       "latest": null,
+       "mark_auto": "",
+       "mark_auto_removed": false,
+       "marked_by_you": true,
+       "name": "Stretching",
+       "results": 0,
+       "sensitive": true,
+       "sensitive_why": "you marked it",
+       "target": null,
+       "unit": "min",
+       "unmark": "instant",
+       "unmark_last": null,
+       "unmark_waiting": false
+      }
+     ],
+     "benchmarks": 4,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000001",
+     "instructions": "Keep me honest about training. Race is 12 April.",
+     "kind": "life",
+     "max": {
+      "benchmarks": 12,
+      "instructions": 1500,
+      "note": 200,
+      "notes": 10
+     },
+     "name": "Half marathon",
+     "notes": [
+      "Long runs on Sundays",
+      "Knee: stop if it hurts"
+     ],
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": false,
+     "shareable_waiting_words": "",
+     "work_list": {
+      "name": "half marathon",
+      "title": "Half marathon list"
+     }
+    }
+   },
+   "status": 200
+  },
+  "shareable_on": {
+   "body": {
+    "message": "Waiting for your approval. Shareable stays off unless you approve the card.",
+    "ok": true,
+    "project": {
+     "app": null,
+     "benchmark_list": [
+      {
+       "better": "higher",
+       "change": {
+        "by": 1.5,
+        "direction": "up",
+        "said": "Better than last time (up 1.5).",
+        "target_reached": false,
+        "verdict": "better"
+       },
+       "changed": 1790000000.0,
+       "created": 1790000000.0,
+       "id": "00000000000000000000000000000002",
+       "keep_on_screen": false,
+       "keep_on_screen_words": "",
+       "kind": "number",
+       "latest": {
+        "at": 1789395200.0,
+        "id": "00000000000000000000000000000008",
+        "value": 12.0
+       },
+       "mark_auto": "",
+       "mark_auto_removed": false,
+       "marked_by_you": false,
+       "name": "Long run",
+       "results": 3,
+       "sensitive": false,
+       "sensitive_why": "",
+       "target": 21.1,
+       "unit": "km",
+       "unmark": "",
+       "unmark_last": null,
+       "unmark_waiting": false
+      },
+      {
+       "better": "lower",
+       "change": {
+        "by": 0.6000000000000085,
+        "direction": "down",
+        "said": "Better than last time (down 0.6).",
+        "target_reached": null,
+        "verdict": "better"
+       },
+       "changed": 1790000000.0,
+       "created": 1790000000.0,
+       "id": "00000000000000000000000000000003",
+       "keep_on_screen": true,
+       "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
+       "kind": "number",
+       "latest": {
+        "at": 1789395200.0,
+        "id": "0000000000000000000000000000000a",
+        "value": 73.6
+       },
+       "mark_auto": "health",
+       "mark_auto_removed": false,
+       "marked_by_you": false,
+       "name": "Weight",
+       "results": 2,
+       "sensitive": true,
+       "sensitive_why": "health",
+       "target": null,
+       "unit": "kg",
+       "unmark": "card",
+       "unmark_last": null,
+       "unmark_waiting": false
+      },
+      {
+       "better": "lower",
+       "change": {
+        "by": 0.75,
+        "direction": "down",
+        "said": "Better than last time (down 0.75).",
+        "target_reached": null,
+        "verdict": "better"
+       },
+       "changed": 1790000000.0,
+       "created": 1790000000.0,
+       "id": "00000000000000000000000000000004",
+       "keep_on_screen": true,
+       "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
+       "kind": "number",
+       "latest": {
+        "at": 1789913600.0,
+        "id": "0000000000000000000000000000000c",
+        "value": 26.75
+       },
+       "mark_auto": "money",
+       "mark_auto_removed": false,
+       "marked_by_you": false,
+       "name": "5k time",
+       "results": 2,
+       "sensitive": true,
+       "sensitive_why": "money",
+       "target": null,
+       "unit": "min",
+       "unmark": "card",
+       "unmark_last": null,
+       "unmark_waiting": false
+      },
+      {
+       "better": null,
+       "change": null,
+       "changed": 1790000000.0,
+       "created": 1790000000.0,
+       "id": "00000000000000000000000000000005",
+       "keep_on_screen": true,
+       "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
+       "kind": "number",
+       "latest": null,
+       "mark_auto": "",
+       "mark_auto_removed": false,
+       "marked_by_you": true,
+       "name": "Stretching",
+       "results": 0,
+       "sensitive": true,
+       "sensitive_why": "you marked it",
+       "target": null,
+       "unit": "min",
+       "unmark": "instant",
+       "unmark_last": null,
+       "unmark_waiting": false
+      }
+     ],
+     "benchmarks": 4,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "folder": null,
+     "goals": [],
+     "id": "00000000000000000000000000000001",
+     "instructions": "Keep me honest about training. Race is 12 April.",
+     "kind": "life",
+     "max": {
+      "benchmarks": 12,
+      "instructions": 1500,
+      "note": 200,
+      "notes": 10
+     },
+     "name": "Half marathon",
+     "notes": [
+      "Long runs on Sundays",
+      "Knee: stop if it hurts"
+     ],
+     "shareable": false,
+     "shareable_last": null,
+     "shareable_waiting": true,
+     "shareable_waiting_words": "Waiting for your yes on the approval card.",
+     "work_list": {
+      "name": "half marathon",
+      "title": "Half marathon list"
+     }
+    },
+    "waiting": true
+   },
+   "status": 202
+  },
+  "task_no_such": {
+   "body": {
+    "error": "No such task.",
+    "ok": false
+   },
+   "status": 404
+  },
+  "task_on_life": {
+   "body": {
+    "error": "This project is not an app.",
+    "ok": false
+   },
+   "status": 404
+  },
+  "task_start": {
+   "body": {
+    "ok": true,
+    "task": {
+     "added": 0,
+     "files": 0,
+     "older_main": false,
+     "removed": 0,
+     "source": "empty",
+     "started": 1790000000.0,
+     "task": "000000000001",
+     "title": "Add a dark mode",
+     "waiting": false
+    }
+   },
+   "status": 200
+  },
+  "task_start_big": {
+   "body": {
+    "ok": true,
+    "task": {
+     "added": 0,
+     "files": 0,
+     "older_main": false,
+     "removed": 0,
+     "source": "empty",
+     "started": 1790000000.0,
+     "task": "000000000003",
+     "title": "A huge change",
+     "waiting": false
+    }
+   },
+   "status": 200
+  },
+  "task_start_long_title": {
+   "body": {
+    "error": "The title is 121 characters - at most 120.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "task_start_no_git": {
+   "body": {
+    "error": "Git is not installed on this PC (https://git-scm.com), so Jarvis cannot keep app projects yet.",
+    "ok": false
+   },
+   "status": 503
+  },
+  "task_start_no_title": {
+   "body": {
+    "error": "The title cannot be empty.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "task_start_second": {
+   "body": {
+    "ok": true,
+    "task": {
+     "added": 0,
+     "files": 0,
+     "older_main": false,
+     "removed": 0,
+     "source": "empty",
+     "started": 1790000000.0,
+     "task": "000000000002",
+     "title": "Try a login page",
+     "waiting": false
+    }
+   },
+   "status": 200
+  },
+  "too_long": {
+   "body": {
+    "error": "The instructions is 1501 characters - at most 1500.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "unmark_card": {
+   "body": {
+    "benchmark": {
+     "better": "lower",
+     "change": {
+      "by": 0.75,
+      "direction": "down",
+      "said": "Better than last time (down 0.75).",
+      "target_reached": null,
+      "verdict": "better"
+     },
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "id": "00000000000000000000000000000004",
+     "keep_on_screen": true,
+     "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
+     "kind": "number",
+     "latest": {
+      "at": 1789913600.0,
+      "id": "0000000000000000000000000000000c",
+      "value": 26.75
+     },
+     "mark_auto": "money",
+     "mark_auto_removed": false,
+     "marked_by_you": false,
+     "name": "5k time",
+     "results": 2,
+     "sensitive": true,
+     "sensitive_why": "money",
+     "target": null,
+     "unit": "min",
+     "unmark": "card",
+     "unmark_last": null,
+     "unmark_waiting": true
+    },
+    "changed": false,
+    "message": "Waiting for your approval. The numbers stay private unless you approve the card.",
+    "ok": true,
+    "waiting": true
+   },
+   "status": 202
+  },
+  "unmark_yours": {
+   "body": {
+    "benchmark": {
+     "better": null,
+     "change": null,
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "id": "00000000000000000000000000000005",
+     "keep_on_screen": false,
+     "keep_on_screen_words": "",
+     "kind": "number",
+     "latest": null,
+     "mark_auto": "",
+     "mark_auto_removed": false,
+     "marked_by_you": false,
+     "name": "Stretching",
+     "results": 0,
+     "sensitive": false,
+     "sensitive_why": "",
+     "target": null,
+     "unit": "min",
+     "unmark": "",
+     "unmark_last": null,
+     "unmark_waiting": false
+    },
+    "changed": true,
+    "message": "Your private mark is off.",
+    "ok": true
+   },
+   "status": 200
+  },
+  "update_app": {
+   "body": {
+    "error": "An app is chosen when the project is made.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "update_folder_on_app": {
+   "body": {
+    "error": "This project's files are its app.",
+    "ok": false
+   },
+   "status": 400
+  }
+ },
+ "scales": [
+  {
+   "scale": [
+    0.0,
+    1.0
+   ],
+   "target": null,
+   "values": []
+  },
+  {
+   "scale": [
+    4.0,
+    6.0
+   ],
+   "target": null,
+   "values": [
+    5
+   ]
+  },
+  {
+   "scale": [
+    -1.0,
+    1.0
+   ],
+   "target": null,
+   "values": [
+    0
+   ]
+  },
+  {
+   "scale": [
+    6.6899999999999995,
+    22.41
+   ],
+   "target": 21.1,
+   "values": [
+    8,
+    10.5,
+    12
+   ]
+  },
+  {
+   "scale": [
+    73.53999999999999,
+    74.26
+   ],
+   "target": null,
+   "values": [
+    74.2,
+    73.6
+   ]
+  },
+  {
+   "scale": [
+    900.0,
+    1100.0
+   ],
+   "target": null,
+   "values": [
+    1000,
+    1000
+   ]
+  },
+  {
+   "scale": [
+    -2.5,
+    3.5
+   ],
+   "target": 0,
+   "values": [
+    -2,
+    3
+   ]
+  },
+  {
+   "scale": [
+    26.675,
+    27.575
+   ],
+   "target": null,
+   "values": [
+    27.5,
+    26.75
+   ]
+  }
+ ],
+ "share_card": "Make the project \"Half marathon\" Shareable?\n\nWhen a project is Shareable, a short piece of its files may one day go to a web search or to an AI chatbot you use - but only after a card that shows you those exact words, every time. Nothing is sent by turning this on, and nothing can be sent today: that part is not built yet.\n\nNever shared, whatever this says: health or money numbers, anything Jarvis remembers about you, your email, and passwords or keys.\n\nTurning it off again is instant, from either app.\n\nIf you did not just do this, say no.\n\nIf you say no: nothing changes.",
+ "unmark_card": "Take the private mark off \"5k time\" in the project \"Half marathon\"?\n\nJarvis marked this benchmark private by itself, because its name \"5k time\" (in min) looked like money. While it is marked, its numbers stay on screen: never read aloud, and never sent anywhere.\n\nIf you take the mark off, Jarvis may read these numbers aloud, like any other answer.\n\nRenaming the benchmark or changing its unit checks it again. You can mark it private yourself at any time, instantly.\n\nIf you did not just do this, say no.\n\nIf you say no: nothing changes. The numbers stay private.",
+ "words": {
+  "add": "Add",
+  "add_benchmark": "Add a benchmark",
+  "back": "All projects",
+  "bench_better": "Better is",
+  "bench_name": "What you measure",
+  "bench_target": "Target (optional)",
+  "bench_unit": "Unit (optional)",
+  "benchmarks": "Benchmarks",
+  "benchmarks_empty": "No benchmarks yet. Add one to track a number over time.",
+  "better_either": "Don't say",
+  "better_higher": "Higher",
+  "better_lower": "Lower",
+  "chart_empty": "No numbers yet - log the first one.",
+  "chart_summary": "{count} numbers. Latest: {latest}.",
+  "chart_target": "Target",
+  "coding": "Coding",
+  "coding_on_pc": "A coding project's folder is chosen on your PC. Make coding projects there.",
+  "command_on_pc": "A benchmark's command is written and changed on your PC.",
+  "create": "Create",
+  "delete_bench": "Delete benchmark",
+  "delete_bench_q": "Delete the benchmark \"{name}\" and every number logged for it? This cannot be undone.",
+  "delete_no": "Keep it",
+  "delete_project": "Delete project",
+  "delete_project_q": "Delete the project \"{name}\"? Its benchmarks and every number logged go with it. This cannot be undone.",
+  "delete_yes": "Delete",
+  "folder": "Folder",
+  "folder_choose": "Choose a folder…",
+  "folder_clear": "Clear",
+  "folder_none": "No folder yet.",
+  "folder_under": "Only a folder on \"Folders Jarvis may look in\" (Settings), or one inside it.",
+  "instructions": "How Jarvis should work on this",
+  "instructions_under": "In your own words. Saved for later: Jarvis does not read this in chats yet.",
+  "kind_coding": "Coding - a folder on your PC",
+  "kind_life": "Life - numbers you track",
+  "latest": "Latest",
+  "life": "Life",
+  "log": "Log",
+  "log_value": "A number",
+  "mark_private": "Mark private",
+  "missing": "Your PC's Jarvis does not have Projects yet - run apply-patches.ps1 on the PC.",
+  "name": "Name",
+  "new": "New project",
+  "notes": "Project notes",
+  "notes_under": "Short lines to keep in mind for this project, one per line.",
+  "open": "Open",
+  "private_label": "private - not read aloud",
+  "remove_mark": "Remove the private mark",
+  "remove_mark_card": "Jarvis marked this itself. Removing the mark asks you with an approval card first, because afterwards its numbers may be read aloud.",
+  "remove_mark_yours": "You marked this. Removing your mark is instant.",
+  "remove_number": "Remove this number",
+  "save": "Save",
+  "set_on_pc": "Set on your PC",
+  "shareable": "Shareable",
+  "shareable_under": "Off by default: nothing from this project is shared. Turning it on asks you with an approval card first; turning it off is instant.",
+  "stale": "The connection to Jarvis is catching up, so nothing can be sent until it does.",
+  "title": "Projects",
+  "under": "One place for each thing you are working on - an app, or a goal like a half marathon: how Jarvis should help, your notes, and numbers you track. Kept on your PC.",
+  "waiting_card": "Waiting for your yes on the approval card.",
+  "work_list": "Work list",
+  "work_list_none": "No work list.",
+  "work_list_under": "A named list in Coming up. Add to it there, or say \"add ... to the {name}\"."
+ }
+}

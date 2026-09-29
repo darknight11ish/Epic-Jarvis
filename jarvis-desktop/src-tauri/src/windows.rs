@@ -329,6 +329,33 @@ pub(crate) fn show_quickbar_unlocked(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Jarvis Live: puts the quickbar on screen, if it is hidden, WITHOUT taking
+/// the keyboard from the program in front - a Live answer arrives in it
+/// (the Live review of 2026-09-28, #10: answers streamed into a hidden bar).
+/// Never while App lock would ask (Live has ended then anyway), and never
+/// moves a bar already on screen. Whether Windows keeps the focus where it
+/// was when a window is shown is Windows' call: `show` without `set_focus`
+/// is the gentlest this API offers - checked on the owner's PC, not here.
+pub(crate) fn show_quickbar_quietly(app: &AppHandle) -> Result<(), String> {
+    if crate::lock::app_locked(app) {
+        return Ok(());
+    }
+    let window = app
+        .get_webview_window(QUICKBAR_LABEL)
+        .ok_or_else(|| format!("window `{QUICKBAR_LABEL}` was not found"))?;
+    if window.is_visible().unwrap_or(false) {
+        return Ok(());
+    }
+    let _ = window.set_size(LogicalSize::new(QUICKBAR_WIDTH, QUICKBAR_BASE_HEIGHT));
+    center_quickbar(&window)?;
+    window
+        .show()
+        .map_err(|e| format!("unable to show the quickbar: {e}"))?;
+    window
+        .set_always_on_top(true)
+        .map_err(|e| format!("unable to raise the quickbar: {e}"))
+}
+
 /// Hides the quickbar and drops any pin, so the next summon starts clean.
 pub fn hide_quickbar(app: &AppHandle) -> Result<(), String> {
     QUICKBAR_PINNED.store(false, Ordering::Relaxed);
@@ -424,7 +451,7 @@ pub(crate) fn show_settings_unlocked(app: &AppHandle) -> Result<(), String> {
             .map_err(|e| format!("unable to focus settings: {e}"));
     }
 
-    tauri::WebviewWindowBuilder::new(
+    let window = tauri::WebviewWindowBuilder::new(
         app,
         SETTINGS_LABEL,
         tauri::WebviewUrl::App("settings.html".into()),
@@ -434,11 +461,18 @@ pub(crate) fn show_settings_unlocked(app: &AppHandle) -> Result<(), String> {
     .min_inner_size(520.0, 480.0)
     .center()
     .resizable(true)
-    .focused(true)
+    // Hidden until it is back where the owner left it (window_memory.rs),
+    // so it does not flash up centred first and then jump.
+    .visible(false)
     .theme(Some(tauri::Theme::Dark))
     .build()
-    .map(|_| ())
-    .map_err(|e| format!("unable to open settings: {e}"))
+    .map_err(|e| format!("unable to open settings: {e}"))?;
+    crate::window_memory::restore(&window, true);
+    window
+        .show()
+        .map_err(|e| format!("unable to open settings: {e}"))?;
+    let _ = window.set_focus();
+    Ok(())
 }
 
 pub const BRAIN_LABEL: &str = "brain";
@@ -465,33 +499,76 @@ pub fn show_brain(app: &AppHandle) -> Result<(), String> {
     show_brain_unlocked(app)
 }
 
+/// The Brain places a tray item or the Jarvis bar may open it at. The page
+/// is told the name alone (`#history` on a new window, the
+/// [`BRAIN_PLACE_EVENT`] event on an open one), never anything else.
+pub(crate) const BRAIN_PLACES: [&str; 1] = ["history"];
+
+/// The event an open Brain hears a place by.
+pub(crate) const BRAIN_PLACE_EVENT: &str = "brain-place";
+
+/// The place asked for, kept until the Brain is really shown - App lock may
+/// ask Windows Hello first (lock.rs), and the window is built only then.
+static PENDING_PLACE: std::sync::Mutex<Option<&'static str>> = std::sync::Mutex::new(None);
+
+/// Opens the Brain at one of [`BRAIN_PLACES`] - "Chat history…" in the tray
+/// and "Earlier chats" in the Jarvis bar (the chat audit, 2026-09-28).
+/// Navigation only; App lock still applies, as for [`show_brain`].
+pub fn show_brain_at(app: &AppHandle, place: &str) -> Result<(), String> {
+    let place = BRAIN_PLACES
+        .iter()
+        .copied()
+        .find(|p| *p == place)
+        .ok_or_else(|| "That is not a place in the Brain.".to_string())?;
+    if let Ok(mut pending) = PENDING_PLACE.lock() {
+        *pending = Some(place);
+    }
+    show_brain(app)
+}
+
+fn take_pending_place() -> Option<&'static str> {
+    PENDING_PLACE.lock().ok().and_then(|mut p| p.take())
+}
+
 /// [`show_brain`] without the app lock. Only lock.rs calls this.
 pub(crate) fn show_brain_unlocked(app: &AppHandle) -> Result<(), String> {
+    let place = take_pending_place();
     if let Some(window) = app.get_webview_window(BRAIN_LABEL) {
         window
             .show()
             .map_err(|e| format!("unable to show the Brain: {e}"))?;
         let _ = window.unminimize();
+        if let Some(place) = place {
+            let _ = tauri::Emitter::emit_to(app, BRAIN_LABEL, BRAIN_PLACE_EVENT, place);
+        }
         return window
             .set_focus()
             .map_err(|e| format!("unable to focus the Brain: {e}"));
     }
 
-    tauri::WebviewWindowBuilder::new(
-        app,
-        BRAIN_LABEL,
-        tauri::WebviewUrl::App("brain.html".into()),
-    )
-    .title("Jarvis — Brain")
-    .inner_size(1180.0, 820.0)
-    .min_inner_size(880.0, 600.0)
-    .center()
-    .resizable(true)
-    .focused(true)
-    .theme(Some(tauri::Theme::Dark))
-    .build()
-    .map(|_| ())
-    .map_err(|e| format!("unable to open the Brain: {e}"))
+    let page = match place {
+        Some(p) => format!("brain.html#{p}"),
+        None => "brain.html".to_string(),
+    };
+    let window =
+        tauri::WebviewWindowBuilder::new(app, BRAIN_LABEL, tauri::WebviewUrl::App(page.into()))
+            .title("Jarvis — Brain")
+            .inner_size(1180.0, 820.0)
+            .min_inner_size(880.0, 600.0)
+            .center()
+            .resizable(true)
+            // Hidden until it is back where the owner left it (window_memory.rs),
+            // so it does not flash up centred first and then jump.
+            .visible(false)
+            .theme(Some(tauri::Theme::Dark))
+            .build()
+            .map_err(|e| format!("unable to open the Brain: {e}"))?;
+    crate::window_memory::restore(&window, true);
+    window
+        .show()
+        .map_err(|e| format!("unable to open the Brain: {e}"))?;
+    let _ = window.set_focus();
+    Ok(())
 }
 
 /// Label of the faces window.
@@ -521,7 +598,7 @@ pub fn show_faces(app: &AppHandle) -> Result<(), String> {
             .map_err(|e| format!("unable to focus Faces: {e}"));
     }
 
-    tauri::WebviewWindowBuilder::new(
+    let window = tauri::WebviewWindowBuilder::new(
         app,
         FACES_LABEL,
         tauri::WebviewUrl::App("faces.html".into()),
@@ -531,11 +608,18 @@ pub fn show_faces(app: &AppHandle) -> Result<(), String> {
     .min_inner_size(900.0, 620.0)
     .center()
     .resizable(true)
-    .focused(true)
+    // Hidden until it is back where the owner left it (window_memory.rs),
+    // so it does not flash up centred first and then jump.
+    .visible(false)
     .theme(Some(tauri::Theme::Dark))
     .build()
-    .map(|_| ())
-    .map_err(|e| format!("unable to open Faces: {e}"))
+    .map_err(|e| format!("unable to open Faces: {e}"))?;
+    crate::window_memory::restore(&window, true);
+    window
+        .show()
+        .map_err(|e| format!("unable to open Faces: {e}"))?;
+    let _ = window.set_focus();
+    Ok(())
 }
 
 /// Label of the first-run walkthrough.
@@ -596,6 +680,9 @@ pub(crate) fn show_hud_unlocked(app: &AppHandle) -> Result<(), String> {
     window
         .show()
         .map_err(|e| format!("unable to show the HUD: {e}"))?;
+    // Maximised last time but built hidden: maximised now that it is on
+    // screen, never before (window_memory.rs).
+    crate::window_memory::finish_showing(&window);
     // A window that was minimised stays minimised on `show`.
     let _ = window.unminimize();
     window

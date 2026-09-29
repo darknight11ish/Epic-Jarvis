@@ -127,6 +127,51 @@ _PRIVATE_TERMS = [
     # which is the safe direction to err in.
     r"\bdepress\w*\b", r"\banxiet\w*\b", r"\bpanic attack\w*\b", r"\btherap\w*\b",
     r"\bself[- ]harm\w*\b", r"\bsuicid\w*\b",
+    # Health conditions, pregnancy, medicines and more mental-health words
+    # (security audit 2026-09-28 #4: "I have diabetes", "my blood pressure
+    # is high", "I am pregnant", "my HIV test", "I take sertraline 50mg"
+    # all matched nothing). The chatbot driver's last check and "Try the
+    # cloud model" both lean on this list. Broad in the same safe direction
+    # as the rest, but each word is one that means health in everyday
+    # English: no bare "disease", "symptom", "dose", "aids", "period", "std",
+    # "prep", "lithium" or "addicted" (plant diseases, "a dose of reality",
+    # hearing aids, std::vector, meal prep, batteries, "addicted to this
+    # song"), and "bipolar" only as the condition, not the transistor.
+    r"\bdiabet\w*\b", r"\binsulin\b", r"\bcholesterol\b",
+    r"\bblood (?:pressure|sugar|tests?|results?|work)\b", r"\bhypertension\b",
+    r"\bhiv\b", r"\bstds\b", r"\bstis\b", r"\bsexually transmitted\b", r"\bherpes\b",
+    r"\bhepatitis\b", r"\bcancer\w*\b", r"\btumou?rs?\b", r"\bchemo\w*\b",
+    r"\basthma\w*\b", r"\bepilep\w*\b", r"\bdementia\b", r"\balzheimer\w*\b",
+    r"\bparkinson'?s\b", r"\bmigraines?\b", r"\bheart (?:attack|condition|disease|failure)\b",
+    r"\bpregnan\w*\b", r"\bmiscarr\w*\b", r"\babortion\w*\b", r"\bivf\b",
+    r"\bfertility\b", r"\binfertil\w*\b", r"\bcontracepti\w*\b", r"\bbirth control\b",
+    r"\bmenopaus\w*\b", r"\bmenstrua\w*\b",
+    r"\bmedications?\b", r"\bmedicines?\b", r"\bpills\b", r"\bantidepressants?\b",
+    r"\b\d+(?:\.\d+)?\s?mg\b", r"\bhospitals?\b",
+    r"\b(?:my|our)\s+(?:[\w'-]+\s+)?(?:doctor|gp|dentist|psychiatrist|psychologist|"
+    r"nurse|surgeon)\b",
+    # Common medicines by name (antidepressants and anxiety medicines, ADHD,
+    # diabetes and weight, heart, thyroid, pain and opioids, HIV).
+    r"\b(?:sertraline|zoloft|fluoxetine|prozac|citalopram|escitalopram|lexapro|paroxetine|"
+    r"venlafaxine|effexor|duloxetine|cymbalta|mirtazapine|bupropion|wellbutrin|"
+    r"amitriptyline|quetiapine|seroquel|aripiprazole|abilify|olanzapine|"
+    r"alprazolam|xanax|diazepam|valium|lorazepam|ativan|clonazepam|klonopin|"
+    r"adderall|ritalin|methylphenidate|vyvanse|lisdexamfetamine|"
+    r"metformin|ozempic|wegovy|semaglutide|mounjaro|tirzepatide|"
+    r"statins?|atorvastatin|lipitor|simvastatin|lisinopril|amlodipine|"
+    r"levothyroxine|warfarin|gabapentin|pregabalin|oxycodone|oxycontin|hydrocodone|"
+    r"codeine|tramadol|morphine|fentanyl|opioids?|methadone|buprenorphine|suboxone|"
+    r"truvada|antiretroviral\w*)\b",
+    # Mental health beyond mood (the words above cover depression, anxiety,
+    # therapy, self-harm and suicide).
+    r"\bmental (?:health|illness)\b", r"\bpsychiatr\w*\b",
+    r"\bcounsell?ing\b", r"\badhd\b", r"\badd\b(?=\s+(?:diagnosis|medication|meds))",
+    r"\bautis\w*\b", r"\bocd\b", r"\bptsd\b", r"\btrauma\b",
+    r"\bbipolar (?:disorder|depression)\b", r"\b(?:am|i'm|is|was|being)\s+bipolar\b",
+    r"\bschizo\w*\b", r"\beating disorder\w*\b", r"\banorexi\w*\b", r"\bbulimi\w*\b",
+    r"\baddictions?\b", r"\brehab\b", r"\balcoholi\w*\b",
+    # A family matter the audit also found missing.
+    r"\bdivorc\w*\b", r"\bcustody\b",
 ] + list(_crisis_terms())
 
 
@@ -478,21 +523,39 @@ def complexity(query: str) -> float:
     return round(min(score, 1.0), 3)
 
 
+def lockdown_on() -> bool:
+    """Is Lockdown on (jarvis_asks_first.py, 2026-09-28)? False without that
+    module - the feature is not there. Its own reading fails closed (a
+    damaged file reads as on); anything else going wrong here reads as ON
+    too: a cloud lane is never the answer to "could not tell"."""
+    try:
+        import jarvis_asks_first
+    except Exception:
+        return False
+    try:
+        return bool(jarvis_asks_first.lockdown_on())
+    except Exception:
+        return True
+
+
 def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
            has_image: bool = False, conversation_tainted: bool = False,
            budget: Optional[Budget] = None, tainted: Optional[bool] = None,
-           owner_said_yes: bool = False, **_extra) -> Decision:
+           owner_said_yes: bool = False, has_screen: bool = False,
+           **_extra) -> Decision:
     """Which lane answers this turn.
 
-    Eight gates, in this order, and the order is the policy. Each one can only
+    Nine gates, in this order, and the order is the policy. Each one can only
     send the answer DOWNWARD toward local - none of them can escalate past a
     gate that already refused.
 
      -1. the local model is itself  -> gate "cloud_model": refused, and
          one of Ollama's cloud models    run_local_turn sends it nothing
       0. no cloud lanes offered      -> local
+     0b. Lockdown is on              -> local, unconditionally, no offer
       1. the conversation is tainted -> local, unconditionally
      1b. the turn carries a picture  -> local, unconditionally
+         or the screen's words
       2. private content matched     -> local
       3. a real secret was found     -> local, unconditionally
       4. not complex enough          -> local
@@ -578,6 +641,13 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
         # this string to rewrite the reason when Jarvis is injecting memory
         # itself. A different name left that branch dead.
         return local_decision("unavailable", "no cloud lane was offered")
+    # Gate 0b (2026-09-28, jarvis_asks_first.py's Lockdown): every way out of
+    # this PC asks first or stops - and a cloud model is one. No lane, and no
+    # offer to ask about one either: Lockdown means "not now", not "ask me".
+    if lockdown_on():
+        return local_decision(
+            "lockdown",
+            "Lockdown is on, so nothing goes to a cloud AI model")
     if conversation_tainted:
         return local_decision(
             "taint",
@@ -595,6 +665,19 @@ def choose(query: str, local_model: str = "", lanes: Optional[list] = None,
             "image",
             "the message carries a picture, which can show anything that was "
             "on screen, so it stays on this machine")
+    # THE SCREEN'S WORDS NEVER LEAVE EITHER (docs/SCREEN-DESIGN.md section 5,
+    # "Rule 1: a turn with screen content always stays on this PC"). "Look
+    # at this" and "Watch with me" hand the model the words read off the
+    # owner's screen (jarvis_screen.py) - an email, a document, a chat, a
+    # bank page not on the Never look at list - with or without a picture,
+    # and the private-topic check below reads only the owner's question.
+    # Its own gate name, "screen", so the route header says why; nothing in
+    # either app reads a gate name but "private", so none needs a change.
+    if has_screen:
+        return local_decision(
+            "screen",
+            "the message carries words read from your screen, which can show "
+            "anything, so it stays on this machine")
     if is_private(query):
         return local_decision("private", "the question matches the private-topic backstop")
     secret = looks_like_a_secret(query)

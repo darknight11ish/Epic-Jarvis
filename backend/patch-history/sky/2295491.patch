@@ -1,0 +1,24 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2535,6 +2535,21 @@
+     except Exception as exc:
+         print(f"  sources    NOT ON ({type(exc).__name__}) - \"Where this came from\" is off")
+         print("             until jarvis_sources.py is back: run apply-patches.ps1 again")
++    # sky.patch (the owner's decisions of 2026-09-28, "Sun and moon behind
++    # the animals" and "Weather in the animals' scene"): GET /api/sky and
++    # POST /api/sky - whether the sun and moon show, the town typed on this
++    # PC (turned into a rough position from a list this PC carries, never
++    # online), and the weather source: off, the owner's own Home Assistant,
++    # or Open-Meteo online (ONE approval card to switch it on; off at once).
++    # Wrapped round Handler here, before anything listens, like sources
++    # above; the rules are all in jarvis_sky.py.
++    try:
++        import jarvis_sky
++        print(jarvis_sky.install(Handler, origin_ok=_origin_ok,
++                                 token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  sky        NOT ON ({type(exc).__name__}) - the sun, moon and weather are off")
++        print("             until jarvis_sky.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

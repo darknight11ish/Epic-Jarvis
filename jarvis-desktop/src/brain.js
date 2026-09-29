@@ -42,6 +42,16 @@ import { addToWiki, readWiki, renderWiki } from "./wiki.js";
 import { mountCardLink } from "./card-link.js";
 import { fallbackTitle } from "./card-words.js";
 import { stepText } from "./step-words.js";
+import { validToFromText } from "./valid-to.js";
+// Whether a model can chat, and the words when it cannot (shared with the
+// phone through tests/fixtures/model-chat-cases.json).
+import { CANNOT_CHAT, canChat } from "./model-chat.js";
+// Brain -> Projects: its own module (projects-panel.js, projects.js).
+import { readAtMs as projectsReadAt, showProjects } from "./projects-panel.js";
+import { tellChatsGone } from "./chat-history.js";
+// Brain -> History -> "Forget a time frame": its own module too.
+import { openForgetRange, showForgetRange, takeAnyPlace } from "./forget-range-panel.js";
+import { BRAIN_PLACE_KEY, HISTORY_CHANGED, HISTORY_PLACE, PLACE as FORGET_RANGE_PLACE } from "./forget-range.js";
 import {
   actionsOf as focusActionsOf,
   BAD_MINUTES as FOCUS_BAD_MINUTES,
@@ -56,6 +66,48 @@ import {
   readFocus,
   toneOf as focusToneOf,
 } from "./focus.js";
+import {
+  actionsOf as chatbotActionsOf,
+  chatbotGroups,
+  moneyLine as chatbotMoneyLine,
+  usageLine as chatbotUsageLine,
+  compareFormProblem,
+  compareProgress,
+  compareStatusLine,
+  compareTalkingLine,
+  memberLine as chatbotMemberLine,
+  pickLine as chatbotPickLine,
+  formProblem as chatbotFormProblem,
+  historyLine as chatbotHistoryLine,
+  limitOf as chatbotLimitOf,
+  neverWords,
+  POLL_MS as CHATBOT_POLL_MS,
+  progressLine as chatbotProgress,
+  readChatbot,
+  statusLine as chatbotStatusLine,
+  talkingLine as chatbotTalkingLine,
+  versionLine as chatbotVersionLine,
+  WORDS as CHATBOT,
+} from "./chatbot.js";
+import {
+  actionsOf as supportActionsOf,
+  detailRows as supportDetailRows,
+  formProblem as supportFormProblem,
+  holdingLine as supportHoldingLine,
+  limitOf as supportLimitOf,
+  MAX_DETAILS as SUPPORT_MAX_DETAILS,
+  offerActions as supportOfferActions,
+  POLL_MS as SUPPORT_POLL_MS,
+  progressLine as supportProgress,
+  readSupport,
+  savedLine as supportSavedLine,
+  statusLine as supportStatusLine,
+  talkingLine as supportTalkingLine,
+  versionLine as supportVersionLine,
+  whoOf as supportWhoOf,
+  WORDS as SUPPORT,
+} from "./support.js";
+import { pcLine as handoffPcLine } from "./handoff.js";
 import {
   actionsOf,
   addPlaceholder,
@@ -76,9 +128,26 @@ import {
   tagOf,
   titleOf,
   todoItems,
+  WAITING,
   WENT_OFF_ACTIONS,
   wentOffMeta,
 } from "./coming-up.js";
+import {
+  ACCEPT_LABEL,
+  ADD_STEP_LABEL,
+  BY_PLACEHOLDER,
+  checkinJobFor,
+  checkinLines,
+  EMPTY_GOALS,
+  GOALS_MISSING,
+  openCount,
+  planIsValid,
+  readGoals,
+  REMOVE_STEP_LABEL,
+  statusLabel,
+  STEP_PLACEHOLDER,
+  STOP_LABEL,
+} from "./goals.js";
 import {
   BUILDING as BRIEFING_BUILDING,
   EMPTY as BRIEFING_EMPTY,
@@ -95,10 +164,85 @@ import {
   readMissed,
 } from "./briefing.js";
 import {
+  addArgs as todayAddArgs,
+  briefingCards,
+  cardMeta as todayCardMeta,
+  cardsOf,
+  cardTitle as todayCardTitle,
+  DELETE_LABEL as TODAY_DELETE_LABEL,
+  EMPTY_CARDS as TODAY_EMPTY,
+  FROM_BRIEFING as TODAY_FROM_BRIEFING,
+  LATER_TITLE as TODAY_LATER_TITLE,
+  MISSING as TODAY_MISSING,
+  NO_BRIEFING_TODAY,
+  TAG as TODAY_TAG,
+  todayCards,
+} from "./today.js";
+import {
+  ADD_LABEL as WIDGETS_ADD_LABEL,
+  DELETE_LABEL as WIDGETS_DELETE_LABEL,
+  DISCARD_LABEL as WIDGETS_DISCARD_LABEL,
+  draftArgs as widgetDraftArgs,
+  EMPTY as WIDGETS_EMPTY,
+  MAKE_LABEL as WIDGETS_MAKE_LABEL,
+  MAKING_LABEL as WIDGETS_MAKING_LABEL,
+  MISSING as WIDGETS_MISSING,
+  PREVIEW_TITLE as WIDGETS_PREVIEW_TITLE,
+  readList as readWidgets,
+} from "./widget-board.js";
+import {
+  CHOOSE_NOTE as PHOTO_NOTE,
+  mountProposal as mountPhotoProposal,
+  READING as PHOTO_READING,
+  shrinkPicture,
+} from "./photo-reminder.js";
+import { HISTORY_IMPORT, mountHistoryImport } from "./history-import.js";
+import {
+  HISTORY_BUTTON,
+  HISTORY_BUTTON_TITLE,
+  hasOtherVersions,
+  readFactHistory,
+  renderFactHistory,
+  REPLACED_MARK,
+} from "./fact-history.js";
+import {
+  buildEntityGraph,
+  findNames,
+  findStatus,
+  groupWords,
+  sharedWords,
+} from "./galaxy-view.js";
+import {
   addPage,
+  COPIED as HISTORY_COPIED,
+  CONTINUE as HISTORY_CONTINUE,
+  CONTINUE_TITLE as HISTORY_CONTINUE_TITLE,
+  DELETE_SUPPORT,
+  FILTER_LABEL as HISTORY_FILTER_LABEL,
+  FILTER_NONE as HISTORY_FILTER_NONE,
+  FILTERS as HISTORY_FILTERS,
+  FORGET_RANGE_LINK,
+  FORGET_RANGE_LINK_TITLE,
+  KEEP_SUPPORT_NOTE,
+  KIND_TAG,
+  KIND_TITLE,
+  NO_TITLE,
+  chatFactsHiddenLine,
+  chatFactsIntro,
+  deleteAndForgetQuestion,
+  deleteChatButton,
+  deleteDoneWords,
   deleteQuestion,
+  readChatFacts,
   DENIED_REPLY,
   deviceTag,
+  FIND_LABEL,
+  FIND_PLACEHOLDER,
+  findCountWords,
+  findMatches,
+  hitsWords,
+  chatFactsTaught,
+  chatFactsTaughtHidden,
   keepConfirm,
   keepLabel,
   keepNeedsConfirm,
@@ -111,12 +255,20 @@ import {
   PAGE as HISTORY_PAGE,
   readConversation,
   readHistory,
+  readSearch,
   refreshRows,
+  renderSnippet,
   renderTranscript,
   rowMeta,
+  SEARCH_MIN,
+  SEARCH_NONE,
+  SEARCH_NOTE,
+  SEARCHING,
+  searchMoreWords,
   SWITCH_DETAIL,
   SWITCH_LABEL,
   TAINT_TITLE,
+  whenLine,
   whenWords,
 } from "./history-view.js";
 import {
@@ -127,10 +279,14 @@ import {
   CANCEL_TITLE,
   EMPTY as AUTO_EMPTY,
   ERASE_ALSO_CHAT_CONFIRM,
+  otherFactsInChat,
   ERASE_LABEL,
   ERASE_TITLE,
   ERASED,
   ERASED_AND_CHAT_DELETED,
+  ERASED_NO_CHAT,
+  eraseAlsoChatNamedConfirm,
+  readFactChat,
   erasedAt,
   erasedLine,
   eraseQuestion,
@@ -223,6 +379,7 @@ import {
   RUNNING as DEEP_RUNNING,
   runningCount,
 } from "./deep.js";
+import { loadModelsCache, saveModelsCache } from "./models-cache.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -240,19 +397,25 @@ const VIEWS = {
   history: { title: "History", sub: "your conversations, kept on this PC" },
   faculties: { title: "Model", sub: "models, compute, skills, memory" },
   work: { title: "Work", sub: "coming up, jobs in flight and what can be put back" },
-  galaxy: { title: "Galaxy", sub: "what Jarvis knows" },
-  live: { title: "Live", sub: "what Jarvis is doing" },
+  projects: { title: "Projects", sub: "what you are working on, and the numbers you track" },
+  galaxy: { title: "Galaxy", sub: "the people and things Jarvis knows about" },
+  // "Now" - called "Live" until 2026-09-28, renamed by the owner so it is
+  // not confused with Jarvis Live (the voice conversation).
+  now: { title: "Now", sub: "what Jarvis is doing" },
   trust: { title: "Trust", sub: "the audit chain and what outside text tried" },
   watch: { title: "Watch", sub: "the GitHub watchlist" },
 };
 
 /** Views tucked behind the "Advanced" disclosure until it is opened. */
-const ADVANCED_VIEWS = ["galaxy", "live", "trust", "watch"];
+const ADVANCED_VIEWS = ["galaxy", "now", "trust", "watch"];
 
 /** Which sections each view needs, so a switch reads only what it will show. */
 const VIEW_SECTIONS = {
-  galaxy: ["graph"],
-  live: ["attention", "status"],
+  // The people and things facts name (galaxy-view.js) - the same list, and
+  // the same Windows Hello rule, as "About <name>" on the Memory tab. Not
+  // `graph` any more: privacy finding B1 (brain/routes.rs).
+  galaxy: ["memory_entities"],
+  now: ["attention", "status"],
   faculties: ["models", "compute", "skills", "memory", "memory_pending"],
   // memory_entities: the names under each fact, for "About <name>"
   // (memory-entities.js). Hidden with the other memory lists.
@@ -264,6 +427,8 @@ const VIEW_SECTIONS = {
   // `history` half - see brain/routes.rs's own comment on why one more GET
   // to that route is the right way to reach it.
   work: ["jobs", "undo", "gate_history"],
+  // Read through its own command (brain/projects.rs), by projects-panel.js.
+  projects: [],
   trust: ["content_risk", "ledger"],
   watch: ["watch", "watch_report"],
 };
@@ -294,6 +459,9 @@ const dom = {
   graphEmptyText: $("graph-empty-text"),
   graphStat: $("graph-stat"),
   graphSearch: $("graph-search"),
+  graphFind: $("graph-find"),
+  graphEmptyActions: $("graph-empty-actions"),
+  nodeActions: $("node-actions"),
   graphRefit: $("graph-refit"),
   legend: $("legend"),
   inspector: $("inspector"),
@@ -337,7 +505,50 @@ const dom = {
   focusOn: $("focus-on"),
   focusStart: $("focus-start"),
   focusReport: $("focus-report"),
+  chatbot: $("chatbot"),
+  chatbotLimits: $("chatbot-limits"),
+  chatbotLog: $("chatbot-log"),
+  chatbotVersion: $("chatbot-version"),
+  chatbotForm: $("chatbot-form"),
+  chatbotWhich: $("chatbot-which"),
+  chatbotGoal: $("chatbot-goal"),
+  chatbotMessages: $("chatbot-messages"),
+  chatbotMinutes: $("chatbot-minutes"),
+  chatbotNever: $("chatbot-never"),
+  chatbotStart: $("chatbot-start"),
+  chatbotCompare: $("chatbot-compare"),
+  chatbotCompareToggle: $("chatbot-compare-toggle"),
+  chatbotCompareDetail: $("chatbot-compare-detail"),
+  chatbotCompareNote: $("chatbot-compare-note"),
+  chatbotWhichLabel: $("chatbot-which-label"),
+  chatbotMoney: $("chatbot-money"),
+  chatbotSeveral: $("chatbot-several"),
+  chatbotSeveralLegend: $("chatbot-several-legend"),
+  chatbotSeveralList: $("chatbot-several-list"),
+  support: $("support"),
+  supportLog: $("support-log"),
+  supportVersion: $("support-version"),
+  supportForm: $("support-form"),
+  supportCompany: $("support-company"),
+  supportTerms: $("support-terms"),
+  supportAddressLabel: $("support-address-label"),
+  supportAddress: $("support-address"),
+  supportGoal: $("support-goal"),
+  supportRows: $("support-rows"),
+  supportAdd: $("support-add"),
+  supportMessages: $("support-messages"),
+  supportMinutes: $("support-minutes"),
+  supportQueue: $("support-queue"),
+  supportStart: $("support-start"),
   comingUp: $("coming-up"),
+  photoFile: $("photo-file"),
+  photoChoose: $("photo-choose"),
+  photoNote: $("photo-note"),
+  photoProposal: $("photo-proposal"),
+  historyImportWords: $("history-import-words"),
+  historyImportStart: $("history-import-start"),
+  historyImportStop: $("history-import-stop"),
+  historyImportHow: $("history-import-how"),
   todoList: $("todo-list"),
   todoForm: $("todo-form"),
   todoText: $("todo-text"),
@@ -351,6 +562,20 @@ const dom = {
   standbyEnd: $("standby-end"),
   standbyAdd: $("standby-add"),
   standbyIsSet: $("standby-is-set"),
+  goalsList: $("goals-list"),
+  goalsNewForm: $("goals-new-form"),
+  goalsNewText: $("goals-new-text"),
+  goalsNewAdd: $("goals-new-add"),
+  today: $("today"),
+  widgets: $("widgets"),
+  widgetsForm: $("widgets-form"),
+  widgetsWords: $("widgets-words"),
+  widgetsMake: $("widgets-make"),
+  todayForm: $("today-form"),
+  todayText: $("today-text"),
+  todayAt: $("today-at"),
+  todayDays: $("today-days"),
+  todayAdd: $("today-add"),
   briefing: $("briefing"),
   briefingNow: $("briefing-now"),
   briefingMissed: $("briefing-missed"),
@@ -363,7 +588,7 @@ const dom = {
   watchAddOpen: $("watch-add-open"),
   watchCancel: $("watch-cancel"),
   watchSeen: $("watch-seen"),
-  countLive: $("count-live"),
+  countLive: $("count-now"),
   countWork: $("count-work"),
   countTrust: $("count-trust"),
   countWatch: $("count-watch"),
@@ -393,6 +618,59 @@ const state = {
 
 /** Whether the four views behind "Advanced" are on the rail right now. */
 let advancedOpen = false;
+
+/**
+ * Seeds the Model pane from disk before the first live read comes back
+ * (or fails), so a cold start with Jarvis not running has something to
+ * paint at once instead of a blank pane while the request times out
+ * (docs/OFFLINE-MODELS-DESIGN-2026-09-27.md). `state.readAt.models` is set
+ * to when the cache was actually read, not to now, so the "as of" wording
+ * in `renderModels` is honest from the very first paint.
+ *
+ * If the first live read of "models" then succeeds, `load()` overwrites
+ * both in the ordinary way. If it fails, `load()`'s existing "keep the last
+ * good read, mark it stale" logic (`state.failed`) takes over unchanged -
+ * this cache is just that "last good read" surviving a restart.
+ */
+(function seedModelsFromDisk() {
+  const cached = loadModelsCache();
+  if (!cached) return;
+  state.data.models = { available: true, ...cached.models };
+  state.readAt.models = cached.at;
+})();
+
+/* "Bring in old chats" (history-import.js; JARVIS-API.md section 85): a
+   ChatGPT, Claude, Gemini or DeepSeek export, picked on this PC by the Windows dialog
+   in Rust, read in the background by the PC, which only PROPOSES - every
+   fact waits under "Waiting for you", one card each. Mounted here, before
+   the first render, so render("memory") can ask it where a run is. */
+const historyImport = dom.historyImportStart && dom.historyImportStop && dom.historyImportWords
+  ? mountHistoryImport({
+    words: dom.historyImportWords,
+    start: dom.historyImportStart,
+    stop: dom.historyImportStop,
+  }, {
+    invoke,
+    canAct: () => linkWords(currentLink()).canAct,
+    showing: () => state.view === "memory" && !document.hidden,
+    say: (said, tone) => toast(said, tone),
+    // New cards were made: re-read "Waiting for you" (the queue itself -
+    // never anything from the import).
+    onWaiting: () => load(["memory_pending"], { quiet: true }).then(() => {
+      if (state.view === "memory") renderProposals();
+    }),
+  })
+  : null;
+if (dom.historyImportHow) dom.historyImportHow.textContent = HISTORY_IMPORT.how;
+let historyImportAt = 0;
+
+/** Ask the PC where an import is: on opening Memory, at most every 5 s. */
+function renderHistoryImport() {
+  if (!historyImport || !IS_TAURI) return;
+  if (Date.now() - historyImportAt < 5000) return;
+  historyImportAt = Date.now();
+  historyImport.refresh();
+}
 
 /* ==========================================================================
    Plumbing
@@ -621,6 +899,13 @@ async function load(sections, { quiet = false } = {}) {
         // read that asks for it - which may be the Faculties view's, not
         // the Memory tab's. Noted here so it is not lost either way.
         if (section === "memory_pending" && value) noteSleepOffer(value.setup);
+        // Every good models read is written to disk (never on a failed or
+        // "absent" one - `value.available` covers both), so the Model pane
+        // has something honest to show after a restart, not only within
+        // this window's lifetime. See models-cache.js for what is kept.
+        if (section === "models" && value && value.available !== false) {
+          saveModelsCache(value, now);
+        }
         if (failedRead) {
           state.failed[section] = { why: String(value.error || "no reason given"), at: now };
         } else {
@@ -691,7 +976,7 @@ function render(name) {
     case "galaxy":
       renderGraph();
       break;
-    case "live":
+    case "now":
       renderLive();
       break;
     case "faculties":
@@ -702,6 +987,7 @@ function render(name) {
       break;
     case "memory":
       renderLearning();
+      renderHistoryImport();
       renderProfile();
       renderShared();
       renderAuto();
@@ -712,14 +998,22 @@ function render(name) {
       break;
     case "history":
       renderHistory();
+      showForgetRange();
       break;
     case "work":
       renderFocus();
+      renderChatbot();
+      renderSupport();
       renderComingUp();
+      renderGoals();
       renderBriefing();
       renderJobs();
       renderUndo();
       renderActivity();
+      break;
+    case "projects":
+      // Its own read; the status line is painted again once it is in.
+      showProjects().then(() => paintFreshness(), () => paintFreshness());
       break;
     case "trust":
       renderContentRisk();
@@ -800,7 +1094,12 @@ function agoMs(ms) {
 function paintFreshness() {
   if (!dom.freshness) return;
   const sections = (VIEW_SECTIONS[state.view] || []).filter((s) => state.readAt[s]);
-  const oldest = sections.length ? Math.min(...sections.map((s) => state.readAt[s])) : 0;
+  let oldest = sections.length ? Math.min(...sections.map((s) => state.readAt[s])) : 0;
+  // History and Projects are read through their own commands, not
+  // brain_read, so VIEW_SECTIONS lists nothing for them - and the line used
+  // to say "reading…" for ever (the chat audit, 2026-09-28, desktop B3).
+  const own = OWN_READS[state.view];
+  if (!sections.length && own) oldest = own() || 0;
   const what = (VIEWS[state.view] && VIEWS[state.view].title.toLowerCase()) || "this";
   const words = linkWords(currentLink());
   dom.freshness.dataset.tone = words.canAct ? "" : "warn";
@@ -817,6 +1116,12 @@ function paintFreshness() {
   }
 }
 setInterval(paintFreshness, 15000);
+
+/** When a view read through its own command last read successfully. */
+const OWN_READS = {
+  history: () => chats.readOkAt,
+  projects: () => projectsReadAt(),
+};
 
 function renderCounts() {
   const set = (node, n) => {
@@ -856,10 +1161,60 @@ function renderCounts() {
    Faculties
    ========================================================================== */
 
+/** Shown when there is no data at all - never a good read this session,
+ *  and nothing cached from an earlier one either. Not "Could not read
+ *  this": that would read as a fault on a machine that has simply never
+ *  once been connected to Jarvis while it was running. */
+const MODELS_NEVER_CONNECTED =
+  "There's nothing to show yet — open this once while Jarvis is running on your PC.";
+
+/** The offline banner's "as of" time, in the same short form the rest of
+ *  the window uses for a moment in the past (not a duration - the owner
+ *  asked for a real time here, not "3h ago", since it may be days old). */
+function asOfWords(atMs) {
+  if (!atMs) return "an earlier connection";
+  try {
+    return new Date(atMs).toLocaleString(undefined, {
+      day: "numeric",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return "an earlier connection";
+  }
+}
+
 function renderModels() {
-  const body = state.data.models || {};
-  const why = unavailable("models");
-  if (why) return rows(dom.models, [], null, whyNode("models"));
+  const live = sectionState("models");
+  const body = state.data.models;
+  // A body of `{available: false, ...}` (never read, or read but failed
+  // with nothing older to show, or an explicit "this backend does not have
+  // it") counts the same as no body at all here: none of them are data to
+  // draw the pane from. Checking `body` alone would treat a failed read's
+  // own `{available: false}` shape as "there is something to show" - it
+  // very nearly did.
+  const haveGoodData = Boolean(body) && body.available !== false;
+
+  if (!haveGoodData) {
+    // The backend itself says it has no models module (a 404/503, not "no
+    // answer at all") - a fact about this machine, not a stale read, so the
+    // cache (if load() kept one) is not shown in its place.
+    if (live.kind === "absent") return rows(dom.models, [], null, whyNode("models"));
+    // 'reading' or 'failed', and there is nothing to fall back to - not
+    // even a disk cache: never a good read, this session or any earlier
+    // one on this PC. Saying "could not read" would blame a fault where
+    // there has simply never once been a connection.
+    const node = el("p", "empty", live.kind === "reading" ? "Reading…" : MODELS_NEVER_CONNECTED);
+    if (live.kind === "failed") node.append(" ", retryButton("models"));
+    return rows(dom.models, [], null, node);
+  }
+
+  // The most recent read failed and this is the last one that worked -
+  // whether that was earlier this session or, via models-cache.js, from
+  // before the app last restarted. Either way it must never be painted as
+  // if it were live: rule 4, and the design doc's whole point.
+  const stale = live.kind === "stale";
 
   const current = body.current || body.active || "";
   const previous = body.previous || "";
@@ -876,9 +1231,15 @@ function renderModels() {
     items,
     (m) => {
       const ref = String(m.ref || m.name || m.model || "");
+      // Which model is current is honestly cacheable, but only labelled as
+      // of the cache's own time, never drawn as "this is running now" -
+      // that claim needs a live read (docs/OFFLINE-MODELS-DESIGN-2026-09-27.md
+      // section 5). The quieter note below the list carries it while stale.
       const isCurrent = ref && ref === current;
+      const showAsLiveCurrent = isCurrent && !stale;
+      const chats = canChat(m, ref);
       const actions = [];
-      if (ref && !isCurrent) {
+      if (ref && !isCurrent && chats) {
         actions.push(
           button("Use", () => modelAction("switch", ref), {
             title: `Ask to switch to this model. You approve it ${APPROVE_WHERE}.`,
@@ -887,13 +1248,15 @@ function renderModels() {
         );
       }
       return row({
-        tag: isCurrent ? "active" : "installed",
-        state: isCurrent ? "present" : "",
+        tag: showAsLiveCurrent ? "active" : "installed",
+        state: showAsLiveCurrent ? "present" : "",
         title: ref || "(unnamed)",
         meta: [
           m.size ? bytes(m.size) : "",
           m.family || "",
           ref && ref === previous ? "the previous model" : "",
+          // Said rather than a greyed-out button: why there is no "Use".
+          chats ? "" : CANNOT_CHAT,
         ],
         actions,
       });
@@ -901,29 +1264,58 @@ function renderModels() {
     "No models reported."
   );
 
-  // Is the model actually ON the graphics card? Nothing else anywhere says.
-  // llama.cpp spills layers to the CPU silently and Ollama still reports the
-  // model as loaded and healthy, so the only symptom is that everything got
-  // slow - and the owner blames Jarvis rather than the fit.
-  //
-  // Prepended after `rows()` rather than composed before it, because `rows()`
-  // calls replaceChildren on whatever it is given, and the rollback button
-  // below appends to the same element.
-  const off = body.offload || {};
-  if (off.status === "cpu" || off.status === "partial") {
+  if (stale) {
+    // The one clearly-labelled sentence this whole feature is for: what is
+    // shown below is old, roughly how old, and what is deliberately not
+    // shown because only a running Jarvis could know it.
     dom.models.prepend(
-      el("p", "banner", String(off.note || "The model is not on the graphics card."))
+      el(
+        "p",
+        "banner models-offline",
+        `Jarvis isn't running right now, so this list is from the last time it was: ` +
+          `${asOfWords(state.readAt.models)}. Sizes and names are probably still right. ` +
+          `What's actually loaded right now isn't shown, since only a running Jarvis knows that.`
+      )
     );
+    if (current) {
+      dom.models.append(
+        el("p", "note", `As of that last connection, ${current} was the one in use.`)
+      );
+    }
   }
 
-  // How fast answers have been (speed-record.patch). docs/JARVIS-API.md says
-  // show exactly three things: one line for the current model, the backend's
-  // own note only when it got slower, and its own old-vs-new sentence beside
-  // the rollback button. The phone does the same (ApiModels.kt ModelSpeed);
-  // this window ignored the block entirely.
-  const speed = modelSpeed(body.speed, current);
-  if (speed.line) dom.models.append(el("p", "model-speed", speed.line));
-  if (speed.slowdown) dom.models.append(el("p", "banner", speed.slowdown));
+  // Is the model actually ON the graphics card, and how fast have answers
+  // been? Both are live measurements of what Ollama is doing right now, not
+  // facts about a file on disk - shown stale they would read as "this is
+  // happening now" and be wrong, so they are skipped outright while stale
+  // rather than guessed at (docs/OFFLINE-MODELS-DESIGN-2026-09-27.md section
+  // 5). `speed` is also never written to the disk cache in the first place
+  // (models-cache.js), so there would be nothing to show here even for a
+  // read this window never actually saw fail.
+  const speed = stale ? { line: "", slowdown: "", lastSwitch: "" } : modelSpeed(body.speed, current);
+  if (!stale) {
+    // llama.cpp spills layers to the CPU silently and Ollama still reports
+    // the model as loaded and healthy, so the only symptom is that
+    // everything got slow - and the owner blames Jarvis rather than the fit.
+    //
+    // Prepended after `rows()` rather than composed before it, because
+    // `rows()` calls replaceChildren on whatever it is given, and the
+    // rollback button below appends to the same element.
+    const off = body.offload || {};
+    if (off.status === "cpu" || off.status === "partial") {
+      dom.models.prepend(
+        el("p", "banner", String(off.note || "The model is not on the graphics card."))
+      );
+    }
+
+    // How fast answers have been (speed-record.patch). docs/JARVIS-API.md
+    // says show exactly three things: one line for the current model, the
+    // backend's own note only when it got slower, and its own old-vs-new
+    // sentence beside the rollback button. The phone does the same
+    // (ApiModels.kt ModelSpeed); this window ignored the block entirely.
+    if (speed.line) dom.models.append(el("p", "model-speed", speed.line));
+    if (speed.slowdown) dom.models.append(el("p", "banner", speed.slowdown));
+  }
 
   if (previous && previous !== current) {
     if (speed.lastSwitch) dom.models.append(el("p", "model-speed", speed.lastSwitch));
@@ -1033,6 +1425,13 @@ function modelSpeed(speed, current) {
     if (firstMs !== null) {
       const tenths = Math.round(firstMs / 100);
       parts.push(`first word after ${Math.floor(tenths / 10)}.${tenths % 10} s`);
+    }
+    // Milestone 7: the share of the conversation Ollama already had read
+    // from the last question and did not read again (its prompt cache;
+    // jarvis_speed.reused_percent). Missing on older rows and older Ollamas.
+    const reused = num(mine.median_reused_percent);
+    if (reused !== null) {
+      parts.push(`${Math.round(Math.min(100, reused))}% of the conversation reused, not read again`);
     }
     if (parts.length) {
       const n = num(mine.answers);
@@ -1344,6 +1743,22 @@ function renderMemory() {
   for (const [k, v] of statusRows(body)) add(k, v);
   if (typeof body.db === "string") add("Store", body.db);
   if (dl.childElementCount) dom.memory.append(dl);
+  // The overnight tidy (2026-09-28, backend/jarvis_tidy.py): once it is on,
+  // turning it off is one tap, at once - it only makes Jarvis ask less, so
+  // it is not held on a stale link (brain.rs brain_memory_sleep_time).
+  // Turning it ON stays the daily offer's Enable.
+  if (body.sleep_time && body.sleep_time.enabled === true) {
+    const box = el("div", "row-actions");
+    box.append(button("Turn off overnight tidying", async () => {
+      await memoryWrite("brain_memory_sleep_time", { enabled: false }, OVERNIGHT_OFF_SAID);
+      if (state.data.memory && state.data.memory.sleep_time) {
+        state.data.memory.sleep_time.enabled = false;
+      }
+      renderMemory();
+    }, { title: "No more \u201cStill true?\u201d or \u201cWhich is true now?\u201d cards. "
+               + "Cards already waiting stay until you answer them." }));
+    dom.memory.append(box);
+  }
 
   const proposed = Array.isArray(pending.pending) ? pending.pending : [];
   if (pending.hidden === true && waitingCount(pending)) {
@@ -1433,6 +1848,12 @@ let memoryAsOfRows = null;
 let cachedSleepOffer = null;
 let sleepOfferDismissed = false;
 
+/** What turning the overnight tidy on and off says (2026-09-28): the
+ *  phone's MemoryWords.OVERNIGHT_ON_SAID / OVERNIGHT_OFF_SAID, word for word. */
+const OVERNIGHT_ON_SAID = "Overnight tidying is on. Once a day Jarvis may ask about facts that "
+  + "look out of date, with review cards. Nothing changes without your yes.";
+const OVERNIGHT_OFF_SAID = "Overnight tidying is off. No more cards from it.";
+
 function noteSleepOffer(setup) {
   if (setup && setup.sleep_time_offer && !cachedSleepOffer && !sleepOfferDismissed) {
     cachedSleepOffer = setup.sleep_time_offer;
@@ -1454,24 +1875,24 @@ function dismissSleepOffer() {
  * `undefined` if the owner cancelled. `undefined` is a distinct answer from
  * `null` on purpose: the caller must abort the whole action on a cancel,
  * not quietly fall back to "just now" for a date the owner never confirmed.
+ *
+ * An answer that is not a usable date ("last week", a day next month) asks
+ * again, with the reason above the question and the typed words kept. It
+ * used to show an error and return `undefined` - so a Forget the owner had
+ * already confirmed was dropped without a word (play tester, 2026-09-27).
+ * What counts as a date is `validToFromText` (valid-to.js).
  */
 function promptValidTo(message) {
-  const raw = window.prompt(message, "");
-  if (raw === null) return undefined;
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  // A bare YYYY-MM-DD is parsed as local midnight, not Date.parse's UTC
-  // midnight - west of Greenwich that shift lands the timestamp on the
-  // previous calendar day, the same trap the "as of" picker above avoids.
-  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
-  const ts = dateOnly
-    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3])).getTime()
-    : Date.parse(trimmed);
-  if (Number.isNaN(ts)) {
-    window.alert(`"${trimmed}" is not a date I understand. Try YYYY-MM-DD.`);
-    return undefined;
+  let typed = "";
+  let problem = "";
+  for (;;) {
+    const raw = window.prompt(problem ? `${problem}\n\n${message}` : message, typed);
+    if (raw === null) return undefined;
+    const answer = validToFromText(raw);
+    if (!("error" in answer)) return answer.seconds;
+    typed = raw;
+    problem = answer.error;
   }
-  return ts / 1000;
 }
 
 /** Dates before this are refused by "What did you know on…". The server
@@ -1592,6 +2013,7 @@ async function revealPrivate() {
   // The deep questions, on the Memory tab, come back with the lists.
   deep.at = 0;
   fx.at = 0;
+  cb.at = 0;
   if (state.view !== "memory") render(state.view);
   else loadDeep();
 }
@@ -1600,6 +2022,10 @@ async function revealPrivate() {
 // read the lists again - Rust decides whether they come back hidden.
 if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   const reread = async () => {
+    // The chatbot card's goal and conversation are hidden with the lists too,
+    // and the support chat's goal, details and transcript.
+    cb.at = 0;
+    sp.at = 0;
     await load(VIEW_SECTIONS.memory, { quiet: true });
     render(state.view);
   };
@@ -1631,7 +2057,7 @@ function renderLearning() {
       row({
         tag: "offer",
         state: "warn",
-        title: String(offer.title || "Overnight memory tidying - not built yet"),
+        title: String(offer.title || "Overnight memory tidying"),
         meta: [String(offer.body || "")],
         actions: [
           // Dismissed BEFORE the write, not after: `memoryWrite`'s own
@@ -1650,19 +2076,18 @@ function renderLearning() {
             const answered = cachedSleepOffer;
             dismissSleepOffer();
             render("memory");
-            // The truth, which is short: nothing is built, so nothing runs.
-            // This toast used to promise an overnight tidy that nothing does.
+            // The truth, which is short (2026-09-28, backend/jarvis_tidy.py):
+            // it only ASKS, with review cards, and changes nothing by itself.
             const out = await memoryWrite("brain_memory_sleep_time", { enabled: true },
-              "Noted that you want it. It is not built yet, so nothing runs "
-              + "and nothing in memory changes.");
+              OVERNIGHT_ON_SAID);
             if (!out || out.ok === false) {
               cachedSleepOffer = answered;
               sleepOfferDismissed = false;
               render("memory");
             }
-          }, { title: "Records that you want overnight tidying. It is not built yet: "
-                     + "nothing runs, and no fact changes without your yes on that "
-                     + "one fact.", live: true }),
+          }, { title: "Once a day, Jarvis may ask you about facts that look out of date, "
+                     + "with review cards - at most five a night. No fact changes without "
+                     + "your yes on that one fact.", live: true }),
           button("Not now", async () => {
             dismissSleepOffer();
             render("memory");
@@ -2082,6 +2507,60 @@ function paintAbout() {
   box.append(foot);
 }
 
+/* ==========================================================================
+   "History of this fact" (the owner's choice of 2026-09-28; JARVIS-API.md
+   section 71; fact-history.js). A History button on a fact that has another
+   wording opens every version under its row, the changed words marked. A
+   read (brain_fact_history), hidden like every memory list.
+   ========================================================================== */
+
+const factHist = { id: null, view: null, error: "", loading: false };
+
+async function toggleFactHistory(id) {
+  if (factHist.id === id) {
+    factHist.id = null;
+    factHist.view = null;
+    renderFacts();
+    return;
+  }
+  factHist.id = id;
+  factHist.view = null;
+  factHist.error = "";
+  factHist.loading = true;
+  renderFacts();
+  try {
+    const v = readFactHistory(await invoke("brain_fact_history", { id }));
+    if (factHist.id === id) factHist.view = v;
+  } catch (error) {
+    if (factHist.id === id) factHist.error = errorText(error);
+  } finally {
+    if (factHist.id === id) factHist.loading = false;
+  }
+  renderFacts();
+}
+
+/** The open history, under its fact's row. */
+function factHistoryNode() {
+  const box = el("div", "fact-history");
+  box.id = "fact-history";
+  const v = factHist.view;
+  if (factHist.error) {
+    box.append(el("p", "empty failed", `Could not read this fact's history: ${factHist.error}`));
+  } else if (!v) {
+    box.append(el("p", "empty", "Reading…"));
+  } else if (!v.available) {
+    box.append(el("p", "empty", v.why));
+  } else if (v.hidden) {
+    box.append(hiddenNode(v.hiddenCount, "facts"));
+  } else {
+    renderFactHistory(box, v, { el });
+  }
+  const foot = el("div", "row-actions");
+  foot.append(button("Close", () => toggleFactHistory(factHist.id)));
+  box.append(foot);
+  return box;
+}
+
 function renderFacts() {
   paintAbout();
   const body = state.data.memory_facts || {};
@@ -2093,6 +2572,9 @@ function renderFacts() {
   if (body.hidden === true) {
     memoryAsOf = null;
     memoryAsOfRows = null;
+    // An open "History of this fact" goes with the list it was opened from.
+    factHist.id = null;
+    factHist.view = null;
     dom.memoryFacts.replaceChildren(hiddenNode(body.hidden_count, "facts"));
     return;
   }
@@ -2164,7 +2646,12 @@ function renderFacts() {
               "if it stopped being true a while ago and you are only telling " +
               "Jarvis about it now."
             );
-            if (validTo === undefined) return; // the date prompt was cancelled
+            if (validTo === undefined) {
+              // Cancel on the date box after "yes, forget it": say so, so
+              // the owner is not left thinking the fact is gone.
+              toast("Nothing was forgotten.");
+              return;
+            }
             const args = { id: Number(f.id) };
             if (validTo !== null) args.valid_to = validTo;
             await memoryWrite("brain_memory_forget", args, FORGOTTEN);
@@ -2186,6 +2673,17 @@ function renderFacts() {
         actions.push(button(ERASE_LABEL, () => eraseFact(f),
           { danger: true, live: true, title: ERASE_TITLE }));
       }
+      // "History of this fact" (section 71): a read, first of the buttons,
+      // on any fact that has another wording on the list - an erased one
+      // too (its history shows the dates, never its words).
+      const withHistory = !past && hasOtherVersions(f, loaded);
+      if (withHistory) {
+        const open = factHist.id === Number(f.id);
+        const h = button(open ? "Close history" : HISTORY_BUTTON,
+          () => toggleFactHistory(Number(f.id)), { title: HISTORY_BUTTON_TITLE });
+        h.setAttribute("aria-expanded", String(open));
+        actions.unshift(h);
+      }
       const item = row({
         tag: erased !== null ? "erased" : current ? "fact" : "retired",
         state: current && erased === null ? "ok" : undefined,
@@ -2203,7 +2701,8 @@ function renderFacts() {
           // `retired_by` is the column the store writes: the id of the fact
           // that replaced this one. (It used to read `supersedes`, which is
           // an argument to add(), not a column, so this never showed.)
-          f.retired_by ? `replaced by #${f.retired_by}` : "",
+          // Said in words since 2026-09-28; History shows which wording.
+          f.retired_by ? REPLACED_MARK : "",
           whenTrue(f),
           // The two axes, and the only place the difference is visible. They
           // are usually the same day and this says nothing; when they are not,
@@ -2218,7 +2717,11 @@ function renderFacts() {
       });
       // The names it is linked to, each opening "About <name>" - on a fact
       // in use, in today's view only (the links are today's).
-      return current && !past && erased === null ? withLinks(item, f) : item;
+      const shown = current && !past && erased === null ? withLinks(item, f) : item;
+      if (!withHistory || factHist.id !== Number(f.id)) return shown;
+      const both = el("div", "fact-with-history");
+      both.append(shown, factHistoryNode());
+      return both;
     },
     needle && loaded.length
       ? "No fact on this list has those words."
@@ -2463,15 +2966,45 @@ const chats = {
   at: 0,
   loading: false,
   older: false,
+  /** A successful read's time, for the status line (paintFreshness). */
+  readOkAt: 0,
+  /** "Show": one kind of conversation, or "" for every kind (the chat
+   *  audit, 2026-09-28 - "History can be filtered to Live sessions only"). */
+  kind: "",
   /** The conversation open below its row, and its transcript. */
   openId: null,
   open: null,
   openError: "",
+  /** What the open chat taught (readChatFacts), or null while it is read or
+   *  when this PC cannot say (the second chat audit, 2026-09-28, finding 9). */
+  openFacts: null,
   /** `{ cardId, gone }` while an ON card waits (like `learningAsk`). */
   ask: null,
+  /**
+   * "Search what was said" (JARVIS-API.md section 71). `query` is what is
+   * in the box; `view` the PC's answer (readSearch), dropped when the box
+   * is cleared. Nothing of it is kept anywhere else. `oldPc` is the
+   * sentence of a PC that cannot search the words - then the box narrows
+   * the loaded list by title, as it did before. `seq` drops an answer
+   * that arrives after a newer search was started.
+   */
+  search: { query: "", view: null, loading: false, error: "", seq: 0, timer: null, oldPc: "" },
+  /** "Find in this chat", over the conversation open: the words, which
+   *  match is current, and how many there are. Asks the PC nothing. */
+  find: { needle: "", current: 0, total: 0 },
+  /**
+   * Deleting a chat offers to forget the facts it taught (JARVIS-API.md
+   * section 79, 2026-09-28): the conversation being deleted, the facts it
+   * taught (brain_conversation_facts, hidden like every memory list), and
+   * the ones the owner ticked - NONE to start with. Kept here so the
+   * 15-second repaint keeps the ticks.
+   */
+  deleting: null,
 };
 /** The tab repaints often; the list is re-read at most this often. */
 const HISTORY_READ_MS = 15000;
+/** How long typing must pause before the PC is asked to search. */
+const HISTORY_SEARCH_WAIT_MS = 350;
 
 const errorText = (error) => String((error && error.message) || error);
 
@@ -2479,8 +3012,13 @@ async function loadHistory() {
   if (chats.loading) return;
   chats.loading = true;
   try {
-    const v = readHistory(await invoke("brain_history_list", { before: null, limit: HISTORY_PAGE }));
+    const kind = chats.kind;
+    const v = readHistory(await invoke("brain_history_list",
+      { before: null, limit: HISTORY_PAGE, kind: kind || null }));
+    if (kind !== chats.kind) return;       // the filter changed while this read ran
     chats.view = v;
+    chats.readOkAt = Date.now();
+    paintFreshness();
     // The re-read every 15 seconds replaces the newest page only: pages
     // "Load older" brought in stay, and so does a conversation opened
     // from one of them. A hidden list (Windows Hello) keeps nothing.
@@ -2490,10 +3028,14 @@ async function loadHistory() {
     chats.more = kept.more;
     chats.error = "";
     if (v.enabled) chats.ask = null; // the card was approved
-    if (chats.openId && !chats.rows.some((c) => c.id === chats.openId)) {
+    // A conversation opened from the search results may be older than
+    // every page loaded; it stays open while it is still a result.
+    const inSearch = (chats.search.view?.conversations || []).some((c) => c.id === chats.openId);
+    if (chats.openId && (v.hidden || (!chats.rows.some((c) => c.id === chats.openId) && !inSearch))) {
       chats.openId = null;
       chats.open = null;
     }
+    if (v.hidden) chats.search.view = null;
   } catch (error) {
     chats.error = errorText(error);
   } finally {
@@ -2508,7 +3050,8 @@ async function loadOlderHistory() {
   if (before === null || chats.older) return;
   chats.older = true;
   try {
-    const v = readHistory(await invoke("brain_history_list", { before, limit: HISTORY_PAGE }));
+    const v = readHistory(await invoke("brain_history_list",
+      { before, limit: HISTORY_PAGE, kind: chats.kind || null }));
     chats.rows = addPage(chats.rows, v.conversations);
     chats.more = v.conversations.length >= HISTORY_PAGE;
   } catch (error) {
@@ -2519,16 +3062,24 @@ async function loadOlderHistory() {
   paintHistory();
 }
 
-async function toggleConversation(id) {
+/**
+ * Opens (or closes) one conversation below its row. `needle`: the words to
+ * find in it at once - the search words, when it was opened from a search
+ * result; nothing when it was opened from the list.
+ */
+async function toggleConversation(id, needle = "") {
   if (chats.openId === id) {
     chats.openId = null;
     chats.open = null;
+    chats.openFacts = null;
     paintHistory();
     return;
   }
   chats.openId = id;
   chats.open = null;
+  chats.openFacts = null;
   chats.openError = "";
+  chats.find = { needle: String(needle || ""), current: 0, total: 0 };
   paintHistory();
   try {
     const conv = readConversation(await invoke("brain_history_open", { id }));
@@ -2537,19 +3088,162 @@ async function toggleConversation(id) {
     if (chats.openId === id) chats.openError = errorText(error);
   }
   paintHistory();
+  if (chats.openId === id && chats.open && CONTINUABLE_KINDS.includes(chats.open.kind)) {
+    loadOpenFacts(id);
+  }
 }
 
+const CONTINUABLE_KINDS = ["chat", "live"];
+
+/** The facts an opened chat taught and Jarvis still uses (section 79), read
+ *  only - Delete offers to forget them, the Memory tab has Forget. */
+async function loadOpenFacts(id) {
+  let got = null;
+  try {
+    got = readChatFacts(await invoke("brain_conversation_facts", { conversationId: id }));
+  } catch {
+    got = null;
+  }
+  if (chats.openId !== id) return;
+  chats.openFacts = got && got.available ? got : null;
+  paintHistory();
+}
+
+/** Under an opened chat: what it taught, or that nothing it taught is in use. */
+function factsTaughtNode(got) {
+  const box = el("div", "history-facts-taught");
+  if (got.hiddenCount) {
+    box.append(el("p", "hint", chatFactsTaughtHidden(got.hiddenCount)));
+    return box;
+  }
+  box.append(el("p", "hint", chatFactsTaught(got.facts.length)));
+  if (got.facts.length) {
+    const list = el("ul", "history-taught-list");
+    for (const f of got.facts) list.append(el("li", "", f.text));
+    box.append(list);
+  }
+  return box;
+}
+
+/**
+ * Delete, on a conversation's row. Since 2026-09-28 (JARVIS-API.md section
+ * 79) it first asks the PC which facts in use this chat taught. None, or a
+ * PC that cannot say: the same "are you sure?" as before. Some: a list
+ * under the row with a tick box each - none ticked - and "Delete the chat"
+ * (or "... and forget 2 facts"), then the usual "are you sure?". Hidden
+ * memory lists: the facts are not shown, and are kept.
+ */
 async function deleteConversation(c) {
-  if (!window.confirm(deleteQuestion(c))) return;
+  if (chats.deleting && chats.deleting.id === c.id) {
+    chats.deleting = null;
+    paintHistory();
+    return;
+  }
+  // A customer-support chat's record is the owner's record of what a company
+  // agreed to: it asks once more, saying so (the chat audit, 2026-09-28).
+  if (c.kind === "support" && !window.confirm(DELETE_SUPPORT)) return;
+  let got = null;
+  try {
+    got = readChatFacts(await invoke("brain_conversation_facts", { conversationId: c.id }));
+  } catch {
+    got = null;          // an older app build, or the PC out of reach: ask as before
+  }
+  if (got && got.facts.length) {
+    chats.deleting = { id: c.id, facts: got.facts, ticked: new Set(), busy: false };
+    paintHistory();
+    return;
+  }
+  const note = got && got.hiddenCount ? chatFactsHiddenLine(got.hiddenCount) : "";
+  if (!window.confirm(deleteQuestion(c, note))) return;
+  await finishDelete(c, []);
+}
+
+/** The list under a row being deleted: each fact with a tick box, none
+ *  ticked; Delete (naming how many will be forgotten) and Cancel. */
+function deletingNode(c) {
+  const d = chats.deleting;
+  const box = el("div", "history-delete-facts");
+  box.id = "history-delete-facts";
+  box.append(el("p", "hint", chatFactsIntro(d.facts.length)));
+  const list = el("ul", "history-delete-list");
+  for (const f of d.facts) {
+    const li = el("li");
+    const label = el("label", "history-delete-fact");
+    const tick = document.createElement("input");
+    tick.type = "checkbox";
+    tick.checked = d.ticked.has(f.id);
+    tick.disabled = d.busy;
+    tick.dataset.factId = String(f.id);
+    tick.addEventListener("change", () => {
+      if (tick.checked) d.ticked.add(f.id);
+      else d.ticked.delete(f.id);
+      // Only the button's words change - no repaint, so the keyboard stays
+      // on this tick box.
+      const go = $("history-delete-go");
+      if (go) go.textContent = deleteChatButton(d.ticked.size);
+    });
+    label.append(tick, el("span", "", f.text));
+    li.append(label);
+    list.append(li);
+  }
+  box.append(list);
+  const actions = el("div", "row-actions");
+  const go = button(d.busy ? "Deleting…" : deleteChatButton(d.ticked.size), async () => {
+    // Read at the click, not when drawn: the ticks may have changed since.
+    const chosen = d.facts.filter((f) => d.ticked.has(f.id));
+    if (d.busy || !window.confirm(deleteAndForgetQuestion(c, chosen))) return;
+    d.busy = true;
+    paintHistory();
+    await finishDelete(c, chosen.map((f) => f.id));
+  }, { danger: true, live: true,
+       title: "Delete this conversation from this PC, and forget only the facts ticked above." });
+  go.id = "history-delete-go";
+  actions.append(
+    go,
+    button("Cancel", () => {
+      chats.deleting = null;
+      paintHistory();
+    }, { title: "Keep the conversation and every fact." }),
+  );
+  box.append(actions);
+  return box;
+}
+
+/** Delete the chat, then forget each ticked fact - ONE brain_memory_forget
+ *  per fact (held on a stale link in Rust, like every Forget). There is no
+ *  list form of Forget. */
+async function finishDelete(c, factIds) {
   try {
     const out = await invoke("brain_history_delete", { id: c.id });
-    toast(out && out.gone ? "That conversation was already deleted." : "Deleted from this PC.", "ok");
+    let forgot = 0;
+    let failed = 0;
+    for (const id of factIds) {
+      try {
+        const r = await invoke("brain_memory_forget", { id });
+        if (r && r.ok === false) failed += 1;
+        else {
+          forgot += 1;
+          autoL.rows = autoL.rows.filter((row) => row.id !== id);
+        }
+      } catch {
+        failed += 1;
+      }
+    }
+    toast(deleteDoneWords({ gone: Boolean(out && out.gone), forgot, failed }), failed ? "bad" : "ok");
+    // The Jarvis bar may be in this chat: it starts a new one, and says so.
+    tellChatsGone([c.id]);
+    if (factIds.length) refreshMemory();
+    chats.deleting = null;
     chats.rows = chats.rows.filter((r) => r.id !== c.id);
+    if (chats.search.view) {
+      chats.search.view.conversations = chats.search.view.conversations.filter((r) => r.id !== c.id);
+    }
     if (chats.openId === c.id) {
       chats.openId = null;
       chats.open = null;
     }
   } catch (error) {
+    if (chats.deleting) chats.deleting.busy = false;
     toast(errorText(error), "bad");
   }
   paintHistory();
@@ -2603,6 +3297,281 @@ async function revealHistory() {
   }
   chats.at = 0;
   await loadHistory();
+  // A search typed before the list was hidden runs again, now it may.
+  if (chats.search.query.length >= SEARCH_MIN) onHistorySearch();
+}
+
+/* ---- "Search what was said" and "Find in this chat" (section 71) -------- */
+
+/**
+ * The search box. Two letters or more: after a short pause the PC searches
+ * what was said in the kept chats (brain_history_search); one letter, or a
+ * PC that cannot search the words, narrows the loaded list by title, as the
+ * box did before. The words are held in this window only while they are in
+ * the box.
+ */
+function onHistorySearch() {
+  const s = chats.search;
+  const q = ($("history-filter")?.value || "").trim();
+  clearTimeout(s.timer);
+  s.query = q;
+  s.seq += 1;          // an answer still on its way is for older words
+  s.error = "";
+  if (q.length < SEARCH_MIN || s.oldPc || !IS_TAURI || (chats.view && chats.view.hidden)) {
+    s.view = null;
+    s.loading = false;
+    paintHistoryList();
+    return;
+  }
+  s.loading = true;
+  paintHistoryList();
+  s.timer = setTimeout(() => runHistorySearch(q, s.seq), HISTORY_SEARCH_WAIT_MS);
+}
+
+async function runHistorySearch(q, seq) {
+  const s = chats.search;
+  let v = null;
+  let error = "";
+  try {
+    // The kind chosen in "Show" narrows the search too, so "Live only" and
+    // a typed search combine (the second chat audit, 2026-09-28, finding 8).
+    v = readSearch(await invoke("brain_history_search",
+      { query: q, limit: null, kind: chats.kind || null }));
+  } catch (e) {
+    error = errorText(e);
+  }
+  if (seq !== s.seq) return;
+  s.loading = false;
+  s.error = error;
+  if (v && !v.available) {
+    // An older PC: say so once, and narrow the loaded list by title.
+    s.oldPc = v.why;
+    s.view = null;
+  } else {
+    s.view = v;
+  }
+  paintHistoryList();
+}
+
+/** Re-draws only the open transcript and the count, so the find box keeps
+ *  the keyboard while the owner types in it. */
+function paintFound() {
+  const box = $("history-transcript-turns");
+  if (!box || !chats.open) return;
+  const f = chats.find;
+  const matches = f.needle.trim() ? findMatches(chats.open, f.needle) : [];
+  f.total = matches.length;
+  if (f.current >= matches.length) f.current = 0;
+  renderTranscript(box, chats.open, { el, onCopy: copyOldAnswer },
+    { matches, current: f.current, needle: f.needle.trim() });
+  const count = $("history-find-count");
+  if (count) count.textContent = f.needle.trim() ? findCountWords(f.current, matches.length) : "";
+  for (const id of ["history-find-prev", "history-find-next"]) {
+    const b = $(id);
+    if (b) b.disabled = matches.length < 2;
+  }
+}
+
+function stepFind(delta) {
+  const f = chats.find;
+  if (!f.total) return;
+  f.current = (f.current + delta + f.total) % f.total;
+  paintFound();
+  $("history-transcript-turns")?.querySelector(".find-current")?.scrollIntoView({ block: "nearest" });
+}
+
+/** "Find in this chat": a box, Previous, Next, and "2 of 7". */
+function findBar() {
+  const bar = el("div", "history-find");
+  bar.setAttribute("role", "search");
+  const input = el("input", "field search history-find-input");
+  input.type = "search";
+  input.id = "history-find";
+  input.placeholder = FIND_PLACEHOLDER;
+  input.spellcheck = false;
+  input.autocomplete = "off";
+  input.setAttribute("aria-label", FIND_LABEL);
+  input.setAttribute("aria-describedby", "history-find-count");
+  input.value = chats.find.needle;
+  input.addEventListener("input", () => {
+    chats.find.needle = input.value;
+    chats.find.current = 0;
+    paintFound();
+    $("history-transcript-turns")?.querySelector(".find-current")?.scrollIntoView({ block: "nearest" });
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      stepFind(e.shiftKey ? -1 : 1);
+    } else if (e.key === "Escape" && input.value) {
+      e.preventDefault();
+      e.stopPropagation();
+      input.value = "";
+      chats.find.needle = "";
+      paintFound();
+    }
+  });
+  const prev = button("Previous", () => stepFind(-1), { title: "The match before this one (Shift+Enter)." });
+  prev.id = "history-find-prev";
+  const next = button("Next", () => stepFind(1), { title: "The next match (Enter)." });
+  next.id = "history-find-next";
+  const count = el("span", "history-find-count");
+  count.id = "history-find-count";
+  count.setAttribute("aria-live", "polite");
+  bar.append(input, prev, next, count);
+  return bar;
+}
+
+/** The open conversation, below its row: the find bar, then the words. */
+function transcriptNode() {
+  const t = el("div", "history-transcript");
+  t.id = "history-transcript";
+  if (chats.openError) t.append(el("p", "empty failed", chats.openError));
+  else if (!chats.open) t.append(el("p", "empty", "Reading…"));
+  else {
+    t.append(continueNode(chats.open));
+    if (chats.openFacts) t.append(factsTaughtNode(chats.openFacts));
+    t.append(findBar());
+    const turns = el("div", "history-transcript-turns");
+    turns.id = "history-transcript-turns";
+    t.append(turns);
+  }
+  return t;
+}
+
+/**
+ * "Continue this chat" (the owner's decision, 2026-09-28): the Jarvis bar
+ * carries this conversation on - the same conversation id, the newest kept
+ * messages that fit, its "read outside text" mark carried over by the PC.
+ * A support, chatbot or comparison record cannot be, and says why.
+ */
+function continueNode(conv) {
+  const box = el("div", "row-actions history-continue");
+  if (!conv.continuable) {
+    box.append(el("p", "hint history-continue-why", conv.continueWhy));
+    return box;
+  }
+  const go = button(HISTORY_CONTINUE, async () => {
+    try {
+      await invoke("brain_continue_chat", { id: conv.id });
+    } catch (error) {
+      toast(errorText(error), "bad");
+    }
+  }, { title: HISTORY_CONTINUE_TITLE });
+  go.classList.add("history-continue-go");
+  box.append(go);
+  return box;
+}
+
+/** Copy on an opened old answer: the bar's own private copy (kept out of
+ *  Windows' clipboard history), or a plain one from an older build. */
+async function copyOldAnswer(text, btn) {
+  try {
+    await invoke("write_clipboard_private", { text });
+  } catch {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (error) {
+      toast(errorText(error), "bad");
+      return;
+    }
+  }
+  const was = btn.textContent;
+  btn.textContent = HISTORY_COPIED;
+  setTimeout(() => { btn.textContent = was; }, 1200);
+}
+
+/** One conversation's row, in the list or in the search results. */
+function conversationRow(c, { needle = "", snippet = null } = {}) {
+  const open = chats.openId === c.id;
+  const device = deviceTag(c.device);
+  const item = row({
+    tag: device.tag,
+    title: c.title || NO_TITLE,
+    meta: [rowMeta(c), snippet ? hitsWords(c.hits) : ""],
+    actions: [
+      button(open ? "Close" : "Open", () => toggleConversation(c.id, needle),
+        { title: open ? "Close the conversation." : "Read the conversation. Nothing changes." }),
+      button("Delete", () => deleteConversation(c),
+        { danger: true, live: true, title: "Delete this conversation from this PC. There is no undo." }),
+    ],
+  });
+  item.dataset.id = c.id;
+  if (device.words) item.querySelector(".row-tag").title = device.words;
+  // Every row's buttons say WHICH chat they are for (the second chat audit,
+  // 2026-09-28, desktop A1): "Open" ten times over names nothing.
+  const named = c.title || NO_TITLE;
+  const buttons = item.querySelectorAll(".row-actions button");
+  if (buttons[0]) buttons[0].setAttribute("aria-label", `${open ? "Close" : "Open"} ${named}`);
+  if (buttons[1]) buttons[1].setAttribute("aria-label", `Delete ${named}`);
+  const main = item.querySelector(".row-main");
+  if (snippet) {
+    const p = el("p", "search-snippet");
+    renderSnippet(p, snippet, { el });
+    main.append(p);
+  }
+  const kindTag = KIND_TAG[c.kind] || "";
+  if (c.hasVoice || c.tainted || (kindTag && c.kind !== "live")) {
+    const marks = el("span", "history-marks");
+    // What kind of conversation it is (the chat audit, 2026-09-28). A Live
+    // session says so in its line ("Live · 12 min · Today 14:05").
+    if (kindTag && c.kind !== "live") {
+      const kind = el("span", "history-mark history-mark-kind", kindTag);
+      kind.dataset.kind = c.kind;
+      kind.title = KIND_TITLE[c.kind] || "";
+      marks.append(kind);
+    }
+    if (c.hasVoice) {
+      const mic = el("span", "history-mark history-mark-voice", "voice");
+      mic.title = "Some of it was said aloud to Jarvis.";
+      marks.append(mic);
+    }
+    if (c.tainted) {
+      const taint = el("span", "history-mark history-mark-taint", "read outside text");
+      taint.title = TAINT_TITLE;
+      marks.append(taint);
+    }
+    main.append(marks);
+  }
+  return item;
+}
+
+/** The PC's search results, in place of the list, while words are in the box. */
+function paintSearchResults(box) {
+  const s = chats.search;
+  box.append(el("p", "hint history-search-note", SEARCH_NOTE));
+  const status = el("p", "empty history-search-status");
+  status.setAttribute("role", "status");
+  box.append(status);
+  const v = s.view;
+  if (s.error) {
+    status.classList.add("failed");
+    status.textContent = `Could not search: ${s.error}`;
+    return;
+  }
+  if (!v) {
+    status.textContent = SEARCHING;
+    return;
+  }
+  if (!v.queryOk) {
+    status.textContent = v.why;
+    return;
+  }
+  if (s.loading) status.textContent = SEARCHING;
+  else if (!v.conversations.length) status.textContent = v.whyNot || SEARCH_NONE;
+  else {
+    const n = v.conversations.length;
+    status.textContent = `${n} ${n === 1 ? "conversation matches" : "conversations match"}.`;
+  }
+  const list = el("div", "rows history-rows history-search-rows");
+  for (const c of v.conversations) {
+    list.append(conversationRow(c, { needle: s.query, snippet: c.snippet }));
+    if (chats.deleting && chats.deleting.id === c.id) list.append(deletingNode(c));
+    if (chats.openId === c.id) list.append(transcriptNode());
+  }
+  box.append(list);
+  const more = searchMoreWords(v);
+  if (more) box.append(el("p", "empty", more));
 }
 
 /** The ON card left the queue: read the switch again after the backend has
@@ -2712,7 +3681,8 @@ function paintHistorySettings() {
     select.value = String(v.keepDays);
     // A shorter period (or any, from "Never") deletes conversations now,
     // with no undo: asked first, the phone's question word for word.
-    if (keepNeedsConfirm(v.keepDays, days) && !window.confirm(keepConfirm(days))) return;
+    if (keepNeedsConfirm(v.keepDays, days)
+        && !window.confirm(`${keepConfirm(days)}\n\n${KEEP_SUPPORT_NOTE}`)) return;
     select.disabled = true;
     select.dataset.busy = "true";
     await setKeepDays(days);
@@ -2724,6 +3694,23 @@ function paintHistorySettings() {
 function paintHistoryList() {
   const box = $("history-list");
   if (!box) return;
+  // The find box is drawn afresh with the list (the 15-second re-read
+  // repaints it): the keyboard and the caret stay where the owner left them.
+  const active = document.activeElement;
+  const refocus = active && active.id === "history-find"
+    ? [active.selectionStart, active.selectionEnd] : null;
+  paintHistoryListNow(box);
+  if (chats.open && $("history-transcript-turns")) paintFound();
+  if (refocus) {
+    const input = $("history-find");
+    if (input) {
+      input.focus({ preventScroll: true });
+      try { input.setSelectionRange(refocus[0], refocus[1]); } catch { /* type=search may refuse */ }
+    }
+  }
+}
+
+function paintHistoryListNow(box) {
   box.replaceChildren();
   const v = chats.view;
   if (!v) {
@@ -2742,21 +3729,31 @@ function paintHistoryList() {
       : "Hidden until Windows Hello confirms it is you."));
     hidden.append(button("Show", revealHistory,
       { title: "Asks Windows Hello - your PIN, fingerprint or face - then shows this list." }));
+    // The search box above does nothing while the list is hidden, and used to
+    // say nothing about it (the second chat audit, 2026-09-28, desktop C6).
+    hidden.append(el("p", "hint", "Searching, and Continue this chat, work again after you press Show."));
     box.append(hidden);
     return;
   }
+  // "Search what was said" (section 71; the owner's answer of 2026-09-27:
+  // "shown on screen only; nothing saved, nothing handed to the AI"): two
+  // letters or more, and the PC's results are shown instead of the list.
+  const s = chats.search;
+  if (s.query.length >= SEARCH_MIN && !s.oldPc && IS_TAURI) {
+    paintSearchResults(box);
+    return;
+  }
   if (!chats.rows.length) {
-    box.append(el("p", "empty", v.enabled
+    box.append(el("p", "empty", chats.kind ? HISTORY_FILTER_NONE : v.enabled
       ? "No conversations kept yet."
       : "No conversations kept. Chat history is off."));
     return;
   }
-  // The search box (ease-of-use audit row 20; the owner's answer of
-  // 2026-09-27: "shown on screen only; nothing saved, nothing handed to the
-  // AI"): the list already loaded, by its title only - nothing is asked of
-  // the PC and nothing reaches the model. The same shape as "What Jarvis
-  // knows about you"'s filter (renderFacts).
-  const needle = ($("history-filter")?.value || "").trim().toLowerCase();
+  // One letter, or a PC that cannot search the words: the list already
+  // loaded, narrowed by its title only - nothing is asked of the PC. The
+  // same shape as "What Jarvis knows about you"'s filter (renderFacts).
+  const needle = s.query.toLowerCase();
+  if (needle && s.oldPc) box.append(el("p", "hint history-search-note", s.oldPc));
   const shown = needle
     ? chats.rows.filter((c) => String(c.title || "").toLowerCase().includes(needle))
     : chats.rows;
@@ -2767,45 +3764,9 @@ function paintHistoryList() {
   }
   const list = el("div", "rows history-rows");
   for (const c of shown) {
-    const open = chats.openId === c.id;
-    const device = deviceTag(c.device);
-    const item = row({
-      tag: device.tag,
-      title: c.title || "(no title)",
-      meta: [rowMeta(c)],
-      actions: [
-        button(open ? "Close" : "Open", () => toggleConversation(c.id),
-          { title: open ? "Close the conversation." : "Read the conversation. Nothing changes." }),
-        button("Delete", () => deleteConversation(c),
-          { danger: true, live: true, title: "Delete this conversation from this PC. There is no undo." }),
-      ],
-    });
-    item.dataset.id = c.id;
-    if (device.words) item.querySelector(".row-tag").title = device.words;
-    const main = item.querySelector(".row-main");
-    if (c.hasVoice || c.tainted) {
-      const marks = el("span", "history-marks");
-      if (c.hasVoice) {
-        const mic = el("span", "history-mark history-mark-voice", "voice");
-        mic.title = "Some of it was said aloud to Jarvis.";
-        marks.append(mic);
-      }
-      if (c.tainted) {
-        const taint = el("span", "history-mark history-mark-taint", "read outside text");
-        taint.title = TAINT_TITLE;
-        marks.append(taint);
-      }
-      main.append(marks);
-    }
-    list.append(item);
-    if (open) {
-      const t = el("div", "history-transcript");
-      t.id = "history-transcript";
-      if (chats.openError) t.append(el("p", "empty failed", chats.openError));
-      else if (!chats.open) t.append(el("p", "empty", "Reading…"));
-      else renderTranscript(t, chats.open, { el });
-      list.append(t);
-    }
+    list.append(conversationRow(c));
+    if (chats.deleting && chats.deleting.id === c.id) list.append(deletingNode(c));
+    if (chats.openId === c.id) list.append(transcriptNode());
   }
   box.append(list);
   if (chats.more) {
@@ -2816,7 +3777,65 @@ function paintHistoryList() {
   }
 }
 
+/**
+ * Above the list: "Show" (every kind, or Live only, and the rest) and a
+ * way to "Forget a time frame" from the top of History - it used to be at
+ * the very bottom (the chat audit, 2026-09-28).
+ */
+function paintHistoryTools() {
+  const box = $("history-tools");
+  if (!box) return;
+  const v = chats.view;
+  box.hidden = !v || !v.available || v.hidden;
+  if (box.hidden) return;
+  if (box.dataset.built === "true") {
+    const select = $("history-kind");
+    if (select && select.value !== chats.kind) select.value = chats.kind;
+    return;
+  }
+  box.dataset.built = "true";
+  box.replaceChildren();
+  const label = el("label", "history-kind-label");
+  label.append(el("span", "", HISTORY_FILTER_LABEL));
+  const select = document.createElement("select");
+  select.id = "history-kind";
+  select.className = "field";
+  for (const [value, words] of HISTORY_FILTERS) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = words;
+    select.append(option);
+  }
+  select.value = chats.kind;
+  select.addEventListener("change", () => {
+    chats.kind = select.value;
+    chats.rows = [];
+    chats.more = false;
+    chats.openId = null;
+    chats.open = null;
+    chats.openFacts = null;
+    chats.view = chats.view ? { ...chats.view, conversations: [] } : null;
+    paintHistoryList();
+    loadHistory();
+    // A typed search runs again for the kind now chosen.
+    if (chats.search.query.length >= SEARCH_MIN) onHistorySearch();
+  });
+  label.append(select);
+  const link = button(FORGET_RANGE_LINK, () => openForgetRange(), { title: FORGET_RANGE_LINK_TITLE });
+  link.classList.add("history-forget-range-link");
+  box.append(label, link);
+}
+
+/** Chats were removed or put back somewhere else (an Undo, "Forget a time
+ *  frame", "Erase the words" with its chat): read the list again now. */
+function historyChanged() {
+  chats.at = 0;
+  if (state.view === "history") loadHistory();
+}
+window.addEventListener(HISTORY_CHANGED, historyChanged);
+
 function paintHistory() {
+  paintHistoryTools();
   paintHistorySettings();
   paintHistoryList();
 }
@@ -2984,15 +4003,32 @@ async function setAutoSwitch(which, on) {
  *  still erases the fact; it only skips deleting the chat too. */
 async function eraseFact(f) {
   if (!window.confirm(eraseQuestion(f))) return;
-  const alsoChat = window.confirm(ERASE_ALSO_CHAT_CONFIRM);
+  // Since the chat audit (2026-09-28) the second question names the chat
+  // (its title and when), and is not asked at all when no chat is on record
+  // for this fact. A PC that cannot say asks as before.
+  let chat;
+  try {
+    chat = readFactChat(await invoke("brain_fact_chat", { id: Number(f.id) }));
+  } catch {
+    chat = undefined;
+  }
+  const others = chat ? await otherFactsInChat(invoke, chat, f.id) : 0;
+  const alsoChat = chat === undefined ? window.confirm(ERASE_ALSO_CHAT_CONFIRM)
+    : chat ? window.confirm(eraseAlsoChatNamedConfirm(chat, whenLine(chat.updated), others))
+      : false;
   const out = await memoryWrite(
     "brain_memory_erase",
     { id: Number(f.id), also_delete_conversation: alsoChat },
-    (reply) => (reply && reply.chat_deleted ? ERASED_AND_CHAT_DELETED : ERASED),
+    (reply) => (reply && reply.chat_deleted ? ERASED_AND_CHAT_DELETED
+      : alsoChat || chat === null ? ERASED_NO_CHAT : ERASED),
   );
   if (out && out.ok !== false) {
     autoL.rows = autoL.rows.filter((r) => r.id !== Number(f.id));
     paintAuto();
+    if (out.chat_deleted) {
+      window.dispatchEvent(new CustomEvent(HISTORY_CHANGED));
+      if (chat) tellChatsGone([chat.id]);
+    }
   }
 }
 
@@ -3873,6 +4909,1137 @@ if (dom.focusStart) {
 }
 
 /* ==========================================================================
+   Talk to a chatbot for me (the owner's decisions of 2026-09-27 and
+   2026-09-28; JARVIS-API.md section 87; chatbot.js, brain/chatbot.rs).
+
+   The form (which chatbot, the goal - "these words will be sent" - the
+   most messages and minutes within the version's caps, never-send words)
+   asks the PC for ONE approval card; nothing is sent before a yes. Then the
+   conversation: its state in the PC's words, the counts, Pause / Resume /
+   Stop, Change limits (a NEW card), the transcript with the chatbot's words
+   in the outside-text style, and at the end the summary - kept on screen,
+   never read aloud (nothing in this window speaks). There is no event of
+   its own: it is read again every few seconds while a conversation is
+   live, and on every activity event. The last conversation's id is kept
+   here so its summary stays on screen after it ends.
+
+   "Ask several and compare" (jarvis_chatbot_compare.py): the same form with
+   a tick box per chatbot asks the PC for ONE card listing every one. While
+   it runs: each chatbot's line, Pause / Resume / Stop for the whole
+   comparison, each conversation under its chatbot's name, and at the end
+   ONE summary - where they agree and disagree (who said what), the sources
+   each gave (not checked by Jarvis), who dropped out and why - kept on
+   screen in the outside-text style, never read aloud.
+   ========================================================================== */
+
+const cb = { view: null, error: "", loading: false, again: false, at: 0, id: "", gone: false,
+  timer: null, filled: false, starting: false, limitsKey: "", logKey: "", limitsInFlight: false,
+  cmpId: "", cmpGone: false, lastKind: "", several: new Set(), severalKey: "" };
+const CHATBOT_READ_MS = 15000;
+
+/* The last conversation's and comparison's ids outlive this window (the
+   chat audit, 2026-09-28, desktop B2: a finished summary vanished when the
+   Brain was closed, because the ids lived in the page alone). The ids only -
+   never a goal, a message or a summary - in this app's own storage; the PC
+   still answers "gone" once it restarts, and the finished conversation is
+   then in History. */
+const CHATBOT_LAST_KEY = "jarvis.chatbot.last";
+try {
+  const left = JSON.parse(localStorage.getItem(CHATBOT_LAST_KEY) || "null");
+  if (left && typeof left.id === "string") cb.id = left.id;
+  if (left && typeof left.cmp === "string") cb.cmpId = left.cmp;
+} catch {
+  /* no storage: the summary shows while this window is open, as before */
+}
+
+function keepChatbotIds() {
+  try {
+    if (cb.id || cb.cmpId) {
+      localStorage.setItem(CHATBOT_LAST_KEY, JSON.stringify({ id: cb.id, cmp: cb.cmpId }));
+    } else {
+      localStorage.removeItem(CHATBOT_LAST_KEY);
+    }
+  } catch {
+    /* no storage */
+  }
+}
+
+async function loadChatbot() {
+  if (!IS_TAURI) return;
+  if (cb.loading) {
+    cb.again = true;
+    return;
+  }
+  cb.loading = true;
+  try {
+    // The latest live conversation first (it may have been started on the
+    // phone); else the one this window last showed, for its summary.
+    let view = readChatbot(await invoke("chatbot_status", { id: null, compare: null }));
+    cb.gone = false;
+    cb.cmpGone = false;
+    if (view.available && !view.session && cb.id) {
+      const named = readChatbot(await invoke("chatbot_status", { id: cb.id, compare: null }));
+      if (named.available && named.session) view = { ...view, session: named.session, limits: named.limits };
+      else if (named.available) {
+        cb.gone = true;
+        cb.id = "";
+      }
+    }
+    // The same for a comparison: the latest one still going, else the one
+    // this window last showed, for its summary.
+    if (view.available && !view.compare && cb.cmpId) {
+      const named = readChatbot(await invoke("chatbot_status", { id: null, compare: cb.cmpId }));
+      if (named.available && named.compare) view = { ...view, compare: named.compare };
+      else if (named.available) {
+        cb.cmpGone = true;
+        cb.cmpId = "";
+      }
+    }
+    if (view.available && view.session) cb.id = view.session.id;
+    if (view.available && view.compare) cb.cmpId = view.compare.id;
+    keepChatbotIds();
+    if (view.available && view.session && view.session.live) cb.lastKind = "session";
+    if (view.available && view.compare && view.compare.live) cb.lastKind = "compare";
+    cb.view = view;
+    cb.error = "";
+  } catch (error) {
+    cb.error = errorText(error);
+  } finally {
+    cb.loading = false;
+    cb.at = Date.now();
+  }
+  if (cb.again) {
+    cb.again = false;
+    await loadChatbot();
+    return;
+  }
+  if (state.view === "work") paintChatbot();
+}
+
+/** The PC's refusals are sometimes lower-case fragments ("nothing is running"). */
+function asSentence(text) {
+  const t = String(text || "").trim();
+  if (!t) return "Not changed.";
+  const s = t[0].toUpperCase() + t.slice(1);
+  return /[.!?]$/.test(s) ? s : `${s}.`;
+}
+
+async function chatbotAct(cmd, args = {}) {
+  try {
+    const out = await invoke(cmd, args);
+    const said = out && (out.message || out.said);
+    toast(asSentence(said || "Done."), "ok");
+  } catch (error) {
+    toast(asSentence(errorText(error)), "bad");
+  }
+  await loadChatbot();
+}
+
+/** "Ask several and compare" is ticked. */
+function compareMode() {
+  return Boolean(dom.chatbotCompare && dom.chatbotCompare.checked
+    && dom.chatbotCompareToggle && !dom.chatbotCompareToggle.hidden);
+}
+
+async function chatbotStart() {
+  const v = cb.view;
+  const several = compareMode();
+  const form = {
+    chatbot: dom.chatbotWhich ? dom.chatbotWhich.value : "",
+    // Ticked, in the order the list shows them (grouped by kind).
+    chatbots: v && v.available ? chatbotGroups(v).flatMap((g) => g.chatbots).filter((c) => cb.several.has(c.id)).map((c) => c.id) : [],
+    goal: dom.chatbotGoal ? dom.chatbotGoal.value : "",
+    messages: dom.chatbotMessages ? dom.chatbotMessages.value : "",
+    minutes: dom.chatbotMinutes ? dom.chatbotMinutes.value : "",
+  };
+  if (cb.starting) return;
+  const problem = several ? compareFormProblem(v, form) : chatbotFormProblem(v, form);
+  if (problem) {
+    toast(problem, "bad");
+    return;
+  }
+  if (!linkWords(currentLink()).canAct) {
+    toast(STALE_TITLE, "bad");
+    return;
+  }
+  // One start at a time: a double press must not ask the PC twice.
+  cb.starting = true;
+  if (dom.chatbotStart) {
+    dom.chatbotStart.dataset.busy = "true";
+    syncLiveButton(dom.chatbotStart);
+  }
+  try {
+    const limits = {
+      goal: form.goal,
+      maxMessages: chatbotLimitOf(form.messages, v.tier.turnsMax),
+      maxMinutes: chatbotLimitOf(form.minutes, v.tier.minutesMax),
+      neverSend: neverWords(dom.chatbotNever ? dom.chatbotNever.value : ""),
+    };
+    let out;
+    if (several) {
+      out = await invoke("chatbot_compare_start", { chatbots: form.chatbots, ...limits });
+      if (out && out.compare) cb.cmpId = out.compare;
+      cb.lastKind = "compare";
+    } else {
+      out = await invoke("chatbot_start", { chatbot: form.chatbot, ...limits });
+      if (out && out.session) cb.id = out.session;
+      cb.lastKind = "session";
+    }
+    toast(asSentence((out && out.message) || CHATBOT.start_note), "ok");
+    if (dom.chatbotGoal) dom.chatbotGoal.value = "";
+  } catch (error) {
+    toast(asSentence(errorText(error)), "bad");
+  } finally {
+    cb.starting = false;
+  }
+  await loadChatbot();
+  // paintChatbotForm sets busy again only when nothing is built.
+  if (dom.chatbotStart && cb.view && cb.view.available) paintChatbotForm(cb.view);
+}
+
+function chatbotTurn(t, name) {
+  const item = el("div", `chatbot-turn${t.outside ? " chatbot-outside" : ""}`);
+  item.dataset.who = t.who;
+  const head = el("div", "chatbot-turn-head");
+  head.append(el("span", "chatbot-who", t.who === "jarvis" ? `Jarvis, message ${t.n}` : name));
+  if (t.outside) head.append(el("span", "history-mark history-mark-taint", "outside text"));
+  item.append(head);
+  item.append(el("p", "chatbot-text", t.text));
+  if (t.cutOff) item.append(el("p", "note chatbot-cut-off", CHATBOT.cut_off));
+  return item;
+}
+
+/** "Kept in your encrypted chat history" - or why not - and, when kept, a
+ *  way to it (the second chat audit, 2026-09-28, desktop C5). Nothing when
+ *  the PC did not say. */
+function historyNote(h) {
+  const line = chatbotHistoryLine(h);
+  if (!line) return null;
+  const p = el("p", "note chatbot-history-line", line);
+  if (h && h.kept) {
+    p.append(" ", button(CHATBOT.history_open, () => showView("history"),
+      { title: CHATBOT.history_open_title }));
+  }
+  return p;
+}
+
+function chatbotSummary(s) {
+  const box = el("div", "chatbot-summary chatbot-outside");
+  const head = el("div", "chatbot-turn-head");
+  head.append(el("h3", "subhead", CHATBOT.summary_title));
+  head.append(el("span", "history-mark history-mark-taint", "outside text"));
+  box.append(head);
+  box.append(el("p", "note", CHATBOT.summary_note));
+  const kept = historyNote(s.history);
+  if (kept) box.append(kept);
+  if (s.summary.answer) box.append(el("p", "chatbot-text", s.summary.answer));
+  if (s.summary.claims.length) {
+    const list = el("ul", "chatbot-claims");
+    for (const c of s.summary.claims) {
+      list.append(el("li", "", `${c.claim} - ${c.sourced ? CHATBOT.claim_sourced : CHATBOT.claim_unsourced}`));
+    }
+    box.append(list);
+  }
+  if (s.summary.open.length) {
+    box.append(el("p", "note", CHATBOT.open_title));
+    const list = el("ul", "chatbot-open");
+    for (const o of s.summary.open) list.append(el("li", "", o));
+    box.append(list);
+  }
+  return box;
+}
+
+function chatbotLimitsRow(v, s) {
+  const wrap = el("div", "");
+  const row = el("div", "row");
+  const field = (label, value, max, id) => {
+    const lab = el("label", "lbl", label);
+    const input = el("input", "field");
+    input.type = "number";
+    input.min = "1";
+    input.max = String(max);
+    input.value = String(value);
+    input.id = id;
+    lab.append(input);
+    row.append(lab);
+    return input;
+  };
+  const msgs = field(CHATBOT.messages_label, s.max, v.tier.turnsMax, "chatbot-new-messages");
+  const mins = field(CHATBOT.minutes_label, s.maxMinutes, v.tier.minutesMax, "chatbot-new-minutes");
+  wrap.append(row);
+  const neverLab = el("label", "lbl", CHATBOT.never_label);
+  const never = el("input", "field");
+  never.type = "text";
+  never.id = "chatbot-new-never";
+  never.value = s.never.join(", ");
+  never.disabled = s.hidden;
+  neverLab.append(never);
+  wrap.append(neverLab);
+  const go = button(CHATBOT.change_limits, async () => {
+    const m = chatbotLimitOf(msgs.value, v.tier.turnsMax);
+    const n = chatbotLimitOf(mins.value, v.tier.minutesMax);
+    if (m === null || n === null) {
+      toast(`Most messages: 1 to ${v.tier.turnsMax}; most minutes: 1 to ${v.tier.minutesMax}.`, "bad");
+      return;
+    }
+    cb.limitsInFlight = true;
+    try {
+      await chatbotAct("chatbot_limits", {
+        id: s.id, maxMessages: m, maxMinutes: n,
+        // While the words are hidden the box shows none: keep the PC's list.
+        neverSend: s.hidden ? null : neverWords(never.value),
+      });
+    } finally {
+      cb.limitsInFlight = false;
+    }
+  }, { live: true });
+  go.id = "chatbot-limits-go";
+  wrap.append(go);
+  wrap.append(el("p", "note", CHATBOT.limits_note));
+  wrap.append(el("p", "note chatbot-limits-said"));
+  return wrap;
+}
+
+/**
+ * The limits row: rebuilt only when the conversation, its limits or what may
+ * be shown change - never by the 4-second re-read, which would wipe numbers
+ * being typed and take the focus away. Its last line is updated each time.
+ */
+function paintChatbotLimits(v, s) {
+  const box = dom.chatbotLimits;
+  if (!box) return;
+  const show = Boolean(s && (s.state === "running" || s.state === "paused"));
+  box.hidden = !show;
+  if (!show) {
+    box.replaceChildren();
+    cb.limitsKey = "";
+    return;
+  }
+  const key = JSON.stringify([s.id, s.max, s.maxMinutes, s.never, s.hidden, v.tier.turnsMax,
+    v.tier.minutesMax]);
+  if (key !== cb.limitsKey) {
+    box.replaceChildren(chatbotLimitsRow(v, s));
+    cb.limitsKey = key;
+  }
+  // Greyed while a card for new limits waits; its own click greys it while
+  // the request is on its way (button()), and that is left alone here.
+  const go = box.querySelector("#chatbot-limits-go");
+  if (go && !cb.limitsInFlight) {
+    go.dataset.busy = v.limits.waiting ? "true" : "false";
+    syncLiveButton(go);
+  }
+  const said = box.querySelector(".chatbot-limits-said");
+  if (said) {
+    said.textContent = v.limits.waiting ? "A card for new limits is waiting for your answer."
+      : v.limits.said;
+  }
+}
+
+/** The summary and the transcript: rebuilt only when they change. */
+function paintChatbotLog(s) {
+  const box = dom.chatbotLog;
+  if (!box) return;
+  const shown = s && !s.hidden ? s : null;
+  const key = shown ? "s" + JSON.stringify([shown.id, shown.summary, shown.transcript, shown.history]) : "";
+  if (key === cb.logKey) return;
+  cb.logKey = key;
+  const out = [];
+  if (shown && shown.summary) out.push(chatbotSummary(shown));
+  if (shown && shown.transcript.length) {
+    const tr = el("div", "chatbot-transcript");
+    tr.append(el("h3", "subhead", CHATBOT.transcript_title));
+    tr.append(el("p", "note", CHATBOT.outside_note));
+    for (const t of shown.transcript) tr.append(chatbotTurn(t, shown.name));
+    out.push(tr);
+  }
+  box.replaceChildren(...out);
+}
+
+/** A list under a small heading, for the comparison's summary. */
+function summaryList(box, title, items, cls) {
+  if (!items.length) return;
+  box.append(el("p", "note", title));
+  const list = el("ul", cls);
+  for (const item of items) list.append(typeof item === "string" ? el("li", "", item) : item);
+  box.append(list);
+}
+
+function compareSummary(c) {
+  const sm = c.summary;
+  const box = el("div", "chatbot-summary chatbot-outside chatbot-compare-summary");
+  const head = el("div", "chatbot-turn-head");
+  head.append(el("h3", "subhead", CHATBOT.compare_summary_title));
+  head.append(el("span", "history-mark history-mark-taint", "outside text"));
+  box.append(head);
+  box.append(el("p", "note", CHATBOT.compare_summary_note));
+  const kept = historyNote(c.history);
+  if (kept) box.append(kept);
+  if (sm.answer) box.append(el("p", "chatbot-text", sm.answer));
+  summaryList(box, CHATBOT.agree_title, sm.agree, "chatbot-agree");
+  summaryList(box, CHATBOT.disagree_title, sm.disagree.map((d) => {
+    const li = el("li", "", d.point);
+    const views = el("ul", "");
+    for (const v of d.views) views.append(el("li", "", `${v.who}: ${v.said}`));
+    li.append(views);
+    return li;
+  }), "chatbot-disagree");
+  summaryList(box, CHATBOT.sources_title, sm.sources.map((x) => `${x.who}: ${x.items.join("; ")}`),
+    "chatbot-sources");
+  summaryList(box, CHATBOT.dropped_title, sm.dropped.map((x) => `${x.who} - ${x.why}`),
+    "chatbot-dropped");
+  summaryList(box, CHATBOT.open_title, sm.open, "chatbot-open");
+  return box;
+}
+
+/** The comparison's summary and each conversation: rebuilt only when they change. */
+function paintCompareLog(c) {
+  const box = dom.chatbotLog;
+  if (!box) return;
+  const shown = c && !c.hidden ? c : null;
+  const key = shown ? "c" + JSON.stringify([shown.id, shown.summary, shown.history,
+    shown.members.map((m) => m.transcript)]) : "";
+  if (key === cb.logKey) return;
+  cb.logKey = key;
+  const out = [];
+  if (shown && shown.summary) out.push(compareSummary(shown));
+  const talked = shown ? shown.members.filter((m) => m.transcript.length) : [];
+  if (talked.length) {
+    const tr = el("div", "chatbot-transcript");
+    tr.append(el("h3", "subhead", CHATBOT.conversations_title));
+    tr.append(el("p", "note", CHATBOT.outside_note));
+    for (const m of talked) {
+      const part = el("div", "chatbot-member-log");
+      part.dataset.chatbot = m.chatbot;
+      part.append(el("h4", "subhead", m.name));
+      for (const t of m.transcript) part.append(chatbotTurn(t, m.name));
+      tr.append(part);
+    }
+    out.push(tr);
+  }
+  box.replaceChildren(...out);
+}
+
+function hiddenBlock(title, words = CHATBOT.hidden) {
+  const hid = el("div", "private-hidden");
+  hid.append(el("p", "empty", words));
+  hid.append(button("Show", revealPrivate, { title }));
+  return hid;
+}
+
+function compareNow(c) {
+  const now = el("div", "chatbot-now chatbot-compare-now");
+  now.dataset.state = c.state;
+  now.append(el("p", "chatbot-head", c.live ? compareTalkingLine(c)
+    : `${CHATBOT.compare_title}: ${compareStatusLine(c)}`));
+  if (c.live) now.append(el("p", "chatbot-line", compareStatusLine(c)));
+  if (c.state !== "refused") now.append(el("p", "note", compareProgress(c)));
+  if (c.tierName) now.append(el("p", "note", `${CHATBOT.version}: ${c.tierName}`));
+  if (c.hidden) {
+    now.append(hiddenBlock("Asks Windows Hello - your PIN, fingerprint or face - then shows the comparison."));
+  } else if (c.goal) {
+    now.append(el("p", "note", `Your goal (sent word for word to each): ${c.goal}`));
+  }
+  if (c.members.length) {
+    const list = el("ul", "chatbot-members");
+    for (const m of c.members) {
+      const li = el("li", "", chatbotMemberLine(m, c));
+      li.dataset.state = m.state;
+      // An API conversation's counts, per chatbot.
+      if (m.usage) li.append(el("p", "note chatbot-usage", chatbotUsageLine(m.usage)));
+      list.append(li);
+    }
+    now.append(list);
+  }
+  for (const m of c.hidden ? [] : c.members) {
+    if (!m.question) continue;
+    const q = el("div", "chatbot-question chatbot-outside");
+    q.append(el("p", "subhead", `${CHATBOT.question_title}: ${m.name}`));
+    q.append(el("p", "chatbot-text", m.question));
+    q.append(el("p", "note", CHATBOT.question_note));
+    now.append(q);
+  }
+  const actions = el("div", "row-actions");
+  for (const a of chatbotActionsOf(c)) {
+    if (a === "pause") actions.append(button(CHATBOT.pause, () => chatbotAct("chatbot_pause")));
+    if (a === "resume") actions.append(button(CHATBOT.resume, () => chatbotAct("chatbot_resume"), { live: true }));
+    if (a === "stop") actions.append(button(CHATBOT.stop, () => chatbotAct("chatbot_compare_stop", { id: c.id }), { danger: true }));
+  }
+  if (actions.childElementCount) now.append(actions);
+  return now;
+}
+
+function paintChatbot() {
+  const box = dom.chatbot;
+  if (!box) return;
+  const v = cb.view;
+  if (dom.chatbotVersion) dom.chatbotVersion.textContent = v ? chatbotVersionLine(v) : "";
+  if (!v) {
+    const line = el("p", "empty", cb.error ? `Could not read it: ${cb.error}` : "Reading…");
+    if (cb.error) {
+      line.classList.add("failed");
+      line.append(" ", button("Retry", loadChatbot));
+    }
+    box.replaceChildren(line);
+    if (dom.chatbotForm) dom.chatbotForm.hidden = true;
+    paintChatbotLimits(null, null);
+    paintChatbotLog(null);
+    return;
+  }
+  if (!v.available) {
+    box.replaceChildren(el("p", "empty", v.why || CHATBOT.missing));
+    if (dom.chatbotForm) dom.chatbotForm.hidden = true;
+    paintChatbotLimits(null, null);
+    paintChatbotLog(null);
+    return;
+  }
+  const c = v.compare;
+  // A comparison going is shown; else the one this window started last.
+  const showCompare = Boolean(c && (c.live || (!(v.session && v.session.live)
+    && (cb.lastKind === "compare" || !v.session))));
+  const s = showCompare ? null : v.session;
+  const out = [];
+  if (cb.error) out.push(el("p", "empty failed", `Could not read it again: ${cb.error}`));
+  if (!v.anyBuilt) out.push(el("p", "note chatbot-none", CHATBOT.none_built));
+  if (cb.gone && !showCompare) out.push(el("p", "note", CHATBOT.gone));
+  if (cb.cmpGone && !s) out.push(el("p", "note", CHATBOT.compare_gone));
+  if (showCompare) {
+    out.push(compareNow(c));
+  } else if (s) {
+    const now = el("div", "chatbot-now");
+    now.dataset.state = s.state;
+    now.append(el("p", "chatbot-head", s.live ? chatbotTalkingLine(s) : `${s.name}: ${chatbotStatusLine(s)}`));
+    if (s.live) now.append(el("p", "chatbot-line", chatbotStatusLine(s)));
+    // "Solve it here" (handoff.js): paused at a captcha, a sign-in page or
+    // an "unusual activity" page - the window is right here on the PC.
+    const waitsForYou = s.state === "paused" ? handoffPcLine(v.handoff, "chatbot", s.id) : null;
+    if (waitsForYou) now.append(handoffAlert(waitsForYou));
+    if (s.state !== "refused") now.append(el("p", "note", chatbotProgress(s)));
+    if (s.usage) now.append(el("p", "note chatbot-usage", chatbotUsageLine(s.usage)));
+    if (s.tierName) now.append(el("p", "note", `${CHATBOT.version}: ${s.tierName}`));
+    if (s.hidden) {
+      now.append(hiddenBlock("Asks Windows Hello - your PIN, fingerprint or face - then shows the conversation."));
+    } else if (s.goal) {
+      now.append(el("p", "note", `Your goal (sent word for word): ${s.goal}`));
+    }
+    if (s.question) {
+      const q = el("div", "chatbot-question chatbot-outside");
+      q.append(el("p", "subhead", CHATBOT.question_title));
+      q.append(el("p", "chatbot-text", s.question));
+      q.append(el("p", "note", CHATBOT.question_note));
+      now.append(q);
+    }
+    const actions = el("div", "row-actions");
+    for (const a of chatbotActionsOf(s)) {
+      if (a === "pause") actions.append(button(CHATBOT.pause, () => chatbotAct("chatbot_pause")));
+      if (a === "resume") actions.append(button(CHATBOT.resume, () => chatbotAct("chatbot_resume"), { live: true }));
+      if (a === "stop") actions.append(button(CHATBOT.stop, () => chatbotAct("chatbot_stop", { id: s.id }), { danger: true }));
+    }
+    if (actions.childElementCount) now.append(actions);
+    out.push(now);
+  } else if (v.anyBuilt) {
+    out.push(el("p", "empty", "No conversation yet."));
+  }
+  box.replaceChildren(...out);
+  paintChatbotLimits(v, s);
+  if (showCompare) paintCompareLog(c);
+  else paintChatbotLog(s);
+  paintChatbotForm(v);
+  const live = Boolean((v.session && v.session.live) || (c && c.live));
+  if (live && !cb.timer) {
+    cb.timer = setInterval(() => {
+      if (state.view === "work" && !cb.loading) loadChatbot();
+    }, CHATBOT_POLL_MS);
+  }
+  if (!live && cb.timer) {
+    clearInterval(cb.timer);
+    cb.timer = null;
+  }
+}
+
+/** The tick boxes, one per chatbot: rebuilt only when the list changes. */
+function paintChatbotSeveral(v) {
+  if (dom.chatbotSeveralLegend) {
+    dom.chatbotSeveralLegend.textContent = v.canCompare ? chatbotPickLine(v) : CHATBOT.compare_not_enough;
+  }
+  const list = dom.chatbotSeveralList;
+  if (!list) return;
+  const key = JSON.stringify(v.chatbots);
+  if (key === cb.severalKey) return;
+  cb.severalKey = key;
+  for (const id of [...cb.several]) {
+    if (!v.chatbots.some((c) => c.id === id && c.built)) cb.several.delete(id);
+  }
+  // Grouped by how each is reached, like the single chooser; a chatbot
+  // that cannot be used yet says why under its name.
+  const rows = [];
+  for (const g of chatbotGroups(v)) {
+    if (g.title) rows.push(el("p", "note chatbot-kind", g.title));
+    for (const c of g.chatbots) {
+      const lab = el("label", "");
+      const box = el("input", "");
+      box.type = "checkbox";
+      box.value = c.id;
+      box.disabled = !c.built;
+      box.checked = c.built && cb.several.has(c.id);
+      box.addEventListener("change", () => {
+        if (box.checked) cb.several.add(c.id);
+        else cb.several.delete(c.id);
+      });
+      lab.append(box, ` ${c.name}`);
+      rows.push(lab);
+      if (!c.built) rows.push(el("p", "note chatbot-not-ready", c.note || "Not built yet."));
+      // An API service: how much of its monthly money limit is left.
+      const money = chatbotMoneyLine(c);
+      if (money) rows.push(el("p", "note chatbot-money-line", money));
+    }
+    if (g.kind === "api") rows.push(el("p", "note chatbot-money-note", CHATBOT.money_pc_only));
+  }
+  list.replaceChildren(...rows);
+}
+
+/**
+ * Under the single chooser: the chosen API service's money left this month
+ * (the PC's own amounts), and that limits and prices are set on the PC.
+ * Hidden for a website or the second AI on this PC.
+ */
+function paintChatbotMoney(v) {
+  const box = dom.chatbotMoney;
+  if (!box) return;
+  const id = dom.chatbotWhich ? dom.chatbotWhich.value : "";
+  const bot = v && v.available ? v.chatbots.find((c) => c.id === id) : null;
+  const several = compareMode();
+  if (!bot || bot.kind !== "api" || several) {
+    box.hidden = true;
+    box.textContent = "";
+    return;
+  }
+  box.textContent = [chatbotMoneyLine(bot), CHATBOT.money_pc_only].filter(Boolean).join(" ");
+  box.hidden = false;
+}
+
+function paintChatbotForm(v) {
+  const form = dom.chatbotForm;
+  if (!form) return;
+  form.hidden = Boolean((v.session && v.session.live) || (v.compare && v.compare.live));
+  if (form.hidden) return;
+  // An older PC has no comparisons: no tick box then.
+  if (dom.chatbotCompareToggle) dom.chatbotCompareToggle.hidden = !(v.tier.compareMax > 0);
+  const several = compareMode();
+  if (dom.chatbotCompareDetail) dom.chatbotCompareDetail.hidden = !several;
+  if (dom.chatbotCompareNote) dom.chatbotCompareNote.hidden = !several;
+  if (dom.chatbotWhichLabel) dom.chatbotWhichLabel.hidden = several;
+  if (dom.chatbotSeveral) dom.chatbotSeveral.hidden = !several;
+  if (several) paintChatbotSeveral(v);
+  const which = dom.chatbotWhich;
+  if (which) {
+    const was = which.value;
+    // Grouped by how each is reached: websites, with a key, on this PC.
+    const option = (c) => {
+      const o = el("option", "", c.built ? c.name : `${c.name} - ${c.note || "Not built yet."}`);
+      o.value = c.id;
+      o.disabled = !c.built;
+      return o;
+    };
+    which.replaceChildren(...chatbotGroups(v).map((g) => {
+      if (!g.title) return g.chatbots.map(option);
+      const group = el("optgroup", "");
+      group.label = g.title;
+      group.append(...g.chatbots.map(option));
+      return [group];
+    }).flat());
+    // The first usable one as the list shows it (grouped), not as the PC sent it.
+    const shown = chatbotGroups(v).flatMap((g) => g.chatbots);
+    const pick = shown.find((c) => c.id === was && c.built) || shown.find((c) => c.built)
+      || shown[0];
+    if (pick) which.value = pick.id;
+  }
+  paintChatbotMoney(v);
+  if (dom.chatbotMessages) dom.chatbotMessages.max = String(v.tier.turnsMax);
+  if (dom.chatbotMinutes) dom.chatbotMinutes.max = String(v.tier.minutesMax);
+  if (!cb.filled) {
+    if (dom.chatbotMessages) dom.chatbotMessages.value = String(v.tier.turnsDefault);
+    if (dom.chatbotMinutes) dom.chatbotMinutes.value = String(v.tier.minutesDefault);
+    cb.filled = true;
+  }
+  if (dom.chatbotStart) {
+    // Nothing built: Start stays greyed, with the reason as its title.
+    dom.chatbotStart.dataset.title = v.anyBuilt ? "" : CHATBOT.none_built;
+    dom.chatbotStart.dataset.busy = v.anyBuilt ? "false" : "true";
+    syncLiveButton(dom.chatbotStart);
+    if (!v.anyBuilt) dom.chatbotStart.title = CHATBOT.none_built;
+  }
+}
+
+function renderChatbot() {
+  paintChatbot();
+  if (IS_TAURI && !cb.loading && Date.now() - cb.at > CHATBOT_READ_MS) loadChatbot();
+}
+
+if (dom.chatbotForm) {
+  dom.chatbotForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    chatbotStart();
+  });
+}
+if (dom.chatbotCompare) {
+  dom.chatbotCompare.addEventListener("change", () => {
+    if (cb.view && cb.view.available) paintChatbotForm(cb.view);
+  });
+}
+if (dom.chatbotWhich) {
+  dom.chatbotWhich.addEventListener("change", () => {
+    if (cb.view && cb.view.available) paintChatbotMoney(cb.view);
+  });
+}
+if (dom.chatbotStart) {
+  liveButtons.add(dom.chatbotStart);
+  syncLiveButton(dom.chatbotStart);
+}
+
+/* ==========================================================================
+   Chat with customer support for me (the owner's decisions of 2026-09-28;
+   JARVIS-API.md section 65; support.js, brain/support.rs).
+
+   The form (the company - Groupon, or another company's help page typed by
+   the owner - its terms risk, the goal, the details Jarvis may give as
+   name-and-value rows, and the limits) asks the PC for ONE approval card;
+   nothing is sent before a yes. Then the chat: its state in the PC's words
+   (waiting for the owner to open the chat in the window, the queue, the
+   agent's name), Take over / Resume / Stop, a waiting offer with its words
+   and the exact reply its card would send (accepting is ONLY that card;
+   here: Decline, Say something else, Take over), a question handed to the
+   owner, the transcript with the company's words marked outside text, and
+   at the end the summary, the reference number, whether it was kept in the
+   encrypted history, and "Export transcript" (a file the owner picks). Kept
+   on screen, never read aloud (nothing in this window speaks). Read again
+   every few seconds while a chat is going, and on every activity event.
+   ========================================================================== */
+
+const sp = { view: null, error: "", loading: false, again: false, at: 0, id: "", gone: false,
+  timer: null, filled: false, starting: false, logKey: "", rows: [{ name: "", value: "" }],
+  rowsKey: "", sayOpen: false, companiesKey: "" };
+const SUPPORT_READ_MS = 15000;
+
+async function loadSupport() {
+  if (!IS_TAURI) return;
+  if (sp.loading) {
+    sp.again = true;
+    return;
+  }
+  sp.loading = true;
+  try {
+    let view = readSupport(await invoke("support_status", { id: null }));
+    sp.gone = false;
+    // The latest chat still going first (it may have been started on the
+    // phone); else the one this window last showed, for its summary.
+    if (view.available && !view.chat && sp.id) {
+      const named = readSupport(await invoke("support_status", { id: sp.id }));
+      if (named.available && named.chat) view = { ...view, chat: named.chat };
+      else if (named.available) {
+        sp.gone = true;
+        sp.id = "";
+      }
+    }
+    if (view.available && view.chat) sp.id = view.chat.id;
+    sp.view = view;
+    sp.error = "";
+  } catch (error) {
+    sp.error = errorText(error);
+  } finally {
+    sp.loading = false;
+    sp.at = Date.now();
+  }
+  if (sp.again) {
+    sp.again = false;
+    await loadSupport();
+    return;
+  }
+  if (state.view === "work") paintSupport();
+}
+
+async function supportAct(cmd, args = {}) {
+  try {
+    const out = await invoke(cmd, args);
+    const said = out && (out.message || out.said);
+    if (out && out.cancelled) toast("Not saved.", "ok");
+    else if (out && out.saved) toast(`Saved to ${out.saved}. ${SUPPORT.export_note}`, "ok");
+    else toast(asSentence(said || "Done."), "ok");
+  } catch (error) {
+    toast(asSentence(errorText(error)), "bad");
+  }
+  await loadSupport();
+}
+
+async function supportStart() {
+  const v = sp.view;
+  const form = {
+    company: dom.supportCompany ? dom.supportCompany.value : "",
+    address: dom.supportAddress ? dom.supportAddress.value : "",
+    goal: dom.supportGoal ? dom.supportGoal.value : "",
+    rows: sp.rows,
+    messages: dom.supportMessages ? dom.supportMessages.value : "",
+    minutes: dom.supportMinutes ? dom.supportMinutes.value : "",
+    queue: dom.supportQueue ? dom.supportQueue.value : "",
+  };
+  if (sp.starting) return;
+  const problem = supportFormProblem(v, form);
+  if (problem) {
+    toast(problem, "bad");
+    return;
+  }
+  if (!linkWords(currentLink()).canAct) {
+    toast(STALE_TITLE, "bad");
+    return;
+  }
+  sp.starting = true;
+  if (dom.supportStart) {
+    dom.supportStart.dataset.busy = "true";
+    syncLiveButton(dom.supportStart);
+  }
+  try {
+    const typed = v.companies.find((c) => c.id === form.company);
+    const out = await invoke("support_start", {
+      company: form.company,
+      address: typed && typed.typed ? form.address.trim() : null,
+      goal: form.goal,
+      details: supportDetailRows(form.rows),
+      maxMessages: supportLimitOf(form.messages, v.tier.messagesMax),
+      maxMinutes: supportLimitOf(form.minutes, v.tier.minutesMax),
+      maxQueueMinutes: supportLimitOf(form.queue, v.tier.queueMax),
+    });
+    if (out && out.support) sp.id = out.support;
+    toast(asSentence((out && out.message) || SUPPORT.start_note), "ok");
+    if (dom.supportGoal) dom.supportGoal.value = "";
+    sp.rows = [{ name: "", value: "" }];
+    sp.rowsKey = "";
+  } catch (error) {
+    toast(asSentence(errorText(error)), "bad");
+  } finally {
+    sp.starting = false;
+    if (dom.supportStart) {
+      dom.supportStart.dataset.busy = "false";
+      syncLiveButton(dom.supportStart);
+    }
+  }
+  await loadSupport();
+}
+
+/** The details rows: rebuilt only when rows are added or removed, so typing is kept. */
+function paintSupportRows() {
+  const box = dom.supportRows;
+  if (!box) return;
+  const key = String(sp.rows.length);
+  if (key === sp.rowsKey) return;
+  sp.rowsKey = key;
+  const out = sp.rows.map((r, i) => {
+    const line = el("div", "row support-row");
+    const name = el("input", "field");
+    name.type = "text";
+    name.maxLength = 40;
+    name.value = r.name;
+    name.placeholder = SUPPORT.detail_name;
+    name.setAttribute("aria-label", `${SUPPORT.detail_name}, row ${i + 1}`);
+    name.addEventListener("input", () => { sp.rows[i].name = name.value; });
+    const value = el("input", "field");
+    value.type = "text";
+    value.maxLength = 200;
+    value.spellcheck = false;
+    value.value = r.value;
+    value.placeholder = SUPPORT.detail_value;
+    value.setAttribute("aria-label", `${SUPPORT.detail_value}, row ${i + 1}`);
+    value.addEventListener("input", () => { sp.rows[i].value = value.value; });
+    const remove = button(SUPPORT.remove_detail, () => {
+      sp.rows.splice(i, 1);
+      if (!sp.rows.length) sp.rows.push({ name: "", value: "" });
+      sp.rowsKey = "";
+      paintSupportRows();
+    });
+    remove.setAttribute("aria-label", `${SUPPORT.remove_detail} row ${i + 1}`);
+    line.append(name, value, remove);
+    return line;
+  });
+  box.replaceChildren(...out);
+}
+
+function paintSupportForm(v) {
+  const form = dom.supportForm;
+  if (!form) return;
+  form.hidden = Boolean(v.chat && v.chat.live);
+  if (form.hidden) return;
+  const which = dom.supportCompany;
+  if (which) {
+    const key = JSON.stringify(v.companies.map((c) => [c.id, c.name]));
+    if (key !== sp.companiesKey) {
+      const was = which.value;
+      which.replaceChildren(...v.companies.map((c) => {
+        const o = el("option", "", c.name);
+        o.value = c.id;
+        return o;
+      }));
+      which.value = v.companies.some((c) => c.id === was) ? was : (v.companies[0] || {}).id || "";
+      sp.companiesKey = key;
+    }
+  }
+  const co = v.companies.find((c) => c.id === (which ? which.value : ""));
+  if (dom.supportTerms) {
+    dom.supportTerms.textContent = co && co.terms ? `${SUPPORT.terms_title}: ${co.terms}` : "";
+  }
+  if (dom.supportAddressLabel) dom.supportAddressLabel.hidden = !(co && co.typed);
+  if (dom.supportMessages) dom.supportMessages.max = String(v.tier.messagesMax);
+  if (dom.supportMinutes) dom.supportMinutes.max = String(v.tier.minutesMax);
+  if (dom.supportQueue) dom.supportQueue.max = String(v.tier.queueMax);
+  if (!sp.filled) {
+    if (dom.supportMessages) dom.supportMessages.value = String(v.tier.messagesDefault);
+    if (dom.supportMinutes) dom.supportMinutes.value = String(v.tier.minutesDefault);
+    if (dom.supportQueue) dom.supportQueue.value = String(v.tier.queueDefault);
+    sp.filled = true;
+  }
+  paintSupportRows();
+}
+
+function supportTurn(t, c) {
+  const item = el("div", `chatbot-turn${t.outside ? " chatbot-outside" : ""}`);
+  item.dataset.who = t.who;
+  const head = el("div", "chatbot-turn-head");
+  head.append(el("span", "chatbot-who", supportWhoOf(t, c)));
+  if (t.outside) head.append(el("span", "history-mark history-mark-taint", "outside text"));
+  item.append(head);
+  item.append(el("p", t.who === "note" ? "note" : "chatbot-text", t.text));
+  return item;
+}
+
+function supportSummaryBox(c) {
+  const sm = c.summary;
+  const box = el("div", "chatbot-summary chatbot-outside");
+  const head = el("div", "chatbot-turn-head");
+  head.append(el("h3", "subhead", SUPPORT.summary_title));
+  head.append(el("span", "history-mark history-mark-taint", "outside text"));
+  box.append(head);
+  box.append(el("p", "note", SUPPORT.summary_note));
+  if (sm.answer) box.append(el("p", "chatbot-text", sm.answer));
+  summaryList(box, SUPPORT.agreed_title, sm.agreed, "support-agreed");
+  summaryList(box, SUPPORT.open_title, sm.open, "chatbot-open");
+  return box;
+}
+
+/** The summary and the transcript: rebuilt only when they change. */
+function paintSupportLog(c) {
+  const box = dom.supportLog;
+  if (!box) return;
+  const shown = c && !c.hidden ? c : null;
+  const key = shown ? JSON.stringify([shown.id, shown.summary, shown.transcript, shown.reference,
+    shown.saved, shown.live]) : "";
+  if (key === sp.logKey) return;
+  sp.logKey = key;
+  const out = [];
+  if (shown && shown.summary) out.push(supportSummaryBox(shown));
+  if (shown && !shown.live) {
+    if (shown.reference) {
+      out.push(el("p", "note support-reference",
+        SUPPORT.reference_line.replace("{reference}", shown.reference)));
+    }
+    const saved = supportSavedLine(shown);
+    if (saved) {
+      const p = el("p", "note support-saved", saved);
+      // Kept: a way to it (the second chat audit, 2026-09-28, desktop C5).
+      if (shown.saved === "yes") {
+        p.append(" ", button(CHATBOT.history_open, () => showView("history"),
+          { title: CHATBOT.history_open_title }));
+      }
+      out.push(p);
+    }
+  }
+  if (shown && shown.transcript.length) {
+    const tr = el("div", "chatbot-transcript");
+    tr.append(el("h3", "subhead", SUPPORT.transcript_title));
+    tr.append(el("p", "note", SUPPORT.outside_note));
+    for (const t of shown.transcript) tr.append(supportTurn(t, shown));
+    const ex = button(SUPPORT.export, () => supportAct("support_export", { id: shown.id }));
+    ex.id = "support-export";
+    tr.append(ex, el("p", "note", SUPPORT.export_note));
+    out.push(tr);
+  }
+  box.replaceChildren(...out);
+}
+
+/** The waiting offer: its words, the exact reply its card would send, the owner's other choices. */
+function supportOfferBox(c) {
+  const o = c.offer;
+  const box = el("div", "chatbot-question chatbot-outside support-offer");
+  box.append(el("p", "subhead", SUPPORT.offer_title));
+  box.append(el("p", "chatbot-text", o.words));
+  box.append(el("p", "note", `If you approve the card, Jarvis sends: "${o.reply}"`));
+  box.append(el("p", "note", SUPPORT.offer_note));
+  if (o.card === "no") box.append(el("p", "note support-card-no", SUPPORT.offer_card_no));
+  const hold = supportHoldingLine(c);
+  if (hold) box.append(el("p", "note", hold));
+  if (o.said) box.append(el("p", "note failed", o.said));
+  const actions = el("div", "row-actions");
+  for (const a of supportOfferActions(c)) {
+    if (a === "decline") {
+      actions.append(button(SUPPORT.decline, () => supportAct("support_answer", {
+        id: c.id, offer: o.id, choice: "decline", text: null }), { live: true }));
+    }
+    if (a === "say_else") {
+      actions.append(button(SUPPORT.say_else, () => {
+        sp.sayOpen = !sp.sayOpen;
+        paintSupport();
+      }));
+    }
+    if (a === "take_over") {
+      actions.append(button(SUPPORT.take_over, () => supportAct("support_answer", {
+        id: c.id, offer: o.id, choice: "takeover", text: null })));
+    }
+  }
+  box.append(actions);
+  if (sp.sayOpen) {
+    const lab = el("label", "lbl", SUPPORT.say_else);
+    const input = el("input", "field");
+    input.type = "text";
+    input.maxLength = 1200;
+    input.id = "support-say";
+    lab.append(input);
+    const send = button(SUPPORT.say_send, async () => {
+      await supportAct("support_answer", { id: c.id, offer: o.id, choice: "say",
+        text: input.value });
+      sp.sayOpen = false;
+    }, { live: true });
+    send.id = "support-say-send";
+    box.append(lab, send, el("p", "note", SUPPORT.say_note));
+  }
+  return box;
+}
+
+/**
+ * "Solve it here" on the PC: the same alert the phone gets, pointing at the
+ * browser window on this PC (handoff.js). Only a site and a reason - never
+ * a picture or a word from the page.
+ */
+function handoffAlert(line) {
+  const box = el("div", "chatbot-handoff");
+  box.setAttribute("role", "status");
+  box.append(el("p", "subhead", line.title), el("p", "note", line.text));
+  return box;
+}
+
+function paintSupport() {
+  const box = dom.support;
+  if (!box) return;
+  const v = sp.view;
+  if (dom.supportVersion) dom.supportVersion.textContent = v ? supportVersionLine(v) : "";
+  if (!v) {
+    const line = el("p", "empty", sp.error ? `Could not read it: ${sp.error}` : "Reading…");
+    if (sp.error) {
+      line.classList.add("failed");
+      line.append(" ", button("Retry", loadSupport));
+    }
+    box.replaceChildren(line);
+    if (dom.supportForm) dom.supportForm.hidden = true;
+    paintSupportLog(null);
+    return;
+  }
+  if (!v.available) {
+    box.replaceChildren(el("p", "empty", v.why || SUPPORT.missing));
+    if (dom.supportForm) dom.supportForm.hidden = true;
+    paintSupportLog(null);
+    return;
+  }
+  const c = v.chat;
+  const out = [];
+  if (sp.error) out.push(el("p", "empty failed", `Could not read it again: ${sp.error}`));
+  if (sp.gone) out.push(el("p", "note", SUPPORT.gone));
+  if (c) {
+    const now = el("div", "chatbot-now support-now");
+    now.dataset.state = c.state;
+    now.append(el("p", "chatbot-head", c.live ? supportTalkingLine(c)
+      : `${c.companyName}: ${supportStatusLine(c)}`));
+    if (c.live) now.append(el("p", "chatbot-line", supportStatusLine(c)));
+    const waitsForYou = c.state === "paused" ? handoffPcLine(v.handoff, "support", c.id) : null;
+    if (waitsForYou) now.append(handoffAlert(waitsForYou));
+    if (c.state !== "refused") now.append(el("p", "note", supportProgress(c)));
+    if (c.tierName) now.append(el("p", "note", `${SUPPORT.version}: ${c.tierName}`));
+    if (c.hidden) {
+      now.append(hiddenBlock("Asks Windows Hello - your PIN, fingerprint or face - then shows the chat.",
+        SUPPORT.hidden));
+    } else {
+      if (c.goal) now.append(el("p", "note", `Your goal: ${c.goal}`));
+      if (c.details.length) {
+        now.append(el("p", "note support-details-line", "Jarvis may give: "
+          + c.details.map((d) => `${d.name}: ${d.value}`).join("; ")));
+      }
+      if (c.question) {
+        const q = el("div", "chatbot-question chatbot-outside");
+        q.append(el("p", "subhead", SUPPORT.question_title));
+        q.append(el("p", "chatbot-text", c.question));
+        q.append(el("p", "note", SUPPORT.question_note));
+        now.append(q);
+      }
+      if (c.offer) now.append(supportOfferBox(c));
+    }
+    const actions = el("div", "row-actions");
+    for (const a of supportActionsOf(c)) {
+      if (a === "take_over") {
+        const b = button(SUPPORT.take_over, () => supportAct("support_takeover", { id: c.id }));
+        b.title = SUPPORT.take_over_note;
+        actions.append(b);
+      }
+      if (a === "resume") actions.append(button(SUPPORT.resume, () => supportAct("chatbot_resume"), { live: true }));
+      if (a === "stop") actions.append(button(SUPPORT.stop, () => supportAct("support_stop", { id: c.id }), { danger: true }));
+    }
+    if (actions.childElementCount) now.append(actions);
+    out.push(now);
+  } else {
+    out.push(el("p", "empty", "No support chat yet."));
+  }
+  box.replaceChildren(...out);
+  paintSupportLog(c);
+  paintSupportForm(v);
+  const live = Boolean(c && c.live);
+  if (!live) sp.sayOpen = false;
+  if (live && !sp.timer) {
+    sp.timer = setInterval(() => {
+      if (state.view === "work" && !sp.loading) loadSupport();
+    }, SUPPORT_POLL_MS);
+  }
+  if (!live && sp.timer) {
+    clearInterval(sp.timer);
+    sp.timer = null;
+  }
+}
+
+function renderSupport() {
+  paintSupport();
+  if (IS_TAURI && !sp.loading && Date.now() - sp.at > SUPPORT_READ_MS) loadSupport();
+}
+
+if (dom.supportForm) {
+  dom.supportForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    supportStart();
+  });
+}
+if (dom.supportCompany) {
+  dom.supportCompany.addEventListener("change", () => {
+    if (sp.view && sp.view.available) paintSupportForm(sp.view);
+  });
+}
+if (dom.supportAdd) {
+  dom.supportAdd.addEventListener("click", () => {
+    if (sp.rows.length >= SUPPORT_MAX_DETAILS) {
+      toast(`At most ${SUPPORT_MAX_DETAILS} details.`, "bad");
+      return;
+    }
+    sp.rows.push({ name: "", value: "" });
+    sp.rowsKey = "";
+    paintSupportRows();
+  });
+}
+if (dom.supportStart) {
+  liveButtons.add(dom.supportStart);
+  syncLiveButton(dom.supportStart);
+}
+
+/* ==========================================================================
    Coming up - timers, alarms, reminders and the to-do list (the owner's
    decisions of 2026-09-25; JARVIS-API.md section 21; coming-up.js).
 
@@ -3913,7 +6080,13 @@ async function loadComingUp() {
     await loadComingUp();
     return;
   }
-  if (state.view === "work") paintComingUp();
+  if (state.view === "work") {
+    paintComingUp();
+    // A goal's weekly check-in lives on this very list (goals.js's own
+    // module doc says why) - repaint it too, so its "waiting"/"paused"/next
+    // note stays in step with Coming up rather than needing its own read.
+    paintGoals();
+  }
 }
 
 async function scheduleAct(job, action) {
@@ -4096,6 +6269,7 @@ function tick() {
 }
 
 function paintComingUp() {
+  paintToday();
   const box = dom.comingUp;
   if (!box) return;
   ticking.clear();
@@ -4146,9 +6320,188 @@ function paintComingUp() {
   }
 }
 
+/* ==========================================================================
+   Widgets (widget-board.js; JARVIS-API.md section 86; brain/widgets.rs)
+
+   The owner's words become a PREVIEW on the PC (its AI model makes a small
+   description from a fixed menu, never code, and the PC checks it); Add
+   keeps it exactly as shown, Discard drops it, Delete removes a widget at
+   once. No approval card - the PC's own `no_card` sentence says why. Add
+   and Delete are held on a stale link; making a preview is not (it adds
+   nothing). Words pasted into the box are sent as pasted, which the PC
+   refuses: only the owner's own typed or spoken words make a widget.
+   ========================================================================== */
+
+const wid = { view: null, error: "", loading: false, at: 0, making: false, pasted: false };
+const WIDGETS_READ_MS = 15000;
+
+async function loadWidgets() {
+  if (!IS_TAURI || wid.loading) return;
+  wid.loading = true;
+  try {
+    wid.view = readWidgets(await invoke("brain_widgets"));
+    wid.error = "";
+  } catch (error) {
+    wid.error = errorText(error);
+  } finally {
+    wid.loading = false;
+    wid.at = Date.now();
+  }
+  if (state.view === "work") paintWidgets();
+}
+
+function widgetRow(w, draft) {
+  const actions = draft
+    ? [button(WIDGETS_DISCARD_LABEL, () => widgetAct("brain_widgets_discard", { draft: w.id })),
+      button(WIDGETS_ADD_LABEL, () => widgetAct("brain_widgets_add", { draft: w.id }),
+        { live: true })]
+    : [button(WIDGETS_DELETE_LABEL, () => widgetAct("brain_widgets_delete", { id: w.id }),
+      { live: true, danger: true })];
+  const item = row({
+    tag: draft ? "preview" : "widget",
+    state: draft ? "warn" : "ok",
+    title: w.name || (wid.view && wid.view.hidden ? "(hidden) widget" : "Widget"),
+    meta: [w.said, ...w.parts],
+    actions,
+  });
+  item.dataset.id = w.id;
+  return item;
+}
+
+function paintWidgets() {
+  const box = dom.widgets;
+  if (!box) return;
+  const v = wid.view;
+  const out = [];
+  if (!v) {
+    const line = el("p", "empty", wid.error ? `Could not read Widgets: ${wid.error}` : "Reading…");
+    if (wid.error) line.append(" ", button("Retry", loadWidgets));
+    out.push(line);
+  } else if (!v.available) {
+    out.push(el("p", "empty", v.why || WIDGETS_MISSING));
+  } else {
+    if (v.drafts.length) {
+      out.push(el("h3", "subhead", WIDGETS_PREVIEW_TITLE));
+      const list = el("div", "rows");
+      for (const d of v.drafts) list.append(widgetRow(d, true));
+      out.push(list);
+      if (v.noCard) out.push(el("p", "note", v.noCard));
+    }
+    const list = el("div", "rows");
+    for (const w of v.widgets) list.append(widgetRow(w, false));
+    out.push(v.widgets.length ? list : el("p", "empty", WIDGETS_EMPTY));
+    if (v.hidden) out.push(hiddenNode(0, "words"));
+  }
+  if (dom.widgetsForm) dom.widgetsForm.hidden = Boolean(v && !v.available);
+  if (dom.widgetsMake) {
+    dom.widgetsMake.disabled = wid.making;
+    dom.widgetsMake.textContent = wid.making ? WIDGETS_MAKING_LABEL : WIDGETS_MAKE_LABEL;
+  }
+  box.replaceChildren(...out);
+}
+
+async function widgetAct(command, args) {
+  if (command !== "brain_widgets_discard" && !linkWords(currentLink()).canAct) {
+    toast(STALE_TITLE, "bad");
+    return;
+  }
+  try {
+    const out = await invoke(command, args);
+    if (out && out.said) toast(String(out.said), "ok");
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadWidgets();
+}
+
+async function makeWidget() {
+  if (wid.making) return;
+  const args = widgetDraftArgs(dom.widgetsWords && dom.widgetsWords.value, wid.pasted);
+  if (args.error) {
+    toast(args.error, "bad");
+    return;
+  }
+  wid.making = true;
+  paintWidgets();
+  try {
+    const out = await invoke("brain_widgets_draft", args);
+    toast(String((out && out.said) || "Preview made."), "ok");
+    if (dom.widgetsWords) dom.widgetsWords.value = "";
+    wid.pasted = false;
+  } catch (error) {
+    toast(errorText(error), "bad");
+  } finally {
+    wid.making = false;
+  }
+  await loadWidgets();
+}
+
+if (dom.widgetsForm) {
+  dom.widgetsForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    makeWidget();
+  });
+}
+if (dom.widgetsWords) {
+  // Pasted words are not the owner's own (ARCHITECTURE section 3): said to
+  // the PC as pasted, which refuses them. Emptying the box starts again.
+  dom.widgetsWords.addEventListener("paste", () => { wid.pasted = true; });
+  dom.widgetsWords.addEventListener("input", () => {
+    if (!dom.widgetsWords.value) wid.pasted = false;
+  });
+}
+
 function renderComingUp() {
+  paintWidgets();
+  if (IS_TAURI && !wid.loading && Date.now() - wid.at > WIDGETS_READ_MS) loadWidgets();
   paintComingUp();
   if (IS_TAURI && !upL.loading && Date.now() - upL.at > SCHEDULE_READ_MS) loadComingUp();
+}
+
+/* "Photo to reminder" (photo-reminder.js; JARVIS-API.md section 83): a
+   picture file, shrunk here to a screen capture's limits, goes to the PC,
+   which reads its words and PROPOSES a reminder. Nothing is set up until
+   "Add a Jarvis reminder" (ONE photo_add_reminder, held on a stale link).
+   The picture and its words live only in this page's memory, and go when
+   the proposal is closed. */
+let photoView = null;
+
+async function findDateInFile(file) {
+  if (!dom.photoProposal) return;
+  if (photoView) photoView.close();
+  photoView = null;
+  dom.photoProposal.hidden = false;
+  dom.photoProposal.textContent = PHOTO_READING;
+  dom.photoChoose.disabled = true;
+  let out;
+  try {
+    const image = await shrinkPicture(file, window);
+    out = await invoke("photo_scan", { image });
+  } catch (error) {
+    dom.photoProposal.textContent = errorText(error);
+    return;
+  } finally {
+    dom.photoChoose.disabled = false;
+  }
+  photoView = mountPhotoProposal(dom.photoProposal, out, {
+    invoke,
+    canAct: () => linkWords(currentLink()).canAct,
+    say: (said) => toast(said, "ok"),
+    onDone: () => loadComingUp(),
+    onClose: () => { photoView = null; },
+  });
+}
+
+if (dom.photoNote) dom.photoNote.textContent = PHOTO_NOTE;
+if (dom.photoChoose && dom.photoFile) {
+  dom.photoChoose.addEventListener("click", () => dom.photoFile.click());
+  dom.photoFile.addEventListener("change", () => {
+    const file = dom.photoFile.files && dom.photoFile.files[0];
+    // Cleared at once, so the same file can be chosen again and no
+    // reference to it is left on the input.
+    dom.photoFile.value = "";
+    if (file) findDateInFile(file);
+  });
 }
 
 if (dom.todoForm) {
@@ -4172,15 +6525,302 @@ if (dom.standbyAdd) {
   syncLiveButton(dom.standbyAdd);
 }
 
+/* ==========================================================================
+   Goals - a plan the owner edits, one card per acting step (the owner's
+   "build it now", 2026-09-27; JARVIS-API.md section 59; goals.js).
+
+   Read through its own command (brain/goals.rs), not brain_read - the words
+   are taken out while the private lists are hidden, same as Coming up. A new
+   draft and marking a step raise no card; Stop tracking is one tap,
+   immediate, no confirm. Accepting a draft is the only place this can raise
+   a card, and it is the backend's own weekly-check-in card, never one this
+   window invents - see goals.js's own module doc for why that check-in's
+   live state is read from the very same Coming up list rather than a second
+   source of truth.
+   ========================================================================== */
+
+const gl = { view: null, error: "", loading: false, again: false, at: 0 };
+const GOALS_READ_MS = 20000;
+
+/** goal id -> its working plan while it is still a draft, edited but not yet
+ *  sent to Accept. Cleared once accepted (or the goal is gone). */
+const draftPlans = new Map();
+
+/** goal id -> the id of the weekly check-in job accept() handed back for
+ *  it, so a later read can find that SAME job even if its text ever
+ *  changed - a reload of the app still falls back to matching by text
+ *  (goals.js checkinJobFor). */
+const checkinJobIds = new Map();
+
+async function loadGoals() {
+  if (!IS_TAURI) return;
+  if (gl.loading) {
+    gl.again = true;
+    return;
+  }
+  gl.loading = true;
+  try {
+    gl.view = readGoals(await invoke("brain_goals"));
+    gl.error = "";
+  } catch (error) {
+    gl.error = errorText(error);
+  } finally {
+    gl.loading = false;
+    gl.at = Date.now();
+  }
+  if (gl.again) {
+    gl.again = false;
+    await loadGoals();
+    return;
+  }
+  if (state.view === "work") paintGoals();
+}
+
+/** The working copy of a draft's plan - made once, from what the PC sent,
+ *  then edited in place so typing does not get wiped by the next read. */
+function workingPlan(goal) {
+  if (!draftPlans.has(goal.id)) draftPlans.set(goal.id, goal.plan.map((s) => ({ ...s })));
+  return draftPlans.get(goal.id);
+}
+
+async function createGoal() {
+  const input = dom.goalsNewText;
+  const words = input ? input.value.trim() : "";
+  if (!words) return;
+  if (!linkWords(currentLink()).canAct) {
+    toast(STALE_TITLE, "bad");
+    return;
+  }
+  try {
+    const out = await invoke("brain_goals_create", { text: words });
+    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
+    else {
+      toast("Added as a draft.", "ok");
+      input.value = "";
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadGoals();
+}
+
+async function acceptGoal(goal) {
+  const limits = gl.view ? gl.view.limits : undefined;
+  const plan = workingPlan(goal);
+  if (!planIsValid(plan, limits)) {
+    toast("Add at least one step, each with some words, none of them too long.", "bad");
+    return;
+  }
+  try {
+    const out = await invoke("brain_goals_accept", { id: goal.id, plan });
+    if (out && out.ok === false) {
+      toast(String(out.error || "Refused."), "bad");
+    } else {
+      toast("Accepted - Jarvis will check in once a week.", "ok");
+      draftPlans.delete(goal.id);
+      if (out && out.goal && out.goal.checkin && out.goal.checkin.id) {
+        checkinJobIds.set(goal.id, out.goal.checkin.id);
+      }
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadGoals();
+  // The new job is on Coming up's own list, not this read - fetch it too,
+  // straight away, so the check-in's state shows without a second visit.
+  await loadComingUp();
+}
+
+async function goalStep(goal, index, done) {
+  try {
+    const out = await invoke("brain_goals_step", { id: goal.id, index, done });
+    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadGoals();
+}
+
+async function stopGoal(goal) {
+  try {
+    const out = await invoke("brain_goals_stop", { id: goal.id });
+    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
+    else toast("Stopped tracking.", "ok");
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  checkinJobIds.delete(goal.id);
+  await loadGoals();
+  await loadComingUp();
+}
+
+function goalStepEditorRow(plan, index) {
+  const line = el("div", "goal-editor-row");
+  const step = el("input", "field goal-step-field");
+  step.type = "text";
+  step.maxLength = (gl.view && gl.view.limits.text) || 300;
+  step.value = plan[index].step;
+  step.placeholder = STEP_PLACEHOLDER;
+  step.setAttribute("aria-label", STEP_PLACEHOLDER);
+  step.addEventListener("input", () => {
+    plan[index].step = step.value;
+  });
+  const by = el("input", "field goal-by-field");
+  by.type = "text";
+  by.maxLength = (gl.view && gl.view.limits.by) || 40;
+  by.value = plan[index].by;
+  by.placeholder = BY_PLACEHOLDER;
+  by.setAttribute("aria-label", BY_PLACEHOLDER);
+  by.addEventListener("input", () => {
+    plan[index].by = by.value;
+  });
+  line.append(step, by, button(REMOVE_STEP_LABEL, () => {
+    plan.splice(index, 1);
+    paintGoals();
+  }, { danger: true }));
+  return line;
+}
+
+function draftGoalBlock(goal) {
+  const plan = workingPlan(goal);
+  const block = el("div", "goal-block");
+  const head = el("div", "goal-head");
+  head.append(el("span", "goal-title", goal.hidden ? "" : goal.text));
+  head.append(el("span", "row-tag", statusLabel(goal.status)));
+  block.append(head);
+  const steps = el("div", "goal-steps");
+  plan.forEach((_, i) => steps.append(goalStepEditorRow(plan, i)));
+  block.append(steps);
+  const maxSteps = (gl.view && gl.view.limits.steps) || 7;
+  const actions = el("div", "goal-actions");
+  actions.append(button(ADD_STEP_LABEL, () => {
+    if (plan.length >= maxSteps) {
+      toast(`A plan can have at most ${maxSteps} steps - keep the big ones and drop the rest.`, "bad");
+      return;
+    }
+    plan.push({ step: "", by: "", done: false });
+    paintGoals();
+  }));
+  actions.append(button(ACCEPT_LABEL, () => acceptGoal(goal), { live: true }));
+  block.append(actions);
+  return block;
+}
+
+function goalStepRow(goal, step, index) {
+  const line = el("div", "goal-step");
+  const label = el("label", "goal-step-label");
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = step.done;
+  const active = goal.status === "active";
+  box.disabled = !active;
+  if (active) {
+    liveButtons.add(box);
+    syncLiveButton(box);
+  }
+  box.addEventListener("change", async () => {
+    const want = box.checked;
+    box.disabled = true;
+    await goalStep(goal, index, want);
+  });
+  label.append(box, el("span", "goal-step-text", step.step));
+  line.append(label);
+  if (step.by) line.append(el("span", "goal-step-by", step.by));
+  return line;
+}
+
+function activeGoalBlock(goal, jobs) {
+  const block = el("div", "goal-block");
+  const head = el("div", "goal-head");
+  head.append(el("span", "goal-title", goal.hidden ? "" : goal.text));
+  const tag = el("span", "row-tag", statusLabel(goal.status));
+  if (goal.status === "active") tag.dataset.state = "running";
+  head.append(tag);
+  block.append(head);
+  const steps = el("div", "goal-steps");
+  goal.plan.forEach((s, i) => steps.append(goalStepRow(goal, s, i)));
+  block.append(steps);
+  if (goal.status === "active") {
+    const job = checkinJobFor(goal, jobs, checkinJobIds.get(goal.id));
+    if (job) checkinJobIds.set(goal.id, job.id);
+    for (const line of checkinLines(job, WAITING)) block.append(el("p", "goal-note", line));
+    block.append(button(STOP_LABEL, () => stopGoal(goal), { live: true, danger: true }));
+  }
+  return block;
+}
+
+function paintGoals() {
+  const box = dom.goalsList;
+  if (!box) return;
+  const v = gl.view;
+  if (!v) {
+    const line = el("p", "empty", gl.error ? `Could not read Goals: ${gl.error}` : "Reading…");
+    if (gl.error) {
+      line.classList.add("failed");
+      line.append(" ", button("Retry", loadGoals));
+    }
+    box.replaceChildren(line);
+    return;
+  }
+  if (!v.available) {
+    box.replaceChildren(el("p", "empty", v.why || GOALS_MISSING));
+    if (dom.goalsNewForm) dom.goalsNewForm.hidden = true;
+    return;
+  }
+  const full = openCount(v) >= v.limits.goals;
+  if (dom.goalsNewForm) dom.goalsNewForm.hidden = full;
+  if (!v.goals.length) {
+    box.replaceChildren(el("p", "empty", EMPTY_GOALS));
+  } else {
+    const jobs = (upL.view && upL.view.jobs) || [];
+    box.replaceChildren(...v.goals.map((g) =>
+      (g.status === "draft" ? draftGoalBlock(g) : activeGoalBlock(g, jobs))));
+  }
+  // The rows above already carry no words while the private lists are
+  // hidden (Rust blanked them, same as Coming up) - this only adds the
+  // "Show" prompt underneath, exactly as paintComingUp does.
+  if (v.hidden) box.append(hiddenNode(0, "words"));
+  if (full) {
+    box.append(el("p", "empty", `${v.limits.goals} goals are already open - stop tracking one before adding another.`));
+  }
+}
+
+function renderGoals() {
+  paintGoals();
+  if (IS_TAURI && !gl.loading && Date.now() - gl.at > GOALS_READ_MS) loadGoals();
+}
+
+if (dom.goalsNewForm) {
+  dom.goalsNewForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    createGoal();
+  });
+}
+if (dom.goalsNewAdd) {
+  liveButtons.add(dom.goalsNewAdd);
+  syncLiveButton(dom.goalsNewAdd);
+}
+
 // Private answers turned on or off, or a Show ran out: read it again - Rust
 // decides whether the words come back.
 if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   const rereadSchedule = () => {
     upL.at = 0;
-    if (state.view === "work") loadComingUp();
+    wid.at = 0;
+    if (state.view === "work") {
+      loadComingUp();
+      loadWidgets();
+    }
   };
   TAURI.event.listen("security-changed", rereadSchedule);
   TAURI.event.listen("private-hidden", rereadSchedule);
+  // Goals hides its words the same way (brain/goals.rs redact_goals).
+  const rereadGoals = () => {
+    gl.at = 0;
+    if (state.view === "work") loadGoals();
+  };
+  TAURI.event.listen("security-changed", rereadGoals);
+  TAURI.event.listen("private-hidden", rereadGoals);
   // The deep questions are hidden with the lists too (commands.rs get_deep).
   const rereadDeep = () => {
     deep.at = 0;
@@ -4195,6 +6835,118 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   };
   TAURI.event.listen("security-changed", rereadFocus);
   TAURI.event.listen("private-hidden", rereadFocus);
+}
+
+/* ==========================================================================
+   Today (the owner's choice of 2026-09-28; JARVIS-API.md section 82;
+   today.js).
+
+   The owner's own cards that show today (jobs of kind "today" on the one
+   scheduler, from the Coming up read) and the parts of the latest briefing
+   made today (from the Morning briefing read). Nothing new is read here.
+   Delete is ONE card; Add is one card - both held on a stale link, neither
+   raises a card. While the private lists are hidden, Rust already took the
+   words out of both reads.
+   ========================================================================== */
+
+function todayDays() {
+  const boxes = dom.todayDays ? [...dom.todayDays.querySelectorAll("input[type=checkbox]")] : [];
+  return boxes.filter((b) => b.checked).map((b) => Number(b.value));
+}
+
+async function addToday() {
+  const args = todayAddArgs(dom.todayText && dom.todayText.value,
+    dom.todayAt && dom.todayAt.value, todayDays());
+  if (args.error) {
+    toast(args.error, "bad");
+    return;
+  }
+  if (!linkWords(currentLink()).canAct) {
+    toast(STALE_TITLE, "bad");
+    return;
+  }
+  try {
+    const out = await invoke("brain_schedule_add_today", args);
+    if (out && out.ok === false) {
+      toast(String(out.error || "Refused."), "bad");
+    } else {
+      toast(String((out && out.said) || "Done."), "ok");
+      if (dom.todayText) dom.todayText.value = "";
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadComingUp();
+}
+
+function todayRow(card) {
+  const item = row({
+    tag: TODAY_TAG,
+    state: card.today === "showing" ? "ok" : "",
+    title: todayCardTitle(card),
+    meta: [todayCardMeta(card)],
+    actions: [button(TODAY_DELETE_LABEL, () => scheduleAct(card, "delete"),
+      { live: true, danger: true })],
+  });
+  item.dataset.id = card.id;
+  return item;
+}
+
+function paintToday() {
+  const box = dom.today;
+  if (!box) return;
+  const out = [];
+  const v = upL.view;
+  if (!v) {
+    out.push(el("p", "empty", upL.error ? `Could not read Today: ${upL.error}` : "Reading…"));
+  } else if (!v.available) {
+    out.push(el("p", "empty", v.why || TODAY_MISSING));
+  } else {
+    const { showing, later } = todayCards(cardsOf(v));
+    const list = el("div", "rows");
+    for (const c of showing) list.append(todayRow(c));
+    out.push(showing.length ? list : el("p", "empty", TODAY_EMPTY));
+    if (later.length) {
+      out.push(el("h3", "subhead", TODAY_LATER_TITLE));
+      const rest = el("div", "rows");
+      for (const c of later) rest.append(todayRow(c));
+      out.push(rest);
+    }
+    if (v.hidden) out.push(hiddenNode(0, "words"));
+  }
+  if (dom.todayForm) dom.todayForm.hidden = Boolean(v && !v.available);
+  // The briefing's own parts, from the latest one made today - never a new read.
+  const bv = brief.view;
+  if (bv && bv.available) {
+    out.push(el("h3", "subhead", TODAY_FROM_BRIEFING));
+    const parts = briefingCards(bv);
+    if (!parts) {
+      out.push(el("p", "empty", NO_BRIEFING_TODAY));
+    } else {
+      const list = el("div", "rows");
+      for (const s of parts) {
+        list.append(row({
+          tag: s.title,
+          state: s.state === "ok" ? "ok" : s.state === "empty" ? "" : "warn",
+          title: s.summary,
+          meta: s.items,
+        }));
+      }
+      out.push(list);
+    }
+  }
+  box.replaceChildren(...out);
+}
+
+if (dom.todayForm) {
+  dom.todayForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    addToday();
+  });
+}
+if (dom.todayAdd) {
+  liveButtons.add(dom.todayAdd);
+  syncLiveButton(dom.todayAdd);
 }
 
 /* ==========================================================================
@@ -4273,6 +7025,7 @@ async function briefNow() {
 }
 
 function paintBriefing() {
+  paintToday();
   const box = dom.briefing;
   if (!box) return;
   if (dom.briefingNow) {
@@ -4882,6 +7635,11 @@ function pushTrace(frame) {
   } else if (kind === "deep") {
     // The id and how it ended - never the question or the answer.
     body = `question ${String(data.id || "?")} ${String(data.state || "")}`.trim();
+  } else if (kind === "live") {
+    // Jarvis Live's session (jarvis_live.status(): fixed words and numbers,
+    // never anything said), in one readable line rather than raw JSON (the
+    // Live review, 2026-09-28).
+    body = liveTraceLine(data);
   } else if (kind === "hello") {
     body = `resumed from ${data.resumed_from ?? 0}${data.stale ? " · STALE" : ""}`;
   } else {
@@ -4894,7 +7652,7 @@ function pushTrace(frame) {
   // DOM nodes is a leak with a nice name.
   if (state.trace.length > 300) state.trace.splice(0, state.trace.length - 300);
 
-  if (state.view !== "live") return;
+  if (state.view !== "now") return;
   const li = el("li");
   li.append(
     el("span", "trace-time", time),
@@ -4904,6 +7662,21 @@ function pushTrace(frame) {
   dom.trace.append(li);
   while (dom.trace.childElementCount > 300) dom.trace.firstElementChild.remove();
   dom.trace.scrollTop = dom.trace.scrollHeight;
+}
+
+/** A `live` event (Jarvis Live's status) as one line. */
+function liveTraceLine(s) {
+  const d = s && typeof s === "object" ? s : {};
+  if (d.on === true) {
+    const where = d.device === "desktop" ? "this PC" : d.device === "phone" ? "the phone" : "a device";
+    const parts = [`Jarvis Live on ${where}`];
+    if (Number.isInteger(d.minutes_left)) parts.push(`${d.minutes_left} min left`);
+    const why = d.muted ? d.muted_words : d.paused ? d.pause_words : d.hint_words;
+    if (why) parts.push(String(why));
+    return parts.join(" · ");
+  }
+  if (d.state === "ended") return `Jarvis Live ended${d.ended_words ? `: ${d.ended_words}` : ""}`;
+  return "Jarvis Live off";
 }
 
 // stepText now lives in step-words.js, shared with the Jarvis bar
@@ -4950,21 +7723,22 @@ function repaintTrace() {
  *
  * Five hues each carry two groups, told apart by whether the node is a filled
  * disc or a hollow ring. The pairs are semantically adjacent, so a misread
- * costs the least: a cluster mistaken for the core is a smaller error than a
- * cluster mistaken for a document. Form is not a theme concern — it is a fact
+ * costs the least: a pet mistaken for a person is a smaller error than a
+ * person mistaken for a place. Form is not a theme concern — it is a fact
  * about what the group is — so it lives here and not in theme.css.
+ *
+ * Since 2026-09-28 the groups are the kinds of people and things
+ * (galaxy-view.js); the same five hues and two forms, so every contrast and
+ * colour-blindness check on them (themecheck.mjs, distinct.mjs) still holds.
  */
 const GROUP_STYLE = {
-  core: ["--node-h1", "disc"],
-  cluster: ["--node-h1", "ring"],
-  model: ["--node-h2", "disc"],
-  source: ["--node-h2", "ring"],
-  fact: ["--node-h3", "disc"],
-  document: ["--node-h3", "ring"],
-  tool: ["--node-h4", "disc"],
-  skill: ["--node-h4", "ring"],
-  persona: ["--node-h5", "disc"],
-  entity: ["--node-h5", "ring"],
+  person: ["--node-h1", "disc"],
+  pet: ["--node-h1", "ring"],
+  place: ["--node-h2", "disc"],
+  organisation: ["--node-h2", "ring"],
+  project: ["--node-h3", "disc"],
+  thing: ["--node-h3", "ring"],
+  other: ["--node-h5", "ring"],
 };
 
 /** Unknown groups get the last hue as a ring, which reads as "other". */
@@ -4977,6 +7751,8 @@ let sim = null;
 let hovered = null;
 let selected = null;
 const hiddenGroups = new Set();
+/** "Find a name": every match, and which one is shown (findInGalaxy). */
+const galaxyFind = { hits: [], at: 0 };
 
 /**
  * Node colours, cached.
@@ -5050,25 +7826,51 @@ function invalidate() {
   });
 }
 
+/** An empty canvas with a sentence, and a button when there is one to press. */
+function graphEmptyWith(words, action = null) {
+  if (sim) cancelAnimationFrame(sim);
+  sim = null;
+  dom.graphEmpty.hidden = false;
+  dom.graphEmptyText.textContent = words;
+  dom.graphEmptyActions?.replaceChildren(...(action ? [action] : []));
+  dom.graphStat.textContent = "—";
+  dom.legend.replaceChildren();
+  dom.inspector.hidden = true;
+  selected = null;
+  state.graph = null;
+  draw();
+}
+
 function renderGraph() {
-  const body = state.data.graph || {};
-  const why = unavailable("graph");
+  const why = unavailable("memory_entities");
   if (why) {
-    dom.graphEmpty.hidden = false;
-    dom.graphEmptyText.textContent = why;
-    dom.graphStat.textContent = "—";
-    state.graph = null;
+    graphEmptyWith(why);
     return;
   }
-  const nodes = Array.isArray(body.nodes) ? body.nodes : [];
-  const links = Array.isArray(body.links) ? body.links : [];
+  const view = readEntities(state.data.memory_entities);
+  if (view.hidden) {
+    // "Windows Hello for memory lists and chat history": Rust took the
+    // names out (lock/rules.rs); nothing of them reaches this page.
+    const n = view.hiddenCount;
+    graphEmptyWith(n
+      ? `${n} ${n === 1 ? "name" : "names"}, hidden until Windows Hello confirms it is you.`
+      : "Hidden until Windows Hello confirms it is you.",
+      button("Show", revealPrivate,
+        { title: "Asks Windows Hello - your PIN, fingerprint or face - then shows the names." }));
+    return;
+  }
+  if (!view.available) {
+    graphEmptyWith("This PC's Jarvis cannot list the people and things in its memory yet. " +
+      "Run apply-patches.ps1 on the PC to update it.");
+    return;
+  }
+  const { nodes, links } = buildEntityGraph(view);
   if (!nodes.length) {
-    dom.graphEmpty.hidden = false;
-    dom.graphEmptyText.textContent = "The graph is empty.";
-    state.graph = null;
+    graphEmptyWith("No people or things yet. They appear here as Jarvis saves facts that name them.");
     return;
   }
   dom.graphEmpty.hidden = true;
+  dom.graphEmptyActions?.replaceChildren();
 
   const byId = new Map();
   const N = nodes.map((n, i) => {
@@ -5077,11 +7879,17 @@ function renderGraph() {
     const a = (i / nodes.length) * Math.PI * 2;
     const r = 40 + (i % 9) * 26;
     const node = {
-      id: String(n.id),
-      label: String(n.label ?? n.id),
-      group: String(n.group || "entity"),
-      weight: Number(n.weight) || 1,
-      extra: n,
+      id: n.id,
+      entityId: n.entityId,
+      label: n.label,
+      group: n.group,
+      // Dot size: how many saved facts name it (radiusOf).
+      weight: Math.max(1, n.weight),
+      facts: n.weight,
+      aliases: n.aliases,
+      also: n.also,
+      // Most facts first: the names worth labelling at a glance.
+      rank: i,
       x: Math.cos(a) * r,
       y: Math.sin(a) * r,
       vx: 0,
@@ -5093,12 +7901,12 @@ function renderGraph() {
   });
   const L = [];
   for (const l of links) {
-    const s = byId.get(String(l.source));
-    const t = byId.get(String(l.target));
+    const s = byId.get(l.source);
+    const t = byId.get(l.target);
     if (!s || !t || s === t) continue;
     s.deg++;
     t.deg++;
-    L.push({ s, t, kind: String(l.kind || "") });
+    L.push({ s, t, shared: l.shared, kind: sharedWords(l.shared) });
   }
 
   colourCache.clear();
@@ -5120,8 +7928,12 @@ function renderGraph() {
   state.graph = { nodes: N, links: L, byId, signature };
   selected = null;
   dom.inspector.hidden = true;
-  buildLegend(body.counts || countGroups(N));
-  dom.graphStat.textContent = `${N.length} nodes · ${L.length} links`;
+  buildLegend();
+  dom.graphStat.textContent =
+    `${N.length} ${N.length === 1 ? "name" : "names"} · ${L.length} ${L.length === 1 ? "link" : "links"}`;
+  // A search typed before this read finds its matches in the new picture.
+  galaxyFind.hits = [];
+  if (dom.graphSearch.value.trim()) findInGalaxy({ keepAt: true });
   if (settled) {
     fitCanvas();
     draw();
@@ -5136,10 +7948,11 @@ function countGroups(nodes) {
   return counts;
 }
 
-function buildLegend(counts) {
+function buildLegend() {
   const present = countGroups(state.graph.nodes);
   dom.legend.replaceChildren();
-  for (const group of Object.keys(present).sort()) {
+  const order = Object.keys(GROUP_STYLE);
+  for (const group of Object.keys(present).sort((a, b) => order.indexOf(a) - order.indexOf(b))) {
     const item = el("button", "legend-item");
     item.type = "button";
     item.setAttribute("aria-pressed", String(!hiddenGroups.has(group)));
@@ -5153,7 +7966,8 @@ function buildLegend(counts) {
       sw.style.background = colourFor(group);
       sw.style.borderColor = "transparent";
     }
-    item.append(sw, el("span", "", group), el("span", "legend-count", present[group]));
+    item.append(sw, el("span", "", groupWords(group)), el("span", "legend-count", present[group]));
+    item.title = `Show or hide the ${groupWords(group)} on the picture.`;
     item.addEventListener("click", () => {
       if (hiddenGroups.has(group)) hiddenGroups.delete(group);
       else hiddenGroups.add(group);
@@ -5161,10 +7975,6 @@ function buildLegend(counts) {
       draw();
     });
     dom.legend.append(item);
-  }
-  const missing = Object.keys(counts).filter((k) => !(k in present) && counts[k]);
-  if (missing.length) {
-    dom.legend.append(el("span", "legend-count", `(${missing.join(", ")} not in the graph)`));
   }
 }
 
@@ -5500,18 +8310,19 @@ function draw() {
   // Not while it is still settling: see the note in `startLayout`.
   if (sim) return;
   const placed = [];
+  // The names named by the most facts (the first LABELLED_NAMES), and
+  // whatever is focused and next to it.
+  const LABELLED_NAMES = 24;
   const ordered = g.nodes
     .filter(visible)
-    .filter((n) => n.group === "core" || n.group === "cluster" || n.deg >= 6 || near.has(n.id))
+    .filter((n) => n.rank < LABELLED_NAMES || near.has(n.id))
     .sort((a, b) => {
-      const rank = (n) =>
-        (n === focus ? 4 : 0) + (near.has(n.id) ? 2 : 0) +
-        (n.group === "core" ? 3 : n.group === "cluster" ? 1 : 0);
-      return rank(b) - rank(a) || b.deg - a.deg;
+      const pull = (n) => (n === focus ? 4 : 0) + (near.has(n.id) ? 2 : 0);
+      return pull(b) - pull(a) || a.rank - b.rank;
     });
 
   for (const n of ordered) {
-    if (view.scale < 0.35 && !near.has(n.id) && n.group !== "core") continue;
+    if (view.scale < 0.35 && !near.has(n.id) && n.rank >= 6) continue;
     const [x, y] = T(n);
     const label = n.label.length > 34 ? n.label.slice(0, 33) + "…" : n.label;
     const w = ctx.measureText(label).width;
@@ -5560,21 +8371,25 @@ function select(node) {
     draw();
     return;
   }
-  dom.nodeKind.textContent = node.group;
+  dom.nodeKind.textContent = groupWords(node.group, { plural: false });
   dom.nodeLabel.textContent = node.label;
 
+  // What the list says about this name - never a fact's words: those are
+  // one click away, in "About <name>", read by id and hidden like every
+  // memory list.
   dom.nodeFacts.replaceChildren();
   const add = (k, v) => {
     if (v === undefined || v === null || v === "") return;
     dom.nodeFacts.append(el("dt", "", k), el("dd", "", v));
   };
-  add("id", node.id);
-  add("connections", node.deg);
-  for (const [k, v] of Object.entries(node.extra || {})) {
-    if (["id", "label", "group", "weight"].includes(k)) continue;
-    if (v === null || typeof v === "object") continue;
-    add(k, v);
-  }
+  add("Facts that name it", node.facts);
+  if (node.aliases.length) add("You call it", node.aliases.join(", "));
+  if (node.also.length) add("Also known as", node.also.join(", "));
+  add("Shares facts with", `${node.deg} ${node.deg === 1 ? "name" : "names"}`);
+
+  dom.nodeActions?.replaceChildren(
+    button(aboutTitle(node.label), () => openAboutFromGalaxy(node.entityId),
+      { title: "Opens the Memory tab at this name: its facts, word for word." }));
 
   const g = state.graph;
   const neighbours = [];
@@ -5584,7 +8399,7 @@ function select(node) {
   }
   dom.nodeLinks.replaceChildren();
   if (!neighbours.length) {
-    dom.nodeLinks.append(el("li", "empty", "Nothing connected."));
+    dom.nodeLinks.append(el("li", "empty", "No other name shares a fact with it."));
   }
   for (const [other, kind] of neighbours.slice(0, 60)) {
     const li = el("li");
@@ -5607,10 +8422,51 @@ function select(node) {
   // silent event. This is the only thing that tells a screen-reader user
   // anything happened.
   announce(
-    `${node.label}, ${node.group}, ${node.deg} ` +
-      `${node.deg === 1 ? "connection" : "connections"}.`
+    `${node.label}, ${groupWords(node.group, { plural: false })}, named in ${node.facts} ` +
+      `${node.facts === 1 ? "fact" : "facts"}, shares facts with ${node.deg} ` +
+      `${node.deg === 1 ? "name" : "names"}.`
   );
   draw();
+}
+
+/** "About <name>", from the Galaxy: the Memory tab, opened at that name. */
+async function openAboutFromGalaxy(entityId) {
+  await showView("memory");
+  await openAbout(entityId);
+}
+
+/* ---- Finding a name (the research audit's B3) ---------------------------
+   It used to jump to the first match only, and said nothing when there was
+   none. Now every match is counted, Enter steps to the next (Shift+Enter
+   back), and the line beside the box says "2 of 5" or "No name matches". */
+
+function findInGalaxy({ keepAt = false } = {}) {
+  const q = dom.graphSearch.value.trim();
+  const g = state.graph;
+  if (!q || !g) {
+    galaxyFind.hits = [];
+    galaxyFind.at = 0;
+    if (dom.graphFind) dom.graphFind.textContent = "";
+    return;
+  }
+  galaxyFind.hits = findNames(g.nodes.filter(visible), q);
+  if (!keepAt || galaxyFind.at >= galaxyFind.hits.length) galaxyFind.at = 0;
+  if (dom.graphFind) dom.graphFind.textContent = findStatus(galaxyFind.at, galaxyFind.hits.length);
+  const hit = galaxyFind.hits[galaxyFind.at];
+  if (hit) {
+    select(hit);
+    centreOn(hit);
+  }
+}
+
+function stepGalaxyFind(delta) {
+  const n = galaxyFind.hits.length;
+  if (!n) return;
+  galaxyFind.at = (galaxyFind.at + delta + n) % n;
+  if (dom.graphFind) dom.graphFind.textContent = findStatus(galaxyFind.at, n);
+  const hit = galaxyFind.hits[galaxyFind.at];
+  select(hit);
+  centreOn(hit);
 }
 
 function centreOn(node) {
@@ -5814,18 +8670,13 @@ dom.graphRefit.addEventListener("click", () => {
 dom.inspectorClose.addEventListener("click", () => select(null));
 
 dom.memoryFactsFilter?.addEventListener("input", () => renderFacts());
-$("history-filter")?.addEventListener("input", () => paintHistoryList());
+$("history-filter")?.addEventListener("input", () => onHistorySearch());
 
-dom.graphSearch.addEventListener("input", () => {
-  const q = dom.graphSearch.value.trim().toLowerCase();
-  if (!q || !state.graph) return;
-  const hit = state.graph.nodes.find(
-    (n) => visible(n) && n.label.toLowerCase().includes(q)
-  );
-  if (hit) {
-    select(hit);
-    centreOn(hit);
-  }
+dom.graphSearch.addEventListener("input", () => findInGalaxy());
+dom.graphSearch.addEventListener("keydown", (e) => {
+  if (e.key !== "Enter") return;
+  e.preventDefault();
+  stepGalaxyFind(e.shiftKey ? -1 : 1);
 });
 
 dom.traceClear.addEventListener("click", () => {
@@ -5922,8 +8773,9 @@ onLink((link) => {
   dom.linkPill.title = link.error || `${link.base} · last event ${link.lastId}`;
   dom.reconnectLink.hidden = link.connected;
   syncLiveButtons();
+  if (historyImport) historyImport.sync();
   paintFreshness();
-  if (state.view === "live") renderLive();
+  if (state.view === "now") renderLive();
   renderCounts();
 });
 
@@ -5965,6 +8817,19 @@ onEvent((frame) => {
     fx.at = 0;
     if (state.view === "work") loadFocus();
   }
+  // A chatbot conversation has no event of its own: its progress travels on
+  // the one activity line ("Talking to Gemini: message 3 of 5."). Read it
+  // again on every activity change while the Work tab is showing.
+  if (kind === "activity") {
+    cb.at = 0;
+    sp.at = 0;
+    if (state.view === "work") {
+      loadChatbot();
+      // A support chat's progress rides on the same activity line ("Chat
+      // with Groupon: message 2 of 15.").
+      loadSupport();
+    }
+  }
   if (kind === "schedule") {
     upL.at = 0;
     if (state.view === "work") loadComingUp();
@@ -5974,6 +8839,10 @@ onEvent((frame) => {
       brief.at = 0;
       if (state.view === "work") loadBriefing();
     }
+    // A goal's weekly check-in was approved, paused or changed (`{id, kind:
+    // "goal_checkin", state}`): Goals reads its state from the very same
+    // Coming up list (goals.js's own module doc says why), so loadComingUp()
+    // above already reads the job again - it repaints Goals itself once done.
   }
 
   const refreshes = {
@@ -6011,8 +8880,42 @@ onEvent((frame) => {
   }
 
   repaintTrace();
-  await showView("memory");
+  // "Forget what you learned last week", said or typed in the Jarvis bar:
+  // main.js left the place, so the Brain opens at History -> "Forget a time
+  // frame" with the list filled in (forget-range-panel.js). "Earlier chats"
+  // in the bar, and "Chat history…" in the tray (`#history`), open History
+  // itself (the chat audit, 2026-09-28). Navigation only.
+  const place = takeAnyPlace() || (location.hash === `#${HISTORY_PLACE}` ? HISTORY_PLACE : "");
+  if (place === FORGET_RANGE_PLACE) {
+    await showView("history");
+    await openForgetRange();
+  } else if (place === HISTORY_PLACE) {
+    await showView("history");
+  } else {
+    await showView("memory");
+  }
 })();
+
+/** The Brain was already open when the Jarvis bar asked for a place. */
+async function goToPlace(place = takeAnyPlace()) {
+  if (place === FORGET_RANGE_PLACE) {
+    await showView("history");
+    await openForgetRange();
+  } else if (place === HISTORY_PLACE) {
+    await showView("history");
+  }
+}
+window.addEventListener("focus", () => goToPlace());
+window.addEventListener("storage", (e) => {
+  if (e.key === BRAIN_PLACE_KEY && e.newValue) goToPlace();
+});
+// "Chat history…" in the tray, with the Brain already open (windows.rs
+// show_brain_at): the place's name only.
+if (IS_TAURI && TAURI.event && TAURI.event.listen) {
+  TAURI.event.listen("brain-place", (event) => {
+    if (event && event.payload === HISTORY_PLACE) goToPlace(HISTORY_PLACE);
+  });
+}
 
 console.info(
   `[brain] ready — backend ${IS_TAURI ? "connected" : "absent (browser preview)"}`

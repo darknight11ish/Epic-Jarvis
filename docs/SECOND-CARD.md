@@ -108,6 +108,38 @@ day, then a week, then a month. Turning either switch off just means Jarvis
 never asks that way; it never stops you turning the switch above on
 yourself, any time.
 
+## A third graphics card
+
+If your PC has a THIRD card - besides the everyday one and the second one
+above - and it is capable (the same rule as the second card: Turing or
+newer, 10 GB or more), Jarvis finds it and shows it, but it does nothing on
+its own. That is on purpose: which of the five switches above runs on which
+physical card is a real decision, and Jarvis never makes it for you by
+guessing "the biggest card wins" or any other default.
+
+**Move a switch there.** Once one of the five switches above is already
+on, Settings → "Second graphics card" (desktop) or Brain (phone) shows a
+new "Third graphics card" section underneath "One bigger model on both
+cards", listing the switches that are currently on. Pick one, and it moves
+there - it does not turn the switch off or on, it only changes WHICH card
+its model calls go to. Moving one there asks with one approval card first
+(`second_card_third_assign`), naming the exact card, its model and how much
+memory it uses - the same shape as the five switches' own cards. Moving a
+switch back to "Not used" is immediate, like turning any switch off.
+
+**It runs at the same time as the second card**, not instead of it - two
+different switches can each be working on their own card at once. Only one
+switch can be on the third card at a time, since there is only the one
+extra lane; the switch itself still has to be turned on above before it can
+be moved here.
+
+**"One bigger model on both cards" stays two-card-only.** A third card is
+never part of it - that switch still only ever uses the everyday card and
+the second one, because how fast splitting one model across even two cards
+really is has not been measured yet (the second card is not installed).
+Adding a third untested unknown on top of a first untested one is not a
+decision Jarvis makes on its own.
+
 ## What happens when a switch is on
 
 Jarvis starts a **second copy of Ollama** (the program that runs the models)

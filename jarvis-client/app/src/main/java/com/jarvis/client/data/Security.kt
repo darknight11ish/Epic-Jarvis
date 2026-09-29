@@ -28,6 +28,24 @@ data class Security(
     val approvals: ApprovalCheck = ApprovalCheck.RISKY,
     val privateLists: Boolean = false,
     val method: CheckMethod = CheckMethod.FINGERPRINT_OR_PIN,
+    /**
+     * "Swipe to approve or deny" on the phone's approval cards (the owner,
+     * 2026-09-28: a setting that can be turned off). On by default - the
+     * behaviour before the setting existed. Off, every card is decided with
+     * its buttons only, even one the PC marks `risk.swipe_ok`. Turning it off
+     * is stricter, so instant; turning it back on loosens, so it needs the
+     * check ([SecurityRules.loosens]).
+     */
+    val swipeDecides: Boolean = true,
+    /**
+     * "End Live when" (the owner's decision of 2026-09-28, the Jarvis Live
+     * extras: the same setting as the PC's). With App lock on, Jarvis Live
+     * on this phone ends when App lock would ask again (the default, as
+     * before), or - looser, so it asks for the fingerprint or PIN - only
+     * when the phone's own screen lock comes on ([SecurityRules.liveEndsNow]).
+     * With App lock off neither ends it. Back to the default is instant.
+     */
+    val liveEnd: LiveEnd = LiveEnd.APP_LOCK,
 ) {
     /**
      * True when the owner has asked for anything stricter than the defaults.
@@ -51,6 +69,24 @@ enum class RelockAfter(val wire: String, val ms: Long, val label: String) {
 
     companion object {
         fun fromWire(s: String?): RelockAfter = entries.firstOrNull { it.wire == s } ?: ONE_MINUTE
+    }
+}
+
+/**
+ * When App lock ends Jarvis Live on this phone - the same setting as the PC's
+ * (`live_end`: "When App lock would ask again" / "Only when Windows locks").
+ */
+enum class LiveEnd(val wire: String, val label: String) {
+    /** The default, strict: when App lock would lock Jarvis again ("Lock again after"). */
+    APP_LOCK("app_lock", "When App lock would ask again"),
+
+    /** Looser: only when the phone's own screen lock comes on. */
+    SCREEN_LOCK("screen_lock", "Only when the phone's screen locks"),
+    ;
+
+    companion object {
+        /** Missing or unreadable reads as the strict default, never the looser one. */
+        fun fromWire(s: String?): LiveEnd = entries.firstOrNull { it.wire == s } ?: APP_LOCK
     }
 }
 
@@ -255,8 +291,19 @@ object SecurityRules {
      * screens: memory, history and answers are on most of them. Off with
      * both off, so nothing changes for an owner who asked for neither. The
      * recent-apps picture is blank under the same rule.
+     *
+     * [keyShown]: the pairing token is shown in plain letters on the pairing
+     * screen ("Show token", phone walk-through C8, 2026-09-27). While it is,
+     * the screen cannot be captured whatever the settings say - the token is
+     * the one secret that opens Jarvis - and the rule falls back to the
+     * settings the moment it is hidden again.
+     *
+     * [handoffShown]: "Solve it here" shows a live picture of the PC's
+     * browser window (the owner's decision of 2026-09-28: never saved on
+     * either side), so it cannot be captured either while it shows.
      */
-    fun blockScreenCapture(s: Security): Boolean = s.appLock || s.privateLists
+    fun blockScreenCapture(s: Security, keyShown: Boolean = false, handoffShown: Boolean = false): Boolean =
+        s.appLock || s.privateLists || keyShown || handoffShown
 
     /**
      * True when going from [from] to [to] weakens anything. Any one field is
@@ -268,7 +315,9 @@ object SecurityRules {
             to.relockAfter.ms > from.relockAfter.ms ||
             (from.approvals == ApprovalCheck.EVERY && to.approvals == ApprovalCheck.RISKY) ||
             (from.privateLists && !to.privateLists) ||
-            (from.method == CheckMethod.FINGERPRINT_ONLY && to.method == CheckMethod.FINGERPRINT_OR_PIN)
+            (from.method == CheckMethod.FINGERPRINT_ONLY && to.method == CheckMethod.FINGERPRINT_OR_PIN) ||
+            (!from.swipeDecides && to.swipeDecides) ||
+            (from.liveEnd == LiveEnd.APP_LOCK && to.liveEnd == LiveEnd.SCREEN_LOCK)
 
     /**
      * Why a tightening cannot be taken, or null when it can. [availability]
@@ -313,15 +362,54 @@ object SecurityRules {
 
     /** One line for the Security card on Checks. */
     fun summary(s: Security): String {
-        if (!s.anyLockOn) return "Off. Your fingerprint or PIN is asked for risky approvals only."
+        val swipeOff = (if (s.swipeDecides) "" else " $SWIPE_OFF_SUMMARY") +
+            (if (s.appLock && s.liveEnd == LiveEnd.SCREEN_LOCK) " $LIVE_END_SUMMARY" else "")
+        if (!s.anyLockOn) return "Off. Your fingerprint or PIN is asked for risky approvals only.$swipeOff"
         val parts = buildList {
             add(if (s.appLock) "App lock on (${s.relockAfter.label.lowercase()})" else "App lock off")
             add(if (s.approvals == ApprovalCheck.EVERY) "every approval asks" else "risky approvals ask")
             if (s.privateLists) add("memory lists hidden")
             if (s.method == CheckMethod.FINGERPRINT_ONLY) add("fingerprint only")
         }
-        return parts.joinToString(", ").replaceFirstChar { it.uppercase() } + "."
+        return parts.joinToString(", ").replaceFirstChar { it.uppercase() } + "." + swipeOff
     }
+
+    /**
+     * Does Jarvis Live on this phone end now, and why ("app_lock" or
+     * "screen_lock", the PC's end reasons) - or null. [appLockWouldLock]:
+     * App lock would lock Jarvis now ([LockSession.wouldLock]);
+     * [screenLocked]: the phone's own screen lock is on (Android's
+     * KeyguardManager.isDeviceLocked). With App lock off, nothing here ends
+     * Live - as before the setting existed.
+     */
+    fun liveEndsNow(s: Security, appLockWouldLock: Boolean, screenLocked: Boolean): String? {
+        if (!s.appLock) return null
+        return when (s.liveEnd) {
+            LiveEnd.APP_LOCK -> if (appLockWouldLock) "app_lock" else null
+            LiveEnd.SCREEN_LOCK -> if (screenLocked) "screen_lock" else null
+        }
+    }
+
+    /** The Security screen's "End Live when" setting, and what it does. */
+    const val LIVE_END_TITLE = "End Live when"
+    const val LIVE_END_DETAIL =
+        "While App lock is on. \"When App lock would ask again\" ends Jarvis Live after " +
+            "\"Lock again after\" away from Jarvis. \"Only when the phone's screen locks\" lets " +
+            "you use other apps while you talk, and ends Live when the phone locks. Choosing " +
+            "that asks for your fingerprint or PIN."
+
+    /** Said on Checks' Security line when Live ends only at the screen lock. */
+    const val LIVE_END_SUMMARY = "Live ends only when the phone's screen locks."
+
+    /** Said on Checks' Security line when swiping is off. */
+    const val SWIPE_OFF_SUMMARY = "Swiping to decide is off."
+
+    /** The Security screen's switch, and what it does. */
+    const val SWIPE_TITLE = "Swipe to approve or deny"
+    const val SWIPE_DETAIL =
+        "On cards your PC marks as safe for a quick gesture, swipe right to approve " +
+            "and left to deny. Off, every card is decided with its buttons only. " +
+            "Turning it back on asks for your fingerprint or PIN."
 
     const val CHECK_NOT_SHOWN =
         "The fingerprint or PIN check could not be shown just now, so nothing was sent. " +
@@ -336,6 +424,8 @@ object SecurityRules {
         KEY_APPROVALS to s.approvals.wire,
         KEY_PRIVATE to s.privateLists.toString(),
         KEY_METHOD to s.method.wire,
+        KEY_SWIPE to s.swipeDecides.toString(),
+        KEY_LIVE_END to s.liveEnd.wire,
     )
 
     /**
@@ -349,6 +439,10 @@ object SecurityRules {
         approvals = ApprovalCheck.fromWire(get(KEY_APPROVALS)),
         privateLists = get(KEY_PRIVATE) == "true",
         method = CheckMethod.fromWire(get(KEY_METHOD)),
+        // Missing or unreadable reads as on: the behaviour before the
+        // setting existed, never something looser than it.
+        swipeDecides = get(KEY_SWIPE) != "false",
+        liveEnd = LiveEnd.fromWire(get(KEY_LIVE_END)),
     )
 
     const val KEY_APP_LOCK = "security_app_lock"
@@ -356,6 +450,8 @@ object SecurityRules {
     const val KEY_APPROVALS = "security_approvals"
     const val KEY_PRIVATE = "security_private_lists"
     const val KEY_METHOD = "security_method"
+    const val KEY_SWIPE = "security_swipe_decides"
+    const val KEY_LIVE_END = "security_live_end"
 }
 
 /**
@@ -390,6 +486,21 @@ class LockSession {
 
     /** Whether Mind's private lists should be hidden now. */
     fun privateHidden(s: Security): Boolean = s.privateLists && !privateShown
+
+    /**
+     * Whether App lock WOULD lock Jarvis now, were it brought back in sight:
+     * locked already, or out of sight for "Lock again after" or longer (a
+     * fingerprint or PIN check under way does not count). Asks nothing and
+     * changes nothing. Jarvis Live on this phone ends then.
+     */
+    fun wouldLock(nowMs: Long, s: Security): Boolean {
+        if (!s.appLock) return false
+        if (!unlocked) return true
+        if (checking) return false
+        val from = awayFrom ?: return false
+        val away = nowMs - from
+        return away < 0 || away >= s.relockAfter.ms
+    }
 
     /** Jarvis went out of sight (not a rotation - the activity checks that). */
     fun left(nowMs: Long) {

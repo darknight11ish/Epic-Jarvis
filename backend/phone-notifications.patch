@@ -1,0 +1,46 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -158,2 +158,3 @@
+     "restore_backup",  # jarvis_backup.py acts only on tier "ask" (backup.patch)
++    "phone_notifications_read",  # jarvis_phone_notifications.py acts only on tier "ask" (phone-notifications.patch)
+ })
+@@ -591,2 +592,11 @@
+     "run_plan": ("no", "outbound", "runs every step of an approved plan the model did not flag as risky, at once; a risky or result-filled step always asks again on its own separate card first"),
++    # phone-notifications.patch (jarvis_phone_notifications.py, the owner's
++    # decision of 2026-09-26; built 2026-09-28). Lets the phone start
++    # reading notifications from apps the OWNER chooses (an empty list by
++    # default; banking apps are blocked on the phone). Nothing here reaches
++    # this PC by itself - a captured notification is read into a chat only
++    # when the owner explicitly attaches it, the same "shared text" door
++    # every other outside-text source already uses. Turning it off again is
++    # instant.
++    "phone_notifications_read": ("yes", "local", "lets your phone start reading notifications from apps you choose (none, until you add one); banking apps are blocked on the phone; a notification only reaches Jarvis when you attach it to a chat yourself; turning it off again is instant"),
+     # note-capture.patch (jarvis_note_capture.py). All three stay on this PC:
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3264,10 +3264,25 @@
+     try:
+         import jarvis_goals
+         print(jarvis_goals.install(Handler, origin_ok=_origin_ok,
+                                    token_ok=_token_ok, read_body=_read_body))
+     except Exception as exc:
+         print(f"  goals      NOT ON ({type(exc).__name__}) - Goals is off")
+         print("             until jarvis_goals.py is back: run apply-patches.ps1 again")
++    # phone-notifications.patch (the owner's decision, 2026-09-26; built
++    # 2026-09-28): GET and POST /api/notifications/phone - OFF by default
++    # (Jarvis never reads a phone notification), ON is one approval card
++    # (phone_notifications_read), OFF is instant. Everything else (which
++    # apps, the one-time-code redaction, never SMS) lives on the phone; this
++    # only decides whether the phone may even try. Wrapped round Handler
++    # here, before anything listens, like goals above; the rules are all in
++    # jarvis_phone_notifications.py.
++    try:
++        import jarvis_phone_notifications
++        print(jarvis_phone_notifications.install(Handler, origin_ok=_origin_ok,
++                                                 token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  notif      NOT ON ({type(exc).__name__}) - Phone notifications setting is off")
++        print("             until jarvis_phone_notifications.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

@@ -186,8 +186,445 @@ number as the last part - `0.2.57` is a build of 0.2.
   you asked from; switching the weather to Open-Meteo still shows its
   approval card first. Anything unclear gets a plain question back. Needs
   `apply-patches.ps1` on the PC (new: `jarvis_animal.py`, `animal.patch`).
-  See `docs/JARVIS-API.md` section 60 and `docs/CRITTERS.md`, "Animal
+  See `docs/JARVIS-API.md` section 93 and `docs/CRITTERS.md`, "Animal
   options".
+- **An app Jarvis builds is now a project (the backend half).** In
+  Projects, a coding project can be an app: its latest saved version and its
+  open tasks show on its page. A task is one change kept as a separate copy
+  of the app; open it, read the whole change, then **Merge** - ONE approval
+  card lists every file and the whole change (Windows Hello on the PC, your
+  fingerprint or PIN on the phone; never from a widget) - or **Discard**. On
+  the PC you can paste a change in. A change too big for one card is refused
+  with "ask Jarvis to split it". Nothing runs and Jarvis does not write the
+  code yet (that waits for the 12 GB card). Deleting the project keeps the
+  app's files; they can be added back. Also fixed: throwing away a task whose
+  copy had been deleted by hand left its branch behind. Needs git. Not yet
+  tried on your PC's real approval queue (`backend/README.md`, "Apps in
+  Projects").
+- **Chats: carry one on, see the whole thing, find it again.** Open any chat
+  or Jarvis Live session in History and press **Continue this chat**: the
+  Jarvis bar (PC) or Home (phone) picks it up where it stopped - the same
+  chat, its newest kept messages, and its "read outside text" mark. The chat
+  you are in now shows every earlier question and answer in a scrolling
+  "Earlier in this chat" list, not just the last one. **Earlier chats** on
+  Home and in the Jarvis bar (and "Chat history…" in the PC's tray) opens
+  History. After 30 quiet minutes the next question starts a new chat, and a
+  line says so. History marks each chat's kind - a Live session shows its
+  length ("Live · 12 min · Today 14:05"), and "Show" can list Live sessions
+  only, support chats, chats with other AIs or comparisons. **Chats Jarvis
+  had with other AIs, and comparisons, are now kept in History** (encrypted,
+  marked as outside text, never learned from or read aloud). A chat with a
+  crisis moment is kept under the title "A difficult moment". Support chat
+  records are never removed by "Delete conversations older than", start
+  unticked in "Forget a time frame", and Delete asks once more. History: the
+  list first (phone), dates with times and Today / Yesterday in both apps,
+  answers without stray `**` and `#`, Copy on old answers, and "Forget a
+  time frame…" at the top. The HUD window's own chat box now opens the
+  Jarvis bar, so the PC has one chat box. Not yet tried on a real phone.
+
+- **Fixed: chats that were not what they seemed** (the chat audit). Game and
+  role-play chats were being kept in History although they are temporary -
+  they are not any more, and both apps now say "This looks like a game or
+  role-play, so it's a temporary chat". Deleting the chat you were in (from
+  History, "Erase the words" with its chat, or "Forget a time frame") left
+  its words going to Jarvis and brought it back under a new title - now a
+  new chat starts and says why. "Move it here" in Jarvis Live on the phone
+  carried on the wrong chat. "Erase the words" now names the chat it would
+  also delete, and says plainly when there was none. Projects no longer
+  promise that Jarvis reads a project's instructions in chats (it does not
+  yet). The Brain's History and Projects status line no longer sits on
+  "reading…". The phone's "Forget a time frame" and chatbot forms keep what
+  you typed when you scroll or turn the phone; the phone now says when a
+  temporary chat starts or ends, and "New conversation".
+
+- **Solve it here: a captcha handed to your phone.** When a chatbot website
+  or a customer-support chat that Jarvis is using stops at a captcha, a
+  sign-in page or an "unusual activity" page, your phone now says so ("Gemini
+  needs you") and offers **Solve it here**: a live picture of that one
+  browser window on your PC, and your taps and typing passed back to it -
+  only while Jarvis is paused there, never saved on either side. Jarvis never
+  solves it for you. Some captchas refuse taps passed on this way; "Solve it
+  on the PC instead" is always there, and the PC's Brain shows the same
+  alert. Press Resume when it is done (Resume asks with a card, as always).
+  Not yet tried against a real captcha.
+
+- **Jarvis Live extras.** On the PC: a key to start or end Live, off until
+  you pick one in Settings -> Shortcuts (Alt+Shift+L is free for it). On the
+  phone: a Quick Settings tile (with the minutes left), the headset button
+  (press to stop Jarvis talking, hold to turn the microphone off or on - it
+  never approves anything), a "Live ended - Resume" notification for ten
+  minutes, a Bluetooth headset's microphone used while one is connected (the
+  Live screen says which microphone), "Talk about this in Live" in the Share
+  sheet (the shared text is outside text and goes when you tap Send), and
+  "End Live when" on the Security screen, like the PC's: when App lock would
+  ask again (the default), or only when the phone's screen locks (asks for
+  your fingerprint or PIN). Not yet tried on a real phone.
+
+- **Chat with customer support for me.** Jarvis can chat with a company's
+  customer support for you - Groupon first - in your name, in a browser
+  window you can see on the PC. Fill in the company, what you want done and
+  the details Jarvis may give (each one exactly as written) on either app's
+  Brain; ONE approval card shows all of it and the company's terms risk
+  (your real account could be closed). You open the chat on the help page
+  yourself; Jarvis writes from there. **Every offer - a refund, a credit, a
+  cancellation - gets its own card**, and nothing is accepted before you
+  approve it; the app offers Decline, Say something else and Take over,
+  never Accept. "Are you a bot?", identity checks (card digits, security
+  questions, codes) and a detail not on the card are handed to you - Jarvis
+  never claims to be a person and never sends a password, card number or ID
+  number. The chat is kept in your encrypted chat history; Export on the PC
+  saves a plain text copy. Not yet tried on Groupon's real site: run the
+  read-only check first (backend/README.md, "Chat with customer support for
+  me").
+
+- **Forget a time frame.** Say or type "forget what you learned last
+  week" or "delete my chats from 1 to 15 September", or open it yourself:
+  the desktop's Brain -> History, or the phone's Brain. Jarvis lists every
+  fact it saved in those days and every chat from them, each ticked; untick
+  anything to keep and tap **Forget these**. One approval card lists
+  everything, and you approve it by tapping - saying "yes" does nothing.
+  The facts are forgotten, exactly like Forget, and the chats deleted; for
+  **10 minutes one tap on Undo puts it all back** (the Undo is kept in
+  memory only, so it also ends if Jarvis restarts). A chat that also has
+  messages from other days is marked, because the whole chat goes. At most
+  200 at once. If a date could mean two things ("on Monday" said on a
+  Monday, "3/9"), Jarvis asks. Erasing a fact's words for good is still
+  "Erase the words", one fact at a time. This is the one place Jarvis
+  deletes many things at once. Not yet tried on your PC's real memory.
+
+- **The money limit for chatbots with a key is now a hard stop.** Every
+  message asks the service to keep its answer short enough to fit in what
+  is left of your monthly limit (at most 8,000 word-pieces, fewer as the
+  month is used), so one long answer cannot carry a month past it. An
+  answer cut short says so under it in both apps: "Jarvis asked for a
+  short answer so it stays within your limit; the rest was cut off." Each
+  company calls this setting something different; each name was checked in
+  that company's own code (OpenAI, Groq, OpenRouter, Mistral, and xAI from
+  its own client program). **DeepSeek's could not be confirmed, so no cap
+  is sent to DeepSeek** - it keeps the old check before each message. For
+  every service except OpenAI, whether hidden "thinking" counts inside the
+  cap is not stated, so Jarvis leaves room for it - a guess, so a month
+  can still end slightly over there. See it per service with
+  `cd "<your backend folder>"; py -3 jarvis_chatbot_api.py spent`. Not yet
+  tried against the real services.
+
+- **A monthly money limit for chatbots with a key.** Each service Jarvis
+  reaches with an API key (OpenAI, DeepSeek, Mistral, xAI, OpenRouter,
+  Groq) now needs a monthly limit before it is used - set on the PC with
+  one line, for example
+  `cd "<your backend folder>"; py -3 jarvis_chatbot_api.py limit openai 5`
+  for $5 a month. Jarvis estimates each message's cost from the
+  word-pieces the company reports and a price list, stops a service when
+  its month reaches the limit, and checks before every message that it
+  cannot go over. The approval card and both apps show "About $4.55 of
+  $5.00 left this month for OpenAI", and "Used so far" adds "about $0.03".
+  **The prices Jarvis starts with are not checked** (written from memory,
+  no price page could be opened): see them with
+  `py -3 jarvis_chatbot_api.py spent` and correct one with
+  `py -3 jarvis_chatbot_api.py price openai <in> <out>`. It is an estimate,
+  so a month can end slightly over. Limits and prices can only be set on
+  the PC; the apps only show them. Not yet tried against the real services.
+
+- **Jarvis Live, fixed after four reviews - and your three answers built.**
+  - **After a crisis answer, Live gets more time.** It does not end at its
+    time limit until at least 30 minutes after the last such answer, and
+    it does not say "minutes left". It is quiet about it. You can still end
+    it any time. Both apps.
+  - **One "Interrupting Jarvis" setting** instead of two, for Live and
+    everyday voice alike: "Interrupt by voice" (recommended), "By button
+    only", or "Don't interrupt". On the PC: Settings -> Voice, where the old
+    switch was. On the phone: the Readiness screen. Your old choice carries
+    over (the old switch off becomes "Don't interrupt"; Live's "tap only"
+    becomes "By button only").
+  - **Remarks to someone else are not kept in chat history at all** (they
+    were kept, marked "(not for Jarvis)"). An old one still in your history
+    shows as "(not for Jarvis)".
+  - **"End Live when"** (PC, Settings -> Voice): with App lock on, Live ends
+    when App lock would ask again (the default), or only when Windows locks
+    - the looser choice asks with an approval card. The phone keeps App
+    lock's own rule.
+  - **Clearer words:** "End Live" (not "Stop"), "Mic off" / "Mic on" (not
+    "Mute"), "Listen anyway" during a call; every pause says what to do
+    next; "your PC", never "your desktop"; when Live ends it says why, in
+    a sentence, and says it aloud when it ended by itself.
+  - **Fewer surprises:** "that's it" or "I'm done" in answer to a question
+    no longer ends Live; only a card raised during Live pauses it (an old
+    waiting card does not); tap buttons no longer come out garbled; typing
+    counts as talking for the quiet timer; Esc on the PC hides the bar but
+    keeps the conversation; a remark to someone else no longer wipes the
+    answer (or the crisis help) off the screen.
+  - **Easier to find:** the phone has a strip on Home while Live is on and
+    a "Live" shortcut when you long-press the app icon; the PC's tray icon
+    gets a red mark; "What asks first" lists "Start Jarvis Live - does it
+    without asking" in both apps; Brain's old "Live" tab on the PC is now
+    called "Now".
+  - Said plainly: none of this has run on your PC or phone yet, and the
+    phone's part is only compiled by GitHub.
+
+- **Jarvis Live: talk back and forth, on the PC and the phone.** Press
+  Live (the Jarvis bar, the tray, or Home -> Live on the phone) or say "Hey
+  Jarvis, let's talk", then just talk - no "Hey Jarvis" before each
+  sentence. Every sentence is still checked to be your voice on your PC
+  before any words are made of it, and cards still need a tap (Jarvis stops
+  listening while one waits). A sign shows the whole time ("Jarvis Live ·
+  24 min left"), with Mute and Stop; on the phone a notification with End
+  and Mute. It ends when you say "Okay Jarvis, that's all for now", press
+  Stop, after 90 quiet seconds, or at 30 minutes ("give me twenty more
+  minutes" adds time). After a spoken question, tap buttons ("Yes", "No")
+  answer it; you can type too. It pauses itself during a phone or video
+  call. Two new voice settings in both apps: "Jarvis Live" (how far it is
+  trusted under "Only trust the talk button"; trusted fully by default) and
+  "Interrupting Jarvis in Live" (by voice, or by tap only). Said plainly:
+  it needs your voice trained first; very short replies ("yes") are still
+  too short to check, so use the buttons; nothing has been timed on your
+  PC; and **the camera part is built but switched off** until the second
+  graphics card is in and passes the photo test.
+
+- **Chatbot driver fixes, and a correction: every chatbot is reachable from
+  both apps.** The entries below that say "still not usable from either
+  app" are out of date: both apps' chatbot screens can start a
+  conversation with any of the chatbots once it is set up (a website signed
+  in, a key saved, or the model chosen). None has been tried against the
+  real site or service yet. Fixed at the same time: a website window no
+  longer reads an answer from a different chat you clicked while the first
+  answer was coming; each site's self-check now asks two questions in the
+  same chat, so a wrong guess about a site's chat address is caught by the
+  check rather than mid-conversation; a site no longer shows "ready" after
+  a sign-in window that was closed before you finished signing in (if you
+  signed in to Gemini before this change, run
+  `py -3 jarvis_chatbot_gemini.py sign-in` once more - it finishes at once
+  if it is still signed in); the second AI on your PC no longer ends with a
+  wrong "did not answer within 180 seconds" when it was only waiting for
+  your own chat, and Stop now cancels its answer so the graphics card is
+  freed; and a few words are now right (no "leaves this PC" or "(this PC)
+  (this PC)" for the second AI on your PC, and the real reason when a
+  key-based chatbot is not set up).
+
+- **A new voice setting in both apps: "Answers about your screen after
+  "Hey Jarvis"".** If you choose "Only trust the talk button" for
+  hands-free, an answer about your screen to a question that starts with
+  "Hey Jarvis" now stays on screen - written, not read aloud. This setting
+  lets you allow reading those answers aloud anyway: "Read aloud" shows an
+  approval card first; "Keep on screen" (the default) applies at once. With
+  "Same as the talk button" it changes nothing, and the settings page says
+  so. It is under Settings -> Voice on the PC, and Checks -> Voice check on
+  the phone. Said plainly: Jarvis cannot look at your screen from either
+  app yet, so for now the setting is stored and waiting.
+
+
+- **Ask several chatbots and compare** (both apps, Brain -> "Talk to a
+  chatbot for me"). Tick "Ask several and compare", pick two or more
+  chatbots, type the goal once. One approval card lists every chatbot
+  Jarvis would ask. Jarvis then talks to each one in turn, under the same
+  limits and checks as a single conversation, and at the end writes one
+  summary on your PC: where they agree, where they disagree (and who said
+  what), the sources each gave (not checked by Jarvis), and which one
+  dropped out and why. If one shows a captcha or a sign-in page, Jarvis
+  leaves it out and carries on with the others. Pause, Resume and Stop act
+  on the whole comparison. Up to 3 chatbots with one graphics card, 4 with
+  two (you confirmed these numbers). Not yet tried against the real
+  chatbot websites.
+- **The chatbot chooser is a list you can read on a phone.** It used to be
+  one row of buttons, and with sixteen chatbots most fell off the screen.
+  Both apps now list them one per line under three headings - "Websites (a
+  browser window on the PC)", "With a key (each message costs a little)",
+  "On this PC" - with the reason under any that is not set up yet.
+- **A conversation through a key shows what it used**: "Used so far: 3
+  requests, 4,215 word-pieces (tokens), model gpt-5-mini" (per chatbot in a
+  comparison). The card already said Jarvis would show this; neither app
+  did.
+- **"What Jarvis can reach" showed the chatbot ways out as Off** although
+  both apps can start conversations: a switch the routes should have set
+  was never set. Fixed.
+- **The chatbot driver can now work eight more chatbot websites - still not
+  usable from either app.** ChatGPT, Claude, Microsoft Copilot and
+  Perplexity, plus DeepSeek, Grok, Le Chat (Mistral) and Meta AI (these
+  last four picked as "other commonly used" websites - say if you want any
+  left out). Each works exactly like Gemini: a browser window you can see,
+  a steady typing pace, nothing hidden, and a stop to ask you at any
+  captcha, sign-in or "unusual activity" page. Each has its own spare
+  account, signed in once by hand, and each company's terms restrict
+  automated use, so that account may be blocked or closed. Perplexity's
+  listed sources are copied as text under its answer, never opened. How
+  Jarvis finds each site's buttons could not be tried against the real
+  sites: run each site's one-line self-check on the PC first
+  (`backend/README.md`).
+
+- **The rules for letting Jarvis look at your screen - not in the apps
+  yet.** "Look at this" (one look when you ask) and "Watch with me" (a
+  session you start and stop, 30 minutes unless you say otherwise, 2 hours
+  at most) now have their rules written and tested on the PC side: Jarvis
+  pauses on password boxes, on anything on your "Never look at" list
+  (password managers and Windows sign-in to start with; adding is instant,
+  taking something off asks with a card), on protected windows and on pages
+  whose site it can't read; it checks just before and just after each
+  picture and throws the picture away if either check fails; it keeps
+  nothing it saw; and "Stop everything" ends a session. Answers about the
+  screen will be read aloud unless a sensitive fact was used, like web
+  search answers. There is no key, button or setting for it in either app
+  yet, and the parts that read Windows itself are the next step.
+
+- **A switch to turn off swiping on approval cards** (phone, Security).
+  Swiping right to approve and left to deny stays on unless you turn it
+  off; off, every card is decided with its buttons only. Turning it back on
+  asks for your fingerprint or PIN.
+- **The chatbot driver can also use a key, or a second AI on your PC -
+  still not usable from either app.** With a key saved on the PC, Jarvis
+  can hold its one-card conversation with ChatGPT (OpenAI), DeepSeek,
+  Mistral, Grok, OpenRouter or Groq through each company's official API.
+  The key stays in Windows Credential Manager and goes only to that
+  company. Each message costs a little on that account; Jarvis shows the
+  word-pieces (tokens) used, but there is no money limit yet. Or it can talk
+  to another AI model on your own PC, where nothing leaves the PC: with one
+  graphics card that is the same model Jarvis uses, with both cards any
+  model you already have. How to save a key: `backend/README.md`.
+- **The chatbot driver's Gemini part is written - still not usable from
+  either app.** Jarvis can now open its own Gemini window (gemini.google.com,
+  in a browser window you can see), type a question at a steady pace, and
+  read back only the answer to it. It never hides that it is a program, and
+  at a captcha, a sign-in page or an "unusual activity" page it stops and
+  asks you instead of trying to get past it. It uses its own browser profile,
+  which you sign in to once, by hand, with the spare Google account. Before
+  real use, run the one-line self-check on the PC (`backend/README.md`) - it
+  sends "What is 2 plus 2?" and says PASS or FAIL for each step, because the
+  way it finds Gemini's buttons could not be tested against the real site.
+- **"Talk to a chatbot for me" now has its screens in both apps - but no
+  chatbot can be reached yet.** On the PC it is a card in Brain -> Work; on
+  the phone, a card in Brain. You choose the chatbot, type what Jarvis
+  should find out (the card says these words are sent exactly as typed),
+  set the most messages and minutes and any words it must never send, and
+  Start asks for one approval card - nothing is sent before your yes. While
+  it talks you see the conversation, with the chatbot's words marked
+  "outside text", plus Pause, Resume and Stop; changing a limit asks a new
+  card; the summary stays on screen at the end and is never read aloud. The
+  phone also shows "Talking to Gemini, 3 of 5" with a Stop button. Gemini's
+  part is still being built, so today Start says so and does nothing.
+- **New: Projects in both apps.** Brain now has Projects on the PC and on
+  the phone. Make a project, write how Jarvis should help with it and a
+  few notes, and track numbers ("benchmarks") - log a number with a tap,
+  see a small chart of your numbers over time with your target as a
+  dashed line, and whether each one is better or worse than last time.
+  Health and money numbers show "private - not read aloud". Deleting asks
+  "are you sure?" first. A coding project's folder is chosen on the PC
+  (from "Folders Jarvis may look in"); the phone says "Set on your PC" for
+  that. The "Shareable" switch asks you with a card to turn on, and turns
+  off at once.
+- **New: take a wrong private mark off.** Jarvis sometimes marks a number
+  private by mistake - it reads "5k time" as money. You can now remove
+  that mark; because the numbers may then be read aloud, it asks you with
+  one approval card first. A mark you added yourself comes off at once.
+  Renaming the benchmark checks its name again.
+- **Backups and the data-health check now include your projects**
+  (`projects.db`). Before this, a backup would not have kept them.
+- **The core of the chatbot driver - not usable yet.** The part of Jarvis
+  that will hold a conversation with an AI chatbot for you (Gemini first)
+  is written and tested on the PC side: one approval card per
+  conversation, a check before every message so nothing private leaves,
+  and stops at any captcha or sign-in page. There is no button for it in
+  either app yet, and the Gemini part is not built.
+- **Fixed: marking a crisis answer "wrong" counted toward "suggest the
+  bigger model".** Crisis messages are never learned from and never
+  counted; the thumbs-down on a crisis answer was the one place that still
+  counted. It no longer does. A thumbs-down on any other answer counts as
+  before.
+- **Fixed (phone): "Use" on a model that cannot chat.** Brain › Model on the
+  phone offered "Use" on memory-search models such as nomic-embed-text,
+  which would leave Jarvis unable to answer. Like the desktop, their row now
+  has no "Use" and says "for memory search only - it cannot chat". Both
+  apps follow one shared table of cases, so they cannot drift apart.
+- **New (phone): reconnects as soon as the network changes.** Walking out
+  of Wi-Fi, or switching Tailscale on, used to leave the phone on a dead
+  connection for up to about a minute and a half. Now it reconnects within
+  a couple of seconds. Approving still waits until the link is trusted.
+- **New (phone): "Tailscale (or Meshnet) is off on this phone".** When the
+  link is down and the phone has no VPN running at all, Home and Checks
+  say so under the link.
+- **New (phone): Show token on the pairing screen.** The 43-character token no
+  longer has to be typed blind. It starts hidden, is never saved anywhere
+  new, and screenshots and screen recording are blocked while it is shown.
+- **New (phone): "Background restart" is offered once after pairing.** A
+  line on Home, in the same words as the Checks card, with "Keep link
+  alive" and "Not now". It never comes back after either.
+- **New (PC): the live check asks "Can your phone reach Jarvis?"**
+  (`selftest.py --preflight`): is a phone address set, is it a Tailscale or
+  Meshnet one, is Tailscale or Meshnet on this PC, is Jarvis listening
+  there, and is there a Windows Firewall rule - each with the one line or
+  the one setting that fixes it.
+- **Docs: a Quick start at the top of `docs/INSTALL.md`** - the shortest
+  way to a first typed chat, with the desktop app starting Jarvis, then
+  pairing the phone.
+- **Projects, first part (on the PC's side only - not in the apps yet).**
+  Jarvis can now keep projects: a coding project (an app) or a life
+  project ("run a half marathon"), each with its own instructions, a few
+  notes, a to-do list and the goals it belongs to. A coding project's
+  folder must already be one of "Folders Jarvis may look in", and is
+  chosen on the PC. Each project can track numbers ("benchmarks"): say
+  "I ran 5 km" or "log my weight as 72.5 kg" and Jarvis writes it down
+  without the AI model and says whether it is better or worse than last
+  time - but only when one of your projects tracks that number.
+  Weight, heart rate, money and other health or money numbers stay on
+  screen and are never read aloud. A "Shareable" switch per project
+  starts off, and turning it on asks you with a card; nothing is ever
+  sent by it yet. Running tests and Jarvis changing code come later. The
+  screens in both apps are next.
+- **Fixed (phone): "open help", "connection", "the morning briefing",
+  "about" and "Jarvis's voices" opened Settings at the top.** Each now opens
+  the phone's own place for it - Help, Checks, Brain or "Jarvis's voice" -
+  and scrolls to it. A setting that only the PC app has (keyboard shortcuts,
+  accounts and a few more) now says so in one line instead.
+- **Fixed (phone): "Catching up…" explained properly.** An approval card
+  said "Not connected to the desktop" even while the phone was connected and
+  only catching up. It now says Jarvis is catching up with your PC and the
+  decision waits until then. Checks calls this state "Catching up…" like
+  Home (it said "Stale"), Home shows Retry next to it, and coming back to the
+  app reconnects on its own. Approving still waits until the link is
+  trusted again.
+- **Fixed (phone): the "Brief me now" and "What did I miss?" app-icon
+  shortcuts** opened Brain at the top. Each now asks its question on Home,
+  as if you had typed it.
+- **Fixed (phone): an answer made without the AI model** said "answered on
+  this PC" on the phone. It now says "on your PC".
+- **Answers from web search and home status are read aloud again when you
+  ask by voice.** Before, any answer where Jarvis used a tool was kept on
+  screen ("It's on your screen."), so a spoken question answered from the
+  web was never spoken. Now only web search and home status (which is
+  where the weather comes from) are read aloud. Email, calendar, notes,
+  files, memory and any other tool still keep the answer on screen, and so
+  does Jarvis not being sure which tool ran. Both apps follow one shared
+  table of cases, so they cannot drift apart.
+- **Fixed: one "Hey Jarvis" heard by both the phone and the PC.** Both
+  used to answer, so you got two answers - and a timer or "next song" could
+  happen twice. Or, after a plain "Hey Jarvis.", the second device used up
+  the listening moment and your real question was thrown away. Now only the
+  first copy is answered, the other device stays quiet, and each device
+  listens for its own follow-up question. Your voice is still checked
+  before any words are written down.
+- **Fixed (desktop): Forget's "when did this stop being true?" box.** "Sept
+  20" was saved as the year 2001; now a date with no year means the most
+  recent one that has passed, a date in the future is refused, and a date it
+  cannot read asks again instead of quietly dropping the Forget you said yes
+  to.
+- **Fixed (desktop): "Use" on a model that cannot chat.** Memory-search
+  models such as nomic-embed-text say "for memory search only" instead.
+- **Fixed (desktop): raw underscores in answers** - `_words_` now show in
+  italics.
+- **Fixed (desktop): putting one of two approval cards aside hid both.** The
+  next card now shows, and the count of waiting cards is right.
+- **Clearer (desktop): Erase's second question** says what OK and Cancel
+  each do. Two small wording slips fixed in Hardware and Voices.
+- **Fixed: typing the phone's pairing key exactly as the PC shows it.** The
+  PC shows the key in groups of four with spaces, to make it easier to read.
+  The phone kept those spaces, so the key was refused. The phone now drops
+  them as you type, and the PC says to leave them out.
+- **Fixed: "Tell me when this page changes" alerting when nothing visible
+  changed.** It compared the whole page, including hidden codes that change
+  on every visit. It now compares only the words you can see. Watches set up
+  before this record the new kind once, quietly, instead of alerting.
+- **Fixed: "Start with Windows" said on when Task Manager had it off.**
+  Settings now reads Task Manager's Startup switch too, and turning it on in
+  Jarvis turns that switch back on.
+- **Clearer message** when the patch script is pointed at the wrong folder:
+  it no longer sends you looking for "OpenJarvis", an unrelated project.
 
 - **Sharper animals, and more frame-rate choices, on both apps.** Quality
   now reads **Lower, Balanced, High, Maximum**, each with a one-line note on
@@ -305,6 +742,233 @@ number as the last part - `0.2.57` is a build of 0.2.
 - **Sharper animals**: fewer see-through or stray specks along their
   outlines, measured against a slow exact render (`docs/CRITTERS.md`,
   "Drawing quality").
+
+**New: watches**
+
+- **"Tell me when a search shows something new."** Jarvis runs your search
+  once a day (every 6 hours at most) through the search service you chose -
+  never another one - and tells you when new results appear.
+- **"Tell me when the price on <address> drops below X."** The price is read
+  by plain code, not the AI, and shown under the watch so you can check it
+  picked the right number. Jarvis never buys anything.
+- **GitHub watches:** "tell me when CI fails (or finishes) on owner/repo" and
+  "tell me when PR #12 on owner/repo merges". Read-only, using the GitHub key
+  you already have. One line to add on the PC: `github_read = "auto"` under
+  `[autonomy.tiers]` in `jarvis-framework.toml` (the refusal message names it).
+- **A watch that stops working tells you once** (at most every 12 hours)
+  instead of failing silently, and clears by itself when it works again.
+- **Page watches ignore hidden page bytes**, so a page nobody changed no
+  longer counts as changed (a fix ported from another branch).
+
+**New: Brain upgrades**
+
+- **Search what was said in your old chats**, in both apps' History - not
+  just titles. Each match shows the words in place, and "Find in this chat"
+  steps through them. The search runs on your PC; nothing is saved and
+  nothing goes to the AI.
+- **"History of this fact"** on the PC's Memory tab: every earlier wording,
+  with the changed words marked. Erased words never come back.
+- **Galaxy now shows the people and things Jarvis knows about.** Click a name
+  to open "About <name>".
+- **Fixed: Galaxy could show memory while "Windows Hello for memory lists"
+  said it was hidden.** The HUD's copy is covered too. Galaxy's search now
+  counts every match and says when nothing matches.
+
+**New: reminders, your phone, and Lockdown**
+
+- **"Remind me next time I talk about X."** When your own words later mention
+  it, Jarvis brings it up in the chat. At most 3 times, never out loud if the
+  topic is sensitive, gone after 90 days. No card.
+- **"Ring my phone."** Said to Jarvis on the PC, your phone rings on its alarm
+  sound - even on silent - with a Stop button, for at most 2 minutes. It never
+  rings for an old message.
+- **"Playing on your PC" on the phone's Home:** previous, play, pause, next.
+- **Lockdown.** One tap (or "lockdown") makes everything that would leave the
+  PC ask first, and anything that runs by itself stop. Turning it off is on
+  the PC only, with a card and Windows Hello. Not yet covered: the ntfy push
+  notice, which lives in your own `jarvis_gate.py`.
+
+**New: smarter memory**
+
+- **"Where did I put ...?"** Tell Jarvis "the passport is in the top
+  drawer", then ask "where's my passport?" - it answers at once, without the
+  AI model, and says when you told it. A newer place replaces the older one.
+  ("Where's my phone?" still rings your phone.)
+- **Facts keep "until" dates from your words** ("on holiday until 12
+  October") and are never hidden by themselves when the date passes: Jarvis
+  asks "Still true?" instead.
+- **Overnight memory tidying now actually runs, cards only:** at most five
+  "Still true?" or "Which is true now?" cards a night, using the AI on this
+  PC only, and only while its switch is on. It never changes a fact by itself.
+- **Deleting a chat offers to forget the facts it taught you**, with nothing
+  ticked to start, and "are you sure?" before anything is forgotten.
+
+**New: phone conveniences**
+
+- **After a restart, a quiet "Hey Jarvis is off - tap to turn it back on"
+  notice**, if listening was on before. Nothing opens the microphone by
+  itself.
+- **Three Quick Settings tiles you choose:** a focus session, a 10-minute
+  timer, Brief me, Stop everything, or play/pause on the PC. Never Approve or
+  Deny. Held while the connection catches up. Stop everything works even
+  while the app is locked, like the PC's hotkey.
+- **Notes for Android 17:** Jarvis's voice has its own volume slider, and
+  Floating Jarvis may work as an app bubble (touch and hold the icon).
+- **Install notes for 2027:** Google will require extra steps to install
+  unverified apps by tapping the file; installing from the PC with adb stays
+  allowed (docs/INSTALL.md).
+
+**New: better voice (each off until measured on your PC)**
+
+- **An optional second "hey Jarvis" check:** two detectors must agree before
+  Jarvis wakes, for fewer false wake-ups. Off until you choose it, in both
+  apps.
+- **A newer speech detector (Silero VAD v6)** you can switch to after
+  measuring it on your PC; today's stays the default.
+- **A third voice-ID model (WeSpeaker ResNet221)** is ready but cannot be
+  chosen until it is measured on your PC - in a first test it let other
+  voices through more often than the one used today.
+
+**New: Today cards**
+
+- **Your own words on a Today section** in both apps (above Coming up), at a
+  time and on the days you choose: "show gym bag on my Today page on Mondays
+  at 7". Set by saying it or with a small form; no approval card; Delete is
+  immediate.
+- **The Today section also shows today's briefing** - weather, calendar,
+  email and what is still to come - without reading anything new.
+
+**New: photo to reminder**
+
+- **Give Jarvis a screenshot, a picture file or a shared photo** of a flyer or
+  ticket, and it suggests a reminder from the date and time it finds. Nothing
+  is set up until you tap Add (or "Also on my phone"). The words are read on
+  your PC, never by the AI model, and are not kept.
+- **You can now say calendar dates:** "remind me on 12 October at 2pm to pay
+  the deposit". A slashed date like 5/10 is read month first (May 10).
+
+**New: PC help**
+
+- **Ask "why is my PC slow?", "how full is my disk?", "what's using my graphics
+  card?", "how hot is my graphics card?" or "when did my PC last restart?"**
+  and get a plain answer at once, without the AI model. Also under Settings ->
+  Hardware and models on the PC and Brain -> PC help on the phone. It only
+  reads; program names never leave the PC and are not saved. Changing Windows
+  settings (Night light, dark mode) is not built yet.
+
+**New: widgets you describe**
+
+- **Say or type what a small widget should show** - "my next 3 reminders and
+  a 10-minute timer button" - and Jarvis makes a preview; tap Add to keep it.
+  It is built from a fixed menu of five block kinds and eleven sources, never
+  code, and plain code on the PC checks it. It shows on the phone's home
+  screen (Jarvis widget 1-3) and in the desktop widget window, in place of
+  the face. Its buttons are only the Quick Settings tile actions. Delete is
+  instant. Email text, saved facts and web pages are never on the menu.
+
+**New: smarter answers**
+
+- **Big tool results (long files, emails, web pages) are shortened to their
+  start and end** instead of being dropped, so Jarvis can still answer from
+  them. In long answers that use many tools, older tool results are cleared
+  to make room; your own words are never cut.
+- **If Jarvis says it did something but nothing actually ran,** the answer
+  now ends with "(Nothing was actually done - no action ran in this
+  answer.)" - and says so aloud on voice.
+
+**New: model tryouts (tools only - nothing switches by itself)**
+
+- **Try other chat models overnight** against Jarvis's own: tools, learning,
+  speed and how much fits on the graphics card, with a plain verdict for each
+  (`tools/model_tryout/README.md`).
+- **Try other memory-search models and re-rankers** with the memory
+  self-test. New `JARVIS_MEMORY_EMBED_MODEL` / `JARVIS_MEMORY_RERANK_MODEL`
+  switches; the defaults are unchanged.
+- **The preflight check warns about a hidden llama.cpp `config.ini`,** and
+  docs/MODEL-TOPOLOGY.md has two engine settings to try, with how to measure
+  and undo each.
+
+**New: bring in old chats from ChatGPT, Claude or Gemini**
+
+- **Brain -> Memory on the PC: "Bring in chats from ChatGPT, Claude or
+  Gemini".** Choose the export file; Jarvis reads it in the background and
+  every possible fact waits for your yes, one card at a time. Nothing is
+  saved by itself, and nothing leaves the PC.
+- **Changed: importing reads only your own messages,** never the other
+  assistant's replies - for all three services (Claude and Gemini imports
+  used to read both sides).
+- **Fixed:** a Google Takeout with Search activity in it no longer treats
+  searches as Gemini chats.
+- **DeepSeek chats can be brought in too**, and Jarvis reads imported chats
+  better: a long chat is read in pieces the model can take in whole (the
+  start of a long chat could be cut off before), with the date the chat
+  happened and the facts Jarvis already keeps, the same way live learning
+  does. Gemini's prompts are put back into conversations instead of being
+  read one line at a time, without the "Prompted" in front, and "Gave
+  feedback" lines are no longer taken as things you said. Claude's hidden
+  reasoning and tool output are never read. If the AI model stops answering
+  partway, the import pauses and nothing is lost.
+
+**New: desktop polish**
+
+- **Brain, Settings, Faces and the HUD reopen where you left them,** at the
+  same size, and maximised if they were. App lock still asks Windows Hello
+  before the HUD shows. A window whose screen was unplugged opens centred.
+- **While Jarvis is clicking or typing on your screen,** the widget shows
+  "Jarvis is working on your screen", a timer and a Stop button - the same
+  as the Stop everything key.
+
+**New: talk-to-type on the PC**
+
+- **Hold Alt+Shift+T, speak, let go** - Jarvis types what you said into the
+  program in front. Off by default; turning it on shows one approval card,
+  turning it off is immediate. The voice check still comes first.
+- **It never types into a password box, while Jarvis is locked, or into a
+  window you switched to.** Your clipboard is put back afterwards, and the
+  words stay out of Windows' clipboard history. The words are not kept.
+
+**Fixed**
+
+- **Desktop security update.** The desktop app's framework (Tauri) goes from
+  2.11.5 to 2.11.6, which closes a published hole (GHSA-w28w-mhc8-qvjv) where
+  one window of an app could read data queued for another window. Jarvis has
+  several windows and streams chat answers that way, so it was affected.
+- **Speech and memory-search models no longer report to Microsoft.** The
+  library that runs them (ONNX Runtime) has its own usage reports switched on
+  by default. Jarvis now switches them off before any model loads. One copy
+  inside the speech engine can't be reached this way; Windows' own "Send
+  optional diagnostic data" switch covers that one (docs/ARCHITECTURE.md §4).
+- **A fact you forget no longer comes back by itself.** Jarvis re-reads the
+  whole chat when it learns, so about a minute after you pressed Forget (or
+  Erase), the same sentence could be saved again without asking. Now nothing
+  is learned again from the lines it had already read in that chat, and if
+  you say a forgotten fact again later, it waits for your yes.
+
+**Faster**
+
+- **A faster first answer after waking, and after a pause.** Jarvis now
+  reads its rules and tool list into the model ahead of time - a one-word
+  warm-up whose answer is thrown away and never recorded. It never loads the
+  model by itself, never runs while you are asking something, and gives way
+  the moment you do. To switch it off: `warm_prefix = false` under `[power]`
+  in `jarvis-framework.toml`.
+- **Jarvis speaks sooner.** Speech-to-text and the voice now use 4 processor
+  threads instead of 2 on a PC with cores to spare (2 on a small one), which
+  measured about 0.3 s sooner to the first sound. Your own `stt_threads` /
+  `tts_threads` setting still wins.
+- **The model's settings file explains the real memory check.** The notes in
+  `backend/jarvis-primary.Modelfile` were out of date about flash attention.
+  They now give the one PowerShell line that shows whether the whole model is
+  on the graphics card ("offloaded 37/37").
+
+**Smaller fixes**
+
+- **The model tool test is fair to other models.** A model that loads with
+  too short a conversation is skipped with a plain message saying how to fix
+  it, `--repeat` saves the worst of several runs, and a model maker's own
+  settings can be tried (`tools/tool_eval/README.md`).
+- **The smartwatch setting says a ringing alarm may stay on the phone.**
+  Watches often skip notifications that keep going until you stop them.
 
 ## 0.2.0 - 26 September 2026
 

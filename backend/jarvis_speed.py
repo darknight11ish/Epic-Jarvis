@@ -12,7 +12,8 @@ This module keeps one small row per answer:
 
     which model   how long until the first word   how long in total
     words per second   tokens per second   how much of the model was on the
-    graphics card   whether tools were used
+    graphics card   whether tools were used   how big the prompt was and
+    how much of it Ollama reused from its prompt cache (counts only)
 
 and, when the model is switched, one row comparing the old model's speed with
 the new one's (item 12 - the Tripwire speed check, `SwitchSpeed` below).
@@ -530,9 +531,44 @@ def summary(rows: list) -> dict:
             "median_tokens_per_s": _median(r.get("tokens_per_s") for r in rs),
             "median_words_per_s": _median(r.get("words_per_s") for r in rs),
             "median_on_gpu_percent": _median(r.get("on_gpu_percent") for r in rs),
+            # Milestone 7 (2026-09-28): the middle share of the prompt Ollama
+            # reused rather than read again - reused_percent() below. Only
+            # answers that carry both counts; None when none do (older rows,
+            # an older Ollama, or a turn that never asked for the counts).
+            "median_reused_percent": _median(reused_percent(r) for r in rs),
+            "reused_answers": sum(1 for r in rs if reused_percent(r) is not None),
             "last_at": max((r.get("at") or 0) for r in rs) or None,
         }
     return out
+
+
+def reused_percent(row: dict) -> Optional[float]:
+    """How much of one answer's prompt Ollama reused from its prompt cache,
+    as a percentage: `cached_tokens` out of `prompt_tokens`.
+
+    What the two numbers are (Ollama's own code, read 2026-09-28, not run):
+    its OpenAI endpoint sends `usage.prompt_tokens` = the prompt's
+    `prompt_eval_count`, and `usage.prompt_tokens_details.cached_tokens` =
+    `prompt_eval_cached_count`, the part of it found already read from the
+    last request (openai/openai.go). `prompt_eval_count` counts the WHOLE
+    prompt, cached part included: Ollama's own `--verbose` printout works
+    out the part actually read as `prompt_eval_count - cached`
+    (api/types.go, Metrics.Summary). So this is "the share Ollama did not
+    have to read again". For a tool turn both are summed over its requests
+    to the model (prompt_rounds), so it is the share over the whole turn.
+
+    None when either count is missing (an older row, an older Ollama, a
+    relayed turn whose request never asked) or the prompt is empty. Capped at
+    100, in case the two numbers ever come from different requests."""
+    if not isinstance(row, dict):
+        return None
+    pt, ct = row.get("prompt_tokens"), row.get("cached_tokens")
+    for v in (pt, ct):
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or v < 0:
+            return None
+    if pt <= 0:
+        return None
+    return round(min(100.0, 100.0 * ct / pt), 1)
 
 
 def slowdown(rows: list, model: str, *, recent: int = 10, before: int = 20,

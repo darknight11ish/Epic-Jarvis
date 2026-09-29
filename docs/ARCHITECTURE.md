@@ -47,6 +47,21 @@ it works.
    That is the whole exception: one named file, always locked, never a
    general loosening of this invariant, and never anything Jarvis decides
    to send anywhere on its own. `docs/JARVIS-API.md` §45.
+
+   **A second named exception: support-chat details** (`jarvis_support.py`;
+   the owner's decisions of 2026-09-28, "Customer-support chats"). In a
+   chat with a company's customer support, Jarvis may give the details the
+   owner listed on that chat's ONE approval card - an order number, an
+   email address - word for word, to that company only, and nothing else.
+   The last check before every message (`jarvis_support.support_check`)
+   hides each listed value exactly as written and blocks anything else
+   personal (an unlisted email, phone number, long number or address, a
+   saved fact); payment card numbers, Social-Security-shaped numbers,
+   passwords, keys and one-time codes block even when listed, and the card
+   refuses them. Each value sent is audit-logged by its NAME only
+   (`support.detail_sent`), never the value. Per chat, for the listed
+   values only - like the backup file, never a general loosening.
+   `docs/JARVIS-API.md` §65.
 2. **No public tunnel, ever.** Reachability is a private, encrypted
    device-to-device network: Tailscale, or NordVPN Meshnet. Both give each
    device an address in `100.64.0.0/10` that only the owner's own devices
@@ -320,6 +335,19 @@ narrower still: it is read-only navigation, matched only against a fixed
 list of real section ids, so it changes nothing by construction.
 `docs/JARVIS-API.md` §58 has the whole design.
 
+**One card for a whole time frame, never a bulk switch** ("Forget a time
+frame", the owner's decision of 2026-09-28; `jarvis_forget_range.py`,
+docs/JARVIS-API.md §64). The one place a single card forgets and deletes
+many things at once - and it keeps the four steps: `preview()` lists every
+fact and chat from the chosen days (touching nothing), the apps show each
+one ticked and the owner unticks any to keep; `card_text()` lists EVERY
+item still ticked in full - each fact word for word, each chat's title and
+dates; the gate asks once (action `memory_forget_range`, tier `ask` only,
+never loosened; risky, so Windows Hello or the phone's lock); `apply()`
+runs only on a person's "approved", and only on ids re-checked against the
+days. A spoken "yes" approves nothing. Undo (10 minutes, no card) only
+puts back what that card removed.
+
 **Stopping is never gated.** Stop, Pause and "Stop everything"
 (`/api/task/stop`, `/api/task/pause`, `/api/stop_all`) need no card and are
 never held on a stale event stream or by a waiting card: rule 4 blocks
@@ -330,6 +358,27 @@ one task control that raises a card. "Stop everything" also refuses every
 further tool call of the answer being written, even one whose card is
 approved after the press: a stop wins over an approval of the earlier
 question.
+
+**"Photo to reminder" (2026-09-28, JARVIS-API section 83) reads outside
+text without a model turn at all.** `POST /api/photo/scan` reads the words
+in a picture (`jarvis_ocr.py`) and finds a date with `jarvis_quick.py`'s own
+parser - plain code. The words never reach the model, a tool, the gate or
+the learner, and nothing is kept: the apps show a proposal in boxes, and
+only the owner's tap adds ONE one-off reminder through the ordinary
+`POST /api/schedule/add` (no card, like any one-off reminder the owner
+sets; held on a stale link). A command printed on a flyer is at most a
+suggested title the owner can see and change.
+**"Solve it here" needs no card, and can only do what the owner does**
+(`jarvis_handoff.py`, JARVIS-API §87.8, the owner's decision of 2026-09-28).
+When a chatbot website or a support chat is paused at a captcha, a sign-in
+page or an "unusual activity" page, the phone may be shown that ONE browser
+window and pass the owner's own taps and typing to it. Nothing is decided
+by Jarvis, nothing leaves the owner's own devices, and it never resumes the
+conversation: Resume is still the task's own card. The routes refuse every
+picture and every input unless the session is still paused at that very
+page, in that window, on the site's own hosts; a Resume, a Stop, Stop
+everything or the window going elsewhere ends it at once. Input is held on
+a stale link (rule 4); ending never is.
 
 ### Two rules that are easy to get wrong
 
@@ -399,6 +448,28 @@ What is **still open**, said plainly:
 - **Another device** on the owner's Tailscale or Meshnet network holding a
   stolen token is taken for the phone and not asked on the PC. Step 2 (a
   phone key per risky approval, with "more devices") closes that.
+  **Narrowed 2026-09-28 by QR-code pairing** (`docs/PAIRING-DESIGN.md`
+  phase 1, `backend/jarvis_devices.py`, JARVIS-API section 90): each paired
+  phone has a key of its own that can be removed on its own, and once the
+  owner retires the old shared key it works on this PC only, so a copy of
+  it is useless on another device. A stolen *device* key still works from
+  another device until that device is removed - phase 2 (a fingerprint-
+  signed yes per risky approval) is what closes that. **Built 2026-09-29
+  (backend half; JARVIS-API section 91):** a paired phone that has turned
+  on signed approvals (one `register_approval_key` card, PC only, Windows
+  Hello) must sign every RISKY approval with a key locked in its security
+  chip, made fresh by a fingerprint or PIN each time; the backend checks
+  the signature (`jarvis_owner_check.approve_check`, a one-use 120-second
+  challenge, the card's words re-hashed at that moment). A phone without
+  it is refused risky cards ("Turn on signed approvals for this phone
+  first") and an unpaired phone on the old shared key still works until
+  the owner retires that key. A program that steals a device key alone can
+  no longer approve a risky card from another device; a program that has
+  the PHONE, or the phone's screen lock, still can - and a program on the
+  PC is where it was (below).
+  Pairing does NOT change the rest of this section: a program already on
+  the PC can still read this PC's key and edit the device list (it cannot
+  pass the pairing card's Windows Hello).
 - **A program written to attack Jarvis** can still edit its files or take
   over its running process (above). Nothing inside the owner's Windows
   account can stop that.
@@ -555,11 +626,58 @@ These lanes leave the machine. Nothing else may.
 | **web search** (2026-09-25) | ONE search's words (at most 300 characters), to the ONE provider the owner chose - SearXNG on the owner's own machine (which asks other engines), DuckDuckGo, Exa, Tavily or Brave - and, for the last three, the owner's key to that service only. Never words that look like a password or key. A card with the exact words whenever the conversation has read email, files, notes, saved memories or other outside text, or the owner chose "Ask before every web search" | `jarvis_search.plan/run` (no socket in `plan`, secret refusal, one provider, no fallback, redirects refused, answers capped) + `jarvis_agent._web_search_call` (when it asks; only a person's yes after that) |
 | **checking for tool updates** (2026-09-27, the owner's own request, made directly) - PC only, and never the AI model: `jarvis_tool_updates.py`, run only by a person pressing the desktop's own button | Package and crate NAMES only (checked 2026-09-27, security/privacy audit: each request is `pypi.org/pypi/<name>/json` or `crates.io/api/v1/crates/<name>` - the version the PC is on is compared here, never sent; the card says "NAME and the version number", which is more than is actually sent), with a User-Agent naming the tool, not the owner (it named the owner's GitHub address until 2026-09-27) - never a file path, a folder name, or anything about the owner - to PyPI (`pypi.org`), crates.io (`crates.io`) and, if a real hand-installed tool is ever added to the (empty today) GitHub list, `api.github.com`. Report only: nothing here ever writes a file, runs `pip install`, or runs `cargo update` - it only shows the owner the exact command to run themselves. ONE approval card, the very first time this is ever run, ever; every later run skips the card entirely | `jarvis_tool_updates.run_check` (no socket opened by anything but the fetch functions it calls, each with its own timeout and a small retry, never a fallback that swaps providers; plain `urllib.request.urlopen`, so a redirect IS followed and the system proxy is used - acceptable only because no key or anything of the owner's is in the request, https only); `request_check` (the plan/run split: `approved()` is checked, and the gate is asked, before any fetch; only "approved" writes `tool_updates.json`, and a damaged or missing file reads as not-yet-approved, never as approved). "Desktop only" is the apps' choice, not the backend's: the two routes take any paired device's token (unlike the backup routes, `from_this_pc`) |
 | **an address the owner typed, meant to be on the open internet** (2026-09-27, feasibility I49/I67) - a news feed's own address (`jarvis_news.py`) or the one page "tell me when this page changes" watches (`jarvis_tellme.py`'s `page` source) | ONE plain GET of exactly that address, never a link found on it - a feed's headlines (titles only, never an article's own page) or a page's own bytes (kept only as a SHA-256 fingerprint, never shown, kept or sent to the AI model). ONE approval card per address ADDED (a feed) or WATCHED (a page); reading it afterwards needs no further card, only the tier below. Refused - at add-time, and again immediately before every later fetch - if the address resolves, by a REAL DNS lookup (never spelling), to this PC or a private network address, so a public-looking name can never be used to make Jarvis fetch from its own machine or home network (DNS rebinding is checked for, not only assumed away) | `jarvis_local_http.private_fetch_problem` (real DNS, checked on every fetch, not only at setup; a redirect followed only where the same check allows it) + `jarvis_local_http.public_urlopen` (since 2026-09-27, the security/privacy audit: the connection itself looks the name up ONCE, refuses any private answer, and connects to exactly the address it checked - before this, urllib looked the name up a second time to connect, so an answer that changed within that moment got through) + `jarvis_news.request_add`/`read_feed` (gate action `news_read`, tier `auto`/`notify`; adding is `change_own_config`, tier `ask` only) + `jarvis_tellme.add`/`_look_page` (gate action `page_read`, tier `auto` only - stricter than news, since a look is every 30 minutes, not about once a day; adding is the scheduler's own `schedule_repeat`, tier `ask` only) |
-| **the weather behind the face, from Open-Meteo** (2026-09-28, the owner's decision "Weather in the animals' scene") - off by default, and only when the owner chose "Open-Meteo (online)" | The owner's rough position - the latitude and longitude of the town typed on the PC, rounded to 0.1 degree (about 11 km) - and the names of four weather values, in ONE plain GET of one fixed address, `https://api.open-meteo.com/v1/forecast`, about every 20 minutes and only while an app is showing a face (the PC reads nothing on its own timer). No name, key, cookie or anything else of the owner's; no proxy; no redirect followed; the answer capped at 64 KB and turned into five numbers that are drawn, never given to the AI model. ONE approval card to switch it on, naming the exact numbers; the yes covers that position only (a new town switches it off); off is at once | `jarvis_sky.request_weather` (the card: `change_own_config`, tier `ask` only, `leaves_this_pc`) + `jarvis_sky.read_open_meteo` (refuses a position the card did not name, immediately before sending) + `_default_open_meteo_fetch` (refuses any other address before a socket opens; `jarvis_local_http.public_urlopen`) |
+| **customer-support chat (website)** (2026-09-28, the owner's "Customer-support chats"; `jarvis_support.py`, `jarvis_support_widget.py`, JARVIS-API §65) - **BUILT, NOT YET TRIED FOR REAL**: reachable from both apps through `/api/chatbot/support/*` once Playwright is installed on the PC. A browser window the owner can see, on its own profile (`chatbot/support-profile`, the owner signs in to their OWN account there by hand), opens ONLY the help page of the company on the card - Groupon's preset (`www.groupon.com`, address unverified) or a help page the owner types (https, a public name) - and never navigates anywhere else by itself. The company's chat widget usually sits in a frame served from its maker's own host; Jarvis reads and types in such a frame only when it is where that maker's widget sits AND its host is on that maker's list (Zendesk, Intercom, LivePerson, Gorgias, Freshchat, Salesforce; NOT VERIFIED), else it pauses. "What Jarvis can reach" has its row (`jarvis_reach._support_chat`); the gate's `_RISK` lines are `support-chat.patch` (outbound, cannot be undone) | Messages Jarvis writes in the owner's name (no opening "I'm an AI" line - the owner's choice), each through the support last check: only the details on the card, never a password, PIN, card number, security answer, ID number or code; a message saying it is a person never leaves. Fixed lines: the accepting reply "Yes, I accept that. Thank you." ONLY after that offer's own card; the owner's Decline line; "One moment please, I'm just checking that." while an offer card waits (at most every 2 minutes, 3 times); "Are you still there?" once; the request for a reference number and a written summary; thanks. A menu button in the chat is pressed only when the driver names its exact label, after the same check (one with offer words gets its own card) | `jarvis_support.plan/describe/run` (gate action `support_chat`, tier `ask` only, one card per chat listing every detail and the company's terms risk) + `support_offer` (one card per offer, showing the agent's words and the exact reply; a typed "yes" is refused) + `support_check` right before every send + plain-code detectors: "are you a bot?" and identity checks are handed to the owner (nothing sent), a detail not on the card is handed to the owner + `jarvis_task_control` Pause/Resume, Take over, Stop and `jarvis_stop_all`. Any company preset beyond Groupon needs the owner's OK first |
+| **"tell me when" watches on a search, a price or GitHub** (2026-09-28, the owner's choice of the research audit's "Watches" group; `jarvis_tellme.py`, docs/JARVIS-API.md section 70) - three watches, each ONE approval card (`schedule_repeat`, tier `ask` only) and each only notifying | **A search:** the owner's own typed or said words (at most 200 characters), once a day by default (every 6 hours at the most often), to the ONE web search provider the owner chose - the **web search** lane above, through the same `jarvis_search.plan/run` (secret refusal, one provider, no fallback, redirects refused), never while "Ask before every web search" is on; only 16-character fingerprints of the result addresses are kept, never titles, text or the addresses. **A price:** the same one GET of one typed address as a page watch - the lane above - with one number read from it by plain code, never the AI model; nothing is bought or pressed. **GitHub (a new way out):** ONE read-only GET to `api.github.com` per look - a repository's workflow run list or one pull request, the repository, branch and number the owner named, nothing else - and, when `JARVIS_GITHUB_TOKEN` is set, that key (the one GitHub research already uses) in that request's header only; without it, public repositories only. Nothing on GitHub is changed | `jarvis_tellme._look_search` (through `jarvis_search`), `_look_price` (through `jarvis_local_http.private_fetch_problem`/`public_urlopen` and `_PageRedirect`, gate action `page_read`), `_look_github`/`_default_github_get` (gate action `github_read`, tier `auto` only; any address but `https://api.github.com/...` refused before sending; redirects refused, never followed; the key read fresh, registered with `jarvis_scrub` by value, never in a card, error, audit line, event or `schedule.db` - `test_tellme_watches.py` checks) |
+| **chatbot conversation (website)** (2026-09-27/28, the owner's decisions; `docs/CHATBOT-DRIVER-DESIGN.md`) - **BUILT, NOT YET TRIED FOR REAL**: the core (`jarvis_chatbot.py`), its routes (`jarvis_chatbot_routes.py`, `chatbot-routes.patch`), both apps' screens, and the Gemini adapter (`jarvis_chatbot_gemini.py`, Playwright, a visible window, its own browser profile signed in once by hand) are built (2026-09-28); it reaches gemini.google.com only after the owner has installed Playwright and signed the window in. The routes take any chatbot id and both apps list every one, so each website below is likewise reachable from both apps once its own window is signed in (the sign-in helper leaves a small dated note in the profile folder only when the sign-in finishes; a folder without it is "not signed in yet"). The owner's one-off self-check (`py -3 jarvis_chatbot_gemini.py check`) sends one fixed question, "What is 2 plus 2?", to verify the selectors. **Eight more websites, the same open way** ("the chatbot driver becomes versatile", 2026-09-28): one shared base (`jarvis_chatbot_web.py`) and a thin site file each, each its own named way out with its own spare account, profile folder and self-check - ChatGPT `chatgpt.com` (`jarvis_chatbot_chatgpt.py`), Claude `claude.ai` (`jarvis_chatbot_claude.py`), Microsoft Copilot `copilot.microsoft.com` (`jarvis_chatbot_copilot.py`), Perplexity `www.perplexity.ai` (`jarvis_chatbot_perplexity.py`; its listed sources are copied as text, never opened), DeepSeek `chat.deepseek.com` (`jarvis_chatbot_deepseek.py`), Grok `grok.com` (`jarvis_chatbot_grok.py`), Le Chat `chat.mistral.ai` (`jarvis_chatbot_lechat.py`) and Meta AI `www.meta.ai` (`jarvis_chatbot_metaai.py`). Each window opens only its own host by itself; the sign-in hosts its "Sign in with ..." buttons lead to (Google, Microsoft, Apple, X, Facebook, the sites' own `auth.` hosts) are reached only by the owner's click, and are a "needs you" pause. None of their selectors has been tried against the real site (`docs/JARVIS-API.md` 87.5). "What Jarvis can reach" has its row (`jarvis_reach._chatbot`); the gate's `_RISK` line is `chatbot.patch` (outbound, cannot be undone) | The owner's goal, word for word as its ONE card showed it, then Jarvis's own short follow-up questions, written on this PC by a model that is given only the goal and the conversation (no memory, email, notes, calendar, files or history, and no tools), to ONE chatbot website per adapter (Gemini first, `gemini.google.com`, typed into a visible browser window at a person's pace with the spare account used only by Jarvis; never hidden, never a captcha solved). At most the card's messages and minutes. Never a message that fails the last check: a password- or key-shaped value, a one-time code or sign-in link, an email address, a phone or other long number, a street address or postcode, the owner's never-send words, a private topic (`jarvis_router.is_private`), or anything repeating a saved fact (`jarvis_search.repeated_facts`) | `jarvis_chatbot.plan/describe/run` (gate action `chatbot_session`, tier `ask` only, one card per conversation and a new one for any changed limit; `run` refuses a conversation whose goal, limits or version changed after its card) + `jarvis_chatbot.last_check` right before every `send()`, the goal included (one rewrite, then pause and ask; fails closed) + stops in code (limits, two refusals, circles, a question about the owner handed back, captcha/sign-in/"unusual activity" pauses) + `jarvis_task_control` Stop/Pause/Resume and `jarvis_stop_all`. Each new chatbot is a new adapter, and needs the owner's OK first (each company's terms differ) |
+| **chatbot conversation (API, with a key)** (2026-09-28, the owner's "the chatbot driver becomes versatile"; `jarvis_chatbot_api.py`) - **BUILT, NOT YET TRIED FOR REAL**, like the row above: reachable from both apps through `/api/chatbot/*` once that service's key is saved on the PC; not yet tried against any real service. One named way out per service, each only once the owner has saved that service's key on the PC: **OpenAI** `api.openai.com`, **DeepSeek** `api.deepseek.com` (address unverified), **Mistral** `api.mistral.ai`, **xAI (Grok)** `api.x.ai` (host checked; path seen in xAI's own client, not its API reference), **OpenRouter** `openrouter.ai` (which passes each message on to the company that runs the chosen model), **Groq** `api.groq.com`. "What Jarvis can reach" has its row (`jarvis_reach._chatbot_api`, the hosts with a key saved) | The same words as the row above - the goal as its ONE card showed it, then Jarvis's own follow-ups, each through the same last check - plus that conversation's earlier messages and replies (the API keeps no memory, so each request carries the conversation so far), as a Chat Completions request `{"model", "messages"}` plus that service's answer-length cap (the money limit's hard stop, 2026-09-28: `max_completion_tokens` for OpenAI, Groq and OpenRouter, `max_tokens` for Mistral and xAI, none for DeepSeek, whose field is unverified; JARVIS-API §87.4.1), with no system message and nothing else. The service's key (Windows Credential Manager, `Jarvis Backend/<company> API key`, added on the PC only with `py -3 jarvis_chatbot_api.py key <service>`) goes in the Authorization header to that service's own host and nowhere else | `jarvis_chatbot` exactly as above (the same card, action `chatbot_session`, the last check before every send) + `jarvis_chatbot_api.endpoint_problem` (https, the preset's own host and port, no user name - checked at open and again before every request; the key is attached only after it passes) + `_RefuseRedirect` (a redirect is refused, never followed) + errors in plain words that never quote the service's own error text + at most ONE retry, only after a 429 whose Retry-After is at most 20 seconds. Nothing is logged; the key is registered with `jarvis_scrub`. **A monthly money limit per service** (the owner, 2026-09-28: "a money limit comes before API chatbots are used for real"): no limit set = the service is not used (`ready` false, before any card); spending is estimated from each answer's token counts and a price list the owner can correct (defaults UNVERIFIED), per calendar month, in `chatbot/api-money.json` (numbers only, never the key); a service at its limit is refused before any card, and `before_send` refuses any message whose worst case would pass what is left. The card shows "About $X of $Y left this month". Limits and prices are set on the PC's command line only (`py -3 jarvis_chatbot_api.py limit|price|spent`) - no route |
+| **chatbot comparison ("Ask several and compare")** (2026-09-28, the owner's "the chatbot driver becomes versatile", point 4; `jarvis_chatbot_compare.py`, JARVIS-API §87.7) - **BUILT, NOT YET TRIED FOR REAL**, on both apps. **No new host**: it uses the two rows above (and "a second AI on this PC", which leaves nothing on the PC), 2 to 3 of them on one graphics card, 2 to 4 on two (proposed numbers, the owner may change them), one after another | Exactly what the rows above send, once per chatbot picked: the goal word for word as the ONE card showed it, then that conversation's own follow-ups. Each chatbot's conversation is separate - no chatbot's words are ever sent to another, and the summary written from all of them stays on the PC | ONE card (gate action `chatbot_session`, tier `ask` only, risky, no "always allow") listing every chatbot by name and address, the goal and the limits per chatbot and in all; each conversation is an ordinary `jarvis_chatbot.run()` with its own `last_check` before every send; a chatbot that cannot go on is left out (never a captcha solved; an API service whose next message could pass its monthly money limit is left out too, and the card shows each one's money left); Stop, the task Stop and Stop everything end all of them; one comparison OR one conversation at a time |
+| **the weather for the animals' scene, from Open-Meteo** (2026-09-28, the owner's decision "Weather in the animals' scene") - off by default, and only when the owner chose "Open-Meteo (online)" | The owner's rough position - the latitude and longitude of the town typed on the PC, rounded to 0.1 degree (about 11 km) - and the names of four weather values, in ONE plain GET of one fixed address, `https://api.open-meteo.com/v1/forecast`, about every 20 minutes and only while an app is showing a face (the PC reads nothing on its own timer). No name, key, cookie or anything else of the owner's; no proxy; no redirect followed; the answer capped at 64 KB and turned into five numbers that are drawn, never given to the AI model. ONE approval card to switch it on, naming the exact numbers; the yes covers that position only (a new town switches it off); off is at once | `jarvis_sky.request_weather` (the card: `change_own_config`, tier `ask` only, `leaves_this_pc`) + `jarvis_sky.read_open_meteo` (refuses a position the card did not name, immediately before sending) + `_default_open_meteo_fetch` (refuses any other address before a socket opens; `jarvis_local_http.public_urlopen`) |
+
+**Not a way out, but written here because it is a way IN: pairing a phone**
+(2026-09-28, `backend/jarvis_devices.py`, JARVIS-API section 90). Two
+routes take no key at all - `POST /api/pair/claim` and `/api/pair/collect`,
+because a phone being paired has none yet. They answer only a Tailscale or
+NordVPN Meshnet address that is not this PC (403 `not_mesh` otherwise), only
+while the owner has pressed "Pair a phone" on the PC (10 minutes, one use),
+and only to a request that proves it saw the QR code or the typed code
+without sending either (HMAC sums); 3 wrong tries, from anywhere, end it.
+No key is made until the `pair_device` card is approved on the PC with
+Windows Hello, and it is handed over once. Nothing leaves the PC for it.
+
+**Lockdown: every lane above at once** (2026-09-28, the owner's choice of
+the research audit's idea 10; `backend/jarvis_asks_first.py`, JARVIS-API
+§75). One tap, from either app, makes every lane in this table ask first or
+stop, with no card; undoing it is the PC-only loosening of §3 (ONE
+`loosen_what_asks_first` card plus Windows Hello). It is not a second gate:
+`rebuilt/jarvis_framework.action_tier()` returns "ask" for a way out whose
+line says "auto" or "notify" while it is on, so the gate asks for a chat
+tool, and everything that runs by itself - it accepts only "auto" - stops
+("tell me when", news, the briefing's reads). The few lanes the tier table
+does not decide are switched beside it: the cloud model (the router's gate
+"lockdown": not even offered), web search (always a card), the lights
+setting (off), plug-in programs (a card at every start) and tool-update
+checks (the card again). **Not yet covered:** the ntfy push lane, which is
+sent from the owner's `jarvis_gate.py` - text made from Jarvis's own tables,
+never payload, but still a way out; it needs a patch to that file.
+
+**Not a lane: a library's own reports** (2026-09-28, research audit section
+1.3). ONNX Runtime, which runs the voice and memory-search models, has its
+own trace events ON by default in Microsoft's builds (its `docs/Privacy.md`).
+On Windows they go to ETW, and only reach Microsoft if a trace session is
+collecting and the owner's Windows diagnostic-data setting allows it.
+Jarvis switches them off before any model loads, wherever the backend loads
+onnxruntime itself: `jarvis_wakeword.py`, `jarvis_turn.py`, and
+`jarvis_memory.quiet_onnxruntime()` before fastembed
+(`backend/test_ort_quiet.py`). **Known limit:** sherpa-onnx (speech-to-text,
+Kokoro, the voice check) carries its own copy of ONNX Runtime with no switch
+Jarvis can reach. For that copy, Windows' own setting (Settings → Privacy &
+security → Diagnostics & feedback → "Send optional diagnostic data" off) is
+the control. The Hugging Face download library's reports are already off
+(`HF_HUB_DISABLE_TELEMETRY`, `jarvis_voices.py`).
 
 **The sun, the moon and the weather behind the animals, in one sentence each**
 (the owner's decisions of 2026-09-28, `CLAUDE.md`; docs/JARVIS-API.md section
-59). The sun and moon add no lane at all: the town is turned into a rough
+89). The sun and moon add no lane at all: the town is turned into a rough
 position from a list the PC carries (`jarvis_sky_places.py`, GeoNames' towns),
 never by a geocoding service, and each app works the sky out itself from that
 position. The weather from the owner's own Home Assistant adds no lane either:
@@ -750,6 +868,16 @@ nothing and says why, and `jarvis_router.choose` gives it the gate
 Ollama must do the same. Not yet: the model switch and install routes (the
 owner's `jarvis_models.py`) do not refuse a cloud model's name.
 
+**Not a way out: "Solve it here"** (`jarvis_handoff.py`, 2026-09-28). A
+picture of the paused chatbot or support window goes from the PC to the
+owner's phone over the same authenticated link every answer uses
+(Tailscale or Meshnet), and the owner's taps and typing come back. It stays
+on the owner's own devices, is never saved on either, and sends nothing to
+the website that the owner did not type or tap there - so it adds no row to
+the table above. The window's own host lock stays as it was: a hand-off ends
+the moment the window shows any host but the site's own, its sign-in hosts
+and the one it showed when the hand-off began.
+
 ---
 
 ## 5. Memory — one model
@@ -798,6 +926,19 @@ yes/no on the same confirm, off by default: this ONE fact's own
 out, is deleted from chat history too (docs/JARVIS-API.md §6, §18.1) -
 never the earlier wordings `erase()` cascades to alongside it, which may
 have been said in a different chat.
+
+**"Forget a time frame" forgets; it never erases** (the owner's decision
+of 2026-09-28; `jarvis_forget_range.py`, docs/JARVIS-API.md §64). Each fact
+on its ONE approved card is `retire()`d exactly as Forget retires it -
+`forgotten_at` included, so the past-recall rule and "not learned again"
+treat it like any Forget - picked by `created` (when Jarvis SAVED it), never
+by `valid_from`. For 10 minutes one tap on Undo un-forgets it
+(`MemoryStore.unforget()`, the only way back from a retirement, and only
+for a row still exactly as that Forget left it: an erase in the meantime
+wins). The chats on the card are taken out of `chat-history.db` at once and
+held in memory only, still sealed, until Undo or the 10 minutes or a
+restart, whichever comes first. Wiping words stays "Erase the words", one
+fact at a time.
 
 **"Between us" is a label, not a new door into `facts`** (the owner's
 decision, 2026-09-27; `memory-shared.patch`). `meta.kind = "shared"`, the
@@ -1010,12 +1151,26 @@ fact_repeats  fact_id, said_at, how ("typed" | "voice")   "said again" - NO WORD
   owner's own live words, by automatic learning's own checks (typed or
   strictly checked voice, seen live, no outside text read, every word said
   and no "not" dropped), only after the fact was saved, one row per turn
-  however often the learner re-reads it. Nothing reads the count to decide
-  anything, so it can never make a fact harder to forget, correct or erase;
-  Erase keeps the rows (ids and dates, like the fact's own dates). Shown as
+  however often the learner re-reads it. The count can never make a fact
+  harder to forget, correct or erase, and the only thing that may read it
+  to decide anything is the tie-break below (off by default); Erase keeps
+  the rows (ids and dates, like the fact's own dates). Shown as
   "said again 3 times" in both apps' "Saved automatically" list (the one
   list both apps read from a shipped module; the full memory list is the
   owner's `jarvis_hud` route and does not carry it yet).
+- **"Said again" as a tie-breaker** (milestone 12, 2026-09-28). Chat
+  recall only (`jarvis_past.recall` -> `search(said_again=True)`): after
+  the fusion, the re-ranker and the cut to `k`, facts NEXT TO EACH OTHER
+  that tie exactly - the same RRF score, and the same re-ranker score if it
+  ran - are put in "said again" order, most first. It is a permutation of
+  the final list: no fact added, dropped, hidden or faded, `k` and both
+  floors unchanged, and no fact moves past one that scored differently.
+  Never `find_one()`, corrections or anything that writes; a failure is the
+  old order. **Off by default** (kept only once the PC's self-test shows it
+  helps); `JARVIS_MEMORY_SAID_AGAIN_TIEBREAK=1` turns it on, and
+  `eval_memory.py` measures it on its own "said again" line whatever the
+  setting. Words only, it changed nothing on the golden set (2026-09-28);
+  ties are commoner with meaning search on, so only the PC's run can say.
 - **Real "true from" dates** (idea 4). `add()` sets `valid_from` from the
   owner's own words when they say when something changed ("I moved to Leeds
   in January", told in March -> 1 January; `true_from()`: fixed English
@@ -1063,6 +1218,47 @@ added, each measured by the self-test before it was kept:
 - **Both memory models live in Jarvis's own folder** (B17,
   `~/.openjarvis/models`, or `FASTEMBED_CACHE_PATH`), not the temp folder a
   disk clean-up empties.
+
+**Smarter memory dates, "Where did I put ...?" and the overnight tidy**
+(the owner's choice of 2026-09-28, docs/RESEARCH-AUDIT-2026-09-28.md
+sections 3 and 8.5; docs/JARVIS-API.md sections 77-79; backend/README.md
+"Smarter memory dates"). Each measured by the memory self-test before it
+was kept (docs/MEMORY-SCOREBOARD.md):
+
+- **"True until" is a label, never a hide.** `add()` reads an end date from
+  the owner's words ("until 12 October", "the lease ends in December") into
+  `meta.true_until`, with fixed rules like `true_from`. `valid_to` is NOT
+  set from the words: a fact is never hidden on its own, before or after
+  the date. Recall shows "(until 12 Oct)" while the date is ahead; once it
+  has passed, the overnight tidy asks "Still true?" and only the owner's
+  yes ends the fact - on that date.
+- **A thing that moved is not a correction card.** A fact that says where
+  a thing is (`jarvis_places.place_of`, fixed rules) and names a thing
+  Jarvis already keeps a place for, somewhere else, is saved without the
+  correction card when every OTHER automatic-learning check passes (a
+  sensitive hiding place still waits); the older place is then ended as
+  history, replaced by the new one - older news, by the owner's own dates,
+  is filed as history instead. "Where is my passport?" is answered by the
+  fast path from the places in use, without the model, and says it used
+  memory (`injected_ids`), so the usual on-screen rules apply. This is the
+  one place automatic learning retires a fact; it is limited to the same
+  thing's place, and the retired place stays in the history.
+- **The overnight tidy raises cards and nothing else** (`jarvis_tidy.py`).
+  It is off unless the owner's "Overnight memory tidying" switch is on; one
+  job on the one scheduler, at most once a day, paced by the back-off, at
+  most five cards a night. "Still true?" (an end date that passed) and
+  "Which is true now?" (two facts that may clash, found with the learner's
+  LOCAL model, which is given numbered facts and returns only numbers - the
+  Graphiti `resolve_edge` pattern). Every card is the ordinary "stop using
+  this fact?" card, one fact each. Accepting one ENDS the fact as history
+  (on its said date, or replaced by the newer fact), not a Forget - the one
+  place `retire()` reads which card is being accepted (`_tidy_ending`: the
+  `tidy_cards` row of the proposal in state `accepting`). A Forget from a
+  list stays a Forget.
+- **"Facts this chat taught"** (`GET /api/memory/conversation-facts`): a
+  read of the facts in use whose meta names that conversation, for
+  History's Delete to offer forgetting them - none ticked, then the usual
+  "are you sure?", then the ordinary Forget, one fact per call.
 
 **Never compress facts or transcripts** with a keep/drop token dropper
 (LLMLingua and relatives). They are negation-blind, and this store is
@@ -1123,7 +1319,25 @@ the owner turned on the voice setting `sensitive_memory` (X-Jarvis-Route's
 like the talk button by default; with the voice setting `hands_free:
 button_only` it is never learned from without a card, and its memory,
 sensitive and private answers stay on screen (the speech route records how
-each clip started, `source`, with the transcript).
+each clip started, `source`, with the transcript) - and so do its answers
+about the screen, unless the owner turned on the voice setting
+`hands_free_screen` (owner, 2026-09-28; one approval card to turn it on,
+off at once; JARVIS-API §16 and §62.7). A Jarvis Live turn (`source=live`,
+JARVIS-API §63) is trusted like the talk button by default however Live
+was started; the voice setting `hands_free_live` gives it the "Hey Jarvis"
+caution when Live was started by voice, or always (owner, 2026-09-28; a
+stricter choice at once, a looser one a card). A Live turn the model marked
+as side talk (`[not for me]`) is never learned from, never counted and not
+kept in chat history at all (owner, 2026-09-28; `jarvis_intake.owner_turns`,
+`jarvis_agent`, `jarvis_chat_log.record_turn`). An ordinary Live turn counts
+toward "suggest the bigger model" like any turn; a crisis turn never does,
+and after one Live quietly gets more time (it does not end until at least
+30 minutes after the last crisis turn) and skips the "minutes left" warning
+(owner, 2026-09-28; `jarvis_live.Engine.note_crisis`). **When Live ends on
+a PC with App lock on** is the voice setting `live_end`: by default when App
+lock would ask again (talking does not count as being at the PC), or, the
+looser choice, only when Windows itself locks - that one raises an approval
+card; going back is immediate (owner, 2026-09-28).
 
 **Jarvis's own words are never the owner's.** Since 2026-09-25 an app sends
 the last sentence of a spoken answer the owner cut off (`interrupted` on the
@@ -1145,7 +1359,15 @@ reads from on its own. Three things about it are invariants:
 - **Encrypted or not kept.** Every piece of text is AES-256-GCM with a key
   in Windows Credential Manager (`Jarvis Backend/chat history key`). No
   key, no `cryptography` package, or a key that does not open the file:
-  nothing is recorded and the apps say why. There is no plain-text path.
+  nothing is recorded and the apps say why. There is no plain-text path -
+  **with one named exception**, the owner's of 2026-09-28 ("Chats, after the
+  chat audit": "Support chats: export stays"): a customer-support chat's
+  "Export transcript" (docs/JARVIS-API.md §65.5, desktop only), the owner's
+  own record of what a company agreed to. It is written only by the owner's
+  tap, to a folder they pick with the Windows "Save as" dialog, never to the
+  clipboard, and the button and the file both say plainly that the file is
+  not encrypted. Nothing else of the chat history ever leaves it in plain
+  text.
 - **The PC records the live turn, with where its words came from.** Only
   the newest user message of each request (and shared text sent just
   before it), tagged typed / voice / shared / pasted / clipboard /
@@ -1154,17 +1376,71 @@ reads from on its own. Three things about it are invariants:
   marked from that turn on. Automatic learning trusts this - through an
   in-memory registry of the same facts (hashes, never words) that is kept
   even while history is off - instead of the history an app re-sends (the
-  memory-safety audit).
+  memory-safety audit). **One loosening, the owner's (2026-09-28, after the
+  second chat audit):** when the PC meets a conversation it already holds
+  in its own encrypted record (after a restart, or "Continue this chat"),
+  it re-registers that record's typed and spoken user messages that did not
+  read outside text - read from the PC's own record, never from what the
+  app sends, and never shared, pasted, chatbot, support, crisis or imported
+  text - so a continued chat does not fall back to a card for every fact.
+  A Forget or Erase on the conversation is remembered across a restart
+  (a floor in the history database), so the words cannot come back.
 - **Deep questions are not kept at all** (`jarvis_big_model.py`, security
   audit L2, 2026-09-25): they live in memory until the backend stops. They
   used to be written to `deep-questions.jsonl` in plain text, outside this
   switch and its encryption.
 - **Turning it back on is a card; off is immediate. No delete-all.**
   One conversation per delete, and both apps hold deleting and shortening
-  the keep period on a stale link.
+  the keep period on a stale link. Since 2026-09-28 deleting one offers to
+  forget the facts it taught (docs/JARVIS-API.md §79): none ticked, each
+  ticked fact forgotten through the ordinary Forget, one per call. The one
+  exception to "one at a time" is "Forget a time frame" (2026-09-28,
+  docs/JARVIS-API.md §64): the chats from some days, on a list the owner
+  checks, deleted only after ONE approval card listing every one, with 10
+  minutes to Undo.
 - **A temporary chat is never kept** (2026-09-25): nothing of it reaches
   `chat-history.db`, whether history is on or off (§5, "A temporary chat
-  uses and makes no memory").
+  uses and makes no memory"). Since 2026-09-27 a game or role-play the PC
+  spots is a temporary chat by itself; since the chat audit (2026-09-28) it
+  is really never kept (`games-temporary.patch` used to hand `record_turn`
+  the body without the flag) and both apps say so under the answer.
+- **Every conversation has a kind** (the chat audit, 2026-09-28; the
+  owner's decisions "Chats, after the chat audit" and "History marks Live
+  sessions"; docs/JARVIS-API.md §18.6): `chat`, `live`, `support`,
+  `chatbot` or `compare`, one column set when it is first written, plus an
+  empty `project` column for Projects step 4. What each kind means for the
+  rules:
+  - `chatbot` and `compare` - a conversation Jarvis had with another AI,
+    and "Ask several and compare" - are **kept** since 2026-09-28 (they were
+    memory-only), in the same encrypted store, as ONE record each, every row
+    role `chatbot`: never `user`, so the learner never reads a word of it;
+    outside text as a whole; never read aloud (History is on-screen only);
+    read-only.
+  - `support` records are never removed without the owner's own tap on
+    that record: "Delete conversations older than" keeps them (and says
+    so), "Forget a time frame" lists them unticked, and Delete asks once
+    more, naming what it is.
+  - A conversation that held a **crisis** turn is kept, titled "A difficult
+    moment", never with the owner's words (the crisis turn itself is never
+    learned from or counted, §38 of the API).
+  - Main's "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek"
+    (§85) does not add those chats to History - it only proposes facts - so
+    there is no `imported` kind.
+- **"Continue this chat" re-sends kept words only by the owner's tap**
+  (2026-09-28). It does not make History a memory: nothing kept is ever put
+  in front of the model on its own. Only the owner, from an opened chat or
+  Live session, carries it on - the SAME conversation id, so its "read
+  outside text" mark carries over (the PC decides that from its own
+  record) - and only the newest kept questions and answers that fit a chat's
+  own re-send limit go back, each with the tag it was kept under; a
+  question whose answer was not kept, a Live side remark, and a
+  `support`/`chatbot`/`compare` row never do. A temporary chat is never in
+  History, so it can never be continued. Jarvis Live's "Move it here" is
+  the same, for the one Live chat moving between devices (the PC's Live
+  status names its conversation id).
+- **A conversation ends after 30 quiet minutes** (2026-09-28), in both apps:
+  the next question starts a new one, with one quiet line saying so; the
+  old one stays in History. Never in the middle of Jarvis Live.
 - **Searching your own old chats is a client-side filter, not a search
   feature.** 2026-09-26 said plainly that "searching past chat words waits"
   - that decision was about a NEW capability: a backend index or route over
@@ -1177,11 +1453,31 @@ reads from on its own. Three things about it are invariants:
     `GET /api/history`, filtering it in the app - `ChatLog.filtered()` on
     the phone, `paintHistoryList`'s `needle` on the desktop - by
     conversation title only. No new route, no new index, nothing written to
-    disk, and the search words never reach a model or a tool. The waiting
-    rule still stands for anything else: a backend route that searches
-    `chat-history.db`'s words, or a chat turn that can ask Jarvis to search
-    its own past conversations, both still wait on ideas 1-4 and the memory
-    self-test, unbuilt.
+    disk, and the search words never reach a model or a tool.
+- **Searching what was said, for the screen only** (the owner's choice of
+  2026-09-28, "Brain upgrades"; docs/JARVIS-API.md §71). This changes the
+  written rule just above, and says how far: `GET /api/history/search`
+  (`jarvis_chat_log.ChatLog.search`, `brain-reads.patch`) searches the kept
+  turns' WORDS for the apps' History search box. Three invariants hold it
+  to the owner's own words of 2026-09-27, "shown on screen only; nothing
+  saved, nothing handed to the AI":
+  - **No index, ever.** Each search opens every kept turn with the key, in
+    memory, compares it and drops it. An FTS5 table, a word list or a cache
+    between searches would be a plain-text copy of the chats on disk,
+    beside the encrypted one - the "encrypted or not kept" rule above
+    forbids it. The search words are not written, logged or audited
+    (`test_brain_reads.py` compares every byte of the history folder).
+  - **Not a tool, not a chat turn.** Only the apps' History screens call
+    it, behind the token and hidden with the chat history under "Windows
+    Hello for memory lists and chat history" / "Hide memory lists and chat
+    history". `jarvis_agent.py` offers nothing that reaches it, and nothing
+    it returns is put in front of the model.
+  - **What the list shows, no more.** A temporary chat was never kept, so it
+    is never found; what the keep period deleted is gone.
+  "Find in this chat" is in the apps, over a conversation already open.
+  What still waits on the memory self-test is the other half of the
+  2026-09-26 rule: a chat turn that can ask Jarvis to search its own past
+  conversations, or anything that hands past chat words to the model.
 
 ---
 
@@ -1192,7 +1488,9 @@ changes from it and from nowhere else. Kinds: `approval`, `proposal`,
 `finding`, `power`, `persona`, `model`, `activity`, `appearance`, `step`,
 `deep`, `memory_saved`, `schedule`, `focus`, `wellbeing`, `hello`. (`step` is the tool loop saying what it is doing - asking the model,
 a tool starting, finishing or refused - with tool names from its own table
-and nothing else; `jarvis_agent._step_event`. Brain → Live renders it.
+and nothing else; `jarvis_agent._step_event`. Brain → Now renders it (the
+tab was called "Live" until 2026-09-28, renamed so it is not confused with
+Jarvis Live).
 `deep` is a deep question finishing, `{"id", "state"}` only -
 `jarvis_big_model.py`; added 2026-09-24. Both apps handle it: the desktop's
 Brain reads `GET /api/deep` again (`brain.js`, Deep questions), and the
@@ -1348,9 +1646,9 @@ are architectural rather than configuration:
 
 ## 8. The clients
 
-**Desktop** (`jarvis-desktop/`): Tauri 2, eight windows (quickbar, widget,
-HUD, Brain, Faces, onboarding, Settings, the floating face - one capability
-file each in `src-tauri/capabilities/`), per-window ACL capabilities. The Rust commands are the real API — buttons are a courtesy, and
+**Desktop** (`jarvis-desktop/`): Tauri 2, nine windows (quickbar, widget,
+HUD, Brain, Faces, onboarding, Settings, the floating face, the Jarvis Live
+badge - one capability file each in `src-tauri/capabilities/`), per-window ACL capabilities. The Rust commands are the real API — buttons are a courtesy, and
 any window holding the capability can call them, so a check that lives only in
 the webview is not a check. `decide_approval` consults link staleness in Rust
 for exactly that reason.
@@ -1424,8 +1722,12 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   owner's decision of 2026-09-26): with App lock on, the widget offers no
   note to a running task or a card, and `inject_task_note` and
   `amend_approval` refuse the widget in Rust - notes are added in the
-  Jarvis bar, which asks Windows Hello first. Stop everything (the hotkey
-  and the tray row) is never behind App lock. **The floating face**
+  Jarvis bar, which asks Windows Hello first. **The widget's own tiles
+  too** (the owner, 2026-09-28): with App lock on, Focus session, the
+  10-minute timer and Play/pause open the Jarvis bar instead of acting,
+  in `widget.js` and again in Rust (`brain/widgets.rs`). Stop everything
+  (the hotkey, the tray row and the widget's tile) is never behind App
+  lock. **The floating face**
   (2026-09-27) is not covered either, for a shorter reason than the
   widget's: it shows no approval card at all, ever - not even a title -
   only which of eight states Jarvis is in, the same information the tray
@@ -1442,7 +1744,14 @@ apps security audit (M3 and L5, the owner's decisions of 2026-09-25):
   description says so.
 - **Phone:** the whole app - including Home's "Stop everything" button,
   which is behind App lock like the rest of the app (JARVIS-API §28); the
-  PC's hotkey and tray row are not. The home-screen widget only ever shows the
+  PC's hotkey and tray row are not. **Quick Settings tiles** (2026-09-28,
+  JARVIS-API §81.2) sit outside the app: a "Stop everything" tile is not
+  behind App lock either, like the PC's hotkey (it only stops things); a
+  "Brief me" tile only opens the app, so App lock asks as usual; the timer,
+  focus and PC play/pause tiles show nothing private and, with App lock on
+  and the phone locked, ask for the phone's own unlock first. No tile can
+  approve or deny. The "tap to turn \"Hey Jarvis\" back on" notice after a
+  restart (§81.1) opens the app, and listening starts only after App lock. The home-screen widget only ever shows the
   `notice` text and offers Deny only, lock or not. **The floating avatar**
   ("Floating Jarvis", §56) is not covered either, for the same reason as the
   desktop's floating face: App lock does not change what it shows
@@ -1567,7 +1876,9 @@ backend routes, in both directions; the rest are listed here only.
 
 | what | why |
 |---|---|
-| The memory graph (`/api/graph`) | Out of scope on the phone (`CLAUDE.md`). |
+| The memory graph (`/api/graph`) | Out of scope on the phone (`CLAUDE.md`). Since 2026-09-28 only the desktop's HUD window reads it (the Brain's Galaxy is drawn from people and things instead, privacy finding B1, docs/JARVIS-API.md §71.3), and the HUD's copy loses its fact and person dots while the memory lists are hidden. |
+| Galaxy, made of people and things (Brain -> Advanced, 2026-09-28) | The memory graph, which stays off the phone (`CLAUDE.md`). It reads `/api/memory/entities` (the row below), so no route of its own. |
+| "History of this fact" (`/api/memory/fact-history`, 2026-09-28, docs/JARVIS-API.md §71.2) | The phone lists only facts saved automatically that are still in use ("Saved automatically"). Those are never corrections, so they almost never have an earlier wording, and a view that brings back the retired wordings of any fact is the deep memory editing that stays on the desktop (the rows below about Forget and Erase draw the same line). The phone's "What did I believe on this date?" still shows retired facts as they were on a date. |
 | People and things (`/api/memory/entities`): the names under each fact, "About <name>", and the "are these the same?" card (memory wave 3, 2026-09-25) | The same rule: linking facts to the people and things they name, and joining two entries, is the memory graph, which stays off the phone (`CLAUDE.md`). The phone shows no names and never asks for the merge card (its pending list leaves out `?merge_cards=1`, so the card waits for the desktop). What the layer is for reaches the phone anyway: chat recall runs on the PC, so "where is my sister getting married?" finds Priya's wedding from either app. |
 | Rewording a stored fact (`/api/memory/edit`), and forgetting one from a list of every fact | Deep memory editing. It stays on the desktop's Brain → Memory tab. Forget (`/api/memory/forget`) itself is no longer desktop-only: since 2026-09-24 the phone calls it for facts in the "Saved automatically" list (JARVIS-API §19), and since 2026-09-25 for a fact shown under "Used in this answer" or "Jarvis remembered N things" - one the owner just saw Jarvis use or save, not a browse of the whole store. |
 | "Erase the words" beside Forget under "Used in this answer" and "Jarvis remembered N things" | The phone offers Erase in one place only, Brain → Saved automatically, for facts saved automatically that are still in use (the row below). A fact an answer used may be any fact, history included (a question about the past recalls facts that were corrected or have ended - never forgotten ones, since the memory review of 2026-09-27, B15), and erasing any fact at all is deep memory editing. On the phone those two lists offer Forget; the desktop offers both, as it does on every fact. |
@@ -1579,10 +1890,22 @@ backend routes, in both directions; the rest are listed here only.
 | Deep config editing (`/api/config`) | Out of scope on the phone (`CLAUDE.md`). The desktop does not use it either today: it is only in the Brain window's read allow-list, and no window asks for it. |
 | Fetching the look spec (`/api/visual-spec`) | The phone ships its own copy and checks it in a unit test (`SpecDriftTest`); `JARVIS-API.md` says the phone never fetches it. |
 | "Finished, or only paused?" (`/api/voice/turn`) | The phone runs the same Smart Turn model itself (`voice/SmartTurn.kt`), so its audio never leaves it just to ask. The desktop asks its own PC over loopback. |
-| Screen capture | Nothing earlier wrote a reason down; this one is written 2026-09-24 from the code. The phone attaches a picture through Android's photo picker (`MainActivity.kt`, `PickVisualMedia`), which already offers the phone's own screenshots - one picture, chosen by the owner. Capturing the screen live on Android needs a separate system permission every session and shows a "casting" icon, for no gain over the picker. |
+| Looking at the screen: the Alt+Shift+S "Look at this" key, the optional Alt+Shift+V "Watch with me" key, and the always-on-top "Jarvis is watching" badge (**rewritten 2026-09-28**) | **The old row is replaced.** It said (2026-09-24) that the phone should not capture the screen live, because Android's photo picker already offered its screenshots. The owner's decision of 2026-09-28 (`CLAUDE.md`, "Jarvis may look at the owner's screen, on the PC and the phone") replaces that: **both apps get both halves** (`docs/SCREEN-DESIGN.md` §6) - on the phone, "Look at this" through the assistant gesture and "Watch with me" through Android's own screen sharing, with Android's consent dialog every session, the phone's own "Never look at" list of apps, and the pictures sent only to the PC over Tailscale/Meshnet, never streamed. What stays on the desktop alone is the **keys and the badge**: keyboard shortcuts are PC things (like the hotkeys below), and the phone's sign is its persistent "Jarvis is watching · Stop" notification and Android's own status-bar icon instead of a floating window. Built so far: the backend's rules only (`jarvis_screen.py`, JARVIS-API §62) - neither app has either half yet. |
+| Starting a pairing, the QR code and the typed code, and watching or cancelling it (`/api/pair/start`, `/session`, `/cancel`; QR-code pairing, 2026-09-28, `docs/PAIRING-DESIGN.md` section 12) | The code is shown on the PC and the `pair_device` card is approved there with Windows Hello; the backend refuses these routes from any other device (403 `pc_only`). The phone is the device being paired, so it scans or types the code instead (the phone table below). |
+| Turning on signed approvals and the signing challenge (`/api/devices/approval-key`, `/api/approve/challenge`; pairing phase 2, 2026-09-29, `docs/PAIRING-DESIGN.md` section 11) | The signing key lives in a phone's Keystore and the fingerprint or PIN is asked on the phone; the desktop IS the PC and its risky approvals are checked by Windows Hello on the PC itself, so it has no key to register and never signs. It only reads the result: the device list's `approval_key` (`false`, `"waiting"` or `true`) beside each phone. `tools/check_parity.py` lists both routes as phone-only. |
+| "Bring it back" for the old shared key (`/api/devices/shared` with `{"retired": false}`) | A loosening: PC only, one `unretire_shared_key` card with Windows Hello, refused under Lockdown - the same rule as loosening "What asks first". The phone offers Retire (stricter, immediate), never Bring back; the backend refuses Bring back from any other device. |
+| Making an app project, adding an app folder that has no project, and starting a task from the phone (`POST /api/projects` with an `app`, `POST /api/projects/{id}/app/tasks`; apps in Projects, 2026-09-29, `docs/APPS-IN-PROJECTS-DESIGN.md`, JARVIS-API §92) | Nothing on the phone can fill a task: pasting code is deep editing, which stays off the phone (next row), so an empty task there has nothing to offer. The backend would take both from either app (no card: an empty folder in Jarvis's own folder, nothing runs); the screens offer them on the desktop only, and the phone says "Set on your PC". The phone READS an app's versions and open tasks (they ride on the project itself), reads a task's whole change, and merges or discards it. Jarvis writing an app's files from chat is a later slice and will work from either app. |
+| Pasting a change into a task (`POST /api/projects/{id}/app/tasks/{task}/files`, `<<<FILE>>>` blocks; 2026-09-29, JARVIS-API §92) | PC only - `403`, `"pc_only": true` from anywhere else: a paste of code is the owner's editing, not a setting, and the phone has no place to write it (`CLAUDE.md`, no deep config editing on the phone). It lands only in the task's own copy, inside Jarvis's apps folder, and nothing runs it; the merge card decides. |
+| Approving the merge card (`app_merge_change`) is **on both apps** - written here so it is not read as PC only like `pair_device` (2026-09-29, the owner's answer: after the whole change has been shown) | Not one-sided. The card is risky (the gate's risk table says it cannot be undone yet), so the PC asks Windows Hello and the phone the screen lock or a signed approval; it is not in `PC_ONLY_ACTIONS` because a merge only writes text files into Jarvis's own folder and the owner reads every line first (the phone pages the whole change and opens Merge on the last page). **Never from the approval widget or a notification**: the card is "heavy", so a widget's Approve opens the full card instead of approving. |
 | Global hotkeys (`hotkeys.rs`) | Keyboard shortcuts for a PC. A phone has no equivalent. |
 | The "Stop everything" hotkey (Alt+Shift+X, `hotkeys.rs`) | Written with the feature, 2026-09-25. A key on a PC's keyboard; a phone has no global keys. The phone has the same control as a button - Home's "Stop everything", shown whenever Jarvis is busy - calling the same route (`/api/stop_all`, `ported` in `tools/check_parity.py`) with the same words. Each app stops only its OWN speech: pressing it on the phone does not silence the PC, or the other way round (JARVIS-API §28). |
+| Talk-to-type (Settings, Voice, "Talk-to-type (this PC only)"; the Alt+Shift+T hotkey, `talk_type.rs`; `mode: talk_to_type` on `/api/voice/enroll` and `source=talk_to_type` on `/api/voice/utterance`, JARVIS-API §72; the owner's decision, 2026-09-27) | Written with the feature, 2026-09-28. It types into programs on the PC, pressing Ctrl+V there - a phone has no PC program in front to type into, and "a client must not do speech-to-text" rules out a phone version of its own (`CLAUDE.md`, and the owner's decision says "Not on the phone"). The switch lives on the PC with the other voice settings, and the phone does not show it: the phone's voice screen reads only the settings it offers (`VoiceStrict.kt`), so the new `talk_to_type` key in `/api/voice/status` is ignored there. No new route, so `tools/check_parity.py` has nothing new to classify. |
+| "Better voice" (2026-09-28, JARVIS-API §80): the second "hey Jarvis" detector (microWakeWord) runs on the PC only; the phone's own listener stays openWakeWord alone | Written with the feature. The phone does run its own detector (`voice/WakeSpotter.kt`, in `WakeWordService`), but it only decides when to send a sentence to the PC; the PC then checks the phrase again (`jarvis_speech.hear()` step 3) - and, with "Two detectors must agree", runs the second detector too (step 3a) - before the voice check and before any word exists. So the setting covers the phone's "hey Jarvis" without a phone change. Running microWakeWord ON the phone would need TensorFlow Lite in the app beside ONNX Runtime: a second model runtime, its own licence and size, and a separate decision. The SETTING itself is on both apps (Settings -> Voice; the phone's Voice check screen), like the other voice settings. |
+| Which speech detector (Silero VAD v4 or v6) the PC uses: a status line in Settings -> Voice, and the `vad_version` line under `[voice]` that chooses it (backend/README.md, "Better voice", step 8) | Written with the feature. It is a file on the PC chosen by a line in the PC's settings file after the PC's own bake-off, not an app switch - nobody can judge a speech detector by looking at it (the feasibility audit's "invisible upgrades get no switch"). The desktop shows which file is in use because that is where the owner runs the bake-off and the PowerShell line; the phone's clips go through the same PC detector, and its Voice check screen shows the voice settings only. |
 | The tray icon (`tray.rs`) | Part of Windows' taskbar. |
+| Windows remember their size and place (Brain, Settings, Faces and the HUD; `window_memory.rs`, tauri-plugin-window-state 2.4.1; the owner's choice of 2026-09-28, the research audit's idea 16) | Written with the feature. A phone app is always full-screen: there is no size or place to remember. Only size, place and maximised are kept - never whether a window was open, which would put the HUD on screen before Windows Hello with App lock on. The widget, the floating face and the Jarvis bar place themselves, as before. |
+| "Jarvis is working on your screen, 0:42 - Stop" on the widget (`screen_work.rs`, `screen-work.js`, `GET /api/task`; the owner's choice of 2026-09-28, the research audit's idea 17) | Written with the feature. It is about the PC's own screen, seen by whoever sits at the PC while Jarvis moves its mouse and types there. Its Stop is the "Stop everything" key; the phone already has the same stop as Home's "Stop everything" button, and the task Pause/Stop, shown whenever Jarvis is busy. |
+| Signing in to a chatbot's account for "Talk to a chatbot for me" (the spare Google account Jarvis uses for Gemini; `docs/CHATBOT-DRIVER-DESIGN.md`, JARVIS-API §87) | Written with the feature's screens, 2026-09-28. The chatbot is driven in a visible browser window ON THE PC, in a browser profile used only for this, so the sign-in happens there, by the owner's own hands - and when Gemini asks to sign in again mid-conversation, the conversation pauses and asks the owner to do it in that window, then press Resume. Neither app ever carries the account's password; there is no route for one. Everything else about a conversation - starting one (one approval card), watching it, Pause, Resume, Stop, new limits, the summary - is on both apps (`/api/chatbot/*`, `ported` in `tools/check_parity.py`). The words both apps show come from the PC's `jarvis_chatbot_routes.WORDS`, through one contract file. |
 | Starting and stopping the backend (`sidecar.rs`) | The backend runs on the PC, next to the desktop app. The phone cannot run it, and stopping it from the phone is the `/api/shutdown` problem above. |
 | On the Hardware screen: the memory bars, the "Details" arithmetic, Copy for the one PowerShell line, and the "exactly what is made" Modelfile (desktop Settings, Hardware and models) | The phone shows the cards (names and memory), what runs now, the three setups in the PC's words, their steps, Measure, and the line itself to read (the phone's Brain, Hardware - the design's section 4.6 asks for that much and no more). The line runs on the PC, so Copy belongs there; the bars and the arithmetic are the design's "Details", which a phone screen does not need to choose a setup. Every route is on both apps (JARVIS-API §20). |
 | The Faces window's "Portable output" (`faces.html`) | Code for building a client (the look spec as JSON, Kotlin, TypeScript). It is a developer's tool, and the phone already ships its own copy of the spec. |
@@ -1590,6 +1913,7 @@ backend routes, in both directions; the rest are listed here only.
 | The fade when switching faces to or from Tokamak or Membrane (the face switch's goodbye and hello, 2026-09-28) | Written 2026-09-28, after the animal-behaviours audit. On the desktop every face, the two mesh faces included, is drawn into the one canvas whose opacity carries the fade (`faces.html`, display mode's `switchFace`), so they fade like any face that is not a character. On the phone those two draw on their own GL surface (`GLFaceSurface`), which Compose's layer alpha cannot fade: leaving, a mesh face goes at once instead of sitting still for a second (`FaceView`'s switch skips its goodbye), and arriving it shows at once. Every other face - the animals and the robot included - says goodbye and hello the same way on both apps. |
 | Typing the town for "Show the sun and moon behind the face" (`POST /api/sky {"place"}`; the owner's decision of 2026-09-28: "a town the owner types once on the PC (the phone gets it from the PC)") | Written with the feature. The backend refuses a town from any device but this PC (`jarvis_owner_check.from_this_pc`), so a stolen token cannot move where Jarvis thinks the owner lives. Everything else is on both apps, in the PC's words (`/api/sky`, `ported` in `tools/check_parity.py`): the switch, which town is set and today's rise and set times (each app's own maths), "Forget my town" (at once, from either), and the weather source (Open-Meteo's card answered on either). |
 | A temporary chat in the HUD window (`jarvis_hud.html`) | The HUD window shows the backend's own page, which sends its own chat requests and has no temporary-chat control; the desktop's temporary chat is in the quickbar, where its chat is. Both apps have the feature (JARVIS-API §4). |
+| "Chat history…" in the tray, and the Jarvis bar's "Esc: end chat" with "Chat ended. Kept chats are in Brain > History." (the chat audit, 2026-09-28) | A tray menu and an Esc key are the PC's. The phone's way to History is "Earlier chats" on Home (next to Temporary chat), which the bar has too; the phone's chat ends on New conversation, a temporary chat, Live, 30 quiet minutes or the app's process ending - it has no Esc. |
 | Who set the power mode, on the tray's Power row ("· set by hand", "· quiet hours", "· idle timer", and since 2026-09-25 "· standby schedule") | Written 2026-09-25, when the standby schedule added a fourth. The phone's Power field has only ever shown the mode itself; the reason is a tray detail. What the standby schedule did is on both apps anyway: its row in Coming up says how its last end went ("Went on standby at 01:00."). |
 | Entering an Exa, Tavily or Brave key for web search (Settings -> Web search, `save_search_key`) | Written 2026-09-25, with the feature. A key is "sent only to the one service it authenticates against" (`CLAUDE.md` rule 3). Typed on the phone, it would have to travel over the link to the PC first - somewhere other than its one service. So the desktop writes it straight into Credential Manager on the PC (never over HTTP), or the owner runs `py -3 jarvis_search.py key exa` (or `key tavily`, `key brave`) there; the backend has no route that takes a key. Everything else about web search is on both apps (JARVIS-API §23): choosing the provider, the SearXNG address, "Ask before every web search", Test search - and the phone shows whether a key is saved and where to add one. |
 | "Accounts" (Settings -> Accounts, `save_account_secret`/`forget_account_secret`; ease-of-use audit row 15, 2026-09-27, JARVIS-API §44) | Same reasoning as the web search key row above, for the IMAP username and password, the private calendar link, and the Home Assistant token: each is "sent only to the one service it authenticates against" (`CLAUDE.md` rule 3), and CLAUDE.md's standing rule keeps deep config editing off the phone besides. The desktop writes each straight into Credential Manager on the PC - never over HTTP, no backend route takes one. An environment variable the owner already set still wins (`jarvis_token_store.resolve_secret`); this only adds a second place to set one, never a second source that could disagree once one is chosen. |
@@ -1604,27 +1928,64 @@ backend routes, in both directions; the rest are listed here only.
 | "I lost my phone. What do I do?" in the FAQ (ease-of-use audit #8h) | Everything it says is done on the PC and in Tailscale's or NordVPN's own pages, and the phone it is about is the one that is gone. docs/INSTALL.md, "If you lose your phone", has the steps. "How do I update Jarvis?" is in both FAQs. |
 | The 3-screen walkthrough (`onboarding.html`; ease-of-use audit #4, "3 examples on walkthrough screen 2") | The desktop has a first-run tour because it is a window that can sit empty with nothing to do until the tray icon, an approval card and memory are explained. The phone's first screen IS the point of contact - pairing - so there is no equivalent empty moment to fill with a tour; its own "What can I say?" line is in the FAQ (`Sayable.HELP_TITLE`/`HELP_BODY`, `FaqScreen.kt`) instead of a screen 2. `Sayable.WALKTHROUGH_EXAMPLES` still exists on the phone, held to the same contract fixture as the desktop's 3 examples, so a phone screen that wants them later does not have to invent its own three. The UI audit (2026-09-26, item 16) set the phone's whole onboarding budget at one picture and one sentence, and the phone has exactly that since the ease-of-use audit (#17, 2026-09-27): above the pairing form, on a genuine first pairing only (`PairingScreen.kt`; a re-pair, `onCancel` set, is a returning owner). The desktop's three screens are the tray icon, approval cards and memory. |
 | Adding a folder to "Folders Jarvis may look in" (`POST /api/folders/add`) and bringing in a Notion export (`POST /api/folders/import`) (the owner's decisions of 2026-09-26; the feasibility audit's guardrail 1: "one folder list, PC only, empty by default") | Written with the feature. Both are about files on the PC: the desktop opens the Windows folder picker (or the file picker, for the export's `.zip`) in Rust, and only the path the owner chose is sent; adding then raises ONE approval card (`change_own_config`). A phone has no view of the PC's folders to pick from, and a path typed on the phone would be a guess. The backend refuses both routes from any device but the PC (`jarvis_owner_check.from_this_pc`), not only the apps. Everything else is on both apps: the list in the PC's words and Remove on each folder (at once, never held on a stale link - it only lets Jarvis see less; `/api/folders` and `/api/folders/remove`, `ported` in `tools/check_parity.py`), and asking about the files, which is ordinary chat from either app (the `my_files` tool runs on the PC, with the model on the PC). |
+| "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek" (Brain -> Memory; `/api/memory/import_chats`, `/start`, `/cancel`; the owner's choice of 2026-09-28, JARVIS-API §85) | Written with the feature. The export is a file on the PC: the desktop opens the Windows file picker in Rust and sends only the path the owner chose, and the backend refuses `/start` from any device but the PC (`jarvis_owner_check.from_this_pc`). A phone has no view of the PC's files, and the file is usually hundreds of megabytes - uploading it from a phone would be a new way for a whole chat history to travel. What the import makes reaches the phone anyway: every possible fact is an ordinary card in the review queue ("Waiting for you"), which the phone shows and decides one at a time, like any other. The phone shows no progress line; the run is started and stopped on the PC. `deliberate` in `tools/check_parity.py`. |
 | Backups: choosing the folder, "Back up now", listing, and restoring (`POST /api/backup/folder`, `/api/backup/now`, `GET /api/backup/list`, `POST /api/backup/restore/preview`, `/api/backup/restore`) (the owner's decision of 2026-09-27, CLAUDE.md; `docs/JARVIS-API.md` §45) | Written with the feature. The folder picker is the exact one "Folders Jarvis may look in" uses (Rust's `folders::picker`, reused not copied), so the same reasoning applies: a phone has no view of the PC's folders, and the recovery code that locks and unlocks a backup is typed on the PC, never sent to or from the phone. Restoring replaces memory, chat history, settings and notes, so it is PC-only for the same reason `loosen_what_asks_first` and `enable_reading_tool` are: it always needs Windows Hello, which is the PC's (`jarvis_owner_check.PC_ONLY_ACTIONS`). The backend refuses every one of these five routes from any device but the PC (`jarvis_owner_check.from_this_pc`). `GET /api/backup` itself IS on both apps, at two depths - `ported` in `tools/check_parity.py`: the desktop reads the full view (the folder, waiting cards, counts), and the phone reads the same route but shows only `last_backup_at`, as "Last backup: 3 days ago." (`net/Backup.kt`, `ui/screens/BackupPlate.kt`) - the design's own words for what belongs on a phone. |
 | The short tool list (`[tools] short_list`) and the tool and behaviour test (`tools/tool_eval`, 2026-09-26) | Written with the feature. Neither is something an app shows: the short list changes which tool descriptions the PC sends to its own model (both apps' chats get it the same), and the test runs on the PC against the PC's model, with one PowerShell line. Nothing to port. |
+| The warm-up with words (`[power] warm_prefix`, `jarvis_agent.warm_prefix`, 2026-09-28) | Written with the change. It is the PC's backend reading Jarvis's rules and tool list into its own model ahead of a question, after waking and after a learning pass; nothing in either app shows it or starts it, and both apps' questions get the same benefit. Switched off only in the PC's settings file, like the short list. Nothing to port. |
 | Setting up a plug-in program (MCP): the `[mcp]` lines and `py -3 jarvis_mcp.py inspect` (2026-09-26) | Written with the feature. A plug-in program is a program ON the PC, listed by full path in the PC's settings file - deep config editing, which stays off the phone (`CLAUDE.md`), and the desktop has no screen for it either. Using one is the same from both apps' chats: its start card and every call's card reach both apps like any other card, and both apps show its row on "What Jarvis can reach" and its two rows on "What asks first". |
 | "Data health in the preflight" (`GET /api/data-health`; feasibility I97, 2026-09-27) | Written with the feature. It exists for `backend/selftest.py --preflight`'s own PowerShell output, not for a screen in either app - a diagnostic the owner pastes back, the same audience as every other preflight check (JARVIS-API §49). Neither app calls the route today. |
 | The restart-with-a-cap watchdog (`sidecar.rs`'s `spawn_watchdog`) and hang/crash notes (`crash_notes.rs`, Settings -> More options -> "Hang and crash notes"; feasibility I98/I99, 2026-09-27) | Both are about a process on the PC: the Rust desktop app supervising the Python backend it started, on this machine. There is nothing on a phone to watch or restart, and a panic in this process is this process's own. The phone has its own separate crash reporting question, not raised by this work. |
 | "Private copy" (feasibility I114, 2026-09-27) - keeping a copied answer out of what each platform remembers or syncs on its own | Genuinely different mechanisms, not one file shared two ways: the desktop excludes the clip from Windows Clipboard History and Cloud Clipboard sync (`clipboard_privacy.rs`, two registered clipboard formats set to 0 in the same open/close sequence as the text); the phone marks the clip `ClipDescription.EXTRA_IS_SENSITIVE` so Android's own copy toast shows no preview (`PrivateClipboard.kt`) - Android has no clipboard history or cross-device sync feature to opt out of at all. `docs/JARVIS-API.md` §51 has both. |
-| App-icon shortcuts (feasibility I125, `res/xml/shortcuts.xml`, 2026-09-27) | Phone only - a long press of an app's own icon on the home screen or app drawer is an Android launcher convention with no Windows equivalent this app has any reason to add (the desktop already has its own quickbar hotkeys, Settings -> Shortcuts). Every shortcut reuses an action `MainActivity.kt` already had (the widget's Talk/Note buttons, the briefing notification's tap) - no new backend route, no new navigation logic. `docs/JARVIS-API.md` §52. |
+| App-icon shortcuts (feasibility I125, `res/xml/shortcuts.xml`, 2026-09-27) | Phone only - a long press of an app's own icon on the home screen or app drawer is an Android launcher convention with no Windows equivalent this app has any reason to add (the desktop already has its own quickbar hotkeys, Settings -> Shortcuts). Talk and Note reuse the widget's own actions; "Brief me" and "What did I miss?" ask their fixed, read-only sentence on Home through the chat box's own send (`AppShortcuts.kt`, changed 2026-09-27) - no new backend route. `docs/JARVIS-API.md` §52. |
 | "Check for tool updates" (`GET`/`POST /api/tool_updates`(`/check`); the owner's own request, made directly, 2026-09-27) | Written with the feature. Checking the versions of the Python packages, Rust building blocks and any pinned GitHub tool Jarvis is built from is developer/maintenance tooling, not something the owner does from their phone - the same reasoning that keeps the model catalogue and deep config editing off the phone (`CLAUDE.md`'s standing rule). Report only: it never installs or changes anything, on either app, ever - it only shows the exact command to run, which is itself a PC-side action (`py -3 -m pip install ...`, `cargo update ...`, run from a terminal on the PC, not from a phone). `deliberate` in `tools/check_parity.py`. |
+| **Turning Lockdown OFF** (`POST /api/asks_first/tier {"action": "lockdown", "ask": false}`; the owner's choice of 2026-09-28, `docs/JARVIS-API.md` §75) | Written with the feature. Turning it ON is in both apps, at once. Turning it off loosens every way out of the PC at once, so it is the existing PC-only loosening - ONE `loosen_what_asks_first` card that needs Windows Hello, refused from any other device by the backend itself (`jarvis_owner_check.PC_ONLY_ACTIONS`). The phone shows where to do it instead of a button, exactly as for loosening one action. |
 | "Open <a settings section>" by voice or chat (§3, `docs/JARVIS-API.md` §58.1) jumping to Hardware and models, the second graphics card, the big model, Updates, "Check for tool updates" or "More options" | No new route (this rides inside `/api/chat`), so nothing for `tools/check_parity.py` to check. Each of these sections is already desktop-only or Rare-and-desktop-only for its own reason, listed elsewhere in this table. Voice, Security, Appearance and Backups ARE reachable on the phone: each is a real `item(key = ...)` row in `SettingsScreen.kt`'s `LazyColumn`, with its own entry in `SETTINGS_ITEM_INDEX`, so "open voice", "open security", "open appearance" and "open backups" from the phone scroll to that row like any other section, the same as on the desktop. |
+| "Try the cloud model" (the "yes" button, 2026-09-27; §4 "`offer` in `X-Jarvis-Route`", `docs/JARVIS-API.md` §18.1) - the widget only | No new route (it rides inside `/api/chat`, so nothing for `tools/check_parity.py` to check), and it IS on both real chat surfaces: the desktop's main window (`index.html`/`main.js`) and the phone's Home screen (`HomeScreen.kt`, `net/CloudOffer.kt`). Left off the desktop's own separate `widget.html`/`widget.js`, which never renders an answer's own text or route at all today - it shows only the quickbar's Talk/Note/status controls, nothing an offer could attach to. Nothing here is a decision to keep it off the widget forever; there is simply nothing on that screen yet for it to hang beside. |
+| Projects: choosing a coding project's folder, and writing or changing a coding benchmark's command (`POST /api/projects` and `/api/projects/<id>` with `folder`, `/benchmarks` with `command`; `docs/JARVIS-API.md` §88, the owner's decision of 2026-09-28, `docs/PROJECTS-DESIGN.md` §6) | Written with the backend (build steps 1 and 2) and kept in both apps' screens (step 3, 2026-09-28): the desktop chooses the folder with the Windows folder picker and writes a command in Brain -> Projects; the phone shows both and says "Set on your PC", and creates life projects only. Project folders and benchmark commands are PC-only: folders already are ("Folders Jarvis may look in" is added on the PC alone, and a project's folder must already be on it), and a command's words decide what would run on the PC. The backend refuses both from any device but the PC (`jarvis_owner_check.from_this_pc`, `403` with `"pc_only": true`). Everything else about a project - creating a life project, instructions, notes, the Shareable switch, logging a number - is on both apps; clearing a folder is too, since it only lets Jarvis see less. |
+| Setting up Jarvis's Gemini window: signing it in once (`py -3 jarvis_chatbot_gemini.py sign-in`) and the selector self-check (`py -3 jarvis_chatbot_gemini.py check`), 2026-09-28 | PowerShell commands on the PC, not app screens, in neither app: the browser window they open is on the PC, and the owner signs in to the spare Google account there, by hand. Whether it is set up reaches both apps anyway, as the "Chatbot conversations" row of "What Jarvis can reach" ("Not set up", with the line to run). |
+| Signing in to the other chatbot websites (ChatGPT, Claude, Copilot, Perplexity, DeepSeek, Grok, Le Chat, Meta AI) and their self-checks: `py -3 jarvis_chatbot_<site>.py sign-in` / `check`, 2026-09-28 | **PC only**, the same reason as Gemini's: each website's window, and its browser profile holding that site's sign-in cookie, are on the PC, and the owner signs in to each spare account there, by hand - a phone cannot sign a PC's browser in, and Jarvis never types or keeps a password. Both apps still see which are set up, through the same "Chatbot conversations" row. |
+| Customer-support chats: signing in to the owner's own account in the support window, opening the company's chat on its help page, answering an identity check or "are you a bot?", and the read-only check (`py -3 jarvis_support_widget.py sign-in|check groupon`, `forget-sign-ins`), 2026-09-28 | **PC only**: the support window, its browser profile holding the owner's REAL sign-ins, and the chat itself are on the PC; the owner signs in, opens the chat and answers what Jarvis hands over there, by hand (the owner's decisions: identity checks are "always handed to the owner in the window"). Both apps start, watch, take over, resume and stop the chat, and answer a waiting offer (Decline, Say something else). |
+| "Export transcript" of a support chat (`GET /api/chatbot/support/export`), 2026-09-28 | **Desktop only**: the design's "the owner's tap on the PC, to a folder they pick". The file is plain text, NOT encrypted (the button says so), written where the owner picks with the Windows "Save as" dialog; a phone has no folder on the PC to put it in, and says "Export transcript is on the PC only." The encrypted chat history keeps the record on both apps' History. |
+| Saving a chatbot API key (`py -3 jarvis_chatbot_api.py key <service>`) and choosing "a second AI on this PC" (`local_model` under `[chatbot]` in `jarvis-framework.toml`), 2026-09-28 | A key is entered on the PC only, like the web-search keys: sending it from the phone would send it somewhere other than its own service (rule 3). Neither app has a screen for entering a key or choosing the local model; once either is done on the PC, both apps' chatbot screens can start a conversation with it (`/api/chatbot/*`), and both apps see whether a key is saved, in "What Jarvis can reach" ("Chatbot conversations with a key (API)"). The local model is a settings-file line, as the other second-card settings are. |
+| Setting an API chatbot's monthly money limit, or correcting its price (`py -3 jarvis_chatbot_api.py limit <service> <dollars>`, `price <service> <in> <out>`, `spent`), 2026-09-28 | Set on the PC only, the same place a key is added, as the owner decided ("a monthly amount per service, set on the PC"). Raising a limit or lowering a price is a loosening - more money can leave - and a person typing at the PC's own command line is how every other loosening of this feature is done (a key, the model line); there is no route for either, so no app, and nothing that holds the pairing token, can raise one. Both apps READ it: the chooser shows "About $X of $Y left this month for <company> (prices are estimates you can correct on the PC)" under each API service with a limit, and the approval card (written on the PC) says the same. Lowering is on the PC too, to keep ONE place for the numbers. |
+| Jarvis Live's always-on-top badge, its tray row and the red mark on the tray icon, and ending Live when Windows locks (and pausing it when the lock cannot be read) | The badge is the PC's always-visible Live sign (docs/LIVE-DESIGN.md); the phone's sign is its Live screen, a strip on Home and an ongoing notification (the row in the phone table). Windows' lock is a PC thing; on the phone, App lock and the screen do that job. |
+| Jarvis Live's "End Live when" as a PC voice setting (`live_end`: when App lock would ask again, or - looser, with an approval card - only when Windows locks) | The owner's decision of 2026-09-28 is about the PC, where Live can outlast App lock while the owner walks away from a desk. **The phone has its own "End Live when" since 2026-09-28 (the Jarvis Live extras)**, on its Security screen, saved on the phone: "When App lock would ask again" (default) or "Only when the phone's screen locks" (looser, so it asks for the fingerprint or PIN, like every loosening there - not a card, because the phone's lock settings never go to the PC). Each app keeps its own, because each app's App lock is its own. |
+| The "Start or end Jarvis Live" hotkey (`hotkeys.rs` `toggle_live`, off until the owner picks a key; Alt+Shift+L suggested), 2026-09-28 | A key on a PC's keyboard. The phone's one-tap equivalents are its Quick Settings tile and the headset button (the phone table). |
+| Jarvis Live noticing "another program is using the microphone" (Windows' own record) and muting itself | The PC's way of noticing a call (the owner's answer, 2026-09-28). The phone notices a call from Android's audio mode instead (the phone row). When Windows' record cannot be read, the PC's sign says "Jarvis can't tell when you're on a call - use Mute". |
+| "This looks like a game, so nothing in it is kept or learned." strip under the Jarvis bar (the second chat audit, 2026-09-28) | The bar has a strip for the chat's own state ("Temporary chat: ..."); a game or role-play the PC made temporary by itself gets one too, so a chat that never reaches History says so. The phone has no such strip: it only avoids saying "the last one is in History" for a game (`ChatSession.game`), and "New conversation"/"After 30 quiet minutes" say the plain thing. |
 
 **On the phone, kept off the desktop:**
 
 | what | why |
 |---|---|
+| "Temporary is on - this Live session will not be kept in History." shown BEFORE Live starts (the owner, 2026-09-29; `LiveScreen.kt`) | The phone's Live screen is a screen of its own with the Start button on it, so it can say so before Start. The desktop's Live strip exists only while Live is on here, so its line appears then; Temporary's own strip is already on the bar the rest of the time. |
+| "This is the chat you are in on Home" line on an opened chat in History, and "Change" beside History's on/off line (the second chat audit, 2026-09-28) | The phone's History is a screen of its own, next to Home's chat, so it can name the one Home is in and put the switch's state at the top (the settings sit at the bottom of a long list). The desktop's Brain History is a separate window whose settings row is always on screen, and the bar tells the owner where a chat went when it ends. |
+| Scanning the pairing QR code, or typing its code (`/api/pair/claim`, `/api/pair/collect`; QR-code pairing, 2026-09-28) | The phone is the device being paired. The desktop runs on the PC, which already has its own key (the old shared one, kept for this PC even after Retire), so it has nothing to pair. The backend refuses both routes from the PC itself. |
+| The ongoing "Talking to Gemini, 3 of 5" notification with Stop, while Jarvis talks to a chatbot for the owner (`service/ChatbotNotifier.kt`; JARVIS-API §87) | Written with the feature, 2026-09-28. It is how a phone in a pocket shows that something is still going and offers Stop without opening the app. On the PC the same line heads the Brain's "Talk to a chatbot for me" card, the approval card arrives the usual way, and the "Stop everything" hotkey stops a conversation too - a Windows notification that stays up would only repeat what the Brain shows. The same holds for "Ask several and compare" (2026-09-28): the phone's line reads "Comparing 3 chatbots: asking ChatGPT, 2 of 3" and its Stop stops the whole comparison. |
 | The phone's own layout settings (`AppearanceStore.kt`, `Look`: the face's share of Home, the tabs row, glow, motion, compact spacing, corners, text size, panel edges, and the "make room" switches) | They describe a phone screen. They are saved per device and never synced (`toSyncDocument` leaves them out), so they cannot change the desktop. |
 | "Also on my phone" (the owner's decision of 2026-09-26; `net/AlsoOnPhone.kt`, a button on an alarm or reminder in Brain -> Coming up) | Written with the feature. It hands an alarm to the PHONE's own Clock app, or a reminder to its calendar, by the owner's tap, so it rings with the PC off - the gap it closes is the phone's alone (the PC is Jarvis's clock, and the phone hears of a job only while connected). On the desktop the PC already rings it; Windows' Clock app offers no way for another program to add an alarm; and putting an event into Google Calendar from the desktop would be a new way out of the PC (a link to Google carrying the event's words), which the creativity audit (usefulness #12) said needs the owner's OK first - not built. No route is involved, so `tools/check_parity.py` has nothing to check. |
+| "Also on my phone" on a "Photo to reminder" proposal (the owner's choice of 2026-09-28; `net/PhotoReminder.kt` `calendarOffer`, `PhotoReminderDialog.kt`; JARVIS-API section 83) | Written with the feature. Both apps have "Photo to reminder" (the Jarvis bar's screen capture and the Brain's "Choose a picture..." on the PC; a picture shared to Jarvis on the phone), and both add a Jarvis reminder on the owner's tap. Only the phone's proposal also has "Also on my phone" - the same hand-over as the row above, to the phone's own calendar - for the same reasons: on the PC Jarvis's own reminder already rings, and putting the event into a calendar from the PC would be a new way out of the PC. The picture's words are outside text on both. |
+| **"Swipe to approve or deny"** (the owner, 2026-09-28; Security on the phone, `SecurityRules.SWIPE_TITLE`, `Security.swipeDecides`) | The swipe exists only on the phone's approval card - the desktop decides cards with buttons and keys only, so there is nothing there to turn off. On by default (as before); off, no swipe decides any card, whatever `risk.swipe_ok` says. Turning it off is instant; turning it back on needs the fingerprint or PIN check, like every other loosening on that screen. Saved on the phone only. |
 | **Blocking screenshots while a lock is on** (`FLAG_SECURE`, `SecurityRules.blockScreenCapture`) | **Undecided on the desktop - the owner's call.** The owner decided it for the phone (apps security audit L5, 2026-09-25), where screenshots, screen recording and casting are all a tap away. Windows could do the same for Jarvis's windows (Tauri's `set_content_protected`, which keeps a window out of screenshots, recordings and screen sharing), but it was not part of that decision and is not built. |
 | **Smartwatch notifications** (`GET`/`POST /api/notifications/watch`, `phone-only` in `tools/check_parity.py`; the owner's decision, 2026-09-25, reconfirmed 2026-09-27, Q17) | A smartwatch pairs with a phone, never with a Windows PC - there is nothing on the desktop for this to mean. The setting itself still lives on the PC, the same as every other approval-card switch (`docs/ARCHITECTURE.md` §3: one permission model, one place cards come from), so a stolen or borrowed phone cannot flip it on its own; only the phone ever reads it or acts on it (`.setLocalOnly(...)` on its own `NotificationCompat.Builder`s). Off by default - every notification stays on the phone; turning it on raises one card (`watch_notifications_enable`), turning it off is instant. There is no Jarvis watch app and none is built for this: Android's own, already-built-in notification bridging does the copying, to whatever companion device is paired, once this setting stops refusing it. |
+| **"Playing on your PC" buttons** (`GET /api/media`, `POST /api/media/control`; the owner's choice of 2026-09-28, `docs/JARVIS-API.md` §74.2) | Written with the feature. **Since "Widgets you describe" (§86, 2026-09-28) the two routes are `ported`:** the desktop calls them ONLY for a widget's "Play/pause PC" button (`brain/widgets.rs`), with the phone tile's own play-or-pause rule; it still shows no "what's playing" of its own, for the reason below. The desktop IS the PC: Windows' own media keys and media flyout are already there, and "pause the music" said or typed to the Jarvis bar is answered without the model (§47.1). A Jarvis copy of those buttons on the PC would add a second control for the same thing. On the phone they are one tap on Home, greyed on a stale link (rule 4), no card. |
+| **Ringing when "ring my phone" is said** (the `ring_phone` event; `docs/JARVIS-API.md` §74.1) | Written with the feature. The PC is the one being asked, never the one being found: the desktop ignores the event, and the phone rings on its alarm channel with Stop and a time-out. Saying it works from both apps (it is answered on the PC without the model). With one pairing key for every phone, every connected phone rings - the answer says so; per-device targeting waits for "more devices". |
+| **"Hey Jarvis is off since the phone restarted - tap to turn it back on"** (`data/WakeResume.kt`, `service/WakeResumeNotifier.kt`; the owner's choice of 2026-09-28, `docs/JARVIS-API.md` §81.1) | Written with the feature. Only the phone has this gap: Android will not let an app open the microphone at boot, so the phone's "hey Jarvis" is off after every restart until the owner taps. The desktop's listener is part of the backend on the PC, which starts with the PC and needs no tap, so there is nothing for a notice to say there. No route, so no `tools/check_parity.py` entry. |
+| **Widgets you describe: the home screen vs. the widget window** (`docs/JARVIS-API.md` §86; `widget/JarvisBoardWidget.kt`, `src/widget-board.js`) | Written with the feature. Both apps have the whole feature (describe, preview, Add, Delete, draw one). What differs is WHERE a widget is drawn: the phone offers three home-screen slots ("Jarvis widget 1-3"), like its three Quick Settings tile slots, because Android cannot add a widget type while the app runs; the PC draws ONE chosen widget inside the existing desktop widget window, in place of the face - not a new window, and not the Windows 11 widget board, which only takes widgets from a packaged (MSIX) app, and this app is not packaged that way. The phone cannot tell a paste from typing in its text box, so it always says "typed"; the desktop's box sends pasted words as pasted, which the PC refuses. |
+| **Quick Settings tiles the owner chooses** (`data/QuickTiles.kt`, `service/QuickTileService.kt`; the owner's choice of 2026-09-28, `docs/JARVIS-API.md` §81.2) | Written with the feature. Quick Settings tiles are an Android panel; Windows has no equivalent a program can fill with its own buttons. The PC already has the same five things close at hand: the Stop everything hotkey and tray row, the Jarvis bar ("set a timer for 10 minutes", "brief me", "focus for 25 minutes", "pause the music" - all answered on the PC), and Windows' own media keys. Every tile calls a route the phone already called (`/api/focus/start`, `/api/schedule/add`, `/api/stop_all`, `/api/media`, `/api/media/control`), so `tools/check_parity.py` is unchanged. |
+| **The Android 17 notes** (the assistant volume line in Settings -> Voice, and the "try Android's own Bubble" line under Floating Jarvis; `docs/JARVIS-API.md` §81.3-81.4) | Written with the feature. Both describe what Android 17 does for this app; Windows has neither an assistant volume slider nor app bubbles. |
 | **A haptic tick on letting go of the talk button** (UI audit "do first" item 7, 2026-09-26) | A PC has no vibration motor. The desktop's own half of "Caught it" is a short reactor "inhale" instead - the same contraction-and-spring the moment gets on the phone (`jarvis-desktop/src/style.css` `reactor-inhale`, called from `main.js`'s `stopPushToTalk`, never on a cancel) - so both apps mark the same instant, each in the one channel its hardware actually has. |
 | **Refusing a home-network desktop address up front** ("...this phone can only reach your PC by its Tailscale name ... or its NordVPN Meshnet name ...", `PhoneAddress.kt`; 2026-09-27) | Written with the change (§2, "Which addresses the phone can use"). It makes the phone's own judgment agree with Android's per-app list of names that may get plain http:// (`network_security_config.xml`), which Android enforces through OkHttp on every request. Windows has no such per-app list, and the desktop's requests to Jarvis are made by its Rust code (`reqwest`), which has none either - an address the shared rule accepts is one the desktop can actually use (usually Jarvis on the same PC) - so it keeps the shared own-networks rule alone, with the shared sentence. Both apps still apply that rule, from the one table (`tools/gen_own_network_cases.py`). |
+| **Setup helps from the phone play test** (2026-09-28; walk-through N1, C8, C9): reconnecting at once when the phone's network changes, the "Tailscale (or Meshnet) is off on this phone" line, **Show token** on the pairing screen, and the one-time "Background restart" offer after the first pairing | Each fixes something only the phone has. The desktop normally talks to Jarvis on the same PC (`127.0.0.1`), so it has no network to change and no VPN to need; a token is normally never typed on the PC at all (Jarvis makes one and the desktop reads it from Windows Credential Manager), so its own masked Token box, for choosing your own token, got no Show button - a possible follow-up, not built; and Windows does not close a desktop program to save battery. No route is involved, so `tools/check_parity.py` has nothing to check. The PC's half of "can the phone reach Jarvis?" is the preflight check `phone` (`backend/selftest.py`), which the desktop's owner runs. |
 | **"Findings" (Brain → Findings, `BrainScreen.kt`'s `Probed("Findings", brain.initiative, ...)`, "What Jarvis noticed on its own")** | Written down 2026-09-27, on the ease-of-use audit's parity check (#17). `GET /api/initiative` is read on both apps - the desktop's HUD window polls it too (`jarvis_hud.html`) - but only as transient cards the owner dismisses while the HUD happens to be open; the desktop's Brain window has no section that keeps them. The phone's Brain gives the same feed a persistent, browsable place instead, with the honest empty state from `initiativeNote()` ("Jarvis doesn't watch anything on its own yet") for when the initiative engine's check list is still empty. Nothing here is phone-only data; it is a phone-only place to read it back. |
+| **Reading phone notifications** (`GET`/`POST /api/notifications/phone`, `phone-only` in `tools/check_parity.py`; the owner's decision, CLAUDE.md 2026-09-26; built 2026-09-28; docs/JARVIS-API.md §61) | A Windows desktop has no equivalent to "which app posted a notification, and what did it say" - `NotificationListenerService` is an Android concept with no PC surface this project has any reason to invent one for, the same reasoning §56 (Floating Jarvis) and the smartwatch row above already give for their own phone-only halves. The setting itself still lives on the PC, the same as every other approval-card switch (§3: one permission model, one place cards come from) - only the phone ever reads or acts on it. Everything else (which apps - empty by default, banking and SMS/Messages blocked outright; the one-time-code redaction; the local, capped store) is entirely on the phone and never reaches this backend module at all - it is a plain on/off switch, nothing more. |
+| Jarvis Live's ongoing notification (End, Mute; kept on the phone) and the screen kept on while the Live screen shows | The phone's always-visible Live sign when the owner leaves the app; the PC's is the badge (the row in the desktop table). A PC screen does not sleep under a conversation the way a phone's does. |
+| Jarvis Live noticing a phone or video call from Android's audio mode, and saying "I've lost the link to your PC." in the phone's own offline voice | Calls happen on the phone; the PC uses Windows' microphone record instead (the desktop row). The link line is the phone's because the PC's voice cannot reach it when the link is down; on the PC the sign says "Paused: link lost". |
+| Jarvis Live's camera (built switched OFF, hidden in both apps until the 12 GB card passes the photo test) | The owner's answers of 2026-09-28: the phone's camera only - a PC webcam mostly sees the owner's face and room (docs/LIVE-DESIGN.md section 5). Taking the picture on the phone is not built yet; only the gate is. |
+| **"Solve it here"**: a live picture of the PC's paused browser window and the owner's taps and typing passed back to it (`/api/chatbot/handoff/*`, `phone-only` in `tools/check_parity.py`; JARVIS-API §87.8), 2026-09-28 | The owner's decision is about the PHONE: "a captcha can be handed to the owner's phone". On the PC the browser window is right there, so the desktop shows the same alert on the Brain's Work tab ("Gemini needs you on this PC", from `/api/chatbot/status`'s `handoff`) and points at the window - it never calls the picture or input routes (`tests/handoff.mjs` checks). The phone's alert is its own channel and always stays on the phone. |
+| The Jarvis Live Quick Settings tile, the headset button in Live, and the 10-minute "Live ended - Resume" notification (the Jarvis Live extras), 2026-09-28 | Phone things: a tile lives in Android's pulled-down shade, a headset button reaches a phone's media session, and a notification is how a phone in a pocket offers Resume. The PC has the tray row and the Live hotkey (the desktop table) and its badge shows "Resume Live" for 15 seconds, in the Jarvis bar until the 10 minutes are up. |
+| Preferring a Bluetooth headset's microphone in Live, and saying which microphone is in use (the Jarvis Live extras), 2026-09-28 | On the phone Jarvis picks the microphone (Android's communication device; no Bluetooth permission). On the PC Windows picks it - Live opens the default microphone, both the plain and the echo-cancelled way (`aec.rs`) - so a Bluetooth headset is used when Windows makes it the default, and the Voice settings already say which microphone that is. Choosing a different microphone on the PC is a larger change to both capture paths, not made here. |
+| "Talk about this in Live" in Android's Share sheet (the Jarvis Live extras), 2026-09-28 | A Share sheet is Android's. The text is outside text exactly as a share to Home is (`provenance: "shared"`, JARVIS-API §18); the PC's quickbar already takes clipboard text with its own "clipboard" tag, in Live as anywhere. |
 
 **The picture-in-picture idea landed on both apps, on 2026-09-27, by two
 different sessions working at the same time - not one shared mechanism,
@@ -1676,6 +2037,14 @@ every screen but Home on the phone (Home shows the cards). Both name the
 last card in the queue as read. The phone's home-screen widget has no
 Approve at all - "Review" opens the app - and sits where Approve sits
 elsewhere, on the right.
+
+**PC help is in both apps since 2026-09-28** (`docs/JARVIS-API.md` §84):
+the same five answers from `GET /api/pc/help`, and the same five questions
+answered in chat by `jarvis_quick.py`. One small difference, on purpose:
+the desktop shows it in Settings -> Hardware and models, the phone in Brain
+under Hardware - in each app, where the graphics cards already are. Changing
+Windows settings from it (Night light, dark mode, Do not disturb) is in
+neither: nothing safe to build it on exists yet (§10).
 
 ---
 
@@ -1973,18 +2342,31 @@ they landed):
 
 **Still missing:**
 
+- **Looking at the screen ("Look at this", "Watch with me").** Decided
+  2026-09-28 and designed (`docs/SCREEN-DESIGN.md`). Built: the rules only -
+  `jarvis_front.py` (the front-window reader, now shared with focus
+  sessions) and `jarvis_screen.py` (session states, the pause rules, the
+  caps, the Never look at list, Stop everything), plus the router keeping a
+  screen turn on this PC (`has_screen`) and `read_screen` on the read-aloud
+  list (JARVIS-API §62), with the voice setting "Answers about your screen
+  after "Hey Jarvis"" in both apps (under "Only trust the talk button" they
+  stay on screen unless it is on). Missing: the Windows readers (password boxes,
+  capture protection, a window's own text), the chat route reading
+  `screen_text`, and everything in both apps. The preflight's `screen` check
+  says "not built on this PC yet".
 - **Obsidian daily notes in every date format.** Only formats that can be
   written out exactly are followed (YYYY, YY, MM, M, DD, D, bracketed words,
   `/` folders). A format with month or weekday names, or week numbers, is
   refused with the reason, and so is a vault where the Periodic Notes plugin
   may be naming the daily note. Nothing guesses a file name.
 
-- **Overnight memory tidying.** `jarvis_sleep.py` only offers it, at most
-  once a day and under the back-off (a "not now" is quiet for 1, then 7,
-  then 30 days), and the card says it is not built; switching it on records the wish
-  and runs nothing. If it is ever built it may only raise review cards: no
-  stored fact is retired or changed without the owner's yes on that one
-  fact.
+- **Overnight memory tidying beyond two kinds of card.** Built on
+  2026-09-28 (`jarvis_tidy.py`, section 5): "Still true?" and "Which is true
+  now?" review cards only, off unless switched on. There is still no
+  merging of repeats, no rewording and no summarising, and no fact is
+  retired or changed without the owner's yes on that one fact. What the
+  real local model gets right in "Which is true now?" is not measured yet
+  (it needs the PC run).
 - **A wake word measured on real speech.** "Hey Jarvis" is built (openWakeWord's
   model, on the phone and through the PC; turning it on is an approval card),
   but it has only been tested on synthesised voices: 44/44 heard, and the
@@ -2010,7 +2392,7 @@ they landed):
   its model is there; otherwise it asks Ollama about the everyday model, as
   before. Pictures never go to a cloud lane (`jarvis_router.choose()`
   keeps any turn with an image local, and the second card is on this PC).
-- **A reasoning trace.** Brain → Live shows each tool Jarvis starts and
+- **A reasoning trace.** Brain → Now shows each tool Jarvis starts and
   finishes (the `step` event, from `jarvis_agent.py`, only when tools are
   switched on), but not the model's private reasoning: that text can quote
   email or files, and the event bus reaches a phone's lock screen (§6), so
@@ -2025,6 +2407,13 @@ they landed):
   is published until the owner generates a signing key and adds it
   (`jarvis-desktop/README.md`, "Turning on updates"). Until then Settings
   says updates are not set up.
+- **Changing Windows settings from Jarvis** (Night light, dark mode, Focus
+  Assist / Do not disturb). "PC help" (`jarvis_pc_help.py`, JARVIS-API §84)
+  only reads. No safe way to change a Windows setting exists in this
+  codebase yet (`jarvis_ui_control.py` clicks inside other programs'
+  windows, which is not that), so none was built. When it is: one gate
+  action per setting, tier `ask`, one card each, listed on "What asks
+  first" and held by Lockdown.
 
 **Present, but only on the owner's PC** (not missing, and not in this
 repository either):
@@ -2059,10 +2448,10 @@ Do not relitigate these without new evidence.
 |---|---|
 | Reachability | Tailscale or NordVPN Meshnet, properly. Never a public tunnel. |
 | Face / appearance | Rendered locally on each device; the server is a sync channel only. |
-| Voice | sherpa-onnx for STT (Parakeet TDT 0.6B v2), speaker verification, Kokoro TTS, Silero VAD. 0 GB VRAM. First audio is slow: from the owner finishing to Jarvis's first sound is roughly **2.5–4 s** today, with the voice on the processor. That is an estimate - the model's part (first word, first sentence) has not been measured; making the first sentence's sound alone takes about 1.3–1.6 s (measured in the dev container, not the owner's PC). The real figure is in `flow.timings` and `flow.summary` of `/api/voice/status` on the owner's PC (`backend/README.md`, "The voice flow"). Design a "thinking" state that survives several seconds of silence. Both apps make the next sentence's sound while the current one plays (one ahead), so there is no silence *between* sentences as long as making the next one takes less time than saying the current one (a simulation in the dev container: 3.5 s of mid-answer silence became 0 s; a short sentence followed by a long one can still leave a pause). Both apps also start speaking at the **first comma** of an answer once the phrase is long enough - the first piece only, the same rule on both (`jarvis-desktop/src/speech-pieces.js`, `SpeechText.kt`, one shared list of cases); in the dev container that moved the first sound from 2.04 s to 1.23 s, at the cost of one short pause after that first phrase. And a question **said** out loud is answered in a spoken style - a short first sentence, one to three sentences, no lists or markdown - by one line the PC adds for this PC's own model only (`jarvis_agent.SPOKEN_NOTE`, `JARVIS-API.md` section 17); typed questions are unchanged. The "One moment." clip's suggested 1000 ms (`JARVIS-API.md` section 17) would therefore fire on most spoken turns at today's speeds. **The wake word is the exception**: openWakeWord's `hey_jarvis` model on ONNX Runtime, on the phone and the PC alike - sherpa-onnx has no Android library on Maven Central/Google, and the TOML and `WAKE-WORD.md` had already chosen openWakeWord. Measured side by side in `backend/README.md`. **Custom voices** (2026-09-24, the owner's decision): ZipVoice via sherpa-onnx on the processor, and F5-TTS as an optional second-card "better voice" in its own process (on demand, stopped when idle and in standby); Kokoro stays the fallback. Adding a voice and switching to one are each a card; a voice that sounds like the owner's is refused (`backend/jarvis_voices.py`, `JARVIS-API.md` section 15). **Voice upgrades** (2026-09-26, the owner's choice, "each measured before it replaces anything"): a newer "hey Jarvis" detector (livekit-wakeword, trained once on the owner's PC) and Pocket TTS (a faster voice-copying engine on the processor) are built but **switched off**, with no switch in either app (the feasibility audit's "invisible upgrades get no switch"). `backend/jarvis_bakeoff.py` measures each against today's on the owner's PC and says "replace" or "keep what we have" by rules fixed beforehand (`backend/README.md`, "Voice upgrades: the bake-off"). A winner replaces the old part - never two detectors or three voice engines side by side. Every Pocket TTS file is hash-pinned and refused if it changed; the candidate detector is refused unless it matches the hash its training wrote down; the wake-word files the phone ships are pinned to the same hashes as the PC's (`test_voice_upgrades.py`). **How fast Jarvis speaks** (Slower / Normal / Faster) is in both apps: one number for every voice made on the PC, no card either way. **Which of Kokoro's own voices the built-in one uses** (2026-09-27, ease-of-use audit row 13) is the same shape, right next to it in both apps: no card either way, `[voice] tts_speaker_id` in the toml until a choice is made. **Voice follows the face** (2026-09-27, the owner's choice): with an animal face showing (red panda, pygmy owl, sea otter, monkey), the built-in voice becomes that animal's - one of the Kokoro voices already installed, its own pace and a small pitch rise (`jarvis_voices.FACE_VOICES`, not listened to yet). An on/off switch, on by default, under the built-in voice choice in both apps: no card either way (it changes how Jarvis sounds, never what it does), held on a stale link; a recorded custom voice still wins. **Each animal's voice** (2026-09-28, the owner's choice): under that switch in both apps, any of the eleven built-in voices, a pitch from 3 steps deeper to 4 higher and a pace per animal, with Try it (one fixed line, changes nothing) and Reset - no card either way, held on a stale link; the mouth timing follows the chosen pitch and pace (`docs/LIPSYNC.md`). |
-| Cloud / API keys | Allowed, **per use, with permission**. Jarvis works out what it genuinely needs the internet for, explains it, and asks. No standing grant. Enforced in `jarvis_router.choose()` since 2026-09-24 (the owner chose "ask each time"): without the owner's yes for that one question it answers locally and only names the cloud lane in `offer`; a yes never carries a private, tainted or picture turn out. Before that, the router escalated long questions by itself. |
+| Voice | sherpa-onnx for STT (Parakeet TDT 0.6B v2), speaker verification, Kokoro TTS, Silero VAD. 0 GB VRAM. First audio is slow: from the owner finishing to Jarvis's first sound is roughly **2.5–4 s** today, with the voice on the processor. That is an estimate - the model's part (first word, first sentence) has not been measured; making the first sentence's sound alone takes about 1.3–1.6 s (measured in the dev container, not the owner's PC). The real figure is in `flow.timings` and `flow.summary` of `/api/voice/status` on the owner's PC (`backend/README.md`, "The voice flow"). Design a "thinking" state that survives several seconds of silence. Both apps make the next sentence's sound while the current one plays (one ahead), so there is no silence *between* sentences as long as making the next one takes less time than saying the current one (a simulation in the dev container: 3.5 s of mid-answer silence became 0 s; a short sentence followed by a long one can still leave a pause). Both apps also start speaking at the **first comma** of an answer once the phrase is long enough - the first piece only, the same rule on both (`jarvis-desktop/src/speech-pieces.js`, `SpeechText.kt`, one shared list of cases); in the dev container that moved the first sound from 2.04 s to 1.23 s, at the cost of one short pause after that first phrase. And a question **said** out loud is answered in a spoken style - a short first sentence, one to three sentences, no lists or markdown - by one line the PC adds for this PC's own model only (`jarvis_agent.SPOKEN_NOTE`, `JARVIS-API.md` section 17); typed questions are unchanged. The "One moment." clip's suggested 1000 ms (`JARVIS-API.md` section 17) would therefore fire on most spoken turns at today's speeds. **The wake word is the exception**: openWakeWord's `hey_jarvis` model on ONNX Runtime, on the phone and the PC alike - sherpa-onnx has no Android library on Maven Central/Google, and the TOML and `WAKE-WORD.md` had already chosen openWakeWord. Measured side by side in `backend/README.md`. **Custom voices** (2026-09-24, the owner's decision): ZipVoice via sherpa-onnx on the processor, and F5-TTS as an optional second-card "better voice" in its own process (on demand, stopped when idle and in standby); Kokoro stays the fallback. Adding a voice and switching to one are each a card; a voice that sounds like the owner's is refused (`backend/jarvis_voices.py`, `JARVIS-API.md` section 15). **Voice upgrades** (2026-09-26, the owner's choice, "each measured before it replaces anything"): a newer "hey Jarvis" detector (livekit-wakeword, trained once on the owner's PC) and Pocket TTS (a faster voice-copying engine on the processor) are built but **switched off**, with no switch in either app (the feasibility audit's "invisible upgrades get no switch"). `backend/jarvis_bakeoff.py` measures each against today's on the owner's PC and says "replace" or "keep what we have" by rules fixed beforehand (`backend/README.md`, "Voice upgrades: the bake-off"). A winner replaces the old part - never two detectors or three voice engines side by side. Every Pocket TTS file is hash-pinned and refused if it changed; the candidate detector is refused unless it matches the hash its training wrote down; the wake-word files the phone ships are pinned to the same hashes as the PC's (`test_voice_upgrades.py`). **How fast Jarvis speaks** (Slower / Normal / Faster) is in both apps: one number for every voice made on the PC, no card either way. **Which of Kokoro's own voices the built-in one uses** (2026-09-27, ease-of-use audit row 13) is the same shape, right next to it in both apps: no card either way, `[voice] tts_speaker_id` in the toml until a choice is made. **Voice follows the face** (2026-09-27, the owner's choice): with an animal face showing (red panda, pygmy owl, sea otter, monkey), the built-in voice becomes that animal's - one of the Kokoro voices already installed, its own pace and a small pitch rise (`jarvis_voices.FACE_VOICES`, not listened to yet). An on/off switch, off by default (the owner's 2026-09-28 decision; the sea otter no longer starts on Kokoro's "Sky" voice), under the built-in voice choice in both apps: no card either way (it changes how Jarvis sounds, never what it does), held on a stale link; a recorded custom voice still wins. **Each animal's voice** (2026-09-28, the owner's choice): under that switch in both apps, any of the eleven built-in voices, a pitch from 3 steps deeper to 4 higher and a pace per animal, with Try it (one fixed line, changes nothing) and Reset - no card either way, held on a stale link; the mouth timing follows the chosen pitch and pace (`docs/LIPSYNC.md`). |
+| Cloud / API keys | Allowed, **per use, with permission**. Jarvis works out what it genuinely needs the internet for, explains it, and asks. No standing grant. Enforced in `jarvis_router.choose()` since 2026-09-24 (the owner chose "ask each time"): without the owner's yes for that one question it answers locally and only names the cloud lane in `offer`; a yes never carries a private, tainted or picture turn out. Before that, the router escalated long questions by itself. **One exception, decided 2026-09-27**: a conversation with an AI chatbot website (`jarvis_chatbot.py`, section 4's "chatbot conversation (website)" row) follows up on its own within limits approved on one card; the core, its routes, both apps' screens and nine website adapters (Gemini first) are built; not yet tried against the real sites. The same exception covers the API adapters (section 4's "chatbot conversation (API, with a key)" row, `jarvis_chatbot_api.py`) and "a second AI on this PC" (`jarvis_chatbot_local.py`, which leaves nothing on the PC and so adds no row). |
 | Structured output | Ollama's native `format: <schema>` — GBNF at the sampler. **Not** `outlines`, which cannot constrain Ollama. |
-| Sandbox | Git worktrees, not Docker. |
+| Sandbox | Git worktrees, not Docker - for keeping the app builder's changes apart until a card approves them (`jarvis_app_workspace.py`, 2026-09-28; and since 2026-09-29 the merge card reaches it from Projects, `jarvis_apps.py`). A worktree is NOT a sandbox for running programs: `shell_exec` and any build command run with the owner's full permissions, which is why each one asks with the exact command (`docs/APP-BUILDER-DESIGN.md`). |
 | Extraction | `ast-grep` — measured 54,490 → 1,088 bytes, 0 VRAM. |
 
 **Rejected, with reasons, so they stay rejected:** screenpipe (relicensed,
@@ -2096,7 +2485,9 @@ the package, though Kokoro the model is adopted via sherpa-onnx.
    anything that repeats is set up by one card, like `schedule_repeat` -
    unless the owner decided otherwise for that kind: since 2026-09-26 plain
    alarms, reminders and the standby schedule have none
-   (`register_kind(plain_repeat=True)`; a new kind asks by default).
+   (`register_kind(plain_repeat=True)`; a new kind asks by default), and
+   since 2026-09-28 Today cards (`jarvis_today.py`, JARVIS-API §82): the
+   owner's own words shown back to them, reading nothing new.
    A kind that must look more often than hourly ("tell me when",
    `jarvis_tellme.py`) brings its own rule check (`register_kind(check=)`)
    with its own floor and an end date; the shared check keeps the hourly

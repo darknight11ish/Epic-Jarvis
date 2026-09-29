@@ -160,6 +160,67 @@ class ChatSession(
      */
     @Volatile private var conversationId: String = ChatHistory.newConversationId()
 
+    /**
+     * When the last answer of this conversation finished (wall clock, ms), for
+     * "a new conversation starts after 30 quiet minutes" (the owner's
+     * decision, 2026-09-28; [ChatHistory.idleExpired]). 0: none yet.
+     */
+    @Volatile private var lastTurnAt = 0L
+
+    private val _thread = MutableStateFlow<List<ChatHistory.Exchange>>(emptyList())
+
+    /**
+     * What Home SHOWS of this conversation (the owner's decision, 2026-09-28:
+     * the whole conversation as a scrollable thread): every finished pair,
+     * oldest first - not trimmed to the model's re-send window like
+     * [history], only capped ([ChatHistory.THREAD_MAX]). Memory only; emptied
+     * wherever [history] starts afresh.
+     */
+    val thread: StateFlow<List<ChatHistory.Exchange>> = _thread.asStateFlow()
+
+    private val _game = MutableStateFlow(false)
+
+    /**
+     * The PC made this conversation temporary by itself, because it is a
+     * game or role-play (the route header said so). Nothing of it is kept, so
+     * the notes about "the last one is in History" are not said for it. Ends
+     * with the conversation (the second chat audit, 2026-09-28, phone B1).
+     */
+    val game: StateFlow<Boolean> = _game.asStateFlow()
+
+    private val _readOutside = MutableStateFlow(false)
+
+    /**
+     * This conversation has read outside text (a chat carried on from History
+     * that did, or one that read a page or an email since): the line about it
+     * stays on Home for as long as the conversation does, instead of vanishing
+     * with the next question (the second chat audit, phone C4). Set by
+     * [continueFrom]; cleared by [newConversation].
+     */
+    val readOutside: StateFlow<Boolean> = _readOutside.asStateFlow()
+
+    /** Is there a chat here that was kept on the PC - so a new one can say where it went? */
+    fun hasKeptChat(): Boolean = _history.value.isNotEmpty() && !_temporary.value && !_game.value
+
+    /** Has the chat gone quiet for 30 minutes - so the next question starts a new one? */
+    fun idleNow(): Boolean =
+        ChatHistory.idleExpired(lastTurnAt, System.currentTimeMillis(), _history.value.isNotEmpty())
+
+    private val _chatNote = MutableStateFlow<String?>(null)
+
+    /**
+     * One quiet line about the chat itself, or null (the chat audit,
+     * 2026-09-28): a new conversation after 30 quiet minutes, a chat carried
+     * on from History ("Continue this chat") or from Live's "Move it here",
+     * the chat Home was in deleted elsewhere. The desktop's Jarvis bar shows
+     * the same words (tools/gen_history_cases.py). Words only; memory only.
+     */
+    val chatNote: StateFlow<String?> = _chatNote.asStateFlow()
+
+    /** The conversation id the next question goes with - for Jarvis Live,
+     *  which names its chat to the PC so "Move it here" carries it on. */
+    fun conversationIdNow(): String = conversationId
+
     @Volatile private var call: Call? = null
 
     private val _temporary = MutableStateFlow(false)
@@ -196,6 +257,19 @@ class ChatSession(
      * cleared with the answer, like it.
      */
     val crisis: StateFlow<Boolean> = _crisis.asStateFlow()
+
+    private val _cloudOffer = MutableStateFlow<String?>(null)
+
+    /**
+     * "A cloud model could give this one a second look." under the answer
+     * on screen - the lane [CloudOffer.laneFromHeader] read off this turn's
+     * `X-Jarvis-Route`, or null: no offer, or the owner has already tapped
+     * "Try the cloud model" or dismissed it ([tryCloudForLast],
+     * [dismissCloudOffer]). Cleared with the answer, like [crisis] and
+     * [usedIds] - the moment a newer question is asked, the old turn's
+     * offer is gone for good, never replayed on top of a different answer.
+     */
+    val cloudOffer: StateFlow<String?> = _cloudOffer.asStateFlow()
 
     private val _openSettings = MutableStateFlow<String?>(null)
 
@@ -240,6 +314,14 @@ class ChatSession(
     }
 
     /**
+     * Drops [cloudOffer] without asking anything - the offer's own
+     * "dismissible" half. Safe to call with no offer showing.
+     */
+    fun dismissCloudOffer() {
+        _cloudOffer.value = null
+    }
+
+    /**
      * Turns a temporary chat on or off, and starts a new conversation
      * either way ([newConversation]) - so nothing said in one kind of chat
      * is re-sent in the other. ON only when the PC says it has one.
@@ -248,9 +330,48 @@ class ChatSession(
     fun setTemporary(on: Boolean): String? {
         if (on == _temporary.value) return null
         if (on && !canTemporary()) return TemporaryChat.UNAVAILABLE
+        // The chat this ends was kept, unless it was itself temporary: say
+        // where it went (the second chat audit, phone C6 - it used to go silently).
+        val kept = hasKeptChat()
         newConversation()
         _temporary.value = on
-        return if (on) TemporaryChat.STARTED else TemporaryChat.ENDED
+        // Said on Home too (the chat audit, 2026-09-28, phone B5: the phone
+        // dropped this sentence, and the chat on screen went without a word).
+        val said = (if (on) TemporaryChat.STARTED else TemporaryChat.ENDED) +
+            (if (kept) ChatHistory.LAST_IN_HISTORY else "")
+        return said.also { _chatNote.value = it }
+    }
+
+    /** "New conversation", pressed by the owner: [newConversation], and Home
+     *  says so (read out by TalkBack - the chat audit, 2026-09-28). */
+    fun newConversationSaid() {
+        // Says where the old chat went, as the desktop does ("Chat ended.
+        // Kept chats are in Brain > History") - only when it was kept.
+        val kept = hasKeptChat()
+        newConversation()
+        _chatNote.value = if (kept) ChatHistory.NEW_CONVERSATION_KEPT else ChatHistory.NEW_CONVERSATION
+    }
+
+    /**
+     * Jarvis Live started here with a fresh conversation (a spoken "let's
+     * talk", or a session with no chat to carry on): Home's chat goes, and
+     * says so - it used to go without a word (the second chat audit,
+     * 2026-09-28, phone worst-three #1).
+     */
+    fun startLiveConversation() {
+        val kept = hasKeptChat()
+        newConversation()
+        if (kept) _chatNote.value = ChatHistory.LIVE_STARTED_NOTE
+    }
+
+    /** Jarvis Live ended here: its session is its own chat in History. */
+    fun noteLiveEnded() {
+        _chatNote.value = ChatHistory.LIVE_ENDED_NOTE
+    }
+
+    /** The owner dismissed the line about the chat. */
+    fun dismissChatNote() {
+        _chatNote.value = null
     }
 
     /**
@@ -304,8 +425,39 @@ class ChatSession(
          * a card is waiting, and then how it ended (voice/CardVoice.kt).
          */
         onStatus: ((String) -> Unit)? = null,
+        /**
+         * The owner's yes to [CloudOffer]'s "Try the cloud model" for THIS
+         * one question ([tryCloudForLast]) - sent as `cloud_yes: true`.
+         * Never set on an ordinary send; the router treats its absence as
+         * "no", same as [temporary]'s absence means "not temporary".
+         */
+        cloudYes: Boolean = false,
+        /**
+         * Jarvis Live: this spoken question was said in a Live conversation
+         * (`live: true` on it - ChatHistory.messages). An answer that is only
+         * the side-talk marker ("[not for me]") is then shown as "(not for
+         * Jarvis)" and not kept in the conversation.
+         */
+        live: Boolean = false,
     ): String? {
         cancel()
+        // A new conversation after 30 quiet minutes (the owner's decision,
+        // 2026-09-28) - never in the middle of Jarvis Live, which ends itself
+        // when it goes quiet. The old one stays in History; "Continue this
+        // chat" brings it back. Said once, quietly, above the new question.
+        _chatNote.value = null
+        if (!live && ChatHistory.idleExpired(lastTurnAt, System.currentTimeMillis(), _history.value.isNotEmpty())) {
+            // A temporary chat or a game was never kept: no "last one in History".
+            val kept = hasKeptChat()
+            conversation++
+            conversationId = ChatHistory.newConversationId()
+            _history.value = emptyList()
+            _thread.value = emptyList()
+            _game.value = false
+            _readOutside.value = false
+            lastTurnAt = 0L
+            _chatNote.value = if (kept) ChatHistory.IDLE_NEW_LINE else ChatHistory.IDLE_NEW_LINE_TEMPORARY
+        }
         _reply.value = ""
         _error.value = null
         _problem.value = null
@@ -326,6 +478,7 @@ class ChatSession(
         _usedIds.value = emptyList()
         _crisis.value = false
         _openSettings.value = null
+        _cloudOffer.value = null
         // A temporary question goes only to a PC that says it can hold one -
         // asked again now, since the PC may have changed since it was turned on.
         val asTemporary = _temporary.value
@@ -346,7 +499,7 @@ class ChatSession(
         val interrupted = cutOff.take(SystemClock.elapsedRealtime())
         val c = api.chatCall(
             asking, earlier, picture, conversationId,
-            interrupted = interrupted, temporary = asTemporary,
+            interrupted = interrupted, temporary = asTemporary, cloudYes = cloudYes, live = live,
         )
         if (c == null) {
             // No address to send to: none saved, or a saved one off the
@@ -373,6 +526,13 @@ class ChatSession(
         // later turn. The HUD page draws the same line. A plain-text upstream
         // has no end marker, so for it the end of the body is the end.
         var cutShort = false
+        // This turn is a crisis turn (the PC's own flag in X-Jarvis-Route): its
+        // question and help answer stay on screen as the current answer, but
+        // never join the thread or what the model is re-sent - the next question
+        // takes them off the screen for good (the owner, 2026-09-29). Kept per
+        // call: `_crisis` is the shared, screen-facing copy and a newer question
+        // clears it.
+        var crisisTurn = false
         withContext(Dispatchers.IO) {
             // Cancelling this coroutine has to cancel the HTTP call, and only a
             // coroutine that is NOT parked on the socket can do it.
@@ -472,10 +632,12 @@ class ChatSession(
                     // reminder, the to-do list (`quick` in the same header;
                     // docs/JARVIS-API.md section 21): the small "done" line.
                     val quick = Schedule.quickFromRouteHeader(routeHeader)
+                    crisisTurn = Wellbeing.crisisFromHeader(routeHeader)
                     // The facts this answer used, by id, for "Used 2
                     // memories" - none on a temporary one - and what the PC
                     // said about a temporary question (TemporaryChat.notes).
                     if (call === c) {
+                        if (TemporaryChat.isGame(asTemporary, routeHeader)) _game.value = true
                         _usedIds.value = if (asTemporary) emptyList() else MemoryUsed.idsFromRouteHeader(routeHeader)
                         // The crisis help line (jarvis_wellbeing.py): the
                         // one flag that says whether the answer arriving is
@@ -486,9 +648,19 @@ class ChatSession(
                         // "Open <a settings section>" (jarvis_settings_
                         // registry.py, docs/JARVIS-API.md section 58.1):
                         // pure navigation, read the same way.
+                        // "Forget what you learned last week" (2026-09-28):
+                        // `open_brain` names Brain's "Forget a time frame",
+                        // the list already filled in - the same navigation,
+                        // through OpenPlace. Nothing is removed by it.
                         _openSettings.value = Schedule.openSettingsFromRoute(routeHeader)
+                            ?: ForgetRange.openFromRoute(routeHeader)
                         // Sharpness or frame rate, for this phone only.
                         _faceTuningChange.value = AnimalOptions.fromRoute(routeHeader)
+                        // "A cloud model could give this one a second
+                        // look." (jarvis_router.choose(), gate "offer"):
+                        // read the same way as [crisis] and [usedIds]
+                        // above, off the same header.
+                        _cloudOffer.value = CloudOffer.laneFromHeader(routeHeader)
                     }
                     val temporaryNotes = TemporaryChat.notes(asTemporary, routeHeader)
                     // Decoded as CHARACTERS, not as whatever bytes happened
@@ -660,7 +832,7 @@ class ChatSession(
                             },
                             if (cloud && !failed) "Answered by a cloud model, not on your PC." else null,
                             if (secondCard != null && !cloud && !failed) SecondCard.routeNote(secondCard) else null,
-                            if (quick && !failed) Schedule.DONE_LINE else null,
+                            if (quick && !failed) Schedule.DONE_LINE_HERE else null,
                         ).plus(temporaryNotes).joinToString(" ").ifEmpty { null }
                     }
                 }
@@ -704,8 +876,20 @@ class ChatSession(
         // on `earlier`: a call that finished in the meantime has already
         // added its own pair, and this one goes after it.
         val answer = mine
-        if (answer != null && answer.isNotBlank() && !cutShort && conversation == askedIn) {
+        // Jarvis Live's side talk: shown as "(not for Jarvis)", never kept.
+        if (live && com.jarvis.client.voice.LiveRules.isSideTalk(answer)) {
+            // Only while no newer question has started.
+            if (call == null) {
+                _reply.value = com.jarvis.client.voice.LiveRules.SEEN.getValue("not_for_me")
+            }
+            return mine
+        }
+        if (answer != null && answer.isNotBlank() && !cutShort && conversation == askedIn &&
+            ChatHistory.keepsInThread(crisisTurn)
+        ) {
             _history.update { ChatHistory.commit(it, asking, answer) }
+            _thread.update { ChatHistory.addToThread(it, asking, answer) }
+            lastTurnAt = System.currentTimeMillis()
         }
         return mine
     }
@@ -732,8 +916,13 @@ class ChatSession(
     fun newConversation() {
         conversation++
         conversationId = ChatHistory.newConversationId()
+        lastTurnAt = 0L
+        _chatNote.value = null
+        _game.value = false
+        _readOutside.value = false
         cancel()
         _history.value = emptyList()
+        _thread.value = emptyList()
         _reply.value = ""
         _question.value = null
         _turnId.value = null
@@ -745,6 +934,50 @@ class ChatSession(
         _usedIds.value = emptyList()
         _crisis.value = false
         _openSettings.value = null
+        _cloudOffer.value = null
+    }
+
+    /**
+     * "Continue this chat" (from History) and Jarvis Live's "Move it here"
+     * (the owner's decisions, 2026-09-28): Home carries on a kept
+     * conversation - the SAME conversation id, so the PC files what follows
+     * with it and its "read outside text" mark carries over (the PC decides
+     * that from its own record) - with [window] as the conversation so far
+     * ([ChatHistory.continueWindow]: the newest kept messages that fit).
+     * What was on screen goes, as with [newConversation]; [note] is said in
+     * its place. False for an id the PC could never have made.
+     */
+    fun continueFrom(
+        id: String,
+        window: List<ChatHistory.Exchange>,
+        note: String?,
+        readOutside: Boolean = false,
+    ): Boolean {
+        if (!ChatHistory.validConversationId(id)) return false
+        newConversation()
+        conversationId = id
+        _history.value = window
+        _thread.value = window
+        _readOutside.value = readOutside
+        lastTurnAt = System.currentTimeMillis()
+        _chatNote.value = note
+        return true
+    }
+
+    /**
+     * Chats deleted elsewhere - Delete in History, "Erase the words" with
+     * its chat, "Forget a time frame" approved, deleting a chat and the facts
+     * it taught (section 79). When Home is IN one of them, its old words
+     * must stop going to the model and the PC must not bring the chat back
+     * under a new title (the chat audit, 2026-09-28, phone B2): a new
+     * conversation, and Home says why. True when that happened.
+     */
+    fun chatsGone(ids: Collection<String>): Boolean {
+        if (conversationId !in ids) return false
+        val had = _history.value.isNotEmpty() || _question.value != null
+        newConversation()
+        if (had) _chatNote.value = ChatHistory.CHAT_GONE
+        return had
     }
 
     /**
@@ -755,6 +988,21 @@ class ChatSession(
     suspend fun retryLast(): Boolean {
         val (message, provenance, shared) = lastAsked ?: return false
         send(message, provenance = provenance, shared = shared)
+        return true
+    }
+
+    /**
+     * The owner's yes to [CloudOffer]'s "Try the cloud model" - the same
+     * shape as [retryLast]: the same words, tag and shared text, as a new
+     * [send], this time with `cloudYes = true`. A genuinely new turn, not a
+     * replacement - the old answer stays on screen until this one streams
+     * in over it, same as any other question. False when there is nothing
+     * to ask again (a new conversation was started since the offer, or the
+     * owner already moved on to a different question).
+     */
+    suspend fun tryCloudForLast(): Boolean {
+        val (message, provenance, shared) = lastAsked ?: return false
+        send(message, provenance = provenance, shared = shared, cloudYes = true)
         return true
     }
 

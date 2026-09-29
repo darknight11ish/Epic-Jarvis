@@ -35,6 +35,12 @@ const frame = document.getElementById("face-frame");
 /** The owner's appearance document, as this window last read it. */
 let faceAppearance = null;
 
+/** Talk-to-type holds this PC's microphone (talk_type.rs sends
+ *  `talk-type-listening`): the face shows "listening" while it does, the
+ *  same sign the tray icon gives - a local fact the event stream cannot
+ *  know, so it wins over what the stream says. */
+let talkTypeListening = false;
+
 /** What this window says to a screen reader: the face itself is hidden from
  *  it (decorative), so what it shows is said here instead, in the same eight
  *  plain sentences the phone says, plus "Jarvis isn't connected" and the
@@ -57,6 +63,7 @@ function postFace() {
   // notches) and `serious` (a crisis answer's calm, plain pose, section
   // 38.1) - jarvis-link.js faceSignal.
   const message = { type: "jarvis-hud-face", ...signal };
+  if (talkTypeListening) message.state = "listening";
   if (faceAppearance) message.appearance = faceAppearance;
   try {
     frame.contentWindow.postMessage(message, location.origin);
@@ -95,6 +102,10 @@ onLink(() => postFace());
 // change, so it has its own call to post again.
 onSerious(() => postFace());
 listen("appearance-changed", () => readFaceAppearance(false));
+listen("talk-type-listening", (event) => {
+  talkTypeListening = event && event.payload === true;
+  postFace();
+});
 readFaceAppearance(true);
 startLink();
 // The sun, the moon and the weather behind the animal (sky-feed.js): this

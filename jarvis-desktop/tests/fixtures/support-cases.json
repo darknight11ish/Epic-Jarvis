@@ -1,0 +1,1371 @@
+{
+  "answer_accept_refused": {
+    "body": {
+      "error": "Choose Decline, Say something else or Take over - accepting is done on the approval card.",
+      "ok": false
+    },
+    "code": 400
+  },
+  "answer_decline": {
+    "body": {
+      "message": "Declining: Jarvis sends the polite no within a few seconds.",
+      "ok": true,
+      "support": "sup_000000000004"
+    },
+    "code": 202
+  },
+  "answer_say_yes_refused": {
+    "body": {
+      "error": "That reads like accepting the offer - approve the offer card instead, which shows exactly what is sent.",
+      "ok": false
+    },
+    "code": 400
+  },
+  "asking": {
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
+    "routed": true,
+    "support": {
+      "agent": "",
+      "company": "groupon",
+      "company_name": "Groupon",
+      "details": [
+        {
+          "name": "Order number",
+          "value": "4481902217"
+        },
+        {
+          "name": "Email",
+          "value": "alex.q@example.net"
+        }
+      ],
+      "ended": "",
+      "goal": "Get a refund for my spa voucher: the spa closed before I could use it.",
+      "help_url": "https://www.groupon.com/customer-support",
+      "id": "sup_000000000003",
+      "in_queue": false,
+      "max_messages": 15,
+      "max_minutes": 30,
+      "max_queue_minutes": 45,
+      "messages_used": 0,
+      "minutes_used": 0.0,
+      "offer": null,
+      "offers": [],
+      "paused": "",
+      "paused_code": "",
+      "problem": "",
+      "question": "",
+      "queue_minutes": 0.0,
+      "queue_position": null,
+      "read_aloud": false,
+      "reference": "",
+      "saved": "",
+      "state": "asking",
+      "summary": null,
+      "take_over": false,
+      "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": [],
+      "waiting_for_chat": false
+    },
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    }
+  },
+  "decline_line": "Thank you, but I'd rather not accept that. Is there another option?",
+  "declined_done": {
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
+    "routed": true,
+    "support": {
+      "agent": "",
+      "company": "groupon",
+      "company_name": "Groupon",
+      "details": [
+        {
+          "name": "Order number",
+          "value": "4481902217"
+        },
+        {
+          "name": "Email",
+          "value": "alex.q@example.net"
+        }
+      ],
+      "ended": "Groupon ended the chat.",
+      "goal": "Get a refund for my spa voucher: the spa closed before I could use it.",
+      "help_url": "https://www.groupon.com/customer-support",
+      "id": "sup_000000000004",
+      "in_queue": false,
+      "max_messages": 15,
+      "max_minutes": 30,
+      "max_queue_minutes": 45,
+      "messages_used": 2,
+      "minutes_used": 0.1,
+      "offer": null,
+      "offers": [
+        {
+          "id": 1,
+          "state": "declined"
+        }
+      ],
+      "paused": "",
+      "paused_code": "",
+      "problem": "",
+      "question": "",
+      "queue_minutes": 0.1,
+      "queue_position": null,
+      "read_aloud": false,
+      "reference": "",
+      "saved": "yes",
+      "state": "done",
+      "summary": {
+        "agreed": [
+          "A full refund of $45"
+        ],
+        "answer": "Groupon agreed to refund $45 to the original payment method.",
+        "by_model": true,
+        "ended": "Groupon ended the chat.",
+        "messages": 2,
+        "open": [],
+        "outside_text": true,
+        "read_aloud": false,
+        "reference": "",
+        "source": "support_transcript"
+      },
+      "take_over": false,
+      "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": [
+        {
+          "at": 1800000000.0,
+          "move": "reply",
+          "n": 1,
+          "outside_text": false,
+          "text": "Hi, I bought a spa voucher and the spa has closed. Could I get a refund?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000004.0,
+          "outside_text": true,
+          "source": "support_transcript",
+          "text": "Thank you. I can offer you a full refund of $45 to your original payment method. Would you like me to go ahead?",
+          "who": "company"
+        },
+        {
+          "at": 1800000004.0,
+          "kind": "offer",
+          "offer": 1,
+          "outside_text": false,
+          "text": "An offer card was raised: Thank you. I can offer you a full refund of $45 to your original payment method. Would you like me to go ahead?",
+          "who": "note"
+        },
+        {
+          "at": 1800000004.0,
+          "kind": "offer_answer",
+          "offer": 1,
+          "outside_text": false,
+          "text": "The offer card was not approved: nothing was accepted. Choose Decline, Say something else or Take over.",
+          "who": "note"
+        },
+        {
+          "at": 1800000006.0,
+          "kind": "offer_answer",
+          "offer": 1,
+          "outside_text": false,
+          "text": "You chose Decline.",
+          "who": "note"
+        },
+        {
+          "at": 1800000006.0,
+          "move": "decline",
+          "n": 2,
+          "outside_text": false,
+          "text": "Thank you, but I'd rather not accept that. Is there another option?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000010.0,
+          "outside_text": true,
+          "source": "support_transcript",
+          "text": "No problem. This chat has ended.",
+          "who": "system"
+        }
+      ],
+      "waiting_for_chat": false
+    },
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    }
+  },
+  "done": {
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
+    "routed": true,
+    "support": {
+      "agent": "Priya",
+      "company": "groupon",
+      "company_name": "Groupon",
+      "details": [
+        {
+          "name": "Order number",
+          "value": "4481902217"
+        },
+        {
+          "name": "Email",
+          "value": "alex.q@example.net"
+        }
+      ],
+      "ended": "Groupon ended the chat.",
+      "goal": "Get a refund for my spa voucher: the spa closed before I could use it.",
+      "help_url": "https://www.groupon.com/customer-support",
+      "id": "sup_000000000003",
+      "in_queue": false,
+      "max_messages": 15,
+      "max_minutes": 30,
+      "max_queue_minutes": 45,
+      "messages_used": 4,
+      "minutes_used": 0.3,
+      "offer": null,
+      "offers": [
+        {
+          "id": 1,
+          "state": "accepted"
+        }
+      ],
+      "paused": "",
+      "paused_code": "",
+      "problem": "",
+      "question": "",
+      "queue_minutes": 0.1,
+      "queue_position": null,
+      "read_aloud": false,
+      "reference": "GRP48213",
+      "saved": "yes",
+      "state": "done",
+      "summary": {
+        "agreed": [
+          "A full refund of $45"
+        ],
+        "answer": "Groupon agreed to refund $45 to the original payment method.",
+        "by_model": true,
+        "ended": "Groupon ended the chat.",
+        "messages": 4,
+        "open": [],
+        "outside_text": true,
+        "read_aloud": false,
+        "reference": "GRP48213",
+        "source": "support_transcript"
+      },
+      "take_over": false,
+      "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": [
+        {
+          "at": 1800000000.0,
+          "move": "reply",
+          "n": 1,
+          "outside_text": false,
+          "text": "Hi, I bought a spa voucher and the spa has closed. Could I get a refund?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000004.0,
+          "outside_text": true,
+          "source": "support_transcript",
+          "text": "You are number 2 in the queue.",
+          "who": "system"
+        },
+        {
+          "at": 1800000006.0,
+          "outside_text": true,
+          "source": "support_transcript",
+          "text": "Priya joined the chat.",
+          "who": "system"
+        },
+        {
+          "at": 1800000008.0,
+          "outside_text": true,
+          "source": "support_transcript",
+          "text": "Hi, I'm Priya from Groupon. Could I have your order number please?",
+          "who": "company"
+        },
+        {
+          "at": 1800000008.0,
+          "move": "reply",
+          "n": 2,
+          "outside_text": false,
+          "text": "It's 4481902217.",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000012.0,
+          "outside_text": true,
+          "source": "support_transcript",
+          "text": "Thank you. I can offer you a full refund of $45 to your original payment method. Would you like me to go ahead?",
+          "who": "company"
+        },
+        {
+          "at": 1800000012.0,
+          "kind": "offer",
+          "offer": 1,
+          "outside_text": false,
+          "text": "An offer card was raised: Thank you. I can offer you a full refund of $45 to your original payment method. Would you like me to go ahead?",
+          "who": "note"
+        },
+        {
+          "at": 1800000014.0,
+          "kind": "offer_answer",
+          "offer": 1,
+          "outside_text": false,
+          "text": "You approved the offer card; Jarvis accepted it in your name.",
+          "who": "note"
+        },
+        {
+          "at": 1800000014.0,
+          "move": "accept",
+          "n": 3,
+          "outside_text": false,
+          "text": "Yes, I accept that. Thank you.",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000018.0,
+          "outside_text": true,
+          "source": "support_transcript",
+          "text": "Done, the refund is on its way. Is there anything else I can help you with?",
+          "who": "company"
+        },
+        {
+          "at": 1800000020.0,
+          "move": "closing",
+          "n": 4,
+          "outside_text": false,
+          "text": "No, that's everything, thank you. Could I have a reference number for this chat, and a short written summary of what was agreed?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000024.0,
+          "outside_text": true,
+          "source": "support_transcript",
+          "text": "Your reference number is GRP48213.",
+          "who": "company"
+        },
+        {
+          "at": 1800000026.0,
+          "outside_text": true,
+          "source": "support_transcript",
+          "text": "This chat has ended.",
+          "who": "system"
+        }
+      ],
+      "waiting_for_chat": false
+    },
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    }
+  },
+  "export": {
+    "body": {
+      "filename": "jarvis-support-groupon-2027-01-15.txt",
+      "note": "This file is NOT encrypted: anyone who can open it can read the whole chat, with the details you allowed. Keep it somewhere safe, or delete it when you no longer need it.",
+      "ok": true,
+      "text": "Support chat with Groupon (https://www.groupon.com/customer-support)\nStarted: 2027-01-15 08:00\nGoal: Get a refund for my spa voucher: the spa closed before I could use it.\nDetails Jarvis could give: Order number: 4481902217; Email: alex.q@example.net\n\n[08:00:00] You (sent by Jarvis): Hi, I bought a spa voucher and the spa has closed. Could I get a refund?\n[08:00:04] Groupon (notice) [outside text]: You are number 2 in the queue.\n[08:00:06] Groupon (notice) [outside text]: Priya joined the chat.\n[08:00:08] Groupon [outside text]: Hi, I'm Priya from Groupon. Could I have your order number please?\n[08:00:08] You (sent by Jarvis): It's 4481902217.\n[08:00:12] Groupon [outside text]: Thank you. I can offer you a full refund of $45 to your original payment method. Would you like me to go ahead?\n[08:00:12] Note: An offer card was raised: Thank you. I can offer you a full refund of $45 to your original payment method. Would you like me to go ahead?\n[08:00:14] Note: You approved the offer card; Jarvis accepted it in your name.\n[08:00:14] You (sent by Jarvis): Yes, I accept that. Thank you.\n[08:00:18] Groupon [outside text]: Done, the refund is on its way. Is there anything else I can help you with?\n[08:00:20] You (sent by Jarvis): No, that's everything, thank you. Could I have a reference number for this chat, and a short written summary of what was agreed?\n[08:00:24] Groupon [outside text]: Your reference number is GRP48213.\n[08:00:26] Groupon (notice) [outside text]: This chat has ended.\n\nOffer card 1: accepted - Thank you. I can offer you a full refund of $45 to your original payment method. Would you like me to go ahead?\nReference number: GRP48213\nEnded: Groupon ended the chat.\n\nThis file is NOT encrypted: anyone who can open it can read the whole chat, with the details you allowed. Keep it somewhere safe, or delete it when you no longer need it.\n"
+    },
+    "code": 200
+  },
+  "gone": {
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
+    "routed": true,
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    }
+  },
+  "hold_line": "One moment please, I'm just checking that.",
+  "in_queue": {
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
+    "routed": true,
+    "support": {
+      "agent": "",
+      "company": "groupon",
+      "company_name": "Groupon",
+      "details": [
+        {
+          "name": "Order number",
+          "value": "4481902217"
+        },
+        {
+          "name": "Email",
+          "value": "alex.q@example.net"
+        }
+      ],
+      "ended": "",
+      "goal": "Get a refund for my spa voucher: the spa closed before I could use it.",
+      "help_url": "https://www.groupon.com/customer-support",
+      "id": "sup_000000000003",
+      "in_queue": true,
+      "max_messages": 15,
+      "max_minutes": 30,
+      "max_queue_minutes": 45,
+      "messages_used": 1,
+      "minutes_used": 0.0,
+      "offer": null,
+      "offers": [],
+      "paused": "",
+      "paused_code": "",
+      "problem": "",
+      "question": "",
+      "queue_minutes": 0.1,
+      "queue_position": 2,
+      "read_aloud": false,
+      "reference": "",
+      "saved": "",
+      "state": "running",
+      "summary": null,
+      "take_over": false,
+      "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": [
+        {
+          "at": 1800000000.0,
+          "move": "reply",
+          "n": 1,
+          "outside_text": false,
+          "text": "Hi, I bought a spa voucher and the spa has closed. Could I get a refund?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000004.0,
+          "outside_text": true,
+          "source": "support_transcript",
+          "text": "You are number 2 in the queue.",
+          "who": "system"
+        }
+      ],
+      "waiting_for_chat": false
+    },
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    }
+  },
+  "no_chat": {
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
+    "routed": true,
+    "support": {
+      "agent": "",
+      "company": "groupon",
+      "company_name": "Groupon",
+      "details": [
+        {
+          "name": "Order number",
+          "value": "4481902217"
+        },
+        {
+          "name": "Email",
+          "value": "alex.q@example.net"
+        }
+      ],
+      "ended": "The chat was not opened in the window within 10 minutes, so Jarvis stopped. Nothing was sent.",
+      "goal": "Get a refund for my spa voucher: the spa closed before I could use it.",
+      "help_url": "https://www.groupon.com/customer-support",
+      "id": "sup_000000000008",
+      "in_queue": false,
+      "max_messages": 15,
+      "max_minutes": 30,
+      "max_queue_minutes": 45,
+      "messages_used": 0,
+      "minutes_used": 0.0,
+      "offer": null,
+      "offers": [],
+      "paused": "",
+      "paused_code": "",
+      "problem": "",
+      "question": "",
+      "queue_minutes": 0.0,
+      "queue_position": null,
+      "read_aloud": false,
+      "reference": "",
+      "saved": "nothing was said, so nothing was kept",
+      "state": "done",
+      "summary": {
+        "agreed": [],
+        "answer": "No summary was written; the whole chat is below.",
+        "by_model": false,
+        "ended": "The chat was not opened in the window within 10 minutes, so Jarvis stopped. Nothing was sent.",
+        "messages": 0,
+        "open": [],
+        "outside_text": true,
+        "read_aloud": false,
+        "reference": "",
+        "source": "support_transcript"
+      },
+      "take_over": false,
+      "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": [],
+      "waiting_for_chat": false
+    },
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    }
+  },
+  "nothing": {
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
+    "routed": true,
+    "support": null,
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    }
+  },
+  "offer_accept_line": "Yes, I accept that. Thank you.",
+  "offer_card_no": {
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
+    "routed": true,
+    "support": {
+      "agent": "",
+      "company": "groupon",
+      "company_name": "Groupon",
+      "details": [
+        {
+          "name": "Order number",
+          "value": "4481902217"
+        },
+        {
+          "name": "Email",
+          "value": "alex.q@example.net"
+        }
+      ],
+      "ended": "",
+      "goal": "Get a refund for my spa voucher: the spa closed before I could use it.",
+      "help_url": "https://www.groupon.com/customer-support",
+      "id": "sup_000000000004",
+      "in_queue": false,
+      "max_messages": 15,
+      "max_minutes": 30,
+      "max_queue_minutes": 45,
+      "messages_used": 1,
+      "minutes_used": 0.0,
+      "offer": {
+        "card": "no",
+        "choice": "",
+        "holds": 0,
+        "holds_most": 3,
+        "id": 1,
+        "reply": "Yes, I accept that. Thank you.",
+        "said": "",
+        "state": "waiting",
+        "words": "Thank you. I can offer you a full refund of $45 to your original payment method. Would you like me to go ahead?"
+      },
+      "offers": [
+        {
+          "id": 1,
+          "state": "waiting"
+        }
+      ],
+      "paused": "",
+      "paused_code": "",
+      "problem": "",
+      "question": "",
+      "queue_minutes": 0.1,
+      "queue_position": null,
+      "read_aloud": false,
+      "reference": "",
+      "saved": "",
+      "state": "running",
+      "summary": null,
+      "take_over": false,
+      "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": [
+        {
+          "at": 1800000000.0,
+          "move": "reply",
+          "n": 1,
+          "outside_text": false,
+          "text": "Hi, I bought a spa voucher and the spa has closed. Could I get a refund?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000004.0,
+          "outside_text": true,
+          "source": "support_transcript",
+          "text": "Thank you. I can offer you a full refund of $45 to your original payment method. Would you like me to go ahead?",
+          "who": "company"
+        },
+        {
+          "at": 1800000004.0,
+          "kind": "offer",
+          "offer": 1,
+          "outside_text": false,
+          "text": "An offer card was raised: Thank you. I can offer you a full refund of $45 to your original payment method. Would you like me to go ahead?",
+          "who": "note"
+        },
+        {
+          "at": 1800000004.0,
+          "kind": "offer_answer",
+          "offer": 1,
+          "outside_text": false,
+          "text": "The offer card was not approved: nothing was accepted. Choose Decline, Say something else or Take over.",
+          "who": "note"
+        }
+      ],
+      "waiting_for_chat": false
+    },
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    }
+  },
+  "offer_waiting": {
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
+    "routed": true,
+    "support": {
+      "agent": "Priya",
+      "company": "groupon",
+      "company_name": "Groupon",
+      "details": [
+        {
+          "name": "Order number",
+          "value": "4481902217"
+        },
+        {
+          "name": "Email",
+          "value": "alex.q@example.net"
+        }
+      ],
+      "ended": "",
+      "goal": "Get a refund for my spa voucher: the spa closed before I could use it.",
+      "help_url": "https://www.groupon.com/customer-support",
+      "id": "sup_000000000003",
+      "in_queue": false,
+      "max_messages": 15,
+      "max_minutes": 30,
+      "max_queue_minutes": 45,
+      "messages_used": 2,
+      "minutes_used": 0.1,
+      "offer": {
+        "card": "waiting",
+        "choice": "",
+        "holds": 0,
+        "holds_most": 3,
+        "id": 1,
+        "reply": "Yes, I accept that. Thank you.",
+        "said": "",
+        "state": "waiting",
+        "words": "Thank you. I can offer you a full refund of $45 to your original payment method. Would you like me to go ahead?"
+      },
+      "offers": [
+        {
+          "id": 1,
+          "state": "waiting"
+        }
+      ],
+      "paused": "",
+      "paused_code": "",
+      "problem": "",
+      "question": "",
+      "queue_minutes": 0.1,
+      "queue_position": null,
+      "read_aloud": false,
+      "reference": "",
+      "saved": "",
+      "state": "running",
+      "summary": null,
+      "take_over": false,
+      "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": [
+        {
+          "at": 1800000000.0,
+          "move": "reply",
+          "n": 1,
+          "outside_text": false,
+          "text": "Hi, I bought a spa voucher and the spa has closed. Could I get a refund?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000004.0,
+          "outside_text": true,
+          "source": "support_transcript",
+          "text": "You are number 2 in the queue.",
+          "who": "system"
+        },
+        {
+          "at": 1800000006.0,
+          "outside_text": true,
+          "source": "support_transcript",
+          "text": "Priya joined the chat.",
+          "who": "system"
+        },
+        {
+          "at": 1800000008.0,
+          "outside_text": true,
+          "source": "support_transcript",
+          "text": "Hi, I'm Priya from Groupon. Could I have your order number please?",
+          "who": "company"
+        },
+        {
+          "at": 1800000008.0,
+          "move": "reply",
+          "n": 2,
+          "outside_text": false,
+          "text": "It's 4481902217.",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000012.0,
+          "outside_text": true,
+          "source": "support_transcript",
+          "text": "Thank you. I can offer you a full refund of $45 to your original payment method. Would you like me to go ahead?",
+          "who": "company"
+        },
+        {
+          "at": 1800000012.0,
+          "kind": "offer",
+          "offer": 1,
+          "outside_text": false,
+          "text": "An offer card was raised: Thank you. I can offer you a full refund of $45 to your original payment method. Would you like me to go ahead?",
+          "who": "note"
+        }
+      ],
+      "waiting_for_chat": false
+    },
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    }
+  },
+  "paused_bot_question": {
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
+    "routed": true,
+    "support": {
+      "agent": "",
+      "company": "groupon",
+      "company_name": "Groupon",
+      "details": [
+        {
+          "name": "Order number",
+          "value": "4481902217"
+        },
+        {
+          "name": "Email",
+          "value": "alex.q@example.net"
+        }
+      ],
+      "ended": "",
+      "goal": "Get a refund for my spa voucher: the spa closed before I could use it.",
+      "help_url": "https://www.groupon.com/customer-support",
+      "id": "sup_000000000005",
+      "in_queue": false,
+      "max_messages": 15,
+      "max_minutes": 30,
+      "max_queue_minutes": 45,
+      "messages_used": 1,
+      "minutes_used": 0.0,
+      "offer": null,
+      "offers": [],
+      "paused": "Groupon's agent asked whether they are talking to a bot or a person. Jarvis never claims to be a person, and sent nothing. Answer it yourself in the chat window on the PC, then press Resume if you want Jarvis to carry on, or Stop.",
+      "paused_code": "bot_question",
+      "problem": "",
+      "question": "Quick check - am I talking to a bot or a real person?",
+      "queue_minutes": 0.1,
+      "queue_position": null,
+      "read_aloud": false,
+      "reference": "",
+      "saved": "",
+      "state": "paused",
+      "summary": null,
+      "take_over": false,
+      "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": [
+        {
+          "at": 1800000000.0,
+          "move": "reply",
+          "n": 1,
+          "outside_text": false,
+          "text": "Hi, I bought a spa voucher and the spa has closed. Could I get a refund?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000004.0,
+          "outside_text": true,
+          "source": "support_transcript",
+          "text": "Quick check - am I talking to a bot or a real person?",
+          "who": "company"
+        },
+        {
+          "at": 1800000004.0,
+          "kind": "handed_over",
+          "outside_text": false,
+          "text": "The agent asked whether they are talking to a bot. Jarvis sent nothing and handed it to you.",
+          "who": "note"
+        }
+      ],
+      "waiting_for_chat": false
+    },
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    }
+  },
+  "paused_identity": {
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
+    "routed": true,
+    "support": {
+      "agent": "",
+      "company": "groupon",
+      "company_name": "Groupon",
+      "details": [
+        {
+          "name": "Order number",
+          "value": "4481902217"
+        },
+        {
+          "name": "Email",
+          "value": "alex.q@example.net"
+        }
+      ],
+      "ended": "",
+      "goal": "Get a refund for my spa voucher: the spa closed before I could use it.",
+      "help_url": "https://www.groupon.com/customer-support",
+      "id": "sup_000000000006",
+      "in_queue": false,
+      "max_messages": 15,
+      "max_minutes": 30,
+      "max_queue_minutes": 45,
+      "messages_used": 1,
+      "minutes_used": 0.0,
+      "offer": null,
+      "offers": [],
+      "paused": "Groupon's agent asked for an identity check (like the last digits of a card, a security question or a code). Jarvis never answers those. Answer it yourself in the chat window on the PC, then press Resume, or Stop.",
+      "paused_code": "identity",
+      "problem": "",
+      "question": "For security, please confirm the last 4 digits of the card.",
+      "queue_minutes": 0.1,
+      "queue_position": null,
+      "read_aloud": false,
+      "reference": "",
+      "saved": "",
+      "state": "paused",
+      "summary": null,
+      "take_over": false,
+      "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": [
+        {
+          "at": 1800000000.0,
+          "move": "reply",
+          "n": 1,
+          "outside_text": false,
+          "text": "Hi, I bought a spa voucher and the spa has closed. Could I get a refund?",
+          "who": "jarvis"
+        },
+        {
+          "at": 1800000004.0,
+          "outside_text": true,
+          "source": "support_transcript",
+          "text": "For security, please confirm the last 4 digits of the card.",
+          "who": "company"
+        },
+        {
+          "at": 1800000004.0,
+          "kind": "handed_over",
+          "outside_text": false,
+          "text": "An identity check was handed to you.",
+          "who": "note"
+        }
+      ],
+      "waiting_for_chat": false
+    },
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    }
+  },
+  "paused_takeover": {
+    "companies": [
+      {
+        "help_url": "https://www.groupon.com/customer-support",
+        "host": "www.groupon.com",
+        "id": "groupon",
+        "name": "Groupon",
+        "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+        "verified": false
+      },
+      {
+        "help_url": "",
+        "host": "",
+        "id": "other",
+        "name": "Another company (its help page)",
+        "terms": "Many companies' terms forbid automated use of their websites. Check this company's terms: your REAL account there could be closed.",
+        "verified": false
+      }
+    ],
+    "routed": true,
+    "support": {
+      "agent": "",
+      "company": "groupon",
+      "company_name": "Groupon",
+      "details": [
+        {
+          "name": "Order number",
+          "value": "4481902217"
+        },
+        {
+          "name": "Email",
+          "value": "alex.q@example.net"
+        }
+      ],
+      "ended": "",
+      "goal": "Get a refund for my spa voucher: the spa closed before I could use it.",
+      "help_url": "https://www.groupon.com/customer-support",
+      "id": "sup_000000000007",
+      "in_queue": false,
+      "max_messages": 15,
+      "max_minutes": 30,
+      "max_queue_minutes": 45,
+      "messages_used": 1,
+      "minutes_used": 0.0,
+      "offer": null,
+      "offers": [],
+      "paused": "You took over. Jarvis sends nothing now: type in the chat window on the PC yourself. Press Resume when you want Jarvis to carry on - what you typed is kept as yours.",
+      "paused_code": "takeover",
+      "problem": "",
+      "question": "",
+      "queue_minutes": 0.0,
+      "queue_position": null,
+      "read_aloud": false,
+      "reference": "",
+      "saved": "",
+      "state": "paused",
+      "summary": null,
+      "take_over": true,
+      "terms": "Groupon's terms reportedly forbid using \"any robot, spider, scraper, or other automated means\" to reach its site (a search summary: the page itself could not be read when this was written). Your REAL Groupon account could be closed, and any unused vouchers with it.",
+      "tier": "one_card",
+      "tier_name": "the limited version (one graphics card)",
+      "transcript": [
+        {
+          "at": 1800000000.0,
+          "move": "reply",
+          "n": 1,
+          "outside_text": false,
+          "text": "Hi, I bought a spa voucher and the spa has closed. Could I get a refund?",
+          "who": "jarvis"
+        }
+      ],
+      "waiting_for_chat": false
+    },
+    "support_tier": {
+      "id": "one_card",
+      "messages_default": 15,
+      "messages_max": 25,
+      "minutes_default": 30,
+      "minutes_max": 45,
+      "name": "the limited version (one graphics card)",
+      "queue_default": 45,
+      "queue_max": 120,
+      "why": "The full version is off until the second graphics card is installed and measured ([chatbot] full_version in jarvis-framework.toml).",
+      "words": "basic chats: Jarvis's own model on the card you chat on reads the goal, your details and the last six messages; the offer check is plain code, so a small model cannot miss an offer; and a support reply goes ahead of your own chat with Jarvis for its few seconds, so the agent is not kept waiting."
+    }
+  },
+  "start_asking": {
+    "body": {
+      "asking": true,
+      "message": "Nothing has been sent yet. An approval card shows the company, your goal and every detail Jarvis may give; the chat starts only if you approve it.",
+      "ok": true,
+      "support": "sup_000000000003"
+    },
+    "code": 202
+  },
+  "start_bad_address": {
+    "body": {
+      "error": "The help page's address must start with https://.",
+      "ok": false,
+      "support": "sup_000000000002"
+    },
+    "code": 400
+  },
+  "start_refused_detail": {
+    "body": {
+      "error": "\"Password\" can never be on the card: Jarvis never gives passwords, PINs, security questions and answers, payment card numbers and their digits, ID numbers (a Social Security number, a passport), sign-in details, one-time codes and bank account numbers. If the agent asks, Jarvis hands it to you.",
+      "ok": false,
+      "support": "sup_000000000001"
+    },
+    "code": 400
+  },
+  "stop_ended": {
+    "body": {
+      "error": "That chat has already ended.",
+      "ok": false
+    },
+    "code": 409
+  },
+  "takeover_answer": {
+    "body": {
+      "message": "Jarvis stops sending within a few seconds. Type in the chat window on the PC; press Resume when you want Jarvis to carry on.",
+      "ok": true,
+      "support": "sup_000000000007"
+    },
+    "code": 200
+  },
+  "takeover_while_paused": {
+    "body": {
+      "message": "Jarvis is already paused: type in the chat window on the PC. Press Resume when you want Jarvis to carry on.",
+      "ok": true,
+      "support": "sup_000000000005"
+    },
+    "code": 200
+  },
+  "words": {
+    "add_detail": "Add a detail",
+    "address_label": "The company's help page (https://...)",
+    "agent_line": "Talking with {agent}",
+    "agreed_title": "What they agreed to",
+    "company_label": "Company",
+    "decline": "Decline",
+    "detail": "Jarvis chats with a company's customer support for you (Groupon first), in your name, in a browser window on the PC. One approval card lists exactly which of your details it may give. Every offer - a refund, a credit, a cancellation - gets its own card, and nothing is accepted before you approve it.",
+    "detail_name": "Name (like Order number)",
+    "detail_value": "Exact value",
+    "details_label": "Details Jarvis may give (one per row: a name and its exact value)",
+    "details_note": "Never a password, PIN, security answer, card number or ID number: those are refused, and if the agent asks, Jarvis hands it to you.",
+    "export": "Export transcript",
+    "export_note": "This file is NOT encrypted: anyone who can open it can read the whole chat, with the details you allowed. Keep it somewhere safe, or delete it when you no longer need it.",
+    "export_pc_only": "Export transcript is on the PC only.",
+    "goal_label": "What should Jarvis get done?",
+    "goal_note": "Jarvis writes its own messages from these words, in your name.",
+    "gone": "That chat is gone from the screen: Jarvis on the PC restarted. The encrypted chat history keeps a copy.",
+    "hidden": "The chat and your details are hidden until you confirm it is you.",
+    "holding": "Jarvis told the agent \"One moment please\" {holds} of {most} times.",
+    "messages_label": "Most messages",
+    "minutes_label": "Most minutes of chat",
+    "missing": "Your PC's Jarvis cannot chat with customer support yet - run apply-patches.ps1 on the PC.",
+    "notify_locked": "Jarvis is chatting with customer support for you.",
+    "notify_offer": "Chat with {company}: offer waiting",
+    "notify_paused": "Paused: chat with {company}",
+    "notify_running": "Chat with {company}: {used} of {max} messages",
+    "notify_waiting": "Waiting for your yes to chat with {company}",
+    "offer_card_no": "The card was not approved: nothing was accepted. Choose what to do next.",
+    "offer_note": "Accepting is done only on the approval card, which shows the exact reply. Nothing is accepted before you approve it.",
+    "offer_title": "An offer is waiting for your answer",
+    "open_title": "Still open",
+    "outside_note": "The company's words are outside text: shown here, never learned from, never read aloud.",
+    "question_note": "Jarvis never answers this. Answer it yourself in the chat window on the PC, then press Resume - or Stop.",
+    "question_title": "Handed to you",
+    "queue_label": "Most minutes in the queue",
+    "queue_line": "In the queue: number {position}",
+    "queue_waiting": "Waiting in the queue",
+    "reference_line": "Reference number: {reference}",
+    "remove_detail": "Remove",
+    "resume": "Resume",
+    "saved_no": "Not kept in your chat history: {why}",
+    "saved_yes": "Kept in your encrypted chat history on the PC.",
+    "say_else": "Say something else",
+    "say_note": "Your words go through the same check as Jarvis's. To accept, approve the card instead.",
+    "say_send": "Send",
+    "sign_in_pc": "You sign in to your own account by hand in the window on the PC, and open the company's chat there yourself (its Chat or Help button). Jarvis never types, sees or keeps a password.",
+    "start": "Start",
+    "start_note": "Nothing is sent until you approve the card.",
+    "stop": "Stop",
+    "summary_note": "Written on this PC from the chat, so it is outside text too.",
+    "summary_title": "What happened",
+    "take_over": "Take over",
+    "take_over_note": "Jarvis stops sending; you type in the chat window on the PC.",
+    "terms_title": "Terms risk",
+    "title": "Chat with customer support for me",
+    "transcript_title": "The chat",
+    "version": "Version",
+    "waiting_for_chat": "Open the chat on the company's help page in the window on the PC (its Chat or Help button). Jarvis starts once it shows.",
+    "who_button": "You pressed",
+    "who_jarvis": "You (sent by Jarvis)",
+    "who_owner": "You"
+  }
+}

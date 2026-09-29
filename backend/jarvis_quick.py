@@ -90,7 +90,67 @@ approval card raised by the scheduler; nothing is watched before a yes. A
 device said in words is looked up first - one read of each of up to three
 likely Home Assistant names (switch.washing_machine, ...), through the
 gate like any read - and the answer then counts as having read outside
-text. The model has no tool for this.
+text. The model has no tool for this. Since 2026-09-28 (the "Watches"
+group): "tell me when a search for X shows something new" (", once a day"
+/ "every 12 hours"), "tell me when the price on <url> drops below 25",
+"tell me when CI fails / finishes on owner/repo [branch]" and "tell me when
+PR #12 on owner/repo merges" - each ONE card too (_tellme_watches).
+
+"REMIND ME NEXT TIME I TALK ABOUT ..." (jarvis_next_time.py, 2026-09-28):
+"remind me next time I talk about the dentist to ask about the bill", "next
+time I mention Sam, remind me to ask about the loan", "remind me to ask
+about the bill next time I talk about the dentist". No card, like a one-time
+reminder; "cancel that" takes it back, as for any reminder set here.
+"Delete the reminder about the dentist" deletes ONE; "what will you remind
+me of next time?" lists them. It is brought up by jarvis_agent.py, not here.
+
+TODAY CARDS (jarvis_today.py, 2026-09-28): "show gym bag on my Today page
+on Mondays and Wednesdays at 7", "put bins out on my today page on Thursday
+evenings", "add a today card saying water the plants every day at 8". The
+owner's own words, shown on the Today part of both apps from that time to
+the end of the day, on those days. No card, like a plain repeating reminder;
+"cancel that" takes it back. "What's on my Today page?" lists them;
+"remove gym bag from my Today page" deletes ONE.
+
+"RING MY PHONE" (jarvis_find_phone.py, 2026-09-28): "ring my phone", "find
+my phone", "where's my phone" - ONE event the phone rings for, on its alarm
+channel, even on silent. No card: it only rings the owner's own phone.
+"Stop ringing my phone" stops it from the PC.
+
+"PC HELP" (jarvis_pc_help.py, 2026-09-28): "why is my PC slow?", "how full
+is my disk?", "what's using my graphics card?", "how hot is my graphics
+card?", "when did my PC last restart?" - read on this PC, answered at once.
+Read-only: no card, nothing changes. An answer that names programs is
+private and marked as outside text (a program picks its own name).
+
+LOCKDOWN (jarvis_asks_first.py, 2026-09-28): "lockdown", "turn on lockdown",
+"lock everything down" - every way out of this PC asks first, or stops, at
+once. "Turn off lockdown" goes through the same path as the apps' button:
+from the PC, ONE approval card plus Windows Hello; from anywhere else it
+says where to do it. "Is lockdown on?" says whether it is.
+
+A NUMBER FOR A PROJECT (jarvis_projects.py, 2026-09-28, Projects build
+step 2) is here too: "log 5 km run", "log my weight as 72.5 kg", "I ran 5
+km", "I walked 10,000 steps today", "my weight is 72 kg" - but ONLY when
+one of the owner's life projects has a benchmark it fits (the name's
+words and the unit; 5 km is never logged as miles). With no such
+benchmark the sentence is not ours and goes to the model as before;
+projects.db is read only after the sentence already has that shape, and
+never created by it. No card: the owner is writing down their own
+number. A health or money benchmark's answer is `private`, so the apps
+keep it on screen and never read it aloud.
+
+"FORGET A TIME FRAME" (jarvis_forget_range.py, the owner's decision of
+2026-09-28) is here too: "forget what you learned last week", "delete my
+chats from 1 to 15 September", "forget what I said this morning". It
+REMOVES NOTHING: it fills in the checked list in both apps' Brain (under
+"Forget a time frame"), says how many facts and chats are on it, and puts
+`open_brain: "forget-range"` in X-Jarvis-Route so the app it was asked from
+opens that place. The owner unticks, taps Forget these, and approves ONE
+card by tapping - a spoken "yes" or "approve" matches nothing here and
+approves nothing. A date it cannot be sure of ("on Monday" said on a
+Monday, "3/9", "the 3rd", "last night", a month that has not happened yet
+this year) is a question instead, and opens nothing.
 
 WHERE THE IDEA COMES FROM
 Home Assistant's `prefer_local_intents` - try the built-in sentence matcher
@@ -424,9 +484,92 @@ DEFAULT_HOUR = {"morning": 9, "afternoon": 14, "evening": 18, "night": 20, "toni
 _DAYPART = r"(?:\s+(morning|afternoon|evening|night))?"
 
 
+#: Months and short weekdays, for a calendar date ("Sat 12 Oct", "October
+#: 12th 2026", "12/10", "2026-10-12") - added 2026-09-28 for "Photo to
+#: reminder" (jarvis_photo_remind.py), which reads dates off a flyer with THIS
+#: parser rather than a second one. Said to Jarvis it works too: "remind me on
+#: 12 October at 2pm to pay the deposit".
+_MONTHS = ("january", "february", "march", "april", "may", "june", "july", "august",
+           "september", "october", "november", "december")
+_MONTH_OF = {m: i + 1 for i, m in enumerate(_MONTHS)}
+_MONTH_OF.update({m[:3]: i + 1 for i, m in enumerate(_MONTHS)})
+_MONTH_OF["sept"] = 9
+_MON = "|".join(sorted(_MONTH_OF, key=len, reverse=True))
+_WD_SHORT = r"(?:mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)"
+_WD_ANY = r"(?:(?:" + _WD + r"|" + _WD_SHORT + r")\.?,?\s+(?:the\s+)?)?"
+_DAY_NUM = r"(\d{1,2})(?:st|nd|rd|th)?"
+_YEAR = r"(?:,?\s+(\d{4}))?"
+
+#: How a slashed date is read when both numbers could be the month
+#: ("5/10"): month first, as in the United States (the owner's help line is
+#: the US one, CLAUDE.md 2026-09-27). "13/10" can only be day first, and is.
+SLASH_MONTH_FIRST = True
+
+
+def _calendar_day(s: str):
+    """('date', year or None, month, day) for a calendar date, or None. Not
+    checked against a calendar here - _ymd does that, and says None for 31
+    February."""
+    m = re.fullmatch(_WD_ANY + _DAY_NUM + r"(?:\s+of)?\s+(" + _MON + r")\.?" + _YEAR, s)
+    if m:
+        return ("date", int(m.group(3)) if m.group(3) else None,
+                _MONTH_OF[m.group(2)], int(m.group(1)))
+    m = re.fullmatch(_WD_ANY + r"(" + _MON + r")\.?\s+(?:the\s+)?" + _DAY_NUM + _YEAR, s)
+    if m:
+        return ("date", int(m.group(3)) if m.group(3) else None,
+                _MONTH_OF[m.group(1)], int(m.group(2)))
+    m = re.fullmatch(_WD_ANY + r"(\d{4})-(\d{1,2})-(\d{1,2})", s)
+    if m:
+        return ("date", int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    m = re.fullmatch(_WD_ANY + r"(\d{1,2})/(\d{1,2})(?:/(\d{2}|\d{4}))?", s)
+    if m:
+        a, b = int(m.group(1)), int(m.group(2))
+        y = m.group(3)
+        year = None if y is None else (2000 + int(y) if len(y) == 2 else int(y))
+        if a > 12 >= b:
+            mo, d = b, a
+        elif b > 12 >= a or SLASH_MONTH_FIRST:
+            mo, d = a, b
+        else:
+            mo, d = b, a
+        return ("date", year, mo, d)
+    return None
+
+
+def _ymd(day, now: float):
+    """(y, mo, d) for a day from _parse_day, or None for a date that does not
+    exist. A calendar date with no year is the next one: this year's, or next
+    year's when this year's has gone."""
+    if isinstance(day, tuple) and day and day[0] == "date":
+        import datetime
+        _, year, mo, d = day
+        lt = time.localtime(now)
+        today = (lt.tm_year, lt.tm_mon, lt.tm_mday)
+        y = year if year is not None else lt.tm_year
+        try:
+            datetime.date(y, mo, d)
+        except ValueError:
+            if year is not None:
+                return None
+            y = None
+        if year is None and (y is None or (y, mo, d) < today):
+            try:
+                datetime.date(lt.tm_year + 1, mo, d)
+            except ValueError:
+                return None
+            y = lt.tm_year + 1
+        return (y, mo, d)
+    n = _days_until(now, day[1]) if isinstance(day, tuple) else day
+    return _day_of(now, n)
+
+
 def _parse_day(s: str):
-    """(days from today or ('wd', n), part) for a day phrase, or None."""
+    """(days from today, ('wd', n) or ('date', y, mo, d), part) for a day
+    phrase, or None."""
     s = s.strip()
+    cal = _calendar_day(s)
+    if cal is not None:
+        return cal, None
     m = re.fullmatch(r"(today|tomorrow|tonight)" + _DAYPART, s)
     if m:
         day, part = m.group(1), m.group(2)
@@ -452,11 +595,11 @@ def _resolve(c: Clock, day, part, now: float, kind: str) -> When:
             if best is None or t < best:
                 best = t
         return When(at=best)
-    if isinstance(day, tuple):
-        n = _days_until(now, day[1])
-    else:
-        n = day
-    y, mo, d = _day_of(now, n)
+    ymd = _ymd(day, now)
+    if ymd is None:
+        return None
+    y, mo, d = ymd
+    n = 1 if ymd != _day_of(now, 0) else 0      # another day than today
     hours = _hour24(c, part)
     if c.mer is None and part is None and n > 0 and len(hours) == 2:
         # A bare hour on another day. An alarm is for waking up: the morning.
@@ -543,8 +686,10 @@ def parse_when(s: str, now: float, kind: str) -> Optional[When]:
         if kind == "alarm":
             return None       # "set an alarm for tomorrow" - at what time?
         day, part = dp
-        n = _days_until(now, day[1]) if isinstance(day, tuple) else day
-        y, mo, d = _day_of(now, n)
+        ymd = _ymd(day, now)
+        if ymd is None:
+            return None
+        y, mo, d = ymd
         import jarvis_schedule as S
         t = S.wall_to_epoch(y, mo, d, DEFAULT_HOUR.get(part, 9), 0)
         return When(at=t, default_time=True, passed=t <= now)
@@ -625,6 +770,8 @@ def match(text, now: Optional[float] = None) -> Optional[Intent]:
     got = _match(text, now)
     if got is not None and got.f.get("text"):
         got.f["text"] = _restore(text, got.f["text"])
+    if got is not None and got.f.get("about"):
+        got.f["about"] = _restore(text, got.f["about"])
     if got is not None and got.f.get("items"):
         got.f["items"] = [_restore(text, i) for i in got.f["items"]]
     return got
@@ -641,8 +788,33 @@ def _match(text, now: float) -> Optional[Intent]:
                     r"|(?:clear|empty|delete)\s+(?:my|the)\s+todo\s+list", s):
         return Intent("bulk")
 
+    # --- "forget what you learned last week" (jarvis_forget_range.py) ----------
+    # Before everything that starts with "delete"/"remove": this one names
+    # what Jarvis learned or the chats, and a time frame. It only ever fills
+    # in the checked list in Brain - it removes nothing.
+    got = _forget_range(s, now)
+    if got is not None:
+        return got
+
+    # --- "make me a widget ..." (jarvis_widgets.py, 2026-09-28) ---------------
+    # Before timers and reminders: "make me a widget with a 10-minute timer
+    # button" is about a widget, not a timer to set now.
+    if _WIDGET.fullmatch(s):
+        return Intent("widget_make", {"words": str(text)})
+
     # --- focus sessions (jarvis_focus.py) --------------------------------------
     got = _focus(s)
+    if got is not None:
+        return got
+
+    # --- "where did I put ...?" (jarvis_places.py, 2026-09-28) ----------------
+    # A QUESTION only: "where is my passport?". The owner saying where a
+    # thing is ("I put the spare key under the blue pot") is never ours - it
+    # goes to the model, and the learner learns it like any fact.
+    # "Where's my phone?" is not a place question: it rings the phone
+    # ("ring my phone" below, jarvis_find_phone.py) - the two features met
+    # on these words when they were merged, 2026-09-28.
+    got = None if _RING.fullmatch(s) else _where_put(s)
     if got is not None:
         return got
 
@@ -831,8 +1003,33 @@ def _match(text, now: float) -> Optional[Intent]:
     if got is not None:
         return got
 
+    # --- Today cards (jarvis_today.py, 2026-09-28) ------------------------------------
+    got = _today(s, now)
+    if got is not None:
+        return got
+
+    # --- "PC help": why is my PC slow, how full is my disk ... (jarvis_pc_help.py) ---
+    got = _pc_help(s)
+    if got is not None:
+        return got
+
+    # --- "remind me next time I talk about ..." (jarvis_next_time.py) ------------------
+    got = _next_time(s)
+    if got is not None:
+        return got
+
+    # --- "ring my phone" (jarvis_find_phone.py) and Lockdown (jarvis_asks_first.py) ----
+    got = _find_phone(s) or _lockdown(s)
+    if got is not None:
+        return got
+
     # --- "tell me when ..." (jarvis_tellme.py) ------------------------------------------
     got = _tellme(s, text, now)
+    if got is not None:
+        return got
+
+    # --- a number for a project's benchmark (jarvis_projects.py, 2026-09-28) ---------
+    got = _project_log(s)
     if got is not None:
         return got
 
@@ -969,6 +1166,17 @@ def _list_whole(s: str) -> Optional[Intent]:
     return None
 
 
+def _where_put(s: str) -> Optional[Intent]:
+    """"where is my passport?", "where did I put the spare key?" - the thing
+    asked about, from jarvis_places' grammar. None without that module."""
+    try:
+        import jarvis_places
+        thing = jarvis_places.where_question(s)
+    except Exception:
+        return None
+    return Intent("where_put", {"thing": thing}) if thing else None
+
+
 def _missed(s: str) -> Optional[Intent]:
     """"What did I miss?" (jarvis_briefing.build_missed)."""
     if re.fullmatch(r"what\s+(?:did|have)\s+i\s+miss(?:ed)?(?:\s+while\s+i\s+was\s+(?:away|out|gone))?"
@@ -1000,7 +1208,7 @@ def _snooze(s: str) -> Optional[Intent]:
 #: What "cancel that <noun>" may name, and the nouns each kind answers to.
 _UNDO_NOUNS = {"timer": "timer", "alarm": "alarm", "reminder": "reminder",
                "briefing": "briefing", "snooze": "snooze", "item": "item", "todo": "item",
-               "todo item": "item", "one": None, "": None}
+               "todo item": "item", "card": "card", "one": None, "": None}
 
 
 def _undo(s: str) -> Optional[Intent]:
@@ -1016,7 +1224,7 @@ def _undo(s: str) -> Optional[Intent]:
         return Intent("undo", {"noun": None, "soft": False})
     m = re.fullmatch(r"(?:cancel|undo|scratch|delete|remove|take\s+back)\s+(?:that|it|the\s+last\s+one|"
                      r"what\s+you\s+just\s+(?:set|added|did))(?:\s+(timer|alarm|reminder|briefing|"
-                     r"snooze|item|one|todo(?:\s+item)?))?", t)
+                     r"snooze|item|card|one|todo(?:\s+item)?))?", t)
     if m:
         return Intent("undo", {"noun": _UNDO_NOUNS.get(m.group(1) or ""), "soft": False})
     return None
@@ -1218,6 +1426,398 @@ def _reminder(s: str, now: float) -> Optional[Intent]:
     return None
 
 
+#: "Remind me next time I talk about X" (jarvis_next_time.py, 2026-09-28).
+#: The subject is "the dentist" in each of: "remind me next time I talk about
+#: the dentist to ask about the bill", "remind me to ask about the bill next
+#: time I talk about the dentist", "next time I mention the dentist, remind
+#: me to ask about the bill", "when I next talk about the dentist remind me
+#: to ask about the bill". Several words may fit a subject; the answer says
+#: back which were taken, and "cancel that" takes it back at once.
+_NT_TALK = (r"(?:talk|speak|chat|ask)\s+(?:to\s+you\s+|with\s+you\s+)?about|mention|bring\s+up"
+            r"|say\s+anything\s+about")
+_NT_NEXT = r"(?:the\s+)?next\s+time\s+(?:i|we)\s+(?:" + _NT_TALK + r")"
+_NT_WHEN = r"when(?:ever)?\s+(?:i|we)\s+next\s+(?:" + _NT_TALK + r")"
+_NT_WHAT = r"(?:to|that|about|of)"
+_NT_PATTERNS = (
+    # "remind me next time I talk about <about> to <text>"
+    re.compile(r"remind\s+me\s+(?:" + _NT_NEXT + r"|" + _NT_WHEN + r")\s+(?P<about>.+?),?\s+"
+               + _NT_WHAT + r"\s+(?P<text>.+)"),
+    # "remind me to <text> (the) next time I talk about <about>"
+    re.compile(r"remind\s+me\s+" + _NT_WHAT + r"\s+(?P<text>.+?),?\s+(?:" + _NT_NEXT + r"|"
+               + _NT_WHEN + r")\s+(?P<about>.+)"),
+    # "next time I talk about <about>, remind me to <text>"
+    re.compile(r"(?:" + _NT_NEXT + r"|" + _NT_WHEN + r")\s+(?P<about>.+?),?\s+remind\s+me\s+"
+               + _NT_WHAT + r"\s+(?P<text>.+)"),
+)
+_NT_CANCEL = re.compile(
+    r"(?:cancel|delete|remove|forget|drop|stop)\s+(?:the\s+|my\s+)?(?:next[\s-]time\s+)?"
+    r"reminder\s+(?:for\s+next\s+time\s+)?(?:about|for|on)\s+(?P<about>.+)")
+_NT_LIST = re.compile(
+    r"what\s+(?:will|would|are)\s+you\s+(?:going\s+to\s+)?remind\s+me\s+(?:of|about)\s+"
+    r"next\s+time|(?:what\s+are|list|show\s+me)\s+(?:my\s+)?reminders\s+for\s+next\s+time"
+    r"|what\s+(?:reminders\s+)?(?:do\s+i\s+have|have\s+i\s+got)\s+for\s+next\s+time")
+
+
+def _next_time(s: str) -> Optional[Intent]:
+    for rx in _NT_PATTERNS:
+        m = rx.fullmatch(s)
+        if not m:
+            continue
+        about = m.group("about").strip(" ,")
+        text = m.group("text").strip(" ,")
+        if about and text and len(text) <= 300 and not re.fullmatch(_VAGUE, text):
+            return Intent("next_time_set", {"about": about, "text": text})
+    if _NT_LIST.fullmatch(s):
+        return Intent("next_time_list")
+    m = _NT_CANCEL.fullmatch(s)
+    if m:
+        return Intent("next_time_cancel", {"about": m.group("about").strip()})
+    return None
+
+
+#: "PC help" (jarvis_pc_help.py, 2026-09-28): five read-only questions about
+#: this PC, answered without the model. Each must be the WHOLE sentence, so
+#: "why is my PC slow to boot after the update, and should I reinstall?"
+#: still goes to the model.
+_PC = r"(?:my|the|this)\s+(?:pc|computer|laptop|machine|desktop)"
+_GPU = r"(?:my|the)\s+(?:graphics\s+card|gpu|video\s+card)"
+_DRIVE = (r"(?:my|the)\s+(?:disks?|drives?|hard\s+drives?|hard\s+disks?|ssds?|storage|"
+          r"c\s+drive)")
+_PC_HELP = (
+    ("slow", re.compile(
+        r"why\s+is\s+" + _PC + r"\s+(?:so\s+|really\s+|being\s+|running\s+)?"
+        r"(?:so\s+)?(?:slow|sluggish|laggy|lagging)(?:\s+(?:today|right\s+now|now))?"
+        r"|" + _PC + r"\s+(?:is|feels|seems)\s+(?:so\s+|really\s+|very\s+)?(?:running\s+)?"
+        r"(?:slow|sluggish|laggy)(?:\s+(?:today|right\s+now|now))?"
+        r"|what(?:'?s|\s+is)\s+slowing\s+(?:down\s+)?" + _PC + r"(?:\s+down)?"
+        r"|what(?:'?s|\s+is)\s+(?:using|eating|hogging)\s+(?:all\s+)?(?:my|the)\s+"
+        r"(?:cpu|processor|memory|ram)"
+        r"|how\s+busy\s+is\s+(?:my|the)\s+(?:cpu|processor|pc|computer)")),
+    ("disk", re.compile(
+        r"how\s+full\s+(?:is|are)\s+" + _DRIVE +
+        r"|how\s+much\s+(?:free\s+)?(?:disk\s+|drive\s+|storage\s+)?space\s+"
+        r"(?:do\s+i\s+have|is\s+(?:there|left)|have\s+i\s+got)(?:\s+left)?"
+        r"(?:\s+on\s+(?:" + _PC + r"|" + _DRIVE + r"))?"
+        r"|is\s+" + _DRIVE + r"\s+(?:full|nearly\s+full|almost\s+full|running\s+out)"
+        r"|am\s+i\s+running\s+(?:out|low)\s+(?:of|on)\s+(?:disk\s+|drive\s+)?"
+        r"(?:space|storage)")),
+    ("heat", re.compile(
+        r"how\s+hot\s+is\s+" + _GPU + r"(?:\s+(?:running|getting|right\s+now|now))?"
+        r"|what(?:'?s|\s+is)\s+(?:the\s+temperature\s+of\s+" + _GPU + r"|" + _GPU
+        + r"(?:'s)?\s+temp(?:erature)?)"
+        r"|is\s+" + _GPU + r"\s+(?:too\s+|running\s+|getting\s+)?(?:hot|overheating|warm)")),
+    ("gpu", re.compile(
+        r"what(?:'?s|\s+is)\s+(?:using|on|running\s+on|eating|hogging)\s+" + _GPU
+        + r"(?:'s)?(?:\s+memory)?"
+        r"|how\s+(?:busy|full)\s+is\s+" + _GPU + r"(?:'s\s+memory)?"
+        r"|how\s+much\s+(?:of\s+)?(?:my\s+|the\s+)?(?:gpu\s+memory|vram|video\s+memory|"
+        r"graphics\s+card\s+memory)\s+is\s+(?:used|in\s+use|being\s+used|free)")),
+    ("restart", re.compile(
+        r"when\s+did\s+" + _PC + r"\s+(?:last\s+)?(?:restart|reboot|start(?:\s+up)?|"
+        r"boot(?:\s+up)?)(?:\s+last)?"
+        r"|when\s+was\s+" + _PC + r"\s+last\s+(?:restarted|rebooted|started|turned\s+on)"
+        r"|when\s+did\s+i\s+last\s+(?:restart|reboot|turn\s+on)\s+" + _PC +
+        r"|how\s+long\s+has\s+" + _PC + r"\s+been\s+(?:on|running|up)(?:\s+for)?"
+        r"|what(?:'?s|\s+is)\s+(?:my|the)\s+(?:pc's\s+|computer's\s+)?uptime"
+        r"|(?:pc|computer|system)\s+uptime")),
+)
+
+
+def _pc_help(s: str) -> Optional[Intent]:
+    for topic, rx in _PC_HELP:
+        if rx.fullmatch(s):
+            return Intent("pc_help", {"topic": topic})
+    return None
+
+
+PC_HELP_MISSING = ("Your PC's Jarvis cannot answer questions about the PC yet - run "
+                   "apply-patches.ps1 on the PC.")
+
+
+def _run_pc_help(intent: Intent) -> Result:
+    """Read-only, no card: nothing changes and nothing leaves this PC. An
+    answer naming programs is private (it stays on screen) and marks the
+    turn as having read outside text - a program chooses its own name."""
+    try:
+        import jarvis_pc_help as PCH
+    except Exception:
+        return Result(PC_HELP_MISSING, intent.name)
+    out = PCH.answer(str(intent.f.get("topic") or ""))
+    return Result(str(out.get("said") or ""), intent.name, private=bool(out.get("private")),
+                  read=list(out.get("read") or []))
+
+
+#: "Widgets you describe" (jarvis_widgets.py, 2026-09-28): the sentence must
+#: START by asking for a widget, and name what it shows after that.
+_WIDGET = re.compile(
+    r"(?:make|create|build|design|add|set\s+up|give)\s+(?:me\s+)?(?:a|an|another|one|my)\s+"
+    r"(?:new\s+|small\s+|little\s+)?(?:jarvis\s+)?widget\s+"
+    r"(?:showing|that\s+shows|with|for|to\s+show|which\s+shows|of|listing|that\s+has)\s+.+")
+
+WIDGETS_MISSING = ("Your PC's Jarvis cannot make widgets yet - run apply-patches.ps1 on the PC.")
+
+
+def _run_widget(f: dict, conversation, messages) -> Result:
+    """A widget PREVIEW from the owner's own words, never a widget: the
+    owner sees it under Brain, Widgets and taps Add. Refused in a
+    conversation that has read outside text (jarvis_widgets.chat_tainted)."""
+    try:
+        import jarvis_widgets as W
+    except Exception:
+        return Result(WIDGETS_MISSING, "widget_make")
+    return Result(W.from_chat(str(f.get("words") or ""), conversation=conversation,
+                              messages=messages), "widget_make")
+
+
+#: "Ring my phone" (jarvis_find_phone.py, 2026-09-28). A phone the owner
+#: names ("ring my work phone") is kept, so the answer can say plainly that
+#: Jarvis cannot tell phones apart yet. Only the owner's OWN phone: the word
+#: before "phone" must be one of these, never a person ("call my mum's
+#: phone", "ring my sister's mobile" - the owner means to call someone, and
+#: ringing their own phone at full volume would be the wrong thing; those go
+#: to the model). Bug audit 2026-09-28, F6.
+_OWN_PHONE = r"(?:work|personal|other|old|new|own|second|spare|main|android)"
+_RING = re.compile(
+    r"(?:ring|call|buzz|beep)\s+(?:my|the)\s+(?:(?P<name>" + _OWN_PHONE + r")\s+)?"
+    r"(?:phone|mobile|cell(?:\s*phone)?|android)"
+    r"|(?:find|locate)\s+(?:my|the)\s+(?:(?P<name2>" + _OWN_PHONE + r")\s+)?"
+    r"(?:phone|mobile|cell(?:\s*phone)?|android)"
+    r"|where(?:'s|\s+is)\s+my\s+(?:(?P<name3>" + _OWN_PHONE + r")\s+)?"
+    r"(?:phone|mobile|cell(?:\s*phone)?|android)"
+    r"|make\s+my\s+(?:phone|mobile)\s+ring|i\s+(?:can'?t|cannot)\s+find\s+my\s+phone")
+_RING_STOP = re.compile(r"stop\s+ringing(?:\s+(?:my|the)\s+(?:phone|mobile))?"
+                        r"|(?:stop|silence)\s+(?:my|the)\s+phone(?:\s+ringing)?")
+
+
+def _find_phone(s: str) -> Optional[Intent]:
+    if _RING_STOP.fullmatch(s):
+        return Intent("phone_stop")
+    m = _RING.fullmatch(s)
+    if not m:
+        return None
+    name = (m.group("name") or m.group("name2") or m.group("name3") or "").strip()
+    return Intent("phone_ring", {"named": bool(name) and name not in ("own", "android")})
+
+
+#: Lockdown (jarvis_asks_first.py, 2026-09-28).
+_LOCKDOWN_ON = re.compile(
+    r"lock\s*down(?:\s+(?:now|jarvis|everything|the\s+pc|mode))?"
+    r"|(?:turn|switch|put)\s+on\s+lock\s*down(?:\s+mode)?|(?:turn|switch)\s+lock\s*down\s+on"
+    r"|(?:go|get)\s+(?:into|in)\s+lock\s*down|enter\s+lock\s*down|lock\s+(?:it|everything)\s+down"
+    r"|(?:start|enable)\s+lock\s*down")
+_LOCKDOWN_OFF = re.compile(
+    r"(?:turn|switch)\s+off\s+lock\s*down(?:\s+mode)?|(?:turn|switch)\s+lock\s*down\s+off"
+    r"|(?:end|stop|undo|lift|cancel|leave|exit|disable)\s+(?:the\s+)?lock\s*down")
+_LOCKDOWN_ASK = re.compile(r"(?:is|are\s+we\s+in)\s+lock\s*down(?:\s+(?:on|mode\s+on))?"
+                           r"|is\s+jarvis\s+(?:in\s+)?lock(?:ed)?\s*down")
+
+
+def _lockdown(s: str) -> Optional[Intent]:
+    if _LOCKDOWN_ASK.fullmatch(s):
+        return Intent("lockdown_status")
+    if _LOCKDOWN_OFF.fullmatch(s):
+        return Intent("lockdown_off")
+    if _LOCKDOWN_ON.fullmatch(s):
+        return Intent("lockdown_on")
+    return None
+
+
+#: Today cards (jarvis_today.py, 2026-09-28): "show gym bag on my Today page
+#: on Mondays and Wednesdays at 7", "put 'bins out' on my today page on
+#: Thursday evenings", "add a today card saying water the plants every day at
+#: 8". No card - like a plain repeating reminder. "What's on my Today page?"
+#: lists them; "remove gym bag from my Today page" deletes ONE. "On Monday"
+#: means every Monday here: a Today card always repeats.
+_TD_PAGE = r"(?:my|the)\s+today\s+(?:page|screen|cards?)"
+_TD_VERB = r"(?:show|put|add|pin|stick)"
+_TD_WHEN = r"(?:on|every|each|daily|weekdays?|(?:" + _WD + r")s?)\b.*"
+_TD_PATTERNS = (
+    # "show <text> <when> on my today page"
+    re.compile(_TD_VERB + r"\s+(?P<text>.+?)\s+(?P<when>" + _TD_WHEN + r"?)\s+(?:on|to|in)\s+"
+               + _TD_PAGE),
+    # "show <text> on my today page <when>"
+    re.compile(_TD_VERB + r"\s+(?P<text>.+?)\s+(?:on|to|in)\s+" + _TD_PAGE
+               + r"(?:,?\s+(?P<when>.+))?"),
+    # "add a today card (saying|for|that says) <text> <when>"
+    re.compile(r"(?:add|make|create|set\s+up|put\s+up)\s+(?:a\s+|another\s+)?today\s+card"
+               r"\s*(?:saying|for|that\s+says|reading|:)?\s+(?P<text>.+?)(?:,?\s+(?P<when>"
+               + _TD_WHEN + r"))?"),
+)
+_TD_LIST = re.compile(
+    r"(?:what'?s|what\s+is|whats|what\s+are)\s+(?:on\s+)?" + _TD_PAGE
+    + r"|(?:list|read|tell\s+me|show(?:\s+me)?|open)\s+" + _TD_PAGE
+    + r"|what\s+(?:cards\s+)?(?:do\s+i\s+have|have\s+i\s+got)\s+on\s+" + _TD_PAGE)
+_TD_REMOVE = re.compile(
+    r"(?:remove|delete|take|drop|clear)\s+(?:the\s+card\s+)?(?P<text>.+?)\s+(?:from|off)\s+"
+    + _TD_PAGE)
+_TD_DAYS_ONLY = re.compile(
+    r"(?:on\s+|every\s+|each\s+)?(?P<days>(?:(?:" + _WD + r")s?)(?:(?:\s*,\s*|\s+and\s+)(?:"
+    + _WD + r")s?)*|day|weekdays?|work\s*days?|daily)(?:\s+(?P<part>morning|afternoon|evening|"
+    r"night))?")
+
+
+def today_when(when_s: str, now: float) -> Optional[dict]:
+    """A Today card's repeat from words, or None when it is not one.
+    "on Mondays at 7", "on monday and wednesday at 7am", "every weekday at
+    6pm", "thursday evenings" (18:00 - the same default a reminder uses),
+    "every day at 8". A card always repeats, so "on Monday" is every Monday."""
+    s = when_s.strip().strip(",")
+    s = re.sub(r"\b(morning|afternoon|evening|night)s\b", r"\1", s)
+    m = _TD_DAYS_ONLY.fullmatch(s)
+    if m:
+        days_s, part = m.group("days"), m.group("part")
+        at = f"{DEFAULT_HOUR.get(part, 9):02d}:00"
+        if days_s in ("day", "daily"):
+            return {"every": "day", "at": at}
+        if days_s.startswith(("weekday", "work")):
+            return {"every": "weekday", "at": at}
+        days = sorted({_WEEKDAYS.index(w if w in _WEEKDAYS else w[:-1])
+                       for w in re.findall(r"(?:" + _WD + r")s?", days_s)})
+        return {"every": "week", "at": at, "days": days} if days else None
+    s = re.sub(r"^(?:on|each)\s+", "every ", s)
+    if re.match(r"(?:" + _WD + r")", s):
+        s = "every " + s
+    when = parse_when(s, now, "reminder")
+    if when is None or not isinstance(when.rule, dict):
+        return None
+    if when.rule.get("every") not in ("day", "weekday", "week"):
+        return None
+    return when.rule
+
+
+def _today(s: str, now: float) -> Optional[Intent]:
+    if _TD_LIST.fullmatch(s):
+        return Intent("today_list")
+    m = _TD_REMOVE.fullmatch(s)
+    if m:
+        return Intent("today_remove", {"text": m.group("text").strip()})
+    unclear = None
+    for rx in _TD_PATTERNS:
+        m = rx.fullmatch(s)
+        if not m:
+            continue
+        text = (m.group("text") or "").strip(" ,:")
+        if not text or re.fullmatch(_VAGUE, text) or len(text) > 300:
+            continue
+        when_s = (m.group("when") or "").strip()
+        if not when_s:
+            return Intent("today_set", {"text": text, "rule": None})
+        rule = today_when(when_s, now)
+        if rule is not None:
+            return Intent("today_set", {"text": text, "rule": rule})
+        # About the Today page, but not a time it can show at ("every 2
+        # hours", "tomorrow at 7"): said so, rather than handed to the model.
+        unclear = unclear or Intent("today_set", {"text": text, "rule": None, "bad": True})
+    return unclear
+
+
+TODAY_MISSING = ("Your PC's Jarvis cannot do Today cards yet - run apply-patches.ps1 on the "
+                 "PC.")
+
+
+def _run_today(intent: Intent, sched) -> Optional[Result]:
+    n, f = intent.name, intent.f
+    try:
+        import jarvis_today as T
+    except Exception:
+        return Result(TODAY_MISSING, n)
+    if n == "today_set":
+        if f.get("rule") is None:
+            return Result(T.BAD_RULE if f.get("bad") else T.NO_WHEN, n)
+        try:
+            j = T.add(f["text"], f["rule"], sched=sched, source="quick")
+        except (ValueError, OverflowError) as exc:
+            return Result(T.said_of(exc), n)
+        if j.get("already"):
+            return Result(T.ALREADY, n, [j["id"]])
+        return Result(T.set_words(j, sched.now()), n, [j["id"]], made=[j["id"]],
+                      what="the Today card just set", nouns=("card",))
+    if n == "today_list":
+        items = T.cards(sched=sched)
+        if not items:
+            return Result(T.NONE_SET, n)
+        words = [f"“{i['text']}”, {i['shows']}" for i in items[:5]]
+        head = ("One card on your Today page: " if len(items) == 1
+                else f"{len(items)} cards on your Today page: ")
+        more = f" And {len(items) - 5} more under Coming up." if len(items) > 5 else ""
+        return Result(head + "; ".join(words) + "." + more, n, [i["id"] for i in items[:5]],
+                      private=True)
+    ok, said = T.remove(f["text"], sched=sched)
+    return Result(said, n)
+
+
+NEXT_TIME_MISSING = ("Your PC's Jarvis cannot do reminders for next time yet - run "
+                     "apply-patches.ps1 on the PC.")
+FIND_PHONE_MISSING = ("Your PC's Jarvis cannot ring your phone yet - run apply-patches.ps1 on "
+                      "the PC.")
+LOCKDOWN_MISSING = ("Your PC's Jarvis does not have Lockdown yet - run apply-patches.ps1 on "
+                    "the PC.")
+
+
+def _run_next_time(intent: Intent, sched) -> Optional[Result]:
+    n, f = intent.name, intent.f
+    try:
+        import jarvis_next_time as NT
+    except Exception:
+        return Result(NEXT_TIME_MISSING, n)
+    import jarvis_schedule as S
+    if n == "next_time_set":
+        try:
+            j = NT.add(f["about"], f["text"], sched=sched, source="quick")
+        except (ValueError, OverflowError) as exc:
+            return Result(S._sentence(exc), n)
+        if j.get("already"):
+            return Result(NT.ALREADY, n, [j["id"]])
+        return Result(NT.set_words(j), n, [j["id"]], made=[j["id"]],
+                      what="the reminder for next time just set", nouns=("reminder",))
+    if n == "next_time_list":
+        items = NT.waiting(sched=sched)
+        if not items:
+            return Result(NT.NONE_SET, n)
+        words = [f"when you talk about \u201c{i['about']}\u201d: \u201c{i['text']}\u201d"
+                 for i in items[:5]]
+        head = ("One reminder for next time - " if len(items) == 1
+                else f"{len(items)} reminders for next time - ")
+        more = f" And {len(items) - 5} more under Coming up." if len(items) > 5 else ""
+        return Result(head + "; ".join(words) + "." + more, n, [i["id"] for i in items[:5]],
+                      private=True)
+    if not NT.waiting(sched=sched):
+        # No reminder for next time at all: "delete the reminder about the
+        # dentist" is about something else - the model answers, as before.
+        return None
+    ok, said = NT.cancel(f["about"], sched=sched)
+    return Result(said, n)
+
+
+def _run_find_phone(intent: Intent) -> Result:
+    n = intent.name
+    try:
+        import jarvis_find_phone as FP
+    except Exception:
+        return Result(FIND_PHONE_MISSING, n)
+    out = FP.stop() if n == "phone_stop" else FP.ring(named=bool(intent.f.get("named")))
+    return Result(str(out.get("said") or ""), n)
+
+
+def _run_lockdown(intent: Intent, peer, local) -> Result:
+    n = intent.name
+    try:
+        import jarvis_asks_first as AF
+        AF.request_lockdown
+    except Exception:
+        return Result(LOCKDOWN_MISSING, n)
+    if n == "lockdown_status":
+        return Result(AF.LOCKDOWN_ON_SAYS if AF.lockdown_on() else AF.LOCKDOWN_OFF_SAYS, n)
+    # The same route both apps' Lockdown button uses: on at once; off from
+    # this PC only, with ONE card plus Windows Hello.
+    code, out = AF.request_tier({"action": AF.LOCKDOWN, "ask": n == "lockdown_on"},
+                                peer=peer, local=local)
+    said = str(out.get("message") or out.get("error") or "")
+    if said and not said.endswith("."):
+        said += "."
+    return Result(said, n)
+
+
 #: "Tell me when ..." (jarvis_tellme.py, the owner's decision of 2026-09-25):
 #: an email from a named sender, or a Home Assistant device doing something.
 #: Whole sentences only, like everything here: "tell me when you're ready"
@@ -1261,6 +1861,58 @@ _ENTITY_STATE = re.compile(r"(?P<dev>[a-z0-9_]+\.[a-z0-9_]+)\s+(?:is|becomes|rea
 #: only a literal address the owner typed - "tell me when it changes" (no
 #: address) goes to the model, since Jarvis has no page in mind for "it".
 _PAGE_CHANGE = re.compile(r"(?P<url>https?://\S+?)\s+changes?")
+#: Watches, 2026-09-28 (jarvis_tellme.py "price", "search" and "github").
+#: "tell me when the price on <url> drops below 25" - a literal address and
+#: a number, like the page watch above.
+_PRICE_NUM = r"(?P<cur>[£$€])?\s?(?P<num>\d[\d,.]*)(?:\s*(?:pounds?|dollars?|euros?|quid|bucks))?"
+_PRICE_DROP = re.compile(
+    r"(?:the\s+)?price\s+(?:on|of|at|for)\s+(?P<url>https?://\S+?)\s+(?:drops|falls|goes|gets"
+    r"|is|comes\s+down)\s+(?:below|under|beneath|less\s+than)\s+" + _PRICE_NUM
+    + r"|(?P<url2>https?://\S+?)\s+(?:drops|falls|goes|is)\s+(?:below|under|less\s+than)\s+"
+    + _PRICE_NUM.replace("?P<cur>", "?P<cur2>").replace("?P<num>", "?P<num2>"))
+#: "tell me when a search for <words> shows something new", "... when
+#: there's something new about <words>".
+_SEARCH_NEW = re.compile(
+    r"(?:a\s+|the\s+|my\s+)?(?:web\s+|google\s+|internet\s+)?search\s+(?:for\s+|on\s+)?"
+    r"(?P<q>.+?)\s+(?:shows|finds|has|turns\s+up|brings\s+up|gets)\s+(?:something|anything"
+    r"|a\s+new\s+result|new\s+results)(?:\s+new)?"
+    r"|there'?s\s+(?:something|anything)\s+new\s+(?:online\s+|on\s+the\s+web\s+)?"
+    r"(?:about|for|on)\s+(?P<q2>.+)"
+    r"|(?:there\s+are\s+)?new\s+(?:search\s+|web\s+)?results\s+(?:for|about)\s+(?P<q3>.+)")
+#: "... searching once a day / every 12 hours / every week" after it.
+_SEARCH_EVERY = re.compile(
+    r"[\s,]+(?:(?:checking|looking|searching)\s+)?(?:(?P<daily>once\s+a\s+day|daily|every\s+day)"
+    r"|(?P<weekly>once\s+a\s+week|weekly|every\s+week)|(?P<twice>twice\s+a\s+day)"
+    r"|every\s+(?P<n>\d{1,3}|six|twelve|two|three)\s+(?P<u>hours?|days?))$")
+_REPO_WORDS = r"(?P<repo>[a-z0-9][a-z0-9-]{0,38}/[a-z0-9_.-]{1,100})"
+#: "tell me when CI fails on owner/repo", "... CI finishes on owner/repo main",
+#: "... the build on owner/repo (branch dev) fails".
+_CI_VERB = (r"(?P<verb>finishes|is\s+(?:done|finished)|completes|has\s+finished|fails"
+            r"|has\s+failed|breaks|goes\s+red|is\s+red)")
+_CI_WHAT = r"(?:the\s+)?(?:ci|build|builds|checks|tests|github\s+actions|actions)"
+_BR = r"[a-z0-9._/-]{1,100}"
+
+
+def _ci_branch(a: str, b: str, c: str) -> str:
+    """An optional branch after the repository: "branch dev", "dev branch",
+    "on dev", or just "dev" - three group names, one per shape."""
+    return (rf"(?:\s+(?:on\s+|for\s+)?(?:the\s+)?(?:branch\s+(?P<{a}>{_BR})"
+            rf"|(?P<{b}>{_BR})\s+branch|(?P<{c}>{_BR})))?")
+
+
+_CI = re.compile(
+    _CI_WHAT + r"\s+" + _CI_VERB + r"\s+(?:on|for|in)\s+" + _REPO_WORDS
+    + _ci_branch("br", "br2", "br3")
+    + r"|" + _CI_WHAT + r"\s+(?:on|for|in)\s+" + _REPO_WORDS.replace("?P<repo>", "?P<repo2>")
+    + _ci_branch("br4", "br5", "br6") + r"\s+" + _CI_VERB.replace("?P<verb>", "?P<verb2>"))
+#: "tell me when PR #12 on owner/repo merges", "... https://github.com/o/r/pull/12 is merged".
+_PR_MERGED = r"(?:is\s+merged|merges|gets\s+merged|has\s+been\s+merged|is\s+in)"
+_PR = re.compile(
+    r"(?:pr|pull\s+request)\s*#?(?P<n>\d{1,7})\s+(?:on|in|for)\s+" + _REPO_WORDS + r"\s+"
+    + _PR_MERGED
+    + r"|https?://(?:www\.)?github\.com/" + _REPO_WORDS.replace("?P<repo>", "?P<repo2>")
+    + r"/pull/(?P<n2>\d{1,7})/?\s+" + _PR_MERGED
+    + r"|(?:pr|pull\s+request)\s*#?(?P<n3>\d{1,7})\s+" + _PR_MERGED)
 #: Not a device - and not a sender: "tell me when it's done" is the model's.
 _NOT_A_THING = frozenset(("it", "this", "that", "they", "you", "he", "she", "we", "something",
                           "timer", "alarm", "reminder", "everything", "anything", "one",
@@ -1362,6 +2014,9 @@ def _tellme(s: str, original, now: float) -> Optional[Intent]:
             continue
         break
     f = {"urgent": urgent, "once": once, "ends": ends}
+    got = _tellme_watches(what, original, f)
+    if got is not None:
+        return got
     for rx in _MAIL_WHAT:
         mm = rx.fullmatch(what)
         if mm:
@@ -1393,6 +2048,58 @@ def _tellme(s: str, original, now: float) -> Optional[Intent]:
     return None
 
 
+def _tellme_watches(what: str, original, f: dict) -> Optional[Intent]:
+    """The 2026-09-28 watches: a price, a web search, GitHub CI or a pull
+    request. Checked before email and devices: "the build on owner/repo
+    finishes" is not a Home Assistant device."""
+    mm = _PRICE_DROP.fullmatch(what)
+    if mm:
+        url = mm.group("url") or mm.group("url2")
+        num = mm.group("num") or mm.group("num2")
+        cur = mm.group("cur") or mm.group("cur2") or ""
+        return Intent("tellme_price", dict(f, url=_restore(original, url),
+                                           below=num.rstrip(".,"), currency=cur))
+    minutes = None
+    probe = what
+    e = _SEARCH_EVERY.search(probe)
+    if e:
+        if e.group("daily"):
+            minutes = 1440
+        elif e.group("weekly"):
+            minutes = 7 * 1440
+        elif e.group("twice"):
+            minutes = 720
+        else:
+            n = e.group("n")
+            n = int(n) if n.isdigit() else {"six": 6, "twelve": 12, "two": 2, "three": 3}[n]
+            minutes = n * (1440 if e.group("u").startswith("day") else 60)
+        probe = probe[:e.start()].strip()
+    mm = _SEARCH_NEW.fullmatch(probe)
+    if mm:
+        q = (mm.group("q") or mm.group("q2") or mm.group("q3") or "").strip()
+        q = q.strip(" \"'“”")
+        if not q or q in _NOT_A_THING:
+            return Intent("tellme_help", {"why": "search"})
+        return Intent("tellme_search", dict(f, words=_restore(original, q), minutes=minutes))
+    mm = _CI.fullmatch(what)
+    if mm:
+        repo = mm.group("repo") or mm.group("repo2")
+        branch = next((mm.group(g) for g in ("br", "br2", "br3", "br4", "br5", "br6")
+                       if mm.group(g)), "")
+        verb = mm.group("verb") or mm.group("verb2")
+        event = "ci_failed" if re.search(r"fail|break|red", verb) else "ci_done"
+        return Intent("tellme_github", dict(f, repo=_restore(original, repo), event=event,
+                                            branch=_restore(original, branch) if branch else ""))
+    mm = _PR.fullmatch(what)
+    if mm:
+        if mm.group("n3"):
+            return Intent("tellme_help", {"why": "repo"})
+        repo = mm.group("repo") or mm.group("repo2")
+        return Intent("tellme_github", dict(f, repo=_restore(original, repo), event="pr_merged",
+                                            pr=int(mm.group("n") or mm.group("n2"))))
+    return None
+
+
 TELLME_MISSING = ("Your PC's Jarvis cannot do \"tell me when\" yet - run apply-patches.ps1 "
                   "on the PC.")
 
@@ -1408,6 +2115,12 @@ def _run_tellme(intent: Intent, sched, now: float) -> Result:
         if f.get("why") == "when":
             return Result("Say by when, like \"tell me if Alex hasn't replied by Friday\" or "
                           "\"... within 2 days\".", n)
+        if f.get("why") == "search":
+            return Result("Say what to search for, like \"tell me when a search for Kokoro "
+                          "voices shows something new\".", n)
+        if f.get("why") == "repo":
+            return Result("Say which repository the pull request is on, like \"tell me when "
+                          "PR #12 on darknight11ish/Epic-Jarvis merges\".", n)
         return Result("Say who the email is from, like \"tell me when an email from Alex "
                       "arrives\".", n)
     try:
@@ -1432,6 +2145,19 @@ def _run_tellme(intent: Intent, sched, now: float) -> Result:
                  "once": f["once"]}
     elif n == "tellme_page":
         watch = {"source": "page", "url": f["url"], "urgent": f["urgent"], "once": f["once"]}
+    elif n == "tellme_price":
+        watch = {"source": "price", "url": f["url"], "below": f["below"],
+                 "currency": f.get("currency") or "", "urgent": f["urgent"], "once": f["once"]}
+    elif n == "tellme_search":
+        watch = {"source": "search", "words": f["words"], "urgent": f["urgent"],
+                 "once": f["once"]}
+    elif n == "tellme_github":
+        watch = {"source": "github", "repo": f["repo"], "event": f["event"],
+                 "urgent": f["urgent"], "once": f["once"]}
+        if f["event"] == "pr_merged":
+            watch["pr"] = f["pr"]
+        elif f.get("branch"):
+            watch["branch"] = f["branch"]
     else:
         entity, name = f.get("entity") or "", f.get("name") or ""
         if not entity:
@@ -1462,7 +2188,8 @@ def _run_tellme(intent: Intent, sched, now: float) -> Result:
         else:
             watch["states"] = f.get("states") or []
     try:
-        j = TM.add(watch, ends=f.get("ends"), source="quick", sched=sched)
+        j = TM.add(watch, ends=f.get("ends"), minutes=f.get("minutes"), source="quick",
+                   sched=sched)
     except (ValueError, OverflowError) as exc:
         return Result(S._sentence(exc), n, read=read)
     # Like a reminder's words, the sender or device is not said back: the
@@ -2098,6 +2825,71 @@ MEDIA_MISSING = ("Your PC's Jarvis cannot control music or video yet - run apply
                  "on the PC.")
 
 
+def _forget_range(s: str, now: float) -> Optional[Intent]:
+    """"forget what you learned last week", "delete my chats from 1 to 15
+    September" - jarvis_forget_range.parse_phrase. Without that module, or
+    on any error: not ours (the model has no tool that forgets anything)."""
+    try:
+        import jarvis_forget_range as FR
+        got = FR.parse_phrase(s, now)
+    except Exception:
+        return None
+    if got is None:
+        return None
+    return Intent("forget_range", {"got": got})
+
+
+FORGET_RANGE_MISSING = ("Your PC's Jarvis cannot forget a time frame yet - run apply-patches.ps1 "
+                        "on the PC.")
+
+
+def _run_forget_range(f: dict, now: float) -> Result:
+    """Never removes anything: it fills in the checked list in both apps'
+    Brain and says where it is. The owner unticks, taps Forget these, and
+    approves ONE card by tapping - a spoken "yes" approves nothing. A date
+    it is not sure of is a question instead, and opens nothing."""
+    try:
+        import jarvis_forget_range as FR
+        reply, opens = FR.quick_answer(f.get("got") or {}, now)
+    except Exception:
+        return Result(FORGET_RANGE_MISSING, "forget_range")
+    return Result(reply, "forget_range", open_brain="forget-range" if opens else None)
+
+
+def _project_log(s: str) -> Optional[Intent]:
+    """"log 5 km run", "I ran 5 km": ours only when a life project has a
+    benchmark it fits (jarvis_projects.quick_match). Without
+    jarvis_projects.py, or on any error reading it: not ours."""
+    try:
+        import jarvis_projects as PJ
+        found = PJ.quick_match(s)
+    except Exception:
+        return None
+    if not found:
+        return None
+    return Intent("project_log", {"found": found})
+
+
+def _run_project_log(f: dict, now: float) -> Result:
+    """Logged at once, no card - the owner's own number. A sensitive
+    (health or money) benchmark's answer is private: kept on screen."""
+    try:
+        import jarvis_projects as PJ
+    except Exception:
+        return Result("Your PC's Jarvis cannot keep projects yet - run apply-patches.ps1 "
+                      "on the PC.", "project_log")
+    found = f.get("found") or {}
+    private = any(b.get("sensitive") for b in
+                  ([found["match"]] if found.get("match") else found.get("ambiguous") or []))
+    try:
+        out = PJ.quick_log(found, now=now)
+    except Exception as exc:
+        why = str(PJ._err(exc)[1].get("error") or "it could not be saved")
+        return Result("That was not logged: " + why[:1].lower() + why[1:], "project_log",
+                      private=private)
+    return Result(out["said"], "project_log", private=bool(out.get("private")) or private)
+
+
 def _run_media(intent: Intent) -> Result:
     """Play/pause/next/previous act at once, no card (the owner's own
     words are the only permission this needs); "what's playing" says the
@@ -2221,6 +3013,16 @@ class Result:
     # jarvis_animal.DEVICE_CHANGES. Per device, so the PC changes nothing -
     # the app that asked applies it to itself (jarvis_animal.step_device).
     face_tuning: Optional[str] = None
+    # "Forget a time frame" (jarvis_forget_range.py, 2026-09-28): the place in
+    # Brain both apps open - "forget-range" - after "forget what you learned
+    # last week" filled in its list. Navigation only; nothing is removed.
+    open_brain: Optional[str] = None
+    # "Where did I put ...?" (2026-09-28): the saved facts the answer quotes,
+    # by id, and how many of them are sensitive - so X-Jarvis-Route says the
+    # answer used memory, both apps show "Used 1 memory" with Forget, and a
+    # sensitive one stays on screen like any memory answer (route_fields).
+    facts: list = field(default_factory=list)
+    facts_sensitive: int = 0
 
 
 def _join(items: list) -> str:
@@ -2260,6 +3062,41 @@ def _pick_timer(timers: list, f: dict):
 
 SETTINGS_MISSING = ("Your PC's Jarvis does not have the settings registry yet - run "
                     "apply-patches.ps1 on the PC.")
+
+
+def _memory_k() -> int:
+    """JARVIS_MEMORY_K: 0 means no memory at all (ARCHITECTURE section 5),
+    which the fast path honours too."""
+    import os
+    try:
+        return int(os.environ.get("JARVIS_MEMORY_K", "5"))
+    except ValueError:
+        return 5
+
+
+def _run_where_put(f: dict, now: float, temporary: bool) -> Optional[Result]:
+    """"Where is my passport?" from memory, without the model (2026-09-28;
+    JARVIS-API section 77). None - the model answers, as before - in a
+    temporary chat (it uses no memory), with memory switched off
+    (JARVIS_MEMORY_K=0), without jarvis_places.py or the memory store, and
+    when no saved place is in use for that thing."""
+    if temporary or _memory_k() <= 0:
+        return None
+    try:
+        import jarvis_memory
+        import jarvis_places
+        found = jarvis_places.lookup(jarvis_memory.store(), f.get("thing") or "", now=now)
+    except Exception:
+        return None
+    if not found:
+        return None
+    try:
+        import jarvis_auto_learn
+        sensitive = sum(1 for x in found if jarvis_auto_learn.is_sensitive_fact(x.get("text")))
+    except Exception:
+        sensitive = len(found)            # fail closed: may all be sensitive
+    return Result(jarvis_places.answer_words(found, now), "where_put",
+                  facts=[int(x["id"]) for x in found], facts_sensitive=sensitive)
 
 
 def _run_settings_open(f: dict) -> Result:
@@ -2335,7 +3172,7 @@ def _run_settings_tool(f: dict, peer, local) -> Result:
 
 def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         seen: Optional[float] = None, temporary: bool = False,
-        peer=None, local=None) -> Optional[Result]:
+        peer=None, local=None, messages=None) -> Optional[Result]:
     """Do it. None hands the sentence to the model after all.
     `conversation`: the request's conversation_id ("cancel that" works only
     within one). `seen`: when the owner last talked to Jarvis before this
@@ -2344,8 +3181,13 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     same way owner-check.patch's do_POST wrapper reads it - so a setting on
     jarvis_owner_check.PC_ONLY_ACTIONS can refuse a request that did not
     truly come from this PC (jarvis_settings_registry.py, 2026-09-27)."""
-    import jarvis_schedule as S
     n, f = intent.name, intent.f
+    if n == "where_put":
+        return _run_where_put(f, now, temporary)
+    if n == "widget_make":
+        # `messages`: the request's, as they arrived - for the taint check.
+        return _run_widget(f, conversation, messages)
+    import jarvis_schedule as S
     if n == "settings_open":
         return _run_settings_open(f)
     if n == "settings_bool":
@@ -2361,6 +3203,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "bulk":
         return Result("Jarvis does not clear everything at once. Delete them one at a time, "
                       "here or under Coming up.", n)
+    if n == "forget_range":
+        return _run_forget_range(f, now)
     if n == "missed":
         return _run_missed(sched, now, seen)
     if n == "snooze":
@@ -2398,8 +3242,20 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
         return Result("Here you go.", n)
     if n.startswith("media_"):
         return _run_media(intent)
+    if n.startswith("next_time_"):
+        return _run_next_time(intent, sched)
+    if n.startswith("today_"):
+        return _run_today(intent, sched)
+    if n == "pc_help":
+        return _run_pc_help(intent)
+    if n in ("phone_ring", "phone_stop"):
+        return _run_find_phone(intent)
+    if n.startswith("lockdown_"):
+        return _run_lockdown(intent, peer, local)
     if n.startswith("tellme_"):
         return _run_tellme(intent, sched, now)
+    if n == "project_log":
+        return _run_project_log(f, now)
     if n.startswith("focus_"):
         return _run_focus(intent)
     if n == "timer_set":
@@ -2942,7 +3798,7 @@ def _run_briefing(intent: Intent, sched, now: float) -> Result:
 
 def answer(text, *, sched=None, now: Optional[float] = None,
            conversation: Optional[str] = None, seen: Optional[float] = None,
-           temporary: bool = False, peer=None, local=None) -> Optional[Result]:
+           temporary: bool = False, peer=None, local=None, messages=None) -> Optional[Result]:
     """Match and act. None: not ours - ask the model. `conversation`: the
     request's conversation_id, so "cancel that" takes back only what was set
     in it; `seen`: when the owner last talked to Jarvis before this turn;
@@ -2957,7 +3813,7 @@ def answer(text, *, sched=None, now: Optional[float] = None,
         import jarvis_schedule
         sched = jarvis_schedule.get()
     res = run(intent, sched, now, conversation=conversation, seen=seen, temporary=temporary,
-             peer=peer, local=local)
+             peer=peer, local=local, messages=messages)
     if res is not None:
         try:
             sched.mark_command(text)
@@ -3120,11 +3976,12 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None,
     # jarvis_hud.py's own _temporary_chat(body) makes; needed here for
     # "from now on ..." (2026-09-27), which keeps a temporary chat's style
     # change in that chat only, never written to manner.json.
-    temporary = isinstance(body, dict) and body.get("temporary") is True
+    temporary = _temporary_body(body)
     text = newest_own_words(body)
     res = None if text is None else answer(text, sched=sched, now=now,
                                            conversation=conversation, seen=seen,
-                                           temporary=temporary, peer=peer, local=local)
+                                           temporary=temporary, peer=peer, local=local,
+                                           messages=body.get("messages"))
     if res is None and conversation:
         # The model answers this turn: "cancel that" after it is about the
         # model's answer, never about a reminder set before it.
@@ -3141,6 +3998,21 @@ def answer_turn(body, *, sched=None, now: Optional[float] = None,
             pass
         res.reply = in_manner(res.reply, manner)
     return res
+
+
+def _temporary_body(body) -> bool:
+    """Is this request a temporary chat? `temporary: true`, or a game or
+    role-play the PC has seen in this conversation - the same test the chat
+    route makes (jarvis_hud._temporary_chat, games-temporary.patch). This
+    path used to read the flag alone, so in a role-play chat "where is my
+    passport" was answered from saved memory and "from now on, be plainer"
+    was written to manner.json for good (the second chat audit,
+    2026-09-28, finding 7, reproduced). Without jarvis_intake: the flag."""
+    try:
+        import jarvis_intake
+        return bool(jarvis_intake.temporary_body(body))
+    except Exception:
+        return isinstance(body, dict) and body.get("temporary") is True
 
 
 def _forget_set(sched, conversation) -> None:
@@ -3164,6 +4036,15 @@ def route_fields(res: Result) -> dict:
            "injected_sensitive": 0}
     if res.private:
         out["gate"] = "private"
+    if res.facts:
+        # "Where did I put ...?" (2026-09-28): the answer quotes saved facts,
+        # so it says so exactly as a model answer that used memory does -
+        # the same "mem:<id>" ids, and how many are sensitive (both apps
+        # keep such an answer on screen unless the owner allowed it).
+        out["inject_memory"] = True
+        out["injected_facts"] = len(res.facts)
+        out["injected_ids"] = [f"mem:{int(i)}" for i in res.facts]
+        out["injected_sensitive"] = max(0, min(int(res.facts_sensitive), len(res.facts)))
     if res.open_settings:
         # "open <a settings section>" (jarvis_settings_registry.py,
         # 2026-09-27): the section id both apps' Settings screens already
@@ -3176,6 +4057,11 @@ def route_fields(res: Result) -> dict:
         # per device, so the app that asked applies it to itself - the same
         # additive road as open_settings above.
         out["face_tuning"] = res.face_tuning
+    if res.open_brain:
+        # "Forget a time frame" (jarvis_forget_range.py, 2026-09-28): the
+        # Brain place both apps open, with the list already filled in.
+        # Additive, like open_settings.
+        out["open_brain"] = res.open_brain
     return out
 
 

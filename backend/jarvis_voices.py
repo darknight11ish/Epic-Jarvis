@@ -42,6 +42,8 @@ THE ROUTES (voices.patch):
     POST /api/voice/voices/speed     {"speed": "slower" | "normal" | "faster"}
     POST /api/voice/voices/speaker   {"speaker": "0" .. "10"} - which Kokoro voice
     POST /api/voice/voices/face      {"enabled": true | false} - voice follows the face
+    POST /api/voice/voices/face_offer {"face": <animal>, "answer": "use" | "keep"} - the
+                                     one-time "has its own voice. Use it?" answer
 
 THE PERMISSION MODEL (docs/ARCHITECTURE.md section 3). Creating a voice and
 switching Jarvis to one each raise ONE approval card through jarvis_gate,
@@ -401,7 +403,7 @@ SPEAKER_LABEL = dict(KOKORO_VOICES)
 SPEAKER_DEFAULT = "0"
 SPEAKER_TITLE = "Jarvis's built-in voice"
 SPEAKER_DETAIL = ("Which of Kokoro's voices Jarvis's built-in voice uses - never a voice "
-                  "you recorded, which stays under \"Voices\" above.")
+                  "you recorded, which stays under \"Voices\" below.")
 
 
 def speaker() -> int:
@@ -440,7 +442,7 @@ def speaker_view() -> dict:
         # reasonably thinks the setting is broken.
         note = (note + " " if note else "") + (
             f"While the {fv['name']} face is showing, its own voice speaks instead "
-            f"(\"{FACE_VOICE_TITLE}\" is on); this choice is used with any other face.")
+            f"(\"{FACE_VOICE_TITLE}\" is on); this choice is used the rest of the time.")
     return {"choice": choice, "value": value, "default": SPEAKER_DEFAULT,
             "title": SPEAKER_TITLE, "detail": SPEAKER_DETAIL, "note": note,
             "choices": [{"id": k, "label": v} for k, v in KOKORO_VOICES]}
@@ -479,7 +481,8 @@ def set_speaker(body) -> tuple:
 # falls back to the built-in voice, and so to the face's voice. The owner's speaking speed still applies ON TOP of the
 # animal's pace, so "Faster" makes the owl faster too.
 #
-# A switch, ON by default (the owner picked "voice follows the face"), set
+# A switch, OFF by default (the owner, 2026-09-28; the one-time question below
+# turns it on for an animal face - OFFER_QUESTION), set
 # from either app (POST /api/voice/voices/face), kept in voices/state.json.
 # NO CARD EITHER WAY: like the speed and the built-in voice, it is cosmetic -
 # it never changes what Jarvis does, asks or remembers.
@@ -513,7 +516,10 @@ def set_speaker(body) -> tuple:
 FACE_VOICES = {
     "redpanda": {"name": "Red Panda", "speaker": "1", "speed": 1.0, "semitones": 2.0},
     "pygmyowl": {"name": "Pygmy Owl", "speaker": "2", "speed": 0.85, "semitones": 1.0},
-    "seaotter": {"name": "Sea Otter", "speaker": "4", "speed": 1.15, "semitones": 3.0},
+    # Not "4" ("Sky"): the owner's 2026-09-28 decision - its name matches the
+    # voice OpenAI withdrew in 2024 over a likeness complaint. Sarah, with the
+    # same playful lift and pace the otter had.
+    "seaotter": {"name": "Sea Otter", "speaker": "3", "speed": 1.15, "semitones": 3.0},
     # The fourth animal (owner, 2026-09-28): "a male voice, a touch
     # energetic". Michael, one step higher at normal pace. Made with the real
     # Kokoro model (kokoro-en-v0_19) and MEASURED, not judged by ear: his
@@ -538,12 +544,14 @@ FACE_VOICES = {
 MIN_SEMITONES = -3.0
 MAX_SEMITONES = 4.0
 PITCH_STEP = 0.5
-FACE_VOICE_DEFAULT = True
+#: Off until the owner turns it on (the owner's 2026-09-28 decision: the
+#: switch stays, but starts off). Turning it on or off never asks first.
+FACE_VOICE_DEFAULT = False
 FACE_VOICE_TITLE = "Voice follows the face"
-FACE_VOICE_DETAIL = ("With an animal face showing, Jarvis's built-in voice becomes that "
-                     "animal's: its own voice, pace and pitch, which you can change for each "
-                     "animal. A voice you recorded still wins. It changes nothing else, so it "
-                     "never asks first.")
+FACE_VOICE_DETAIL = ("Each animal asks once whether to use its own voice. With this on, "
+                     "only the animals you said yes to speak in their own voice, pace and "
+                     "pitch; off, none do, and your answers are kept. A voice you recorded "
+                     "still wins. It changes nothing else, so it never asks first.")
 ANIMALS_TITLE = "Each animal's voice"
 ANIMALS_DETAIL = ("Pick a voice, a pitch and a pace for each animal. Its mouth moves with "
                   "whatever you pick. It changes nothing else, so it never asks first.")
@@ -551,6 +559,23 @@ PACE_LABEL = {"slower": "Slower", "normal": "Normal", "faster": "Faster"}
 #: "Try it": the one line an animal says. Fixed here - an app never sends
 #: words to be spoken this way.
 TRY_LINE = "Hello, it's Jarvis. This is how I sound as the {name}."
+
+# THE ONE-TIME QUESTION (the owner, 2026-09-28): the first time the owner
+# picks an animal face, one line asks "The Red Panda has its own voice. Use
+# it?" (Use it / Keep my voice). EACH ANIMAL KEEPS ITS OWN ANSWER (the
+# owner, 2026-09-28), in state.json `face_answers` {face: "use" | "keep"}:
+# an animal speaks in its own voice only while "Voice follows the face" is
+# on AND its answer is "use"; with no answer, or "keep", the built-in voice
+# stays as it is. The question is asked for the animal showing whenever it
+# has no answer yet, whether the switch is on or off. "Use it" records "use"
+# and turns the switch on; "Keep my voice" records "keep" and leaves the
+# switch alone. The switch stays the master: off, no animal voice at all
+# (the answers are kept). A face never changes the voice by itself. No card:
+# the switch it can turn on has none.
+OFFER_QUESTION = "The {name} has its own voice. Use it?"
+OFFER_USE = "Use it"
+OFFER_KEEP = "Keep my voice"
+OFFER_ANSWERS = ("use", "keep")
 
 
 def appearance_face() -> str:
@@ -566,6 +591,12 @@ def appearance_face() -> str:
 def face_voice_on() -> bool:
     v = _read_state().get("face_voice")
     return FACE_VOICE_DEFAULT if v is None else bool(v)
+
+
+def face_answer(face: str) -> Optional[str]:
+    """The owner's answer to the one-time question for this animal: "use",
+    "keep", or None (not asked yet, or a damaged answer - the safe reading)."""
+    return _read_state()["face_answers"].get(face)
 
 
 def _pace_of(value: float) -> str:
@@ -629,11 +660,15 @@ def animal_voice(face: str) -> Optional[dict]:
 
 def face_voice() -> Optional[dict]:
     """The animal voice the built-in voice speaks in now - animal_voice()'s
-    shape - or None: the switch is off, or the face showing is not an
-    animal."""
+    shape - or None: the switch is off, the face showing is not an animal,
+    or the owner has not said "Use it" for that animal (no answer, or
+    "Keep my voice")."""
     if not face_voice_on():
         return None
-    return animal_voice(appearance_face())
+    face = appearance_face()
+    if face_answer(face) != "use":
+        return None
+    return animal_voice(face)
 
 
 def builtin_voice() -> tuple:
@@ -679,14 +714,28 @@ def _animal_row(face: str) -> dict:
             "pace": av["pace"], "changed": av["changed"],
             "own": {"speaker": own["speaker"], "semitones": own["semitones"],
                     "pace": own["pace"]},
+            "answer": face_answer(face),
             "line": (f"{_voice_name(av['speaker'])}, {pitch_words(av['semitones'])}, "
                      f"{_pace_words(av['pace'])}.")}
 
 
+def face_offer() -> Optional[dict]:
+    """The one-time question both apps show, or None: only while the face
+    showing is an animal the owner has not answered for yet - whether
+    "Voice follows the face" is on or off."""
+    face = appearance_face()
+    row = FACE_VOICES.get(face)
+    if row is None or face_answer(face) is not None:
+        return None
+    return {"face": face, "question": OFFER_QUESTION.format(name=row["name"]),
+            "use": OFFER_USE, "keep": OFFER_KEEP}
+
+
 def face_voice_view() -> dict:
     """GET /api/voice/voices `face_voice`: the switch, the one line both
-    apps show under it saying what is happening now, and each animal's
-    voice with the choices and words for changing it."""
+    apps show under it saying what is happening now, each animal's voice
+    with the choices and words for changing it, and the one-time question
+    (`offer`, face_offer())."""
     on = face_voice_on()
     face = appearance_face()
     row = animal_voice(face)
@@ -699,6 +748,7 @@ def face_voice_view() -> dict:
     except Exception:
         engine = "kokoro" if st["active"] == BUILTIN else ""
     builtin_speaks = st["active"] == BUILTIN or engine == "kokoro"
+    answer = st["face_answers"].get(face)
     if not on:
         line = "Off: the built-in voice stays the same whatever the face."
     elif row is None:
@@ -707,6 +757,10 @@ def face_voice_view() -> dict:
                     "Pygmy Owl, Sea Otter, Monkey or Robot face to hear one.")
         else:
             line = "No face is saved on this PC yet, so there is no animal voice to use."
+    elif answer is None:
+        line = f"The {row['name']} will ask once whether to use its own voice."
+    elif answer != "use":
+        line = f"You chose to keep your voice for the {row['name']}."
     elif not builtin_speaks:
         line = (f"The {row['name']} face is showing, but a voice you recorded is chosen, "
                 f"so that voice speaks.")
@@ -718,7 +772,7 @@ def face_voice_view() -> dict:
         how = ", a little higher" if s > 0 else ", a little deeper" if s < 0 else ""
         line = f"Speaking as the {row['name']}: {_voice_name(row['speaker'])}{how}."
     return {"enabled": on, "default": FACE_VOICE_DEFAULT, "face": face,
-            "speaking": bool(on and row is not None and builtin_speaks),
+            "speaking": bool(on and row is not None and answer == "use" and builtin_speaks),
             "name": row["name"] if row else "", "line": line,
             "title": FACE_VOICE_TITLE, "detail": FACE_VOICE_DETAIL,
             "animals": [_animal_row(f) for f in FACE_VOICES],
@@ -726,7 +780,8 @@ def face_voice_view() -> dict:
             "animal_choices": {
                 "voices": [{"id": k, "label": v} for k, v in KOKORO_VOICES],
                 "paces": [{"id": k, "label": PACE_LABEL[k]} for k, _ in SPEEDS],
-                "pitch": {"min": MIN_SEMITONES, "max": MAX_SEMITONES, "step": PITCH_STEP}}}
+                "pitch": {"min": MIN_SEMITONES, "max": MAX_SEMITONES, "step": PITCH_STEP}},
+            "offer": face_offer()}
 
 
 def set_face_voice(body) -> tuple:
@@ -748,6 +803,39 @@ def set_face_voice(body) -> tuple:
 
 
 _NO_ANIMAL = "choose the Red Panda, the Pygmy Owl, the Sea Otter, the Monkey or the Robot"
+
+
+def answer_face_offer(body) -> tuple:
+    """POST /api/voice/voices/face_offer {"face": <animal id>, "answer":
+    "use" | "keep"}: the one-time question answered, at once, no card (see
+    OFFER_QUESTION). The answer is kept for that face alone, so the
+    question never comes back for it; "use" also turns "Voice follows the
+    face" on, "keep" leaves the switch as it is."""
+    if not isinstance(body, dict) or set(body) != {"face", "answer"}:
+        return 400, {"ok": False, "error": 'send the face and the answer, "use" or "keep"'}
+    if not isinstance(body["face"], str) or body["face"] not in FACE_VOICES:
+        return 400, {"ok": False, "error": _NO_ANIMAL}
+    if not isinstance(body["answer"], str) or body["answer"] not in OFFER_ANSWERS:
+        return 400, {"ok": False, "error": 'the answer must be "use" or "keep"'}
+    face, answer = body["face"], body["answer"]
+    name = FACE_VOICES[face]["name"]
+    with _STATE_LOCK:
+        answers = dict(_read_state()["face_answers"])
+        answers[face] = answer
+        changes = {"face_answers": answers}
+        if answer == "use":
+            changes["face_voice"] = True
+        err = _write_state(**changes)
+    if err:
+        return 500, {"ok": False, "error": err}
+    _audit("voices.face_offer", {"face": face, "answer": answer})
+    _publish({"what": "face_offer", "outcome": answer})
+    if answer == "use":
+        message = (f"The {name} speaks in its own voice now. \"{FACE_VOICE_TITLE}\" is on; "
+                   f"turn it off in the voice settings to go back.")
+    else:
+        message = f"Jarvis keeps your voice for the {name}. Each animal asks once for itself."
+    return 200, {"ok": True, "message": message, "face_voice": face_voice_view()}
 
 
 def set_face_animal(body) -> tuple:
@@ -801,6 +889,10 @@ def set_face_animal(body) -> tuple:
                    f"{pitch_words(semis)}, {_pace_words(choice['pace'])}.")
     if not face_voice_on():
         message += f" \"{FACE_VOICE_TITLE}\" is off, so you will hear it once that is on."
+    elif face_answer(face) is None:
+        message += f" The {name} will ask once whether to use its own voice."
+    elif face_answer(face) != "use":
+        message += f" You chose to keep your voice for the {name}, so it is not used."
     return 200, {"ok": True, "message": message, "face_voice": face_voice_view()}
 
 
@@ -910,11 +1002,13 @@ _STATE_LOCK = threading.RLock()
 def _read_state() -> dict:
     """{"active": id, "better_voice": bool, "speed": choice or None,
     "speaker": choice or None, "face_voice": bool or None, "face_animals":
-    {face: {"speaker", "semitones", "pace"}}}. Missing or broken is the
-    built-in voice, the better voice off and no speed, built-in-voice,
-    face-voice or animal-voice choice made - the safe reading."""
+    {face: {"speaker", "semitones", "pace"}}, "face_answers": {face: "use" |
+    "keep"}}. Missing or broken is the built-in voice, the better voice off
+    and no speed, built-in-voice, face-voice or animal-voice choice made, and
+    no animal answered yet - the safe reading. (A leftover `face_offered`,
+    from before each animal kept its own answer, is ignored.)"""
     out = {"active": BUILTIN, "better_voice": False, "speed": None, "speaker": None,
-           "face_voice": None, "face_animals": {}}
+           "face_voice": None, "face_animals": {}, "face_answers": {}}
     try:
         raw = json.loads(_state_path().read_text(encoding="utf-8"))
     except Exception:
@@ -935,6 +1029,10 @@ def _read_state() -> dict:
     if isinstance(fv, bool):
         out["face_voice"] = fv
     out["face_animals"] = _clean_animals(raw.get("face_animals"))
+    fa = raw.get("face_answers")
+    if isinstance(fa, dict):
+        out["face_answers"] = {f: fa[f] for f in FACE_VOICES
+                               if isinstance(fa.get(f), str) and fa[f] in OFFER_ANSWERS}
     return out
 
 
@@ -2983,7 +3081,8 @@ ROUTES = {"/api/voice/voices/create": create, "/api/voice/voices/active": switch
           "/api/voice/voices/speed": set_speed, "/api/voice/voices/speaker": set_speaker,
           "/api/voice/voices/face": set_face_voice,
           "/api/voice/voices/face_animal": set_face_animal,
-          "/api/voice/voices/face_animal/try": try_face_animal}
+          "/api/voice/voices/face_animal/try": try_face_animal,
+          "/api/voice/voices/face_offer": answer_face_offer}
 
 
 def handle_post(route: str, body) -> tuple:

@@ -4118,6 +4118,7 @@ float3 tonemap(float3 c) {
     return c / (1.0 + c);
 }
 
+// Smooth minimum by Inigo Quilez: https://iquilezles.org/articles/distfunctions/
 float smin(float a, float b, float k) {
     float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
     return b + (a - b) * h - k * h * (1.0 - h);

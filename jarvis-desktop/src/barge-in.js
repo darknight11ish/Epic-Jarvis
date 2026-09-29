@@ -36,35 +36,41 @@
  * lives in this window origin's localStorage, shared by the Settings window
  * that changes it and the Jarvis bar that reads it.
  *
+ * SINCE 2026-09-28 this switch is part of ONE setting, "Interrupting
+ * Jarvis" (live-rules.js `INTERRUPT`, the same words as the phone's): the
+ * owner's answer merged it with "Interrupting Jarvis in Live". Its three
+ * choices, on this PC: "Interrupt by voice" is the old ON; "By button only"
+ * and "Don't interrupt" are the old OFF here (what the listener hears while
+ * Jarvis talks is ignored) - they differ in Jarvis Live, where "Don't
+ * interrupt" also shows no Stop talking button. An old OFF carries over as
+ * "Don't interrupt" (live-rules.js `interruptChoice`).
+ *
  * @module barge-in
  */
 
-/** The localStorage key. */
+import { loadInterrupt, saveInterrupt } from "./live-rules.js";
+
+/** The OLD localStorage key; live-rules.js reads it to carry a choice over. */
 export const BARGE_IN_KEY = "jarvis.voice.bargeIn";
 
-/** The switch's name, the phone's words. */
+/** The old switch's name, the phone's words. */
 export const BARGE_IN_NAME = "Interrupt Jarvis while it talks";
 
-/** The owner's setting, or ON when none was saved (or storage is unreadable). */
+/** Under the "Interrupting Jarvis" choices in Settings: this PC's own
+ *  honest detail. */
+export const INTERRUPT_CHOICES_NOTE =
+  "Unless you choose Interrupt by voice, what this PC hears while Jarvis talks is ignored, even \"stop\" and \"hey Jarvis\". Esc in the Jarvis bar still stops a reply.";
+
+/** Whether talking over Jarvis may stop it: "Interrupt by voice" only. ON
+ *  when nothing was saved (or storage is unreadable), as ever. */
 export function loadBargeIn(storage = globalThis.localStorage) {
-  try {
-    const saved = storage && storage.getItem(BARGE_IN_KEY);
-    if (saved === "off") return false;
-  } catch {
-    /* private mode or cleared site data: the default */
-  }
-  return true;
+  return loadInterrupt(storage) === "voice";
 }
 
-/** Saves the setting. Returns whether it could be saved. */
+/** Saves the old switch's way: ON is "Interrupt by voice", OFF "Don't
+ *  interrupt". Returns whether it could be saved. */
 export function saveBargeIn(on, storage = globalThis.localStorage) {
-  try {
-    if (!storage) return false;
-    storage.setItem(BARGE_IN_KEY, on ? "on" : "off");
-    return true;
-  } catch {
-    return false;
-  }
+  return saveInterrupt(on ? "voice" : "off", storage);
 }
 
 /**

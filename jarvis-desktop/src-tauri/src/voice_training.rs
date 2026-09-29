@@ -88,6 +88,8 @@ const VOICES_TIMEOUT: Duration = Duration::from_secs(60);
 const VOICE_CLIP_MAX_BYTES: usize = 2_900_000;
 
 /// What push-to-talk and "hey Jarvis" listening say while Settings records.
+/// Settings' recorder took the microphone while Jarvis Live was on.
+pub(crate) const LIVE_ENDED_FOR_SETTINGS: &str = "Jarvis Live ended because Settings is recording.";
 pub(crate) const MIC_IN_SETTINGS: &str =
     "Settings is recording with the microphone. Finish or cancel that first.";
 /// What a backend without the training route, or too old for it, is told.
@@ -231,12 +233,18 @@ pub fn start_voice_sample(
     if state.recording() {
         return Err("Already recording. Press Stop first.".to_string());
     }
-    stop_listening_because(
-        &app,
+    if app.state::<crate::talk_type::TalkTypeState>().mic_busy() {
+        return Err(crate::voice::TALK_TYPE_HAS_MIC.to_string());
+    }
+    // Jarvis Live has this microphone too (even while paused): recording
+    // ends Live, and the owner is told that - not that "hey Jarvis" stopped.
+    let why = if crate::voice::LIVE_MODE.load(std::sync::atomic::Ordering::SeqCst) {
+        LIVE_ENDED_FOR_SETTINGS
+    } else {
         "This PC stopped listening for \"hey Jarvis\" while you record in Settings. Turn \
          it back on here when you are done."
-            .to_string(),
-    );
+    };
+    stop_listening_because(&app, why.to_string());
     let mut guard = state.active.lock().map_err(poisoned)?;
     if guard.is_some() {
         return Err("Already recording. Press Stop first.".to_string());
@@ -702,7 +710,66 @@ pub(crate) fn voice_setting(
         // default) raises the voice card and is held on a stale link.
         ("hands_free", "button_only") => Ok(("hands_free", "button_only", false)),
         ("hands_free", "same_as_button") => Ok(("hands_free", "same_as_button", true)),
+        // Answers about the screen after "Hey Jarvis", under "Only trust the
+        // talk button" (the owner's decision, 2026-09-28). Keeping them on
+        // screen is the default and applies at once; reading them aloud
+        // raises the voice card and is held on a stale link.
+        ("hands_free_screen", "screen_on_screen") => {
+            Ok(("hands_free_screen", "screen_on_screen", false))
+        }
+        ("hands_free_screen", "screen_aloud") => Ok(("hands_free_screen", "screen_aloud", true)),
+        // Jarvis Live under "Only trust the talk button" (the owner's
+        // answers, 2026-09-28): three choices, strictest last. The strictest
+        // is never a loosening; the other two MAY be (from a stricter one) -
+        // `live_trust_loosens` decides when the choice now is known.
+        ("hands_free_live", "live_like_hey_jarvis") => {
+            Ok(("hands_free_live", "live_like_hey_jarvis", false))
+        }
+        ("hands_free_live", "live_button_start_only") => {
+            Ok(("hands_free_live", "live_button_start_only", true))
+        }
+        ("hands_free_live", "live_trust_fully") => {
+            Ok(("hands_free_live", "live_trust_fully", true))
+        }
+        // When App lock ends Jarvis Live on this PC (the owner's decision,
+        // 2026-09-28): when App lock would ask again (the default, applies
+        // at once), or only when Windows itself locks (the voice card, held
+        // on a stale link).
+        ("live_end", "live_end_app_lock") => Ok(("live_end", "live_end_app_lock", false)),
+        ("live_end", "live_end_windows_lock") => Ok(("live_end", "live_end_windows_lock", true)),
+        // Talk-to-type on the PC (the owner's decision, 2026-09-27): OFF at
+        // once; ON raises the voice card and is held on a stale link.
+        ("talk_to_type", "off") => Ok(("talk_to_type", "off", false)),
+        ("talk_to_type", "on") => Ok(("talk_to_type", "on", true)),
+        // "Better voice" (2026-09-28, docs/JARVIS-API.md section 80). Two
+        // "hey Jarvis" detectors that must agree only narrows when Jarvis
+        // wakes, so it applies at once; going back to one raises the voice
+        // card. The newer, unmeasured voice-ID model raises the card; the
+        // measured one applies at once.
+        ("wake_confirm", "both") => Ok(("wake_confirm", "both", false)),
+        ("wake_confirm", "one") => Ok(("wake_confirm", "one", true)),
+        ("voice_id_model", "titanet") => Ok(("voice_id_model", "titanet", false)),
+        ("voice_id_model", "resnet221") => Ok(("voice_id_model", "resnet221", true)),
         _ => Err("That is not one of the voice settings.".to_string()),
+    }
+}
+
+/// The Live trust choices, loosest first (backend jarvis_voice `_ORDER`).
+const LIVE_TRUST_ORDER: [&str; 3] = [
+    "live_trust_fully",
+    "live_button_start_only",
+    "live_like_hey_jarvis",
+];
+
+/// Whether moving Live's trust from `current` to `value` loosens it. An
+/// unknown `current` counts as the strictest, so a looser-looking choice is
+/// held on a stale link rather than let through.
+pub(crate) fn live_trust_loosens(value: &str, current: Option<&str>) -> bool {
+    let rank = |v: &str| LIVE_TRUST_ORDER.iter().position(|c| *c == v);
+    match (rank(value), current.and_then(rank)) {
+        (Some(v), Some(c)) => v < c,
+        (Some(v), None) => v < LIVE_TRUST_ORDER.len() - 1,
+        _ => true,
     }
 }
 
@@ -714,10 +781,19 @@ pub async fn set_voice_setting(
     app: AppHandle,
     setting: String,
     value: String,
+    current: Option<String>,
 ) -> Result<Value, String> {
-    let (setting, value, loosening) = voice_setting(setting.trim(), value.trim())?;
+    let (setting, value, mut loosening) = voice_setting(setting.trim(), value.trim())?;
+    if setting == "hands_free_live" {
+        loosening = live_trust_loosens(value, current.as_deref().map(str::trim));
+    }
     if loosening && stale(&app) {
         return Err(HELD_STALE.to_string());
+    }
+    if setting == "talk_to_type" {
+        // Whatever the PC answers, the next press asks it again rather than
+        // trusting an "on" it said a moment ago.
+        crate::talk_type::forget_switch(&app);
     }
     let (status, text) = post(
         &app,
@@ -1233,6 +1309,92 @@ pub(crate) fn try_answer(bytes: &[u8]) -> Result<Value, String> {
     }))
 }
 
+// ---------------------------------------------------------------------------
+// The one-time animal voice question (the owner, 2026-09-28)
+// ---------------------------------------------------------------------------
+//
+// The first time the owner picks an animal face, one line asks "The Red
+// Panda has its own voice. Use it?" - "Use it" / "Keep my voice",
+// remembered per face ON THE PC. The PC decides whether to ask
+// (`GET /api/voice/voices` `face_voice.offer`) and says every word; the
+// apps show those words as they are. A face never changes the voice by
+// itself: only "Use it" turns "Voice follows the face" on.
+
+/// The longest question or button word the page is handed.
+const OFFER_MAX_CHARS: usize = 200;
+
+/// The PC's `face_voice.offer`, checked: `{face, question, use, keep}` for
+/// one of the four animals, every word present and short - or null.
+pub(crate) fn face_offer_of(status: &Value) -> Value {
+    let Some(offer) = status
+        .get("face_voice")
+        .and_then(|fv| fv.get("offer"))
+        .and_then(Value::as_object)
+    else {
+        return Value::Null;
+    };
+    let word = |key: &str| {
+        offer
+            .get(key)
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty() && s.chars().count() <= OFFER_MAX_CHARS)
+    };
+    let face = offer.get("face").and_then(Value::as_str).unwrap_or("");
+    match (
+        animal_id(face).ok(),
+        word("question"),
+        word("use"),
+        word("keep"),
+    ) {
+        (Some(face), Some(question), Some(use_it), Some(keep)) => json!({
+            "face": face,
+            "question": question,
+            "use": use_it,
+            "keep": keep,
+        }),
+        _ => Value::Null,
+    }
+}
+
+/// The body for the owner's answer (`POST /api/voice/voices/face_offer`),
+/// or why it cannot be sent.
+pub(crate) fn face_offer_body(face: &str, answer: &str) -> Result<Value, String> {
+    let face = animal_id(face)?;
+    let answer = answer.trim();
+    if answer != "use" && answer != "keep" {
+        return Err("Choose \"Use it\" or \"Keep my voice\".".to_string());
+    }
+    Ok(json!({ "face": face, "answer": answer }))
+}
+
+/// For the Faces window, which may not read the voices list itself: only
+/// the waiting question (or null) and whether the link is stale, so the
+/// page can grey its buttons (rule 4). A read; changes nothing.
+#[tauri::command]
+pub async fn get_face_voice_offer(app: AppHandle) -> Result<Value, String> {
+    let status = get_custom_voices(app.clone()).await?;
+    Ok(json!({ "offer": face_offer_of(&status), "stale": stale(&app) }))
+}
+
+/// The owner's answer to the one-time question: "use" turns "Voice follows
+/// the face" on, "keep" leaves the voice as it is; the PC remembers the
+/// face either way. No card (the switch itself has none), held on a stale
+/// link like every change sent to the PC (rule 4).
+#[tauri::command]
+pub async fn answer_face_voice_offer(
+    app: AppHandle,
+    face: String,
+    answer: String,
+) -> Result<Value, String> {
+    let body = face_offer_body(&face, &answer)?;
+    if stale(&app) {
+        return Err(HELD_STALE.to_string());
+    }
+    let (status, text) = post(&app, "/api/voice/voices/face_offer", &body, VOICES_TIMEOUT).await?;
+    voices_answer(status, &text)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1538,7 +1700,90 @@ mod tests {
         );
         assert!(voice_setting("hands_free", "sensitive_aloud").is_err());
         assert!(voice_setting("memory", "button_only").is_err());
+        assert_eq!(
+            voice_setting("hands_free_screen", "screen_aloud"),
+            Ok(("hands_free_screen", "screen_aloud", true))
+        );
+        assert_eq!(
+            voice_setting("hands_free_screen", "screen_on_screen"),
+            Ok(("hands_free_screen", "screen_on_screen", false))
+        );
+        assert!(voice_setting("hands_free_screen", "same_as_button").is_err());
+        assert!(voice_setting("hands_free", "screen_aloud").is_err());
         assert!(voice_setting("mode", "broad").is_err());
+        // Jarvis Live's three choices: the strictest never loosens.
+        assert_eq!(
+            voice_setting("hands_free_live", "live_like_hey_jarvis"),
+            Ok(("hands_free_live", "live_like_hey_jarvis", false))
+        );
+        assert!(voice_setting("hands_free_live", "screen_aloud").is_err());
+        // When App lock ends Jarvis Live on this PC: only when Windows locks
+        // is the looser choice (a card).
+        assert_eq!(
+            voice_setting("live_end", "live_end_windows_lock"),
+            Ok(("live_end", "live_end_windows_lock", true))
+        );
+        assert_eq!(
+            voice_setting("live_end", "live_end_app_lock"),
+            Ok(("live_end", "live_end_app_lock", false))
+        );
+        assert!(voice_setting("live_end", "live_trust_fully").is_err());
+        assert!(voice_setting("hands_free_screen", "live_trust_fully").is_err());
+        assert!(live_trust_loosens(
+            "live_trust_fully",
+            Some("live_button_start_only")
+        ));
+        assert!(live_trust_loosens(
+            "live_button_start_only",
+            Some("live_like_hey_jarvis")
+        ));
+        assert!(!live_trust_loosens(
+            "live_button_start_only",
+            Some("live_trust_fully")
+        ));
+        assert!(!live_trust_loosens(
+            "live_like_hey_jarvis",
+            Some("live_trust_fully")
+        ));
+        assert!(!live_trust_loosens(
+            "live_trust_fully",
+            Some("live_trust_fully")
+        ));
+        assert!(
+            live_trust_loosens("live_button_start_only", None),
+            "unknown: held"
+        );
+        assert!(!live_trust_loosens("live_like_hey_jarvis", None));
+        // Talk-to-type (2026-09-28): on is the card, off is at once.
+        assert_eq!(
+            voice_setting("talk_to_type", "on"),
+            Ok(("talk_to_type", "on", true))
+        );
+        assert_eq!(
+            voice_setting("talk_to_type", "off"),
+            Ok(("talk_to_type", "off", false))
+        );
+        assert!(voice_setting("talk_to_type", "yes").is_err());
+        // "Better voice" (2026-09-28): both detectors and the measured model
+        // at once; one detector and the unmeasured model are the card.
+        assert_eq!(
+            voice_setting("wake_confirm", "both"),
+            Ok(("wake_confirm", "both", false))
+        );
+        assert_eq!(
+            voice_setting("wake_confirm", "one"),
+            Ok(("wake_confirm", "one", true))
+        );
+        assert_eq!(
+            voice_setting("voice_id_model", "titanet"),
+            Ok(("voice_id_model", "titanet", false))
+        );
+        assert_eq!(
+            voice_setting("voice_id_model", "resnet221"),
+            Ok(("voice_id_model", "resnet221", true))
+        );
+        assert!(voice_setting("voice_id_model", "resnet293").is_err());
+        assert!(voice_setting("wake_confirm", "on").is_err());
     }
 
     #[test]
@@ -1600,5 +1845,46 @@ mod tests {
     fn the_loudest_sample() {
         assert_eq!(peak(&[0, 16384, -32768]), 1.0);
         assert_eq!(peak(&[]), 0.0);
+    }
+    #[test]
+    fn the_animal_voice_question_is_passed_on_only_when_whole() {
+        let st = json!({"face_voice": {"enabled": false, "offer": {
+            "face": "redpanda",
+            "question": "The Red Panda has its own voice. Use it?",
+            "use": "Use it", "keep": "Keep my voice"}}});
+        let got = face_offer_of(&st);
+        assert_eq!(got["face"], json!("redpanda"));
+        assert_eq!(
+            got["question"],
+            json!("The Red Panda has its own voice. Use it?")
+        );
+        assert_eq!(got["use"], json!("Use it"));
+        assert_eq!(got["keep"], json!("Keep my voice"));
+        assert!(face_offer_of(&json!({"face_voice": {"offer": null}})).is_null());
+        assert!(face_offer_of(&json!({"voices": []})).is_null());
+        let mut not_animal = st.clone();
+        not_animal["face_voice"]["offer"]["face"] = json!("orbit");
+        assert!(face_offer_of(&not_animal).is_null());
+        let mut no_words = st.clone();
+        no_words["face_voice"]["offer"]["keep"] = json!("");
+        assert!(face_offer_of(&no_words).is_null());
+        let mut long = st;
+        long["face_voice"]["offer"]["question"] = json!("x".repeat(OFFER_MAX_CHARS + 1));
+        assert!(face_offer_of(&long).is_null());
+    }
+
+    #[test]
+    fn the_answer_is_use_or_keep_for_an_animal() {
+        assert_eq!(
+            face_offer_body("seaotter", "use").unwrap(),
+            json!({"face": "seaotter", "answer": "use"})
+        );
+        assert_eq!(
+            face_offer_body(" monkey ", " keep ").unwrap(),
+            json!({"face": "monkey", "answer": "keep"})
+        );
+        assert!(face_offer_body("orbit", "use").is_err());
+        assert!(face_offer_body("redpanda", "yes").is_err());
+        assert!(face_offer_body("redpanda", "").is_err());
     }
 }

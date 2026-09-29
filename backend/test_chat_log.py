@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import base64
 import json
+from contextlib import closing
 import shutil
 import subprocess
 import sys
@@ -102,6 +103,36 @@ def t_round_trip_and_no_plain_text_on_disk():
         check("status: on, recording, encrypted, nothing waiting",
               st == {"enabled": True, "recording": True, "why_not": "", "waiting": False,
                      "keep_days": 0, "encrypted": True}, st)
+    finally:
+        w.done()
+
+
+def t_side_talk_in_live_is_not_kept():
+    """The owner's answer of 2026-09-28: a remark the model called "not for
+    me" in Jarvis Live is not kept in chat history at all - not the words,
+    not the marker - and the conversation around it is kept as usual."""
+    w = World()
+    try:
+        w.log.record_turn(req("what's the weather", cid="conv-live01", prov="voice"),
+                          turn=local("Sunny, 14 degrees."))
+        turn = dict(local("[not for me]"), side_talk=True)
+        out = w.log.record_turn(req("can you pass me the salt", cid="conv-live01", prov="voice"),
+                                turn=turn)
+        check("a side remark is not recorded, and says why",
+              out == {"recorded": False, "why": H.SIDE_TALK_WHY}, out)
+        conv = w.log.get("conv-live01")
+        texts = [t["text"] for t in conv["turns"]]
+        check("...neither the owner's words nor the marker are in the chat",
+              "can you pass me the salt" not in texts and "[not for me]" not in texts
+              and texts == ["what's the weather", "Sunny, 14 degrees."], texts)
+        raw = w.raw()
+        check("...nor anywhere on disk", b"salt" not in raw and b"not for me" not in raw)
+        out = w.log.record_turn(req("and tomorrow?", cid="conv-live01", prov="voice"),
+                                turn=local("Rain."))
+        check("the next turn is kept as usual", out.get("recorded"), out)
+        got = w.log.live_turn("conv-live01", "can you pass me the salt")
+        check("...and the remark counts only as 'temporary' for learning (never a saved fact)",
+              got is not None and got.get("provenance") == "temporary", got)
     finally:
         w.done()
 
@@ -480,6 +511,190 @@ def t_taint_seeded_by_record_turn_alone():
         w.done()
 
 
+def t_a_continued_chat_puts_its_own_typed_and_spoken_words_back():
+    """The second chat audit (2026-09-28), finding 2 and the owner's answer:
+    after a restart the live-turn registry is empty, so "Continue this chat"
+    made every new fact a card for about ten questions. The PC now puts the
+    chat's own typed and spoken messages back from its encrypted record."""
+    w = World()
+    try:
+        cid = "conv-rehyd001"
+        w.log.note_transcript("turn the lights off", strictness="very_strict", model="m",
+                              mode="owner", source="push_to_talk")
+        history = []
+        for text, prov in (("I live in York", "typed"), ("turn the lights off", "voice"),
+                           ("here is an article about Rome", "shared"),
+                           ("my card is 4111 1111 1111 1111", "pasted"),
+                           ("no mark on this one", None)):
+            b = req(text, cid=cid, prov=prov, history=history)
+            w.log.record_turn(b, turn=local("Noted."))
+            history = b["messages"] + [{"role": "assistant", "content": "Noted."}]
+        log = _restarted(w)
+        check("after a restart the registry is empty", log.live_turn(cid, "I live in York") is None)
+        nxt = req("I like jazz", cid=cid, history=history)
+        log.record_turn(nxt, turn=local("Noted."))
+        e = log.live_turn(cid, "I live in York")
+        check("typed words are back: typed, from the record, not tainted",
+              e is not None and e["provenance"] == "typed" and e["tainted"] is False
+              and e["from_record"] is True and e["device"] == "phone", e)
+        v = log.live_turn(cid, "turn the lights off")
+        check("spoken words are back with the voice check's facts",
+              v is not None and v["provenance"] == "voice"
+              and v["voice_check"]["strictness"] == "very_strict"
+              and v["voice_check"]["source"] == "push_to_talk", v)
+        for text in ("here is an article about Rome", "my card is 4111 1111 1111 1111",
+                     "no mark on this one"):
+            check(f"{text[:26]!r} (shared, pasted or unmarked) is NOT put back",
+                  log.live_turn(cid, text) is None)
+        check("the new question is there as usual", log.live_turn(cid, "I like jazz") is not None)
+        # Seq order: old turns come before the new one (taint is read by order).
+        check("the old turns are older than the new one",
+              e["seq"] < log.live_turn(cid, "I like jazz")["seq"])
+        check("live_upto is the newest seq of the chat",
+              log.live_upto(cid) == log.live_turn(cid, "I like jazz")["seq"]
+              and log.live_upto("conv-nothing1") is None)
+        raw = w.raw()
+        check("nothing about it wrote plain words to disk", b"York" not in raw)
+    finally:
+        w.done()
+
+
+def t_rehydrate_leaves_taint_to_the_record_and_skips_other_kinds():
+    w = World()
+    try:
+        cid = "conv-rehyd002"
+        b1 = req("check my email", cid=cid)
+        w.log.record_turn(b1, turn=local("Two new.", tools=["email_check"]))
+        h = b1["messages"] + [{"role": "assistant", "content": "Two new."}]
+        b2 = req("I live in York", cid=cid, history=h)
+        w.log.record_turn(b2, turn=local("Noted."))
+        h = b2["messages"] + [{"role": "assistant", "content": "Noted."}]
+        log = _restarted(w)
+        log.record_turn(req("thanks", cid=cid, history=h), turn=local("Welcome."))
+        e = log.live_turn(cid, "I live in York")
+        check("a chat that read outside text comes back tainted (the record decides)",
+              e is not None and e["tainted"] is True, e)
+        # A support record, a chatbot record and a comparison are never put back.
+        log.record_support("conv-support01", "Groupon refund",
+                           [("support_owner", "Please refund order 123", 1_790_000_000.0)])
+        log.record_chatbot("conv-chatbot01", "Ask Gemini",
+                           [("chatbot_jarvis", "What is the capital of France?", 1_790_000_000.0)])
+        log = _restarted(w)
+        log.record_turn(req("hello", cid="conv-support01",
+                            history=[{"role": "user", "content": "Please refund order 123"}]),
+                        turn=local("Hi."))
+        check("a support record's words are not put back",
+              log.live_turn("conv-support01", "Please refund order 123") is None)
+        log.record_turn(req("hello", cid="conv-chatbot01",
+                            history=[{"role": "user", "content": "What is the capital of France?"}]),
+                        turn=local("Hi."))
+        check("a chatbot record's words are not put back",
+              log.live_turn("conv-chatbot01", "What is the capital of France?") is None)
+    finally:
+        w.done()
+
+
+def t_rehydrate_needs_the_record_and_never_raises():
+    w = World()
+    try:
+        cid = "conv-rehyd003"
+        w.log.record_turn(req("I live in York", cid=cid), turn=local("Noted."))
+        hist = [{"role": "user", "content": "I live in York", "provenance": "typed"},
+                {"role": "assistant", "content": "Noted."}]
+        # Wrong key: the record cannot be opened, nothing comes back, no error.
+        log = H.ChatLog(w.dir / "chat-history.db", w.dir / "chat-history.json",
+                        lambda: b"\x07" * 32, clock=w.clock)
+        H.use(log)
+        try:
+            log.record_turn(req("I like jazz", cid=cid, history=hist), turn=local("Ok."))
+        except Exception as exc:                        # pragma: no cover
+            check("a record that cannot be opened is not an error here", False, repr(exc))
+        check("a record that cannot be opened brings nothing back",
+              log.live_turn(cid, "I live in York") is None)
+        # History off: the record is still there and still readable.
+        log = _restarted(w)
+        log.set_enabled(False)
+        log.record_turn(req("I like jazz", cid=cid, history=hist), turn=local("Ok."))
+        check("history off: the words already kept still come back",
+              log.live_turn(cid, "I live in York") is not None)
+        # A conversation that is not in the record at all.
+        log = _restarted(w)
+        log.record_turn(req("hello", cid="conv-brandnew1"), turn=local("Hi."))
+        check("a new conversation brings nothing back and costs nothing",
+              log.live_upto("conv-brandnew1") is not None and len(log._live) == 1)
+    finally:
+        w.done()
+
+
+def t_rehydrate_is_bounded():
+    w = World()
+    try:
+        cid = "conv-rehyd004"
+        history = []
+        for n in range(H.REHYDRATE_MAX + 15):
+            b = req(f"fact number {n}", cid=cid, history=history[-4:])
+            w.log.record_turn(b, turn=local("Ok."))
+            history = b["messages"] + [{"role": "assistant", "content": "Ok."}]
+        log = _restarted(w)
+        log.record_turn(req("one more", cid=cid, history=history[-4:]), turn=local("Ok."))
+        mine = [k for k in log._live if k[0] == cid]
+        check("at most REHYDRATE_MAX old turns come back, plus the new one",
+              len(mine) == H.REHYDRATE_MAX + 1, len(mine))
+        check("the newest of the old ones are the ones that come back",
+              log.live_turn(cid, f"fact number {H.REHYDRATE_MAX + 14}") is not None
+              and log.live_turn(cid, "fact number 0") is None)
+        check("the registry stays bounded", len(log._live) <= H.LIVE_MAX)
+    finally:
+        w.done()
+
+
+def t_a_hush_is_kept_in_the_record_and_comes_back_with_the_turns():
+    w = World()
+    try:
+        cid = "conv-hush0001"
+        h = []
+        for text in ("My sister is called Priya", "I live in York"):
+            b = req(text, cid=cid, history=h)
+            w.log.record_turn(b, turn=local("Ok."))
+            h = b["messages"] + [{"role": "assistant", "content": "Ok."}]
+        w.log.note_hush(cid, erased=False)
+        b = req("I like jazz", cid=cid, history=h)          # said after the Forget
+        w.log.record_turn(b, turn=local("Ok."))
+        h = b["messages"] + [{"role": "assistant", "content": "Ok."}]
+        w.log.note_hush("conv-nothere1", erased=True)        # not in the record: nothing kept
+        with closing(w.log._connect()) as c:
+            rows = c.execute("SELECT k FROM meta WHERE k LIKE 'hush:%'").fetchall()
+        check("one hush row for the chat that is in the record, none for the one that is not",
+              [r[0] for r in rows] == ["hush:" + cid], rows)
+        log = _restarted(w)
+        log.record_turn(req("and cooking", cid=cid, history=h), turn=local("Ok."))
+        floor = log.hush_floor(cid)
+        old = log.live_turn(cid, "I live in York")
+        after = log.live_turn(cid, "I like jazz")
+        check("the floor is the newest turn said before the Forget",
+              floor is not None and floor["seq"] == old["seq"] and floor["erased"] is False, floor)
+        check("a turn said after the Forget is above the floor",
+              after["seq"] > floor["seq"])
+        log.note_hush(cid, erased=True)
+        log = _restarted(w)
+        log.record_turn(req("and cooking", cid=cid, history=h), turn=local("Ok."))
+        check("an Erase is remembered as an Erase, and a later Forget does not undo it",
+              log.hush_floor(cid)["erased"] is True)
+        check("the module functions reach the same log",
+              H.hush_floor(cid)["erased"] is True and H.live_upto(cid) is not None)
+        # Deleted with the chat, and put back with it by Undo.
+        held = log.take_out([cid])
+        with closing(log._connect()) as c:
+            gone = c.execute("SELECT COUNT(*) FROM meta WHERE k=?", ("hush:" + cid,)).fetchone()[0]
+        check("Forget a time frame's take_out removes the hush with the chat", gone == 0)
+        log.put_back(held)
+        with closing(log._connect()) as c:
+            back = c.execute("SELECT COUNT(*) FROM meta WHERE k=?", ("hush:" + cid,)).fetchone()[0]
+        check("Undo puts it back with the chat", back == 1)
+    finally:
+        w.done()
+
+
 def t_taint_survives_live_max_eviction():
     """More than LIVE_MAX newer tainted conversations used to push an old
     one's taint out, and it then read clean."""
@@ -607,6 +822,19 @@ def t_list_paging_and_conversation_routes():
         check("user turns carry provenance and read_outside; answers do not",
               set(body["turns"][0]) >= {"role", "text", "at", "provenance", "read_outside"}
               and set(body["turns"][1]) == {"role", "text", "at"}, body["turns"])
+        # "Continue this chat" warns when new messages will not be kept (the
+        # owner, 2026-09-29): the conversation says whether history is keeping
+        # them, with the list's own words for it.
+        check("a conversation says history is on and recording",
+              body.get("history") == {"enabled": True, "recording": True, "why_not": ""},
+              body.get("history"))
+        w.log.set_enabled(False)
+        code, off = H.handle_get("/api/history/conversation", "id=conv-page01")
+        check("with history off it still reads, and says new messages are not kept",
+              code == 200 and off["turns"][1]["text"] == "answer 1"
+              and off["history"]["enabled"] is False and off["history"]["recording"] is False
+              and off["history"]["why_not"], off.get("history"))
+        w.log.set_enabled(True)
         code, _ = H.handle_get("/api/history/conversation", "id=conv-nothere")
         check("an unknown conversation: 404", code == 404)
         code, _ = H.handle_get("/api/history/conversation", "id=../../etc")

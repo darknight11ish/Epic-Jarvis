@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -30,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.CustomVoices
 import com.jarvis.client.ui.parts.Dot
 import com.jarvis.client.ui.parts.Gap
@@ -81,6 +83,8 @@ fun VoicesScreen(
     setSpeed: suspend (id: String) -> CustomVoices.Answer?,
     setSpeaker: suspend (id: String) -> CustomVoices.Answer?,
     setFace: suspend (on: Boolean) -> CustomVoices.Answer?,
+    /** The one-time "Use it" / "Keep my voice" answer for [face]: true is "Use it". */
+    answerFaceOffer: suspend (face: String, use: Boolean) -> CustomVoices.Answer? = { _, _ -> null },
     /** One animal's voice, or its reset: the body is CustomVoices.animalBody / animalResetBody. */
     setAnimal: suspend (json: String) -> CustomVoices.Answer?,
     /**
@@ -203,6 +207,12 @@ fun VoicesScreen(
                         SpeakerPlate(sk, busy, linkBlocker, onSet = { id -> act { setSpeaker(id) } })
                     }
                     s.faceVoice?.let { fv ->
+                        // The one-time question, right above the switch it turns on.
+                        fv.offer?.let { offer ->
+                            FaceVoiceOfferPlate(offer, busy, linkBlocker, onAnswer = { use ->
+                                act { answerFaceOffer(offer.face, use) }
+                            })
+                        }
                         FaceVoicePlate(fv, busy, linkBlocker, onSet = { on -> act { setFace(on) } })
                         if (fv.animals.isNotEmpty()) {
                             AnimalVoicesPlate(
@@ -211,6 +221,7 @@ fun VoicesScreen(
                                 linkBlocker,
                                 onSet = { json -> act { setAnimal(json) } },
                                 onTry = tryAnimal,
+                                onAnswer = { face, use -> act { answerFaceOffer(face, use) } },
                             )
                         }
                     }
@@ -602,6 +613,61 @@ private fun ChoicePlate(
 }
 
 /**
+ * The one-time question the first time the owner picks an animal face
+ * (owner, 2026-09-28): "The panda has its own voice. Use it?" with "Use it"
+ * and "Keep my voice" - every word the PC's own, shown as sent. The PC
+ * remembers the answer per face. No card either way; both buttons are held
+ * on a stale link (rule 4), like the switch below it.
+ */
+@Composable
+internal fun FaceVoiceOfferPlate(
+    offer: CustomVoices.FaceOffer,
+    busy: Boolean,
+    linkBlocker: String?,
+    onAnswer: (use: Boolean) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Plate {
+        Text(offer.question, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+        Gap(8)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Secondary(offer.use, enabled = !busy && linkBlocker == null, onClick = { onAnswer(true) })
+            Quiet(offer.keep, enabled = !busy && linkBlocker == null, onClick = { onAnswer(false) })
+        }
+        if (linkBlocker != null) {
+            Gap(4)
+            Text(linkBlocker, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
+        }
+    }
+}
+
+/**
+ * [FaceVoiceOfferPlate] where a face is picked (Appearance): reads the PC's
+ * voices answer the runtime already holds, and answers through
+ * [JarvisRuntime.answerFaceVoiceOffer]. Draws nothing when no question is
+ * waiting, or on a PC too old to ask one.
+ */
+@Composable
+internal fun FaceVoiceOfferFromPc(linkBlocker: String?) {
+    val read by JarvisRuntime.customVoices.collectAsState()
+    val offer = (read as? CustomVoices.Read.Loaded)?.status?.faceVoice?.offer ?: return
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    FaceVoiceOfferPlate(offer, busy, linkBlocker, onAnswer = { use ->
+        if (!busy) {
+            busy = true
+            scope.launch {
+                try {
+                    JarvisRuntime.answerFaceVoiceOffer(offer.face, use)
+                } finally {
+                    busy = false
+                }
+            }
+        }
+    })
+}
+
+/**
  * "Voice follows the face": with an animal face showing, the built-in voice
  * becomes that animal's. An on/off switch right under the built-in voice it
  * changes, the PC's own words, and the PC's line saying what is happening
@@ -664,6 +730,7 @@ private fun AnimalVoicesPlate(
     linkBlocker: String?,
     onSet: (String) -> Unit,
     onTry: suspend (face: String, name: String, playing: (String) -> Unit) -> String,
+    onAnswer: (face: String, use: Boolean) -> Unit,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
@@ -772,6 +839,15 @@ private fun AnimalVoicesPlate(
                     modifier = Modifier.semantics { contentDescription = "Reset the ${a.name} to its own voice" },
                     enabled = canChange && a.changed,
                     onClick = { onSet(CustomVoices.animalResetBody(a.face)) },
+                )
+            }
+            // Change the one-time answer later (owner, 2026-09-28): nothing until answered.
+            CustomVoices.changeMindLabel(a.answer)?.let { label ->
+                Quiet(
+                    label,
+                    modifier = Modifier.semantics { contentDescription = "$label for the ${a.name}" },
+                    enabled = canChange,
+                    onClick = { CustomVoices.changeMindUse(a.answer)?.let { use -> onAnswer(a.face, use) } },
                 )
             }
             said?.takeIf { it.first == a.face }?.let { (_, words) ->

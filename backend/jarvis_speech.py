@@ -44,12 +44,21 @@ The whole order, since 2026-09-23 (each step can only refuse, never add):
 
     0. source=barge_in (2026-09-24): Jarvis is talking; barge_in() answers
        "stop or not" and NOTHING below runs - no speech-to-text, ever
+       source=talk_to_type (2026-09-28): with the owner's talk-to-type
+       switch off, refused here and NOTHING below runs; with it on, every
+       step below runs as for the talk button, and the words come back
+       cleaned of "um"/"uh" and are never noted for chat history
     1. read the WAV                      bad file        -> refused
     2. Silero VAD: is there speech?      only noise      -> refused, nothing else runs
     3. wake word (source=wake_word only): is it switched on, and is
        "hey Jarvis" in the clip?         no              -> refused, not checked, not transcribed
        (once "Train my voice" has built it, the owner's own verifier
        has the last word here - jarvis_wakeword.py, "THE OWNER'S OWN")
+       3a, since 2026-09-28 ("Better voice"), only with the owner's
+       `wake_confirm = "both"`: a second, differently-built detector
+       (microWakeWord, jarvis_microwake.py) must hear it too, within a
+       second -> else refused, not checked, not transcribed. It can only
+       say no. Not installed: the first decides alone, and status() says so.
        Just before it, since 2026-09-24: a SHORT clip that is the stop
        word ("stop", "Jarvis, stop") answers `stop: true` and nothing
        else - the desktop silences Jarvis's reply. Stopping speech is
@@ -66,6 +75,28 @@ The whole order, since 2026-09-23 (each step can only refuse, never add):
     6. wake word only: does the transcript START with "hey Jarvis"? The
        spotter heard something like it; this is the second opinion that
        stops "the computer in that film was called Jarvis" counting.
+    7. wake word only, since 2026-09-27: the same words heard by the
+       owner's OTHER device (a passing clip from another microphone,
+       within SAME_WAKE_SECONDS) and already acted on there -> refused
+       with `other_device`, no words kept. And the listening window step
+       6 opens belongs to the microphone that opened it.
+
+JARVIS LIVE, since 2026-09-28 (jarvis_live.py, docs/LIVE-DESIGN.md): a
+conversation the owner starts and stops. A clip sent with `source=live`
+needs no "hey Jarvis" - and that is the ONLY difference. Before step 1 it
+is refused, never looked at, unless a Live session is on for THAT
+microphone and not paused (a card waiting, or too many other voices);
+then every step above runs in the same order: speech found, long enough
+(3b - "say a bit more", the short line at most once a minute), THE OWNER
+CHECK, and only then speech-to-text. Its words may end Live ("that's all
+for now") or extend it ("20 more minutes") - jarvis_live.phrase(), only
+after the owner check. "Hey Jarvis, let's talk" (or the talk button's
+"let's talk") starts Live on the device that heard it, also only after the
+owner check. While Live is on one device, the OTHER device's "hey Jarvis"
+clips are dropped before the spotter (`other_device`, "Live is on your
+phone"). The owner's answer of 2026-09-28: under "only trust the talk
+button" a Live clip is trusted like the talk button unless the voice
+setting `hands_free_live` says otherwise (jarvis_voice.hands_free_trusted).
 
 Engines: sherpa-onnx for speech-to-text, Kokoro speech and Silero VAD, per
 docs/ARCHITECTURE.md §11; the owner check is `jarvis_voice.py`; the wake word
@@ -137,6 +168,11 @@ except Exception:
     jarvis_wakeword = None  # type: ignore
 
 try:
+    import jarvis_microwake
+except Exception:
+    jarvis_microwake = None  # type: ignore
+
+try:
     import numpy as np
 except Exception:
     np = None  # type: ignore
@@ -145,6 +181,11 @@ try:
     import sherpa_onnx
 except Exception:
     sherpa_onnx = None  # type: ignore
+
+try:
+    import jarvis_live
+except Exception:
+    jarvis_live = None  # type: ignore
 
 
 def _cfg(key: str, default=None):
@@ -174,11 +215,21 @@ def _wake_state_path() -> Path:
     return _config_dir() / "voice" / "wake_override.json"
 
 
+#: Processor threads for speech-to-text and the voice when the owner has not
+#: set `stt_threads` / `tts_threads`. 4 on a PC with cores to spare (the
+#: owner's 12-core Ryzen is mostly idle while the graphics card thinks), 2 on
+#: a small one. Measured 2026-09-28 (research audit, section 1.5), 2 -> 4
+#: threads: a short spoken phrase 1.13 s -> 0.86 s, a 97-character sentence
+#: 2.51 s -> 1.80 s, speech-to-text on a 4 s clip 0.45 s -> 0.36 s. The wake
+#: word and the voice check keep one thread each (they run all the time).
+DEFAULT_THREADS = max(2, min(4, (os.cpu_count() or 4) // 3))
+
+
 def _threads(key: str) -> int:
     try:
-        return max(1, min(8, int(_cfg(key, 2))))
+        return max(1, min(8, int(_cfg(key, DEFAULT_THREADS))))
     except (TypeError, ValueError):
-        return 2
+        return DEFAULT_THREADS
 
 
 # --------------------------------------------------------------------------
@@ -344,21 +395,103 @@ def _transcribe(samples, sample_rate: int) -> str:
 #   Silero VAD: is there any speech in the clip, and where.
 # --------------------------------------------------------------------------
 
+#: The two Silero VAD files Jarvis knows, by the `vad_version` line under
+#: [voice] ("Better voice", 2026-09-28).
+#:
+#:   v4  silero_vad.onnx - what the install line has always downloaded (the
+#:       sherpa-onnx "asr-models" release). Its own metadata says "silero-vad
+#:       v4 exported to onnx by k2-fsa". The default.
+#:   v6  silero_vad_v6.onnx - upstream's silero_vad.onnx at tag v6.2.3
+#:       (github.com/snakers4/silero-vad, MIT), the model changed in v6.2.
+#:       Its inputs are (input, state, sr), the v5 layout, which sherpa-onnx
+#:       1.13.8 detects by itself (silero-vad-model.cc: three inputs and two
+#:       outputs -> is_v5_, which requires window_size 512 - what
+#:       _build_vad_config already sends).
+#:
+#: v6 is used only when `vad_version = "v6"` is set AND the file is exactly
+#: the pinned one: sherpa-onnx ends the whole process (SHERPA_ONNX_EXIT) on
+#: a VAD file whose layout it does not know, so a wrong file must never
+#: reach it. Otherwise v4 is used, as before, and status() says why. Which
+#: one to keep is measured on the PC first (jarvis_bakeoff.py --vad); the
+#: default stays v4 until then. An explicit `vad_model` path still wins
+#: over both, unchecked, as it always has.
+VAD_FILES = {
+    "v4": {"file": "silero_vad.onnx",
+           "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"},
+    "v6": {"file": "silero_vad_v6.onnx",
+           "sha256": "1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3"},
+}
+DEFAULT_VAD_VERSION = "v4"
+_VAD_HASH: dict = {}
+
+
+def _file_sha256(p: Path) -> str:
+    """SHA-256 of a small file, cached by (path, size, modified time)."""
+    try:
+        st = p.stat()
+    except OSError:
+        return ""
+    key = (str(p), st.st_size, st.st_mtime_ns)
+    got = _VAD_HASH.get(key)
+    if got is None:
+        import hashlib
+        try:
+            got = hashlib.sha256(p.read_bytes()).hexdigest()
+        except OSError:
+            return ""
+        for old in [k for k in _VAD_HASH if k[0] == key[0]]:
+            del _VAD_HASH[old]
+        _VAD_HASH[key] = got
+    return got
+
+
+def vad_choice() -> dict:
+    """Which speech detector file is used, and why. {"chosen": "v4"|"v6",
+    "in_use": "v4"|"v6"|"configured", "path", "note"}. `note` is "" unless
+    the choice could not be honoured."""
+    raw = str(_cfg("vad_version", DEFAULT_VAD_VERSION) or DEFAULT_VAD_VERSION).strip().lower()
+    chosen = raw if raw in VAD_FILES else DEFAULT_VAD_VERSION
+    note = "" if raw == chosen else (f"vad_version = {raw[:12]!r} is not one Jarvis knows "
+                                     f"(\"v4\" or \"v6\"), so v4 is used")
+    configured = str(_cfg("vad_model", "") or "").strip()
+    if configured:
+        return {"chosen": chosen, "in_use": "configured", "path": configured,
+                "note": "vad_model is set, so that file is used"}
+    d = _models_dir() / "vad"
+    v4 = str(d / VAD_FILES["v4"]["file"])
+    if chosen == "v6":
+        p = d / VAD_FILES["v6"]["file"]
+        if not p.is_file():
+            return {"chosen": chosen, "in_use": "v4", "path": v4,
+                    "note": (f"the newer speech detector (v6) is chosen but not installed "
+                             f"(looked for {p}), so v4 is used")}
+        if _file_sha256(p) != VAD_FILES["v6"]["sha256"]:
+            return {"chosen": chosen, "in_use": "v4", "path": v4,
+                    "note": (f"{p.name} is not the expected file (its SHA-256 is "
+                             f"different), so it is not used and v4 is - download it "
+                             f"again with the line in backend/README.md")}
+        return {"chosen": chosen, "in_use": "v6", "path": str(p), "note": ""}
+    return {"chosen": chosen, "in_use": "v4", "path": v4, "note": note}
+
+
 def _vad_path() -> str:
-    return str(_cfg("vad_model", "") or (_models_dir() / "vad" / "silero_vad.onnx"))
+    return vad_choice()["path"]
 
 
 def _vad_wanted() -> bool:
     return bool(_cfg("vad_enabled", True))
 
 
-def _build_vad_config():
-    if sherpa_onnx is None or not _vad_wanted() or not Path(_vad_path()).is_file():
+def vad_config_for(path: str):
+    """A sherpa-onnx VAD config for the Silero file at `path` - Jarvis's own
+    settings - or None when it cannot be built. The bake-off builds one per
+    file to compare them on the same clips."""
+    if sherpa_onnx is None or not Path(path).is_file():
         return None
     try:
         cfg = sherpa_onnx.VadModelConfig(
             silero_vad=sherpa_onnx.SileroVadModelConfig(
-                model=_vad_path(), threshold=0.5, min_silence_duration=0.25,
+                model=str(path), threshold=0.5, min_silence_duration=0.25,
                 min_speech_duration=0.1, window_size=512),
             sample_rate=16000, num_threads=1)
         # Built once here so a broken file shows up now, not mid-request.
@@ -366,6 +499,12 @@ def _build_vad_config():
         return cfg
     except Exception:
         return None
+
+
+def _build_vad_config():
+    if not _vad_wanted():
+        return None
+    return vad_config_for(_vad_path())
 
 
 def _vad_config():
@@ -381,10 +520,12 @@ def _vad_config():
 VAD_PAD_SECONDS = 0.3
 
 
-def _speech_span(samples, sample_rate: int):
+def _speech_span(samples, sample_rate: int, cfg=_UNSET):
     """(start, end) in samples of `samples` holding speech, None when the
-    VAD found none, or "skip" when there is no VAD to ask."""
-    cfg = _vad_config()
+    VAD found none, or "skip" when there is no VAD to ask. `cfg`: another
+    VAD config (vad_config_for) - the bake-off's; hear() uses Jarvis's own."""
+    if cfg is _UNSET:
+        cfg = _vad_config()
     if cfg is None or jarvis_wakeword is None:
         return "skip"
     x = jarvis_wakeword.to_16k(samples, sample_rate)
@@ -491,6 +632,8 @@ def reload_engines() -> None:
         _stt_cache = _tts_cache = _vad_cache = _UNSET
     if jarvis_wakeword is not None:
         jarvis_wakeword.reload()
+    if jarvis_microwake is not None:
+        jarvis_microwake.reload()
     try:
         import jarvis_turn
         jarvis_turn.reload()
@@ -753,10 +896,18 @@ def _reset_wake_for_tests() -> None:
 #   A clip that held ONLY the wake phrase opens a short window in which the
 #   next wake-word clip needs no phrase of its own. Opened only after the
 #   owner check passed; used once; `awake_timeout_s` long (8 s shipped).
+#
+#   One window PER MICROPHONE (the voice play test, 2026-09-27): "Hey
+#   Jarvis." said to the desktop opens the desktop's window only. It used to
+#   be one value for the whole PC, so the phone - hearing the same words
+#   across the room - could use the desktop's window up, and the owner's real
+#   question to the desktop then needed the phrase again and was dropped.
+#   Keyed by the route's `mic` ("phone", "desktop", or "" when none is
+#   named - an older app); there is no finer device id on the route yet.
 # --------------------------------------------------------------------------
 
 _AWAKE_LOCK = threading.Lock()
-_AWAKE_UNTIL = 0.0
+_AWAKE_UNTIL: dict = {}          # mic -> time.monotonic() the window closes
 
 
 def _awake_seconds() -> float:
@@ -766,28 +917,87 @@ def _awake_seconds() -> float:
         return 8.0
 
 
-def _open_awake() -> float:
-    global _AWAKE_UNTIL
+def _open_awake(mic: str = "") -> float:
+    """Opens `mic`'s window (only that microphone's clips may use it)."""
     secs = _awake_seconds()
     with _AWAKE_LOCK:
-        _AWAKE_UNTIL = time.monotonic() + secs
+        _AWAKE_UNTIL[_norm_mic(mic)] = time.monotonic() + secs
     return secs
 
 
-def _take_awake() -> bool:
-    """True, once, if a window is open - and closes it."""
-    global _AWAKE_UNTIL
+def _take_awake(mic: Optional[str] = None) -> bool:
+    """True, once, if `mic`'s window is open - and closes it. Another
+    microphone's window is left as it is. `None` (tests, and nothing in
+    hear()): any window at all, and every one is closed."""
+    now = time.monotonic()
     with _AWAKE_LOCK:
-        live = time.monotonic() < _AWAKE_UNTIL
-        _AWAKE_UNTIL = 0.0
-    return live
+        if mic is None:
+            live = any(now < until for until in _AWAKE_UNTIL.values())
+            _AWAKE_UNTIL.clear()
+            return live
+        until = _AWAKE_UNTIL.pop(_norm_mic(mic), 0.0)
+    return now < until
 
 
 def _close_awake() -> None:
-    global _AWAKE_UNTIL
     with _AWAKE_LOCK:
-        _AWAKE_UNTIL = 0.0
+        _AWAKE_UNTIL.clear()
     _close_question()
+    with _SAME_WAKE_LOCK:
+        _SAME_WAKE.clear()
+
+
+# --------------------------------------------------------------------------
+#   One "hey Jarvis", two microphones (the voice play test, 2026-09-27).
+#
+#   With hands-free on both the phone and the desktop, one "Hey Jarvis,
+#   set a timer for ten minutes" is heard by BOTH, and both send it here.
+#   Each passes the owner check - it is the owner - so, before this, both
+#   were answered: two answers, and an action that needs no card (a timer,
+#   the next song) done twice.
+#
+#   So: a wake-word clip that passed the owner check and is about to be
+#   acted on (words to answer, or "Hey Jarvis." opening a window) CLAIMS
+#   that moment for its microphone. A passing wake-word clip from a
+#   DIFFERENT microphone that arrived within SAME_WAKE_SECONDS of the
+#   claimed one is the same words heard twice: it gets `other_device` true,
+#   no words, `wake_heard` false - which both apps already drop without a
+#   word (WakeRules.verdict IGNORE on the phone, voice.rs on the desktop) -
+#   and nothing is kept from it. Whichever clip claims first is answered.
+#
+#   It only ever refuses more: a clip that would have been refused anyway
+#   is refused as before, and the owner check still comes first (it runs
+#   before any claim, and speech-to-text only after it). Two clips from the
+#   SAME microphone are never matched (that is the owner talking again),
+#   nor is the talk button (one deliberate press, on one device).
+# --------------------------------------------------------------------------
+
+#: Two microphones' passing "hey Jarvis" clips this close together (by when
+#: each arrived) are one utterance heard twice. A first guess, to be
+#: measured on the owner's two devices.
+SAME_WAKE_SECONDS = 1.5
+
+#: What the second copy's reply says. Neither app shows it (they drop a
+#: wake-word reply with `wake_heard` false silently); it is for the logs and
+#: for an app that wants to say it.
+OTHER_DEVICE_REASON = "answered on your other device"
+
+_SAME_WAKE_LOCK = threading.Lock()
+_SAME_WAKE: dict = {}            # {"mic", "at"}: the last claimed clip
+
+
+def _claim_wake(mic: str, arrived: float) -> bool:
+    """True: act on this passing wake-word clip from `mic`, which arrived at
+    `arrived` (time.monotonic()). False: another microphone's clip, arrived
+    within SAME_WAKE_SECONDS of this one, was already acted on."""
+    mic = _norm_mic(mic)
+    with _SAME_WAKE_LOCK:
+        if _SAME_WAKE and _SAME_WAKE["mic"] != mic \
+                and abs(arrived - _SAME_WAKE["at"]) <= SAME_WAKE_SECONDS:
+            return False
+        _SAME_WAKE.clear()
+        _SAME_WAKE.update(mic=mic, at=arrived)
+        return True
 
 
 # --------------------------------------------------------------------------
@@ -912,7 +1122,7 @@ def _prints(voice: dict) -> dict:
 
 def _strict_state(voice: dict) -> dict:
     """gate.strictness / privacy / memory / sensitive_memory / hands_free /
-    settings / models / cohort / repeat, from
+    hands_free_screen / hands_free_live / settings / models / cohort / repeat, from
     jarvis_voice.status(); the strict defaults, and `models` saying nothing
     is known, for a jarvis_voice.py older than them. Never raises."""
     st = voice.get("settings") if isinstance(voice.get("settings"), dict) else {}
@@ -930,6 +1140,25 @@ def _strict_state(voice: dict) -> dict:
         # The fifth (how far "hey Jarvis" is trusted, the owner's decision of
         # 2026-09-24): "" from an older jarvis_voice.py - not offered.
         "hands_free": str(voice.get("hands_free") or ""),
+        # The sixth (answers about the screen after "hey Jarvis", under
+        # "only trust the talk button" - the owner's decision of
+        # 2026-09-28): "" from an older jarvis_voice.py - not offered.
+        "hands_free_screen": str(voice.get("hands_free_screen") or ""),
+        # The seventh (how far a Jarvis Live turn is trusted under "only
+        # trust the talk button" - the owner's answer of 2026-09-28): "" from
+        # an older jarvis_voice.py - not offered.
+        "hands_free_live": str(voice.get("hands_free_live") or ""),
+        # The eighth (when App lock ends Jarvis Live on the PC - the owner's
+        # decision of 2026-09-28): "" from an older jarvis_voice.py - the
+        # desktop then does not offer it.
+        "live_end": str(voice.get("live_end") or ""),
+        # Talk-to-type on the PC (2026-09-28): "off" or "on"; "" from an
+        # older jarvis_voice.py - the desktop then does not offer it.
+        "talk_to_type": str(voice.get("talk_to_type") or ""),
+        # "Better voice" (2026-09-28): "one"/"both" and "titanet"/"resnet221";
+        # "" from an older jarvis_voice.py - the apps then do not offer them.
+        "wake_confirm": str(voice.get("wake_confirm") or ""),
+        "voice_id_model": str(voice.get("voice_id_model") or ""),
         "settings": st or {"strictness": strict, "privacy": "private_on_screen",
                            "voice_is_enough_allowed": strict == "very_strict",
                            "min_command_seconds": 0.0},
@@ -937,6 +1166,19 @@ def _strict_state(voice: dict) -> dict:
         "cohort": voice.get("cohort") if isinstance(voice.get("cohort"), dict) else {},
         "repeat": voice.get("repeat") if isinstance(voice.get("repeat"), dict) else {},
     }
+
+
+def _live_brief() -> dict:
+    """{"available", "on", "device"} for status(). Never raises."""
+    if jarvis_live is None:
+        return {"available": False, "on": False, "device": None,
+                "why": "jarvis_live.py is not in the backend folder"}
+    try:
+        st = jarvis_live.ENGINE.status()
+        return {"available": True, "on": bool(st.get("on")), "device": st.get("device")}
+    except Exception as exc:
+        return {"available": False, "on": False, "device": None,
+                "why": f"could not read it ({type(exc).__name__})"}
 
 
 def _verifier_state() -> dict:
@@ -1130,12 +1372,13 @@ def status() -> dict:
     spotter = _wake_spotter_state()
     ptt, ptt_why = _push_to_talk(voice, stt_ok, voice_loaded)
 
-    vad_file = Path(_vad_path()).is_file()
+    vad_pick = vad_choice()
+    vad_file = Path(vad_pick["path"]).is_file()
     vad_ok = vad_file and _vad_wanted() and sherpa_onnx is not None
     if not _vad_wanted():
         vad_status = "switched off ([voice] vad_enabled = false)"
     elif not vad_file:
-        vad_status = f"not installed (looked for {_vad_path()})"
+        vad_status = f"not installed (looked for {vad_pick['path']})"
     elif sherpa_onnx is None:
         vad_status = "the sherpa-onnx package is not installed"
     else:
@@ -1200,8 +1443,12 @@ def status() -> dict:
             # ready, or why not in plain words (a one-time step to run).
             "mouth": _mouth_status(),
         },
+        # `version`: the Silero file in use ("v4", "v6", or "configured"
+        # for a `vad_model` path); `chosen`: the `vad_version` line; `note`:
+        # why the chosen one is not in use ("" when it is). Section 80.
         "vad": {"engine": "silero (sherpa-onnx)", "available": vad_ok,
-                "status": vad_status},
+                "status": vad_status, "version": vad_pick["in_use"],
+                "chosen": vad_pick["chosen"], "note": vad_pick["note"]},
         "wake": {
             **wake,
             "phrase": spotter.get("phrase", "hey_jarvis"),
@@ -1217,10 +1464,17 @@ def status() -> dict:
             "verifier": _verifier_state(),
             # "Stop" while Jarvis speaks (jarvis_wakeword.spot_stop).
             "stop_word": _stop_state(),
+            # The second "hey Jarvis" detector (jarvis_microwake.py) and the
+            # owner's "both must agree" setting. Section 80.
+            "confirm": _wake_confirm_state(),
         },
         "audio_in": dict(AUDIO_IN),
         # "Finished, or only paused?" - see _turn_state().
         "turn": _turn_state(),
+        # Jarvis Live (2026-09-28): whether this PC has it, and the session.
+        # GET /api/voice/live has the whole status; this says only enough for
+        # an app to offer the Live button.
+        "live": _live_brief(),
         "gate": {
             "mode": voice.get("mode", "owner"),
             "enabled": bool(voice.get("enabled", False)),
@@ -1253,6 +1507,164 @@ def status() -> dict:
 # --------------------------------------------------------------------------
 
 SOURCE_WAKE_WORD = "wake_word"
+#: A Jarvis Live clip (jarvis_live.py): no "hey Jarvis" needed while that
+#: device's session is on; refused, unchecked, otherwise.
+SOURCE_LIVE = "live"
+#: Talk-to-type on the PC (the owner's decision, 2026-09-27; docs/JARVIS-API.md
+#: section 72): the desktop app holds a key, records, and TYPES the words
+#: into the program in front instead of sending them to the chat. The same
+#: order as every clip - speech, the owner check, only then the words - plus
+#: three differences, all in hear(): refused before anything runs while the
+#: owner's switch (jarvis_voice `talk_to_type`) is off; the words are never
+#: noted for chat history or the delay table (they are not a chat turn); and
+#: they come back cleaned of "um"/"uh" (clean_dictation, below).
+SOURCE_TALK_TYPE = "talk_to_type"
+TALK_TYPE_OFF_REASON = ("talk-to-type is switched off on this PC - turn it on in "
+                        "Settings, Voice (it shows you an approval card first)")
+
+
+def _talk_type_on() -> bool:
+    """The owner's talk-to-type switch. A jarvis_voice.py older than it, or
+    one that cannot answer: off (fail closed - nothing is typed)."""
+    fn = getattr(jarvis_voice, "talk_to_type_on", None) if jarvis_voice is not None else None
+    if fn is None:
+        return False
+    try:
+        return bool(fn())
+    except Exception:
+        return False
+
+
+def _wake_confirm_wanted() -> bool:
+    """The owner's "both detectors must agree" setting (jarvis_voice
+    settings `wake_confirm`). A jarvis_voice.py older than it: no."""
+    if jarvis_voice is None or not hasattr(jarvis_voice, "WAKE_BOTH"):
+        return False
+    try:
+        return jarvis_voice.settings().get("wake_confirm") == jarvis_voice.WAKE_BOTH
+    except Exception:
+        return False
+
+
+def _wake_confirm(samples, sample_rate: int, first_at: float) -> str:
+    """"off" (the setting is not on), "agreed", "disagreed", or
+    "unavailable" (on, but the second detector cannot run here - the first
+    one then decides alone, as before, and status() says so)."""
+    if not _wake_confirm_wanted():
+        return "off"
+    if jarvis_microwake is None:
+        return "unavailable"
+    try:
+        verdict, _spot = jarvis_microwake.confirm(samples, sample_rate, first_at)
+    except Exception:
+        return "unavailable"
+    return verdict if verdict in ("agreed", "disagreed") else "unavailable"
+
+
+def _wake_confirm_state() -> dict:
+    """status()'s wake.confirm: the setting, and whether the second
+    detector can run. Cheap (jarvis_microwake.status loads no model)."""
+    wanted = _wake_confirm_wanted()
+    if jarvis_microwake is None:
+        st = {"available": False,
+              "why": "jarvis_microwake.py is not in the backend folder (run the patch script)"}
+    else:
+        try:
+            st = jarvis_microwake.status()
+        except Exception as exc:
+            st = {"available": False, "why": f"it could not be asked ({type(exc).__name__})"}
+    active = wanted and bool(st.get("available"))
+    if active:
+        note = ""
+    elif wanted:
+        note = ("both detectors are chosen, but the second one cannot run on this PC ("
+                + str(st.get("why") or "unknown reason").rstrip(".")
+                + "), so the first one decides alone, as before")
+    else:
+        note = ""
+    return {"setting": "both" if wanted else "one", "active": active,
+            "available": bool(st.get("available")), "why": str(st.get("why") or ""),
+            "engine": "microWakeWord (pymicro-wakeword)",
+            "agree_seconds": getattr(jarvis_microwake, "AGREE_SECONDS", 1.0)
+            if jarvis_microwake is not None else 1.0,
+            "note": note}
+
+
+# ---------------------------------------------------------------------------
+# clean_dictation() - adapted from Handy (https://github.com/cjpais/Handy,
+# src-tauri/src/audio_toolkit/text.rs: remove_filler_words,
+# collapse_stutters, normalize_transcription_output), ported from Rust to
+# Python. MIT License, Copyright (c) 2025 CJ Pais - the full notice is in
+# THIRD-PARTY-NOTICES.txt at the top of this repository. Only the English
+# lists are used: the speech-to-text model on this PC is English.
+# ---------------------------------------------------------------------------
+
+#: Handy's UNIVERSAL_FILLER_WORDS (never a real word in any language) plus
+#: its English-only list ("um", "ah", "eh").
+_FILLER_WORDS = ("uh", "uhm", "umm", "uhh", "uhhh", "ehh", "ehm", "ahm", "hmm", "hm",
+                 "mmm", "um", "ah", "eh")
+_FILLER_PATTERNS = tuple(re.compile(r"\b" + re.escape(w) + r"\b[,.]?", re.IGNORECASE)
+                         for w in _FILLER_WORDS)
+_MULTI_SPACE = re.compile(r"\s{2,}")
+
+
+def _opens_sentence(kept: str) -> bool:
+    t = kept.rstrip()
+    return not t or t[-1] in ".!?…"
+
+
+def _remove_filler_matches(text: str, pattern) -> str:
+    """Deletes every match; a capitalised filler that opened a sentence
+    hands its capital on ("Um, so I think" -> "So I think")."""
+    kept = []
+    owed = False
+    resume = 0
+
+    def push(segment: str) -> None:
+        nonlocal owed
+        if owed:
+            for i, ch in enumerate(segment):
+                if ch.isalnum():
+                    owed = False
+                    kept.append(segment[:i] + ch.upper() + segment[i + 1:])
+                    return
+        kept.append(segment)
+
+    for m in pattern.finditer(text):
+        push(text[resume:m.start()])
+        if m.group(0)[:1].isupper() and _opens_sentence("".join(kept)):
+            owed = True
+        resume = m.end()
+    push(text[resume:])
+    return "".join(kept)
+
+
+def _collapse_stutters(text: str) -> str:
+    """Three or more of the same word in a row become one ("I I I" -> "I")."""
+    words = text.split()
+    if not words:
+        return text
+    out, i = [], 0
+    while i < len(words):
+        w = words[i]
+        low = w.lower()
+        n = 1
+        if low.isalpha():
+            while i + n < len(words) and words[i + n].lower() == low:
+                n += 1
+        out.append(w)
+        i += n if n >= 3 else 1
+    return " ".join(out)
+
+
+def clean_dictation(text: str) -> str:
+    """What talk-to-type types: the words without "um"/"uh", a stutter
+    collapsed, spaces tidied. Never adds a word."""
+    out = str(text or "")
+    for pattern in _FILLER_PATTERNS:
+        out = _remove_filler_matches(out, pattern)
+    out = _collapse_stutters(out)
+    return _MULTI_SPACE.sub(" ", out).strip()
 
 #: A clip longer than this (the VAD's speech span, which keeps 0.3 s either
 #: side - so about 1.4 s of words) is never a stop: "Hey Jarvis, stop the
@@ -1345,6 +1757,11 @@ class Heard:
     #: and was refused before any voice check - "say a little more".
     too_short: bool = False
     min_seconds: float = 0.0
+    #: source=wake_word only (2026-09-27): the owner's "hey Jarvis" clip,
+    #: but another microphone's copy of the same words (within
+    #: SAME_WAKE_SECONDS) was already acted on. No words, `wake_heard`
+    #: false: both apps drop it without a word.
+    other_device: bool = False
     #: The strictness the voice was checked at: "very_strict" or "balanced"
     #: ("" when no check ran).
     strictness: str = ""
@@ -1368,9 +1785,48 @@ class Heard:
     #: talk button" (jarvis_voice `hands_free: button_only`) and this clip's
     #: source is not `push_to_talk` - "hey Jarvis", or no source said.
     sensitive_aloud: bool = False
+    #: May an answer about the SCREEN (the `read_screen` read, "Look at
+    #: this" / "Watch with me") be read aloud for this request, as far as
+    #: the hands-free settings go? jarvis_voice.screen_aloud(source): true
+    #: for the talk button, and for every clip under "same as the talk
+    #: button" (the default); under "only trust the talk button", true for
+    #: any other clip only when the owner chose `screen_aloud` (the owner's
+    #: decision, 2026-09-28). Every earlier rule (a sensitive fact, a private
+    #: question or tool) still comes first in the apps. An app that finds no
+    #: such field (an older PC) treats it as false.
+    screen_aloud: bool = False
     #: The words asked about something private (the router's private-topic
     #: backstop). A hint for the app, not a guarantee - see JARVIS-API.md.
     question_private: bool = False
+    #: Jarvis Live (since 2026-09-28, jarvis_live.py). "" for a clip that has
+    #: nothing to do with Live. For a `live` clip: the session after it -
+    #: "on", "paused" (the clip was not looked at), "off" (no session on this
+    #: device: `available` is false too - stop sending), "ended" (the owner's
+    #: words ended it). For any clip whose words started Live: "started" -
+    #: or "refused", with `reason` in words, when Live could not start (no
+    #: real voice check yet, or standby).
+    live: str = ""
+    #: Why Live is paused, when it is: "card" or "other_voices"
+    #: (jarvis_live.PAUSE_WORDS). The app shows the words, not this code.
+    live_pause: str = ""
+    #: "other_voices" after a few clips in a row that were not the owner's.
+    live_hint: str = ""
+    #: A FIXED line for the app to say now (jarvis_live.LINES): "I'm
+    #: listening.", "Say a bit more, so I can tell it's you." (at most once a
+    #: minute), "Okay. Live ended.", "Okay, 20 more minutes.". Never anything
+    #: heard, so it is safe in any room and says nothing private.
+    live_say: str = ""
+    #: Why Live ended with this clip ("bye"), from jarvis_live.END_WORDS.
+    live_ended: str = ""
+    #: A too-short Live clip, put to the voice check only (NEVER to
+    #: speech-to-text): "owner" - probably the owner, so both apps show
+    #: "Didn't catch that - say a bit more"; "other" - counted as another
+    #: voice, and nothing is shown or said.
+    live_short: str = ""
+    #: The owner's "hey Jarvis" at THIS device while Live is on the OTHER one
+    #: ("phone" / "desktop"): the app offers "Live is on your phone - move it
+    #: here?" instead of answering. `other_device` is true with it.
+    live_elsewhere: str = ""
 
     def as_dict(self) -> dict:
         """What /api/voice/utterance sends back - assuming, as the desktop's
@@ -1518,6 +1974,21 @@ def _source_trusted(source: str) -> bool:
         return False
 
 
+def _screen_aloud(source: str, trusted: bool) -> bool:
+    """May an answer about the screen be read aloud for a clip from
+    `source`? (jarvis_voice.screen_aloud, the owner's decision of
+    2026-09-28.) A jarvis_voice.py older than that setting: the same as the
+    hands-free trust (`trusted`) - the setting is not there, so it is off.
+    One that cannot answer: no - the answer stays on screen."""
+    fn = getattr(jarvis_voice, "screen_aloud", None)
+    if fn is None:
+        return bool(trusted)
+    try:
+        return bool(fn(source))
+    except Exception:
+        return False
+
+
 def _private_aloud() -> bool:
     try:
         return bool(jarvis_voice.may_speak(True, "voice")["speak"])
@@ -1530,6 +2001,121 @@ def _question_private(text: str) -> bool:
         return bool(jarvis_voice.looks_private(text))
     except Exception:
         return False
+
+
+def _live_fields(mic: str) -> dict:
+    """The Live session as a clip's reply carries it: state, pause, hint."""
+    if jarvis_live is None:
+        return {"live": "off"}
+    try:
+        st = jarvis_live.ENGINE.status()
+    except Exception:
+        return {"live": "off"}
+    on = bool(st.get("on")) and st.get("device") == _norm_mic(mic)
+    return {"live": (str(st.get("state") or "off") if on else
+                     ("ended" if st.get("state") == "ended" else "off")),
+            "live_pause": str(st.get("paused") or "") if on else "",
+            "live_hint": str(st.get("hint") or "") if on else ""}
+
+
+def _live_refusal(mic: str, source: str) -> tuple:
+    """(refusal or None, check-only). A `live` clip is looked at only while
+    THIS microphone's Live session is on and not paused; anything else is
+    refused here - before the file is read, before any speech is looked for,
+    never checked, never turned into words. The one exception is a VOICE
+    pause (other voices, or trouble with the owner's voice): then the clip
+    may be put to the voice check - check-only is True - so the owner's own
+    voice carries Live on without a tap. Still never transcribed unless it
+    passes."""
+    if jarvis_live is None:
+        return Heard(False, source=source, available=False, live="off",
+                     reason="jarvis_live.py is not in the backend folder"), False
+    try:
+        acc = jarvis_live.ENGINE.accepts(mic)
+    except Exception as exc:
+        return Heard(False, source=source, available=False, live="off",
+                     reason=f"Jarvis Live could not be read ({type(exc).__name__})"), False
+    if acc.get("ok"):
+        return None, False
+    if acc.get("check"):
+        return None, True
+    if acc.get("state") == "paused":
+        return Heard(False, source=source, live="paused", live_pause=str(acc.get("code") or ""),
+                     live_hint=_live_fields(mic).get("live_hint", ""),
+                     reason=str(acc.get("words") or "")), False
+    return Heard(False, source=source, available=False, live="off",
+                 reason=str(acc.get("words") or "")), False
+
+
+def _near_miss(verdict) -> bool:
+    """A refusal close to the bar: probably the owner, recognised badly."""
+    try:
+        th, sc = float(verdict.threshold or 0.0), float(verdict.score or 0.0)
+    except (TypeError, ValueError):
+        return False
+    return th > 0 and sc < th and sc >= th * jarvis_live.NEAR_MISS
+
+
+def _live_elsewhere(mic: str) -> str:
+    """The device Live is on, when that is not `mic`'s; else ""."""
+    if jarvis_live is None:
+        return ""
+    try:
+        return jarvis_live.ENGINE.on_elsewhere(mic)
+    except Exception:
+        return ""
+
+
+def _offer_move(mic: str, engine: str, common: dict) -> Optional[Heard]:
+    """The owner said "hey Jarvis" to THIS device while Live runs on the
+    OTHER one: not answered here - the app offers "Live is on your phone -
+    move it here?" (a tap moves it). Never silently dropped (the voice play
+    test, 2026-09-28). Nothing from the words is kept."""
+    elsewhere = _live_elsewhere(mic)
+    if not elsewhere:
+        return None
+    return Heard(True, text="", engine=engine, wake_heard=False, other_device=True,
+                 live_elsewhere=elsewhere,
+                 reason=f"Live is on your {jarvis_live.device_words(elsewhere)}", **common)
+
+
+def _live_phrase(text: str):
+    if jarvis_live is None:
+        return None
+    try:
+        return jarvis_live.phrase(text)
+    except Exception:
+        return None
+
+
+def _live_start(mic: str) -> Optional[dict]:
+    """Starts Live on `mic` (the owner's own words, checked; `started_by`
+    voice). None when there is nothing to start it on - no device named (an
+    older app), or no jarvis_live.py; else jarvis_live's answer, which says
+    why it did not start (no real voice check, standby) when it did not."""
+    if jarvis_live is None or not _norm_mic(mic):
+        return None
+    try:
+        return jarvis_live.ENGINE.start(mic, by="voice")
+    except Exception:
+        return None
+
+
+def _live_trust_source(mic: str) -> str:
+    try:
+        return jarvis_live.ENGINE.trust_source(mic)
+    except Exception:
+        return "live_voice"          # cannot tell how it started: the stricter
+
+
+def _live_started(out: dict, engine: str, wake: bool, common: dict) -> Heard:
+    """The reply to "let's talk": started, or refused in words."""
+    if out.get("ok"):
+        return Heard(True, text="", engine=engine, wake_heard=wake, live="started",
+                     live_say=str(out.get("say") or jarvis_live.SAY_STARTED),
+                     reason="Jarvis Live started", **common)
+    return Heard(True, text="", engine=engine, wake_heard=wake, live="refused",
+                 reason=str(out.get("error") or "Jarvis Live could not start"), **common)
 
 
 def _too_short_reason(spoken: float, need: float) -> str:
@@ -1562,6 +2148,21 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         return Heard(False, source=source, available=bool(b.get("available")),
                      stop=bool(b.get("stop")), reason=str(b.get("reason") or ""),
                      seconds=float(b.get("seconds") or 0.0))
+    live = source == SOURCE_LIVE
+    check_only = False
+    if live:
+        # Jarvis Live: only while THIS microphone's session is on and not
+        # paused. Otherwise nothing below runs - no speech found, no voice
+        # check, no words. During a voice pause the clip is CHECKED (not
+        # transcribed) so the owner's own voice carries Live on.
+        refused, check_only = _live_refusal(mic, source)
+        if refused is not None:
+            return refused
+    talk_type = source == SOURCE_TALK_TYPE
+    if talk_type and not _talk_type_on():
+        # Before the WAV is even read: with the owner's switch off, a
+        # talk-to-type clip is not checked, not transcribed, not kept.
+        return Heard(False, source=source, available=False, reason=TALK_TYPE_OFF_REASON)
     t_in = time.monotonic()
     steps = {}
     cold = _stt_cache is _UNSET
@@ -1620,7 +2221,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                                          f"it again in {left} seconds, or press stop"))
                 return Heard(False, source=source, seconds=seconds, stop=True,
                              reason="stop")
-        if _take_awake():
+        if _take_awake(mic):
             via_window = True
         elif _question_open(mic):
             # Jarvis's last sentence asked something (see _note_said): no
@@ -1643,7 +2244,53 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                 return Heard(False, source=source, seconds=seconds,
                              wake_score=spot.score,
                              reason="no \"hey Jarvis\" in that recording")
+            # 3a (2026-09-28, "Better voice"). With the owner's "both
+            # detectors" setting, the second, differently-built detector
+            # must have heard it too, within a second of the first. It can
+            # only say no - never make a wake out of nothing - and it runs
+            # before the voice check and before any words exist, like the
+            # first. Not installed: the first decides alone, as before, and
+            # status() says so (the setting could not be chosen then).
+            confirm = _wake_confirm(samples, sample_rate, spot.at)
+            if confirm == "disagreed":
+                return Heard(False, source=source, seconds=seconds,
+                             wake_score=spot.score,
+                             reason=("the second \"hey Jarvis\" detector did not hear it, "
+                                     "so it was not taken as \"hey Jarvis\""))
         steps["wake"] = (time.monotonic() - t) * 1000.0
+
+    # Jarvis Live: "stop" in a short clip silences Jarvis, exactly as it
+    # does for a "hey Jarvis" clip - no voice check needed to stop speech,
+    # never transcribed, nothing else done.
+    if live and spoken <= STOP_MAX_SECONDS and jarvis_wakeword is not None \
+            and hasattr(jarvis_wakeword, "spot_stop"):
+        stop = jarvis_wakeword.spot_stop(samples, sample_rate)
+        if stop.ran and stop.heard and _jarvis_said_stop(mic) is None:
+            return Heard(False, source=source, seconds=seconds, stop=True, reason="stop",
+                         **_live_fields(mic))
+
+    if jarvis_voice is None:
+        return Heard(False, source=source, available=False, seconds=seconds,
+                      reason="jarvis_voice is not importable; refusing "
+                             "rather than skipping the owner check")
+
+    def check_owner():
+        # 4. The owner check.
+        try:
+            emb = jarvis_voice.EcapaEmbedder()
+        except Exception:
+            emb = jarvis_voice.Embedder()
+        # The real sample rate goes with the clip. Both clients send 16 kHz
+        # now, but an older desktop (before 2026-09-24) sent its
+        # microphone's own rate, and the speaker model resamples when told.
+        # Only to a jarvis_voice.py that takes it - an older copy on the PC
+        # would raise TypeError here, and this call is not wrapped.
+        kw = {}
+        if _takes_rate(jarvis_voice.verify):
+            kw["sample_rate"] = sample_rate
+        if mic and _takes(jarvis_voice.verify, "mic"):
+            kw["mic"] = mic
+        return jarvis_voice.verify(samples, emb, **kw), emb
 
     # 3b. Long enough to be sure it is the owner? (2026-09-24.) A speaker
     #     model has little to go on in a second of speech, so a command
@@ -1654,33 +2301,46 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
     #     more - a command inside a clip that short is refused after all.
     if short and (not wake or via_window):
         _note_short(mic)
+        extra = {}
+        if live:
+            # Jarvis Live (the voice play test, 2026-09-28): the clip is put
+            # to the voice check ONLY - never to speech-to-text - to decide
+            # whether it was probably the owner. The owner hears "say a bit
+            # more" at most once a minute and sees "Didn't catch that" every
+            # time; anyone else (the TV) makes Jarvis say nothing and counts
+            # as another voice. The reason stays as the caption.
+            extra = _live_fields(mic)
+            try:
+                v_short, _ = check_owner()
+            except Exception:
+                v_short = None
+            if v_short is not None and v_short.is_owner and _really_checked(v_short):
+                extra["live_short"] = "owner"
+                try:
+                    jarvis_live.ENGINE.carry_on_by_voice(mic)
+                    if jarvis_live.ENGINE.short_line_due():
+                        extra["live_say"] = jarvis_live.SAY_SHORT
+                except Exception:
+                    pass
+            else:
+                extra["live_short"] = "other"
+                try:
+                    jarvis_live.ENGINE.note_refused(
+                        mic, near_miss=v_short is not None and _near_miss(v_short))
+                except Exception:
+                    pass
+            extra.update({k: v for k, v in _live_fields(mic).items() if k != "live"})
         return Heard(False, source=source, seconds=seconds, too_short=True,
-                     min_seconds=need, reason=_too_short_reason(spoken, need))
+                     min_seconds=need, reason=_too_short_reason(spoken, need), **extra)
 
-    if jarvis_voice is None:
-        return Heard(False, source=source, available=False, seconds=seconds,
-                      reason="jarvis_voice is not importable; refusing "
-                             "rather than skipping the owner check")
-
-    # 4. The owner check.
     t = time.monotonic()
-    try:
-        embedder = jarvis_voice.EcapaEmbedder()
-    except Exception:
-        embedder = jarvis_voice.Embedder()
-    # The real sample rate goes with the clip. Both clients send 16 kHz now,
-    # but an older desktop (before 2026-09-24) sent its microphone's own
-    # rate, and the speaker model resamples when told it.
-    # Only to a jarvis_voice.py that takes it - an older copy on the PC
-    # would raise TypeError here, and this call is not wrapped.
-    kw = {}
-    if _takes_rate(jarvis_voice.verify):
-        kw["sample_rate"] = sample_rate
-    if mic and _takes(jarvis_voice.verify, "mic"):
-        kw["mic"] = mic
-    verdict = jarvis_voice.verify(samples, embedder, **kw)
+    verdict, embedder = check_owner()
     steps["owner_check"] = (time.monotonic() - t) * 1000.0
-    trusted = _source_trusted(source)
+    # What this clip is trusted as. A Live clip asks as "live" when the owner
+    # pressed Start, or like "hey Jarvis" when Live was started by voice
+    # (jarvis_live.trust_source - one switch there decides).
+    trust_src = _live_trust_source(mic) if live else source
+    trusted = _source_trusted(trust_src)
     common = dict(score=verdict.score, threshold=verdict.threshold,
                   source=source, mode=verdict.mode, seconds=seconds,
                   wake_score=spot.score if spot else 0.0,
@@ -1703,16 +2363,43 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                                  and trusted),
                   memory_aloud=_memory_aloud() and _really_checked(verdict) and trusted,
                   sensitive_aloud=(_sensitive_aloud() and _really_checked(verdict)
-                                   and trusted))
+                                   and trusted),
+                  # An answer about the screen is read aloud like a web
+                  # search's - no voice check asked of it, as before - but
+                  # under "only trust the talk button" a clip from anywhere
+                  # else keeps it on screen unless the owner allowed it (the
+                  # owner's decision, 2026-09-28).
+                  screen_aloud=_screen_aloud(trust_src, trusted))
 
     if not verdict.is_owner:
+        if live:
+            # Not the owner's voice: counted (the sign says so after a few,
+            # and Live pauses after many), never turned into words, and the
+            # quiet clock does not move - the TV cannot keep Live open.
+            try:
+                jarvis_live.ENGINE.note_refused(mic, near_miss=_near_miss(verdict))
+            except Exception:
+                pass
+            return Heard(False, reason=verdict.reason, **common, **_live_fields(mic))
         return Heard(False, reason=verdict.reason, **common)
+    if check_only:
+        # A voice pause, and this was the owner: Live carries on without a
+        # tap, and this sentence is taken like any other.
+        try:
+            jarvis_live.ENGINE.carry_on_by_voice(mic)
+        except Exception:
+            pass
 
+    # A Live clip that was the owner's but could not become words keeps the
+    # session's fields, so the app keeps listening and says so rather than
+    # taking "not available" as Live being over (bug 2 of the review,
+    # 2026-09-28).
+    live_extra = _live_fields(mic) if live else {}
     if _stt_engine() is None:
         return Heard(True, available=False, wake_heard=wake,
                      reason="that was you, but no speech-to-text model is "
                             "installed here yet - see jarvis_speech.status()",
-                     **common)
+                     **common, **live_extra)
 
     # 5. The words.
     t = time.monotonic()
@@ -1721,7 +2408,7 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
     except Exception as exc:
         return Heard(True, available=False, wake_heard=wake,
                      reason=f"transcription failed ({type(exc).__name__})",
-                     **common)
+                     **common, **live_extra)
     steps["stt"] = (time.monotonic() - t) * 1000.0
     engine = f"{STT_ENGINE}:{_stt_files()[0]}"
 
@@ -1731,7 +2418,62 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         if words:
             _flow("note_heard", t_in, steps, source=source, mic=mic,
                   waited_ms=waited_ms, cold=cold)
-            _note_for_history(words, verdict, embedder, source)
+            _note_for_history(words, verdict, embedder, trust_src)
+
+    def other_device() -> Heard:
+        # The same words, heard by the owner's other device and already
+        # acted on there. Nothing from this copy is kept.
+        return Heard(True, text="", engine=engine, wake_heard=False, other_device=True,
+                     reason=OTHER_DEVICE_REASON, **common)
+
+    if live:
+        # Jarvis Live: the owner's words (step 4 passed). "Hey Jarvis" said
+        # anyway is taken off. Live's own phrases are answered here, on the
+        # device that heard them, and go no further; anything else is a
+        # spoken question like any other.
+        try:
+            found, rest = jarvis_wakeword.split_wake(text)
+        except Exception:
+            found, rest = False, text
+        if found and rest:
+            text = rest
+        said = _live_phrase(text)
+        if said is not None and said[0] == "end":
+            try:
+                jarvis_live.ENGINE.stop("bye", device=mic)
+            except Exception:
+                pass
+            return Heard(True, text="", engine=engine, live="ended", live_ended="bye",
+                         live_say=jarvis_live.SAY_BYE, reason="Jarvis Live ended", **common)
+        if said is not None and said[0] == "extend":
+            try:
+                out = jarvis_live.ENGINE.extend(said[1])
+            except Exception:
+                out = {"ok": False}
+            fields = _live_fields(mic)
+            if out.get("ok"):
+                fields["live_say"] = jarvis_live.SAY_EXTENDED.format(n=out.get("minutes"))
+            return Heard(True, text="", engine=engine, reason="more time", **common, **fields)
+        if said is not None and said[0] == "start":
+            # Already on: nothing to start, and not a question either.
+            return Heard(True, text="", engine=engine, reason="Jarvis Live is already on",
+                         **common, **_live_fields(mic))
+        try:
+            jarvis_live.ENGINE.note_owner(mic)
+        except Exception:
+            pass
+        timed(text)
+        return Heard(True, text=text, engine=engine,
+                     question_private=_question_private(text), **common, **_live_fields(mic))
+
+    if talk_type:
+        # Typed into another program, never a chat turn: not noted for chat
+        # history, not a row in the delay table, nothing read aloud. The
+        # words go back to the desktop app once, in this reply, and are not
+        # kept here.
+        quiet = {**common, "private_aloud": False, "memory_aloud": False,
+                 "sensitive_aloud": False, "screen_aloud": False}
+        return Heard(True, text=clean_dictation(text), engine=engine, **quiet)
 
     if not wake or via_window:
         if via_question:
@@ -1743,6 +2485,19 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                 found, rest = False, text
             if found and rest:
                 text = rest
+        if wake and text.strip() and not _claim_wake(mic, t_in):
+            return other_device()
+        said = _live_phrase(text)
+        started = _live_start(mic) if said is not None and said[0] == "start" else None
+        if started is not None:
+            # "Let's talk" - with the talk button, or in the window after a
+            # bare "Hey Jarvis." - starts Live on this device. No card: the
+            # owner's own act, and the owner check just passed.
+            return _live_started(started, engine, wake, common)
+        if wake and text.strip():
+            offer = _offer_move(mic, engine, common)
+            if offer is not None:
+                return offer
         timed(text)
         return Heard(True, text=text, engine=engine, wake_heard=wake,
                      question_private=_question_private(text), **common)
@@ -1756,7 +2511,15 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
                      reason="that did not start with \"hey Jarvis\", so it was ignored",
                      **common)
     if not rest:
-        secs = _open_awake()
+        # "Hey Jarvis." on its own, heard by two devices: only the first
+        # opens a window (its own), so the owner's next sentence is taken by
+        # that device alone.
+        if not _claim_wake(mic, t_in):
+            return other_device()
+        offer = _offer_move(mic, engine, common)
+        if offer is not None:
+            return offer
+        secs = _open_awake(mic)
         return Heard(True, text="", engine=engine, wake_heard=True, awake=True,
                      awake_seconds=secs, reason="listening", **common)
     if short:
@@ -1765,6 +2528,17 @@ def hear(raw: bytes, source: str = "push_to_talk", mic: str = "",
         _note_short(mic)
         return Heard(True, text="", engine=engine, wake_heard=True, too_short=True,
                      min_seconds=need, reason=_too_short_reason(spoken, need), **common)
+    if not _claim_wake(mic, t_in):
+        return other_device()
+    said = _live_phrase(rest)
+    started = _live_start(mic) if said is not None and said[0] == "start" else None
+    if started is not None:
+        # "Hey Jarvis, let's talk": Jarvis Live starts on the device that
+        # heard it (docs/LIVE-DESIGN.md section 2). No card.
+        return _live_started(started, engine, True, common)
+    offer = _offer_move(mic, engine, common)
+    if offer is not None:
+        return offer
     timed(rest)
     return Heard(True, text=rest, engine=engine, wake_heard=True,
                  question_private=_question_private(rest), **common)
@@ -1805,6 +2579,13 @@ def say(text: str, mic: str = "") -> Optional[bytes]:
     _note_timing(engine, voice, text, t0, len(samples) / float(rate), fallback, note)
     # Jarvis asked something aloud: the next wake-word clip needs no phrase.
     _note_said(text, len(samples) / float(rate or 16000), mic)
+    # Jarvis Live's quiet clock starts again from Jarvis speaking - but not
+    # from "Say a bit more": asking for more words is no conversation.
+    if jarvis_live is not None:
+        try:
+            jarvis_live.ENGINE.note_spoke(mic, text)
+        except Exception:
+            pass
     wav = _write_wav(samples, rate)
     if mouth and mouth[0]:
         # The mouth shapes from Kokoro's own timing, as a "jmth" block after

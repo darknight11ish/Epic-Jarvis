@@ -28,7 +28,8 @@
  * @module auto-learn
  */
 
-import { whenWords } from "./history-view.js";
+import { readChatFacts, whenWords } from "./history-view.js";
+import { DELETE_STAYS } from "./chat-history.js";
 import { cardLines, trueFromLine } from "./memory-words.js";
 
 /** Section 5's words, word for word. The phone says the same. */
@@ -221,16 +222,89 @@ export function eraseQuestion(f) {
  * hold one - so the words differ, but the choice and its effect are the
  * same. Answering "Cancel" here still erases the fact's words; it only
  * skips deleting the chat too.
+ *
+ * The first and last lines say so in so many words (play tester,
+ * 2026-09-27): owners read this dialog's Cancel as "cancel the erase",
+ * because a Windows dialog cannot rename its OK and Cancel buttons.
  */
 export const ERASE_ALSO_CHAT_CONFIRM =
+  "The fact's words will be erased either way.\n\n" +
   "Also delete the chat this fact came from? That whole conversation will be deleted " +
-  "from History too, on this PC. This cannot be undone either.";
+  "from History too, on this PC. This cannot be undone either. " + DELETE_STAYS + "\n\n" +
+  "OK: delete that chat too.\nCancel: keep the chat.";
 
 /** Said after an erase went through. */
 export const ERASED = "Erased.";
 
 /** Said after an erase that also deleted the chat it came from. */
 export const ERASED_AND_CHAT_DELETED = "Erased, and the chat it came from is deleted too.";
+
+/** Said after an erase when no chat is on record for the fact (a card
+ *  accepted by hand, an older fact, or a chat already deleted) - honest,
+ *  rather than a bare "Erased." (the chat audit, 2026-09-28). The phone's
+ *  MemoryErase says the same. */
+export const ERASED_NO_CHAT = "Erased. No chat was on record for this fact, so no chat was deleted.";
+
+/** The chat named, with when (the chat audit, 2026-09-28): the phone's
+ *  checkbox says the same sentence. */
+export function eraseChatNamed(chat, when = "") {
+  const title = chat && typeof chat.title === "string" && chat.title.trim()
+    ? chat.title.trim() : "its title is hidden";
+  return `Also delete the chat it came from: "${title}" (${when || "date unknown"})?`;
+}
+
+/**
+ * The second question when the PC named the chat (GET
+ * /api/memory/fact-chat): the same shape as ERASE_ALSO_CHAT_CONFIRM, with
+ * the chat's title and when in it, so the owner knows which chat goes.
+ */
+export function eraseAlsoChatNamedConfirm(chat, when = "", others = 0) {
+  // The chat's OTHER facts (the second chat audit, 2026-09-28, desktop B1):
+  // deleting the chat forgets none of them, and the dialog now says so, with
+  // how many; and every delete dialog says what backups keep.
+  const n = Number.isInteger(others) && others > 0 ? others : 0;
+  const stays = n
+    ? `${n === 1 ? "1 other fact" : `${n} other facts`} Jarvis learned in that chat ` +
+      `${n === 1 ? "stays" : "stay"}. ${DELETE_STAYS.replace("Facts Jarvis learned stay. ", "")}`
+    : DELETE_STAYS;
+  const support = chat && chat.kind === "support"
+    ? "\n\nThis is the record of a customer-support chat - what the company said and what was " +
+      "sent in your name."
+    : "";
+  return "The fact's words will be erased either way.\n\n" +
+    `${eraseChatNamed(chat, when)} That whole conversation will be deleted from History too, ` +
+    `on this PC. This cannot be undone either. ${stays}${support}\n\n` +
+    "OK: delete that chat too.\nCancel: keep the chat.";
+}
+
+/** How many OTHER facts Jarvis is using that this chat taught (the second
+ *  chat audit, 2026-09-28, desktop B1): "Erase the words" with its chat
+ *  deletes the chat and forgets none of them, and the question now says how
+ *  many stay. `invoke` rejects on failure; a read that failed says 0 - the
+ *  dialog then names no number, only the general sentence. While the memory
+ *  lists are hidden the count is what the PC said, less this fact. */
+export async function otherFactsInChat(invoke, chat, factId) {
+  try {
+    const got = readChatFacts(await invoke("brain_conversation_facts", { conversationId: chat.id }));
+    if (!got.available) return 0;
+    if (got.hiddenCount) return Math.max(0, got.hiddenCount - 1);
+    return got.facts.filter((x) => x.id !== Number(factId)).length;
+  } catch {
+    return 0;
+  }
+}
+
+/** brain_fact_chat's answer: the chat ({id, title, updated}), null when
+ *  none is on record, or undefined from a PC that cannot say. */
+export function readFactChat(v) {
+  if (!v || typeof v !== "object" || v.available === false) return undefined;
+  const c = v.conversation;
+  if (!c || typeof c !== "object" || typeof c.id !== "string") return null;
+  return { id: c.id, title: typeof c.title === "string" ? c.title : "",
+    updated: Number.isFinite(c.updated) ? c.updated : null,
+    // The kind, so a support record still asks its own question (B2).
+    kind: typeof c.kind === "string" ? c.kind : "chat" };
+}
 
 /**
  * An erased fact's `erased_at` (unix seconds, a column of every fact row),

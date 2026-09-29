@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-chatbot-pause"
+description = "Enables the chatbot_pause command without any pre-configured scope."
+commands.allow = ["chatbot_pause"]
+
+[[permission]]
+identifier = "deny-chatbot-pause"
+description = "Denies the chatbot_pause command without any pre-configured scope."
+commands.deny = ["chatbot_pause"]

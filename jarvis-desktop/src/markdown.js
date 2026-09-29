@@ -31,7 +31,7 @@ export function escapeHtml(text) {
     .replace(/'/g, "&#39;");
 }
 
-/** Inline spans: code, bold, italic, strikethrough, links. */
+/** Inline spans: code, bold, italic (`*` or `_`), strikethrough, links. */
 function renderInline(text) {
   let out = escapeHtml(text);
 
@@ -81,6 +81,12 @@ function renderInline(text) {
     // to render as `user<strong>name</strong>id`.
     .replace(/(^|[^\w])__([\s\S]+?)__(?!\w)/g, "$1<strong>$2</strong>")
     .replace(/(^|[^*\w])\*(?!\s)([^*\n]+?)\*/g, "$1<em>$2</em>")
+    // `_italic_`, with the same word-boundary care as `__`: an underscore
+    // inside a word (`snake_case_name`, `my_file_v2`) is never a delimiter,
+    // and code spans and URLs were lifted out above so theirs are never seen.
+    // Without this pass the app's own "_The server closed the stream..._"
+    // showed its underscores (play tester, 2026-09-27).
+    .replace(/(^|[^_\w])_(?!\s)([^_\n]+?)(?<!\s)_(?!\w)/g, "$1<em>$2</em>")
     .replace(/~~([\s\S]+?)~~/g, "<s>$1</s>");
 
   // Only http(s) links are linkified; anything else stays plain text so model

@@ -64,6 +64,7 @@ TITLES = {
     "run_shell_on_host": "run a command on this PC",
     "control_computer": "use the mouse and keyboard on this PC",
     "control_phone": "tap and type on your phone",
+    "run_plan": "run the safe steps of an approved plan",
     "control_browser": "work a web page for you in a browser",
     "spend_money": "spend money",
     "post_to_external_service": "post to an outside service",
@@ -72,6 +73,11 @@ TITLES = {
     "web_research": "search GitHub",
     "research_authenticated": "search GitHub signed in as you",
     "search_the_web": "search the web",
+    # jarvis_chatbot.py: ONE card per conversation with an AI chatbot (not routed yet)
+    "chatbot_session": "hold a conversation with an AI chatbot for you",
+    # jarvis_support.py (2026-09-28): ONE card per support chat, and ONE per offer
+    "support_chat": "chat with a company's customer support for you",
+    "support_offer": "accept an offer from customer support in your name",
     "stop_asking_before_every_web_search": "stop asking before every web search",
     # --- notes
     "read_joplin_note": "read a note in Joplin",
@@ -93,6 +99,8 @@ TITLES = {
     # --- news feeds and "tell me when this page changes" (2026-09-27)
     "news_read": "read a news feed you added",
     "page_read": "fetch a web page you're watching",
+    # --- GitHub watches in "tell me when" (2026-09-28)
+    "github_read": "check GitHub for a \"tell me when\"",
     # --- models and graphics cards
     "browse_model_catalog": "look up AI models online",
     "download_model": "download an AI model",
@@ -102,10 +110,13 @@ TITLES = {
     "second_card_enable": "start using the second graphics card",
     "second_card_browser_enable": "turn on browser control, which works real web pages",
     "second_card_combined_enable": "run one bigger model across both graphics cards",
+    "second_card_third_assign": "move a second-card feature onto a third graphics card",
     "big_model_enable": "start the big model for background jobs",
     # --- its own settings and code
     "change_own_config": "change one of its settings",
-    "loosen_what_asks_first": "let one action go ahead without asking you first",
+    # One setting going ahead without asking, or (2026-09-28) Lockdown off:
+    # both are this one card (jarvis_asks_first.py), so the words cover both.
+    "loosen_what_asks_first": "loosen what asks first",
     "enable_reading_tool": "offer a reading tool to the AI model",
     "check_tool_updates": "check PyPI, crates.io and GitHub for tool updates",
     "modify_own_code": "change its own code",
@@ -117,14 +128,26 @@ TITLES = {
     "learning_sensitive_enable": "also learn sensitive topics automatically",
     "history_enable": "keep your chat history",
     "memory_manage": "change what it remembers",
+    # jarvis_forget_range.py (2026-09-28): ONE card for a whole time frame
+    "memory_forget_range": "forget what it learned and delete chats from the days you chose",
     "user_profile_manage": "change your profile",
     # --- voices
     "custom_voice": "keep or use a custom voice",
     "better_voice_enable": "turn on the better custom voice",
     # --- notifications
     "watch_notifications_enable": "let your notifications show on a smartwatch too",
+    "phone_notifications_read": "start reading notifications from apps you choose on your phone",
     # --- backups
     "restore_backup": "restore from a backup, replacing what it knows now",
+    # --- devices (jarvis_devices.py, docs/PAIRING-DESIGN.md, 2026-09-28)
+    "pair_device": "connect a new device",
+    "unretire_shared_key": "let the old shared key work from other devices again",
+    # phase 2 (docs/PAIRING-DESIGN.md section 11). A title is built from the
+    # action's name only, never the payload, so the phone's name is on the
+    # card's text instead.
+    "register_approval_key": "let a phone approve risky actions with its fingerprint or PIN",
+    # --- the app builder (docs/APP-BUILDER-DESIGN.md)
+    "app_merge_change": "add its change to one of your apps",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",

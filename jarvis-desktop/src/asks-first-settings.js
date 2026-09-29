@@ -20,10 +20,14 @@
  * @module asks-first-settings
  */
 
-import { announce, currentLink, linkWords, onLink, onQueue } from "./jarvis-link.js";
+import { announce, currentLink, linkWords, onEvent, onLink, onQueue } from "./jarvis-link.js";
 import {
   LIGHTS_DETAIL,
   LIGHTS_LABEL,
+  LOCKDOWN_ACTION,
+  LOCKDOWN_DETAIL,
+  LOCKDOWN_LABEL,
+  lockdownView,
   lightsView,
   readAsksFirst,
   rowLine,
@@ -44,6 +48,7 @@ const el = {
   state: $("af-state"),
   body: $("af-body"),
   groups: $("af-groups"),
+  lockdown: $("af-lockdown"),
   status: $("af-status"),
 };
 
@@ -133,6 +138,7 @@ function paint() {
   }
   el.state.textContent = "";
   el.body.hidden = false;
+  paintLockdown();
   el.groups.replaceChildren(...view.groups.map((g) => {
     const box = node("div", "af-group");
     box.append(node("h3", "subhead", g.title));
@@ -141,6 +147,59 @@ function paint() {
     box.append(ul);
     return box;
   }));
+}
+
+/**
+ * Lockdown, at the top of the page (2026-09-28): what it is, whether it is
+ * on, and ONE button - on at once, or (on the PC) off through one card that
+ * needs Windows Hello.
+ */
+function paintLockdown() {
+  if (!el.lockdown) return;
+  const lv = lockdownView(view.lockdown, live());
+  el.lockdown.hidden = !lv.show;
+  if (!lv.show) {
+    el.lockdown.replaceChildren();
+    return;
+  }
+  el.lockdown.dataset.on = lv.on ? "true" : "false";
+  const head = node("h3", "subhead", LOCKDOWN_LABEL);
+  const detail = node("p", "note", LOCKDOWN_DETAIL);
+  const lines = lv.lines.map((l, i) => node(i === 0 ? "strong" : "span",
+    i === 0 ? "af-lockdown-state" : "sc-gpu-role", l));
+  const parts = [head, detail, ...lines];
+  if (lv.button) {
+    const b = node("button", "btn small", lv.button.label);
+    b.type = "button";
+    b.id = "af-lockdown-button";
+    b.disabled = busy || lv.button.disabled;
+    b.addEventListener("click", () => changeLockdown(lv.button.ask));
+    parts.push(b);
+  }
+  el.lockdown.replaceChildren(...parts);
+}
+
+/** Lockdown ON at once (never held); OFF one card on the PC (held on a stale link). */
+async function changeLockdown(ask) {
+  if (busy) return;
+  if (!ask && !live()) {
+    say(STALE, "bad");
+    return;
+  }
+  busy = true;
+  paint();
+  say(ask ? "Turning on Lockdown…" : "Asking for your approval…");
+  try {
+    const out = await TAURI.core.invoke("set_asks_first", { action: LOCKDOWN_ACTION, ask });
+    const words = String((out && (out.message || out.error)) || "Done.");
+    say(words, out && out.ok === false ? "bad" : "ok");
+    announce(words);
+  } catch (error) {
+    say(problemWords(error), "bad");
+  } finally {
+    busy = false;
+  }
+  await load();
 }
 
 async function load() {
@@ -236,4 +295,8 @@ onLink(() => paint());
 onQueue(() => load());
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) load();
+});
+// Lockdown turned on or off - from the phone, by voice, or its card decided.
+onEvent((frame) => {
+  if (frame && frame.kind === "lockdown") load();
 });

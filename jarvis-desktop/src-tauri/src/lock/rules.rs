@@ -443,9 +443,124 @@ pub fn redact_private(section: &str, body: serde_json::Value) -> serde_json::Val
     serde_json::Value::Object(map)
 }
 
+/// The node groups of `/api/graph` that say what Jarvis IS - the core,
+/// models, tool clusters and tools, skills, personas, the "Facts" and
+/// "Documents" sources - not what it knows about the owner. Every other
+/// group ("fact", "entity", "document", or one this list has never heard
+/// of) is treated as memory.
+const GRAPH_SAFE_GROUPS: &[&str] = &[
+    "core", "cluster", "model", "source", "tool", "skill", "persona",
+];
+
+/// `/api/graph` with its memory taken out, for while the private lists are
+/// hidden (privacy finding B1, docs/RESEARCH-AUDIT-2026-09-28.md section
+/// 8.3). The Brain no longer reads the graph at all; the HUD window still
+/// does (hud_proxy.rs), so its fact, document and person dots go - the dot,
+/// its label and every link to it - and `hidden_count` says how many. A
+/// node whose group is missing or unknown goes too: only the groups known
+/// to say nothing about the owner stay. The rest of the body is unchanged.
+pub fn redact_graph(body: serde_json::Value) -> serde_json::Value {
+    let serde_json::Value::Object(mut map) = body else {
+        return body;
+    };
+    let mut gone = std::collections::HashSet::new();
+    if let Some(serde_json::Value::Array(nodes)) = map.get_mut("nodes") {
+        nodes.retain(|n| {
+            let group = n.get("group").and_then(|g| g.as_str()).unwrap_or("");
+            let keep = GRAPH_SAFE_GROUPS.contains(&group);
+            if !keep {
+                gone.insert(n.get("id").map(|i| i.to_string()).unwrap_or_default());
+            }
+            keep
+        });
+    }
+    if let Some(serde_json::Value::Array(links)) = map.get_mut("links") {
+        links.retain(|l| {
+            let end = |k: &str| l.get(k).map(|v| v.to_string()).unwrap_or_default();
+            !gone.contains(&end("source")) && !gone.contains(&end("target"))
+        });
+    }
+    if !gone.is_empty() {
+        map.insert("hidden".to_string(), serde_json::Value::Bool(true));
+        map.insert("hidden_count".to_string(), gone.len().into());
+    }
+    serde_json::Value::Object(map)
+}
+
+/// One HUD read's reply with its memory taken out while the private lists
+/// are hidden (privacy finding B1, found again in the HUD 2026-09-28):
+///
+/// * `/api/graph` through [`redact_graph`];
+/// * `/api/retrieve?q=` (the HUD's "what the brain reached for" trace,
+///   which lists recalled facts) becomes `{"available": false, "hidden":
+///   true}` - the page already shows no trace for `available: false`.
+///
+/// `/api/memory/pending` is NOT changed: the HUD shows only how many cards
+/// wait, never their words (jarvis_hud.html), and the Brain's own hidden
+/// list keeps that count too. Anything else, or a graph body that is not
+/// JSON, is passed on unchanged.
+pub fn redact_hud_read(path: &str, body: &str) -> String {
+    let route = path.split('?').next().unwrap_or(path);
+    match route {
+        "/api/retrieve" => serde_json::json!({ "available": false, "hidden": true }).to_string(),
+        "/api/graph" => match serde_json::from_str::<serde_json::Value>(body) {
+            Ok(v) => redact_graph(v).to_string(),
+            Err(_) => body.to_string(),
+        },
+        _ => body.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_graph_keeps_no_fact_or_name_under_the_lock() {
+        let body = serde_json::json!({
+            "nodes": [
+                {"id": "core", "label": "J.A.R.V.I.S.", "group": "core"},
+                {"id": "source:facts", "label": "Facts", "group": "source"},
+                {"id": "fact:1", "label": "Owner's sister is called Priya", "group": "fact"},
+                {"id": "entity:1", "label": "Priya", "group": "entity"},
+                {"id": 7, "label": "Mystery words", "group": "brand-new-kind"},
+                {"id": "nogroup", "label": "No group at all"}
+            ],
+            "links": [
+                {"source": "core", "target": "source:facts", "kind": "runs"},
+                {"source": "source:facts", "target": "fact:1", "kind": "knows"},
+                {"source": "fact:1", "target": "entity:1", "kind": "about"},
+                {"source": "core", "target": 7}
+            ],
+            "counts": {"fact": 1}
+        });
+        let out = redact_graph(body);
+        let text = out.to_string();
+        for word in ["Priya", "Mystery", "No group"] {
+            assert!(!text.contains(word), "{word} survived: {text}");
+        }
+        assert_eq!(out["nodes"].as_array().unwrap().len(), 2);
+        assert_eq!(out["links"].as_array().unwrap().len(), 1);
+        assert_eq!(out["hidden"], true);
+        assert_eq!(out["hidden_count"], 4);
+        assert_eq!(out["counts"]["fact"], 1, "counts are numbers, kept");
+    }
+
+    #[test]
+    fn a_hud_read_is_redacted_only_where_it_is_memory() {
+        let graph = r#"{"nodes": [{"id": "f", "label": "Owner likes jazz", "group": "fact"}], "links": []}"#;
+        assert!(!redact_hud_read("/api/graph", graph).contains("jazz"));
+        let trace = r#"{"available": true, "hits": [{"text": "Owner likes jazz"}], "near": []}"#;
+        let out = redact_hud_read("/api/retrieve?q=music", trace);
+        assert!(!out.contains("jazz"), "{out}");
+        assert!(out.contains("\"available\":false"), "{out}");
+        // The HUD shows only how many cards wait - a count, kept.
+        let pending = r#"{"available": true, "pending": [{"id": 1}]}"#;
+        assert_eq!(redact_hud_read("/api/memory/pending", pending), pending);
+        let status = r#"{"model": "jazz"}"#;
+        assert_eq!(redact_hud_read("/api/status", status), status);
+        assert_eq!(redact_hud_read("/api/graph", "not json"), "not json");
+    }
 
     #[test]
     fn no_lock_no_risky_approval_reads_like_the_phone() {

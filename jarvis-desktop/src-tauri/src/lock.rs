@@ -506,6 +506,20 @@ pub fn may_open(app: &AppHandle, which: Covered) -> bool {
     false
 }
 
+/// Talk-to-type (talk_type.rs): true while App lock is on and the owner has
+/// been away longer than "Lock again after" - the same test [`may_open`]
+/// makes, but it starts no prompt (a prompt would take the keyboard focus
+/// from the program the owner wants to type into) and does not count as the
+/// owner being here. Talk-to-type then does not listen or type.
+pub fn locked_now(app: &AppHandle) -> bool {
+    let security = current(app);
+    if !security.app_lock {
+        return false;
+    }
+    let state = app.state::<LockState>();
+    !state.fresh(app, &security, Instant::now())
+}
+
 fn start_unlock(app: &AppHandle, which: Covered) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -596,6 +610,20 @@ pub fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
     }
 }
 
+/// True when App lock is on and would ask Windows Hello before showing a
+/// Jarvis window now - the owner has been away longer than "Lock again
+/// after" and no Jarvis window has focus. Jarvis Live on this PC ends then,
+/// and cannot start (live.rs): someone else at the PC must not be able to
+/// talk to Jarvis through a session the owner left running. Asks nothing.
+pub fn app_locked(app: &AppHandle) -> bool {
+    let security = current(app);
+    if !security.app_lock {
+        return false;
+    }
+    let state = app.state::<LockState>();
+    state.inside_prompts.load(Ordering::SeqCst) == 0 && !state.fresh(app, &security, Instant::now())
+}
+
 /// How often [`spawn_watch`] looks. "Lock again after" is honoured to within
 /// this much.
 const WATCH_EVERY: Duration = Duration::from_secs(5);
@@ -646,6 +674,11 @@ fn emit_private_hidden(app: &AppHandle) {
         (),
     ) {
         eprintln!("[jarvis] unable to tell the Brain to hide its lists: {err}");
+    }
+    // The Jarvis bar hides its thread of earlier answers the same moment
+    // (the second chat audit, 2026-09-28).
+    if let Err(err) = app.emit_to(crate::QUICKBAR_LABEL, crate::events::PRIVATE_HIDDEN, ()) {
+        eprintln!("[jarvis] unable to tell the Jarvis bar to hide its thread: {err}");
     }
 }
 

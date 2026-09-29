@@ -1,0 +1,56 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -559,4 +559,7 @@
+ # Memory tab that says nothing. How each one comes to ask:
+ _NO_RULE_FROM_DENIAL = frozenset({
++    "pair_device",  # jarvis_devices.py acts only on tier "ask": ONE card per phone paired (devices.patch)
++    "unretire_shared_key",  # jarvis_devices.py acts only on tier "ask": bringing the old shared key back (devices.patch)
++    "register_approval_key",  # jarvis_devices.py acts only on tier "ask": ONE card per phone that turns on signed approvals (devices.patch)
+     "second_card_enable",     # jarvis_second_card.py acts only on tier "ask"
+     "second_card_browser_enable",  # jarvis_second_card.py: the same (Browser control)
+@@ -602,2 +605,19 @@
+     "phone_notifications_read": ("yes", "local", "lets your phone start reading notifications from apps you choose (none, until you add one); banking apps are blocked on the phone; a notification only reaches Jarvis when you attach it to a chat yourself; turning it off again is instant"),
++    # devices.patch (jarvis_devices.py, docs/PAIRING-DESIGN.md; the owner's
++    # decisions of 2026-09-24 and 2026-09-28). Pairing a phone gives it a
++    # key of its own; only the key's SHA-256 is kept on this PC, and the
++    # device can be removed at any time (Settings, Devices), which cuts it
++    # off at once - so "yes" and "local". Both cards are also in
++    # jarvis_owner_check.PC_ONLY_ACTIONS: approved on this PC only, always
++    # with Windows Hello, whatever this line says.
++    "pair_device": ("yes", "local", "gives the phone named on the card its own key to talk to Jarvis, after you check it shows the same four words; you can remove it any time in Settings, Devices, and that cuts it off at once"),
++    # Bringing the old shared key back for other devices (a loosening):
++    # retiring it again is instant, so "yes"; it only decides who may talk
++    # to this PC, so "local".
++    "unretire_shared_key": ("yes", "local", "lets any device that still has the old shared key reach Jarvis again, not only this PC; you can retire it again any time, and that is instant"),
++    # Phase 2 (docs/PAIRING-DESIGN.md section 11): a paired phone's signing
++    # key, so its risky approvals need a fresh fingerprint or PIN on the
++    # phone. Removing the device drops it again, so "yes" and "local";
++    # also PC only, always with Windows Hello (PC_ONLY_ACTIONS).
++    "register_approval_key": ("yes", "local", "lets the phone named on the card approve risky actions with its own fingerprint or PIN, checked here on this PC; you can remove the device any time in Settings, Devices, and that drops the key again"),
+     # note-capture.patch (jarvis_note_capture.py). All three stay on this PC:
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -2408,6 +2408,23 @@
+     _refuse_every_interface(bind)
+     if _SCRUBBING_LOG:
+         print("  log        passwords, keys and the token are kept out of this log")
++    # devices.patch (docs/PAIRING-DESIGN.md): a key per device, and pairing
++    # a phone by QR code. HERE, before every install() below, because each
++    # module keeps the _token_ok it is handed at start-up: replacing the
++    # name now reaches every inline `_token_ok(self)` check AND every module
++    # installed after this. A device key (jdk1.<id>.<secret>) is checked in
++    # jarvis_devices.py and never falls through to the old check; anything
++    # else goes to the original _token_ok, unchanged. Without
++    # jarvis_devices.py, or on any error, nothing is replaced - only the
++    # shared key works, exactly as before - and the banner says so.
++    try:
++        import jarvis_devices
++        globals()["_token_ok"] = jarvis_devices.wrap_token_ok(_token_ok)
++        print(jarvis_devices.install(Handler, origin_ok=_origin_ok,
++                                     token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  devices    NOT ON ({type(exc).__name__}) - only the shared key works")
++        print("             until jarvis_devices.py is back: run apply-patches.ps1 again")
+     # owner-check.patch (docs/APPROVAL-GAP-DESIGN.md step 1): POST
+     # /api/approve now asks Windows Hello itself for a risky card approved
+     # from this PC, and stamps every approval it accepts; the gate believes

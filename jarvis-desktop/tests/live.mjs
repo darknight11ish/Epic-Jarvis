@@ -23,7 +23,7 @@ const check = async (name, fn) => {
 async function live() {
   const page = await K.open(browser, base, "brain.html", {}, { width: 1180, height: 780 });
   await page.locator("#rail-advanced-toggle").click();
-  await page.locator("#tab-live").click();
+  await page.locator("#tab-now").click();
   await page.waitForTimeout(150);
   return page;
 }
@@ -87,6 +87,24 @@ await check("Live no longer says steps are missing, and says why reasoning is no
   assert.match(note, /each tool/);
   assert.match(note, /thinking is not shown/);
   assert.match(note, /reaches your phone/);
+});
+
+await check("the tab is called \"Now\" (not confused with Jarvis Live), and a Jarvis Live event reads as one line, not JSON", async () => {
+  const page = await live();
+  const label = (await page.textContent("#tab-now .rail-label")).trim();
+  const status = { on: true, device: "phone", minutes_left: 24, muted: false, paused: "card",
+    pause_words: "Waiting for the card - approve or deny it, and Live carries on", state: "paused" };
+  await page.evaluate((f) => window.__emit("jarvis-event", f), frame("live", status, 900));
+  await page.evaluate((f) => window.__emit("jarvis-event", f),
+    frame("live", { on: false, state: "ended", ended_words: "You ended it." }, 901));
+  await page.waitForTimeout(150);
+  const got = (await rows(page)).filter((r) => r.kind === "live").map((r) => r.body);
+  await page.close();
+  assert.equal(label, "Now");
+  assert.deepEqual(got, [
+    "Jarvis Live on the phone · 24 min left · Waiting for the card - approve or deny it, and Live carries on",
+    "Jarvis Live ended: You ended it.",
+  ]);
 });
 
 await browser.close();

@@ -318,6 +318,34 @@ export function makeGraph(scale = 1) {
   return { nodes, links, counts: {}, sources: {}, config_dir: "C:\\Users\\pcadmin\\.openjarvis" };
 }
 
+/**
+ * A people-and-things list shaped like `entities_view()` builds one
+ * (backend/rebuilt/jarvis_memory.py; GET /api/memory/entities) - what the
+ * Galaxy draws since 2026-09-28. Priya is named by the most facts; some
+ * facts name two or three names, so there are links to draw; one name has
+ * no kind; `scale` grows it to judge the layout under load.
+ */
+export function makeEntities(scale = 1) {
+  const kinds = ["person", "pet", "place", "organisation", "project", "thing", null];
+  const entities = [
+    { id: 1, name: "Priya", kind: "person", also: [], aliases: ["sister"], fact_ids: [10, 11, 12, 13, 14] },
+    { id: 2, name: "Lisbon", kind: "place", also: [], aliases: [], fact_ids: [10, 15] },
+    { id: 3, name: "Miso", kind: "pet", also: [], aliases: ["cat"], fact_ids: [16, 11] },
+    { id: 4, name: "Initech", kind: "organisation", also: ["Initech Ltd"], aliases: [], fact_ids: [17, 18] },
+    { id: 5, name: "Marta", kind: "person", also: [], aliases: ["manager", "boss"], fact_ids: [17, 19] },
+    { id: 6, name: "Jarvis app", kind: "project", also: [], aliases: [], fact_ids: [20] },
+    { id: 7, name: "Blue bike", kind: "thing", also: [], aliases: [], fact_ids: [21, 12] },
+    { id: 8, name: "Okafor", kind: null, also: [], aliases: [], fact_ids: [22] },
+  ];
+  for (let i = 0; i < 32 * scale; i++) {
+    const id = 100 + i;
+    entities.push({ id, name: `Name ${i}`, kind: kinds[i % kinds.length], also: [], aliases: [],
+      fact_ids: [...new Set([1000 + i, 1000 + ((i * 7) % (32 * scale)), 10 + (i % 5)])] });
+  }
+  for (const e of entities) e.facts = e.fact_ids.length;
+  return { entities, count: entities.length, limit: 500 };
+}
+
 export const BRAIN = {
   graph: makeGraph(1),
   status: { available: true, lane: "local", model: "qwen3:8b", power: "active" },
@@ -454,6 +482,11 @@ export const HOTKEYS = [
     accelerator: "Alt+Shift+X", default: "Alt+Shift+X", registered: true, error: null },
   { id: "toggle_floating", label: "Show or hide the floating face", hint: "The small always-on-top window with just Jarvis's face - no chat box. Off by default.",
     accelerator: "Alt+Shift+F", default: "Alt+Shift+F", registered: true, error: null },
+  { id: "talk_to_type", label: "Talk-to-type", hint: "Hold it and speak, then let go: Jarvis types what you said into the program in front. A quick tap keeps it listening until you press it again. Works once talk-to-type is on (Settings, Voice).",
+    accelerator: "Alt+Shift+T", default: "Alt+Shift+T", registered: true, error: null },
+  // Jarvis Live's key ships OFF (the owner's decision of 2026-09-28).
+  { id: "toggle_live", label: "Start or end Jarvis Live", hint: "Off until you pick a key - Alt+Shift+L is free for it. Starting is held while the connection is catching up or App lock would ask; ending never is.",
+    accelerator: "", default: "", registered: false, error: null },
 ];
 
 export const UPDATE_NONE = {
@@ -461,8 +494,8 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus,
-  folders, animal }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals,
+  folders, animal, chatbot, support, historyImport, widgets, devices }) {
   const listeners = {};
   window.__calls = [];
   // animal.rs: GET /api/animal's answer (a scenario's, else a PC nobody has
@@ -471,6 +504,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__emailSending = emailSending || null;
   // folders.rs: { view, addAnswer, removeAnswer, importAnswer } (folders.mjs).
   window.__folders = folders || null;
+  // devices.rs (docs/PAIRING-DESIGN.md): { list, address, start, startFails,
+  // sessions, removeFails, sharedFails } (devices.mjs). Unset, a PC whose
+  // backend has no pairing yet - the Devices card says so and nothing else.
+  window.__devices = devices || null;
   // App lock on or off, for get_app_lock (apps security audit M3).
   window.__appLock = Boolean(appLock);
   const state = {
@@ -773,11 +810,24 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__taskActions.push(cmd);
             if (window.__taskActionFails) throw new Error(window.__taskActionFails);
             return { ok: true };
+          // "Jarvis is working on your screen" (screen_work.rs): a scenario
+          // sets window.__screenWork to what Rust would answer.
+          case "screen_work":
+            if (window.__screenWorkFails) throw new Error(window.__screenWorkFails);
+            return window.__screenWork || { running: false, id: null, elapsed_ms: null };
+          case "stop_everything":
+            return null;
           case "inject_task_note":
             window.__taskNotes = window.__taskNotes || [];
             window.__taskNotes.push(args.note);
             if (window.__taskNoteFails) throw new Error(window.__taskNoteFails);
             return { ok: true };
+          // voice_training.rs get_face_voice_offer: the Faces window's one
+          // read - the PC's waiting animal voice question, or null, and
+          // whether the link is stale. A scenario sets window.__faceOffer.
+          case "get_face_voice_offer":
+            window.__calls.push(["__offerRead"]);
+            return JSON.parse(JSON.stringify(window.__faceOffer || { offer: null, stale: false }));
           case "get_appearance":
             if (window.__appearanceFails) throw new Error(window.__appearanceFails);
             return window.__appearance;
@@ -811,7 +861,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return null;
           case "reset_hotkeys":
             window.__hotkeys = window.__hotkeys.map((h) => ({
-              ...h, accelerator: h.default, registered: true, error: null,
+              ...h, accelerator: h.default, registered: Boolean(h.default), error: null,
             }));
             return window.__hotkeys;
           case "set_hotkeys": {
@@ -819,6 +869,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             // written, so a rejected save leaves the bindings untouched.
             const seen = new Map();
             for (const [id, accel] of Object.entries(args.bindings)) {
+              // Blank: an action left off (hotkeys.rs skips it).
+              if (!accel) continue;
               const mods = String(accel).split("+").slice(0, -1);
               if (!mods.length) throw new Error(`${id}: \`${accel}\` has no modifier.`);
               const key = String(accel).toLowerCase();
@@ -830,8 +882,10 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__hotkeys = window.__hotkeys.map((h) => ({
               ...h,
               accelerator: args.bindings[h.id] ?? h.accelerator,
-              // The scenario decides which combinations the "OS" refuses.
-              registered: !(window.__refuse || []).includes(args.bindings[h.id] ?? h.accelerator),
+              // The scenario decides which combinations the "OS" refuses. A
+              // blank one is off: not registered, and no error.
+              registered: Boolean(args.bindings[h.id] ?? h.accelerator)
+                && !(window.__refuse || []).includes(args.bindings[h.id] ?? h.accelerator),
               error: (window.__refuse || []).includes(args.bindings[h.id] ?? h.accelerator)
                 ? "HotKey already registered"
                 : null,
@@ -875,6 +929,30 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             st.pending = st.pending.filter((p) => p !== args.feature);
             const label = args.feature === "master" ? "The second graphics card" : `"${row ? row.name : args.feature}"`;
             return { ok: true, enabled: false, pending: false, message: `${label} is off.` };
+          }
+          // commands.rs set_third_card (2026-09-28): moving one of the
+          // second card's own features onto a third graphics card, or
+          // moving it back off. What jarvis_second_card._request_change_third
+          // does to status()'s "third" key: assigning puts "third" in
+          // `pending` (a card is up, nothing moved yet); unassigning clears
+          // it and `third.assigned` at once.
+          case "set_third_card": {
+            const sc = window.__secondCard;
+            sc.changes.push({ assign: args.assign ?? null });
+            if (sc.setFails) throw new Error(sc.setFails);
+            const st = sc.status;
+            const third = st.third || {};
+            if (args.assign) {
+              if (!st.pending.includes("third")) st.pending.push("third");
+              third.pending = true;
+              return { ok: true, assigned: third.assigned || null, pending: true,
+                       message: "Approve the card on your PC or phone to move it. Nothing changes until you do." };
+            }
+            third.assigned = null;
+            third.pending = false;
+            st.pending = st.pending.filter((p) => p !== "third");
+            return { ok: true, assigned: null, pending: false,
+                     message: "The third card is not running anything." };
           }
           // "When to suggest the bigger model" - no card either way, so this
           // just flips the one signal in the same status object.
@@ -927,7 +1005,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "set_voice_face":
           case "set_voice_animal":
           case "reset_voice_animal":
-          case "try_voice_animal": {
+          case "try_voice_animal":
+          case "answer_face_voice_offer": {
             const v = window.__vt;
             if (cmd !== "voice_sample_level") v.calls.push([cmd, JSON.parse(JSON.stringify(args || {}))]);
             if (v.fails[cmd]) throw new Error(v.fails[cmd]);
@@ -990,6 +1069,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 return JSON.parse(JSON.stringify(v.animalReset));
               case "try_voice_animal":
                 return JSON.parse(JSON.stringify(v.animalTry));
+              // The one-time animal voice question (voice_training.rs
+              // answer_face_voice_offer). The test builds its own answer
+              // in `faceOfferAnswer` - the fixtures may not have it yet.
+              case "answer_face_voice_offer":
+                return JSON.parse(JSON.stringify(v.faceOfferAnswer
+                  || { ok: true, http: 200, message: "Done", face_voice: {} }));
               default:
                 return null;
             }
@@ -1096,6 +1181,24 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const label = args.switch === "master" ? "The big model" : `"${row ? row.name : args.switch}"`;
             return { ok: true, enabled: false, pending: false, message: `${label} is off.` };
           }
+          // brain/history_import.rs: "Bring in old chats". Unset, an idle
+          // PC (the real jarvis_history_import.view(), below). A scenario's
+          // `historyImport`: `status` answers used in turn (the last
+          // repeating), `start` / `startFails`, `cancel`.
+          case "history_import_status":
+          case "history_import_start":
+          case "history_import_cancel": {
+            const hi = window.__historyImport;
+            hi.calls.push(cmd);
+            const copy = (v) => JSON.parse(JSON.stringify(v));
+            if (cmd === "history_import_start") {
+              if (hi.startFails) throw new Error(hi.startFails);
+              return copy(hi.start || null);
+            }
+            if (cmd === "history_import_cancel") return copy(hi.cancel || null);
+            hi.reads += 1;
+            return copy(hi.status[Math.min(hi.reads - 1, hi.status.length - 1)]);
+          }
           // commands.rs get_deep / ask_deep. `status` is a real
           // deep_status(); `askAnswers` are real POST bodies (the 202 job, or
           // a refusal the Rust passes on as an answer), used in turn, the
@@ -1133,6 +1236,41 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               out[name] = body;
             }
             return out;
+          }
+          // brain/fact_history.rs brain_fact_history, over the stubbed
+          // memory_facts, the way jarvis_memory.fact_history_view answers:
+          // every row joined by retired_by, either way, oldest first; an
+          // erased row with no words. `window.__factHistoryMissing` is an
+          // older PC; hidden like every memory list.
+          case "brain_fact_history": {
+            window.__factHistoryReads = (window.__factHistoryReads || []).concat([args.id]);
+            if (window.__factHistoryMissing) {
+              return { available: false, why: "Your PC's Jarvis cannot show a fact's history yet - " +
+                "run apply-patches.ps1 on the PC to update it." };
+            }
+            const facts = ((brain && brain.memory_facts && brain.memory_facts.facts) || []);
+            const byId = new Map(facts.map((f) => [f.id, f]));
+            if (!byId.has(args.id)) throw new Error("That fact is not in Jarvis's memory any more. Refresh the list.");
+            const seen = new Set([args.id]);
+            const todo = [args.id];
+            while (todo.length) {
+              const cur = byId.get(todo.shift());
+              const near = facts.filter((f) => f.retired_by === cur.id).map((f) => f.id);
+              if (cur.retired_by && byId.has(cur.retired_by)) near.push(cur.retired_by);
+              for (const n of near) if (!seen.has(n)) { seen.add(n); todo.push(n); }
+            }
+            const versions = [...seen].map((id) => byId.get(id))
+              .sort((a, b) => (a.valid_from - b.valid_from) || (a.id - b.id))
+              .map((f) => ({ id: f.id, text: f.erased_at ? "" : f.text, this: f.id === args.id,
+                current: !f.erased_at && (f.valid_to === null || f.valid_to === undefined),
+                forgotten: false, erased_at: f.erased_at || null, created: f.created || f.valid_from,
+                valid_from: f.valid_from, valid_to: f.valid_to ?? null, retired_at: f.retired_at ?? null,
+                retired_by: f.retired_by ?? null, source: f.source || "" }));
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              return { id: args.id, versions: [], hidden: true, hidden_count: versions.length };
+            }
+            return { id: args.id, versions, count: versions.length, more: false };
           }
           // lock.rs. `settings` is what is stored, `hello` this PC's Windows
           // Hello; `setFails` / `revealFails` are the sentences Rust rejects
@@ -1420,6 +1558,199 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return { ok: true, waiting: true, job,
                      said: "It repeats, so it waits for your yes on the card." };
           }
+          // brain/goals.rs (Goals). `window.__goals` is null - a PC without
+          // this feature yet, which Rust answers {available: false} for -
+          // unless the scenario names `goals: {goals}`. Accepting pushes its
+          // check-in job onto the SAME `window.__schedule.jobs` Coming up
+          // reads (creating it, empty, if the scenario named no `schedule` -
+          // exactly as the real backend keeps both on the one scheduler),
+          // waiting, like any other repeat set up on the PC; stopping
+          // removes it again. Words are taken out while the private lists
+          // are hidden, same as brain_schedule above.
+          case "brain_goals": {
+            const g = window.__goals;
+            if (!g) {
+              return { available: false, why: "Your PC's Jarvis does not have Goals yet - " +
+                "run apply-patches.ps1 on the PC." };
+            }
+            g.reads += 1;
+            if (g.fails) throw new Error(g.fails);
+            const out = JSON.parse(JSON.stringify({ available: true, goals: g.goals,
+              limits: { text: 300, steps: 7, goals: 20, by: 40 } }));
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              for (const gl of out.goals) {
+                gl.text = "";
+                gl.plan = gl.plan.map((s) => ({ ...s, step: "", by: "" }));
+                gl.hidden = true;
+              }
+              out.hidden = true;
+            }
+            return out;
+          }
+          // "Widgets you describe" (brain/widgets.rs), as Rust answers.
+          case "brain_widgets": {
+            const w = window.__widgets;
+            if (!w) {
+              return { available: false, why: "Your PC's Jarvis cannot make widgets yet - run " +
+                "apply-patches.ps1 on the PC." };
+            }
+            const out = JSON.parse(JSON.stringify({ ok: true, widgets: w.widgets,
+              drafts: w.drafts, no_card: w.noCard }));
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              for (const x of [...out.widgets, ...out.drafts]) {
+                x.name = ""; x.said = ""; x.parts = []; x.hidden = true;
+              }
+              out.hidden = true;
+            }
+            return out;
+          }
+          case "brain_goals_create": {
+            window.__goalsCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const g = window.__goals;
+            const text = String(args.text || "").trim();
+            if (!text) return { ok: false, error: "a goal needs some words" };
+            if (text.length > 300) {
+              return { ok: false, error: "a goal is longer than 300 characters - say it more briefly" };
+            }
+            const open = g.goals.filter((x) => x.status === "draft" || x.status === "active").length;
+            if (open >= 20) {
+              return { ok: false, error: "there are already 20 goals - stop tracking one before adding another" };
+            }
+            const plan = Array.isArray(args.plan) && args.plan.length
+              ? args.plan.map((s) => ({ step: String(s.step || ""), by: String(s.by || ""), done: Boolean(s.done) }))
+              : [{ step: text, by: "", done: false }];
+            const goal = { id: "g" + g.goals.length.toString(16).padStart(10, "0"), text, plan,
+              status: "draft", created: Date.now() / 1000, changed: Date.now() / 1000 };
+            g.goals.unshift(goal);
+            return { ok: true, goal };
+          }
+          case "brain_goals_accept": {
+            window.__goalsCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const g = window.__goals;
+            const goal = g.goals.find((x) => x.id === args.id);
+            if (!goal) return { ok: false, error: "no such goal" };
+            if (goal.status !== "draft") return { ok: false, error: "that goal is not waiting to be accepted" };
+            const plan = Array.isArray(args.plan) && args.plan.length
+              ? args.plan.map((s) => ({ step: String(s.step || ""), by: String(s.by || ""), done: Boolean(s.done) }))
+              : goal.plan;
+            if (!plan.length) return { ok: false, error: "a plan needs at least one step" };
+            if (plan.length > 7) {
+              return { ok: false, error: "a plan can have at most 7 steps - keep the big ones and drop the rest" };
+            }
+            goal.plan = plan;
+            goal.status = "active";
+            goal.changed = Date.now() / 1000;
+            if (!window.__schedule) window.__schedule = { jobs: [], todo: [], reads: 0, fails: null };
+            const job = { id: "s" + (0xd000000000 + window.__schedule.jobs.length).toString(16),
+              kind: "goal_checkin", text: goal.text, state: "waiting", repeats: true,
+              repeat: "every Monday at 09:00" };
+            window.__schedule.jobs.push(job);
+            g.checkinByGoal = g.checkinByGoal || {};
+            g.checkinByGoal[goal.id] = job.id;
+            return { ok: true, goal: { ...goal, checkin: job } };
+          }
+          case "brain_goals_step": {
+            window.__goalsCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const g = window.__goals;
+            const goal = g.goals.find((x) => x.id === args.id);
+            if (!goal) return { ok: false, error: "no such goal" };
+            const i = args.index;
+            if (typeof i !== "number" || i < 0 || i >= goal.plan.length) {
+              return { ok: false, error: "that is not one of this goal's steps" };
+            }
+            goal.plan[i].done = Boolean(args.done);
+            goal.changed = Date.now() / 1000;
+            return { ok: true, goal: { ...goal } };
+          }
+          case "brain_goals_stop": {
+            window.__goalsCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const g = window.__goals;
+            const goal = g.goals.find((x) => x.id === args.id);
+            if (!goal) return { ok: false, error: "no such goal" };
+            goal.status = "stopped";
+            goal.changed = Date.now() / 1000;
+            const jobId = (g.checkinByGoal || {})[goal.id];
+            if (jobId && window.__schedule) {
+              window.__schedule.jobs = window.__schedule.jobs.filter((j) => j.id !== jobId);
+            }
+            return { ok: true, goal: { ...goal } };
+          }
+          case "brain_widgets_draft": {
+            window.__widgetCalls.push({ cmd, ...args });
+            if (args.pasted) {
+              throw new Error("Widgets are made only from your own typed or spoken words - " +
+                "not from pasted or shared text.");
+            }
+            const w = window.__widgets;
+            const d = JSON.parse(JSON.stringify(w.draft));
+            w.drafts.push(d);
+            return { ok: true, draft: d, said: d.said, card: false, no_card: w.noCard };
+          }
+          case "brain_widgets_add": {
+            window.__widgetCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const w = window.__widgets;
+            const d = w.drafts.find((x) => x.id === args.draft);
+            if (!d) throw new Error("That preview has expired or was already used.");
+            w.drafts = w.drafts.filter((x) => x.id !== args.draft);
+            const kept = { ...d, id: "w" + d.id.slice(1) };
+            w.widgets.push(kept);
+            return { ok: true, widget: kept, said: `Added “${kept.name}”.` };
+          }
+          case "brain_widgets_discard": {
+            window.__widgetCalls.push({ cmd, ...args });
+            const w = window.__widgets;
+            w.drafts = w.drafts.filter((x) => x.id !== args.draft);
+            return { ok: true };
+          }
+          case "brain_widgets_delete": {
+            window.__widgetCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const w = window.__widgets;
+            w.widgets = w.widgets.filter((x) => x.id !== args.id);
+            return { ok: true, said: "Widget deleted." };
+          }
+          case "widget_board": {
+            window.__widgetCalls.push({ cmd, ...args });
+            const w = window.__widgets;
+            if (!w) return { available: false, why: "no widgets" };
+            const hidden = Boolean(window.__appLock);
+            return JSON.parse(JSON.stringify({ available: true, hidden,
+              widgets: w.widgets.map((x) => ({ id: x.id, name: hidden ? "" : x.name })),
+              shown: args.id ? (w.shows[args.id] || null) : null }));
+          }
+          case "widget_board_action": {
+            window.__widgetCalls.push({ cmd, ...args });
+            // brain/widgets.rs: under App lock a tile that acts only opens
+            // the Jarvis bar (the owner, 2026-09-28).
+            if (window.__appLock && !["stop_everything", "brief_me"].includes(args.action)) {
+              window.__barOpened = (window.__barOpened || 0) + 1;
+              return "App lock is on, so this opens the Jarvis bar instead. Unlock it, then ask Jarvis there.";
+            }
+            if (state.stale && !["stop_everything", "brief_me"].includes(args.action)) {
+              throw new Error("the event stream is stale");
+            }
+            return { timer: "10-minute timer set on your PC.",
+              stop_everything: "Stop everything sent." }[args.action] || "Done.";
+          }
+          // A Today card (jarvis_today.add_route): set up at once, no card.
+          case "brain_schedule_add_today": {
+            window.__scheduleCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const sc = window.__schedule;
+            const job = { id: "s" + (0xd000000000 + sc.jobs.length).toString(16), kind: "today",
+                          text: args.text, state: "active", repeats: true, today: "later",
+                          shows_at: args.at, repeat: `every chosen day at ${args.at}` };
+            sc.jobs.push(job);
+            return { ok: true, waiting: false, job,
+                     said: `Set: “${args.text}” shows on your Today page.` };
+          }
           // brain/briefing.rs (the morning briefing). `window.__briefing` is
           // null - a PC without it, which Rust answers {available: false}
           // for - unless the scenario names `briefing: {...}`. Lines are
@@ -1524,6 +1855,103 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const f = window.__focus;
             f.status = { ...f.status, on: true, minutes: args.minutes, left_s: args.minutes * 60 };
             return { ok: true, said: `Focus for ${args.minutes} minutes.` };
+          }
+          // brain/chatbot.rs ("Talk to a chatbot for me"). `window.__chatbot`
+          // is null - a PC without the routes, answered as `null` like any
+          // unknown command - unless the scenario names `chatbot: {status,
+          // named?, startRefuses?}`: real GET /api/chatbot/status answers from
+          // fixtures/chatbot-cases.json (`status` for the latest live one,
+          // `named` for a read by id). Every change is recorded; start,
+          // limits and resume are refused on a stale link, as Rust does.
+          case "chatbot_status": {
+            const c = window.__chatbot;
+            if (!c) return null;
+            c.reads += 1;
+            c.ids.push(args.id);
+            // `namedCompare`: a read by comparison id ("Ask several and
+            // compare"); `compares` lists the ids asked for.
+            if (args.compare) {
+              c.compares.push(args.compare);
+              return JSON.parse(JSON.stringify(c.namedCompare || c.status));
+            }
+            const out = args.id && c.named ? c.named : c.status;
+            return JSON.parse(JSON.stringify(out));
+          }
+          case "chatbot_start":
+          case "chatbot_limits":
+          case "chatbot_stop":
+          case "chatbot_pause":
+          case "chatbot_resume":
+          case "chatbot_compare_start":
+          case "chatbot_compare_stop": {
+            window.__chatbotCalls.push({ cmd, ...args });
+            if (state.stale && ["chatbot_start", "chatbot_limits", "chatbot_resume",
+              "chatbot_compare_start"].includes(cmd)) {
+              throw new Error("the event stream is stale, so this cannot be confirmed live - nothing can be sent until it reconnects");
+            }
+            const c = window.__chatbot;
+            if (cmd === "chatbot_compare_start") {
+              if (c.startRefuses) throw new Error(c.startRefuses);
+              return { ok: true, asking: true, compare: "cmp_000000000001",
+                message: "Nothing has been sent yet. An approval card lists every chatbot Jarvis would ask, the goal word for word, and every limit; the comparison starts only if you approve it." };
+            }
+            if (cmd === "chatbot_compare_stop") {
+              return { ok: true, compare: args.id, message: "Stopping. Nothing more is sent to any of the chatbots; messages already sent stay sent." };
+            }
+            if (cmd === "chatbot_start") {
+              if (c.startRefuses) throw new Error(c.startRefuses);
+              return { ok: true, asking: true, session: "chat_000000000001",
+                message: "Nothing has been sent yet. An approval card shows the goal, word for word, and every limit; the conversation starts only if you approve it." };
+            }
+            if (cmd === "chatbot_limits") {
+              return { ok: true, asking: true, session: args.id,
+                message: "Nothing has changed yet. An approval card shows the new limits; they apply only if you approve it." };
+            }
+            if (cmd === "chatbot_stop") {
+              return { ok: true, session: args.id, message: "Stopping. Nothing more is sent; messages already sent stay sent." };
+            }
+            return { ok: true, message: cmd === "chatbot_pause" ? "Pausing at the next step." : "Resume asks you first." };
+          }
+          // brain/support.rs ("Chat with customer support for me").
+          // `window.__support` is null - a PC without support chats, answered
+          // as `null` - unless the scenario names `support: {status, named?,
+          // startRefuses?}`: real GET /api/chatbot/status answers from
+          // fixtures/support-cases.json. Every change is recorded in
+          // window.__supportCalls; start, decline and say are refused on a
+          // stale link, as Rust does.
+          case "support_status": {
+            const s = window.__support;
+            if (!s) return null;
+            s.reads += 1;
+            s.ids.push(args.id);
+            const out = args.id && s.named ? s.named : s.status;
+            return JSON.parse(JSON.stringify(out));
+          }
+          case "support_start":
+          case "support_stop":
+          case "support_takeover":
+          case "support_answer":
+          case "support_export": {
+            window.__supportCalls.push({ cmd, ...args });
+            const held = cmd === "support_start"
+              || (cmd === "support_answer" && args.choice !== "takeover");
+            if (state.stale && held) {
+              throw new Error("the event stream is stale, so this cannot be confirmed live - nothing can be sent until it reconnects");
+            }
+            const s = window.__support;
+            if (cmd === "support_start") {
+              if (s.startRefuses) throw new Error(s.startRefuses);
+              return { ok: true, asking: true, support: "sup_000000000001",
+                message: "Nothing has been sent yet. An approval card shows the company, your goal and every detail Jarvis may give; the chat starts only if you approve it." };
+            }
+            if (cmd === "support_export") return { saved: "C:\\Users\\me\\jarvis-support-groupon.txt" };
+            if (cmd === "support_stop") {
+              return { ok: true, support: args.id, message: "Stopping. Nothing more is sent; messages already sent stay sent. The window closes." };
+            }
+            if (cmd === "support_takeover") {
+              return { ok: true, support: args.id, message: "Jarvis stops sending within a few seconds. Type in the chat window on the PC; press Resume when you want Jarvis to carry on." };
+            }
+            return { ok: true, support: args.id, message: "Declining: Jarvis sends the polite no within a few seconds." };
           }
           case "brain_schedule_add_todo": {
             window.__scheduleCalls.push({ cmd, ...args });
@@ -1644,13 +2072,17 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           }
           case "brain_history_list": {
             const h = window.__history;
-            h.reads.push({ before: args.before, limit: args.limit });
+            h.reads.push(args.kind ? { before: args.before, limit: args.limit, kind: args.kind }
+              : { before: args.before, limit: args.limit });
             if (h.listFails) throw new Error(h.listFails);
             if (h.missing) {
               return { available: false, why: "This PC's Jarvis does not keep chat history yet. " +
                 "Update the backend by running apply-patches.ps1, then open this again." };
             }
-            const all = [...h.conversations].sort((a, b) => b.updated - a.updated);
+            // `kind` narrows the list, as GET /api/history?kind= does.
+            const all = [...h.conversations]
+              .filter((c) => !args.kind || (c.kind || "chat") === args.kind)
+              .sort((a, b) => b.updated - a.updated);
             const older = args.before == null ? all : all.filter((c) => c.updated < args.before);
             const page = older.slice(0, args.limit || 30);
             const out = JSON.parse(JSON.stringify({ ...h.status, conversations: page }));
@@ -1676,6 +2108,119 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 "or it was older than the keep setting.");
             }
             return JSON.parse(JSON.stringify(t));
+          }
+          // "Continue this chat" (the chat audit, 2026-09-28): the Brain
+          // names the chat (brain/history.rs brain_continue_chat, the id
+          // only); the bar reads it itself (chat_continue_open) - refused,
+          // as Rust refuses, for a record that is not a chat or a Live
+          // session, and while the private lists are hidden.
+          case "brain_continue_chat": {
+            const h = window.__history;
+            h.continued = h.continued || [];
+            h.continued.push(args.id);
+            return null;
+          }
+          // Is "Hide memory lists and chat history" on? (brain/history.rs
+          // chat_thread_hidden - yes or no; the bar hides its thread with it.)
+          case "chat_thread_hidden": {
+            const sec = window.__security || {};
+            return Boolean(sec.hidden && !sec.revealed);
+          }
+          case "chat_continue_open": {
+            const h = window.__history;
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              throw new Error("Your chat history is hidden. Press Show on the Brain's History tab " +
+                "and confirm it is you with Windows Hello first.");
+            }
+            const t = h.transcripts[args.id];
+            if (!t) {
+              throw new Error("That conversation is no longer kept on this PC. It was deleted, " +
+                "or it was older than the keep setting.");
+            }
+            if (!["chat", "live", undefined].includes(t.kind)) {
+              throw new Error("That conversation can't be continued: it is a record of a chat " +
+                "with someone other than Jarvis.");
+            }
+            return JSON.parse(JSON.stringify(t));
+          }
+          // "Which chat did this fact come from?" (GET /api/memory/fact-chat):
+          // `factChat` maps a fact id to its chat ({id, title, updated, kind})
+          // or null; a fact not in it is from a PC that cannot say.
+          case "brain_fact_chat": {
+            const h = window.__history;
+            h.factChatReads = h.factChatReads || [];
+            h.factChatReads.push(args.id);
+            const map = h.factChat || null;
+            if (!map || !(String(args.id) in map)) return { available: false };
+            return { id: args.id, conversation: map[String(args.id)] };
+          }
+          // brain/history.rs brain_history_search, over the stubbed
+          // transcripts, the way jarvis_chat_log.ChatLog.search answers:
+          // every word somewhere in the conversation, case ignored, newest
+          // first, a snippet in parts. `searchMissing` is an older PC (the
+          // Rust's {available: false, why}); `searchFails` the sentence it
+          // rejects with; refused while the private lists are hidden.
+          case "brain_history_search": {
+            const h = window.__history;
+            h.searches.push(args.query);
+            h.searchKinds = h.searchKinds || [];
+            h.searchKinds.push(args.kind || null);
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              throw new Error("Your chat history is hidden. Press Show on the Brain's History tab " +
+                "and confirm it is you with Windows Hello first.");
+            }
+            if (h.searchFails) throw new Error(h.searchFails);
+            if (h.searchMissing) {
+              return { available: false, why: "This PC's Jarvis can only search titles. To search " +
+                "what was said, update it by running apply-patches.ps1 on the PC." };
+            }
+            const words = String(args.query).trim().split(/\s+/).filter((w) => w.length >= 2);
+            const has = (s, w) => String(s).toLowerCase().includes(w.toLowerCase());
+            const found = [];
+            const all = [...h.conversations].sort((a, b) => b.updated - a.updated);
+            for (const c of all) {
+              // The kind chosen in "Show" narrows the search too (finding 8).
+              if (args.kind && (c.kind || "chat") !== args.kind) continue;
+              const turns = (h.transcripts[c.id] && h.transcripts[c.id].turns) || [];
+              if (!words.every((w) => has(c.title, w) || turns.some((t) => has(t.text, w)))) continue;
+              const hitTurns = turns.filter((t) => words.some((w) => has(t.text, w)));
+              const best = hitTurns[0] || { role: "title", text: c.title, at: 0 };
+              const w0 = words.find((w) => has(best.text, w)) || words[0];
+              const at = best.text.toLowerCase().indexOf(w0.toLowerCase());
+              const parts = at < 0 ? [{ text: best.text, hit: false }] : [
+                { text: best.text.slice(0, at), hit: false },
+                { text: best.text.slice(at, at + w0.length), hit: true },
+                { text: best.text.slice(at + w0.length), hit: false },
+              ].filter((p) => p.text);
+              found.push({ ...c, hits: hitTurns.length,
+                snippet: { role: best.role, at: best.at, before: false, after: false, parts } });
+            }
+            return JSON.parse(JSON.stringify({ ...h.status, query_ok: true, why: "",
+              conversations: found.slice(0, 20), more: found.length > 20, partial: false,
+              searched: all.length }));
+          }
+          case "brain_conversation_facts": {
+            // "Facts this chat taught" (JARVIS-API.md section 79): the facts
+            // in use one conversation taught, by its id. `chatFacts` maps a
+            // conversation id to its facts; `chatFactsHidden` answers as Rust
+            // does while the memory lists are hidden; `chatFactsMissing` as
+            // an older PC.
+            const h = window.__history;
+            h.factReads = h.factReads || [];
+            h.factReads.push(args.conversationId);
+            if (h.chatFactsMissing) {
+              return { available: false,
+                       why: "This PC's Jarvis cannot list the facts a chat taught yet - run apply-patches.ps1 on the PC to update it." };
+            }
+            const facts = ((h.chatFacts || {})[args.conversationId] || []);
+            if (h.chatFactsHidden) {
+              return { conversation_id: args.conversationId, facts: [], count: facts.length,
+                       hidden: true, hidden_count: facts.length };
+            }
+            return JSON.parse(JSON.stringify({ conversation_id: args.conversationId, facts,
+                                               count: facts.length, more: false }));
           }
           case "brain_history_delete": {
             const h = window.__history;
@@ -1720,6 +2265,53 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return window.__folders && window.__folders.removeAnswer || { ok: true };
           case "import_notion":
             return window.__folders && window.__folders.importAnswer || { cancelled: true };
+          // devices.rs: Settings -> Devices. The QR picture is Rust's; here a
+          // scenario's `start.qr_svg` stands in for it. `sessions` answers
+          // pair_session in turn (the last one repeats).
+          case "devices_list": {
+            const d = window.__devices;
+            if (!d || !d.list) {
+              return { available: false,
+                       why: "Your PC's Jarvis cannot pair phones by QR code yet - run apply-patches.ps1 on this PC. Until then, your phone keeps using the old shared key (Settings, Connection)." };
+            }
+            return JSON.parse(JSON.stringify({ available: true, ...d.list }));
+          }
+          case "pair_phone_address":
+            return (window.__devices && window.__devices.address) || { address: null, source: null };
+          case "pair_start": {
+            const d = window.__devices || {};
+            if (d.startFails) throw new Error(d.startFails);
+            d.sessionIndex = 0;
+            d.started = (d.started || 0) + 1;
+            return JSON.parse(JSON.stringify(d.start));
+          }
+          case "pair_session": {
+            const d = window.__devices || {};
+            const all = d.sessions || [{ state: "none" }];
+            if (!d.started && !d.openAtLoad) return { state: "none" };
+            const i = Math.min(d.sessionIndex || 0, all.length - 1);
+            d.sessionIndex = i + 1;
+            return JSON.parse(JSON.stringify(all[i]));
+          }
+          case "pair_cancel":
+            window.__devices.cancelled = (window.__devices.cancelled || 0) + 1;
+            return { ok: true, was: "waiting_for_phone", http: 200 };
+          case "devices_remove": {
+            const d = window.__devices;
+            if (d.removeFails) throw new Error(d.removeFails);
+            const row = d.list.devices.find((x) => x.id === args.id);
+            d.list.devices = d.list.devices.filter((x) => x.id !== args.id);
+            return { ok: true, id: args.id, name: row && row.name, was_this_device: false, http: 200 };
+          }
+          case "devices_shared": {
+            const d = window.__devices;
+            if (d.sharedFails) throw new Error(d.sharedFails);
+            if (args.retired === true) {
+              d.list.shared = { ...d.list.shared, retired: true, retired_at: 1790000000 };
+              return { ok: true, retired: true, http: 200 };
+            }
+            return { ok: true, waiting: true, http: 202 };
+          }
           default: return null;
         }
       },
@@ -1797,6 +2389,17 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__bigModel = { reads: 0, changes: [], getFails: null, setFails: null,
                         unavailable: false, ...(bigModel || {}) };
   window.__bigModel.status = JSON.parse(JSON.stringify(window.__bigModel.status || null));
+  window.__historyImport = {
+    reads: 0, calls: [], start: null, startFails: null, cancel: null,
+    status: [{
+      ok: true, available: true, state: "idle", outcome: null, kind: null, source: null,
+      read: 0, before: 0, offered: 0, nothing: 0, waiting: 0, started: null, finished: null,
+      here: true, about: "",
+      words: "Bring in your old chats from ChatGPT, Claude, Gemini or DeepSeek: choose the export "
+        + "file on this PC.",
+    }],
+    ...(historyImport || {}),
+  };
   window.__deep = { reads: 0, asks: [], askAnswers: [], getFails: null, askFails: null,
                     unavailable: false, ...(deep || {}) };
   window.__deep.status = JSON.parse(JSON.stringify(window.__deep.status || null));
@@ -1835,7 +2438,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
     status: { enabled: true, recording: true, why_not: "", waiting: false, keep_days: 0,
               encrypted: true, ...((history && history.status) || {}) },
   }));
-  Object.assign(window.__history, { reads: [], opened: [], deleted: [], settings: [] });
+  Object.assign(window.__history, { reads: [], opened: [], deleted: [], settings: [], searches: [] });
   // Unset, automatic learning as the owner has it by default: learning on,
   // learning automatically on, sensitive topics off, nothing waiting, and
   // nothing saved yet. `missing` is a PC without the list, `statusMissing`
@@ -1863,8 +2466,22 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__schedule = schedule ? JSON.parse(JSON.stringify({
     jobs: [], todo: [], reads: 0, fails: null, ...schedule })) : null;
   window.__scheduleCalls = [];
+  window.__goals = goals ? JSON.parse(JSON.stringify({
+    goals: [], reads: 0, fails: null, checkinByGoal: {}, ...goals })) : null;
+  window.__goalsCalls = [];
+  // "Widgets you describe" (brain/widgets.rs). Unset, a PC without it.
+  // `widgets`/`drafts` are the PC's rows (with said and parts); `shows` maps
+  // an id to its GET /api/widgets/show answer; `draft` is the preview the
+  // next brain_widgets_draft makes.
+  window.__widgets = widgets ? JSON.parse(JSON.stringify({
+    widgets: [], drafts: [], shows: {}, draft: null, noCard: "", ...widgets })) : null;
+  window.__widgetCalls = [];
   window.__focus = focus ? JSON.parse(JSON.stringify({ reads: 0, ...focus })) : null;
   window.__focusCalls = [];
+  window.__chatbot = chatbot ? JSON.parse(JSON.stringify({ reads: 0, ids: [], compares: [], ...chatbot })) : null;
+  window.__chatbotCalls = [];
+  window.__support = support ? JSON.parse(JSON.stringify({ reads: 0, ids: [], ...support })) : null;
+  window.__supportCalls = [];
   window.__briefing = briefing ? JSON.parse(JSON.stringify({
     briefing: null, setups: [], sources: {}, reads: 0, fails: null, ...briefing })) : null;
   window.__briefingCalls = [];

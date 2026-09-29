@@ -2,8 +2,8 @@
 +++ b/jarvis_hud.py
 @@ -2535,6 +2535,21 @@
      except Exception as exc:
-         print(f"  sources    NOT ON ({type(exc).__name__}) - \"Where this came from\" is off")
-         print("             until jarvis_sources.py is back: run apply-patches.ps1 again")
+         print(f"  forget     NOT ON ({type(exc).__name__}) - Forget a time frame is off")
+         print("             until jarvis_forget_range.py is back: run apply-patches.ps1 again")
 +    # sky.patch (the owner's decisions of 2026-09-28, "Sun and moon behind
 +    # the animals" and "Weather in the animals' scene"): GET /api/sky and
 +    # POST /api/sky - whether the sun and moon show, the town typed on this

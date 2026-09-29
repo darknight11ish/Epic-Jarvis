@@ -132,7 +132,7 @@ def make_extract():
     # _accept_merge: memory-entities.patch's "are these the same?" card,
     # which _accept() branches to by MERGE_SOURCE.
     for name in ("_accept_retire", "_accept_merge", "_accept", "accept_auto", "_fact_source",
-                 "_fact_meta", "propose_verbatim"):
+                 "_fact_meta", "_proposal_chat", "propose_verbatim"):
         t = _stack.function_text(src, name)
         if t is None:
             raise AssertionError(f"the stack does not write exactly one {name}()")
@@ -1864,6 +1864,362 @@ def t_fit_the_words_the_apps_show():
         check("fit 28: a gate that failed says the card could not be raised",
               last["outcome"] == "refused" and "could not be raised" in last["message"]
               and "RuntimeError" in last["why"], last)
+    finally:
+        w.done()
+
+
+
+# ======================================== forgotten stays forgotten (2026-09-28)
+#
+# The research audit's gap A (docs/RESEARCH-AUDIT-2026-09-28.md, 8.6): the
+# learner re-reads the whole conversation, so a fact the owner forgot came
+# back automatically from the same sentence a minute later.
+
+CID2 = "conv-auto-0002"
+
+
+def _state(w, pid):
+    with closing(w.store._connect()) as c:
+        row = c.execute("SELECT state FROM proposals WHERE id=?", (pid,)).fetchone()
+    return row[0] if row else None
+
+
+def _proposals_with(w, words):
+    with closing(w.store._connect()) as c:
+        return c.execute("SELECT COUNT(*) FROM proposals WHERE text LIKE ?",
+                         (f"%{words}%",)).fetchone()[0]
+
+
+def t_forgotten_is_not_learned_again_from_the_same_chat():
+    w = World()
+    try:
+        w.say("My sister is called Priya")
+        first = w.learn(["The owner's sister is called Priya"])
+        check("F-L0: saved automatically the first time", saved(first), first)
+        fid = first["saved"][0]
+        check("the store forgets it", w.store.retire(fid) is True)
+        again = w.learn(["The owner's sister is called Priya"])
+        check("F-L1: the next pass does not save it again",
+              not again.get("saved") and not again.get("cards"), again)
+        pid = again.get("dropped", [None])[0]
+        check("F-L1: the re-proposal is turned down, not left as a card",
+              pid is not None and _state(w, pid) == "rejected" and w.card(pid) is None, again)
+        check("F-L1: it stays forgotten", w.fact(fid)["retired_at"] is not None)
+    finally:
+        w.done()
+
+
+def t_erased_is_not_learned_again_and_its_words_are_not_kept():
+    w = World()
+    try:
+        w.say("I keep my spare umbrella in the blue drawer")
+        first = w.learn(["The owner keeps a spare umbrella in the blue drawer"])
+        check("saved automatically the first time", saved(first), first)
+        fid = first["saved"][0]
+        out = w.store.erase(fid)
+        check("the store erases it", out is not None and out["erased_at"])
+        check("erase left no copy of the words", _proposals_with(w, "blue drawer") == 0)
+        again = w.learn(["The owner keeps a spare umbrella in the blue drawer"])
+        check("F-L2: the next pass does not save it again",
+              not again.get("saved") and not again.get("cards"), again)
+        check("F-L2: and the re-proposal's words are deleted, not kept",
+              _proposals_with(w, "blue drawer") == 0, again)
+    finally:
+        w.done()
+
+
+def t_said_again_after_forget_waits_for_a_yes():
+    w = World()
+    try:
+        w.say("I work at Initech")
+        fid = w.learn(["The owner works at Initech"])["saved"][0]
+        w.store.retire(fid)
+        w.say("Actually yes, I do work at Initech, remember that")
+        res = w.learn(["The owner works at Initech"],
+                      turns=["Actually yes, I do work at Initech, remember that"])
+        check("F-L3: said again after the Forget - a card, not automatic",
+              carded(res, "you asked me to forget this before"), res)
+        pid = next(iter(res["cards"]))
+        card = w.card(pid)
+        check("the card says why in plain words",
+              card is not None and "forget this before" in (card.get("auto_reason") or ""), card)
+    finally:
+        w.done()
+
+
+def t_said_again_in_another_chat_waits_for_a_yes():
+    w = World()
+    try:
+        w.say("My favourite band is Muse")
+        fid = w.learn(["The owner's favourite band is Muse"])["saved"][0]
+        w.store.retire(fid)
+        w.history = []
+        w.say("My favourite band is Muse", cid=CID2)
+        res = w.learn(["The owner's favourite band is Muse"], cid=CID2)
+        check("F-L3: another conversation, later - a card, not automatic",
+              carded(res, "forget this before"), res)
+    finally:
+        w.done()
+
+
+def t_other_facts_in_that_chat_are_still_learned():
+    w = World()
+    try:
+        w.say("My sister is called Priya")
+        fid = w.learn(["The owner's sister is called Priya"])["saved"][0]
+        w.store.retire(fid)
+        w.say("I'm learning the cello")
+        res = w.learn(["The owner is learning the cello"],
+                      turns=["I'm learning the cello"])
+        check("a new fact said after the Forget is saved as usual", saved(res), res)
+    finally:
+        w.done()
+
+
+def t_a_pass_with_nothing_to_propose_still_counts_as_read():
+    w = World()
+    try:
+        w.say("I live in York")
+        fid = w.learn(["The owner lives in York"])["saved"][0]
+        w.say("What's the weather like?")
+        w.learn([])                                  # read, nothing proposed
+        w.store.retire(fid)
+        again = w.learn(["The owner lives in York"])
+        check("the turns read by an empty pass are covered too",
+              not again.get("saved") and again.get("dropped"), again)
+    finally:
+        w.done()
+
+
+def t_a_correction_is_not_a_forget():
+    w = World()
+    try:
+        w.say("I drive a Honda")
+        old = w.learn(["The owner drives a Honda"])["saved"][0]
+        new = w.store.add("The owner drives a Toyota", source="auto")
+        w.store.retire(old, replaced_by=new)
+        check("a correction does not hush the conversation", CID not in A._HUSH, A._HUSH)
+    finally:
+        w.done()
+
+
+def t_forget_before_any_pass_read_the_chat_hushes_nothing():
+    w = World()
+    try:
+        fid = w.store.add("The owner likes jazz", source="auto",
+                          meta={"conversation_id": CID})
+        w.store.retire(fid)
+        check("no pass read this conversation since start: nothing hushed",
+              CID not in A._HUSH, A._HUSH)
+    finally:
+        w.done()
+
+
+# ======================================================== Continue after a restart
+#
+# The second chat audit (2026-09-28), findings 2 and 3, and the owner's
+# answer: the PC puts a continued chat's own typed and spoken messages back
+# in the "seen live" registry from its encrypted record, so automatic
+# learning works again after a restart or "Continue this chat" - and what was
+# Forgotten or Erased stays that way.
+
+def _restart(w):
+    """The backend restarts: the registry, the read map and the hush are
+    empty; only the encrypted record and the memory database remain."""
+    w.log = H.ChatLog(w.dir / "chat-history.db", w.dir / "chat-history.json", lambda: KEY)
+    H.use(w.log)
+    A._reset_for_tests()
+    return w.log
+
+
+def _continue(w, text, prov="typed", cid=CID):
+    """The app re-sends the kept chat (as "Continue this chat" does), then
+    the owner asks something new."""
+    return w.say(text, prov=prov, cid=cid)
+
+
+def t_continue_after_a_restart_saves_facts_automatically_again():
+    w = World()
+    try:
+        w.say("I live in York")
+        w.say("My sister is called Priya")
+        _restart(w)
+        check("after the restart the registry is empty for this chat",
+              H.live_turn(CID, "I live in York") is None
+              or H.live_turn(CID, "I live in York").get("from_record") is True)
+        # The chat is continued: the app re-sends the old turns, then a new one.
+        _continue(w, "I'm learning the cello")
+        for text in ("I live in York", "My sister is called Priya", "I'm learning the cello"):
+            e = H.live_turn(CID, text)
+            check(f"the PC knows {text!r} again, as typed",
+                  e is not None and e["provenance"] == "typed" and e["tainted"] is False, e)
+        check("the re-registered turns say they came from the record",
+              H.live_turn(CID, "I live in York").get("from_record") is True)
+        res = w.learn(["The owner is learning the cello"])
+        check("a fact learned from the re-sent window is SAVED, not a card", saved(res), res)
+    finally:
+        w.done()
+
+
+def t_continue_after_a_restart_keeps_outside_text_tainted():
+    w = World()
+    try:
+        w.say("Read my latest email", tools=True)
+        w.say("I live in York")
+        _restart(w)
+        _continue(w, "I'm learning the cello")
+        e = H.live_turn(CID, "I live in York")
+        check("the record says a tool read outside text: still tainted",
+              e is not None and e["tainted"] is True, e)
+        res = w.learn(["The owner is learning the cello"])
+        check("so it is a card", carded(res, "outside text"), res)
+    finally:
+        w.done()
+
+
+def t_continue_does_not_vouch_for_shared_pasted_or_unmarked_text():
+    w = World()
+    try:
+        w.say("Here is an article: the mayor lives in York", prov="shared")
+        w.say("Paste: the CEO drives a Tesla", prov="pasted")
+        w.say("something with no mark", prov=None)
+        w.say("I'm learning the cello")
+        _restart(w)
+        _continue(w, "I like jazz")
+        for text in ("Here is an article: the mayor lives in York",
+                     "Paste: the CEO drives a Tesla", "something with no mark"):
+            check(f"{text[:24]!r} is not put back in the registry",
+                  H.live_turn(CID, text) is None)
+        res = w.learn(["The mayor lives in York"],
+                      turns=["Here is an article: the mayor lives in York", "I like jazz"])
+        check("a fact from shared text stays a card (the PC does not vouch for it)",
+              carded(res, "did not see arrive"), res)
+    finally:
+        w.done()
+
+
+def t_a_message_re_sent_with_other_words_is_not_vouched_for():
+    w = World()
+    try:
+        w.say("I live in York")
+        _restart(w)
+        w.say("I like jazz", resend=False)
+        res = w.learn(["The owner lives in Leeds"],
+                      turns=["I live in Leeds", "I like jazz"])
+        check("words that were never said are a card",
+              carded(res, "did not see arrive"), res)
+    finally:
+        w.done()
+
+
+def t_a_crisis_chat_is_not_put_back():
+    w = World()
+    try:
+        w.say("I want to end my life")
+        _restart(w)
+        H.live_turn(CID, "I want to end my life")
+        check("a chat titled 'A difficult moment' brings nothing back",
+              H.live_turn(CID, "I want to end my life") is None
+              and w.log.get(CID)["title"] == H.CRISIS_TITLE)
+    finally:
+        w.done()
+
+
+def t_forgotten_stays_forgotten_after_a_restart_and_continue():
+    w = World()
+    try:
+        w.say("My sister is called Priya")
+        fid = w.learn(["The owner's sister is called Priya"])["saved"][0]
+        w.store.retire(fid)                      # Forget: forgotten_in fires
+        _restart(w)
+        _continue(w, "I'm learning the cello")
+        again = w.learn(["The owner's sister is called Priya"])
+        check("after a restart and Continue the forgotten fact is not saved again",
+              not again.get("saved") and again.get("dropped"), again)
+        pid = again.get("dropped", [None])[0]
+        check("and it is not left as a card either",
+              pid is not None and _state(w, pid) == "rejected" and w.card(pid) is None, again)
+        new = w.learn(["The owner is learning the cello"],
+                      turns=["I'm learning the cello"])
+        check("what is said after the Forget is still learned", saved(new), new)
+    finally:
+        w.done()
+
+
+def t_erased_stays_erased_after_a_restart_and_continue():
+    w = World()
+    try:
+        w.say("I keep my spare umbrella in the blue drawer")
+        fid = w.learn(["The owner keeps a spare umbrella in the blue drawer"])["saved"][0]
+        check("the store erases it", w.store.erase(fid) is not None)
+        _restart(w)
+        _continue(w, "I'm learning the cello")
+        again = w.learn(["The owner keeps a spare umbrella in the blue drawer"])
+        check("an erased fact is not saved again after a restart and Continue",
+              not again.get("saved") and not again.get("cards"), again)
+        check("and its words are not kept as a proposal",
+              _proposals_with(w, "blue drawer") == 0, again)
+    finally:
+        w.done()
+
+
+def t_the_hush_goes_when_the_chat_is_deleted():
+    w = World()
+    try:
+        w.say("My sister is called Priya")
+        fid = w.learn(["The owner's sister is called Priya"])["saved"][0]
+        w.store.retire(fid)
+        check("the record remembers a hush for this chat", w.log.hush_floor(CID) is None)
+        with closing(w.log._connect()) as c:
+            n = c.execute("SELECT COUNT(*) FROM meta WHERE k=?", ("hush:" + CID,)).fetchone()[0]
+        check("one hush row is kept, numbers only", n == 1)
+        w.log.delete(CID)
+        with closing(w.log._connect()) as c:
+            n = c.execute("SELECT COUNT(*) FROM meta WHERE k=?", ("hush:" + CID,)).fetchone()[0]
+        check("deleting the chat deletes its hush row", n == 0)
+    finally:
+        w.done()
+
+
+# ======================================================== a card accepted by hand keeps its chat
+
+def t_a_card_accepted_by_hand_keeps_the_link_to_its_chat():
+    w = World()
+    try:
+        w.say("My doctor says I have type 2 diabetes")
+        res = w.learn(["The owner has type 2 diabetes"])
+        check("a sensitive fact waits as a card", carded(res, ""), res)
+        pid = next(iter(res["cards"]))
+        with closing(w.store._connect()) as c:
+            full = dict(c.execute("SELECT * FROM proposals WHERE id=?", (pid,)).fetchone())
+            fid = w.x._accept(c, w.store, full)
+        meta = json.loads(w.fact(fid)["meta"])
+        check("the fact accepted by hand carries the chat's id",
+              meta.get("conversation_id") == CID, meta)
+        check("and is not marked as saved automatically", meta.get("auto") is None, meta)
+        row = w.queue("a card nobody noted", source="conversation")
+        with closing(w.store._connect()) as c:
+            full = dict(c.execute("SELECT * FROM proposals WHERE id=?", (row["id"],)).fetchone())
+            fid2 = w.x._accept(c, w.store, full)
+        check("a card with no note has no chat id (as before)",
+              "conversation_id" not in json.loads(w.fact(fid2)["meta"]))
+    finally:
+        w.done()
+
+
+def t_the_chat_is_noted_even_while_learning_is_off():
+    w = World()
+    try:
+        w.say("I live in York")
+        res = w.learn(["The owner lives in York"], learning_on=False)
+        pid = next(iter(res["cards"]))
+        with closing(w.store._connect()) as c:
+            row = c.execute("SELECT reason, conversation_id FROM auto_learn_notes"
+                            " WHERE proposal_id=?", (pid,)).fetchone()
+        check("the chat is noted, and no reason is (learning is off)",
+              row is not None and row[1] == CID and not row[0], row)
+        check("the card still shows no automatic reason",
+              (w.card(pid) or {}).get("auto_reason") == "")
     finally:
         w.done()
 

@@ -308,6 +308,13 @@ _VAL = r"(?!\[redacted)[^\s\"'`,;&}\]\)<>]{4,}"
 #: "?token=") so the log still says what was there. Run before the router's
 #: table.
 _CONTEXT_SHAPES: List[Tuple[str, "re.Pattern[str]", str]] = [
+    # A device's own key (jarvis_devices.py, docs/PAIRING-DESIGN.md 5.1):
+    # jdk1.<device id>.<43 characters>. Found even out of context - that is
+    # what its prefix is for. Replaced whole, first, so the header and
+    # labelled shapes after it see only the marker.
+    ("Jarvis device key",
+     re.compile(r"(?<![A-Za-z0-9_-])jdk1\.d[0-9a-f]{8}\.[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])"),
+     _mark("Jarvis device key")),
     # This project's own header. The Android crash log already strips it
     # (CrashLog.kt).
     ("Jarvis pairing token",

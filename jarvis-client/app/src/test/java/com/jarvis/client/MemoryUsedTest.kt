@@ -97,7 +97,16 @@ class MemoryUsedTest {
 
     @Test
     fun aTemporaryAnswerSaysWhatThePcDidAndNeverPretends() {
-        assertEquals(emptyList<String>(), TemporaryChat.notes(false, """{"temporary":true}"""))
+        // Not asked for, but the PC made it temporary: only a detected game or
+        // role-play does that, and it is said (the chat audit, 2026-09-28).
+        assertEquals(listOf(TemporaryChat.GAME), TemporaryChat.notes(false, """{"temporary":true}"""))
+        assertEquals(
+            listOf(TemporaryChat.GAME, TemporaryChat.REMEMBER_OFF),
+            TemporaryChat.notes(false, """{"temporary":true,"remember_off":true}"""),
+        )
+        for (ordinary in listOf(null, "", "{}", """{"temporary":false}""", """{"temporary":"true"}""")) {
+            assertEquals(emptyList<String>(), TemporaryChat.notes(false, ordinary))
+        }
         assertEquals(emptyList<String>(), TemporaryChat.notes(true, """{"temporary":true,"injected_facts":0}"""))
         assertEquals(
             listOf(TemporaryChat.REMEMBER_OFF),

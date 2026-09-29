@@ -156,6 +156,26 @@
             <span class="sr-only">Toggle listening for "hey Jarvis"</span>
           </button>
 
+          <!-- Jarvis Live (live.rs, live-rules.js; docs/LIVE-DESIGN.md): a
+               back-and-forth voice conversation, started and ended here.
+               No wake word between turns; the voice check still runs on
+               every sentence. Its id is jarvis-live-*. A visible "Live"
+               beside the icon (the review: an unlabelled icon that turned
+               red), one name and aria-pressed for on/off. -->
+          <button
+            id="jarvis-live-toggle"
+            class="icon-button live-toggle"
+            type="button"
+            aria-pressed="false"
+            aria-label="Jarvis Live"
+            title="Jarvis Live: talk back and forth, no &quot;Hey Jarvis&quot; needed"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="M3 6.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 3 6.5Zm2.5-2a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5a.75.75 0 0 1 .75-.75ZM8 2.5a.75.75 0 0 1 .75.75v9.5a.75.75 0 0 1-1.5 0v-9.5A.75.75 0 0 1 8 2.5Zm2.5 2a.75.75 0 0 1 .75.75v5.5a.75.75 0 0 1-1.5 0v-5.5a.75.75 0 0 1 .75-.75ZM13 6.5a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-1.5 0v-1.5A.75.75 0 0 1 13 6.5Z" />
+            </svg>
+            <span class="live-toggle-label" aria-hidden="true">Live</span>
+          </button>
+
           <!-- Temporary chat (the owner's decision, 2026-09-25): while it is
                pressed, Jarvis uses and learns nothing from memory and the PC
                keeps nothing of the chat. Turning it on or off starts a new
@@ -197,12 +217,47 @@
            never grow past the window's 720px clamp and hide the Approve and
            Deny buttons below the cut. -->
       <div class="stack" id="stack">
+        <!-- Jarvis Live's sign in the bar: fixed words and minutes (the PC's
+             jarvis_live.py), its buttons, and the tap buttons after a spoken
+             question. The always-on-top badge (live-badge.html) shows the
+             same sign while the bar is hidden. The sign's words reach a
+             screen reader through the bar's own announcer (a live region
+             inside a hidden box would announce nothing). -->
+        <section class="jarvis-live" id="jarvis-live-strip" hidden aria-label="Jarvis Live">
+          <div class="jarvis-live-sign">
+            <span class="jarvis-live-dot" aria-hidden="true"></span>
+            <strong id="jarvis-live-title">Jarvis Live</strong>
+            <span id="jarvis-live-detail"></span>
+          </div>
+          <p class="jarvis-live-hint" id="jarvis-live-hint" hidden></p>
+          <p class="jarvis-live-hint jarvis-live-temporary" id="jarvis-live-temporary" hidden></p>
+          <div class="jarvis-live-actions">
+            <button id="jarvis-live-move" class="text-button" type="button" hidden>Move it here</button>
+            <button id="jarvis-live-fix" class="text-button" type="button" hidden>Open Settings, then Voice</button>
+            <button id="jarvis-live-show-card" class="text-button" type="button" hidden>Show the card</button>
+            <button id="jarvis-live-carry-on" class="text-button" type="button" hidden>Carry on</button>
+            <button id="jarvis-live-resume" class="text-button" type="button" hidden>Resume Live</button>
+            <button id="jarvis-live-more" class="text-button" type="button" hidden>20 more minutes</button>
+            <button id="jarvis-live-stop-talking" class="text-button" type="button" hidden>Stop talking</button>
+            <button id="jarvis-live-mute" class="text-button" type="button" hidden>Mic off</button>
+            <button id="jarvis-live-end" class="text-button" type="button" hidden>End Live</button>
+          </div>
+        </section>
         <!-- The marker for a whole temporary chat, and its one line while
              the chat is still empty (answer-memory.js). -->
         <div class="temporary-strip" id="temporary-strip" role="status" hidden>
           <strong class="temporary-label" id="temporary-label">Temporary chat</strong>
           <span class="temporary-line" id="temporary-line"></span>
           <span class="temporary-refused" id="temporary-refused" hidden></span>
+        </div>
+
+        <!-- Lockdown (2026-09-28, backend jarvis_asks_first.py): shown while
+             every way out of the PC asks first, from the link (stream.rs
+             LinkState.lockdown), so every window agrees. Words: asks-first.js
+             LOCKDOWN_BAR_*. -->
+        <div class="lockdown-strip" id="lockdown-strip" role="status" hidden>
+          <strong class="lockdown-label">Lockdown is on</strong>
+          <span class="lockdown-line">Everything that would leave this PC asks you first, and anything that runs by itself has stopped. To turn it off: Settings, What asks first.</span>
         </div>
 
         <div class="attachments" id="attachments" hidden>
@@ -212,6 +267,10 @@
               <span class="attachment-title">Screen capture</span>
               <span class="attachment-meta" id="capture-meta">—</span>
             </div>
+            <!-- "Photo to reminder" (photo-reminder.js): the PC reads the
+                 dates in the capture and PROPOSES a reminder below. Nothing
+                 is set up until "Add a Jarvis reminder" is tapped. -->
+            <button class="text-button" type="button" id="capture-find-date">Find a date in it</button>
             <button class="icon-button" type="button" id="capture-remove" title="Remove capture">
               <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
                 <path d="M4 4l8 8M12 4l-8 8" />
@@ -246,6 +305,10 @@
             </button>
           </div>
         </div>
+
+        <!-- "Photo to reminder": the proposal for the capture above - the
+             PC's words, shown only; closed, nothing of them is kept. -->
+        <div class="photo-box" id="photo-proposal" hidden></div>
 
         <!-- ── Attention: the interruption budget and the daily brief ─────
              `pending` is what is waiting to be *told* to you, which is not the
@@ -303,6 +366,13 @@
         <section class="primer" id="primer" aria-label="What you can do here">
           <h2 class="sr-only">What you can do here</h2>
           <div id="sayable-list"></div>
+          <!-- "Earlier chats" (the chat audit, 2026-09-28): the Brain's
+               History, where "Continue this chat" carries one on here; and,
+               after Esc ended a chat, where it went (main.js closeCard). -->
+          <p class="primer-chats">
+            <button class="text-button" type="button" id="earlier-chats-primer">Earlier chats</button>
+            <span class="chat-ended-note" id="chat-ended-note" hidden></span>
+          </p>
           <ul class="primer-list">
             <!-- Only the note apps the PC says are set up are shown (main.js
                  syncNotePrimer). Until it answers, none are - and the last
@@ -568,6 +638,7 @@
                    only once there is one, and not while an answer is
                    arriving. Esc clears it too, with the card. -->
               <button class="text-button" type="button" id="new-conversation" hidden>New conversation</button>
+              <button class="text-button" type="button" id="earlier-chats">Earlier chats</button>
               <button class="text-button" type="button" id="stop" title="Stop generating" hidden>Stop</button>
             </div>
           </header>
@@ -579,9 +650,22 @@
               completed answer to fold away, and it clears when the window is
               dismissed rather than surviving into the next time it opens.
             -->
+            <!-- The one quiet line about the chat itself: a new conversation
+                 after 30 quiet minutes, a chat carried on from History, a
+                 chat deleted elsewhere (main.js showChatNote). -->
+            <p class="chat-note" id="chat-note" hidden></p>
+            <!-- After 30 quiet minutes: the chat that just ended, back
+                 (main.js showCarryOn). Only for a chat that was kept. -->
+            <button class="text-button carry-on-last" type="button" id="carry-on-last" hidden>Carry on the last chat</button>
+            <!-- Since the chat audit (2026-09-28): the whole conversation so
+                 far, not only the last answer - "Earlier in this chat · 3
+                 questions", folded, scrolling inside itself. -->
             <details class="previous-answer" id="previous-answer" hidden>
               <summary id="previous-answer-summary"></summary>
-              <article class="markdown" id="previous-answer-body"></article>
+              <!-- A scrolling region that keyboard and screen-reader users can
+                   reach and name (the second chat audit, 2026-09-28). -->
+              <article class="markdown thread" id="previous-answer-body" role="region"
+                       aria-label="Earlier in this chat" tabindex="0"></article>
             </details>
             <!--
               No `aria-live` here, deliberately. `paint()` reassigns this
@@ -592,8 +676,14 @@
               state. The stream is announced once when it starts and once when
               it finishes, through the shared region in jarvis-link.js.
             -->
+            <!-- The question this answer is for (main.js paintYouLine). -->
+            <p class="you-line" id="you-line" hidden></p>
             <article class="markdown" id="answer"></article>
             <div class="cursor" id="cursor" hidden aria-hidden="true"></div>
+            <!-- Jarvis Live's tap buttons, under the answer they answer (the
+                 review: they sat in the sign's row, looking like its
+                 controls). Each is sent as the owner's TYPED words. -->
+            <div class="jarvis-live-chips" id="jarvis-live-chips" role="group" aria-label="Quick answers" hidden></div>
             <!-- A failed answer: ONE fix button, and the technical detail for a
                  bug report behind "Details" - scrubbed of tokens, keys,
                  passwords, email addresses and the Windows user name first
@@ -640,6 +730,19 @@
                       aria-expanded="false" aria-controls="answer-sources-list"></button>
               <div class="answer-used-list" id="answer-sources-list" hidden></div>
             </div>
+            <!-- "A cloud model could give this one a second look."
+                 (jarvis_router.choose()'s gate "offer", docs/JARVIS-API.md,
+                 "`offer` in `X-Jarvis-Route`"): one tap, one question,
+                 never a standing choice. Hidden whenever the answer above
+                 carries no offer, or the owner already acted on it
+                 (main.js). Same fixed wording as the phone's
+                 net/CloudOffer.kt, word for word. -->
+            <div class="answer-cloud-offer" id="answer-cloud-offer" hidden>
+              <p class="answer-cloud-offer-label">A cloud model could give this one a second look.</p>
+              <button class="text-button" type="button" id="cloud-offer-try">Try the cloud model</button>
+              <button class="text-button" type="button" id="cloud-offer-dismiss">Not now</button>
+              <p class="answer-cloud-offer-micro">Sends only this question - nothing else from this conversation.</p>
+            </div>
           </div>
 
           <footer class="card-foot">
@@ -652,7 +755,10 @@
                  `#primer`, which is visible BEFORE the first answer rather
                  than only after it. `Esc` stays: it is the one key whose
                  meaning changes with the card open (stop, then dismiss). -->
-            <span class="keys"><kbd>Esc</kbd> dismiss</span>
+            <!-- Esc ends the chat (it is kept in History when history is on);
+                 said so since the chat audit, 2026-09-28 - it used to say
+                 "dismiss" and the chat went without a word. -->
+            <span class="keys" title="Esc: end chat"><kbd>Esc</kbd> end chat</span>
           </footer>
         </section>
       </div>

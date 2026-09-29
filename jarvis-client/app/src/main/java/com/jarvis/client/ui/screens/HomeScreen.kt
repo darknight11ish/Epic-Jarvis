@@ -36,6 +36,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -45,6 +47,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -58,6 +61,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -112,6 +116,7 @@ import com.jarvis.client.net.Attention
 import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.StatusInfo
+import com.jarvis.client.platform.PlatformReadiness
 import com.jarvis.client.platform.PrivateClipboard
 import com.jarvis.client.ui.approval.ApprovalCard
 import com.jarvis.client.ui.parts.AppearanceIcon
@@ -120,6 +125,7 @@ import com.jarvis.client.ui.parts.FormattedAnswer
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.HelpIcon
 import com.jarvis.client.ui.parts.InboxIcon
+import com.jarvis.client.ui.parts.LiveIcon
 import com.jarvis.client.ui.parts.Kicker
 import com.jarvis.client.ui.parts.MindIcon
 import com.jarvis.client.ui.parts.Notice
@@ -208,6 +214,11 @@ private class PaneHeight {
 data class HomeState(
     val link: LinkState,
     val linkDetail: String?,
+    /**
+     * "Tailscale (or Meshnet) is off on this phone", or null - shown under
+     * a link that is down ([com.jarvis.client.LinkWords.vpnOffLine]).
+     */
+    val vpnLine: String? = null,
     val stale: Boolean,
     val activity: Activity,
     val faceState: FaceState,
@@ -343,6 +354,33 @@ data class HomeState(
      */
     val conversationTurns: Int = 0,
     /**
+     * The finished questions and answers of this conversation above the one
+     * on screen, oldest first (the owner's decision, 2026-09-28: the whole
+     * conversation as a scrollable thread) - see
+     * [com.jarvis.client.net.ChatSession.thread]. Memory only.
+     */
+    val thread: List<com.jarvis.client.net.ChatHistory.Exchange> = emptyList(),
+    /**
+     * One quiet line about the chat itself, or null - a new conversation
+     * after 30 quiet minutes, a chat carried on, the chat deleted elsewhere,
+     * a temporary chat started or ended, "New conversation" - read out by
+     * TalkBack ([com.jarvis.client.net.ChatSession.chatNote]).
+     */
+    val chatNote: String? = null,
+    /**
+     * This conversation read outside text (a chat carried on that did, or one
+     * that read a page or an email since): a line under the reply says so for
+     * as long as the conversation lasts, not only until the next question
+     * (the second chat audit, phone C4).
+     */
+    val readOutside: Boolean = false,
+    /**
+     * Set once the chat has gone quiet for 30 minutes: "your next question
+     * starts a new conversation", instead of "follows on from the last 3"
+     * (the second chat audit, phone C1).
+     */
+    val idleNextLine: String? = null,
+    /**
      * What the answer on its way is waiting on, in words - "Waiting for your
      * approval…" while a card is up on the desktop - or null. Shown in place
      * of "…". See [com.jarvis.client.net.ChatSession.waiting].
@@ -363,6 +401,12 @@ data class HomeState(
      */
     val crisisAnswer: Boolean = false,
     /**
+     * "A cloud model could give this one a second look." - the lane
+     * [com.jarvis.client.net.CloudOffer] read off the answer on screen's
+     * route, or null. See [com.jarvis.client.net.ChatSession.cloudOffer].
+     */
+    val cloudOffer: String? = null,
+    /**
      * Whether the quick-note field is open - the home-screen widget's Note
      * button opens it. See [QuickNotePlate].
      */
@@ -376,11 +420,22 @@ data class HomeState(
      */
     val pictureOffered: Boolean = false,
     /**
+     * Offer the "Notifications" button: reading phone notifications is on
+     * ([com.jarvis.client.JarvisRuntime.phoneNotificationsAllowed]) AND at
+     * least one has actually been captured
+     * ([com.jarvis.client.data.CapturedNotifications.sharedText] is not
+     * null). Hidden otherwise - a button that would attach nothing is not
+     * an offer, and this never appears at all while the setting is off.
+     */
+    val notificationsAttachable: Boolean = false,
+    /**
      * The line for a picture waiting to go with the next question, or null
      * when none is attached. See [com.jarvis.client.net.ChatPicture]. The
      * picture itself is never in this state - only its size, in words.
      */
     val pictureLine: String? = null,
+    /** True while the PC reads the attached picture for "Photo to reminder". */
+    val photoFinding: Boolean = false,
     /**
      * The chip for text shared from another app, waiting to go with the next
      * question as its own message ("Shared text · 1,204 characters"), or null
@@ -403,6 +458,13 @@ data class HomeState(
      * Checks.
      */
     val updateLine: String? = null,
+    /**
+     * The one-time "Background restart" offer after the first pairing
+     * (phone walk-through C9, 2026-09-27), in the Checks card's own words, or
+     * null. A line under the status line with two buttons; it never blocks
+     * anything, and either button ends it for good.
+     */
+    val keepAliveOffer: String? = null,
     /**
      * A temporary chat is on ([com.jarvis.client.net.TemporaryChat], the
      * owner's decision of 2026-09-25): the marker above the chat box, and
@@ -436,6 +498,15 @@ data class HomeState(
      * notice is anything else.
      */
     val noticeProblem: com.jarvis.client.net.PlainErrors.Shown? = null,
+    /** Security's "Swipe to approve or deny" (on by default). */
+    val swipeDecides: Boolean = true,
+    /**
+     * Lockdown is on (backend jarvis_asks_first.py, 2026-09-28): every way
+     * out of the PC asks first, or has stopped. Home says so at the top -
+     * the desktop bar's strip, in the phone's place.
+     * [com.jarvis.client.JarvisRuntime.lockdown].
+     */
+    val lockdown: Boolean = false,
 )
 
 /**
@@ -453,6 +524,15 @@ private fun HomeNotice(state: HomeState, actions: HomeActions) {
             actions.onDismissNotice,
             actionLabel = SecurityRules.OPEN_LOCK_SETTINGS,
             onAction = actions.onOpenLockSettings,
+        )
+        return
+    }
+    if (problem == null && com.jarvis.client.net.SignedApproval.offersTurnOn(text)) {
+        Notice(
+            text,
+            actions.onDismissNotice,
+            actionLabel = com.jarvis.client.net.SignedApproval.TURN_ON,
+            onAction = actions.onTurnOnSignedApprovals,
         )
         return
     }
@@ -507,6 +587,8 @@ data class HomeActions(
      * caller saves it and hands it back as [HomeState.faceFraction].
      */
     val onFaceFractionCommitted: (Float) -> Unit = {},
+    /** Jarvis Live: open its screen (ui/screens/LiveScreen.kt), where it starts and ends. */
+    val onOpenLive: () -> Unit = {},
     /**
      * The owner tapped Right or Wrong on the answer [turnId]. The runtime
      * works out whether that sets, changes or takes back the mark, and sends
@@ -514,11 +596,23 @@ data class HomeActions(
      */
     val onMarkAnswer: (turnId: String, tapped: AnswerMark) -> Unit = { _, _ -> },
     /**
+     * "Try the cloud model" on the answer on screen's own cloud offer
+     * ([com.jarvis.client.net.ChatSession.tryCloudForLast]) - a genuinely
+     * new turn, one tap, never a standing choice.
+     */
+    val onTryCloud: () -> Unit = {},
+    /** Dismisses [HomeState.cloudOffer] without asking anything. */
+    val onDismissCloudOffer: () -> Unit = {},
+    /**
      * Forget the conversation and start afresh: the next question goes on
      * its own, with nothing before it. Clears the question and answer on
      * screen. Touches nothing the desktop has learned.
      */
     val onNewConversation: () -> Unit = {},
+    /** "Earlier chats": History, where "Continue this chat" carries one on here. */
+    val onEarlierChats: () -> Unit = {},
+    /** The line about the chat itself, dismissed. */
+    val onDismissChatNote: () -> Unit = {},
     /**
      * File the owner's own words in Logseq ("logseq"), Joplin ("joplin") or
      * Obsidian ("obsidian") through the desktop -
@@ -540,6 +634,20 @@ data class HomeActions(
     val onAttachPicture: () -> Unit = {},
     /** Drop the attached picture without sending it. */
     val onRemovePicture: () -> Unit = {},
+    /**
+     * Puts the recent captured notifications' redacted text into the same
+     * "shared text" chip the Share sheet and the clipboard hotkey use
+     * ([com.jarvis.client.data.CapturedNotifications.sharedText]) - the
+     * owner still presses Send themselves, exactly like any other shared
+     * text; nothing here reaches a chat on its own.
+     */
+    val onAttachNotifications: () -> Unit = {},
+    /**
+     * "Photo to reminder": send the attached picture to the PC, which
+     * PROPOSES a reminder ([com.jarvis.client.net.PhotoReminder]). Sets
+     * nothing up.
+     */
+    val onFindDateInPicture: () -> Unit = {},
     /** Drop the shared text without sending it. */
     val onDropShared: () -> Unit = {},
     /** Open the release page in the browser. Downloads nothing itself. */
@@ -551,6 +659,12 @@ data class HomeActions(
      * risky approval", 2026-09-25).
      */
     val onOpenLockSettings: () -> Unit = {},
+    /**
+     * The one button beside the notice "Risky approvals from this phone need
+     * to be signed...": makes the approval key and asks the PC for its card
+     * ([com.jarvis.client.net.SignedApproval.offersTurnOn]).
+     */
+    val onTurnOnSignedApprovals: () -> Unit = {},
     /**
      * Start or end a temporary chat - a new conversation either way
      * ([com.jarvis.client.JarvisRuntime.setTemporaryChat]).
@@ -572,6 +686,21 @@ data class HomeActions(
     val onShowPrivate: () -> Unit = {},
     /** "Try again" under a failed question: ask the same question again. */
     val onRetryQuestion: () -> Unit = {},
+    /** The offer's "Keep link alive": Android's own battery dialog. */
+    val onKeepLinkAlive: () -> Unit = {},
+    /** The offer's "Not now". */
+    val onDismissKeepAlive: () -> Unit = {},
+    /**
+     * "Playing on your PC" (2026-09-28): what is playing, in the PC's own
+     * sentence, or null ([com.jarvis.client.JarvisRuntime.pcMedia]). A read.
+     */
+    val onPcMedia: suspend () -> String? = { null },
+    /**
+     * ONE media button on the PC - play, pause, next or previous
+     * ([com.jarvis.client.JarvisRuntime.pcMediaControl]). No card; refused on
+     * a stale link. @return the sentence to show.
+     */
+    val onPcMediaControl: suspend (String) -> String = { "" },
 )
 
 /**
@@ -787,6 +916,10 @@ fun HomeScreen(
             NavRow(state, actions)
         }
         state.updateLine?.let { UpdateLine(it, actions.onOpenUpdate) }
+        // Jarvis Live's sign on Home while it is on (here or on the PC) -
+        // the review's C2: Live was invisible here, and hard to find.
+        HomeLiveStrip(onOpen = actions.onOpenLive)
+        state.keepAliveOffer?.let { KeepAliveOffer(it, actions.onKeepLinkAlive, actions.onDismissKeepAlive) }
 
         val listState = rememberLazyListState()
         // Where "Open the approval →" actually lands. The id used to be set and
@@ -826,6 +959,16 @@ fun HomeScreen(
         // Driven by the list's own layout rather than by the reply text: the
         // layout is what says how far the reply's bottom edge overhangs, and
         // reading the text here would recompose this whole screen per token.
+        // "Continue this chat" lands on the reply plate, where the carried-on
+        // chat and its note are (the second chat audit, phone C7); nothing is
+        // scrolled when a notification has sent the owner to a card.
+        val carriedOn = state.thread.isNotEmpty() && state.lastUserText == null
+        LaunchedEffect(carriedOn, state.chatNote) {
+            if (carriedOn && state.focusApproval == null) {
+                listState.animateScrollToItem((listState.layoutInfo.totalItemsCount - 1).coerceAtLeast(0))
+            }
+        }
+
         LaunchedEffect(state.streaming, state.followReply, state.focusApproval) {
             if (!state.streaming || !state.followReply || state.focusApproval != null) {
                 return@LaunchedEffect
@@ -1001,6 +1144,11 @@ private fun ConversationList(
         if (busy) {
             item(key = "stop-everything") { StopEverythingPlate(actions) }
         }
+        // Lockdown (2026-09-28): said at the top while it is on. Turning it
+        // off is the PC's alone, so there is no button here.
+        if (state.lockdown) {
+            item(key = "lockdown") { LockdownPlate() }
+        }
         // AUTONOMY-PROPOSALS.md §3d. Shown only while the server itself
         // reports a task running or paused - never while merely thinking
         // about a chat reply, which WORKING is also used for elsewhere;
@@ -1015,6 +1163,15 @@ private fun ConversationList(
         }
 
         item(key = "quick-note") { QuickNotePlate(open = state.quickNoteOpen, actions = actions) }
+
+        // "Playing on your PC" (2026-09-28): play, pause, next, previous -
+        // greyed while the link is stale (rule 4), no card.
+        item(key = "pc-media") {
+            PcMediaPlate(
+                canAct = state.link == LinkState.CONNECTED && !state.stale,
+                actions = actions,
+            )
+        }
 
         if (state.notice != null) {
             item(key = "notice") { HomeNotice(state, actions) }
@@ -1068,6 +1225,7 @@ private fun ConversationList(
                     onApprove = { actions.onApprove(item) },
                     onDeny = { actions.onDeny(item) },
                     onAmend = { note -> actions.onAmend(item.id, note) },
+                    swipeAllowed = state.swipeDecides,
                     showFooter = state.pending.size == 1,
                     // UI-AUDIT-2026-09-26 item 6: a new card fades in, and the
                     // cards below glide up to fill the gap left by one that
@@ -1100,9 +1258,17 @@ private fun ConversationList(
                 onMark = actions.onMarkAnswer,
                 conversationTurns = state.conversationTurns,
                 onNewConversation = actions.onNewConversation,
+                // Hidden while "Hide memory lists and chat history" hides the lists:
+                // the thread is the chat's own words (the owner, 2026-09-28).
+                thread = if (state.memoryHidden) emptyList() else state.thread,
+                readOutside = state.readOutside,
+                idleNextLine = state.idleNextLine,
                 waiting = state.chatWaiting,
                 note = state.answerNote,
                 crisis = state.crisisAnswer,
+                cloudOffer = state.cloudOffer,
+                onTryCloud = actions.onTryCloud,
+                onDismissCloudOffer = actions.onDismissCloudOffer,
                 used = UsedAnswer(
                     ids = state.usedIds,
                     canAct = state.link == LinkState.CONNECTED && !state.stale,
@@ -1259,6 +1425,19 @@ private fun StatusLine(
                 // line, clipped - it is a status, not a log. Only on a live
                 // link, because "Step 2/3" under "Stale" would be a claim
                 // about work the phone cannot see.
+                // Why the link is most likely down, when Android says no
+                // VPN is up at all (phone walk-through N1, 2026-09-27): the
+                // phone reaches the PC only through Tailscale or Meshnet.
+                val vpnLine = state.vpnLine
+                if (vpnLine != null && !linked) {
+                    Text(
+                        vpnLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = chrome.warnInk,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 val detail = state.activityDetail
                 if (detail != null && linked && !state.stale) {
                     Text(
@@ -1272,8 +1451,14 @@ private fun StatusLine(
             }
         }
 
-        // Shown only while there is something to retry.
-        if (!linked) {
+        // Shown only while there is something to retry: offline, and also
+        // "Catching up…" (phone walk-through, 2026-09-27). A link that is up
+        // but has gone quiet - often a half-dead socket after the phone slept
+        // - used to offer nothing to tap, and could sit there until a 90
+        // second read timeout noticed. Retry is the same forced reconnect as
+        // offline; it approves nothing, and acting stays blocked until the
+        // link is trusted again (rule 4).
+        if (!linked || state.stale) {
             Quiet("Retry", onClick = actions.onReconnect)
         }
 
@@ -1348,6 +1533,12 @@ private fun NavRow(state: HomeState, actions: HomeActions) {
                 modifier = Modifier.weight(1f),
             )
             NavItem(
+                icon = { LiveIcon(chrome.textMid) },
+                label = "Live",
+                onClick = actions.onOpenLive,
+                modifier = Modifier.weight(1f),
+            )
+            NavItem(
                 icon = { AppearanceIcon(chrome.textMid) },
                 label = "Appearance",
                 onClick = actions.onOpenAppearance,
@@ -1369,6 +1560,39 @@ private fun NavRow(state: HomeState, actions: HomeActions) {
  * about Jarvis, and it must not push the approval cards down. Not inside
  * [NavRow] either, which is hidden by default.
  */
+/**
+ * Jarvis Live on Home (the review of 2026-09-28, C2): "Jarvis Live · 24 min
+ * left" with End Live and Open while it is on here; "Jarvis Live is on your
+ * PC" with Move it here while it runs there. Fixed words only. The talk
+ * button meanwhile says Live is already listening (VoiceSession.begin).
+ */
+@Composable
+private fun HomeLiveStrip(onOpen: () -> Unit) {
+    val status by com.jarvis.client.JarvisRuntime.liveStatus.collectAsState()
+    val pending by com.jarvis.client.JarvisRuntime.pending.collectAsState()
+    val stale by com.jarvis.client.JarvisRuntime.stale.collectAsState()
+    val rules = com.jarvis.client.voice.LiveRules
+    val on = rules.onHere(status)
+    val cardHolds = remember(pending, status) { com.jarvis.client.JarvisRuntime.liveCardHolds() }
+    val sign = rules.sign(status, stale = stale, cardShown = cardHolds, endedAgo = Int.MAX_VALUE)
+    // On here, or on the PC; never an old end.
+    if (!sign.show || (!on && !sign.move)) return
+    val chrome = LocalChrome.current
+    Row(
+        Modifier.fillMaxWidth().background(chrome.surface1).padding(start = 16.dp, end = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
+            Text(sign.title, style = MaterialTheme.typography.labelLarge, color = chrome.textHi)
+            if (sign.detail.isNotEmpty()) {
+                Text(sign.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+            }
+        }
+        if (on) Quiet(rules.END_LIVE, onClick = { com.jarvis.client.JarvisRuntime.liveEndNow("owner") })
+        Quiet(if (sign.move) "Move it here" else "Open", onClick = onOpen)
+    }
+}
+
 @Composable
 private fun UpdateLine(line: String, onOpen: () -> Unit) {
     val chrome = LocalChrome.current
@@ -1383,6 +1607,32 @@ private fun UpdateLine(line: String, onOpen: () -> Unit) {
             modifier = Modifier.weight(1f),
         )
         Quiet("Release page", onClick = onOpen)
+    }
+}
+
+/**
+ * The one-time "Background restart" offer, after the first pairing (phone
+ * walk-through C9, 2026-09-27). The same words and button as the Checks
+ * card ([PlatformReadiness]), where it can still be found later. Where
+ * [UpdateLine] sits, for the same reason: it is about this phone, and it
+ * must not push the approval cards down.
+ */
+@Composable
+private fun KeepAliveOffer(line: String, onKeep: () -> Unit, onNotNow: () -> Unit) {
+    val chrome = LocalChrome.current
+    Column(
+        Modifier.fillMaxWidth().background(chrome.surface1).padding(start = 16.dp, end = 8.dp, top = 6.dp),
+    ) {
+        Text(
+            PlatformReadiness.BACKGROUND_RESTART,
+            style = MaterialTheme.typography.labelMedium,
+            color = chrome.textHi,
+        )
+        Text(line, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Quiet(PlatformReadiness.KEEP_LINK_ALIVE, onClick = onKeep)
+            Quiet("Not now", color = chrome.textMid, onClick = onNotNow)
+        }
     }
 }
 
@@ -1794,6 +2044,71 @@ private fun StopEverythingPlate(actions: HomeActions) {
     }
 }
 
+/**
+ * "Lockdown is on" (2026-09-28): the one line Home shows while every way out
+ * of the PC asks first. No button: turning it off is on the PC only, with an
+ * approval card and Windows Hello ([com.jarvis.client.net.AsksFirst]).
+ */
+@Composable
+private fun LockdownPlate() {
+    val chrome = LocalChrome.current
+    Plate(outline = chrome.warnInk.copy(alpha = 0.35f)) {
+        Kicker(com.jarvis.client.net.AsksFirst.LOCKDOWN_BAR_LABEL, color = chrome.warnInk)
+        Gap(6)
+        Text(
+            com.jarvis.client.net.AsksFirst.LOCKDOWN_HOME_LINE,
+            style = MaterialTheme.typography.bodyMedium,
+            color = chrome.textMid,
+        )
+    }
+}
+
+/**
+ * "Playing on your PC" (2026-09-28; [com.jarvis.client.net.PcMedia]): what is
+ * playing, in the PC's own sentence - read when Home shows it, and again
+ * after each button - and four buttons, ONE action per tap. Greyed while the
+ * link is stale (rule 4); the runtime refuses then too. No card.
+ */
+@Composable
+private fun PcMediaPlate(canAct: Boolean, actions: HomeActions) {
+    val chrome = LocalChrome.current
+    val scope = rememberCoroutineScope()
+    var said by remember { mutableStateOf<String?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    LaunchedEffect(canAct) {
+        if (canAct) said = actions.onPcMedia()
+    }
+    Plate {
+        Kicker(com.jarvis.client.net.PcMedia.TITLE)
+        Gap(4)
+        Text(
+            said ?: com.jarvis.client.net.PcMedia.HINT,
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            com.jarvis.client.net.PcMedia.ACTIONS.forEach { action ->
+                Quiet(
+                    com.jarvis.client.net.PcMedia.label(action),
+                    enabled = canAct && !busy,
+                    onClick = {
+                        if (!busy) {
+                            busy = true
+                            scope.launch {
+                                try {
+                                    said = actions.onPcMediaControl(action)
+                                } finally {
+                                    busy = false
+                                }
+                            }
+                        }
+                    },
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun TaskControlsPlate(paused: Boolean, actions: HomeActions) {
     val chrome = LocalChrome.current
@@ -2026,6 +2341,9 @@ private fun Reply(
     onMark: (turnId: String, tapped: AnswerMark) -> Unit = { _, _ -> },
     conversationTurns: Int = 0,
     onNewConversation: () -> Unit = {},
+    thread: List<com.jarvis.client.net.ChatHistory.Exchange> = emptyList(),
+    readOutside: Boolean = false,
+    idleNextLine: String? = null,
     waiting: String? = null,
     note: String? = null,
     used: UsedAnswer? = null,
@@ -2038,17 +2356,34 @@ private fun Reply(
     // the word check and never learning from it all happen on the PC;
     // this only changes how the words already decided are shown.
     crisis: Boolean = false,
+    // "A cloud model could give this one a second look."
+    // (jarvis_router.choose(), gate "offer" - docs/JARVIS-API.md, "`offer`
+    // in `X-Jarvis-Route`"): the lane [com.jarvis.client.net.CloudOffer]
+    // read off THIS answer's route, or null - no offer, or the owner
+    // already tapped "Try the cloud model" or dismissed it.
+    cloudOffer: String? = null,
+    onTryCloud: () -> Unit = {},
+    onDismissCloudOffer: () -> Unit = {},
 ) {
     val chrome = LocalChrome.current
     val motion = LocalMotion.current
     val context = LocalContext.current
     val text = reply()
     AnimatedVisibility(
-        visible = text.isNotBlank() || streaming || question != null,
+        visible = text.isNotBlank() || streaming || question != null || thread.isNotEmpty(),
         enter = fadeIn(motion.enter()),
         exit = fadeOut(motion.micro()),
     ) {
         Plate {
+            // The conversation so far, above the question on screen (the
+            // owner's decision, 2026-09-28): folded, and scrolling inside
+            // itself so a long chat never pushes the answer off Home. Open
+            // at once for a chat carried on from History, where nothing new
+            // has been asked yet. Shown only - never read aloud, never kept.
+            if (thread.isNotEmpty()) {
+                ThreadFold(thread, startOpen = question == null)
+                if (question != null || streaming || text.isNotBlank()) Gap(12)
+            }
             if (question != null) {
                 Kicker("You")
                 Gap(4)
@@ -2134,6 +2469,35 @@ private fun Reply(
                         color = chrome.textLo,
                     )
                 }
+                // "Try the cloud model" (docs/JARVIS-API.md, "`offer` in
+                // `X-Jarvis-Route`"): one tap, one question, never a
+                // standing choice - see com.jarvis.client.net.CloudOffer's
+                // own doc for the whole design. Not shown while crisis is
+                // true: the router never offers a cloud lane on a crisis
+                // turn in the first place (jarvis_router.choose()'s own
+                // gates run before gate 6 ever does), but this is the one
+                // place on screen that could show both at once if that
+                // ever changed, and a crisis panel is not where a cloud
+                // upsell belongs.
+                if (cloudOffer != null && !crisis) {
+                    Gap(6)
+                    Text(
+                        com.jarvis.client.net.CloudOffer.LABEL,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo,
+                    )
+                    Gap(2)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Quiet(com.jarvis.client.net.CloudOffer.BUTTON, onClick = onTryCloud)
+                        Spacer(Modifier.width(4.dp))
+                        Quiet("Not now", color = chrome.textLo, onClick = onDismissCloudOffer)
+                    }
+                    Text(
+                        com.jarvis.client.net.CloudOffer.MICRO,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo,
+                    )
+                }
                 // "Used 2 memories": opens the facts this answer used, read
                 // from the PC by id only then (UsedMemoriesPlate.kt).
                 if (used != null && used.ids.isNotEmpty()) {
@@ -2215,7 +2579,9 @@ private fun Reply(
             if (!streaming && conversationTurns > 0) {
                 Gap(4)
                 Text(
-                    if (conversationTurns == 1) {
+                    // After 30 quiet minutes the next question is a new conversation
+                    // and the line says so (the second chat audit, phone C1).
+                    idleNextLine ?: if (conversationTurns == 1) {
                         "Your next question follows on from this one."
                     } else {
                         "Your next question follows on from the last $conversationTurns."
@@ -2223,11 +2589,92 @@ private fun Reply(
                     style = MaterialTheme.typography.labelSmall,
                     color = chrome.textLo,
                 )
+                if (readOutside) {
+                    Text(
+                        com.jarvis.client.net.ChatHistory.CONTINUED_TAINTED,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.warnInk,
+                    )
+                }
                 Quiet("New conversation", color = chrome.textMid, onClick = onNewConversation)
             }
         }
     }
 }
+
+/**
+ * "Earlier in this chat · 3 questions": every finished question and answer
+ * of this conversation above the one on screen, oldest first (the chat
+ * audit, 2026-09-28 - Home used to show only the last exchange). The
+ * desktop's Jarvis bar folds the same thread under the same words
+ * ([com.jarvis.client.net.ChatHistory.threadSummary]).
+ */
+@Composable
+private fun ThreadFold(thread: List<com.jarvis.client.net.ChatHistory.Exchange>, startOpen: Boolean) {
+    val chrome = LocalChrome.current
+    val words = com.jarvis.client.net.ChatHistory
+    // Kept over a rotation (the second chat audit, phone accessibility).
+    var open by rememberSaveable { mutableStateOf(startOpen) }
+    var showAll by rememberSaveable { mutableStateOf(false) }
+    Quiet(
+        words.threadSummary(thread.size),
+        color = chrome.textMid,
+        modifier = Modifier.semantics {
+            // Whether it is open, said in words.
+            stateDescription = if (open) "Expanded" else "Collapsed"
+        },
+        onClick = { open = !open },
+    )
+    if (!open) return
+    // The newest 20 pairs, with "Show older" for the rest: a long chat used
+    // to compose up to 100 answers at once (phone worst-three #3).
+    val shown = if (showAll || thread.size <= THREAD_NEWEST) thread else thread.takeLast(THREAD_NEWEST)
+    val skipped = thread.size - shown.size
+    if (skipped > 0) {
+        Quiet("Show $skipped older", color = chrome.textMid, onClick = { showAll = true })
+    }
+    // The line where what Jarvis reads back begins: only the newest pairs go
+    // to the model (the same numbers Jarvis itself uses), so the owner is not
+    // left thinking it read the whole thread.
+    val above = words.pairsAboveReadLine(thread.size, words.MAX_EXCHANGES)
+    val listState = rememberLazyListState()
+    // Lands on the newest pair, not the oldest (phone worst-three #3).
+    LaunchedEffect(shown.size, open) {
+        if (shown.isNotEmpty()) listState.scrollToItem(shown.lastIndex)
+    }
+    LazyColumn(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(max = 360.dp),
+        state = listState,
+    ) {
+        itemsIndexed(shown) { local, pair ->
+            val index = skipped + local
+            if (index > 0) Gap(12)
+            if (above > 0 && index == above) {
+                Text(
+                    words.THREAD_READS_FROM,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = chrome.textMid,
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+            Kicker("You")
+            Gap(2)
+            Text(pair.question, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+            Gap(6)
+            Kicker("Jarvis")
+            Gap(2)
+            pair.answer.split(PARAGRAPH_BREAK).forEachIndexed { i, paragraph ->
+                if (i > 0) Gap(6)
+                FormattedAnswer(paragraph, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+            }
+        }
+    }
+}
+
+/** How many pairs the thread draws before "Show older". */
+private const val THREAD_NEWEST = 20
 
 /** What "Used 2 memories" under the answer needs - see [UsedFactsList]. */
 @Immutable
@@ -2387,12 +2834,40 @@ private fun Composer(
             .background(chrome.surface1)
             .padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-    // A temporary chat: the marker for the whole chat, and the way in and out.
+    // The one quiet line about the chat itself (the chat audit, 2026-09-28):
+    // read out by TalkBack as it appears, dismissed by a tap.
+    state.chatNote?.let { line ->
+        // Two lines, then "More": a long note used to crowd Home out at large text.
+        var more by remember(line) { mutableStateOf(false) }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                line,
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textMid,
+                maxLines = if (more) Int.MAX_VALUE else 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).liveStatus(),
+            )
+            if (line.length > 110) {
+                Quiet(if (more) "Less" else "More", color = chrome.textLo, onClick = { more = !more })
+            }
+            Quiet(
+                "Dismiss",
+                color = chrome.textLo,
+                modifier = Modifier.semantics { contentDescription = "Dismiss this note about the chat" },
+                onClick = actions.onDismissChatNote,
+            )
+        }
+    }
+    // A temporary chat: the marker for the whole chat, and the way in and
+    // out - and "Earlier chats", the way to History (the owner's decision,
+    // 2026-09-28).
     TemporaryChatStrip(
         on = state.temporary,
         empty = state.lastUserText == null && state.conversationTurns == 0,
         enabled = !state.streaming,
         onToggle = actions.onToggleTemporary,
+        onEarlierChats = actions.onEarlierChats,
     )
     VoiceStrips(state, actions)
     // A picture waiting to go with the next question. Dismiss drops it.
@@ -2400,6 +2875,16 @@ private fun Composer(
         VoiceStrip("Preparing the picture…", tone = chrome.textMid)
     } else if (state.pictureLine != null) {
         VoiceStrip(state.pictureLine, tone = chrome.textMid, onDismiss = actions.onRemovePicture)
+        // "Photo to reminder": the PC reads the dates in it and proposes.
+        Quiet(
+            if (state.photoFinding) {
+                com.jarvis.client.net.PhotoReminder.READING
+            } else {
+                com.jarvis.client.net.PhotoReminder.FIND_LABEL
+            },
+            enabled = !state.photoFinding && state.link == LinkState.CONNECTED,
+            onClick = actions.onFindDateInPicture,
+        )
     }
     // Text shared from another app: sent as its own message, before what is
     // typed, never mixed into it. Dismiss drops it.
@@ -2420,6 +2905,19 @@ private fun Composer(
                 color = chrome.textMid,
                 enabled = state.link == LinkState.CONNECTED && !state.streaming && !state.pictureBusy,
                 onClick = actions.onAttachPicture,
+            )
+            Spacer(Modifier.width(4.dp))
+        }
+        // Only while phone notifications are on AND something has actually
+        // been captured - see HomeState.notificationsAttachable. Attaching
+        // never sends on its own: it fills the same shared-text chip the
+        // Share sheet does, and the owner still presses Send.
+        if (state.notificationsAttachable) {
+            Quiet(
+                "Notifications",
+                color = chrome.textMid,
+                enabled = !state.streaming,
+                onClick = actions.onAttachNotifications,
             )
             Spacer(Modifier.width(4.dp))
         }

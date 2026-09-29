@@ -152,6 +152,23 @@ def stand_in(target: str, patches=None, *, replace: dict = None):
         shutil.rmtree(d, ignore_errors=True)
 
 
+def later_rewriting(name: str, needle: str, patches=None) -> list:
+    """The patches after `name` in the stack whose added or removed lines
+    mention `needle` - i.e. that rewrite `name`'s own lines. A new patch goes
+    last, after every other; what matters for the one it follows is that it
+    leaves that one's lines alone. [] when none does (or `name` is absent)."""
+    patches = order() if patches is None else list(patches)
+    if name not in patches:
+        return []
+    out = []
+    for n in patches[patches.index(name) + 1:]:
+        changed = "".join(l for l in (HERE / n).read_text(encoding="utf-8").splitlines(True)
+                          if l.startswith(("-", "+")) and not l.startswith(("---", "+++")))
+        if needle in changed:
+            out.append(n)
+    return out
+
+
 def function_text(source: str, name: str):
     """One top-level `def name(` and its body, cut out by lines (a stand-in is
     fragments, not a module Python can parse). None unless there is exactly one."""

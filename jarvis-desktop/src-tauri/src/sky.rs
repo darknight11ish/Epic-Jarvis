@@ -1,6 +1,6 @@
 //! The sun, the moon and the weather behind the animal faces (the owner's
 //! decisions of 2026-09-28; backend/jarvis_sky.py, sky.patch; JARVIS-API.md
-//! section 59).
+//! section 89).
 //!
 //! Two commands:
 //!

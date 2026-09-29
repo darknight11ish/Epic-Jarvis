@@ -60,7 +60,7 @@ def t_the_cases_the_rule_exists_for():
         check(f"{h} is refused", host.get(h) is False, host.get(h))
     for h in ("localhost", "127.0.0.1", "::1", "10.0.0.1", "172.16.0.1", "192.168.1.20",
               "100.64.0.0", "100.127.255.255", "homeassistant.local",
-              "desktop.tail1234.ts.net", "marioirelan11-alps.nord"):
+              "desktop.tail1234.ts.net", "my-pc.nord"):
         check(f"{h} is allowed", host.get(h) is True, host.get(h))
     check("https:// to a public tunnel is refused too - it is about where the key goes",
           origin.get("https://abc123.ngrok-free.app") is False)

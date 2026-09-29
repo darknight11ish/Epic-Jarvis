@@ -45,7 +45,9 @@ pub struct Action {
     pub id: &'static str,
     /// What the Settings window calls it.
     pub label: &'static str,
-    /// The shipped binding, and what Reset returns to.
+    /// The shipped binding, and what Reset returns to. Empty: OFF until the
+    /// owner picks a key (the Jarvis Live key, the owner's decision of
+    /// 2026-09-28) - Reset turns it off again.
     pub default: &'static str,
     /// One line of why, shown under the label.
     pub hint: &'static str,
@@ -108,7 +110,30 @@ pub const ACTIONS: &[Action] = &[
         default: "Alt+Shift+F",
         hint: "The small always-on-top window with just Jarvis's face - no chat box. Off by default.",
     },
+    Action {
+        // talk_type.rs: the one action that also reads key-up (lib.rs).
+        id: "talk_to_type",
+        label: "Talk-to-type",
+        // T for "type", in the same Alt+Shift family as the rest. Word, for
+        // one, uses Alt+Shift+T to insert the time; rebind it if that
+        // matters more.
+        default: "Alt+Shift+T",
+        hint: "Hold it and speak, then let go: Jarvis types what you said into the program in front. A quick tap keeps it listening until you press it again. Works once talk-to-type is on (Settings, Voice).",
+    },
+    Action {
+        id: "toggle_live",
+        label: "Start or end Jarvis Live",
+        // OFF until the owner picks a key (the owner's decision of
+        // 2026-09-28, the Jarvis Live extras). Alt+Shift+L is suggested in
+        // the hint: the same family as the others, and nothing here uses L.
+        default: "",
+        hint: "Off until you pick a key - Alt+Shift+L is free for it. Starting is held while the connection is catching up or App lock would ask; ending never is.",
+    },
 ];
+
+/// The key the Live hotkey's hint suggests. Checked below to be free of every
+/// other action's shipped key.
+pub const LIVE_SUGGESTED: &str = "Alt+Shift+L";
 
 fn action(id: &str) -> Option<&'static Action> {
     ACTIONS.iter().find(|a| a.id == id)
@@ -313,6 +338,20 @@ pub fn apply(app: &AppHandle) -> Vec<Bound> {
         // just be refused by the OS, and the notification in lib.rs would
         // wrongly blame "another application" for a fight Jarvis itself
         // caused (finding #7) - so this never reaches `manager.register`.
+        // Off by default and the owner has not picked a key: nothing to
+        // register, and nothing is wrong (no error to show).
+        if accel.is_empty() && spec.default.is_empty() {
+            out.push(Bound {
+                id: spec.id.to_string(),
+                label: spec.label.to_string(),
+                hint: spec.hint.to_string(),
+                accelerator: String::new(),
+                default: String::new(),
+                registered: false,
+                error: None,
+            });
+            continue;
+        }
         if accel.is_empty() {
             let holder = ACTIONS.iter().find(|other| {
                 other.id != spec.id
@@ -472,8 +511,9 @@ mod tests {
     #[test]
     fn every_shipped_default_parses_and_carries_a_modifier() {
         // A default that does not parse would be unbindable on a fresh install
-        // and nothing else in the build would notice.
-        for spec in ACTIONS {
+        // and nothing else in the build would notice. An empty default is an
+        // action that is OFF until the owner picks a key (Jarvis Live).
+        for spec in ACTIONS.iter().filter(|a| !a.default.is_empty()) {
             parse(spec.default)
                 .unwrap_or_else(|e| panic!("default for {} does not parse: {e}", spec.id));
         }
@@ -588,6 +628,56 @@ mod tests {
             if let Ok(theirs) = Shortcut::from_str(reserved) {
                 assert_ne!(ours, theirs, "Stop everything collides with {reserved}");
             }
+        }
+    }
+
+    /// The owner's decision of 2026-09-28: a PC hotkey to start or end Jarvis
+    /// Live, OFF until the owner picks one, Alt+Shift+L suggested.
+    #[test]
+    fn the_live_key_is_off_until_picked_and_its_suggestion_is_free() {
+        let spec = action("toggle_live").expect("the Jarvis Live hotkey exists");
+        assert_eq!(spec.default, "", "the Live key must ship OFF");
+        assert!(spec.hint.contains(LIVE_SUGGESTED));
+        let suggested = parse(LIVE_SUGGESTED).expect("the suggestion parses");
+        for other in ACTIONS.iter().filter(|a| !a.default.is_empty()) {
+            assert_ne!(
+                parse(other.default).unwrap(),
+                suggested,
+                "the suggested Live key is {}'s shipped key",
+                other.label
+            );
+        }
+        // Off, it validates (nothing bound) - and a picked key validates too.
+        let mut set: BTreeMap<String, String> = ACTIONS
+            .iter()
+            .map(|a| (a.id.to_string(), a.default.to_string()))
+            .collect();
+        validate(&set).expect("the Live key left off must not read as no keys");
+        set.insert("toggle_live".into(), LIVE_SUGGESTED.into());
+        validate(&set).expect("picking the suggested key is accepted");
+        // Picking a key another action already has is refused, by name.
+        set.insert("toggle_live".into(), "Alt+Shift+X".into());
+        let err = validate(&set).expect_err("a clash with Stop everything was accepted");
+        assert!(err.contains("Stop everything"), "{err}");
+    }
+
+    #[test]
+    fn talk_to_type_ships_on_its_own_key() {
+        let spec = action(crate::talk_type::ACTION_ID).expect("the talk-to-type hotkey exists");
+        assert_eq!(spec.default, "Alt+Shift+T");
+        let ours = parse(spec.default).expect("parses");
+        // Actions that ship with no key (Live's hotkey is off until the owner
+        // picks one) cannot clash, and an empty string is not a key.
+        for other in ACTIONS
+            .iter()
+            .filter(|a| a.id != spec.id && !a.default.is_empty())
+        {
+            assert_ne!(
+                ours,
+                parse(other.default).unwrap(),
+                "clashes with {}",
+                other.id
+            );
         }
     }
 

@@ -524,6 +524,16 @@ data class Heard(
      */
     @SerialName("sensitive_aloud") val sensitiveAloud: Boolean = false,
     /**
+     * May an answer about the SCREEN (`read_screen`, "Look at this" /
+     * "Watch with me") be read aloud? True for the talk button, and for
+     * "Hey Jarvis" under "Same as the talk button"; under "Only trust the
+     * talk button", true for "Hey Jarvis" only when the owner allowed it
+     * (`hands_free_screen: screen_aloud`, the owner's decision of
+     * 2026-09-28). False - and missing, from an older PC - keeps such an
+     * answer on screen (voice/PrivateAloud.kt).
+     */
+    @SerialName("screen_aloud") val screenAloud: Boolean = false,
+    /**
      * The clip had less speech than a command needs, so the PC would not
      * act on it (since 2026-09-24; false from an older PC). [reason] is the
      * PC's own "say a little more" sentence, and it is shown as it is.
@@ -535,6 +545,29 @@ data class Heard(
      * instead of what went wrong. See [outcome] and `WakeRules.verdict`.
      */
     @SerialName("too_short") val tooShort: Boolean = false,
+    /** The clip was the stop word: silence the reply being spoken, nothing else. */
+    val stop: Boolean = false,
+    /** A "hey Jarvis" clip while Jarvis Live is on the other device: nothing was answered. */
+    @SerialName("other_device") val otherDevice: Boolean = false,
+    /**
+     * Jarvis Live (backend/jarvis_live.py; voice/LiveRules.kt): "" for a clip
+     * that has nothing to do with Live; for a `source=live` clip the session
+     * after it ("on", "paused", "off", "ended"); "started" or "refused"
+     * for "Hey Jarvis, let's talk".
+     */
+    val live: String = "",
+    /** Why Live is paused ("card", "other_voices"...), when it is. */
+    @SerialName("live_pause") val livePause: String = "",
+    /** "other_voices" or "voice_trouble" after a few refused clips in a row. */
+    @SerialName("live_hint") val liveHint: String = "",
+    /** A FIXED line to say now ("Say a bit more, so I can tell it's you.") - never anything heard. */
+    @SerialName("live_say") val liveSay: String = "",
+    /** Why the owner's words ended Live ("bye"). */
+    @SerialName("live_ended") val liveEnded: String = "",
+    /** A too-short Live clip, checked without words: "owner" or "other". */
+    @SerialName("live_short") val liveShort: String = "",
+    /** "Hey Jarvis" here while Live is on the other device: which one ("desktop"). */
+    @SerialName("live_elsewhere") val liveElsewhere: String = "",
 ) {
     enum class Outcome {
         /** Verified, transcribed. Feed [text] to the chat. */

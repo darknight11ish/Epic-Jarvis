@@ -347,18 +347,31 @@ def t_every_caller_goes_through_the_check():
     # jarvis_intake.propose(jarvis_extract, ...) hands the module on and calls
     # extract.propose (checked below). jarvis_feedback's local `propose` is
     # jarvis_extract.propose_retire - it writes one card and asks no model.
+    # jarvis_plan.propose (2026-09-28, wired into jarvis_agent.py's
+    # propose_plan tool) is a DIFFERENT propose() entirely - it only builds
+    # a Plan object from steps the model already supplied in its own tool
+    # call; it never touches OLLAMA_URL, sends a conversation anywhere, or
+    # calls a model at all, so it has no model-address check to reach
+    # (confirmed by reading jarvis_plan.py's own propose(), not assumed just
+    # because the name happens to match).
     fb = (HERE / "jarvis_feedback.py").read_text(encoding="utf-8")
     fb_is_retire = 'propose = getattr(extract, "propose_retire", None)' in fb
     bad = [c for c in calls
-           if c[1] not in ("jarvis_extract.", "X.", "extract.", "jarvis_intake.")
+           if c[1] not in ("jarvis_extract.", "X.", "extract.", "jarvis_intake.", "jarvis_plan.")
            and not (c[0] == "jarvis_feedback.py" and c[1] == "" and fb_is_retire)]
     check("every call reaches propose() through the jarvis_extract module",
           not bad, repr(bad))
     ih = (HERE / "import_history.py").read_text(encoding="utf-8")
     check("import_history's X is jarvis_extract", "import jarvis_extract as X" in ih)
     run = ih[ih.index("def run("):]
+    # Since 2026-09-28 run() hands each piece of a chat to _propose(X, ...),
+    # which calls jarvis_intake.propose(X, ...) or X.propose(...) - and
+    # nothing else in import_history.py calls either.
+    helper = ih[ih.index("def _propose("):ih.index("def run(")]
     check("import_history checks the model's address before the first propose()",
-          run.index("local_model_ok(X)") < run.index("X.propose("))
+          "_propose(X, " in run and run.index("local_model_ok(X)") < run.index("_propose(X, ")
+          and "X.propose(" in helper and "X.propose(" not in ih[ih.index("def run("):]
+          and ih.count("X.propose(") == 2 and ih.count("jarvis_intake.propose(") == 1)
     intake = (HERE / "jarvis_intake.py").read_text(encoding="utf-8")
     check("jarvis_intake.propose calls the module it is handed",
           "out = extract.propose(messages, llm=wrapped, source=source)" in intake)
@@ -486,12 +499,19 @@ def t_the_sleep_card_tells_the_truth():
         SL._cfg = keep
         SL._seen.clear()
     words = f"{card['title']} {card['body']}".lower()
-    check("the card says it is not built", "not built" in words, words)
+    # Built on 2026-09-28 (jarvis_tidy.py): cards only. The card now says
+    # what the tidy does - and still that nothing changes by itself.
+    check("the card no longer says it is not built (it is, as cards only)",
+          "not built" not in words and "review cards" in words, words)
     check("the card promises no merging or retiring by itself",
           "retire facts that" not in words and "merge duplicates" not in words, words)
     check("the card says nothing changes without a yes on that one fact",
-          "without your yes on that one fact" in words, words)
-    check("status() still says it is not implemented", SL.status()["implemented"] is False)
+          "without your yes on that one fact" in words
+          and "nothing in memory changes by itself" in words, words)
+    check("the card says the model it uses is on this PC",
+          "on this pc only" in words, words)
+    check("status() says it is implemented, as cards only",
+          SL.status()["implemented"] is True and "cards only" in SL.status()["note"])
     js = BRAIN_JS.read_text(encoding="utf-8")
     kt = (KT / "ui" / "screens" / "BrainScreen.kt").read_text(encoding="utf-8")
     for where, src in (("brain.js", js), ("BrainScreen.kt", kt)):

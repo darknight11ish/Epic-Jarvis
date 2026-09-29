@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-projects-write"
+description = "Enables the projects_write command without any pre-configured scope."
+commands.allow = ["projects_write"]
+
+[[permission]]
+identifier = "deny-projects-write"
+description = "Denies the projects_write command without any pre-configured scope."
+commands.deny = ["projects_write"]

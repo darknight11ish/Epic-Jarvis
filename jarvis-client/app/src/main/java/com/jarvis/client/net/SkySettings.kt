@@ -11,7 +11,7 @@ import kotlinx.serialization.json.intOrNull
 
 /**
  * "Sun, moon and weather" behind the animal faces (the owner's decisions of
- * 2026-09-28; docs/JARVIS-API.md section 59; backend `jarvis_sky.py`,
+ * 2026-09-28; docs/JARVIS-API.md section 89; backend `jarvis_sky.py`,
  * `sky.patch`). Both off by default.
  *
  * The PC keeps the settings: whether the sun and moon show, the owner's town

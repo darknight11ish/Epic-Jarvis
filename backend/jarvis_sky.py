@@ -4,7 +4,7 @@ and the robot (which counts as an animal face for every option).
 NEW MODULE, shipped whole, with its town list `jarvis_sky_places.py`.
 sky.patch adds one call at start-up, `install(Handler, ...)` (the same shape
 as jarvis_news.py), which answers GET /api/sky and POST /api/sky.
-docs/JARVIS-API.md section 59; backend/README.md "The sky behind the animals".
+docs/JARVIS-API.md section 89; backend/README.md "The sky behind the animals".
 
 THE OWNER'S DECISIONS (CLAUDE.md, 2026-09-28)
   * "Sun and moon behind the animals, optional (off by default): the real
@@ -620,7 +620,7 @@ class Deps:
     """What the reads need, replaceable in tests (no socket, no gate)."""
 
     def __init__(self, *, tier_of=None, gate=None, home_fetch=None, open_meteo_fetch=None,
-                 home_ready=None, clock=None, spawn=None):
+                 home_ready=None, clock=None, spawn=None, lockdown_on=None):
         self.tier_of = tier_of or _tier
         self.gate = gate or _gate
         self.home_fetch = home_fetch            # jarvis_home.run's `fetch`
@@ -628,6 +628,27 @@ class Deps:
         self.home_ready = home_ready or _home_ready
         self.clock = clock or time.time
         self.spawn = spawn or _spawn
+        self.lockdown_on = lockdown_on or _lockdown_on
+
+
+def _lockdown_on() -> bool:
+    """Lockdown (jarvis_asks_first.py): False without that module; True if
+    it cannot be read - a weather read that cannot tell does not happen."""
+    try:
+        import jarvis_asks_first
+    except Exception:
+        return False
+    try:
+        return bool(jarvis_asks_first.lockdown_on())
+    except Exception:
+        return True
+
+
+def _locked(deps) -> bool:
+    try:
+        return bool(deps.lockdown_on())
+    except Exception:
+        return True
 
 
 def _home_ready() -> dict:
@@ -648,12 +669,19 @@ HA_NOT_SET_UP = "Home Assistant is not set up for Jarvis on this PC"
 HA_ASKS = ("your settings ask for a yes, or a notice, each time Jarvis reads Home Assistant - "
            "the scene reads it every 20 minutes, so it needs that read set to happen quietly "
            "(\"What asks first\", Home Assistant reading)")
-_SETTING_REASONS = (HA_NOT_SET_UP, HA_ASKS, "Open-Meteo needs your town - type it on the PC first")
+#: Why no weather is read while Lockdown is on (jarvis_asks_first.py): the
+#: scene reads it by itself, and Lockdown stops what runs by itself.
+LOCKDOWN_WHY = ("Lockdown is on, so Jarvis does not read the weather until you turn Lockdown "
+                "off (on the PC, Settings, What asks first)")
+_SETTING_REASONS = (HA_NOT_SET_UP, HA_ASKS, "Open-Meteo needs your town - type it on the PC first",
+                    LOCKDOWN_WHY)
 
 
 def read_home(place: Optional[dict], deps: Deps) -> tuple:
     """One read of the owner's own Home Assistant weather device, through
     the gate as home_read, only at tier auto. (now, None) or (None, why)."""
+    if _locked(deps):
+        return None, LOCKDOWN_WHY
     ready = deps.home_ready()
     if ready.get("state") != "on":
         return None, HA_ASKS if ready.get("state") == "asks" else HA_NOT_SET_UP
@@ -684,6 +712,9 @@ def read_open_meteo(place: Optional[dict], s: dict, deps: Deps) -> tuple:
     # checked again here, immediately before anything is sent).
     if s.get("open_meteo_for") != position_key(place):
         return None, "Open-Meteo was approved for a different position"
+    # Lockdown, read immediately before anything is sent.
+    if _locked(deps):
+        return None, LOCKDOWN_WHY
     try:
         raw = deps.open_meteo_fetch(open_meteo_url(place))
     except urllib.error.HTTPError as exc:
@@ -710,6 +741,13 @@ def refresh(deps: Optional[Deps] = None, *, wait: bool = False) -> None:
             return
         if _W["key"] != key:
             _W.update(key=key, now=None, at=0.0, status="", failed_at=0.0, source=s["weather"])
+        if _locked(deps):
+            # Lockdown: no read, and the weather already drawn is dropped
+            # rather than left standing as if it were current. Nothing is
+            # kept as a failure, so the first refresh after Lockdown goes
+            # off reads again at once.
+            _W.update(now=None, at=0.0, status=LOCKDOWN_WHY, failed_at=0.0)
+            return
         if _W["busy"]:
             return
         if _W["now"] is not None and now - _W["at"] < REFRESH_S:

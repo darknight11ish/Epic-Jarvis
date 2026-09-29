@@ -95,12 +95,16 @@ const ID_APPROVALS: &str = "approvals";
 const ID_WAITING: &str = "waiting";
 const ID_MUTE: &str = "mute";
 const ID_STOP_EVERYTHING: &str = "stop-everything";
+/// Jarvis Live (live.rs): start or end the voice conversation on this PC.
+const ID_LIVE: &str = "jarvis-live";
 const ID_POWER_ACTIVE: &str = "power-active";
 const ID_POWER_QUIET: &str = "power-quiet";
 const ID_POWER_STANDBY: &str = "power-standby";
 const ID_BACKEND: &str = "backend";
 const ID_SHOW_HUD: &str = "show-hud";
 const ID_SHOW_BRAIN: &str = "show-brain";
+/// "Chat history…" (the chat audit, 2026-09-28): the Brain, on History.
+const ID_CHAT_HISTORY: &str = "chat-history";
 const ID_SHOW_FACES: &str = "show-faces";
 const ID_TOGGLE_SPOTLIGHT: &str = "toggle-spotlight";
 const ID_TOGGLE_WIDGET: &str = "toggle-widget";
@@ -125,10 +129,16 @@ struct Rows {
     approvals: MenuItem<tauri::Wry>,
     waiting: MenuItem<tauri::Wry>,
     mute: MenuItem<tauri::Wry>,
+    /// "Start Jarvis Live" / "End Jarvis Live".
+    live: MenuItem<tauri::Wry>,
     backend: MenuItem<tauri::Wry>,
     /// Shown only while a newer version is known to exist.
     update: MenuItem<tauri::Wry>,
 }
+
+/// What was last painted: the two colours, the notch count, the state, and
+/// whether Jarvis Live's mark was on it.
+type PaintKey = (Rgb, Rgb, u32, &'static str, bool);
 
 /// The colour last pushed to the shell, so an unchanged frame costs nothing.
 ///
@@ -140,7 +150,7 @@ struct Rows {
 /// `windows_subsystem = "windows"`, so that panic went to a stderr that does
 /// not exist: no tray, no stream, no approvals, and nothing on screen to say so.
 #[derive(Default)]
-pub struct Painted(Mutex<Option<(Rgb, Rgb, u32, &'static str)>>);
+pub struct Painted(Mutex<Option<PaintKey>>);
 
 /// The tray's flash-safety governor — one instance, because the tray draws
 /// exactly one surface (the icon). See [`spec::FlashGovernor`] for why one of
@@ -240,6 +250,10 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
         accel(app, "stop_everything").as_deref(),
     )?;
 
+    // Jarvis Live: never greyed - starting is refused with a reason (a stale
+    // link, App lock, no voice print), and ending always works.
+    let live = MenuItem::with_id(app, ID_LIVE, live_label(), true, None::<&str>)?;
+
     // One row that is status and action at once: it says what the backend is
     // and, when there is something to do about it, does it.
     let backend_state = backend_row(app);
@@ -253,6 +267,8 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
 
     let show_hud = MenuItem::with_id(app, ID_SHOW_HUD, "Show the HUD window", true, None::<&str>)?;
     let show_brain = MenuItem::with_id(app, ID_SHOW_BRAIN, "Open the Brain", true, None::<&str>)?;
+    let chat_history =
+        MenuItem::with_id(app, ID_CHAT_HISTORY, "Chat history…", true, None::<&str>)?;
     let show_faces = MenuItem::with_id(app, ID_SHOW_FACES, "Faces…", true, None::<&str>)?;
     let toggle_spotlight = MenuItem::with_id(
         app,
@@ -325,6 +341,10 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             &mute,
             &stop_everything,
             &PredefinedMenuItem::separator(app)?,
+            // Jarvis Live on its own line, away from "Stop everything" (the
+            // review of 2026-09-28: a click one row off started or ended it).
+            &live,
+            &PredefinedMenuItem::separator(app)?,
             // Windows, everyday ones first — the two with hotkeys are the two
             // reached most often, and a hotkey printed beside a row is how the
             // owner learns it exists.
@@ -333,6 +353,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             &toggle_floating,
             &show_hud,
             &show_brain,
+            &chat_history,
             &show_faces,
             &PredefinedMenuItem::separator(app)?,
             // The machinery. `backend` and `reconnect` were three groups apart
@@ -358,6 +379,7 @@ pub fn create_tray(app: &AppHandle) -> tauri::Result<()> {
             approvals,
             waiting,
             mute,
+            live,
             backend,
             update,
         });
@@ -459,8 +481,26 @@ fn spec_state(link: &LinkState) -> &'static str {
     }
 }
 
+/// The state the icon shows: [`spec_state`], except that while talk-to-type
+/// holds the microphone (talk_type.rs) it shows `listening` - the one sign,
+/// always on screen, that this PC is recording. It is a local fact the
+/// server's stream cannot know, so it wins over everything the stream says.
+fn shown_state(link: &LinkState) -> &'static str {
+    if crate::talk_type::listening() {
+        "listening"
+    } else {
+        spec_state(link)
+    }
+}
+
+/// Repaints now, from the current link (talk-to-type started or stopped).
+pub fn refresh(app: &AppHandle) {
+    let link = app.state::<crate::stream::StreamState>().link();
+    repaint(app, &link);
+}
+
 fn binding_for(app: &AppHandle, link: &LinkState) -> Binding {
-    let id = spec_state(link);
+    let id = shown_state(link);
     // The owner's choice first, the spec's default second. This used to read
     // the spec alone, which meant the Faces window edited a document the tray
     // never looked at: you could rebind `idle`, press save, be told it was
@@ -541,7 +581,7 @@ fn governed_resolve(app: &AppHandle, link: &LinkState) -> spec::Resolved {
 /// Takes `resolved` rather than resolving itself so the governor sees each
 /// repaint exactly once — see [`governed_resolve`].
 fn paint(link: &LinkState, resolved: spec::Resolved) -> Image<'static> {
-    let state = spec_state(link);
+    let state = shown_state(link);
     let dim = spec::state_dim(state);
     // `notches` is the overlay the spec puts on `banked`, and its source is
     // named there: "the number of items waiting in the digest
@@ -614,7 +654,69 @@ const INK_LIGHT: Rgb = Rgb {
 /// shell to 16 px reads as a ragged blob, and the notification area is the one
 /// place where a few hundred float operations at 2 Hz is not worth optimising.
 fn draw(a: Rgb, b: Rgb, filled: bool, notches: Option<(usize, usize, Rgb)>) -> Image<'static> {
-    Image::new_owned(draw_pixels(a, b, filled, notches), ICON_SIZE, ICON_SIZE)
+    let mut pixels = draw_pixels(a, b, filled, notches);
+    if crate::live::on_here() {
+        mark_live(&mut pixels);
+    }
+    Image::new_owned(pixels, ICON_SIZE, ICON_SIZE)
+}
+
+/// Jarvis Live's colour on the icon: the sign's red dot (theme.css `--bad`
+/// in the default theme), with a white ring so it reads on a dark taskbar
+/// and a light one alike.
+const LIVE_DOT: Rgb = Rgb {
+    r: 0xE5,
+    g: 0x48,
+    b: 0x4D,
+};
+
+/// Paints Jarvis Live's mark - a small red dot with a light ring - over the
+/// lower-right of the icon, while Live is on on this PC. Over whatever the
+/// disc drew there: the mark is what says the microphone is open.
+fn mark_live(pixels: &mut [u8]) {
+    let size = ICON_SIZE as f64;
+    let (cx, cy) = (size - 7.0, size - 7.0);
+    let dot = 5.0f64;
+    let ring = 6.6f64;
+    for y in 0..ICON_SIZE {
+        for x in 0..ICON_SIZE {
+            let mut in_dot = 0.0f64;
+            let mut in_ring = 0.0f64;
+            for sy in 0..3 {
+                for sx in 0..3 {
+                    let px = x as f64 + (sx as f64 + 0.5) / 3.0;
+                    let py = y as f64 + (sy as f64 + 0.5) / 3.0;
+                    let d = ((px - cx).powi(2) + (py - cy).powi(2)).sqrt();
+                    if d <= dot {
+                        in_dot += 1.0 / 9.0;
+                    } else if d <= ring {
+                        in_ring += 1.0 / 9.0;
+                    }
+                }
+            }
+            if in_dot <= 0.0 && in_ring <= 0.0 {
+                continue;
+            }
+            let at = ((y * ICON_SIZE + x) * 4) as usize;
+            let cover = (in_dot + in_ring).clamp(0.0, 1.0);
+            let mix = |old: u8, dot_c: u8| {
+                let ring_c = 255.0;
+                let want = if in_dot + in_ring > 0.0 {
+                    (f64::from(dot_c) * in_dot + ring_c * in_ring) / (in_dot + in_ring)
+                } else {
+                    f64::from(old)
+                };
+                (f64::from(old) * (1.0 - cover) + want * cover)
+                    .round()
+                    .clamp(0.0, 255.0) as u8
+            };
+            pixels[at] = mix(pixels[at], LIVE_DOT.r);
+            pixels[at + 1] = mix(pixels[at + 1], LIVE_DOT.g);
+            pixels[at + 2] = mix(pixels[at + 2], LIVE_DOT.b);
+            let alpha = f64::from(pixels[at + 3]);
+            pixels[at + 3] = (alpha + (255.0 - alpha) * cover).round().clamp(0.0, 255.0) as u8;
+        }
+    }
 }
 
 /// The pixel loop, split out from [`draw`] so it can be tested.
@@ -803,7 +905,7 @@ fn repaint(app: &AppHandle, link: &LinkState) {
     let Some(tray) = app.tray_by_id(TRAY_ID) else {
         return;
     };
-    let state = spec_state(link);
+    let state = shown_state(link);
     let resolved = governed_resolve(app, link);
     {
         let painted = app.state::<Painted>();
@@ -817,7 +919,15 @@ fn repaint(app: &AppHandle, link: &LinkState) {
         // `resolved.b` is in the key because `draw` uses it for the rim: a
         // rebind that lands on the same primary but a different secondary
         // repainted nothing and kept the old edge.
-        let key = (resolved.a, resolved.b, link.attention.pending, state);
+        // Jarvis Live on this PC adds its mark (the design's "a Live mark on
+        // the tray icon", missing until the review of 2026-09-28).
+        let key = (
+            resolved.a,
+            resolved.b,
+            link.attention.pending,
+            state,
+            crate::live::on_here(),
+        );
         if *slot == Some(key) {
             return;
         }
@@ -957,8 +1067,43 @@ fn backend_row(app: &AppHandle) -> (String, bool) {
     }
 }
 
+/// The Live row's words: what clicking it does.
+fn live_label() -> &'static str {
+    if crate::live::on_here() {
+        "End Jarvis Live"
+    } else {
+        "Start Jarvis Live"
+    }
+}
+
+/// Jarvis Live started or ended here: the row, the tooltip and the icon's
+/// Live mark follow.
+pub fn live_changed(app: &AppHandle) {
+    if let Some(rows) = app
+        .state::<TrayHandles>()
+        .inner
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .as_ref()
+    {
+        let _ = rows.live.set_text(live_label());
+    }
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let link = app.state::<crate::stream::StreamState>().link();
+        let _ = tray.set_tooltip(Some(tooltip(app, &link)));
+        repaint(app, &link);
+    }
+}
+
 fn tooltip(app: &AppHandle, link: &LinkState) -> String {
-    let mut parts = vec![activity_label(link)];
+    let mut parts = vec![if crate::talk_type::listening() {
+        crate::talk_type::TRAY_LISTENING.to_string()
+    } else {
+        activity_label(link)
+    }];
+    if crate::live::on_here() {
+        parts.push("Jarvis Live is on".to_string());
+    }
     // Not while stale: power, approvals and the brief would be last-known
     // facts presented as current ones - the phone drops the same extras.
     if link.connected && !link.stale {
@@ -1121,6 +1266,9 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         // Speech first, then the PC; a notification says what was stopped.
         ID_STOP_EVERYTHING => commands::stop_everything_now(app),
 
+        // Start or end Jarvis Live on this PC (live.rs).
+        ID_LIVE => crate::live::toggle_from_tray(app),
+
         ID_SHOW_HUD => {
             if let Err(err) = windows::show_hud(app) {
                 eprintln!("[jarvis] tray: HUD unavailable: {err}");
@@ -1139,6 +1287,13 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
             if let Err(err) = windows::show_brain(app) {
                 eprintln!("[jarvis] tray: the Brain would not open: {err}");
                 commands::notify(app, "Jarvis", &format!("Brain unavailable: {err}"));
+            }
+        }
+
+        ID_CHAT_HISTORY => {
+            if let Err(err) = windows::show_brain_at(app, "history") {
+                eprintln!("[jarvis] tray: chat history would not open: {err}");
+                commands::notify(app, "Jarvis", &format!("Chat history unavailable: {err}"));
             }
         }
 
@@ -1236,6 +1391,9 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;
                 let _ = app.global_shortcut().unregister_all();
             }
+            // Sizes and places first: the window-state plugin's own save runs
+            // at exit, when the HUD below is already gone (window_memory.rs).
+            crate::window_memory::save_now(app);
             if let Some(hud) = app.get_webview_window(crate::HUD_LABEL) {
                 let _ = hud.destroy();
             }
@@ -1316,6 +1474,21 @@ fn run_status_check(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_live_mark_is_a_red_dot_at_the_lower_right() {
+        let mut px = vec![0u8; (ICON_SIZE * ICON_SIZE * 4) as usize];
+        mark_live(&mut px);
+        let at = |x: u32, y: u32| ((y * ICON_SIZE + x) * 4) as usize;
+        let c = at(ICON_SIZE - 7, ICON_SIZE - 7);
+        assert!(
+            px[c] > 200 && px[c + 1] < 120 && px[c + 3] == 255,
+            "red, opaque"
+        );
+        let ring = at(ICON_SIZE - 7 + 6, ICON_SIZE - 7);
+        assert!(px[ring + 1] > 150, "a light ring round it");
+        assert_eq!(px[at(4, 4) + 3], 0, "the rest of the icon untouched");
+    }
 
     /// Relative luminance, WCAG's definition, 0..1.
     ///

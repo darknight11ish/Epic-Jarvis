@@ -64,6 +64,7 @@ import secrets
 import sys
 import threading
 import time
+from collections import OrderedDict
 from contextlib import closing, contextmanager
 from pathlib import Path
 from typing import Callable, Iterable, Optional
@@ -238,6 +239,10 @@ def owner_turns(messages: Iterable, origin: str) -> list[dict]:
         # health words.
         if wellbeing_skip(text):
             continue
+        # Side talk in Jarvis Live (the owner's answer of 2026-09-28): words
+        # the model said were not meant for Jarvis - never learned from.
+        if live_side_talk(text):
+            continue
         out.append({"role": "user", "content": text})
     return out
 
@@ -256,6 +261,17 @@ def schedule_command(text) -> bool:
     try:
         import jarvis_schedule
         return jarvis_schedule.was_command(text)
+    except Exception:
+        return False
+
+
+def live_side_talk(text) -> bool:
+    """Were these words side talk in Jarvis Live (jarvis_live.was_side_talk:
+    the model answered the side-talk marker)? False when jarvis_live.py is
+    not there."""
+    try:
+        import jarvis_live
+        return bool(jarvis_live.was_side_talk(text))
     except Exception:
         return False
 
@@ -327,20 +343,81 @@ _GAME_ROLEPLAY = re.compile(
     r")\b", re.IGNORECASE)
 
 
-def game_or_roleplay(messages: Iterable) -> bool:
+#: The conversations this PC has seen turn into a game or role-play, newest
+#: last, in memory only (ids, never words). The apps re-send at most the last
+#: 10 pairs and then cut to the newest 6, so after about 11 exchanges the
+#: message that started the game is no longer in the request - and the game
+#: silently became a normal chat: kept in History, recalled memory in the
+#: role-play, facts learned from it (the second chat audit, 2026-09-28,
+#: finding 1, reproduced). Remembering the conversation on the PC closes that
+#: without asking the apps to re-send anything.
+_GAME_CIDS: "OrderedDict[str, bool]" = OrderedDict()
+_GAME_LOCK = threading.Lock()
+_GAME_CIDS_MAX = 500
+_GAME_CID = re.compile(r"[A-Za-z0-9_-]{8,64}")
+
+
+def _game_cid_ok(conversation_id) -> bool:
+    return isinstance(conversation_id, str) and bool(_GAME_CID.fullmatch(conversation_id))
+
+
+def note_game(conversation_id) -> None:
+    """This conversation is a game. Kept until the PC restarts or 500 newer
+    conversations push it out."""
+    if not _game_cid_ok(conversation_id):
+        return
+    with _GAME_LOCK:
+        _GAME_CIDS.pop(conversation_id, None)
+        _GAME_CIDS[conversation_id] = True
+        while len(_GAME_CIDS) > _GAME_CIDS_MAX:
+            _GAME_CIDS.popitem(last=False)
+
+
+def is_game_conversation(conversation_id) -> bool:
+    """Has this PC seen `conversation_id` turn into a game?"""
+    if not _game_cid_ok(conversation_id):
+        return False
+    with _GAME_LOCK:
+        return conversation_id in _GAME_CIDS
+
+
+def forget_games_for_tests() -> None:
+    with _GAME_LOCK:
+        _GAME_CIDS.clear()
+
+
+def game_or_roleplay(messages: Iterable, conversation_id=None) -> bool:
     """Has the owner, anywhere in this conversation, asked to play a game or
     start a role-play - a text adventure, a D&D-style campaign, "pretend you
     are ...", "let's roleplay"? True once, for the whole conversation: see
     the module note above for why a game is not treated as ending partway
     through. Only the owner's own messages are read; the model's own words
-    (an assistant turn playing along) never turn this on or off."""
+    (an assistant turn playing along) never turn this on or off.
+
+    With `conversation_id` (the request's own), a game seen once stays a game
+    for that conversation even when the message that started it is no longer
+    among the messages the app re-sends (see _GAME_CIDS). Without one, only
+    the messages given are read."""
     for m in messages or []:
         if not isinstance(m, dict) or m.get("role") != "user":
             continue
         text = m.get("content")
         if isinstance(text, str) and _GAME_ROLEPLAY.search(text):
+            note_game(conversation_id)
             return True
-    return False
+    return is_game_conversation(conversation_id)
+
+
+def temporary_body(body) -> bool:
+    """One request's "is this chat temporary": `temporary: true`, or a game
+    or role-play (game_or_roleplay, with the request's conversation id).
+    The same test jarvis_hud._temporary_chat and jarvis_agent._looks_temporary
+    make, for the quick-answer path (jarvis_quick) to share."""
+    if not isinstance(body, dict):
+        return False
+    if body.get("temporary") is True:
+        return True
+    return bool(game_or_roleplay(body.get("messages") or [], body.get("conversation_id")))
 
 
 # --------------------------------------------------------------------------

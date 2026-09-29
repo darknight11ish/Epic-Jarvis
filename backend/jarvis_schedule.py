@@ -227,7 +227,7 @@ class Kind:
                  card: Optional[Callable] = None, silent: bool = False,
                  add: Optional[Callable] = None, first_now: bool = False,
                  fields: Optional[Callable[[str], dict]] = None, what: str = "",
-                 leaves: bool = False, plain_repeat: bool = False):
+                 leaves: bool = False, plain_repeat: bool = False, ends: bool = False):
         self.name = name
         self.noun = noun                 # "timer", "reminder"
         self.lock_screen = lock_screen   # what a locked phone may show
@@ -297,6 +297,12 @@ class Kind:
         # morning briefing and "tell me when", which read email or the
         # calendar.
         self.plain_repeat = plain_repeat
+        # True: a job of this kind has no time of its own - its `due` is the
+        # day it ENDS, quietly ("remind me next time I talk about X",
+        # jarvis_next_time.py, 2026-09-28: gone after 90 days). The list
+        # says "until <day>" instead of a time it goes off; going off at the
+        # end rings no doorbell (such a kind is also `silent`).
+        self.ends = ends
 
 
 KINDS: dict = {}
@@ -307,7 +313,16 @@ KINDS: dict = {}
 #: A module that is missing is skipped: its jobs still go off, as a doorbell.
 #: jarvis_focus (2026-09-25): the end of a focus session - not listed in
 #: Coming up (the focus panel counts down), and it tells nobody.
-KIND_MODULES = ("jarvis_standby_schedule", "jarvis_briefing", "jarvis_tellme", "jarvis_focus")
+#: jarvis_next_time (2026-09-28): "remind me next time I talk about X" - no
+#: time of its own; its due is the day it ends, quietly (Kind.ends).
+#: jarvis_tidy (2026-09-28): the overnight tidy's hourly look - not listed in
+#: Coming up, tells nobody, and runs at most once a day, only while the
+#: owner's "Overnight memory tidying" switch is on; it only raises cards.
+#: jarvis_today (2026-09-28): Today cards - the owner's own words shown on
+#: the Today part of both apps at a time, on chosen days; no card (like a
+#: plain repeat), and going off only tells the apps the list changed.
+KIND_MODULES = ("jarvis_standby_schedule", "jarvis_briefing", "jarvis_tellme", "jarvis_focus",
+                "jarvis_next_time", "jarvis_tidy", "jarvis_today")
 
 
 def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = False,
@@ -319,7 +334,8 @@ def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = Fa
                   card: Optional[Callable] = None, silent: bool = False,
                   add: Optional[Callable] = None, first_now: bool = False,
                   fields: Optional[Callable[[str], dict]] = None, what: str = "",
-                  leaves: bool = False, plain_repeat: bool = False) -> Kind:
+                  leaves: bool = False, plain_repeat: bool = False,
+                  ends: bool = False) -> Kind:
     """Add a kind of job. For the features still to come (briefing, tidy,
     sleep): their job goes off through the same loop, the same missed-while-
     off rule and the same event; `on_fire(job_id)` is called after the event,
@@ -336,7 +352,7 @@ def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = Fa
              edges=edges, about=about, note=note, repeatable=repeatable,
              card_note=card_note, check=check, card=card, silent=silent, add=add,
              first_now=first_now, fields=fields, what=what, leaves=leaves,
-             plain_repeat=plain_repeat)
+             plain_repeat=plain_repeat, ends=ends)
     KINDS[name] = k
     return k
 
@@ -402,8 +418,13 @@ CREATE TABLE IF NOT EXISTS commands (
 #: them gets them on open, empty. `list_name`: a to-do item's named list
 #: (NULL: the to-do list). `snooze_of`: a snoozed copy's original job.
 #: `snoozed_to`: the copy made from a job that went off (cleared when a
-#: repeating job goes off again).
-_ADDED_COLUMNS = (("list_name", "TEXT"), ("snooze_of", "TEXT"), ("snoozed_to", "TEXT"))
+#: repeating job goes off again). `extra` (2026-09-28): a kind's own small
+#: JSON state, written and read only by that kind's module through
+#: Scheduler.extra()/set_extra() - "remind me next time I talk about X"
+#: keeps its trigger words and how often it was brought up there. Never
+#: handed out by _view: a kind shows what it wants through `fields`.
+_ADDED_COLUMNS = (("list_name", "TEXT"), ("snooze_of", "TEXT"), ("snoozed_to", "TEXT"),
+                  ("extra", "TEXT"))
 
 #: States. `active` and `paused` are on the list; `waiting` is a repeating
 #: job whose card has not been answered; `fired` is a one-off that went off
@@ -667,6 +688,13 @@ def long_date(t: float) -> str:
     return f"{WEEKDAYS[lt.tm_wday]} {lt.tm_mday} {MONTHS[lt.tm_mon - 1]} at {clock(t)}"
 
 
+def until_words(t: float) -> str:
+    """'until Sunday 27 December' - a job with no time of its own (Kind.ends)
+    that quietly ends that day."""
+    lt = time.localtime(t)
+    return f"until {WEEKDAYS[lt.tm_wday]} {lt.tm_mday} {MONTHS[lt.tm_mon - 1]}"
+
+
 def window_words(start: float, end: float) -> str:
     """'Saturday 26 September, 01:00 to 07:00', or across midnight 'Friday
     25 September at 23:00 to Saturday at 07:00' - for the card."""
@@ -711,6 +739,13 @@ def rule_words(rule: Optional[dict]) -> str:
         return "every hour" if n == 1 else f"every {n} hours"
     if every == "minutes":
         n = rule.get("minutes")
+        # Whole days and hours said as such (2026-09-28: a "tell me when" on
+        # a search looks once a day - "every 1440 minutes" is no way to say it).
+        if isinstance(n, int) and not isinstance(n, bool) and n >= 60:
+            if n % 1440 == 0:
+                return "every day" if n == 1440 else f"every {n // 1440} days"
+            if n % 60 == 0:
+                return "every hour" if n == 60 else f"every {n // 60} hours"
         return "every minute" if n == 1 else f"every {n} minutes"
     return ""
 
@@ -902,15 +937,16 @@ class Scheduler:
 
     def _insert(self, kind: str, *, text: str, state: str, due, rule, duration,
                 source: str, list_name: Optional[str] = None,
-                snooze_of: Optional[str] = None) -> str:
+                snooze_of: Optional[str] = None, extra: Optional[dict] = None) -> str:
         jid = "s" + uuid.uuid4().hex[:10]
         now = self.now()
         with self._lock, self._db() as c:
             c.execute("INSERT INTO jobs (id, kind, text, state, due, rule, duration, created, "
-                      "changed, source, list_name, snooze_of) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                      "changed, source, list_name, snooze_of, extra) "
+                      "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                       (jid, kind, text, state, due,
                        json.dumps(rule) if rule else None, duration, now, now, source,
-                       list_name, snooze_of))
+                       list_name, snooze_of, json.dumps(extra) if extra else None))
         _audit("schedule.add", {"id": jid, "kind": kind, "repeats": bool(rule)})
         self._changed(jid, kind)
         return jid
@@ -957,8 +993,11 @@ class Scheduler:
                            rule=None, duration=seconds, source=source)
         return self.job(jid)
 
-    def add_at(self, kind: str, at: float, text: str = "", source: str = "app") -> dict:
-        """A one-off alarm, reminder or to-do with a time. No card."""
+    def add_at(self, kind: str, at: float, text: str = "", source: str = "app",
+               extra: Optional[dict] = None) -> dict:
+        """A one-off alarm, reminder or to-do with a time. No card. `extra`: a
+        kind's own small state (the `extra` column), for a kind whose module
+        keeps one (jarvis_next_time.py)."""
         if kind not in KINDS or kind == "timer":
             raise ValueError("that kind of job needs a time: alarm, reminder or to-do")
         try:
@@ -974,8 +1013,47 @@ class Scheduler:
         with self._lock, self._db() as c:
             self._room(c, kind)
         jid = self._insert(kind, text=text, state="active", due=at, rule=None,
-                           duration=None, source=source)
+                           duration=None, source=source, extra=extra)
         return self.job(jid)
+
+    # ---- a kind's own small state (the `extra` column) --------------------------
+
+    def extra(self, jid: str) -> dict:
+        """ONE job's own state, {} for none (or a damaged value)."""
+        with self._lock, self._db() as c:
+            row = c.execute("SELECT extra FROM jobs WHERE id = ?", (str(jid),)).fetchone()
+        try:
+            got = json.loads(row["extra"]) if row is not None and row["extra"] else {}
+        except Exception:
+            return {}
+        return got if isinstance(got, dict) else {}
+
+    def set_extra(self, jid: str, extra: dict) -> bool:
+        """Replace ONE listed job's own state. False when it is not on the
+        list any more (deleted meanwhile). Rings no doorbell: nothing the
+        list shows about a job's words changed."""
+        with self._lock, self._db() as c:
+            cur = c.execute("UPDATE jobs SET extra = ?, changed = ? WHERE id = ? AND state IN "
+                            "('active','paused','waiting')",
+                            (json.dumps(extra or {}), self.now(), str(jid)))
+            return cur.rowcount > 0
+
+    def listed_of(self, kind: str) -> list:
+        """The ACTIVE jobs of one kind, oldest first, as raw fields - {"id",
+        "text", "created", "due", "extra"} - for that kind's own module."""
+        with self._lock, self._db() as c:
+            rows = c.execute("SELECT id, text, created, due, extra FROM jobs WHERE kind = ? "
+                             "AND state = 'active' ORDER BY created, rowid",
+                             (str(kind),)).fetchall()
+        out = []
+        for r in rows:
+            try:
+                extra = json.loads(r["extra"]) if r["extra"] else {}
+            except Exception:
+                extra = {}
+            out.append({"id": r["id"], "text": r["text"], "created": r["created"],
+                        "due": r["due"], "extra": extra if isinstance(extra, dict) else {}})
+        return out
 
     def add_todo(self, text: str, source: str = "app", list_name=None) -> dict:
         """One to-do item - on the to-do list, or on a named list ("shopping").
@@ -1181,7 +1259,10 @@ class Scheduler:
                           "WHERE id = ?", (now, now, jid))
                 said = "Marked done."
             elif do == "pause":
-                if state != "active" or kind == "todo":
+                k = KINDS.get(kind)
+                if state != "active" or kind == "todo" or (k is not None and k.ends):
+                    # A kind with no time of its own ("remind me next time
+                    # ...") has nothing to pause: delete it instead.
                     return 409, {"ok": False, "error": "That cannot be paused now."}
                 left = max(0.0, (row["due"] or now) - now) if kind == "timer" else None
                 c.execute("UPDATE jobs SET state = 'paused', left_s = ?, changed = ? "
@@ -1541,6 +1622,15 @@ class Scheduler:
         self._changed(jid, row["kind"])
         return True
 
+    def jobs_of(self, kind: str) -> list:
+        """The ids of the jobs of one kind still on the list (active, paused
+        or waiting for a card) - for a kind that manages its own one job
+        (jarvis_tidy.py). Reads only."""
+        with self._lock, self._db() as c:
+            return [r["id"] for r in c.execute(
+                "SELECT id FROM jobs WHERE kind = ? AND state IN ('active','paused','waiting')"
+                " ORDER BY created", (str(kind),)).fetchall()]
+
     def next_due(self) -> Optional[float]:
         with self._lock, self._db() as c:
             r = c.execute("SELECT MIN(due) FROM jobs WHERE state = 'active' "
@@ -1593,14 +1683,18 @@ class Scheduler:
         v = {"id": row["id"], "kind": kind, "text": row["text"], "state": row["state"],
              "due": row["due"], "created": row["created"], "source": row["source"],
              "repeats": bool(rule)}
+        k = KINDS.get(kind)
         if row["state"] == "active" and row["due"] is not None:
-            v["left"] = max(0.0, float(row["due"]) - now)
-            v["when"] = when_words(float(row["due"]), now)
+            if k is not None and k.ends:
+                # No time of its own: `due` is the day it ends, quietly.
+                v["when"] = until_words(float(row["due"]))
+            else:
+                v["left"] = max(0.0, float(row["due"]) - now)
+                v["when"] = when_words(float(row["due"]), now)
         if kind == "timer":
             v["duration"] = row["duration"]
             if row["state"] == "paused":
                 v["left"] = float(row["left_s"] or 0.0)
-        k = KINDS.get(kind)
         if rule and rule.get("until") and "when" in v and k is not None:
             # A window's next end, said as which end it is: "awake at 07:00
             # tomorrow", "on standby at 01:00 today".
@@ -1746,17 +1840,41 @@ _SCHED_LOCK = threading.Lock()
 
 
 
+#: Called once, on their own thread, after the scheduler first starts in
+#: this process (after_start). For a kind that keeps ONE job of its own in
+#: step with a setting (jarvis_tidy.py: the overnight tidy's look, only
+#: while its switch is on) - it cannot add that job while get() is still
+#: importing it.
+_AFTER_START: list = []
+
+
+def after_start(fn: Callable[[], None]) -> None:
+    """Run `fn()` once the scheduler has started (at once, on its own
+    thread, when it already has). Nothing it raises reaches anyone."""
+    _AFTER_START.append(fn)
+    if _SCHED is not None and _SCHED.running:
+        threading.Thread(target=lambda: _safe(lambda _j: fn(), ""), daemon=True,
+                         name="jarvis-schedule-after-start").start()
+
+
 def get() -> Scheduler:
     """The scheduler, started. Every way in comes through here - the boot
     line in jarvis_hud.py, the routes, the fast path, the model's tools - so
     whichever is first starts the loop, once."""
     global _SCHED
+    first = False
     with _SCHED_LOCK:
         if _SCHED is None:
             _load_kind_modules()
             _SCHED = Scheduler()
+            first = True
         s = _SCHED
-    return s.start()
+    s.start()
+    if first:
+        for fn in list(_AFTER_START):
+            threading.Thread(target=lambda fn=fn: _safe(lambda _j: fn(), ""), daemon=True,
+                             name="jarvis-schedule-after-start").start()
+    return s
 
 
 def _load_kind_modules() -> None:
@@ -1818,11 +1936,31 @@ def _num(v) -> Optional[float]:
     return float(v)
 
 
+def wall_at(date, hhmm) -> float:
+    """The moment this PC's clock reads `date` ("2026-10-12") at `hhmm`
+    ("14:00"). ValueError, in words, for anything else."""
+    m = re.fullmatch(r"(\d{4})-(\d{2})-(\d{2})", str(date or "").strip())
+    if not m:
+        raise ValueError("a date looks like 2026-10-12")
+    y, mo, d = (int(g) for g in m.groups())
+    try:
+        import datetime
+        datetime.date(y, mo, d)
+    except ValueError:
+        raise ValueError("that date is not on the calendar")
+    t = re.fullmatch(r"([01]?\d|2[0-3]):([0-5]\d)", str(hhmm or "").strip())
+    if not t:
+        raise ValueError("a time looks like 14:00")
+    return wall_to_epoch(y, mo, d, int(t.group(1)), int(t.group(2)))
+
+
 def handle_add(body: dict) -> tuple:
     """POST /api/schedule/add - one job.
       {"kind": "todo", "text", "list"?}            a to-do item (on a named list)
       {"kind": "timer", "seconds", "text"?}        a timer
       {"kind": "alarm"|"reminder", "at", "text"?}  once, at an epoch time
+      {"kind": "alarm"|"reminder", "date": "YYYY-MM-DD", "time": "HH:MM", "text"?}
+                                                   once, on this PC's clock ("said")
       {"kind": "alarm"|"reminder", "repeat": {...}, "text"?}   repeating: no card
       {"kind": "standby", "repeat": {"every", "at", "until"}}  no card
       {"kind": "briefing", "repeat": {...}}        repeating: ONE card
@@ -1848,6 +1986,20 @@ def handle_add(body: dict) -> tuple:
                 job = s.add_repeat(kind, body.get("repeat"), body.get("text") or "",
                                    source="app")
                 return _repeat_answer(job, s.now())
+            if kind in ("alarm", "reminder") and ("date" in body or "time" in body):
+                # "Photo to reminder" (2026-09-28, JARVIS-API section 83):
+                # the owner's edited date and time, read as THIS PC's clock
+                # - the PC is Jarvis's only clock - and set by the owner's
+                # tap, with no card, like any one-off reminder.
+                at = wall_at(body.get("date"), body.get("time"))
+                now = s.now()
+                if at <= now:
+                    raise ValueError(f"{when_words(at, now)} has already passed - "
+                                     f"change the date or time")
+                job = s.add_at(kind, at, body.get("text") or "", source="app")
+                noun = "Alarm" if kind == "alarm" else "Reminder"
+                return 200, {"ok": True, "job": job,
+                             "said": f"{noun} set for {when_words(at, now)}."}
             job = s.add_at(kind, _num(body.get("at")), body.get("text") or "", source="app")
         elif kind in KINDS and KINDS[kind].window:
             # The standby schedule: {"kind": "standby", "repeat": {"every":

@@ -44,8 +44,17 @@ object MemoryWords {
     const val SEARCH_BY_MEANING_OFF = "off - facts are found by keyword"
     const val WAITING_TO_BE_INDEXED = "Waiting to be indexed"
     const val OVERNIGHT = "Overnight tidying"
-    const val OVERNIGHT_ON = "switched on, but not built yet - nothing runs"
-    const val OVERNIGHT_OFF = "off (not built yet)"
+    // The overnight tidy is built since 2026-09-28 (backend/jarvis_tidy.py):
+    // review cards only, once a day, while this switch is on.
+    const val OVERNIGHT_ON = "on - once a day Jarvis may ask about facts that look out of date (review cards only)"
+    const val OVERNIGHT_OFF = "off"
+
+    /** What turning the overnight tidy on and off says - the desktop's brain.js
+     *  OVERNIGHT_ON_SAID / OVERNIGHT_OFF_SAID, word for word. */
+    const val OVERNIGHT_ON_SAID = "Overnight tidying is on. Once a day Jarvis may ask about facts that " +
+        "look out of date, with review cards. Nothing changes without your yes."
+    const val OVERNIGHT_OFF_SAID = "Overnight tidying is off. No more cards from it."
+    const val OVERNIGHT_TURN_OFF = "Turn off overnight tidying"
     const val RERANKER = "Answer ordering (re-ranker)"
     const val RERANKER_LOADING = "still loading - answers keep the old order until it is ready"
     const val RERANKER_NOT_STARTED = "not loaded yet - it starts loading with the first question"

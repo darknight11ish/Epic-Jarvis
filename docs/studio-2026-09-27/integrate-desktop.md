@@ -1,0 +1,9 @@
+# Integration scout: desktop (Tauri/Windows), condensed
+Almost all already built: Windows Hello lock.rs, toasts winrt_toast.rs, stop hotkey commands.rs:2527, autostart.rs, token_store.rs (Cred Manager), update.rs, xcap 0.9.8. OCR/media/focus/UIA in Python backend.
+1. QR pairing: `qrcode` crate (MIT/Apache), default-features=false features=["svg"], zero deps; built for windows-msvc target; OpenCV decoded test payload. Runner-up fast_qr (MIT, 2026-09-01). Goes in Settings #pairing (settings.html:129). USE.
+2. Autostart wrong-state (VERIFIED comment autostart.rs:57 assumes Task Manager "removes the entry"; is_enabled reads Run key only). Task Manager disables via ...\Explorer\StartupApproved\Run (last 8 bytes nonzero = disabled). Settings can say on while Windows won't start Jarvis. Adapt auto-launch (MIT) src/windows.rs idea ~20 lines.
+3. Toast Deny/Snooze may not fire (UNVERIFIED): design relies on foreground activation relaunch with argv (winrt_toast.rs:30-60, deliberate, no CLSID). No `Activated`/`Failed` handler registered. Suggest also handling Activated in-process (pattern from tauri-winrt-notification, in lockfile 0.7.3) + Failed logging. Must test on real PC.
+4. Tauri 2.12 + plugins 2.5 (2026-09-26) need Rust 1.90; Cargo.toml rust-version = "1.89" (VERIFIED). Raise when upgrading.
+Skipped: keyring (token_store stricter), uiautomation Rust (dup), windows-capture, nvml-wrapper (in-process hang unkillable), deep-link (attack surface), plugin-biometric (no Windows), active-win-pos-rs/x-win (read more than needed), user-notify (LGPL static link).
+Tauri apps: Jan Apache-2.0 ideas (don't copy analytics-proxied updater or file-fallback secret store); Screenpipe commercial licence - never copy; Pot GPL-3.0 ideas only.
+CLAUDE.md wrong: says x86_64-pc-windows-msvc target installed; it wasn't in this container (agent ran rustup target add).

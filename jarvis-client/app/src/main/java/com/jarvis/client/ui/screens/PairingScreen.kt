@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.R
+import com.jarvis.client.data.PairingKey
 import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.parts.Primary
@@ -80,6 +82,21 @@ fun PairingScreen(
     onOpenHelp: (() -> Unit)? = null,
     /** Set when a desktop is already paired: leaves this screen and keeps it. */
     onCancel: (() -> Unit)? = null,
+    /**
+     * Told true while the token is shown in plain letters ("Show token"),
+     * and false when it is hidden again or this screen goes: the caller
+     * blocks screenshots and screen recording meanwhile (FLAG_SECURE,
+     * SecurityRules.blockScreenCapture).
+     */
+    onKeyShownChange: (Boolean) -> Unit = {},
+    /**
+     * Offer "Scan the code on your PC" and "Type the code instead"
+     * (docs/PAIRING-DESIGN.md §7.2) above the old address-and-token form,
+     * which then folds away under "Use the old shared key instead".
+     */
+    offerCodePairing: Boolean = false,
+    /** The key the PC handed over after its card was approved, and the address to save with it. */
+    onDeviceKey: (address: String, key: String) -> Unit = { _, _ -> },
 ) {
     val chrome = LocalChrome.current
     val accent = LocalAccent.current
@@ -107,6 +124,24 @@ fun PairingScreen(
     // precisely to hold it. The cost of not saving it is that a rotation
     // mid-typing clears the field, which is the right trade for a secret.
     var token by remember { mutableStateOf("") }
+
+    // "Show token" (phone walk-through C8, 2026-09-27): the token is 43
+    // characters typed from the PC's screen, and typing it blind meant one
+    // wrong letter and no way to find it. Hidden by default, `remember` for
+    // the same reason as the token (a rotation hides it again), and nothing
+    // about it is saved anywhere. While it is shown the screen cannot be
+    // captured (onKeyShownChange).
+    var keyShown by remember { mutableStateOf(false) }
+    // And while a pairing code, the camera pointed at one, or the four words
+    // are on screen (CodePairingSection): screenshots are blocked the same way.
+    var codeShown by remember { mutableStateOf(false) }
+    val anySecretShown = keyShown || codeShown
+    DisposableEffect(anySecretShown) {
+        onKeyShownChange(anySecretShown)
+        onDispose { onKeyShownChange(false) }
+    }
+    // The old form, folded away when the QR code is offered; open otherwise.
+    var oldFormOpen by remember { mutableStateOf(!offerCodePairing) }
 
     // Set once the token has been handed over, so the field can be emptied
     // without disabling Connect. `hasToken` is read once by the caller and does
@@ -173,45 +208,74 @@ fun PairingScreen(
             )
         }
 
-        Spacer(Modifier.height(22.dp))
-        TextInput(
-            value = host,
-            onValueChange = setHost,
-            label = "Desktop address",
-            placeholder = "your-desktop.tailnet.ts.net:4719  (or ….nord:4719 for Meshnet)",
-            // Plain words first. The old text ended on "the network security
-            // config can permit a name but cannot express a CIDR range", which
-            // is true and useless to someone who has not written an Android
-            // manifest. Platform checks keeps the technical version.
-            supportingText = "The desktop's name on your private network: its " +
-                "Tailscale name (ends in .ts.net) or its NordVPN Meshnet name (ends " +
-                "in .nord). A number like 100.x will not work, because Android only " +
-                "lets this app use names it has been told about. Leave off :4719 and " +
-                "it is added for you. An address on the open internet, a public tunnel " +
-                "such as ngrok included, is refused, so your token is never sent there.",
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Uri,
-                imeAction = ImeAction.Next,
-            ),
-        )
+        if (offerCodePairing) {
+            Spacer(Modifier.height(22.dp))
+            CodePairingSection(
+                address = host,
+                onAddressChange = setHost,
+                busy = busy,
+                onDeviceKey = onDeviceKey,
+                onSecretShown = { codeShown = it },
+            )
+            Spacer(Modifier.height(14.dp))
+            Quiet(
+                if (oldFormOpen) "Hide the old shared key form" else "Use the old shared key instead",
+                color = chrome.textMid,
+            ) { oldFormOpen = !oldFormOpen }
+        }
 
-        Spacer(Modifier.height(14.dp))
-        TextInput(
-            value = token,
-            onValueChange = { token = it },
-            password = true,
-            label = if (hasToken) "Replace token" else "Pairing token",
-            placeholder = "On the PC: Settings, Show the token for my phone",
-            supportingText = if (hasToken) {
-                "A token is stored. Leave this blank to keep it."
-            } else {
-                "Kept encrypted on this phone, in Android's secure key storage."
-            },
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Password,
-                imeAction = ImeAction.Done,
-            ),
-        )
+        if (oldFormOpen) {
+            Spacer(Modifier.height(22.dp))
+            TextInput(
+                value = host,
+                onValueChange = setHost,
+                label = "Desktop address",
+                placeholder = "your-desktop.tailnet.ts.net:4719  (or ….nord:4719 for Meshnet)",
+                // Plain words first. The old text ended on "the network security
+                // config can permit a name but cannot express a CIDR range", which
+                // is true and useless to someone who has not written an Android
+                // manifest. Platform checks keeps the technical version.
+                supportingText = "The desktop's name on your private network: its " +
+                    "Tailscale name (ends in .ts.net) or its NordVPN Meshnet name (ends " +
+                    "in .nord). A number like 100.x will not work, because Android only " +
+                    "lets this app use names it has been told about. Leave off :4719 and " +
+                    "it is added for you. An address on the open internet, a public tunnel " +
+                    "such as ngrok included, is refused, so your token is never sent there.",
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Uri,
+                    imeAction = ImeAction.Next,
+                ),
+            )
+
+            Spacer(Modifier.height(14.dp))
+            TextInput(
+                value = token,
+                // The PC shows the token in groups of four; the spaces are for
+                // reading only and are dropped as they are typed (PairingKey).
+                onValueChange = { token = PairingKey.clean(it) },
+                password = !keyShown,
+                label = if (hasToken) "Replace token" else "Pairing token",
+                placeholder = "On the PC: Settings, Show the token for my phone",
+                supportingText = if (hasToken) {
+                    "A token is stored. Leave this blank to keep it."
+                } else {
+                    "Kept encrypted on this phone, in Android's secure key storage."
+                },
+                // Password keyboard either way, shown or not: no suggestions, and
+                // the keyboard does not learn the token.
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Password,
+                    imeAction = ImeAction.Done,
+                ),
+            )
+            if (token.isNotEmpty() || keyShown) {
+                Quiet(
+                    if (keyShown) "Hide token" else "Show token",
+                    color = chrome.textMid,
+                    modifier = Modifier.align(Alignment.End),
+                ) { keyShown = !keyShown }
+            }
+        }
 
         if (notice != null) {
             Spacer(Modifier.height(14.dp))
@@ -227,7 +291,9 @@ fun PairingScreen(
 
         Spacer(Modifier.height(20.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Primary(
+            // Only with the old form open: with the QR code offered, "Scan
+            // the code on your PC" is the one filled button on this screen.
+            if (oldFormOpen) Primary(
                 text = "Connect",
                 busy = busy,
                 enabled = !busy && host.isNotBlank() &&
@@ -241,6 +307,7 @@ fun PairingScreen(
                     // text field on an unlocked phone waiting for a retry.
                     handedOver = handedOver || token.isNotBlank()
                     token = ""
+                    keyShown = false
                 },
             )
 

@@ -58,43 +58,39 @@
              return self._send(code, out)
  
          if route in ("/api/hardware/apply", "/api/hardware/create",
-@@ -3707,6 +3751,20 @@
-             except Exception:            # _al_plain unset: nothing here was checked
-                 _al_ok = 0
-             route_header["injected_sensitive"] = max(0, _al_n - _al_ok)
-+            # second-card-suggest.patch (owner's go-ahead, 2026-09-29): a
-+            # thumbs-down on a crisis-help answer must not count toward
-+            # "suggest the bigger model". The mark arrives later, as its own
-+            # request, knowing only this turn's id - so hand jarvis_agent the
-+            # id of a turn flagged as a crisis turn (wellbeing.patch), here,
-+            # where both the flag and the id (feedback.patch) exist. The id
-+            # only: memory only, bounded, never written or logged there. Off
-+            # a try: bookkeeping must never be the reason an answer fails.
-+            try:
-+                if route_header.get("wellbeing") == "crisis":
+@@ -3660,6 +3704,20 @@
+                     route_header.get("injected_ids") or [])
+             except Exception:
+                 pass
++            # second-card-suggest.patch: remember a crisis turn's id (in
++            # memory only, ids never words), so a "wrong" mark on its answer
++            # later is never counted toward suggesting the bigger model -
++            # "Crisis messages are never learned from and never counted"
++            # (the owner, 2026-09-28). Here, the one place both the id above
++            # and wellbeing.patch's flag are known, and before the answer
++            # is sent, so no mark can arrive first. Covers both branches
++            # below. Off a try: never the reason an answer fails.
++            if route_header.get("wellbeing") == "crisis":
++                try:
 +                    import jarvis_agent
 +                    jarvis_agent.note_crisis_turn(route_header.get("turn_id"))
-+            except Exception:
-+                pass
-             if use_tools:
-                 # No `upstream` exists in this branch - jarvis_agent makes
-                 # its own request(s) to Ollama entirely on its own, so there
-@@ -3807,6 +3865,18 @@
++                except Exception:
++                    pass
+             # auto-learn.patch (the owner's decision, 2026-09-24): how many of
+             # the recalled facts this answer REALLY used are sensitive - here,
+             # after the degrade loop, which empties injected_ids when a turn
+@@ -3777,6 +3835,14 @@
                              _turn.get("unverified_quotes") or [])
                      except Exception:
                          pass
-+                    # second-card-suggest.patch: the same hand-over, from the
-+                    # crisis flag run_local_turn itself acted on (its own
-+                    # check, on the owner's own newest words) - the header
-+                    # check above is a second, cosmetic look, so either one
-+                    # counts. The id only; the answer's words are never
-+                    # passed on. Its own try: an older jarvis_agent.py must
-+                    # not turn a delivered answer into an error.
-+                    try:
-+                        if _turn.get("crisis"):
++                    # second-card-suggest.patch: jarvis_agent's own crisis
++                    # check (on the owner's newest words) counts too, in
++                    # case it caught one the flag above did not.
++                    if _turn.get("crisis"):
++                        try:
 +                            jarvis_agent.note_crisis_turn(route_header.get("turn_id"))
-+                    except Exception:
-+                        pass
++                        except Exception:
++                            pass
                      if (_speed is not None and _turn.get("finish_reason")
                              and not _turn.get("client_gone")):
                          _speed.finish(lane, tools=int(_turn.get("rounds") or 1) > 1)

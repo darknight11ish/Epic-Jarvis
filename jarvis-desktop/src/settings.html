@@ -53,6 +53,7 @@
         <div class="settings-jump-group">
           <span class="settings-jump-label">Everyday</span>
           <a href="#connection">Connection</a>
+          <a href="#devices">Devices</a>
           <a href="#faq">FAQ</a>
           <a href="#appearance-card">Appearance</a>
           <a href="#animal-options">Animal options</a>
@@ -140,7 +141,8 @@
             <button class="btn ghost small" id="hide-token" type="button">Hide</button>
           </div>
           <p class="note">
-            Type it into the phone's <strong>Token</strong> box. It hides
+            Type it into the phone's <strong>Token</strong> box, without
+            the spaces: they are only there to make it easier to read. It hides
             itself after a minute. There is no Copy button on purpose: Windows
             keeps what you copy in its clipboard history, and can send it to
             your other devices with cloud clipboard, where the token would
@@ -172,7 +174,7 @@
           <strong>On the phone, type this computer's name, not the number.</strong>
           That is the Tailscale name ending in <code>.ts.net</code>, or the
           Meshnet name ending in <code>.nord</code> (for example
-          <code>marioirelan11-alps.nord</code>), followed by <code>:4719</code>.
+          <code>my-pc.nord</code>), followed by <code>:4719</code>.
         </p>
 
         <div class="row">
@@ -194,6 +196,87 @@
             </details>
           </span>
           <button class="btn ghost small" id="reconnect" type="button">Reconnect</button>
+        </div>
+      </section>
+
+      <!-- Devices (docs/PAIRING-DESIGN.md, phase 1): pairing a phone by QR
+           code, with a key per device. devices.js fills it; the commands are
+           src-tauri/src/devices.rs. The QR picture is drawn in Rust - this
+           page never holds the text inside it. The approval itself is an
+           ordinary card (the "Open the card" line at the top of this page),
+           never approved here. -->
+      <section class="card" id="devices">
+        <h2>Devices</h2>
+        <p class="note">
+          Each phone gets its own key, and you can remove any one of them
+          without touching the others. To add a phone, press
+          <strong>Pair a phone</strong> and scan the code with the Jarvis app
+          on that phone - over Tailscale or NordVPN Meshnet only.
+        </p>
+        <p class="state" id="dv-state" role="status">Asking Jarvis…</p>
+        <div id="dv-body" hidden>
+          <!-- Pairing a phone -->
+          <div id="dv-address-row" hidden>
+            <label class="field">
+              <span class="label">Your phone reaches this PC at</span>
+              <input id="dv-address" type="text" spellcheck="false" autocomplete="off"
+                     placeholder="my-pc.tail1234.ts.net" />
+            </label>
+            <p class="note" id="dv-address-note">
+              This PC's Tailscale name (it ends in <code>.ts.net</code>) or its
+              NordVPN Meshnet name (it ends in <code>.nord</code>). The Tailscale
+              or NordVPN app shows it. You only type it once.
+            </p>
+          </div>
+          <p class="note" id="dv-address-known" hidden>
+            Your phone reaches this PC at <strong id="dv-address-shown"></strong>.
+            <button class="btn ghost small" id="dv-address-change" type="button">Change</button>
+          </p>
+          <div class="row">
+            <button class="btn" id="dv-pair" type="button">Pair a phone</button>
+            <span class="status" id="dv-pair-status" role="status"></span>
+          </div>
+          <p class="note" id="dv-pair-why" hidden></p>
+
+          <div class="dv-panel" id="dv-panel" hidden>
+            <div id="dv-code-box" hidden>
+              <img class="dv-qr" id="dv-qr" alt="The pairing code. Scan it with the Jarvis app on your phone." />
+              <p class="note">
+                Can't scan? Type this code on the phone:
+                <strong class="dv-code" id="dv-code"></strong>
+              </p>
+              <p class="note" id="dv-countdown"></p>
+            </div>
+            <p class="dv-words" id="dv-words" hidden></p>
+            <p class="note" id="dv-session" role="status" aria-live="polite"></p>
+            <p class="note" id="dv-wrong-tries" hidden></p>
+            <div class="row">
+              <button class="btn ghost" id="dv-cancel" type="button">Cancel</button>
+              <button class="btn ghost" id="dv-close" type="button" hidden>Close</button>
+            </div>
+          </div>
+
+          <!-- The device list -->
+          <h3 class="subhead">Paired devices</h3>
+          <ul class="sc-cards" id="dv-list"></ul>
+          <span class="status" id="dv-status" role="status"></span>
+
+          <!-- The old shared key -->
+          <h3 class="subhead">Old shared key</h3>
+          <p class="note">
+            Used by this PC, and by devices paired before each one had its own key.
+          </p>
+          <p class="note" id="dv-shared-line"></p>
+          <p class="note" id="dv-shared-signed" hidden></p>
+          <div class="row">
+            <button class="btn ghost" id="dv-retire" type="button" hidden>Retire for other devices</button>
+            <button class="btn ghost" id="dv-bring-back" type="button" hidden>Bring it back</button>
+            <span class="status" id="dv-shared-status" role="status"></span>
+          </div>
+          <!-- "Show the token for my phone" (Connection, above) moves here
+               while the old key still works for other devices, renamed; it
+               is hidden once the key is retired (design 7.1). -->
+          <div id="dv-old-key-slot"></div>
         </div>
       </section>
 
@@ -235,6 +318,23 @@
               notification can only Deny. Nothing runs until you decide, one
               thing at a time. An email Jarvis wants to send is approved in
               the Jarvis bar, where you can read all of it first.
+            </p>
+          </details>
+
+          <details class="faq-item">
+            <summary class="faq-q">What is Jarvis Live, and how do I end it?</summary>
+            <p class="faq-a">
+              A back-and-forth voice conversation. Click <strong>Live</strong>
+              in the Jarvis bar (or say "Hey Jarvis, let's talk") and just
+              talk: no "Hey Jarvis" before each sentence. Every sentence is
+              still checked for your voice on this PC before any words are
+              made of it, and a card that comes up still waits for your
+              click. A red dot on the tray icon and a small sign at the top
+              of the screen show while it is on. To end it, click
+              <strong>End Live</strong> on the sign, say "Okay Jarvis,
+              that's all for now", or just stop talking for 90 seconds.
+              <strong>Mic off</strong> closes the microphone without ending
+              it. Live needs your voice trained first (Settings, then Voice).
             </p>
           </details>
 
@@ -285,7 +385,7 @@
               this computer's <em>name</em>, not the number: the Tailscale
               name ending in <code>.ts.net</code>, or the Meshnet name ending
               in <code>.nord</code> (like
-              <code>marioirelan11-alps.nord</code>), followed by
+              <code>my-pc.nord</code>), followed by
               <code>:4719</code>. The phone also needs the token: press
               <strong>Show the token for my phone</strong> above.
               Leave the box blank and nothing changes: Jarvis stays reachable
@@ -309,7 +409,9 @@
               computer, which ignores anything that does not start with
               "hey Jarvis". Windows dictation
               is not used, because it sends your voice to a company's
-              servers to turn it into text.
+              servers to turn it into text. To have Jarvis type what you say
+              into another program instead, turn on Talk-to-type in Voice
+              below, then hold Alt+Shift+T and speak.
             </p>
           </details>
 
@@ -696,6 +798,49 @@
               <div class="choices" id="vt-handsfree" role="group" aria-label="Hands-free: how far a question started with Hey Jarvis is trusted"></div>
               <p class="note" id="vt-handsfree-note"></p>
             </div>
+            <div id="vt-screen-box" hidden>
+              <h3 class="subhead">Answers about your screen or the camera after "Hey Jarvis"</h3>
+              <div class="choices" id="vt-screen" role="group" aria-label="Answers about your screen or the camera after Hey Jarvis, under Only trust the talk button"></div>
+              <p class="note" id="vt-screen-note"></p>
+            </div>
+            <div id="vt-live-box" hidden>
+              <h3 class="subhead">How far Jarvis Live is trusted</h3>
+              <div class="choices" id="vt-live" role="group" aria-label="How far Jarvis Live is trusted, under Only trust the talk button"></div>
+              <p class="note" id="vt-live-note"></p>
+            </div>
+            <!-- When App lock ends Jarvis Live on this PC (the owner's
+                 decision, 2026-09-28): a PC setting, kept by Jarvis on the
+                 PC (the voice setting `live_end`), so the looser choice can
+                 be an approval card. The phone keeps App lock's own rule. -->
+            <div id="vt-live-end-box" hidden>
+              <h3 class="subhead">End Jarvis Live on this PC</h3>
+              <div class="choices" id="vt-live-end" role="group" aria-label="When Jarvis Live ends on this PC, with App lock on"></div>
+              <p class="note" id="vt-live-end-note"></p>
+            </div>
+            <!-- Talk-to-type on this PC (talk_type.rs; docs/JARVIS-API.md
+                 section 72). This PC only: it types into this PC's programs,
+                 so the phone has no such switch (ARCHITECTURE section 8). -->
+            <div id="vt-talktype-box" hidden>
+              <h3 class="subhead">Talk-to-type (this PC only)</h3>
+              <div class="choices" id="vt-talktype" role="group" aria-label="Talk-to-type: hold a key, speak, and Jarvis types what you said"></div>
+              <p class="note" id="vt-talktype-note"></p>
+              <p class="note">
+                It cannot share the microphone with "hey Jarvis" listening:
+                turn that off in the Jarvis bar first. Stop everything ends
+                it at once.
+              </p>
+            </div>
+            <!-- "Better voice" (docs/JARVIS-API.md section 80): both apps. -->
+            <div id="vt-wakeconfirm-box" hidden>
+              <h3 class="subhead">Second "hey Jarvis" check</h3>
+              <div class="choices" id="vt-wakeconfirm" role="group" aria-label="Second hey Jarvis check: one detector, or two that must agree"></div>
+              <p class="note" id="vt-wakeconfirm-note"></p>
+            </div>
+            <div id="vt-voiceid-box" hidden>
+              <h3 class="subhead">Voice-ID model</h3>
+              <div class="choices" id="vt-voiceid" role="group" aria-label="Voice-ID model: which model tells your voice from other people's"></div>
+              <p class="note" id="vt-voiceid-note"></p>
+            </div>
             <p class="sc-line" id="vt-setting-waiting" data-tone="warn" hidden></p>
             <p class="note">
               Making it stricter happens at once. Making it looser shows you
@@ -730,22 +875,24 @@
           <p class="sc-line" id="voice-verifier" hidden></p>
           <p class="sc-line" id="voice-stop-word" hidden></p>
           <p class="sc-line" id="voice-turn" hidden></p>
+          <p class="sc-line" id="voice-wake2" hidden></p>
+          <p class="sc-line" id="voice-vad" hidden></p>
         </div>
 
         <!-- A setting of this PC's, not the server's, so it works whether
-             or not Jarvis answered above (barge-in.js; the phone has its
-             own switch for its own microphone). -->
-        <h3 class="subhead">Interrupting Jarvis</h3>
-        <label class="toggle">
-          <input id="voice-barge-in" type="checkbox" />
-          <span>
-            Interrupt Jarvis while it talks
-            <span class="toggle-detail" id="voice-barge-in-detail"></span>
-          </span>
-        </label>
+             or not Jarvis answered above (live-rules.js, barge-in.js; the
+             phone has the same setting for its own microphone). ONE
+             setting for ordinary replies and Jarvis Live alike (the
+             owner's answer of 2026-09-28): it replaced "Interrupt Jarvis
+             while it talks" and "Interrupting Jarvis in Live", and an
+             older choice carries over. -->
+        <h3 class="subhead" id="voice-interrupt-title">Interrupting Jarvis</h3>
+        <div class="choices" id="voice-interrupt" role="group" aria-labelledby="voice-interrupt-title"></div>
+        <p class="note" id="voice-interrupt-note"></p>
         <p class="note">
-          This PC only; your phone has its own switch. It matters only while
-          this PC is listening for "hey Jarvis".
+          This PC only; your phone has its own. It matters while this PC
+          listens for "hey Jarvis", and in Jarvis Live. No card either way:
+          it only changes when this PC listens.
         </p>
 
         <!-- Also this PC's own (voice-flow.js); the phone has the same
@@ -1000,6 +1147,18 @@
               </span>
             </label>
             <p class="note" id="cv-face-line" hidden></p>
+            <!-- The one-time question after an animal face is picked (the
+                 owner, 2026-09-28): the PC's own words, verbatim
+                 (custom-voices.js faceOfferView). Each animal keeps its own
+                 answer: "Use it" records yes for that animal and turns the
+                 switch above on; "Keep my voice" records no for it and
+                 leaves the switch as it is. No card either way; greyed on
+                 a stale link (rule 4). -->
+            <div class="row" id="cv-face-offer" hidden>
+              <span id="cv-face-offer-question"></span>
+              <button type="button" class="btn" id="cv-face-offer-use"></button>
+              <button type="button" class="btn ghost" id="cv-face-offer-keep"></button>
+            </div>
             <div class="row">
               <span class="status" id="cv-face-status" role="status"></span>
             </div>
@@ -1274,6 +1433,25 @@
             keep their own switches, in the next section.
           </p>
         </div>
+
+        <!-- "PC help" (pc-help.js, GET /api/pc/help, JARVIS-API section 84):
+             five plain answers about this PC, read-only. Asked only when
+             "Check now" is pressed. Outside #hw-body, so it works even when
+             the cards could not be read. -->
+        <div id="pc-help">
+          <h3 class="subhead">PC help</h3>
+          <p class="note">
+            Why is your PC slow, how full are your drives, what is using the
+            graphics card, how hot it is, and when did the PC last restart.
+            Jarvis only reads; it changes nothing. You can also just ask
+            Jarvis, like "why is my PC slow?".
+          </p>
+          <div class="row">
+            <button class="btn ghost small" id="pc-help-check" type="button">Check now</button>
+            <span class="status" id="pc-help-status" role="status"></span>
+          </div>
+          <ul class="pc-help-list" id="pc-help-list"></ul>
+        </div>
       </section>
 
       <!-- ── Second graphics card ─────────────────────────────────────────
@@ -1305,6 +1483,28 @@
           <div class="sc-switches" id="sc-switches"></div>
           <div class="row">
             <span class="status" id="sc-status" role="status"></span>
+          </div>
+
+          <!-- A third graphics card (2026-09-28): shown only once Jarvis
+               finds a genuinely capable one. Moving a switch here does not
+               turn it on or off - the switches above still do that - it
+               only says WHICH physical card an already-on switch runs on.
+               Runs at the same time as the second card's own lane, one
+               feature on each. See docs/GPU-SUPPORT-RESEARCH-2026-09-27.md
+               section 1.3: never a default, always a named choice. -->
+          <div id="sc-third-section" hidden>
+            <h3 class="subhead">Third graphics card</h3>
+            <p class="note" id="sc-third-found"></p>
+            <p class="note">
+              Move one of the switches above onto this card. It keeps
+              running there at the same time as the second card's own
+              lane - one feature on each card, never both at once for the
+              same one.
+            </p>
+            <div class="sc-switches" id="sc-third"></div>
+            <div class="row">
+              <span class="status" id="sc-third-status" role="status"></span>
+            </div>
           </div>
 
           <h3 class="subhead">One bigger model on both cards</h3>
@@ -1735,6 +1935,7 @@
         <p class="note">Everything Jarvis can do that might need your OK, and whether it asks you first. The PC writes this list from its own settings - the AI model does not write it. "Ask me first" makes one ask every time, at once, from either app. Letting one go ahead without asking is only for the short list below, only on the PC, and takes an approval card and Windows Hello.</p>
         <p class="state" id="af-state" role="status">Asking Jarvis…</p>
         <div id="af-body" hidden>
+          <div class="af-lockdown" id="af-lockdown" role="group" aria-label="Lockdown" hidden></div>
           <div id="af-groups"></div>
           <span class="status" id="af-status" role="status"></span>
         </div>
@@ -1874,6 +2075,7 @@
     <script src="sky.js"></script>
     <script type="module" src="settings.js"></script>
     <script type="module" src="hardware-panel.js"></script>
+    <script type="module" src="pc-help.js"></script>
     <script type="module" src="briefing-settings.js"></script>
     <script type="module" src="web-search-settings.js"></script>
     <script type="module" src="account-secrets-settings.js"></script>
@@ -1884,6 +2086,7 @@
     <script type="module" src="email-sending-settings.js"></script>
     <script type="module" src="folders-settings.js"></script>
     <script type="module" src="backup-settings.js"></script>
+    <script type="module" src="devices.js"></script>
     <script type="module" src="tool-updates-settings.js"></script>
     <script type="module" src="manner-settings.js"></script>
   </body>

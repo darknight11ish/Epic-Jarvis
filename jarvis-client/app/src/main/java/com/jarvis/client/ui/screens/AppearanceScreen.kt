@@ -208,6 +208,11 @@ fun AppearanceScreen(
     stillAnimal: Boolean = look.stillAnimal,
     /** "Go to the animal's voice" in Animal options; null hides the button (not paired). */
     onOpenVoices: (() -> Unit)? = null,
+    /**
+     * The one-time "The panda has its own voice. Use it?" line, drawn right
+     * under the face picker (owner, 2026-09-28). Null draws nothing.
+     */
+    faceVoiceOffer: (@Composable () -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     // What the face is actually running with right now - what Auto picked, or
@@ -578,6 +583,10 @@ fun AppearanceScreen(
                                     }
                                 }
                             }
+                        }
+                        faceVoiceOffer?.let {
+                            Gap(8)
+                            it()
                         }
                         Gap(6)
                         Text(

@@ -5,15 +5,17 @@
     <!-- App-icon shortcuts (feasibility I125, docs/FEASIBILITY-AUDIT-
          2026-09-26.md: "Talk, Note, Brief me, What did I miss; still meets
          App lock"), shown on a long press of the app's own icon on the
-         home screen or app drawer - res/xml/shortcuts.xml. Each reuses an
-         action MainActivity already handles (the widget's own Talk and
-         Note buttons; the briefing notification's own "open the briefing"
-         action), so there is no new behaviour here, only a second way to
-         reach it. All four still open behind App lock like any other
+         home screen or app drawer - res/xml/shortcuts.xml. Talk and Note
+         reuse the widget's own buttons' actions; "Brief me now" and "What
+         did I miss?" ask that sentence on Home as a typed question
+         (AppShortcuts.kt holds the exact sentences, both from the "Things
+         you can say" list). All four still open behind App lock like any other
          launch - MainActivity.kt's own "the app lock outranks everything"
          composes nothing else until it is unlocked. -->
     <string name="shortcut_talk_short">Talk</string>
     <string name="shortcut_talk_long">Talk to Jarvis</string>
+    <string name="shortcut_live_short">Live</string>
+    <string name="shortcut_live_long">Jarvis Live</string>
     <string name="shortcut_note_short">Note</string>
     <string name="shortcut_note_long">Quick note</string>
     <string name="shortcut_brief_short">Brief me</string>
@@ -62,6 +64,11 @@
         Deny answers it directly; approving always opens the app.</string>
 
     <!-- "Hey Jarvis" on this phone (service/WakeWordService.kt). -->
+    <!-- The three Quick Settings tile slots, as Android's tile editor lists
+         them (data/QuickTiles.kt). The tile itself shows the chosen action. -->
+    <string name="tile_slot_1">Jarvis tile 1</string>
+    <string name="tile_slot_2">Jarvis tile 2</string>
+    <string name="tile_slot_3">Jarvis tile 3</string>
     <string name="channel_wake_name">Listening for \"hey Jarvis\"</string>
     <string name="channel_wake_desc">Shown for as long as this phone listens for
         \"hey Jarvis\". The microphone is open the whole time.</string>
@@ -75,6 +82,13 @@
     <string name="widget_quicklink_desc">The link status, and a one-tap Talk button that opens the
         app with the hold-to-talk mic ready - it does not record from the widget itself.</string>
 
+    <!-- "Widgets you describe" (widget/JarvisBoardWidget.kt; JARVIS-API.md section 86). -->
+    <string name="widget_board_name_1">Jarvis widget 1</string>
+    <string name="widget_board_name_2">Jarvis widget 2</string>
+    <string name="widget_board_name_3">Jarvis widget 3</string>
+    <string name="widget_board_desc">A widget you described to Jarvis - choose which under Brain,
+        Widgets. Its buttons are the small Quick Settings tile actions only.</string>
+
     <!-- "Floating Jarvis": Overlay (data/FloatingAvatar.kt, service/AvatarOverlayService.kt). -->
     <string name="fgs_avatar_overlay_reason">Draws the small "Floating Jarvis" avatar
         the owner turned on, over other apps, so it stays reachable by voice
@@ -86,4 +100,9 @@
     <string name="avatar_overlay_text">The small avatar is on your screen. Tap "Turn off"
         below, or turn "Floating Jarvis" off in Settings.</string>
     <string name="avatar_overlay_stop">Turn off</string>
+
+    <!-- The Jarvis Live extras (2026-09-28): the Quick Settings tile, and the
+         second Share entry (activity-alias ShareToLive). -->
+    <string name="live_tile_label">Jarvis Live</string>
+    <string name="share_to_live_label">Talk about this in Live</string>
 </resources>

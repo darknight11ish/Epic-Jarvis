@@ -152,6 +152,16 @@ NEVER_ASKS = {
 
 #: What an offer may ask for, each said plainly.
 MAY_ASK = {
+    # rebuilt/jarvis_sleep.py's offer, 2026-09-28: switching the overnight
+    # tidy on starts ONE look a day that only raises review cards
+    # (jarvis_tidy.py) - nothing is shown or trusted more, and no fact
+    # changes without a yes on that card.
+    "start_a_card_only_check": ("to start a daily look over what Jarvis knows that only "
+                                "asks you about facts, one review card each - nothing "
+                                "changes unless you say yes on that card"),
+    # jarvis_tidy.py's own cards: "Still true?" and "Which is true now?".
+    "review_a_fact": ("to check one fact Jarvis already keeps - it changes only if you "
+                      "say yes on that card"),
     "record_a_wish": "to record that you want something - nothing runs, and nothing is "
                      "shown or trusted more",
     "save_a_routine": "to save a routine you already run as a skill - each of its steps "
@@ -168,9 +178,13 @@ MAY_ASK = {
 #: Every kind of offer Jarvis makes on its own, and what it asks for. A new
 #: kind of offer is added here, with what it asks for, or it is not made.
 OFFERS = {
-    # rebuilt/jarvis_sleep.py: "Overnight memory tidying - not built yet".
-    # Switching it on records a wish; nothing runs and no fact changes.
-    "sleep_time_offer": ("record_a_wish",),
+    # rebuilt/jarvis_sleep.py: "Overnight memory tidying". Switching it on
+    # starts the overnight tidy (jarvis_tidy.py, 2026-09-28): review cards
+    # only; no fact changes by itself.
+    "sleep_time_offer": ("start_a_card_only_check",),
+    # jarvis_tidy.py: its "Still true?" / "Which is true now?" cards, at most
+    # five a night - each about ONE fact already kept.
+    "tidy_cards": ("review_a_fact",),
     # jarvis_skill_discovery.py: "save this routine as a skill?" - one
     # SKILL.md from tool names; running it still asks step by step.
     "skill_offer": ("save_a_routine",),

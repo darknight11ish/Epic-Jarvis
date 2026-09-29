@@ -44,7 +44,16 @@ import {
   THEME_INFO,
   THEMES,
 } from "./jarvis-link.js";
-import { BARGE_IN_KEY, describeBargeIn, loadBargeIn, saveBargeIn } from "./barge-in.js";
+import { INTERRUPT_CHOICES_NOTE } from "./barge-in.js";
+import {
+  INTERRUPT,
+  INTERRUPT_KEY,
+  INTERRUPT_TITLE,
+  loadInterrupt,
+  OLD_BARGE_IN_KEY,
+  OLD_LIVE_INTERRUPT_KEY,
+  saveInterrupt,
+} from "./live-rules.js";
 import { mountCardLink } from "./card-link.js";
 import {
   describeHeard,
@@ -61,11 +70,13 @@ import {
   isTrained as voiceIsTrained,
   lastTrainingLine,
   printLines as voicePrintLines,
+  speechDetectorLine,
   stopWordLine,
   summaryLine as voiceSummaryLine,
   talkLine as voiceTalkLine,
   turnLine as voiceTurnLine,
   verifierLine as voiceVerifierLine,
+  wakeConfirmLine,
   wakeInfo,
 } from "./voice-settings.js";
 import { paintVoicePanel, startVoicePanel } from "./voice-panel.js";
@@ -1090,6 +1101,8 @@ function accelerator(event) {
 
 /** The accelerator as a person reads it. */
 function prettyKey(accel) {
+  // An action that ships OFF (the Jarvis Live key, until the owner picks one).
+  if (!accel) return "Off - pick a key";
   return String(accel)
     .split("+")
     .map((part) => MOD_LABEL[part] || part.replace(/^Key|^Digit/, ""))
@@ -1129,14 +1142,36 @@ function renderHotkeys() {
     // in the startup toast but missed on this row (Opus 5.5 re-check,
     // 2026-09-27). A real OS-level refusal still names "another app",
     // since that one really is one.
+    // An action that ships OFF (row.default is empty - the Jarvis Live key,
+    // the owner's decision of 2026-09-28) and has no key yet is simply
+    // "off": nothing is wrong, and nothing blames another app.
+    const offByDefault = !row.default;
     state.textContent = row.registered
       ? "working"
-      : row.error
-        ? row.accelerator ? "in use by another app" : "needs a different key"
-        : "not bound";
+      : offByDefault && !row.accelerator
+        ? "off"
+        : row.error
+          ? row.accelerator ? "in use by another app" : "needs a different key"
+          : "not bound";
     if (!row.registered && row.error) state.title = row.error;
 
     wrap.append(name, key, hint, state);
+    // A key picked for an off-by-default action can be taken off again
+    // (Save shortcuts applies it, like every other change here).
+    if (offByDefault && row.accelerator) {
+      const off = document.createElement("button");
+      off.type = "button";
+      off.className = "btn ghost hotkey-off";
+      off.textContent = "Turn off";
+      off.setAttribute("aria-label", `${row.label}: turn the key off`);
+      off.addEventListener("click", () => {
+        stopRecording();
+        row.accelerator = "";
+        renderHotkeys();
+        report(dom.hotkeyStatus, "Not saved yet — press Save shortcuts.", "");
+      });
+      wrap.append(off);
+    }
     dom.hotkeyRows.append(wrap);
   }
 }
@@ -1203,7 +1238,8 @@ dom.saveHotkeys.addEventListener("click", async () => {
   try {
     hotkeys = await invoke("set_hotkeys", { bindings });
     renderHotkeys();
-    const refused = hotkeys.filter((h) => !h.registered);
+    // A key left off on purpose is not "held by another application".
+    const refused = hotkeys.filter((h) => !h.registered && h.accelerator);
     if (refused.length) {
       // Saved is not the same as working, and saying "Saved" alone is how the
       // old build left someone believing a shortcut was live when it was not.
@@ -1559,6 +1595,10 @@ const sc = {
   pinStatus: $("sc-pin-status"),
   combined: $("sc-combined"),
   combinedStatus: $("sc-combined-status"),
+  thirdSection: $("sc-third-section"),
+  thirdFound: $("sc-third-found"),
+  third: $("sc-third"),
+  thirdStatus: $("sc-third-status"),
   suggestTitle: $("sc-suggest-title"),
   suggestDetail: $("sc-suggest-detail"),
   suggestSignals: $("sc-suggest-signals"),
@@ -1915,6 +1955,108 @@ async function scCombinedToggle(input) {
 }
 
 /**
+ * A third graphics card (2026-09-28): moving one of the switches above onto
+ * it, or moving it back off. Reads `status.third` - the same "row" shape as
+ * `status.combined`, plus `card`/`assigned`/`assignable`. A capable third
+ * card that nothing is assigned to does nothing ("no default winner" -
+ * docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section 1.3): the switch never
+ * picks a feature by itself, and this section shows a plain "not used" state
+ * rather than a pre-filled choice.
+ *
+ * A `<select>` plus its own "Move" button, not a checkbox: this is a choice
+ * among several options (one of `assignable`, or "Not used"), not an on/off
+ * switch, and a separate button means picking an option in the list is never
+ * itself the approval - the owner presses Move once they mean it.
+ */
+function scThirdRow(status, names) {
+  const t = status.third || {};
+  sc.thirdSection.hidden = t.capable !== true && !t.assigned;
+  sc.thirdFound.textContent = t.card
+    ? `Found: ${t.card.name || "a graphics card"}${scGigabytes(t.card.total_mb) ? ` (${scGigabytes(t.card.total_mb)})` : ""}.`
+    : "";
+  const row = scNode("div", "sc-switch");
+  row.dataset.id = "third";
+  row.dataset.state = t.pending ? "waiting" : t.assigned ? "on" : "off";
+  const label = scNode("label", "", "Which switch runs here");
+  const select = document.createElement("select");
+  select.id = "sc-third-select";
+  select.className = "field";
+  const noneOpt = document.createElement("option");
+  noneOpt.value = "";
+  noneOpt.textContent = "Not used";
+  select.append(noneOpt);
+  for (const id of t.assignable || []) {
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = names.byId[id] || id;
+    select.append(opt);
+  }
+  // An assigned feature that fell out of `assignable` (turned off since) is
+  // shown anyway, so the select never silently shows the wrong thing.
+  if (t.assigned && !(t.assignable || []).includes(t.assigned)) {
+    const opt = document.createElement("option");
+    opt.value = t.assigned;
+    opt.textContent = names.byId[t.assigned] || t.assigned;
+    select.append(opt);
+  }
+  select.value = t.assigned || "";
+  const held = t.capable !== true ? "Can't be moved yet: no capable third graphics card was found."
+    : t.pending ? SC_WAITING : "";
+  select.disabled = Boolean(held);
+  label.append(select);
+  row.append(label);
+  const move = scNode("button", "btn small", "Move");
+  move.type = "button";
+  move.id = "sc-third-move";
+  move.disabled = Boolean(held);
+  move.addEventListener("click", () => scThirdMove(select));
+  row.append(move);
+  const lines = scNode("div", "sc-lines");
+  const addLine = (className, words) => { if (words) lines.append(scNode("p", className, words)); };
+  addLine("sc-why", t.why);
+  if (t.pending) addLine("sc-held sc-waiting", SC_WAITING);
+  else if (held) addLine("sc-held", held);
+  if (t.assigned) {
+    addLine("sc-model", scModelLine(t));
+    addLine("sc-memory", scMemoryLine(t));
+  }
+  row.append(lines);
+  const focused = scRestoreFocusId || (document.activeElement && document.activeElement.id);
+  sc.third.replaceChildren(row);
+  if (focused === "sc-third-select") {
+    const again = document.getElementById("sc-third-select");
+    if (again) again.focus();
+  }
+}
+
+async function scThirdMove(select) {
+  if (scBusy) return;
+  const assign = select.value || null;
+  const name = assign ? `"${select.options[select.selectedIndex].textContent}"` : "Not used";
+  scBusy = true;
+  scRestoreFocusId = "sc-third-select";
+  select.disabled = true;
+  report(sc.thirdStatus, assign ? `Asking to move ${name} here…` : "Moving it back off…");
+  try {
+    const out = await invoke("set_third_card", { assign });
+    if (assign && out && out.pending === true) {
+      report(sc.thirdStatus, SC_WAITING, "ok");
+      announce(`${name}: ${SC_WAITING}`);
+    } else if (out && typeof out.message === "string" && out.message) {
+      report(sc.thirdStatus, out.message, "ok");
+    } else {
+      report(sc.thirdStatus, assign ? `${name} is moved here.` : "Not used.", "ok");
+    }
+  } catch (error) {
+    report(sc.thirdStatus, scProblemWords(error), "bad");
+    announce(sc.thirdStatus.textContent, "assertive");
+  } finally {
+    scBusy = false;
+  }
+  await loadSecondCard();
+}
+
+/**
  * "When to suggest the bigger model" (2026-09-27): whether Jarvis may OFFER
  * "One bigger model on both cards" on its own - never what it may do
  * without a person's yes, so NEITHER switch here raises an approval card,
@@ -2054,6 +2196,11 @@ function scPaint(status) {
     }
   }
 
+  // A third graphics card (2026-09-28): shown only once one is capable, or
+  // something is still assigned to it (an old choice, kept, even if the
+  // card is gone for the moment).
+  if (sc.thirdSection) scThirdRow(status, names);
+
   // "When to suggest the bigger model": its own subsection, no card either way.
   scPaintSuggest(status);
   // One-shot: consumed by whichever block above matched it.
@@ -2079,11 +2226,15 @@ function scPaint(status) {
     for (const id of scWaiting) {
       if (pending.has(id)) continue;
       const combined = status.combined || {};
+      const third = status.third || {};
       const name = id === "master" ? SC_MASTER.name
         : id === "combined" ? (combined.name || "One bigger model on both cards")
+        : id === "third" ? (third.assigned ? `"${names.byId[third.assigned] || third.assigned}" on the third card`
+                            : "the third card")
         : names.byId[id] || id;
       const on = id === "master" ? status.enabled === true
         : id === "combined" ? combined.enabled === true
+        : id === "third" ? Boolean(third.assigned)
         : names.enabled.has(id);
       report(sc.status, cardEndedWords(name, on, cardLast(status, id, scWaitingSince.get(id))),
         on ? "ok" : null);
@@ -2621,6 +2772,8 @@ const vc = {
   verifier: $("voice-verifier"),
   stopWord: $("voice-stop-word"),
   turn: $("voice-turn"),
+  wake2: $("voice-wake2"),
+  vad: $("voice-vad"),
   wakeOff: $("voice-wake-off"),
   wakeOn: $("voice-wake-on"),
   wakeOnNote: $("voice-wake-on-note"),
@@ -2691,6 +2844,8 @@ function vcPaint(status) {
   vcLine(vc.verifier, voiceVerifierLine(status));
   vcLine(vc.stopWord, stopWordLine(status));
   vcLine(vc.turn, voiceTurnLine(status));
+  vcLine(vc.wake2, wakeConfirmLine(status));
+  vcLine(vc.vad, speechDetectorLine(status));
 
   const gate = status.gate || {};
   vcWaiting = wake.state === "waiting" || (gate.training || {}).pending === true;
@@ -2753,33 +2908,43 @@ startVoicePanel({ reload: loadVoice });
 if (vc.wakeOff) vc.wakeOff.addEventListener("click", () => vcSetWake(false));
 if (vc.wakeOn) vc.wakeOn.addEventListener("click", () => vcSetWake(true));
 
-/* "Interrupt Jarvis while it talks" - this PC's own setting (barge-in.js),
-   read by the Jarvis bar each time the listener hears something while
-   Jarvis is talking. Not the server's, so it works whatever Jarvis answered
-   above. */
-const bargeIn = $("voice-barge-in");
-const bargeInDetail = $("voice-barge-in-detail");
+/* "Interrupting Jarvis" - this PC's own setting (live-rules.js), read by the
+   Jarvis bar each time the listener hears something while Jarvis is
+   talking, in Jarvis Live and out of it. ONE setting since 2026-09-28 (the
+   owner's answer): it replaced "Interrupt Jarvis while it talks" and
+   "Interrupting Jarvis in Live", and an older choice carries over. Not the
+   server's, so it works whatever Jarvis answered above; no card either way,
+   since it only changes when this PC listens. */
+const interruptBox = $("voice-interrupt");
+const interruptNote = $("voice-interrupt-note");
 
-function paintBargeIn() {
-  if (!bargeIn) return;
-  const on = loadBargeIn();
-  bargeIn.checked = on;
-  bargeInDetail.textContent = describeBargeIn(on);
+function paintInterrupt() {
+  if (!interruptBox) return;
+  const chosen = loadInterrupt();
+  interruptBox.replaceChildren(...INTERRUPT.map((c) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "choice";
+    b.textContent = c.recommended ? `${c.label} (recommended)` : c.label;
+    b.dataset.value = c.id;
+    b.setAttribute("aria-pressed", String(c.id === chosen));
+    b.addEventListener("click", () => {
+      if (!saveInterrupt(c.id)) announce("That could not be saved on this PC.", "assertive");
+      paintInterrupt();
+      announce(`${INTERRUPT_TITLE}: ${c.label}.`);
+    });
+    return b;
+  }));
+  const picked = INTERRUPT.find((c) => c.id === chosen) || INTERRUPT[0];
+  interruptNote.textContent = `${picked.detail} ${INTERRUPT_CHOICES_NOTE}`;
 }
 
-if (bargeIn) {
-  bargeIn.addEventListener("change", () => {
-    if (!saveBargeIn(bargeIn.checked)) {
-      announce("That could not be saved on this PC.", "assertive");
-    }
-    paintBargeIn();
-    announce(bargeInDetail.textContent);
-  });
+if (interruptBox) {
   // Kept right if the value is changed from another window.
   window.addEventListener("storage", (event) => {
-    if (event.key === BARGE_IN_KEY) paintBargeIn();
+    if ([INTERRUPT_KEY, OLD_BARGE_IN_KEY, OLD_LIVE_INTERRUPT_KEY].includes(event.key)) paintInterrupt();
   });
-  paintBargeIn();
+  paintInterrupt();
 }
 
 /* "Say 'One moment' if I'm kept waiting" - this PC's own too (voice-flow.js),

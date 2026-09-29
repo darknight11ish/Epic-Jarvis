@@ -26,6 +26,16 @@ The made-up conversations in backend/eval/learner_cases.jsonl, one per line:
              it is then saved without a card (a colon, one line, typed).
   dates      a relative date in a fact gets its real date added
              (jarvis_intake.anchor_dates), anchored to the day it was said.
+  moves      "where did I put ...?" (2026-09-28): a place the owner gives
+             for a thing Jarvis already has a place for. The newer place is
+             saved with no card and the older one becomes history; older
+             news (a place the owner dates earlier) is history instead; a
+             sensitive hiding place, a date that is not a place, pasted text,
+             or a correction aimed at another fact stays a card. Scored on
+             the decision AND on which facts are in use afterwards.
+  true_until "true until" dates (2026-09-28): the end date a fact's own words
+             give ("until 12 October", "lease ends in December"), through
+             the real MemoryStore.add() on the day it was told.
   gate       a fact AS THE MODEL WOULD WRITE IT, from a conversation: is it
              saved without a card, or left a card - and for the right
              reason? Pasted text, a link, email headers, a tool that read
@@ -122,7 +132,7 @@ def _extract_stand_in(M):
     body = [line for line in src.splitlines()
             if line.startswith(("RETIRE_SOURCE = ", "AUTO_SOURCES = ", "MERGE_SOURCE = "))]
     for name in ("_accept_retire", "_accept_merge", "_accept", "accept_auto", "_fact_source",
-                 "_fact_meta", "propose_verbatim"):
+                 "_fact_meta", "_proposal_chat", "propose_verbatim"):
         t = _stack.function_text(src, name)
         if t is None:
             raise RuntimeError(f"the stack does not write exactly one {name}()")
@@ -297,6 +307,82 @@ def _gate(w, I, A, case) -> dict:
         got["shown"] = shown
         ok = ok and case["candidate"] in shown
     return {"ok": ok, "got": got}
+
+
+def _moves(w, I, A, case) -> dict:
+    """"Where did I put ...?": the stored places, the owner's turns, and the
+    proposal the learner's model would make; the real after_pass decides.
+    Scored on the decision, and on which of the listed facts are in use (and
+    which are history, never forgotten) afterwards."""
+    w.fresh()
+    cid = w.conversation()
+    history = []
+    ids = []
+    for text in case.get("stored", []):
+        ids.append(w.store.add(text, source="eval"))
+        time.sleep(0.002)
+    for turn in case["turns"]:
+        history = w.say(cid, history, turn)
+    turns = [t["text"] for t in case["turns"]]
+    rid = None
+    if case.get("correction") and ids:
+        rid = ids[0]
+    if case.get("correction_of") is not None:
+        rid = ids[int(case["correction_of"])]
+    q = w.queue(case["fact"], replaces_id=rid)
+    res = A.after_pass([q], [{"role": "user", "content": t} for t in turns],
+                       conversation_id=cid, model="qwen3:8b", ollama=LOCAL,
+                       learning_on=True, extract=w.x, publish=lambda ids: None)
+    how = "auto" if res.get("saved") else "card"
+    why = next(iter((res.get("cards") or {}).values()), "")
+    now = time.time()
+    with closing(w.store._connect()) as c:
+        rows = [dict(r) for r in c.execute("SELECT id, text, valid_to, meta FROM facts")]
+        named = None
+        if case.get("names_old"):
+            r = c.execute("SELECT replaces_id FROM proposals WHERE id=?", (q["id"],)).fetchone()
+            named = r[0] if r else None
+    current = sorted(r["text"] for r in rows
+                     if r["valid_to"] is None or float(r["valid_to"]) > now)
+    past = [r for r in rows if r["valid_to"] is not None and float(r["valid_to"]) <= now]
+    history_texts = sorted(r["text"] for r in past)
+    forgotten = [r["text"] for r in past
+                 if "forgotten_at" in json.loads(r["meta"] or "{}")]
+    ok = (how == case["want"] and (how == "auto" or case.get("why", "") in why)
+          and current == sorted(case.get("current", []))
+          and history_texts == sorted(case.get("history", []))
+          and not forgotten)
+    if case.get("names_old"):
+        ok = ok and named == ids[0]
+    return {"ok": ok, "got": {"decision": how, "why": why, "current": current,
+                              "history": history_texts, "forgotten": forgotten}}
+
+
+def _true_until(w, case) -> dict:
+    """"True until" (2026-09-28): the fact is added through the real
+    MemoryStore.add() on the day it was told; scored on the end date its
+    words give (meta true_until_said), or none."""
+    M = w.M
+    if not hasattr(M, "true_until"):
+        return {"ok": False, "got": "this memory has no \"true until\" dates (not built)"}
+    told = _day(case["told"])
+    real = M.time
+    M.time = types.SimpleNamespace(**{k: getattr(real, k) for k in dir(real)
+                                      if not k.startswith("_")})
+    M.time.time = lambda: told
+    try:
+        fid = w.store.add(case["text"], source="eval")
+    finally:
+        M.time = real
+    row = w.store.get(fid)
+    try:
+        meta = json.loads(row.get("meta") or "{}")
+    except (TypeError, ValueError):
+        meta = {}
+    got = meta.get(M.TRUE_UNTIL_SAID)
+    # Never a hide: valid_to stays empty whatever the words say.
+    ok = got == case["want"] and row.get("valid_to") is None
+    return {"ok": ok, "got": {"true_until": got, "valid_to": row.get("valid_to")}}
 
 
 def _said_again(w, I, A, case) -> dict:
@@ -494,6 +580,10 @@ def run(M, scratch: Path, *, model: Optional[str] = None, ollama: str = LOCAL) -
                     r = _said_again(w, I, A, case)
                 elif kind == "true_from":
                     r = _true_from(w, case)
+                elif kind == "moves":
+                    r = _moves(w, I, A, case)
+                elif kind == "true_until":
+                    r = _true_until(w, case)
                 else:
                     r = {"ok": False, "got": f"unknown kind {kind!r}"}
             except Exception as exc:
@@ -534,7 +624,11 @@ def markdown(res: dict) -> list:
              "gate": "Saved without a card, or kept a card for the right reason",
              "said_again": "\"Said again\": a repeat recorded once, only from the owner's "
                            "own live words",
-             "true_from": "\"True from\" dates taken from the owner's words"}
+             "true_from": "\"True from\" dates taken from the owner's words",
+             "moves": "\"Where did I put ...\": a newer place replaces the older one "
+                      "(older news never does), and anything else stays a card",
+             "true_until": "\"True until\" dates taken from the owner's words - a label, "
+                           "never a hide"}
     lines += ["", "| What | Right |", "|---|---|"]
     for k, v in res["kinds"].items():
         lines.append(f"| {names.get(k, k)} | {v['right']}/{v['total']} |")

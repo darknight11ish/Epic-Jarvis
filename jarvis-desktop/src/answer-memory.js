@@ -43,13 +43,19 @@ import {
   TEMPORARY_ON_TITLE,
   TEMPORARY_STARTED,
   TEMPORARY_UNAVAILABLE,
+  GAME_TEMPORARY,
   temporaryOutcome,
   USED_LINE_TITLE,
   USED_TITLE,
   usedIds,
   usedLine,
 } from "./memory-used.js";
+import { whenLine } from "./history-view.js";
 import {
+  eraseAlsoChatNamedConfirm,
+  ERASED_NO_CHAT,
+  otherFactsInChat,
+  readFactChat,
   ERASE_ALSO_CHAT_CONFIRM,
   ERASE_LABEL,
   ERASE_TITLE,
@@ -61,6 +67,11 @@ import {
   forgetQuestion,
 } from "./auto-learn.js";
 import { DONE_LINE } from "./coming-up.js";
+
+/** The strip's line: the label beside it already says "Temporary chat". */
+const TEMPORARY_STRIP_LINE = TEMPORARY_LINE.replace(/^Temporary chat:\s*/, "");
+/** A game or role-play the PC made temporary by itself. */
+const GAME_STRIP_LINE = "This looks like a game, so nothing in it is kept or learned.";
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -91,7 +102,15 @@ export function createTemporaryToggle({ button, strip, line, refused, root, chec
   busy, announce, onChange }) {
   const t = {
     on: false,
+    /** The PC made this conversation temporary by itself: a game or
+     *  role-play (the route header said so). The strip says so too - it used
+     *  to be one small quiet line under the answer. */
+    game: false,
     checking: false,
+    setGame(value) {
+      t.game = Boolean(value);
+      t.paint(t.game ? false : true);
+    },
     async toggle() {
       if (t.checking || busy()) return;
       if (t.on) {
@@ -139,8 +158,14 @@ export function createTemporaryToggle({ button, strip, line, refused, root, chec
       if (t.on) {
         strip.dataset.state = "on";
         strip.hidden = false;
-        line.textContent = empty ? TEMPORARY_LINE : "";
+        // The label already says "Temporary chat": the line does not repeat it.
+        line.textContent = empty ? TEMPORARY_STRIP_LINE : "";
         line.hidden = !empty;
+      } else if (t.game) {
+        strip.dataset.state = "game";
+        strip.hidden = false;
+        line.textContent = GAME_STRIP_LINE;
+        line.hidden = false;
       } else if (refused.hidden) {
         strip.hidden = true;
         line.textContent = "";
@@ -161,11 +186,12 @@ export function createTemporaryToggle({ button, strip, line, refused, root, chec
  * as the memory ones above - omit it and this behaves exactly as before.
  */
 export function createAnswerMemory({ box, lineButton, list, note, invoke, isStale, confirm,
-  announce, onChange, sources }) {
+  announce, onChange, sources, onChatDeleted = null }) {
   const a = {
     ids: [],
     count: 0,
     sentTemporary: false,
+    game: false,
     route: null,
     done: false,
     open: false,
@@ -220,6 +246,7 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     const lines = [];
     const outcome = temporaryOutcome(a.sentTemporary, a.route);
     if (a.done && outcome === "unconfirmed") lines.push(TEMPORARY_NOT_CONFIRMED);
+    if (outcome === "game") lines.push(GAME_TEMPORARY);
     if (a.route && a.route.remember_off === true) lines.push(REMEMBER_OFF);
     // Answered WITHOUT the model (a timer, a reminder, the to-do list -
     // JARVIS-API.md section 21): the small "done" line both apps show.
@@ -285,10 +312,28 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
    *  Cancelling the second one still erases the fact. */
   async function writeErase(button, f) {
     if (isStale() || !confirm(eraseQuestion(f))) return;
-    const alsoChat = window.confirm(ERASE_ALSO_CHAT_CONFIRM);
+    // The chat named first, and no question when none is on record (the
+    // chat audit, 2026-09-28) - brain.js eraseFact asks the same way.
+    let chat;
+    try {
+      chat = readFactChat(await invoke("brain_fact_chat", { id: Number(f.id) }));
+    } catch {
+      chat = undefined;
+    }
+    const others = chat ? await otherFactsInChat(invoke, chat, f.id) : 0;
+    const alsoChat = chat === undefined ? window.confirm(ERASE_ALSO_CHAT_CONFIRM)
+      : chat ? window.confirm(eraseAlsoChatNamedConfirm(chat, whenLine(chat.updated), others))
+        : false;
     await sendWrite(button, "brain_memory_erase",
       { id: Number(f.id), also_delete_conversation: alsoChat },
-      (out) => (out && out.chat_deleted ? ERASED_AND_CHAT_DELETED : ERASED));
+      (out) => {
+        // The chat this bar is in, deleted: its turns must stop being sent.
+        if (out && out.chat_deleted && chat && typeof onChatDeleted === "function") {
+          onChatDeleted(chat.id);
+        }
+        return out && out.chat_deleted ? ERASED_AND_CHAT_DELETED
+          : alsoChat || chat === null ? ERASED_NO_CHAT : ERASED;
+      });
   }
 
   function row(f) {
@@ -489,6 +534,7 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     },
     route(route) {
       a.route = route && typeof route === "object" ? route : null;
+      a.game = temporaryOutcome(a.sentTemporary, a.route) === "game";
       a.ids = usedIds(a.route);
       // The facts the line opens: the ones with an id. (A fact from the
       // older word list over the jsonl has none, and cannot be listed.)
@@ -523,7 +569,7 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     /** For tests and main.js: what is shown. */
     get state() {
       return { ids: [...a.ids], open: a.open, sentTemporary: a.sentTemporary,
-        turnId: a.turnId, srcOpen: a.srcOpen };
+        game: a.game, turnId: a.turnId, srcOpen: a.srcOpen };
     },
   };
 }

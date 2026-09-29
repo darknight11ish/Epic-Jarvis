@@ -46,6 +46,10 @@ fn main() {
             "pause_task",
             "resume_task",
             "stop_task",
+            // The widget's "working on your screen" line and its Stop - the
+            // same stop as the hotkey (screen_work.rs). task-control set.
+            "screen_work",
+            "stop_everything",
             "inject_task_note",
             // The interruption budget and the daily brief. Reads and two
             // writes; the tray calls the same functions in-process, so it
@@ -108,6 +112,27 @@ fn main() {
             // one read-only, delete ONE, and the two settings. Brain only.
             "brain_history_list",
             "brain_history_open",
+            // "Search what was said" (JARVIS-API.md section 71): a read,
+            // refused while the private lists are hidden. Brain only.
+            "brain_history_search",
+            // "Continue this chat" (the chat audit, 2026-09-28): the Brain
+            // tells the Jarvis bar which chat to carry on (the id only), and
+            // the bar reads that one chat - never a support, chatbot or
+            // comparison record.
+            "brain_continue_chat",
+            // "Erase the words" names the chat it would also delete: a read.
+            "brain_fact_chat",
+            "chat_continue_open",
+            // Is the private lists' "Hide" on? Yes or no, nothing read. The
+            // Jarvis bar hides its thread of earlier answers with it.
+            "chat_thread_hidden",
+            // "History of this fact" (section 71): every version of one
+            // fact, hidden like every memory list. Brain only.
+            "brain_fact_history",
+            // "Facts this chat taught" (section 79): History's Delete offers
+            // to forget them, one Forget per ticked fact. A read, hidden like
+            // every memory list. Brain only.
+            "brain_conversation_facts",
             "brain_history_delete",
             "brain_history_settings",
             // Backend supervision — settings window only
@@ -150,6 +175,12 @@ fn main() {
             "get_backend_capabilities",
             "get_second_card",
             "set_second_card",
+            // Moving one of the second card's own switches onto a third,
+            // capable graphics card, or moving it back off (2026-09-28).
+            // Its own command (the wire shape differs: "assign", not
+            // "enabled"); read is folded into get_second_card's own
+            // answer (status()'s "third" key). Settings window only.
+            "set_third_card",
             // "When to suggest the bigger model" (2026-09-27): no approval
             // card either way, folded into the same Settings section. read
             // is folded into get_second_card's own answer.
@@ -168,6 +199,9 @@ fn main() {
             "apply_hardware",
             "hardware_step",
             "measure_hardware",
+            // "PC help" (JARVIS-API section 84): five plain answers about
+            // this PC, read-only. Settings window only.
+            "get_pc_help",
             // Settings' "Web search" (backend/web-search.patch): the five
             // providers and their "why" lines, ONE change at a time (turning
             // "Ask before every web search" off raises a card on the PC), a
@@ -249,6 +283,19 @@ fn main() {
             "backup_now",
             "preview_restore",
             "restore_backup",
+            // Settings' "Devices" (docs/PAIRING-DESIGN.md, phase 1): the
+            // address for the QR code, start / watch / cancel a pairing
+            // (the QR code drawn in Rust; the window hidden from screen
+            // capture while a code shows), the device list, Remove ONE
+            // device, and retire / bring back the old shared key. Settings
+            // window only.
+            "pair_phone_address",
+            "pair_start",
+            "pair_session",
+            "pair_cancel",
+            "devices_list",
+            "devices_remove",
+            "devices_shared",
             // Settings' "How Jarvis talks" (backend/manner.patch): warm and
             // brief, or plain. One change at a time, no approval card either
             // way (it changes wording only). Settings window only.
@@ -300,6 +347,8 @@ fn main() {
             "set_voice_animal",
             "reset_voice_animal",
             "try_voice_animal",
+            "get_face_voice_offer",
+            "answer_face_voice_offer",
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",
@@ -378,9 +427,64 @@ fn main() {
             "brain_schedule_act",
             "brain_schedule_add_todo",
             "brain_schedule_add_standby",
+            // One Today card (2026-09-28, jarvis_today.py): no card, held
+            // on a stale link. Brain only.
+            "brain_schedule_add_today",
+            // "Widgets you describe" (brain/widgets.rs, JARVIS-API.md section
+            // 87): the Brain manages them; the widget window draws one and
+            // presses ONE of the five tile actions.
+            "brain_widgets",
+            "brain_widgets_draft",
+            "brain_widgets_add",
+            "brain_widgets_discard",
+            "brain_widgets_delete",
+            "widget_board",
+            "widget_board_action",
             // A NAMED list ("shopping") cleared after the page's "are you
             // sure?", with the count it showed (2026-09-25).
             "brain_schedule_clear_list",
+            // Goals (backend/goals.patch, JARVIS-API.md section 59): a
+            // read, one new draft, accepting it (the backend's own one
+            // approval card, through jarvis_schedule.py, never a card of
+            // this app's own making), one step done or not, and Stop
+            // tracking. No card raised here directly; every write held on
+            // a stale link. Brain only.
+            "brain_goals",
+            "brain_goals_create",
+            "brain_goals_accept",
+            "brain_goals_step",
+            "brain_goals_stop",
+            // "Photo to reminder" (photo-reminder.patch, 2026-09-28): the
+            // dates in a picture, read on the PC and PROPOSED (a scan sets
+            // nothing up), and the owner's tap adding ONE reminder - no
+            // card, held on a stale link. The Jarvis bar and the Brain.
+            "photo_scan",
+            "photo_add_reminder",
+            // "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek"
+            // (history-import.patch, 2026-09-28): where a run is (a read),
+            // the Windows "Open" dialog then start (held on a stale link;
+            // it only PROPOSES - every fact waits for its own yes), and
+            // cancel (never held). Brain only.
+            "history_import_status",
+            "history_import_start",
+            "history_import_cancel",
+            // Projects (backend/projects.patch; JARVIS-API section 88; the
+            // owner's decision of 2026-09-28): read the projects, ONE change
+            // named by an action from a fixed list (the PC raises the only
+            // cards: Shareable ON, and taking off a mark Jarvis made), and a
+            // coding project's folder by the Windows picker. Every change
+            // held on a stale link except Shareable OFF. Brain only.
+            "projects_read",
+            "projects_write",
+            "projects_choose_folder",
+            // "Forget a time frame" (backend/forget-range.patch; JARVIS-API
+            // section 64; the owner's decision of 2026-09-28): read the
+            // status or the list for some days (hidden in Rust with the
+            // private lists), and ONE of two things - "Forget these" (the
+            // PC raises ONE card; held on a stale link, refused while the
+            // list is hidden) or Undo (no card, never held). Brain only.
+            "forget_range_read",
+            "forget_range_write",
             // Focus sessions (backend/focus.patch): read one, start one
             // (Brain only, held on a stale link), and ONE thing to it -
             // pause, resume, +10 minutes, stop, and the widget's Lock on
@@ -388,6 +492,36 @@ fn main() {
             "focus_status",
             "focus_start",
             "focus_act",
+            // "Talk to a chatbot for me" (backend/chatbot-routes.patch): read the
+            // conversation (a read; the words taken out in Rust while the
+            // private lists are hidden), start one (ONE card on the PC; held
+            // on a stale link), new limits (a NEW card; held), stop (never
+            // held), and pause/resume through /api/task/* (resume held - it
+            // raises its own card). "Ask several and compare": start one (ONE
+            // card listing every chatbot; held) and stop it (never held).
+            // Brain only.
+            "chatbot_status",
+            "chatbot_start",
+            "chatbot_limits",
+            "chatbot_stop",
+            "chatbot_pause",
+            "chatbot_resume",
+            "chatbot_compare_start",
+            "chatbot_compare_stop",
+            // "Chat with customer support for me" (jarvis_support.py through
+            // jarvis_chatbot_routes.py): read the chat (a read; the owner's
+            // words taken out in Rust while the private lists are hidden),
+            // start one (ONE details card on the PC; held on a stale link),
+            // stop and take over (never held), answer a waiting offer with
+            // Decline or "Say something else" (held) or Take over (not), and
+            // export the transcript to a file the owner picks. Resume is
+            // chatbot_resume. Brain only.
+            "support_status",
+            "support_start",
+            "support_stop",
+            "support_takeover",
+            "support_answer",
+            "support_export",
             // The morning briefing (backend/briefing.patch): read the latest
             // one and "Brief me now" (a read, not held on a stale link) -
             // Brain only; and its setup - read it, set one up that repeats
@@ -425,6 +559,17 @@ fn main() {
             "start_automatic_listening",
             "stop_automatic_listening",
             "speak_reply",
+            // Jarvis Live (live.rs): read the session, start it (no card;
+            // held on a stale link and under App lock), stop it (never
+            // held), more time / carry on, mute, and hold the microphone
+            // closed while the bar shows a card. The Jarvis bar's and the
+            // Live badge's; neither records or reads any words.
+            "live_status",
+            "live_start",
+            "live_stop",
+            "live_act",
+            "live_mute",
+            "live_hold",
             // Interrupting by talking and "One moment." (voice_flow.rs):
             // ask for one utterance to be checked, read the status's `flow`
             // block, fetch the clip. Quickbar only; none records anything.
@@ -434,6 +579,9 @@ fn main() {
             // The HUD's mic button. Shows the quickbar with push-to-talk
             // ready; records nothing. The one command the HUD holds.
             "summon_push_to_talk",
+            // The HUD's chat box opens the Jarvis bar instead (the chat
+            // audit, 2026-09-28). Sends nothing. The HUD only.
+            "hud_open_bar",
             // Lip-sync: hands the Jarvis bar's mouth track and playback
             // clock to every window's face (voice.rs `face_voice`). Checked
             // shape only; no words, no audio. Quickbar only.

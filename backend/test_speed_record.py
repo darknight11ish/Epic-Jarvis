@@ -261,6 +261,62 @@ def t_the_tool_loop_asks_for_and_hands_over_prompt_reuse():
     check("the answer itself is unchanged", turn.get("answer") == "It is 4.", turn)
 
 
+def t_reuse_share_on_the_screens():
+    """Milestone 7 (2026-09-28): the share of the prompt Ollama reused, from a
+    fake Ollama usage chunk through speed.jsonl to the `by_model` line both
+    apps show - and older rows, written before the counts existed, still
+    load and simply have no share."""
+    log = tmplog()
+    # A row from before I03: no prompt_tokens, no cached_tokens. Written as
+    # raw bytes, exactly as an older jarvis_speed.py wrote it.
+    log.path.parent.mkdir(parents=True, exist_ok=True)
+    log.path.write_text(json.dumps({"at": 1790000000, "first_word_ms": 700, "kind": "answer",
+                                    "model": "qwen3:8b", "streamed": True, "tokens": 40,
+                                    "tokens_per_s": 30.0, "v": 1, "words": 30,
+                                    "words_per_s": 20.0}) + "\n", encoding="utf-8")
+    with NoNetwork():
+        for prompt, cached in ((4000, 3600), (5000, 4750), (2000, 0)):
+            m = S.Meter("qwen3:8b", clock=Clock())
+            for c in chop(sse([SECRET[:20], SECRET[20:]], usage={
+                    "prompt_tokens": prompt, "completion_tokens": 9,
+                    "prompt_tokens_details": {"cached_tokens": cached}}), 11):
+                m.feed(c)
+            m.finish(log=log, gpu=lambda n: None, background=False)
+    rows = log.tail()
+    check("an older row with no prompt counts still loads next to new ones",
+          len(rows) == 4 and "cached_tokens" not in rows[0]
+          and rows[1].get("cached_tokens") == 3600, rows)
+    check("each new row has the reused count from Ollama's usage chunk",
+          [r.get("cached_tokens") for r in rows[1:]] == [3600, 4750, 0]
+          and [r.get("prompt_tokens") for r in rows[1:]] == [4000, 5000, 2000], rows)
+    check("the share of one answer is reused out of prompt",
+          S.reused_percent(rows[1]) == 90.0 and S.reused_percent(rows[2]) == 95.0
+          and S.reused_percent(rows[3]) == 0.0)
+    check("an older row has no share, rather than 0%", S.reused_percent(rows[0]) is None)
+    for bad in ({"prompt_tokens": 0, "cached_tokens": 0}, {"cached_tokens": 5},
+                {"prompt_tokens": 10, "cached_tokens": True},
+                {"prompt_tokens": 10, "cached_tokens": "9"}, None):
+        check(f"no share from {bad}", S.reused_percent(bad) is None)
+    check("never more than 100%",
+          S.reused_percent({"prompt_tokens": 10, "cached_tokens": 12}) == 100.0)
+    s = S.summary(rows)["qwen3:8b"]
+    check("by_model gives the middle share of the answers that have one",
+          s["median_reused_percent"] == 90.0 and s["reused_answers"] == 3
+          and s["answers"] == 4, s)
+    only_old = S.summary(rows[:1])["qwen3:8b"]
+    check("CONTROL: only older rows - the share is None, not 0",
+          only_old["median_reused_percent"] is None and only_old["reused_answers"] == 0,
+          only_old)
+    v = S.view(log=log, current="qwen3:8b")
+    check("the screen view carries it", v["by_model"]["qwen3:8b"]["median_reused_percent"]
+          == 90.0, v)
+    raw = log.path.read_text(encoding="utf-8")
+    words = [w for w in SECRET.replace("'", " ").split() if len(w) > 3]
+    check("no word of the conversation is in the file, or in the view",
+          not any(w in raw for w in words)
+          and not any(w in json.dumps(v) for w in words), raw)
+
+
 def t_the_other_stream_shapes():
     clk = Clock()
     with NoNetwork():
@@ -524,6 +580,7 @@ def t_the_real_file():
 if __name__ == "__main__":
     for fn in (t_timing_an_answer, t_no_words_ever_reach_the_file,
                t_prompt_reuse_is_recorded, t_the_tool_loop_asks_for_and_hands_over_prompt_reuse,
+               t_reuse_share_on_the_screens,
                t_the_other_stream_shapes, t_tools_and_summaries,
                t_the_file_never_breaks_an_answer, t_the_switch_speed_check,
                t_measure_stays_on_this_pc, t_the_patch_context, t_the_real_file):

@@ -23,6 +23,10 @@
       "title": "Jarvis wants to start a helper task"
     },
     {
+      "action": "app_merge_change",
+      "title": "Jarvis wants to add its change to one of your apps"
+    },
+    {
       "action": "append_logseq_journal",
       "title": "Jarvis wants to add to today's Logseq journal"
     },
@@ -49,6 +53,10 @@
     {
       "action": "change_own_config",
       "title": "Jarvis wants to change one of its settings"
+    },
+    {
+      "action": "chatbot_session",
+      "title": "Jarvis wants to hold a conversation with an AI chatbot for you"
     },
     {
       "action": "check_tool_updates",
@@ -127,6 +135,10 @@
       "title": "Jarvis wants to run actions it has lined up"
     },
     {
+      "action": "github_read",
+      "title": "Jarvis wants to check GitHub for a \"tell me when\""
+    },
+    {
       "action": "history_enable",
       "title": "Jarvis wants to keep your chat history"
     },
@@ -152,7 +164,11 @@
     },
     {
       "action": "loosen_what_asks_first",
-      "title": "Jarvis wants to let one action go ahead without asking you first"
+      "title": "Jarvis wants to loosen what asks first"
+    },
+    {
+      "action": "memory_forget_range",
+      "title": "Jarvis wants to forget what it learned and delete chats from the days you chose"
     },
     {
       "action": "memory_manage",
@@ -183,6 +199,14 @@
       "title": "Jarvis wants to fetch a web page you're watching"
     },
     {
+      "action": "pair_device",
+      "title": "Jarvis wants to connect a new device"
+    },
+    {
+      "action": "phone_notifications_read",
+      "title": "Jarvis wants to start reading notifications from apps you choose on your phone"
+    },
+    {
       "action": "post_to_external_service",
       "title": "Jarvis wants to post to an outside service"
     },
@@ -207,6 +231,10 @@
       "title": "Jarvis wants to read a page in Logseq"
     },
     {
+      "action": "register_approval_key",
+      "title": "Jarvis wants to let a phone approve risky actions with its fingerprint or PIN"
+    },
+    {
       "action": "research_authenticated",
       "title": "Jarvis wants to search GitHub signed in as you"
     },
@@ -217,6 +245,10 @@
     {
       "action": "rollback_model",
       "title": "Jarvis wants to go back to the AI model you had before"
+    },
+    {
+      "action": "run_plan",
+      "title": "Jarvis wants to run the safe steps of an approved plan"
     },
     {
       "action": "run_shell_on_host",
@@ -243,6 +275,10 @@
       "title": "Jarvis wants to start using the second graphics card"
     },
     {
+      "action": "second_card_third_assign",
+      "title": "Jarvis wants to move a second-card feature onto a third graphics card"
+    },
+    {
       "action": "send_email",
       "title": "Jarvis wants to send an email"
     },
@@ -255,12 +291,24 @@
       "title": "Jarvis wants to stop asking before every web search"
     },
     {
+      "action": "support_chat",
+      "title": "Jarvis wants to chat with a company's customer support for you"
+    },
+    {
+      "action": "support_offer",
+      "title": "Jarvis wants to accept an offer from customer support in your name"
+    },
+    {
       "action": "switch_model",
       "title": "Jarvis wants to switch to a different AI model"
     },
     {
       "action": "unclassified_tool",
       "title": "Jarvis wants to use a tool it has no plain name for"
+    },
+    {
+      "action": "unretire_shared_key",
+      "title": "Jarvis wants to let the old shared key work from other devices again"
     },
     {
       "action": "user_profile_manage",

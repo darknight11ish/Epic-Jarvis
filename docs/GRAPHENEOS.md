@@ -47,6 +47,19 @@ ONNX Runtime looks fragile - but this can only really be proven by running it
 on an actual GrapheneOS phone, which nothing in this project's build setup
 can do.
 
+## Android developer verification (2027)
+
+From 2027 Google will make phones with its certification (most phones sold
+with Google Play) ask for a one-time "advanced" flow with a 24-hour wait
+before installing an app from an unverified developer **by tapping the
+file**. Installing with `adb` from the PC stays allowed. That comes from a
+search summary of Google's announcement, not from a phone.
+
+GrapheneOS is not a Google-certified system, so it is **likely** unaffected -
+this is an inference, not checked on a GrapheneOS phone. `adb install`, which
+step 1 below already uses, is the way that stays allowed either way.
+`docs/INSTALL.md` §3.3 has the same note for other phones.
+
 ## What to check, the first time it runs on GrapheneOS
 
 In order, right after installing:

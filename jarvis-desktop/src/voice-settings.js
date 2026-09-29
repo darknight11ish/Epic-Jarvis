@@ -133,13 +133,19 @@ export function checkLine(status) {
   };
 }
 
-/** The five settings a card can loosen, as a sentence names them. */
+/** The eight settings a card can loosen, as a sentence names them. */
 const SETTING_NAMES = {
   strictness: "how strict the voice check is",
   privacy: "private answers",
   memory: "answers that use what Jarvis remembers",
   sensitive_memory: "answers that use sensitive saved facts",
   hands_free: "how far \"Hey Jarvis\" is trusted",
+  hands_free_screen: "answers about your screen or the camera after \"Hey Jarvis\"",
+  hands_free_live: "how far Jarvis Live is trusted",
+  live_end: "when Jarvis Live ends on this PC",
+  talk_to_type: "talk-to-type",
+  wake_confirm: "the second \"hey Jarvis\" check",
+  voice_id_model: "the voice-ID model",
 };
 
 /**
@@ -170,7 +176,11 @@ export function lastTrainingLine(last, status) {
       case "timed_out":
         return "Nobody answered the card in time, so nothing changed.";
       case "withdrawn":
-        return "You made it stricter while the card waited, so approving it changed nothing.";
+        return l.setting === "talk_to_type"
+          ? "You turned talk-to-type off while the card waited, so approving it changed nothing."
+          : l.setting === "voice_id_model"
+            ? "You chose the measured model again while the card waited, so approving it changed nothing."
+            : "You made it stricter while the card waited, so approving it changed nothing.";
       case "refused":
         return `Your PC refused the change to ${setting}${because}`;
       case "failed":
@@ -290,6 +300,45 @@ export function stopWordLine(status) {
   }
   const why = sentence(s.why);
   return { text: `The word "stop": this PC cannot hear it yet.${why ? ` ${why}` : ""}`, tone: "" };
+}
+
+/**
+ * The second "hey Jarvis" detector (`wake.confirm`, "Better voice",
+ * 2026-09-28): whether the PC has it, and whether it is in use. Null from a
+ * PC that does not report it. The choice itself is in the settings below.
+ */
+export function wakeConfirmLine(status) {
+  const c = obj(obj(status.wake).confirm);
+  if (!Object.keys(c).length) return null;
+  const what = "Second \"hey Jarvis\" check (microWakeWord)";
+  if (yes(c.active)) {
+    return { text: `${what}: on. Both detectors must hear "hey Jarvis" before Jarvis wakes.`, tone: "ok" };
+  }
+  const note = sentence(c.note);
+  if (note) return { text: `${what}: ${note}`, tone: "warn" };
+  if (yes(c.available)) {
+    return { text: `${what}: installed, not in use. One detector decides, as before.`, tone: "" };
+  }
+  return { text: `${what}: not installed on this PC. One detector decides, as before.`, tone: "" };
+}
+
+/**
+ * The speech detector (`vad`, Silero VAD): which version is in use, and
+ * why the chosen one is not, when it is not. Null from a PC that does not
+ * say which ("Better voice", 2026-09-28).
+ */
+export function speechDetectorLine(status) {
+  const v = obj(status.vad);
+  const version = String(v.version || "");
+  if (!version) return null;
+  const what = "Speech detector (Silero VAD)";
+  const note = sentence(v.note);
+  if (v.available === false) {
+    const why = sentence(v.status);
+    return { text: `${what}: not in use.${why ? ` ${why}` : ""}`, tone: "warn" };
+  }
+  const name = version === "v6" ? "v6, the newer one" : version === "v4" ? "v4" : "the file set in the PC's settings";
+  return { text: `${what}: ${name}.${note ? ` ${note}` : ""}`, tone: note ? "warn" : "" };
 }
 
 /**

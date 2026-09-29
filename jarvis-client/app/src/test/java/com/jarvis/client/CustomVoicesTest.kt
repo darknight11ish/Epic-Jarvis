@@ -353,12 +353,15 @@ class CustomVoicesTest {
 
     @Test
     fun `Voice follows the face - an on-off switch, the PC's words and line, no card`() {
-        // No face saved yet: on by default, and it says there is nothing to follow.
-        val none = requireNotNull(status("empty").faceVoice) { "no face_voice block" }
-        assertTrue("on by default", none.enabled)
-        assertFalse(none.speaking)
-        assertEquals(CustomVoices.FACE_TITLE, none.title)
-        assertEquals("No face is saved on this PC yet, so there is no animal voice to use.", none.line)
+        // OFF by default (the owner's 2026-09-28 decision), and it says so -
+        // with no face saved, and with one showing: a face alone never turns it on.
+        for (case in listOf("empty", "face_default_off")) {
+            val none = requireNotNull(status(case).faceVoice) { "$case: no face_voice block" }
+            assertFalse("$case: off by default", none.enabled)
+            assertFalse(case, none.speaking)
+            assertEquals(CustomVoices.FACE_TITLE, none.title)
+            assertEquals(case, "Off: the built-in voice stays the same whatever the face.", none.line)
+        }
         // The red panda showing: its own voice speaks, and the built-in
         // voice choice says so.
         val panda = requireNotNull(status("face_showing").faceVoice)
@@ -384,6 +387,31 @@ class CustomVoicesTest {
     }
 
     @Test
+    fun `each animal keeps its own answer - the PC's lines, shown as sent`() {
+        // The owner's scenario (2026-09-28): the panda "Keep my voice", then
+        // the owl "Use it" - the switch is on and the owl speaks as the owl.
+        val owl = requireNotNull(status("face_offer_used").faceVoice)
+        assertTrue(owl.enabled)
+        assertTrue(owl.speaking)
+        assertEquals("Speaking as the Pygmy Owl: Nicole, a little higher.", owl.line)
+        assertNull(owl.offer)
+        // The panda showing again: the switch is on, but it keeps the normal voice.
+        val panda = requireNotNull(status("face_kept_on").faceVoice)
+        assertTrue(panda.enabled)
+        assertFalse("a kept animal never speaks as itself", panda.speaking)
+        assertEquals("You chose to keep your voice for the Red Panda.", panda.line)
+        assertNull("the panda was answered for: no question", panda.offer)
+        // The monkey, never answered for: asked with the switch on, and silent as itself.
+        val monkey = requireNotNull(status("face_unanswered_on").faceVoice)
+        assertTrue(monkey.enabled)
+        assertFalse(monkey.speaking)
+        assertEquals("The Monkey will ask once whether to use its own voice.", monkey.line)
+        val offer = requireNotNull(monkey.offer) { "the monkey was not asked" }
+        assertEquals("monkey", offer.face)
+        assertEquals("The Monkey has its own voice. Use it?", offer.question)
+    }
+
+    @Test
     fun `each animal's voice - the PC's rows, choices and words, no card`() {
         for (case in voices["status"]!!.jsonObject.keys) {
             val fv = requireNotNull(status(case).faceVoice) { "$case: no face_voice" }
@@ -397,8 +425,10 @@ class CustomVoicesTest {
         }
         val own = requireNotNull(status("face_showing").faceVoice).animals
         assertEquals(
+            // The otter is Sarah ("3"), not "4" (Sky): the owner's 2026-09-28
+            // decision, in the merged jarvis_voices.py FACE_VOICES.
             listOf(
-                Triple("1", 2.0, "normal"), Triple("2", 1.0, "slower"), Triple("4", 3.0, "faster"), Triple("6", 1.0, "normal"),
+                Triple("1", 2.0, "normal"), Triple("2", 1.0, "slower"), Triple("3", 3.0, "faster"), Triple("6", 1.0, "normal"),
                 Triple("7", 2.0, "faster"),
             ),
             own.map { Triple(it.speaker, it.semitones, it.pace) },

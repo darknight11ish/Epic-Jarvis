@@ -362,11 +362,14 @@ await check("voice follows the face: the PC's switch, words and line, from every
     noRaw([fv.title, fv.detail, fv.line].join(" "));
     assert.match(fv.line, /[.!?)]$/, `${name}: "${fv.line}" is not a sentence`);
   }
-  // No face saved yet: on by default, nothing to follow, and it says so.
-  const none = CV.faceVoiceView(V.builtin_nothing_installed);
-  assert.equal(none.enabled, true, "on by default");
-  assert.equal(none.speaking, false);
-  assert.equal(none.line, "No face is saved on this PC yet, so there is no animal voice to use.");
+  // OFF by default (the owner's 2026-09-28 decision), and it says so -
+  // with no face saved, and with one showing: a face alone never turns it on.
+  for (const st of [V.builtin_nothing_installed, V.face_default_off]) {
+    const fv = CV.faceVoiceView(st);
+    assert.equal(fv.enabled, false, "off by default");
+    assert.equal(fv.speaking, false);
+    assert.equal(fv.line, "Off: the built-in voice stays the same whatever the face.");
+  }
   const panda = CV.faceVoiceView(V.face_showing);
   assert.equal(panda.speaking, true);
   assert.equal(panda.line, "Speaking as the Red Panda: Bella, a little higher.");
@@ -422,6 +425,129 @@ await check("voice follows the face: one click, at once; held on a stale link", 
   assert.deepEqual(none, []);
 });
 
+/* The one-time animal voice question (the owner, 2026-09-28). The shared
+   fixtures may not carry `face_voice.offer` yet, so this test builds its own
+   status on top of the real `face_voice_off` one, in the exact shape the
+   PC's GET /api/voice/voices gives, and its own POST answer. */
+const OFFER = {
+  face: "redpanda",
+  question: "The Red Panda has its own voice. Use it?",
+  use: "Use it",
+  keep: "Keep my voice",
+};
+const withOffer = (st, offer = OFFER) => {
+  const copy = JSON.parse(JSON.stringify(st));
+  copy.face_voice = { ...(copy.face_voice || {}), offer };
+  return copy;
+};
+
+await check("the animal voice question: the PC's words as they are, or nothing", async () => {
+  const v = CV.faceOfferView(withOffer(V.face_voice_off));
+  assert.deepEqual(v, { show: true, ...OFFER });
+  assert.equal(CV.faceOfferView(V.face_voice_off).show, false, "no offer: nothing shown");
+  assert.equal(CV.faceOfferView(withOffer(V.face_voice_off, null)).show, false);
+  assert.equal(CV.faceOfferView(withOffer(V.face_voice_off, { ...OFFER, face: "orbit" })).show, false,
+    "only the animals and the robot have a voice of their own");
+  assert.equal(CV.faceOfferView(withOffer(V.face_voice_off, { ...OFFER, keep: "" })).show, false);
+  assert.equal(CV.faceOfferView({ voices: [] }).show, false, "an older PC: nothing shown");
+  // The Rust checks the same shape for the Faces window.
+  const rs = read("src-tauri/src/voice_training.rs");
+  assert.ok(rs.includes('"/api/voice/voices/face_offer"'));
+  const answer = rs.slice(rs.indexOf("pub async fn answer_face_voice_offer"));
+  assert.ok(answer.slice(0, 600).includes("return Err(HELD_STALE.to_string())"), "held on a stale link");
+});
+
+await check("the animal voice question in Settings: one click answers it, no card; held on a stale link", async () => {
+  const page = await open(withOffer(V.face_voice_off), {
+    faceOfferAnswer: { ok: true, http: 200, message: "Jarvis's voice now follows the face",
+      face_voice: { enabled: true, offer: null } },
+  });
+  const shown = await page.evaluate(() => ({
+    hidden: document.getElementById("cv-face-offer").hidden,
+    question: document.getElementById("cv-face-offer-question").textContent,
+    use: document.getElementById("cv-face-offer-use").textContent,
+    keep: document.getElementById("cv-face-offer-keep").textContent,
+  }));
+  await page.click("#cv-face-offer-use");
+  await page.waitForTimeout(200);
+  const sent = await calls(page, "answer_face_voice_offer");
+  const said = await text(page, "cv-face-status");
+  await page.close();
+  assert.deepEqual(shown, { hidden: false, question: OFFER.question, use: OFFER.use, keep: OFFER.keep });
+  assert.deepEqual(sent, [{ face: "redpanda", answer: "use" }]);
+  assert.equal(said, "Jarvis's voice now follows the face.");
+  assert.doesNotMatch(said, /approv/i, "no card");
+
+  const keep = await open(withOffer(V.face_voice_off));
+  await keep.click("#cv-face-offer-keep");
+  await keep.waitForTimeout(200);
+  const kept = await calls(keep, "answer_face_voice_offer");
+  await keep.close();
+  assert.deepEqual(kept, [{ face: "redpanda", answer: "keep" }]);
+
+  const none = await open(V.face_voice_off);
+  const hidden = await none.evaluate(() => document.getElementById("cv-face-offer").hidden);
+  await none.close();
+  assert.equal(hidden, true, "no question when the PC asks none");
+
+  const stale = await open(withOffer(V.face_voice_off), {}, { link: { stale: true } });
+  const greyed = await stale.evaluate(() => [
+    document.getElementById("cv-face-offer-use").disabled,
+    document.getElementById("cv-face-offer-keep").disabled,
+  ]);
+  await stale.close();
+  assert.deepEqual(greyed, [true, true], "greyed on a stale link (rule 4)");
+});
+
+/* Changing your mind later (the owner, 2026-09-28): a small button on each
+   animal's row once the one-time question was answered. Builds its own
+   answers on top of the real `face_showing` status. */
+const withAnswers = (answers) => {
+  const copy = JSON.parse(JSON.stringify(V.face_showing));
+  copy.face_voice.animals.forEach((a, i) => { a.answer = answers[i]; });
+  return copy;
+};
+const mindButtons = (page) => page.evaluate(() =>
+  [...document.querySelectorAll("#cv-animals-list .cv-animal")].map((r) => {
+    const b = [...r.querySelectorAll("button")].find((x) => /^(Use its own voice|Keep my voice)$/.test(x.textContent));
+    return b && !b.hidden ? { text: b.textContent, disabled: b.disabled } : null;
+  }));
+
+await check("change your mind: 'Use its own voice' after keep, 'Keep my voice' after use, nothing before an answer", async () => {
+  const st = withAnswers(["keep", "use", null, "keep", null]);
+  assert.deepEqual(CV.animalVoicesView(st).animals.map((a) => a.answer), ["keep", "use", null, "keep", null]);
+  const page = await open(st, {
+    faceOfferAnswer: { ok: true, http: 200, message: "The Red Panda speaks in its own voice now.",
+      face_voice: { enabled: true } },
+  });
+  const shown = await mindButtons(page);
+  await page.click('.cv-animal[data-face="redpanda"] button:text-is("Use its own voice")');
+  await page.waitForTimeout(250);
+  const first = await calls(page, "answer_face_voice_offer");
+  const said = await page.evaluate(() =>
+    document.querySelector('.cv-animal[data-face="redpanda"] .status').textContent);
+  await page.click('.cv-animal[data-face="pygmyowl"] button:text-is("Keep my voice")');
+  await page.waitForTimeout(250);
+  const both = await calls(page, "answer_face_voice_offer");
+  await page.close();
+  assert.deepEqual(shown, [
+    { text: "Use its own voice", disabled: false },
+    { text: "Keep my voice", disabled: false },
+    null,
+    { text: "Use its own voice", disabled: false },
+    null,
+  ]);
+  assert.deepEqual(first, [{ face: "redpanda", answer: "use" }]);
+  assert.equal(said, "The Red Panda speaks in its own voice now.");
+  assert.deepEqual(both, [{ face: "redpanda", answer: "use" }, { face: "pygmyowl", answer: "keep" }],
+    "any animal, not only the one showing");
+
+  const stale = await open(st, {}, { link: { stale: true } });
+  const greyed = await mindButtons(stale);
+  await stale.close();
+  assert.deepEqual(greyed.map((b) => b && b.disabled), [true, true, null, true, null], "greyed on a stale link (rule 4)");
+});
+
 await check("each animal's voice: the PC's rows, choices and words, from every real status", async () => {
   for (const [name, st] of Object.entries(V)) {
     const av = CV.animalVoicesView(st);
@@ -435,7 +561,7 @@ await check("each animal's voice: the PC's rows, choices and words, from every r
   }
   const own = CV.animalVoicesView(V.face_showing).animals;
   assert.deepEqual(own.map((a) => [a.speaker, a.semitones, a.pace, a.changed]),
-    [["1", 2, "normal", false], ["2", 1, "slower", false], ["4", 3, "faster", false], ["6", 1, "normal", false],
+    [["1", 2, "normal", false], ["2", 1, "slower", false], ["3", 3, "faster", false], ["6", 1, "normal", false],
      ["7", 2, "faster", false]]);
   assert.equal(own[0].line, "Bella, 2 steps higher, at normal pace.");
   const panda = CV.animalVoicesView(V.animal_changed).animals[0];
@@ -514,7 +640,7 @@ await check("each animal's voice: pick, slide, pace, Try it and Reset - at once,
   assert.deepEqual(sent, [
     { face: "redpanda", speaker: "3", semitones: 2, pace: "normal" },
     { face: "pygmyowl", speaker: "2", semitones: 1, pace: "faster" },
-    { face: "seaotter", speaker: "4", semitones: -1.5, pace: "faster" },
+    { face: "seaotter", speaker: "3", semitones: -1.5, pace: "faster" },
   ]);
   assert.equal(said, "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster.");
   assert.doesNotMatch(said, /approv/i, "no card for an animal's voice");

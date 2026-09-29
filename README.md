@@ -78,8 +78,10 @@ needed to make it again: [v1](videos/v1/jarvis-launch-v1.mp4),
   the screen lock on the phone.
 - **"What asks first"**: a page in both apps listing every action and
   whether it asks you, with switches to make it stricter.
-- **Your own networks only**: the apps connect to Jarvis only on this PC,
-  your home network, Tailscale or NordVPN Meshnet. Anything else is refused.
+- **Your own networks only**: the desktop app connects to Jarvis on this PC,
+  your home network, Tailscale or NordVPN Meshnet; the phone connects
+  through Tailscale or NordVPN Meshnet, which also work at home and keep
+  the pairing key scrambled. Anything else is refused.
 - A live check of the whole setup, "N pass, N fail, N warn". Run this one
   line in PowerShell from this repository's folder, with your own backend
   folder (the one holding `jarvis_hud.py`) between the first quotes; the
@@ -90,7 +92,8 @@ needed to make it again: [v1](videos/v1/jarvis-launch-v1.mp4),
   ```
 
 **Look how you like**
-- An animated face shows what Jarvis is doing (20 designs), with themes and
+- An animated face shows what Jarvis is doing (23 designs, three of them
+  animals), with themes and
   colours that match on the PC and the phone.
 
 ## Install it
@@ -146,7 +149,7 @@ The documents to read first: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 
 - **Phone app:** GitHub builds it. A build is published to `client-latest`
   only after an Android emulator has installed and started that exact file,
-  and only from `main` or the working branch - the release notes say which.
+  and only from `main`.
 - **Desktop app:** built on Windows with `npm install` and `npm run tauri build`
   in `jarvis-desktop/`; GitHub also builds the installer.
 - **Every change** runs the tests on GitHub: the backend suites, every

@@ -1133,7 +1133,11 @@ def _card_row(row: dict, planned: list, ranked_first: Optional[P.Card],
     health = health_for(row, readings or [])
     share, how = (P.desktop_share(card) if card else (None, ""))
     if card is not None and card.share_gib is not None:
-        how = f"measured ({card.share_source})"
+        # share_source already says how it was measured ("measured when
+        # Ollama started", "measured now, with no model loaded"). Wrapping it
+        # in "measured (...)" read "measured (measured when Ollama started)"
+        # on both apps (play tester, 2026-09-27).
+        how = card.share_source or "measured"
     elif card is not None:
         how = "a placeholder until measured"
     kv = P.kv_type(card)[0] if card else None

@@ -184,6 +184,39 @@ body {
   min-width: 0;
 }
 
+/* "Jarvis is working on your screen" (screen-work.js): the same shape as the
+   focus countdown, edged in the warn colour - Jarvis is moving the mouse and
+   typing right now, which is worth noticing - with the words carrying it
+   too, never hue alone. */
+.screen-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 6px;
+  padding: 4px 8px;
+  border-left: 2px solid var(--warn);
+  border-radius: var(--radius-chip, 4px);
+  background: var(--warn-faint);
+  font-size: var(--text-xs);
+  color: var(--text);
+}
+
+.screen-strip .screen-word {
+  flex: 1;
+  min-width: 0;
+}
+
+/* `.btn`, further down this file, sets flex: 1 and would stretch Stop across
+   half the strip; the clock and the words need that room. */
+.screen-strip .btn-quiet {
+  flex: none;
+}
+
+.screen-strip .screen-clock {
+  font-size: var(--text-md);
+  color: var(--text);
+}
+
 /* A button that is an offer, not an emphasis: the emphatic control in this
    window is Approve, and nothing else may compete with it. */
 .btn-quiet {
@@ -954,4 +987,115 @@ body {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* "Your widget" (widget-board.js; JARVIS-API.md section 86): the owner's
+   own widget, drawn in place of the face from a fixed menu of blocks. */
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.board[hidden],
+.board-blocks[hidden] {
+  display: none;
+}
+
+.board-pick-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--text-2xs);
+}
+
+.board-pick-label {
+  color: var(--text-muted);
+  letter-spacing: 0.6px;
+  font-weight: 600;
+}
+
+.board-pick {
+  max-width: 180px;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg-sunken);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-chip, 4px);
+  padding: 2px 4px;
+}
+
+.board-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.board-title {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.board-part {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.board-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--text-2xs);
+}
+
+.board-label {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.board-value {
+  color: var(--text);
+}
+
+.board-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-2xs);
+}
+
+.board-items li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.board-item {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.board-when {
+  color: var(--text-muted);
+  flex: none;
+}
+
+.board-note {
+  margin: 0;
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+.board-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }

@@ -58,16 +58,24 @@ export const TEMPORARY_NOT_CONFIRMED =
 /** A "Remember: ..." in a temporary chat (the route's `remember_off`). */
 export const REMEMBER_OFF = "Remember: is off in a temporary chat.";
 
+/** A game or role-play the PC put in a temporary chat by itself (the
+ *  owner's decision of 2026-09-27; games-temporary.patch): said under the
+ *  answer, both apps (the chat audit, 2026-09-28 - it used to say nothing,
+ *  though JARVIS-API section 4 promised the apps showed it). */
+export const GAME_TEMPORARY =
+  "This looks like a game or role-play, so it's a temporary chat: nothing is kept or learned.";
+
 /**
  * What the route header says about a temporary question, once it is in:
  * "confirmed" (`temporary: true`), "unconfirmed" (anything else - an older
- * PC, or memory the PC cannot switch off), or "" for a normal question.
+ * PC, or memory the PC cannot switch off), or "" for a normal question -
+ * and "game" when the app did NOT ask for a temporary chat but the PC made
+ * it one: only a detected game or role-play does that.
  */
 export function temporaryOutcome(sentTemporary, route) {
-  if (!sentTemporary) return "";
-  return route && typeof route === "object" && route.temporary === true
-    ? "confirmed"
-    : "unconfirmed";
+  const temporary = Boolean(route && typeof route === "object" && route.temporary === true);
+  if (!sentTemporary) return temporary ? "game" : "";
+  return temporary ? "confirmed" : "unconfirmed";
 }
 
 /** The facts an answer used, as the route line carries them (`memory_ids`,

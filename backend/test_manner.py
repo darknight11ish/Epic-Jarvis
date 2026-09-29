@@ -315,10 +315,21 @@ def t_only_this_pcs_model():
     check("manner.patch adds only the two /api/manner routes (no /api/chat line)",
           added.count('"/api/manner"') == 2 and "/api/chat" not in added
           and "messages" not in added, added[:300])
-    check("the line is added inside run_local_turn only",
-          AG.run_local_turn.__code__.co_names.count("with_manner_note") >= 0
-          and "with_manner_note(body[\"messages\"]" in (BACKEND / "jarvis_agent.py").read_text(
-              encoding="utf-8"))
+    # Since the warm-up (2026-09-28) the notes are added by ONE function,
+    # dress_messages, which only the local turn and the warm-up of this PC's
+    # own model call - never the relay, the one path to a cloud model.
+    import ast
+    tree = ast.parse((BACKEND / "jarvis_agent.py").read_text(encoding="utf-8"))
+    callers = {}
+    for top in tree.body:
+        if isinstance(top, ast.FunctionDef):
+            for node in ast.walk(top):
+                if isinstance(node, ast.Call) and getattr(node.func, "id", "") in (
+                        "with_manner_note", "dress_messages"):
+                    callers.setdefault(node.func.id, set()).add(top.name)
+    check("the line is added inside run_local_turn (and its warm-up) only",
+          callers == {"with_manner_note": {"dress_messages"},
+                      "dress_messages": {"run_local_turn", "chat_prefix"}}, callers)
     check("shipped: jarvis_manner.py is in _where.SHIPPED", "jarvis_manner.py" in SHIPPED)
     ps1 = (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
     check("apply-patches.ps1 ships it and applies manner.patch",
@@ -611,6 +622,50 @@ def t_from_now_on_temporary_chat_stays_in_that_chat_only():
                   other is not None and other.reply == "Got it - timer set for 5 minutes.",
                   other and other.reply)
         finally:
+            tmp.cleanup()
+
+
+def t_from_now_on_in_a_game_stays_in_the_chat_even_after_the_window_slides():
+    """The second chat audit (2026-09-28), finding 7, reproduced: the quick
+    path tested only `temporary is True`, so in a role-play chat "from now
+    on, be more plain" was written to manner.json for good. It now asks the
+    same game check the chat route does - and, with the conversation id, a
+    game whose first message has slid out of the re-sent window is still one."""
+    import jarvis_intake as JI
+    JI.forget_games_for_tests()
+    with Folder():
+        sched, tmp = _quick_sched()
+        if sched is None:
+            check("skipped: no Scheduler", True)
+            tmp.cleanup()
+            return
+        try:
+            cid = "conv-game-quick-1"
+            game = {"messages": [
+                {"role": "user", "content": "let's roleplay, you're a knight", "provenance": "typed"},
+                {"role": "assistant", "content": "Sir Rowan bows."},
+                {"role": "user", "content": "from now on, be more plain", "provenance": "typed"}],
+                "conversation_id": cid}
+            res = Q.answer_turn(game, sched=sched)
+            check("in a game: applies for this chat only, says so",
+                  res is not None and "for this chat" in res.reply, res and res.reply)
+            check("in a game: never written to manner.json", M.current() == "warm")
+            check("in a game: this conversation reads plain", M.current(cid) == "plain")
+            # Fifteen moves later the app re-sends only its newest messages.
+            slid = {"messages": [
+                {"role": "assistant", "content": "The door creaks."},
+                {"role": "user", "content": "from now on be warmer", "provenance": "typed"}],
+                "conversation_id": cid}
+            res = Q.answer_turn(slid, sched=sched)
+            check("the game started 12 messages ago and is no longer re-sent: still a game",
+                  res is not None and "for this chat" in res.reply and M.current() == "warm",
+                  res and res.reply)
+            other = dict(slid, conversation_id="conv-not-a-game-2")
+            res = Q.answer_turn(other, sched=sched)
+            check("the same window in a chat that was never a game is an ordinary chat",
+                  res is not None and "for this chat" not in res.reply, res and res.reply)
+        finally:
+            JI.forget_games_for_tests()
             tmp.cleanup()
 
 

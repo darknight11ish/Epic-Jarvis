@@ -115,6 +115,21 @@ await check("Up/Down inside a multi-line prompt moves the caret, not history", a
     "Up recalled history instead of moving the caret up a line");
 });
 
+/* ── The empty-answer note ───────────────────────────────────────────────── */
+
+await check("an empty answer's note shows in italics, not with raw underscores", async () => {
+  // Play tester, 2026-09-27: it read "_The server closed..._" because the
+  // renderer had no single-underscore italics (markdown.js).
+  const page = await open();
+  await submit(page, "anything");
+  const text = await page.locator("#answer").innerText();
+  const em = await page.locator("#answer em").allInnerTexts();
+  await page.close();
+  assert.match(text, /The server closed the stream without sending content\./);
+  assert.doesNotMatch(text, /_/, `underscores shown: ${JSON.stringify(text)}`);
+  assert.deepEqual(em, ["The server closed the stream without sending content."]);
+});
+
 /* ── Previous-answer scrollback ──────────────────────────────────────────── */
 
 await check("nothing to fold away after only one turn", async () => {
@@ -135,7 +150,9 @@ await check("a second turn folds the first one into scrollback, closed by defaul
   await page.close();
   assert.ok(!hidden, "the previous turn was not folded in");
   assert.equal(open_, null, "the strip opened itself instead of starting closed");
-  assert.match(summary, /first question/);
+  // Since the chat audit (2026-09-28) the fold holds the whole conversation
+  // so far: "Earlier in this chat · 1 question", its questions inside.
+  assert.equal(summary, "Earlier in this chat · 1 question");
 });
 
 await check("opening the strip shows the first turn's actual answer, not the second's", async () => {
@@ -147,6 +164,7 @@ await check("opening the strip shows the first turn's actual answer, not the sec
   const current = await page.locator("#answer").innerText();
   await page.close();
   assert.match(body, /the first real answer/);
+  assert.match(body, /first question/, "the earlier question is in the thread too");
   assert.doesNotMatch(body, /the second real answer/,
     "scrollback showed the current answer instead of the previous one");
   assert.match(current, /the second real answer/);

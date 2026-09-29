@@ -565,6 +565,76 @@ function paintSettings() {
       say($("vt-handsfree-note"), VT.HANDS_FREE.find((c) => c.id === view.handsFree).detail);
     }
   }
+  // The sixth: answers about the screen after "Hey Jarvis" (the owner's
+  // decision, 2026-09-28). Offered only when the PC reports it. It matters
+  // only under "Only trust the talk button", and says so otherwise - the
+  // choices stay usable. "Read aloud" is the looser one, held on a stale
+  // link (changeSetting, VT.loosens).
+  const screenBox = $("vt-screen-box");
+  if (screenBox) {
+    screenBox.hidden = !view.handsFreeScreen;
+    if (view.handsFreeScreen) {
+      group($("vt-screen"), VT.HANDS_FREE_SCREEN, view.handsFreeScreen, "hands_free_screen");
+      let screenNote = VT.HANDS_FREE_SCREEN.find((c) => c.id === view.handsFreeScreen).detail;
+      if (VT.screenCovered(view)) screenNote += ` ${VT.SCREEN_ONLY_WHEN_STRICT_NOTE}`;
+      say($("vt-screen-note"), screenNote);
+    }
+  }
+  // The seventh: Jarvis Live under "Only trust the talk button" (the
+  // owner's answers, 2026-09-28). Three choices; a stricter one applies at
+  // once, a looser one is the card, held on a stale link.
+  const liveBox = $("vt-live-box");
+  if (liveBox) {
+    liveBox.hidden = !view.handsFreeLive;
+    if (view.handsFreeLive) {
+      group($("vt-live"), VT.HANDS_FREE_LIVE, view.handsFreeLive, "hands_free_live");
+      let liveNote = VT.HANDS_FREE_LIVE.find((c) => c.id === view.handsFreeLive).detail;
+      if (VT.liveCovered(view)) liveNote += ` ${VT.LIVE_ONLY_WHEN_STRICT_NOTE}`;
+      say($("vt-live-note"), liveNote);
+    }
+  }
+  // The eighth: when App lock ends Jarvis Live on this PC (the owner's
+  // decision, 2026-09-28). "Only when Windows locks" is the looser one, the
+  // card, held on a stale link.
+  const endBox = $("vt-live-end-box");
+  if (endBox) {
+    endBox.hidden = !view.liveEnd;
+    if (view.liveEnd) {
+      group($("vt-live-end"), VT.LIVE_END, view.liveEnd, "live_end");
+      say($("vt-live-end-note"),
+        `${VT.LIVE_END.find((c) => c.id === view.liveEnd).detail} ${VT.LIVE_END_NOTE}`);
+    }
+  }
+  // Talk-to-type on this PC (the owner's decision, 2026-09-27). Offered only
+  // when the PC reports it. "On" is one approval card and is held on a stale
+  // link (changeSetting, VT.loosens); "Off" is at once.
+  const talkBox = $("vt-talktype-box");
+  if (talkBox) {
+    talkBox.hidden = !view.talkToType;
+    if (view.talkToType) {
+      group($("vt-talktype"), VT.TALK_TO_TYPE, view.talkToType, "talk_to_type");
+      say($("vt-talktype-note"), VT.TALK_TO_TYPE.find((c) => c.id === view.talkToType).detail);
+    }
+  }
+  // "Better voice" (2026-09-28): the second "hey Jarvis" check and the
+  // voice-ID model. Offered only when the PC reports them. A choice that
+  // needs something the PC does not have is greyed out, with the PC's own
+  // words saying why (VT.blockedWhy); the looser choice of each is held on
+  // a stale link (changeSetting, VT.loosens).
+  const better = [
+    ["vt-wakeconfirm", VT.WAKE_CONFIRM, view.wakeConfirm, "wake_confirm"],
+    ["vt-voiceid", VT.VOICE_ID_MODEL, view.voiceIdModel, "voice_id_model"],
+  ];
+  for (const [id, list, chosen, setting] of better) {
+    const box = $(`${id}-box`);
+    if (!box) continue;
+    box.hidden = !chosen;
+    if (!chosen) continue;
+    group($(id), list, chosen, setting, (c) => Boolean(VT.blockedWhy(status, setting, c.id)));
+    const blocked = list.map((c) => VT.blockedWhy(status, setting, c.id)).find(Boolean);
+    const detail = list.find((c) => c.id === chosen).detail;
+    say($(`${id}-note`), blocked ? `${detail} ${blocked}` : detail);
+  }
   const waiting = VT.settingWaitingLine(view.waiting, APPROVE_WHERE);
   const w = $("vt-setting-waiting");
   w.hidden = !waiting;
@@ -574,16 +644,20 @@ function paintSettings() {
 async function changeSetting(setting, value, current) {
   if (settingBusy || value === current) return;
   const out = $("vt-setting-status");
-  if (VT.loosens(setting, value) && linkStale) {
+  const loosening = VT.loosens(setting, value, current);
+  if (loosening && linkStale) {
     say(out, HELD, "bad");
     announce(HELD, "assertive");
     return;
   }
   settingBusy = true;
   paintSettings();
-  say(out, VT.loosens(setting, value) ? "Asking…" : "Changing it…");
+  say(out, loosening ? "Asking…" : "Changing it…");
   try {
-    const answer = await invoke("set_voice_setting", { setting, value });
+    // Jarvis Live's three choices: the Rust side needs the choice now to
+    // tell a stricter move from a looser one.
+    const args = setting === "hands_free_live" ? { setting, value, current } : { setting, value };
+    const answer = await invoke("set_voice_setting", args);
     const reply = VT.settingReply(answer, APPROVE_WHERE);
     say(out, reply.text, reply.tone);
     announce(reply.text, reply.tone === "bad" ? "assertive" : "polite");
@@ -1042,6 +1116,20 @@ function paintFace() {
   // Every change sent to the PC is held on a stale link (rule 4).
   sw.disabled = cv.busy || linkStale;
   sw.title = linkStale ? HELD : "";
+  // The one-time "has its own voice. Use it?" question, in the PC's words.
+  const offer = CV.faceOfferView(cv.status);
+  $("cv-face-offer").hidden = !offer.show;
+  if (!offer.show) return;
+  $("cv-face-offer-question").textContent = offer.question;
+  for (const [id, word, answer] of [["cv-face-offer-use", offer.use, "use"],
+    ["cv-face-offer-keep", offer.keep, "keep"]]) {
+    const b = $(id);
+    b.textContent = word;
+    b.dataset.face = offer.face;
+    b.dataset.answer = answer;
+    b.disabled = cv.busy || linkStale;
+    b.title = linkStale ? HELD : "";
+  }
 }
 
 /* Each animal's voice: one row per animal, built once and then updated in
@@ -1093,13 +1181,20 @@ function animalRow(view, a) {
   reset.classList.add("small");
   reset.setAttribute("aria-label", `Reset the ${a.name} to its own voice`);
 
+  // Change your mind about the one-time question: only when it was answered.
+  const mind = button("Keep my voice", () => {
+    if (mind.dataset.answer) answerAnimalOffer(a.face, mind.dataset.answer, status);
+  }, { ghost: true });
+  mind.classList.add("small");
+  mind.hidden = true;
+
   const controls = node("div", "cv-animal-controls");
-  controls.append(voiceField, pitchField, pace, tryIt, reset);
   const status = node("span", "status");
+  controls.append(voiceField, pitchField, pace, tryIt, reset, mind);
   status.setAttribute("role", "status");
   row.append(head, controls, status);
 
-  const r = { row, lineEl, voice, pitch, shown, pace, tryIt, reset, status, name: a.name };
+  const r = { row, lineEl, voice, pitch, shown, pace, tryIt, reset, mind, status, name: a.name };
   const current = () => ({
     speaker: voice.value,
     semitones: Number(pitch.value),
@@ -1170,6 +1265,14 @@ function paintAnimals() {
       c.disabled = linkStale;
       c.title = linkStale ? HELD : "";
     }
+    // "keep" offers its own voice; "use" offers going back; unanswered: neither.
+    r.mind.hidden = !a.answer;
+    r.mind.dataset.answer = a.answer === "keep" ? "use" : a.answer === "use" ? "keep" : "";
+    r.mind.textContent = a.answer === "keep" ? "Use its own voice" : "Keep my voice";
+    r.mind.setAttribute("aria-label", a.answer === "keep"
+      ? `Use the ${a.name}'s own voice` : `Keep my voice for the ${a.name}`);
+    r.mind.disabled = linkStale;
+    r.mind.title = linkStale ? HELD : "";
     r.reset.disabled = linkStale || !a.changed;
     r.reset.title = linkStale ? HELD : a.changed ? "" : `The ${a.name} already speaks in its own voice.`;
   }
@@ -1342,8 +1445,20 @@ async function setFaceVoice(enabled) {
   await sendChoice("cv-face-status", "set_voice_face", { enabled }, [paintFace]);
 }
 
+/** The owner's answer to the one-time animal voice question. */
+async function answerFaceOffer(button) {
+  const { face, answer } = button.dataset;
+  if (!face || !answer) return;
+  await sendChoice("cv-face-status", "answer_face_voice_offer", { face, answer }, [paintFace]);
+}
+
+/** Changing the answer to the one-time question, from the animal's own row. */
+async function answerAnimalOffer(face, answer, statusEl) {
+  await sendChoice(statusEl, "answer_face_voice_offer", { face, answer }, [paintAnimals]);
+}
+
 async function sendChoice(statusId, command, args, repaint) {
-  const out = $(statusId);
+  const out = typeof statusId === "string" ? $(statusId) : statusId;
   if (linkStale) {
     say(out, HELD, "bad");
     repaint.forEach((fn) => fn());
@@ -1587,6 +1702,8 @@ export function startVoicePanel(opts = {}) {
   });
   $("cv-better-switch").addEventListener("change", (e) => setBetter(e.target.checked));
   $("cv-face-switch").addEventListener("change", (e) => setFaceVoice(e.target.checked));
+  $("cv-face-offer-use").addEventListener("click", (e) => answerFaceOffer(e.currentTarget));
+  $("cv-face-offer-keep").addEventListener("click", (e) => answerFaceOffer(e.currentTarget));
 
   followJarvisVoice();
 

@@ -49,6 +49,7 @@ let link = {
   approvals: 0,
   attention: emptyAttention(),
   error: null,
+  lockdown: false,
 };
 
 /**
@@ -111,6 +112,8 @@ function normaliseLink(payload) {
     approvals: Number(payload.approvals || 0),
     attention: normaliseAttention(payload.attention),
     error: payload.error || null,
+    // Lockdown (2026-09-28): every way out of the PC asks first, or stops.
+    lockdown: payload.lockdown === true,
   };
 }
 

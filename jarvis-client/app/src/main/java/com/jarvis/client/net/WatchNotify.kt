@@ -74,7 +74,9 @@ object WatchNotify {
     /** The line under the switch when it is neither waiting nor busy. */
     fun stateLine(on: Boolean?): String = when (on) {
         true -> "Every notification may also show on a paired, compatible smartwatch - " +
-            "Android's own notification bridging, not a Jarvis watch app."
+            "Android's own notification bridging, not a Jarvis watch app. " +
+            "A ringing alarm may still only ring on the phone: watches often skip " +
+            "notifications that keep going until you stop them."
         false -> "Every notification (approval cards, timers, reminders, \"tell me when\") " +
             "stays on this phone only."
         null -> "Couldn't tell whether notifications may show on a watch."

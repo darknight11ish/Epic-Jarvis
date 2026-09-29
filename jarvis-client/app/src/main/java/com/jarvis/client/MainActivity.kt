@@ -29,6 +29,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.jarvis.client.data.CheckMethod
@@ -52,12 +54,16 @@ import com.jarvis.client.face.Faces
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.ChatPicture
+import com.jarvis.client.net.PhotoReminder
 import com.jarvis.client.net.CustomVoices
 import com.jarvis.client.net.Feedback
 import com.jarvis.client.net.NoteCapture
 import com.jarvis.client.net.Provenance
 import com.jarvis.client.net.SecondCard
+import com.jarvis.client.net.SignedApproval
 import com.jarvis.client.net.UpdateCheck
+import android.security.keystore.KeyPermanentlyInvalidatedException
+import com.jarvis.client.platform.ApprovalKey
 import com.jarvis.client.platform.CrashLog
 import com.jarvis.client.platform.DisplayRate
 import com.jarvis.client.platform.PictureEncoder
@@ -73,6 +79,7 @@ import com.jarvis.client.voice.BargeIn
 import com.jarvis.client.voice.WakeRules
 import com.jarvis.client.ui.NavBackHandler
 import com.jarvis.client.ui.NavScreens
+import com.jarvis.client.ui.OpenPlace
 import com.jarvis.client.ui.Screen
 import com.jarvis.client.ui.approval.BiometricGate
 import com.jarvis.client.ui.approval.CardWaitingLine
@@ -82,10 +89,12 @@ import com.jarvis.client.ui.screens.BrainScreen
 import com.jarvis.client.ui.screens.ConnectionInfo
 import com.jarvis.client.ui.screens.CrashScreen
 import com.jarvis.client.ui.screens.FaceSpecimen
+import com.jarvis.client.ui.screens.FaceVoiceOfferFromPc
 import com.jarvis.client.ui.screens.FaqScreen
 import com.jarvis.client.ui.screens.HistoryScreen
 import com.jarvis.client.ui.screens.HomeActions
 import com.jarvis.client.ui.screens.HomeScreen
+import com.jarvis.client.ui.screens.PhotoReminderDialog
 import com.jarvis.client.ui.screens.HomeState
 import com.jarvis.client.ui.screens.InboxScreen
 import com.jarvis.client.ui.screens.LockedScreen
@@ -106,6 +115,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -150,11 +160,53 @@ class MainActivity : FragmentActivity() {
      */
     private val startVoiceRequested = mutableStateOf(false)
 
+    /** The Jarvis Live notification was tapped: its screen. */
+    private val openLiveRequested = mutableStateOf(false)
+
+    /**
+     * The Jarvis Live Quick Settings tile (start) or the "Live ended - Resume"
+     * notification (resume) asked to start Live here: null, "start" or
+     * "resume". Acted on only once the app is unlocked (App lock), then
+     * cleared.
+     */
+    private val startLiveRequested = mutableStateOf<String?>(null)
+
+    /**
+     * Text shared with "Talk about this in Live" (the Share sheet's second
+     * Jarvis entry, the activity-alias ShareToLive): held for the Live
+     * screen's box, sent only when the owner taps Send, tagged "shared" -
+     * outside text, like any shared item. Consumed once.
+     */
+    private val liveSharedText = mutableStateOf<String?>(null)
+
+    /** "Solve it here" - the "a website needs you" alert was tapped. */
+    private val openHandoffRequested = mutableStateOf(false)
+
     /** The quick-note field on Home is open - see [readQuickNoteIntent]. */
     private val quickNoteOpen = mutableStateOf(false)
 
     /** The briefing notification was tapped - see [readBriefingIntent]. Consumed once. */
     private val openBriefingRequested = mutableStateOf(false)
+
+    /**
+     * The sentence an app-icon shortcut asks ("Brief me now." or "What did I
+     * miss?" - [AppShortcuts]), waiting to be sent from Home. See
+     * [readShortcutQuestionIntent]. Consumed once.
+     */
+    private val shortcutQuestion = mutableStateOf<String?>(null)
+
+    /**
+     * When the restart notice was tapped (`SystemClock.elapsedRealtime`), or
+     * null - see [readResumeListeningIntent]. Consumed once, after App lock,
+     * and only while fresh ([RESUME_REQUEST_FRESH_MS]).
+     */
+    private val resumeListeningRequestedAt = mutableStateOf<Long?>(null)
+
+    /** Why listening could not be started from the restart notice; shown once on Checks. */
+    private val resumeListeningNotice = mutableStateOf<String?>(null)
+
+    /** An empty tile slot was tapped - see [readTileSettingsIntent]. Consumed once. */
+    private val openTileSettingsRequested = mutableStateOf(false)
 
     /** Set when the runtime itself failed to start. Shown instead of the app. */
     private val startupError = mutableStateOf<String?>(null)
@@ -242,6 +294,34 @@ class MainActivity : FragmentActivity() {
     private val pictureBusy = mutableStateOf(false)
 
     /**
+     * "Photo to reminder" ([PhotoReminder]): what the PC found in the
+     * attached picture, on screen only. In memory, never in a Bundle; Close
+     * drops it and the words read from the picture with it.
+     */
+    private val photoScan = mutableStateOf<PhotoReminder.Scan?>(null)
+
+    /** True while the PC reads the attached picture. */
+    private val photoFinding = mutableStateOf(false)
+
+    /**
+     * "Find a date in it" under the attached picture: the same picture that
+     * would go with a question - already shrunk, in memory only - is sent to
+     * the PC, which PROPOSES a reminder. Nothing is set up here.
+     */
+    private fun findDateInPicture() {
+        val pic = picture.value ?: return
+        if (photoFinding.value) return
+        photoFinding.value = true
+        lifecycleScope.launch {
+            when (val out = JarvisRuntime.scanPhotoForDate(pic.dataUri)) {
+                is PhotoReminder.Outcome.Ok -> photoScan.value = out.scan
+                is PhotoReminder.Outcome.Failed -> JarvisRuntime.setNotice(out.why)
+            }
+            photoFinding.value = false
+        }
+    }
+
+    /**
      * Android's photo picker (API 33+ has it built in): the owner chooses one
      * photo and the app may read that one. No storage permission is asked
      * for, and nothing is copied to the app's own storage - the photo is read
@@ -322,10 +402,26 @@ class MainActivity : FragmentActivity() {
 
         lastCrash.value = CrashLog.read(this)
         readApprovalIntent(intent)
-        readShareIntent(intent)
+        // `fresh`: a rotation rebuilds this activity from the SAME launch
+        // intent - a Live start (the tile, "Resume") or a share into Live
+        // must not happen again then.
+        readShareIntent(intent, fresh = savedInstanceState == null)
         readVoiceIntent(intent)
+        readLiveIntent(intent, fresh = savedInstanceState == null)
+        readHandoffIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
+        // Only on a fresh start. A rotation (or a restore after Android
+        // reclaimed the process) builds this activity again from the SAME
+        // launch intent, and the other readers above only navigate, so
+        // re-reading them is harmless - but this one sends a question, and
+        // must not ask it again every time the phone turns.
+        if (savedInstanceState == null) readShortcutQuestionIntent(intent)
+        // Only on a fresh start: a rotation (or Android rebuilding the app)
+        // hands the same intent back, and must not open the microphone again
+        // after the owner has switched listening off.
+        if (savedInstanceState == null) readResumeListeningIntent(intent)
+        readTileSettingsIntent(intent)
 
         setContent { App() }
 
@@ -349,8 +445,31 @@ class MainActivity : FragmentActivity() {
         readApprovalIntent(intent)
         readShareIntent(intent)
         readVoiceIntent(intent)
+        readLiveIntent(intent)
+        readHandoffIntent(intent)
         readQuickNoteIntent(intent)
         readBriefingIntent(intent)
+        readShortcutQuestionIntent(intent)
+        readResumeListeningIntent(intent)
+        readTileSettingsIntent(intent)
+    }
+
+    /**
+     * The restart notice ([com.jarvis.client.data.WakeResume]). Only a flag:
+     * listening starts in App(), after App lock, never from here.
+     */
+    private fun readResumeListeningIntent(intent: Intent?) {
+        if (intent?.action != ACTION_RESUME_LISTENING) return
+        // Reopened from Recents, Android replays the intent that first
+        // opened the task: that is not a new tap.
+        if ((intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0) return
+        resumeListeningRequestedAt.value = android.os.SystemClock.elapsedRealtime()
+    }
+
+    /** An empty Quick Settings tile slot: open Settings at the tile section. */
+    private fun readTileSettingsIntent(intent: Intent?) {
+        if (intent?.action != ACTION_OPEN_TILE_SETTINGS) return
+        openTileSettingsRequested.value = true
     }
 
     /**
@@ -360,6 +479,16 @@ class MainActivity : FragmentActivity() {
     private fun readBriefingIntent(intent: Intent?) {
         if (intent?.action != ACTION_OPEN_BRIEFING) return
         openBriefingRequested.value = true
+    }
+
+    /**
+     * The "Brief me now" and "What did I miss?" app-icon shortcuts
+     * (res/xml/shortcuts.xml, [AppShortcuts]): Home, asking that sentence.
+     * `singleTask`, so the `onNewIntent` half is needed too.
+     */
+    private fun readShortcutQuestionIntent(intent: Intent?) {
+        val question = AppShortcuts.questionFor(intent?.action) ?: return
+        shortcutQuestion.value = question
     }
 
     /**
@@ -388,12 +517,39 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
+     * The Jarvis Live notification: its screen (behind the app lock, as
+     * ever). The Quick Settings tile and the "Resume" notification also
+     * start Live - the owner's own tap - once the app is unlocked.
+     */
+    private fun readLiveIntent(intent: Intent?, fresh: Boolean = true) {
+        when (intent?.action) {
+            ACTION_OPEN_LIVE -> openLiveRequested.value = true
+            ACTION_START_LIVE -> if (fresh) startLiveRequested.value = "start" else openLiveRequested.value = true
+            ACTION_RESUME_LIVE -> if (fresh) startLiveRequested.value = "resume" else openLiveRequested.value = true
+        }
+    }
+
+    /** The "a website needs you" alert: the Solve it here screen (behind the app lock, as ever). */
+    private fun readHandoffIntent(intent: Intent?) {
+        if (intent?.action != ACTION_OPEN_HANDOFF) return
+        openHandoffRequested.value = true
+    }
+
+    /**
      * `singleTask`, so a second share while the app is already open re-delivers
      * here rather than starting a new instance - same reason [readApprovalIntent]
      * needs the `onNewIntent` half too.
      */
-    private fun readShareIntent(intent: Intent?) {
+    private fun readShareIntent(intent: Intent?, fresh: Boolean = true) {
         if (intent?.action != Intent.ACTION_SEND) return
+        // "Talk about this in Live": the same share, through the second
+        // entry (activity-alias ShareToLive). Text only; held for the Live
+        // screen, never sent on its own.
+        if (intent.component?.className?.endsWith(SHARE_TO_LIVE) == true) {
+            val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
+            if (fresh && !text.isNullOrEmpty()) liveSharedText.value = text
+            return
+        }
         if (intent.type == "text/plain") {
             val text = intent.getStringExtra(Intent.EXTRA_TEXT)?.trim()
             if (!text.isNullOrEmpty()) sharedText.value = text
@@ -576,6 +732,14 @@ class MainActivity : FragmentActivity() {
         var sleepOfferBusy by remember { mutableStateOf(false) }
 
         val tick = permissionTick.intValue
+        // The one-time "Background restart" offer (walk-through C9): while it
+        // waits and Android has not already allowed it. `tick` moves on every
+        // return to the app, so coming back from Android's own dialog with it
+        // allowed takes the line away.
+        val keepAlivePending by JarvisRuntime.settings.keepAliveOfferPending.collectAsState()
+        val keepAliveOfferShown = remember(tick, keepAlivePending) {
+            keepAlivePending && !PlatformReadiness.batteryExempt(this@MainActivity)
+        }
         val chrome by appearance.chrome.collectAsState()
         val followSystem by appearance.followSystem.collectAsState()
         val faceId by appearance.faceId.collectAsState()
@@ -622,9 +786,15 @@ class MainActivity : FragmentActivity() {
         // The lock and fingerprint settings, and the lock clock. `lockTick`
         // is read here so that every change to the clock recomposes.
         val security by JarvisRuntime.settings.security.collectAsState()
+        // True only while the pairing screen shows the typed token in plain
+        // letters. Plain `remember`: never saved, starts hidden.
+        var pairingKeyShown by remember { mutableStateOf(false) }
         val lockVersion = lockTick.intValue
         val locked = remember(lockVersion, security) { lockSession.locked(security) }
         val privateHidden = remember(lockVersion, security) { lockSession.privateHidden(security) }
+        // The runtime reads no chat history for "Move it here" while the lists are
+        // hidden (the second chat audit, phone C12): the desktop refuses in Rust.
+        SideEffect { JarvisRuntime.privateListsHidden = privateHidden }
         // While App lock or "Hide memory lists and chat history" is on, Jarvis
         // cannot be screenshotted, screen-recorded or cast, and its
         // recent-apps picture is blank rather than a snapshot of what the
@@ -632,8 +802,18 @@ class MainActivity : FragmentActivity() {
         // L5). Compose dialogs and popups inherit FLAG_SECURE from this
         // window (their securePolicy defaults to Inherit). Both are undone
         // the moment both settings are off.
-        LaunchedEffect(security.appLock, security.privateLists) {
-            val secure = SecurityRules.blockScreenCapture(security)
+        // And while the pairing token is shown in plain letters on the
+        // pairing screen ("Show token"): set by PairingScreen, and back to
+        // false the moment it is hidden or the screen goes.
+        // And while "Solve it here" shows a picture of the PC's browser
+        // window (it is never saved, so it must not be screenshotted either).
+        val handoffShown = nav.current == Screen.HANDOFF
+        LaunchedEffect(security.appLock, security.privateLists, pairingKeyShown, handoffShown) {
+            val secure = SecurityRules.blockScreenCapture(
+                security,
+                keyShown = pairingKeyShown,
+                handoffShown = handoffShown,
+            )
             setRecentsScreenshotEnabled(!secure)
             if (secure) {
                 window.addFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE)
@@ -651,6 +831,8 @@ class MainActivity : FragmentActivity() {
         // "draw over other apps" can be revoked in Android's own Settings at
         // any time, and this is what notices that on return.
         val floatingAvatar by JarvisRuntime.settings.floatingAvatar.collectAsState()
+        // Settings -> Quick Settings tiles (data/QuickTiles.kt): this phone only.
+        val quickTiles by JarvisRuntime.settings.quickTiles.collectAsState()
         LaunchedEffect(floatingAvatar, tick) {
             if (floatingAvatar == FloatingAvatarMode.OVERLAY &&
                 Settings.canDrawOverlays(this@MainActivity)
@@ -677,6 +859,12 @@ class MainActivity : FragmentActivity() {
 
         val link by JarvisRuntime.link.collectAsState()
         val linkDetail by JarvisRuntime.linkDetail.collectAsState()
+        // "Tailscale (or Meshnet) is off on this phone", under a link that is
+        // down, when Android says no VPN is up and the saved address needs
+        // one (LinkWords.vpnOffLine). A hint only; it decides nothing.
+        val vpnUp by JarvisRuntime.vpnUp.collectAsState()
+        val savedHost by JarvisRuntime.settings.host.collectAsState()
+        val vpnLine = LinkWords.vpnOffLine(savedHost, link, vpnUp)
         val stale by JarvisRuntime.stale.collectAsState()
         val activity by JarvisRuntime.activity.collectAsState()
         val faceState by JarvisRuntime.face.collectAsState()
@@ -684,6 +872,20 @@ class MainActivity : FragmentActivity() {
         val faceFocusQuiet by JarvisRuntime.faceFocusQuiet.collectAsState()
         val faceSerious by JarvisRuntime.faceSerious.collectAsState()
         val power by JarvisRuntime.power.collectAsState()
+        val lockdown by JarvisRuntime.lockdown.collectAsState()
+
+        // "Photo to reminder": the PC's proposal for the attached picture.
+        // Nothing is set up until one of its buttons is tapped; the add is
+        // held on a stale link here and in the runtime. Never over App
+        // lock's lock screen: nothing behind it is shown.
+        photoScan.value?.takeIf { !locked }?.let { scan ->
+            PhotoReminderDialog(
+                scan = scan,
+                canAct = link == LinkState.CONNECTED && !stale,
+                onAdd = { what, date, time -> JarvisRuntime.addPhotoReminder(what, date, time) },
+                onClose = { photoScan.value = null },
+            )
+        }
         val status by JarvisRuntime.status.collectAsState()
         val version by JarvisRuntime.version.collectAsState()
         val pending by JarvisRuntime.pending.collectAsState()
@@ -718,6 +920,11 @@ class MainActivity : FragmentActivity() {
         val inboxRead by JarvisRuntime.inboxRead.collectAsState()
         val brain by JarvisRuntime.brain.collectAsState()
         val models by JarvisRuntime.models.collectAsState()
+        // The phone's own last successful `GET /api/models` read, held on
+        // disk so Brain -> Model has something to show, clearly marked as
+        // old, when [models] above is null because the live read failed
+        // (docs/OFFLINE-MODELS-DESIGN-2026-09-27.md).
+        val modelsCache by JarvisRuntime.modelsCache.collectAsState()
         val activityDetail by JarvisRuntime.activityDetail.collectAsState()
         var modelBusy by remember { mutableStateOf(false) }
         // The second graphics card: what the PC last said, which switch has a
@@ -771,6 +978,26 @@ class MainActivity : FragmentActivity() {
         // The conversation the next question carries (ChatHistory). Only its
         // size is shown; memory only, like the question itself.
         val conversation by chat.history.collectAsState()
+        // What Home shows of the conversation (the whole thread, the chat
+        // audit 2026-09-28), and its one quiet line. Memory only.
+        val thread by chat.thread.collectAsState()
+        val chatNote by chat.chatNote.collectAsState()
+        // Whether this conversation read outside text, and whether the chat is a
+        // game (the PC made it temporary) - both from the chat, memory only.
+        val readOutsideChat by chat.readOutside.collectAsState()
+        val gameChat by chat.game.collectAsState()
+        // The chat has gone quiet for 30 minutes: re-read every 30 seconds
+        // while there is a conversation, so the line under the reply is true
+        // without waiting for the next redraw (the second chat audit, phone C1).
+        val idleQuiet by produceState(false, conversation.size) {
+            while (true) {
+                value = chat.idleNow()
+                delay(30_000)
+            }
+        }
+        // Did the question on screen get an answer? Read as a boolean so a
+        // streamed word does not redraw the screen.
+        val answeredNow by remember { derivedStateOf { replyState.value.isNotBlank() } }
         // What a turn is waiting on ("Waiting for your approval…"), and the
         // one line under a finished answer (cut short / from a cloud model).
         val chatWaiting by chat.waiting.collectAsState()
@@ -782,6 +1009,11 @@ class MainActivity : FragmentActivity() {
         // The crisis help line (jarvis_wellbeing.py, 2026-09-27): whether
         // the answer on screen is shown as a calm, plain panel.
         val crisisAnswer by chat.crisis.collectAsState()
+        // "A cloud model could give this one a second look."
+        // (jarvis_router.choose()'s gate "offer", docs/JARVIS-API.md,
+        // "`offer` in `X-Jarvis-Route`") - the lane named on the answer on
+        // screen's route, or null.
+        val cloudOffer by chat.cloudOffer.collectAsState()
         // "Open <a settings section>" by voice or chat
         // (jarvis_settings_registry.py, docs/JARVIS-API.md section 58.1):
         // jump to Settings, at the section the answer named. Pure
@@ -794,17 +1026,43 @@ class MainActivity : FragmentActivity() {
         // had been acted on, so a rotation (or any other activity rebuild)
         // saw the same target again and jumped back into Settings on its
         // own. Treated as a one-time request instead: the target is copied
-        // into `pendingSettingsSection` (kept across a rebuild by
+        // into `pendingSection` (kept across a rebuild by
         // `rememberSaveable`, just long enough for `SettingsScreen` to
         // scroll once) and immediately consumed on the `ChatSession` side,
         // so a fresh composition with the same underlying answer sees null
         // and does nothing.
+        //
+        // Phone walk-through, 2026-09-27: not every section lives on the
+        // phone's Settings screen. "Open help", "connection", "morning
+        // briefing", "about" or "Jarvis's voices" all used to land at the top
+        // of Settings, which has none of them. OpenPlace now decides, per
+        // section id, the phone's own screen and the item on it - or, for a
+        // place only the PC app has (keyboard shortcuts, accounts, ...), a
+        // plain notice saying so instead of a screen without it.
+        //
+        // `pendingSectionScreen` names the ONE screen the section is for, and
+        // only that screen is handed it: during the fade between screens the
+        // old and the new one are both composed, and a screen that was not
+        // the target would otherwise "consume" the section first.
         val openSettingsTarget by chat.openSettings.collectAsState()
-        var pendingSettingsSection by rememberSaveable { mutableStateOf<String?>(null) }
+        var pendingSection by rememberSaveable { mutableStateOf<String?>(null) }
+        var pendingSectionScreen by rememberSaveable { mutableStateOf<String?>(null) }
+        fun sectionFor(screen: Screen): String? =
+            if (pendingSectionScreen == screen.name) pendingSection else null
+        val sectionConsumed: () -> Unit = {
+            pendingSection = null
+            pendingSectionScreen = null
+        }
         LaunchedEffect(openSettingsTarget) {
             val target = openSettingsTarget ?: return@LaunchedEffect
-            pendingSettingsSection = target
-            nav.go(Screen.SETTINGS)
+            when (val where = OpenPlace.whereFor(target)) {
+                is OpenPlace.Where.Go -> {
+                    pendingSection = where.section
+                    pendingSectionScreen = where.screen.name
+                    nav.go(where.screen)
+                }
+                is OpenPlace.Where.OnPc -> JarvisRuntime.setNotice(where.notice)
+            }
             chat.consumeOpenSettings()
         }
         // "Make the animal sharper" by voice or chat (X-Jarvis-Route
@@ -823,6 +1081,16 @@ class MainActivity : FragmentActivity() {
                 JarvisRuntime.setNotice(step.line.replace("{device}", "this phone"))
             }
             chat.consumeFaceTuningChange()
+        }
+        // An empty Quick Settings tile slot was tapped: the same one-time
+        // scroll, to "Quick Settings tiles".
+        LaunchedEffect(openTileSettingsRequested.value) {
+            if (!openTileSettingsRequested.value) return@LaunchedEffect
+            openTileSettingsRequested.value = false
+            pendingSection = QUICK_TILES_SECTION
+            pendingSectionScreen = Screen.SETTINGS.name
+            nav.resetTo(Screen.HOME)
+            nav.go(Screen.SETTINGS)
         }
         val answerMark by JarvisRuntime.answerMark.collectAsState()
 
@@ -886,8 +1154,15 @@ class MainActivity : FragmentActivity() {
         // stops firing - it fails towards "stays on Home", never towards
         // unpairing, because nothing here clears the saved token.
         val badTokenNotice = remember { JarvisRuntime.noticeFor(ApiError.BadToken) }
+        // When the PC said WHY it refused the key (docs/PAIRING-DESIGN.md
+        // section 5.3 - removed on the PC, or the old shared key retired),
+        // the notice is that sentence instead (JarvisRuntime.describe), so it
+        // is matched too, and the pairing screen shows it.
+        val keyRefusalReason by com.jarvis.client.net.KeyRefusal.reason.collectAsState()
+        val refusedWords = com.jarvis.client.net.KeyRefusal.words(keyRefusalReason) ?: badTokenNotice
         val tokenRefused = paired &&
-            (linkDetail == TOKEN_REFUSED_DETAIL || notice == badTokenNotice)
+            (linkDetail == TOKEN_REFUSED_DETAIL || notice == badTokenNotice ||
+                com.jarvis.client.net.KeyRefusal.isWords(notice))
         LaunchedEffect(tokenRefused) {
             if (!tokenRefused) {
                 tokenRefusalHandled = false
@@ -1040,6 +1315,53 @@ class MainActivity : FragmentActivity() {
             nav.resetTo(Screen.HOME)
         }
 
+        LaunchedEffect(openLiveRequested.value) {
+            if (!openLiveRequested.value) return@LaunchedEffect
+            openLiveRequested.value = false
+            nav.go(Screen.LIVE)
+        }
+
+        // The Live tile, or "Live ended - Resume": the Live screen, and Live
+        // starts - the owner's own tap - but only once the app is unlocked
+        // (keyed on `locked`, like focusApproval): behind App lock nothing
+        // starts. Held on a stale link like the Live button (liveStart).
+        LaunchedEffect(startLiveRequested.value, locked) {
+            val how = startLiveRequested.value ?: return@LaunchedEffect
+            nav.go(Screen.LIVE)
+            if (locked) return@LaunchedEffect
+            startLiveRequested.value = null
+            // In the runtime's own scope: clearing the request above restarts
+            // this effect, which would cut a start off half-way.
+            if (!JarvisRuntime.liveOnHere()) JarvisRuntime.liveStartSoon(resume = how == "resume")
+        }
+
+        // "Talk about this in Live": the shared text waits on the Live
+        // screen as a "Shared text" chip, and Live starts (once unlocked).
+        // Nothing is sent until the owner taps Send there.
+        var liveSharedHeld by rememberSaveable { mutableStateOf<String?>(null) }
+        LaunchedEffect(liveSharedText.value) {
+            val text = liveSharedText.value ?: return@LaunchedEffect
+            liveSharedHeld = Provenance.joinShared(liveSharedHeld, text)
+            liveSharedText.value = null
+            if (!JarvisRuntime.liveOnHere()) startLiveRequested.value = "start"
+            nav.go(Screen.LIVE)
+        }
+
+        // "Solve it here" tapped on a Brain plate.
+        val handoffOpen by JarvisRuntime.handoffOpen.collectAsState()
+        LaunchedEffect(handoffOpen) {
+            if (!handoffOpen) return@LaunchedEffect
+            JarvisRuntime.handoffOpened()
+            nav.go(Screen.HANDOFF)
+        }
+
+        // "Solve it here": the alert was tapped.
+        LaunchedEffect(openHandoffRequested.value) {
+            if (!openHandoffRequested.value) return@LaunchedEffect
+            openHandoffRequested.value = false
+            nav.go(Screen.HANDOFF)
+        }
+
         // The widget's Note button: Home, with the quick-note field open.
         LaunchedEffect(quickNoteOpen.value) {
             if (quickNoteOpen.value) nav.resetTo(Screen.HOME)
@@ -1052,6 +1374,64 @@ class MainActivity : FragmentActivity() {
             openBriefingRequested.value = false
             nav.resetTo(Screen.HOME)
             nav.go(Screen.BRAIN)
+        }
+
+        // The "Brief me now" and "What did I miss?" app-icon shortcuts
+        // (AppShortcuts): Home, with the fixed sentence asked as a typed
+        // question through `chat.send` - the composer's own path, so the
+        // answer appears where every answer does. Both are read-only
+        // sentences the PC answers without the AI model.
+        //
+        // Behind the app lock nothing is sent until it is unlocked (keyed on
+        // `locked`, like focusApproval above): the answer is the owner's
+        // private briefing. A phone that is not paired, or is re-pairing,
+        // sends nothing - there is no desktop to ask yet, and the pairing
+        // screen is what Home shows. The send runs on `scope`, not in this
+        // effect: clearing `shortcutQuestion` changes this effect's key, and
+        // that would cancel a send made in here halfway through its answer.
+        LaunchedEffect(shortcutQuestion.value, locked) {
+            val question = shortcutQuestion.value ?: return@LaunchedEffect
+            if (locked) return@LaunchedEffect
+            shortcutQuestion.value = null
+            nav.resetTo(Screen.HOME)
+            if (paired && !repairing) {
+                scope.launch { chat.send(question, provenance = Provenance.TYPED) }
+            }
+        }
+
+        // The restart notice ("Hey Jarvis" is off since the phone restarted,
+        // data/WakeResume.kt): start listening from here - the app in front,
+        // from the owner's tap, the only way Android allows the microphone.
+        // Keyed on `locked`: with App lock on, nothing happens until the
+        // owner has unlocked Jarvis. The link may still be coming up after a
+        // restart, so it is given a few seconds, and the desktop's wake-word
+        // switch is read fresh - the same checks as the Checks switch.
+        // A tap left behind App lock and unlocked much later is dropped: the
+        // microphone opens only close to the owner's own tap.
+        LaunchedEffect(resumeListeningRequestedAt.value, locked) {
+            val at = resumeListeningRequestedAt.value ?: return@LaunchedEffect
+            if (locked) return@LaunchedEffect
+            resumeListeningRequestedAt.value = null
+            if (android.os.SystemClock.elapsedRealtime() - at > RESUME_REQUEST_FRESH_MS) return@LaunchedEffect
+            if (!JarvisRuntime.isPaired()) return@LaunchedEffect
+            // On the activity's own scope, not this effect's: clearing the
+            // request above changes this effect's key, which would cancel it
+            // half way through the wait below.
+            lifecycleScope.launch {
+                kotlinx.coroutines.withTimeoutOrNull(RESUME_LINK_WAIT_MS) {
+                    JarvisRuntime.link.first { it == LinkState.CONNECTED }
+                }
+                JarvisRuntime.voice.refreshStatus()
+                val why = startPhoneListening()
+                if (why == null) {
+                    JarvisRuntime.setNotice(com.jarvis.client.data.WakeResume.BACK_ON)
+                } else {
+                    // Checks, where the switch is, with the reason under it.
+                    resumeListeningNotice.value = why
+                    nav.resetTo(Screen.HOME)
+                    nav.go(Screen.CHECKS)
+                }
+            }
         }
 
         JarvisTheme(
@@ -1134,7 +1514,9 @@ class MainActivity : FragmentActivity() {
                 val leaveRepair: () -> Unit = {
                     if (!busy) {
                         repairing = false
-                        if (notice == badTokenNotice) JarvisRuntime.clearNotice()
+                        if (notice == badTokenNotice || com.jarvis.client.net.KeyRefusal.isWords(notice)) {
+                            JarvisRuntime.clearNotice()
+                        }
                     }
                 }
                 if (replacing) {
@@ -1142,7 +1524,110 @@ class MainActivity : FragmentActivity() {
                     // Composed after NavBackHandler, so it takes the press first.
                     BackHandler(onBack = leaveRepair)
                 }
+                // Saves an address and a key, shakes hands with them, and puts
+                // the old ones back if that fails - for a typed token and for
+                // the key the PC hands over after QR-code pairing alike
+                // (docs/PAIRING-DESIGN.md section 7.2: never lock the owner out).
+                val pairWith: (String, String) -> Unit = { host, token ->
+                    busy = true
+                    scope.launch {
+                        // Only filled in when re-pairing. Held in this
+                        // coroutine and nowhere else, never logged, and
+                        // dropped when it ends. `oldToken` stays empty when
+                        // no new token was typed - then the stored one is
+                        // never touched, so there is nothing to put back.
+                        var oldHost = ""
+                        var oldToken = ""
+                        // `wrote`: the new address may already be saved, so
+                        // there is something to undo. `connected`: the new
+                        // pair answered and is being kept.
+                        var wrote = false
+                        var connected = false
+                        try {
+                            // Off the main thread. `setToken` generates a
+                            // hardware-backed AES key on first pair, which is
+                            // a TEE/StrongBox round trip — several hundred
+                            // milliseconds to a couple of seconds, blocking
+                            // the UI so hard that the button could not even
+                            // repaint into its own busy state, and an ANR
+                            // candidate on a slow device.
+                            withContext(Dispatchers.IO) {
+                                if (replacing) {
+                                    oldHost = JarvisRuntime.settings.host.value
+                                    if (token.isNotBlank()) oldToken = JarvisRuntime.tokens.token()
+                                }
+                                wrote = true
+                                JarvisRuntime.settings.setHost(host)
+                                if (token.isNotBlank()) JarvisRuntime.tokens.setToken(token)
+                            }
+                            val result = JarvisRuntime.handshake()
+                            if (result is ApiResult.Ok) {
+                                connected = true
+                                busy = false
+                                paired = true
+                                // The first pairing on this phone queues the
+                                // one-time "Background restart" offer on Home
+                                // (walk-through C9). Offered, never asked for
+                                // by a dialog, and never again after.
+                                if (!replacing) JarvisRuntime.settings.queueKeepAliveOffer()
+                                repairing = false
+                                pairingHost = JarvisRuntime.settings.host.value
+                                // The stream lives in the service, not here:
+                                // a backgrounded activity's connection is
+                                // suspended within about a minute, which is
+                                // exactly how approvals silently stop
+                                // arriving.
+                                EventService.start(this@MainActivity)
+                                if (replacing) {
+                                    // The running stream is still talking
+                                    // to the old desktop, or retrying the old
+                                    // token. Replaced the same way Home's
+                                    // Retry does it, so it picks up the new
+                                    // address and token now rather than at
+                                    // its next backoff.
+                                    JarvisRuntime.startStream(force = true)
+                                    scope.launch { JarvisRuntime.refreshAll() }
+                                }
+                                // Picks up whatever face the owner's other
+                                // device already chose, the moment there is
+                                // somewhere to ask. A no-op, silently, on a
+                                // backend without the capability.
+                                JarvisRuntime.refreshAppearance()
+                            }
+                        } finally {
+                            // A re-pair that did not connect changes
+                            // nothing: the desktop and token that were in
+                            // use go back. A typo must never be what
+                            // unpairs a phone that was working. The
+                            // handshake's own notice stays up to say why.
+                            //
+                            // In `finally`, and NonCancellable, because this
+                            // coroutine dies with the composition: a
+                            // rotation mid-handshake used to cancel it
+                            // before the put-back ran, leaving the new,
+                            // unchecked pair saved and in use - the
+                            // opposite of what the re-pair screen promises.
+                            //
+                            // `oldToken` is empty when it could not be read
+                            // (the Keystore is briefly unavailable) - then
+                            // there is nothing to restore, and clearing the
+                            // new one would unpair the phone outright, so
+                            // the new one is left.
+                            if (replacing && wrote && !connected) {
+                                withContext(NonCancellable + Dispatchers.IO) {
+                                    JarvisRuntime.settings.setHost(oldHost)
+                                    if (oldToken.isNotEmpty()) JarvisRuntime.tokens.setToken(oldToken)
+                                }
+                            }
+                            // Only after the put-back: re-enabling Connect
+                            // first would let a second tap read the failed
+                            // address as the "old" one to restore.
+                            if (!connected) busy = false
+                        }
+                    }
+                }
                 PairingScreen(
+                    onKeyShownChange = { pairingKeyShown = it },
                     initialHost = pairingHost,
                     hasToken = JarvisRuntime.tokens.hasToken(),
                     busy = busy,
@@ -1152,100 +1637,15 @@ class MainActivity : FragmentActivity() {
                     // (OwnNetwork): it is never used, so the app opens here,
                     // and this sentence is the reason.
                     notice = notice ?: JarvisRuntime.settings.baseProblem()
-                        ?: if (tokenRefused) badTokenNotice else null,
-                    onPair = { host, token ->
-                        busy = true
-                        scope.launch {
-                            // Only filled in when re-pairing. Held in this
-                            // coroutine and nowhere else, never logged, and
-                            // dropped when it ends. `oldToken` stays empty when
-                            // no new token was typed - then the stored one is
-                            // never touched, so there is nothing to put back.
-                            var oldHost = ""
-                            var oldToken = ""
-                            // `wrote`: the new address may already be saved, so
-                            // there is something to undo. `connected`: the new
-                            // pair answered and is being kept.
-                            var wrote = false
-                            var connected = false
-                            try {
-                                // Off the main thread. `setToken` generates a
-                                // hardware-backed AES key on first pair, which is
-                                // a TEE/StrongBox round trip — several hundred
-                                // milliseconds to a couple of seconds, blocking
-                                // the UI so hard that the button could not even
-                                // repaint into its own busy state, and an ANR
-                                // candidate on a slow device.
-                                withContext(Dispatchers.IO) {
-                                    if (replacing) {
-                                        oldHost = JarvisRuntime.settings.host.value
-                                        if (token.isNotBlank()) oldToken = JarvisRuntime.tokens.token()
-                                    }
-                                    wrote = true
-                                    JarvisRuntime.settings.setHost(host)
-                                    if (token.isNotBlank()) JarvisRuntime.tokens.setToken(token)
-                                }
-                                val result = JarvisRuntime.handshake()
-                                if (result is ApiResult.Ok) {
-                                    connected = true
-                                    busy = false
-                                    paired = true
-                                    repairing = false
-                                    pairingHost = JarvisRuntime.settings.host.value
-                                    // The stream lives in the service, not here:
-                                    // a backgrounded activity's connection is
-                                    // suspended within about a minute, which is
-                                    // exactly how approvals silently stop
-                                    // arriving.
-                                    EventService.start(this@MainActivity)
-                                    if (replacing) {
-                                        // The running stream is still talking
-                                        // to the old desktop, or retrying the old
-                                        // token. Replaced the same way Home's
-                                        // Retry does it, so it picks up the new
-                                        // address and token now rather than at
-                                        // its next backoff.
-                                        JarvisRuntime.startStream(force = true)
-                                        scope.launch { JarvisRuntime.refreshAll() }
-                                    }
-                                    // Picks up whatever face the owner's other
-                                    // device already chose, the moment there is
-                                    // somewhere to ask. A no-op, silently, on a
-                                    // backend without the capability.
-                                    JarvisRuntime.refreshAppearance()
-                                }
-                            } finally {
-                                // A re-pair that did not connect changes
-                                // nothing: the desktop and token that were in
-                                // use go back. A typo must never be what
-                                // unpairs a phone that was working. The
-                                // handshake's own notice stays up to say why.
-                                //
-                                // In `finally`, and NonCancellable, because this
-                                // coroutine dies with the composition: a
-                                // rotation mid-handshake used to cancel it
-                                // before the put-back ran, leaving the new,
-                                // unchecked pair saved and in use - the
-                                // opposite of what the re-pair screen promises.
-                                //
-                                // `oldToken` is empty when it could not be read
-                                // (the Keystore is briefly unavailable) - then
-                                // there is nothing to restore, and clearing the
-                                // new one would unpair the phone outright, so
-                                // the new one is left.
-                                if (replacing && wrote && !connected) {
-                                    withContext(NonCancellable + Dispatchers.IO) {
-                                        JarvisRuntime.settings.setHost(oldHost)
-                                        if (oldToken.isNotEmpty()) JarvisRuntime.tokens.setToken(oldToken)
-                                    }
-                                }
-                                // Only after the put-back: re-enabling Connect
-                                // first would let a second tap read the failed
-                                // address as the "old" one to restore.
-                                if (!connected) busy = false
-                            }
-                        }
-                    },
+                        ?: if (tokenRefused) refusedWords else null,
+                    // QR-code pairing (docs/PAIRING-DESIGN.md section 7.2): offered
+                    // before anything is paired, and when the PC says it has
+                    // it - or has not said (a refused key cannot even read
+                    // the version, and that is exactly when it is needed).
+                    offerCodePairing = !replacing || JarvisRuntime.version.value == null ||
+                        JarvisRuntime.can("pairing"),
+                    onDeviceKey = pairWith,
+                    onPair = pairWith,
                     onOpenReadiness = { nav.go(Screen.CHECKS) },
                     modifier = root,
                     onHostChange = { pairingHost = it },
@@ -1281,7 +1681,7 @@ class MainActivity : FragmentActivity() {
                         val wakeWord by voice.wakeWord.collectAsState()
                         val voiceAnswered by voice.answered.collectAsState()
                         val phoneListening by WakeWordService.state.collectAsState()
-                        val bargeInSaved by JarvisRuntime.settings.bargeIn.collectAsState()
+                        val interruptChoice by JarvisRuntime.settings.interrupt.collectAsState()
                         val oneMomentOn by JarvisRuntime.settings.oneMoment.collectAsState()
                         val heardSoundOn by JarvisRuntime.settings.heardSound.collectAsState()
                         // Asked once: whether this phone has an echo canceller
@@ -1291,6 +1691,14 @@ class MainActivity : FragmentActivity() {
                         }
                         var wakeBusy by remember { mutableStateOf(false) }
                         var wakeNotice by remember { mutableStateOf<String?>(null) }
+                        // Why the restart notice could not start listening
+                        // (data/WakeResume.kt): shown once, under the switch.
+                        LaunchedEffect(resumeListeningNotice.value) {
+                            resumeListeningNotice.value?.let {
+                                wakeNotice = it
+                                resumeListeningNotice.value = null
+                            }
+                        }
                         // The desktop's switch went off (from here, the
                         // desktop, or a restart): this phone stops too. The
                         // listener also checks for itself every few minutes.
@@ -1360,11 +1768,11 @@ class MainActivity : FragmentActivity() {
                             },
                             wakeWordPending = voiceStatus.listening.wakeWordPending,
                             phoneListening = phoneListening,
-                            bargeIn = BargeIn.enabled(bargeInSaved, echoCanceller),
+                            interrupt = interruptChoice,
                             bargeInEchoCanceller = echoCanceller,
-                            // A switch on this phone only: it changes when the
+                            // A setting on this phone only: it changes when the
                             // phone listens, never what the desktop allows.
-                            onBargeIn = { on -> JarvisRuntime.settings.setBargeIn(on) },
+                            onInterrupt = { v -> JarvisRuntime.settings.setInterrupt(v) },
                             // Also this phone's own: whether "One moment." is
                             // played when a tool starts during a spoken question.
                             oneMoment = oneMomentOn,
@@ -1397,6 +1805,7 @@ class MainActivity : FragmentActivity() {
                                 link = link,
                                 stale = stale,
                                 detail = linkDetail,
+                                vpnLine = vpnLine,
                             ),
                             // The same call as Home's Retry, `force` and all - see
                             // the comment on onReconnect in HomeActions below.
@@ -1455,6 +1864,10 @@ class MainActivity : FragmentActivity() {
                             // The phone's own Settings screen (ease-of-use
                             // audit row 16, 2026-09-27).
                             onOpenSettings = { nav.go(Screen.SETTINGS) },
+                            // "Open connection" / "open updates" by voice or
+                            // chat (OpenPlace).
+                            initialSection = sectionFor(Screen.CHECKS),
+                            onSectionConsumed = sectionConsumed,
                         )
                     }
 
@@ -1531,6 +1944,7 @@ class MainActivity : FragmentActivity() {
                             setSpeed = { id -> JarvisRuntime.setVoiceSpeed(id) },
                             setSpeaker = { id -> JarvisRuntime.setVoiceSpeaker(id) },
                             setFace = { on -> JarvisRuntime.setVoiceFace(on) },
+                            answerFaceOffer = { f, use -> JarvisRuntime.answerFaceVoiceOffer(f, use) },
                             setAnimal = { json -> JarvisRuntime.setVoiceAnimal(json) },
                             tryAnimal = { face, name, playing ->
                                 JarvisRuntime.voice.tryAnimalVoice(face, name, playing)
@@ -1672,6 +2086,7 @@ class MainActivity : FragmentActivity() {
                             notice = notice,
                             onDismissNotice = { JarvisRuntime.clearNotice() },
                             models = models,
+                            modelsCache = modelsCache,
                             modelBusy = modelBusy,
                             onSwitchModel = { ref ->
                                 if (!modelBusy) {
@@ -1745,6 +2160,24 @@ class MainActivity : FragmentActivity() {
                                     }
                                 }
                             },
+                            // A third graphics card (2026-09-28): moving a
+                            // switch onto it, or off. Marked busy the same
+                            // way as onSetSecondCard, under SecondCard.THIRD
+                            // rather than a feature id - there is no single
+                            // switch this request is about.
+                            onSetThirdCard = { assign ->
+                                if (secondCardBusy == null) {
+                                    secondCardBusy = SecondCard.THIRD
+                                    secondCardNotice = null
+                                    scope.launch {
+                                        try {
+                                            secondCardNotice = JarvisRuntime.setThirdCard(assign)
+                                        } finally {
+                                            secondCardBusy = null
+                                        }
+                                    }
+                                }
+                            },
                             // "When to suggest the bigger model" (2026-09-27):
                             // no card either way, so this only ever re-reads
                             // the plate afterwards - never touches approvals.
@@ -1787,6 +2220,10 @@ class MainActivity : FragmentActivity() {
                             // audit row 16, 2026-09-27), where the old
                             // "Settings" group moved to.
                             onOpenSettings = { nav.go(Screen.SETTINGS) },
+                            // "Open the morning briefing", "hardware", ... by
+                            // voice or chat (OpenPlace).
+                            initialSection = sectionFor(Screen.BRAIN),
+                            onSectionConsumed = sectionConsumed,
                         )
                     }
 
@@ -1798,12 +2235,51 @@ class MainActivity : FragmentActivity() {
                         privateHidden = privateHidden,
                         onShowPrivate = ::showPrivateLists,
                         showPrivateBusy = ownerCheckBusy.value,
+                        // "Continue this chat" (the owner's decision,
+                        // 2026-09-28): Home carries it on, and says so.
+                        onContinue = { id ->
+                            JarvisRuntime.continueChat(id).also { why ->
+                                if (why == null) {
+                                    nav.resetTo(Screen.HOME)
+                                }
+                            }
+                        },
+                        // "Forget a time frame…" at the top of History: the
+                        // Brain's plate, as "forget what you learned last
+                        // week" opens it (OpenPlace).
+                        onOpenForgetRange = {
+                            pendingSection = "forget-range"
+                            pendingSectionScreen = Screen.BRAIN.name
+                            nav.go(Screen.BRAIN)
+                        },
+                        modifier = root,
+                    )
+
+                    Screen.LIVE -> com.jarvis.client.ui.screens.LiveScreen(
+                        onBack = { nav.back() },
+                        // "Show the card": the cards are on Home. Back comes
+                        // back to Live (the review's C7: it reset the stack).
+                        onOpenCards = { nav.go(Screen.HOME) },
+                        // "Jarvis Live didn't start: it needs your voice
+                        // trained first - Settings, then Train my voice."
+                        onTrainVoice = { nav.go(Screen.VOICE) },
+                        // "Talk about this in Live": held here until Send.
+                        shared = liveSharedHeld,
+                        onDropShared = { liveSharedHeld = null },
+                        modifier = root,
+                    )
+
+                    Screen.HANDOFF -> com.jarvis.client.ui.screens.HandoffScreen(
+                        onBack = { nav.back() },
                         modifier = root,
                     )
 
                     Screen.FAQ -> FaqScreen(
                         onBack = { nav.back() },
                         modifier = root,
+                        // "Open about" by voice or chat (OpenPlace).
+                        initialSection = sectionFor(Screen.FAQ),
+                        onSectionConsumed = sectionConsumed,
                     )
 
                     Screen.SECURITY -> {
@@ -1834,12 +2310,12 @@ class MainActivity : FragmentActivity() {
                         stale = stale,
                         onBack = { nav.back() },
                         modifier = root,
-                        initialSection = pendingSettingsSection,
+                        initialSection = sectionFor(Screen.SETTINGS),
                         // Bug audit 2026-09-27, finding #4: cleared once the
                         // screen has scrolled to it (or found no row for
                         // it), so a later manual visit to Settings does not
                         // scroll anywhere on its own.
-                        onSectionConsumed = { pendingSettingsSection = null },
+                        onSectionConsumed = sectionConsumed,
                         // Same three ternaries as Screen.CHECKS above: null
                         // until this phone is paired.
                         onTrainVoice = if (paired) {
@@ -1871,6 +2347,15 @@ class MainActivity : FragmentActivity() {
                         },
                         onRequestOverlay = ::requestOverlayPermission,
                         onOpenBubbleSettings = ::openBubbleSettings,
+                        notificationAccessGranted = remember(tick) {
+                            NotificationManagerCompat.getEnabledListenerPackages(this@MainActivity)
+                                .contains(packageName)
+                        },
+                        onOpenNotificationAccess = ::openNotificationAccessSettings,
+                        quickTiles = quickTiles,
+                        onQuickTileChange = { slot, action ->
+                            JarvisRuntime.settings.setQuickTile(slot, action)
+                        },
                     )
 
                     Screen.APPEARANCE -> AppearanceScreen(
@@ -1913,7 +2398,12 @@ class MainActivity : FragmentActivity() {
                         // face and its bindings are the shared vocabulary.
                         onPickFace = {
                             appearance.setFace(it.id)
-                            scope.launch { JarvisRuntime.pushAppearance() }
+                            scope.launch {
+                                JarvisRuntime.pushAppearance()
+                                // An animal picked for the first time: the PC
+                                // may now ask "Use its own voice?" - read it.
+                                JarvisRuntime.refreshCustomVoices()
+                            }
                         },
                         // Randomise and Reset do NOT push straight away any more.
                         // The screen offers ten seconds of Undo, and the desktop
@@ -1963,12 +2453,16 @@ class MainActivity : FragmentActivity() {
                         faceTile = { f, selected, onClick ->
                             FaceSpecimen(face = f, bindings = bindings, isSelected = selected, onClick = onClick)
                         },
+                        faceVoiceOffer = {
+                            FaceVoiceOfferFromPc(linkBlocker = remember(link, stale) { JarvisRuntime.actionBlocker() })
+                        },
                     )
 
                     Screen.HOME -> HomeScreen(
                         state = HomeState(
                             link = link,
                             linkDetail = linkDetail,
+                            vpnLine = vpnLine,
                             stale = stale,
                             activity = activity,
                             faceState = faceState,
@@ -2004,6 +2498,21 @@ class MainActivity : FragmentActivity() {
                             lastUserText = lastQuestion,
                             answerFeedback = Feedback.viewFor(answerTurnId, answerMark),
                             conversationTurns = conversation.size,
+                            // The pairs above the one on screen.
+                            thread = com.jarvis.client.net.ChatHistory.threadBefore(
+                                thread, lastQuestion, streaming, answered = answeredNow,
+                            ),
+                            chatNote = chatNote,
+                            readOutside = readOutsideChat,
+                            idleNextLine = if (idleQuiet && !streaming) {
+                                if (temporaryChat || gameChat) {
+                                    com.jarvis.client.net.ChatHistory.IDLE_NEXT_LINE_TEMPORARY
+                                } else {
+                                    com.jarvis.client.net.ChatHistory.IDLE_NEXT_LINE
+                                }
+                            } else {
+                                null
+                            },
                             chatWaiting = chatWaiting,
                             answerNote = answerNote,
                             quickNoteOpen = quickNoteOpen.value,
@@ -2011,20 +2520,35 @@ class MainActivity : FragmentActivity() {
                             // reading the words in a picture (2026-09-26), as
                             // the PC last reported it. The send asks again first.
                             pictureOffered = SecondCard.picturesTaken(secondCard),
+                            // Reading phone notifications (2026-09-28): only
+                            // offered once the setting is on AND something
+                            // has actually been captured - a button that
+                            // would attach nothing is not an offer.
+                            notificationsAttachable = remember(tick) {
+                                JarvisRuntime.phoneNotificationsAllowed() &&
+                                    com.jarvis.client.data.CapturedNotifications(this@MainActivity)
+                                        .sharedText() != null
+                            },
                             pictureLine = picture.value?.let {
                                 ChatPicture.attachedLine(it, wordsOnly = !SecondCard.visionAvailable(secondCard))
                             },
                             sharedLine = sharedHeld?.let { Provenance.sharedLine(it) },
                             pictureBusy = pictureBusy.value,
+                            photoFinding = photoFinding.value,
                             noteTargets = noteTargets,
                             updateLine = updateState.newerLine.takeIf { updateChecks },
+                            keepAliveOffer = PlatformReadiness.BACKGROUND_RESTART_NOT_ALLOWED
+                                .takeIf { keepAliveOfferShown },
                             temporary = temporaryChat,
                             usedIds = usedIds,
                             answerTurnId = answerTurnId,
                             crisisAnswer = crisisAnswer,
+                            cloudOffer = cloudOffer,
                             memoryHidden = privateHidden,
+                            swipeDecides = security.swipeDecides,
                             showPrivateBusy = ownerCheckBusy.value,
                             noticeProblem = shownProblem,
+                            lockdown = lockdown,
                         ),
                         // A lambda, so a streamed token redraws the reply and
                         // nothing else. Passing the string rebuilt HomeState on
@@ -2107,8 +2631,21 @@ class MainActivity : FragmentActivity() {
                                     )
                                 },
                                 onRemovePicture = { picture.value = null },
+                                // Fills the SAME shared-text chip the Share
+                                // sheet already uses - the owner still
+                                // presses Send. Never sent, learned, or read
+                                // by anything until they do.
+                                onAttachNotifications = {
+                                    com.jarvis.client.data.CapturedNotifications(this@MainActivity)
+                                        .sharedText()
+                                        ?.let { sharedHeld = Provenance.joinShared(sharedHeld, it) }
+                                },
+                                onFindDateInPicture = ::findDateInPicture,
                                 onInterrupt = { chat.cancel() },
-                                onNewConversation = { chat.newConversation() },
+                                // Said on Home, and read out by TalkBack (the chat audit).
+                                onNewConversation = { chat.newConversationSaid() },
+                                onEarlierChats = { nav.go(Screen.HISTORY) },
+                                onDismissChatNote = { chat.dismissChatNote() },
                                 // A temporary chat: no card and no hold - it only
                                 // makes Jarvis stricter. A PC without it says so.
                                 onToggleTemporary = {
@@ -2138,11 +2675,7 @@ class MainActivity : FragmentActivity() {
                                     // coroutine after the POST had landed, drop
                                     // the result, and leave the card on screen
                                     // for a second tap to send again.
-                                    scope.launch {
-                                        if (confirmed(item)) {
-                                            JarvisRuntime.decideDetached(item, approve = true)
-                                        }
-                                    }
+                                    scope.launch { approveItem(item) }
                                 },
                                 // Denying is the safe direction and is never gated:
                                 // a gate on refusing would make the cautious answer
@@ -2170,6 +2703,8 @@ class MainActivity : FragmentActivity() {
                                 onOpenBrain = { nav.go(Screen.BRAIN) },
                                 onOpenAppearance = { nav.go(Screen.APPEARANCE) },
                                 onOpenFaq = { nav.go(Screen.FAQ) },
+                                // Jarvis Live (ui/screens/LiveScreen.kt).
+                                onOpenLive = { nav.go(Screen.LIVE) },
                                 // "Try again" under a failed question: the same
                                 // words, tag and shared text, asked again.
                                 onRetryQuestion = {
@@ -2193,6 +2728,8 @@ class MainActivity : FragmentActivity() {
                                 // The desktop's Alt+Shift+X, as a button:
                                 // this phone's speech, then POST /api/stop_all.
                                 onStopEverything = { JarvisRuntime.stopEverything() },
+                                onPcMedia = { JarvisRuntime.pcMedia() },
+                                onPcMediaControl = { action -> JarvisRuntime.pcMediaControl(action) },
                                 onInjectTaskNote = { note -> JarvisRuntime.injectTaskNote(note) },
                                 // Saved only when the owner's own drag (or a
                                 // screen reader's Bigger/Smaller) finishes - never
@@ -2204,6 +2741,14 @@ class MainActivity : FragmentActivity() {
                                 onMarkAnswer = { turnId, mark ->
                                     JarvisRuntime.markAnswerDetached(turnId, mark)
                                 },
+                                // "Try the cloud model": a genuinely new
+                                // turn, the same shape as onSend below, so
+                                // it runs on this composable's own scope
+                                // rather than the runtime's - a rotation
+                                // mid-answer already cancels an ordinary
+                                // question the same way.
+                                onTryCloud = { scope.launch { chat.tryCloudForLast() } },
+                                onDismissCloudOffer = { chat.dismissCloudOffer() },
                                 // backend/note-capture.patch. The runtime reports
                                 // how it ended, in the desktop's own words.
                                 onFileNote = { target, text ->
@@ -2214,6 +2759,16 @@ class MainActivity : FragmentActivity() {
                                 onQuickNoteOpenChange = { open -> quickNoteOpen.value = open },
                                 onOpenUpdate = ::openReleasePage,
                                 onOpenLockSettings = ::openLockSettings,
+                                // The owner's one tap (design §11): the key is made
+                                // here, the PC raises its own card.
+                                onTurnOnSignedApprovals = {
+                                    scope.launch { JarvisRuntime.setNotice(JarvisRuntime.turnOnSignedApprovals()) }
+                                },
+                                onKeepLinkAlive = {
+                                    JarvisRuntime.settings.answerKeepAliveOffer()
+                                    requestBatteryExemption()
+                                },
+                                onDismissKeepAlive = { JarvisRuntime.settings.answerKeepAliveOffer() },
                             )
                         },
                         modifier = root,
@@ -2345,6 +2900,90 @@ class MainActivity : FragmentActivity() {
                 false
             }
         }
+    }
+
+    /**
+     * Approve [item]. Which way it goes is [SignedApproval.pathFor]: a risky
+     * card on a paired phone with signed approvals on is signed with the
+     * fingerprint or PIN (docs/PAIRING-DESIGN.md §11); a paired phone
+     * without them is offered the one button that turns them on; everything
+     * else - a card that is not risky, the old shared key, a PC that does
+     * not know signed approvals, or a PC that could not be read - takes
+     * today's way, and the PC says `no_approval_key` if it needed one.
+     */
+    private suspend fun approveItem(item: PendingItem) {
+        val risky = SecurityRules.riskyByToday(item)
+        // pcOnly and needsChoice cards are refused in decide() with their own words.
+        val read = if (risky && !item.pcOnly && !item.needsChoice) JarvisRuntime.signedApprovalRead() else null
+        when (val path = SignedApproval.pathFor(risky, read?.state)) {
+            SignedApproval.Path.PLAIN ->
+                if (confirmed(item)) JarvisRuntime.decideDetached(item, approve = true)
+            SignedApproval.Path.SIGNED -> signedApprove(item, read?.device)
+            SignedApproval.Path.OFFER,
+            SignedApproval.Path.OFFER_AGAIN,
+            SignedApproval.Path.WAITING,
+            -> SignedApproval.noticeFor(path)?.let { JarvisRuntime.setNotice(it) }
+        }
+    }
+
+    /**
+     * The signed way: a nonce from the PC, the words checked against what this
+     * phone showed, the fingerprint prompt with the approval key, the signature.
+     * Nothing here is logged.
+     */
+    private suspend fun signedApprove(item: PendingItem, device: String?) {
+        if (device == null) {
+            JarvisRuntime.setNotice(SignedApproval.OFFER_WORDS)
+            return
+        }
+        val challenge = JarvisRuntime.beginSignedApproval(item) ?: return
+        val key = try {
+            ApprovalKey.newSignature()
+        } catch (e: KeyPermanentlyInvalidatedException) {
+            JarvisRuntime.setNotice(SignedApproval.OFFER_AGAIN_WORDS)
+            return
+        } catch (e: Exception) {
+            JarvisRuntime.setNotice(SignedApproval.SIGN_FAILED)
+            return
+        }
+        val s = currentSecurity()
+        var result: BiometricGate.Signed? = null
+        val outcome = withOwnerCheck {
+            val signed = BiometricGate.sign(this, item, s.method, key)
+            result = signed
+            signed.outcome
+        }
+        when (val verdict = SecurityRules.afterApprovalCheck(s, outcome)) {
+            SecurityRules.Verdict.Go -> Unit
+            is SecurityRules.Verdict.Stop -> {
+                verdict.say?.let { JarvisRuntime.setNotice(it) }
+                return
+            }
+        }
+        val unlocked = result?.signature
+        if (unlocked == null) {
+            JarvisRuntime.setNotice(SignedApproval.SIGN_FAILED)
+            return
+        }
+        val der = try {
+            unlocked.update(
+                SignedApproval.signedMessage(
+                    item.id,
+                    item.action.orEmpty(),
+                    challenge.nonce,
+                    SignedApproval.wordsSha256(item),
+                ),
+            )
+            unlocked.sign()
+        } catch (e: java.security.GeneralSecurityException) {
+            JarvisRuntime.setNotice(SignedApproval.SIGN_FAILED)
+            return
+        }
+        JarvisRuntime.decideDetached(
+            item,
+            approve = true,
+            signature = SignedApproval.Signature(device, challenge.nonce, SignedApproval.b64url(der)),
+        )
     }
 
     private fun currentSecurity(): Security = JarvisRuntime.settings.security.value
@@ -2479,6 +3118,27 @@ class MainActivity : FragmentActivity() {
         if (JarvisRuntime.isPaired()) {
             // Cheap, and safe to call on resume — the doc says so explicitly.
             lifecycleScope.launch { JarvisRuntime.refreshStatus() }
+            // Coming back to a link that is "Catching up…" reconnects at
+            // once, the same forced reconnect as Home's Retry (phone
+            // walk-through, 2026-09-27). After the phone slept the socket is
+            // often half-dead, and nothing used to replace it until a 90
+            // second read timeout noticed - so the owner opened Jarvis to an
+            // approval they could not act on and no sign anything was being
+            // done. Only for that state (LinkWords.reconnectOnReturn): the
+            // stream is already running in this process, so no service start
+            // is needed, and after the forced restart the link reads
+            // "reconnecting", so returning from a permission prompt a moment
+            // later does not force a second one. Approves nothing; acting
+            // stays blocked until the link is trusted (rule 4).
+            if (JarvisRuntime.isInitialized &&
+                LinkWords.reconnectOnReturn(
+                    link = JarvisRuntime.link.value,
+                    stale = JarvisRuntime.stale.value,
+                    reason = JarvisRuntime.linkDetail.value,
+                )
+            ) {
+                JarvisRuntime.startStream(force = true)
+            }
         }
     }
 
@@ -2541,6 +3201,23 @@ class MainActivity : FragmentActivity() {
     }
 
     /**
+     * Android's own "Notification access" screen
+     * (`Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS`), for "reading
+     * phone notifications". `PhoneNotificationsPlate.kt`'s own explanation
+     * of what this OS-level access actually grants is shown BEFORE this is
+     * ever called, always - it is unusually broad (every notification, on
+     * every app, once granted), unlike an ordinary runtime permission
+     * dialog, and there is no direct way to grant it: only this screen,
+     * only the owner's own tap. `notificationAccessGranted` keeps reading
+     * the real answer either way, the same pattern `overlayGranted` above
+     * already follows.
+     */
+    private fun openNotificationAccessSettings() {
+        runCatching { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+            .onFailure { runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) } }
+    }
+
+    /**
      * Opens the platform's own exemption dialog. Never granted silently, and the
      * readiness screen keeps reporting the real state either way.
      */
@@ -2578,6 +3255,31 @@ class MainActivity : FragmentActivity() {
 
         /** Fired by the "your morning briefing is ready" notification ([com.jarvis.client.service.ScheduleNotifier]). */
         const val ACTION_OPEN_BRIEFING = "com.jarvis.client.action.OPEN_BRIEFING"
+
+        /** Fired by the Jarvis Live notification ([com.jarvis.client.service.LiveService]). */
+        const val ACTION_OPEN_LIVE = "com.jarvis.client.action.OPEN_LIVE"
+
+        /**
+         * The "\"Hey Jarvis\" is off since the phone restarted" notification's
+         * tap ([com.jarvis.client.service.WakeResumeNotifier]): start "Listen
+         * on this phone" from here, once App lock (if on) has been passed.
+         */
+        const val ACTION_RESUME_LISTENING = "com.jarvis.client.action.RESUME_LISTENING"
+
+        /** An empty Quick Settings tile slot's tap: Settings, at "Quick Settings tiles". */
+        const val ACTION_OPEN_TILE_SETTINGS = "com.jarvis.client.action.OPEN_TILE_SETTINGS"
+
+        /** Fired by the Jarvis Live tile ([com.jarvis.client.service.LiveTileService]): start Live. */
+        const val ACTION_START_LIVE = "com.jarvis.client.action.START_LIVE"
+
+        /** Fired by "Live ended - Resume" ([com.jarvis.client.service.LiveService.showResume]). */
+        const val ACTION_RESUME_LIVE = "com.jarvis.client.action.RESUME_LIVE"
+
+        /** Fired by the "a website needs you" alert ([com.jarvis.client.service.HandoffNotifier]). */
+        const val ACTION_OPEN_HANDOFF = "com.jarvis.client.action.OPEN_HANDOFF"
+
+        /** The activity-alias the "Talk about this in Live" share entry opens this activity as. */
+        const val SHARE_TO_LIVE = ".ShareToLive"
     }
 }
 
@@ -2614,6 +3316,24 @@ private val pairingBusy = mutableStateOf(false)
  * app lock is on.
  */
 private val lockSession = LockSession()
+
+/**
+ * Would App lock lock Jarvis now? Jarvis Live on this phone ends then
+ * (JarvisRuntime's Live watcher; docs/LIVE-DESIGN.md): the owner may talk
+ * with the Live screen away from them, but not past the point the app would
+ * ask for the fingerprint or PIN again. Changes nothing.
+ */
+internal fun appLockWouldLock(nowMs: Long, security: com.jarvis.client.data.Security): Boolean =
+    lockSession.wouldLock(nowMs, security)
+
+/** How long the restart notice's tap waits for the link before asking the desktop anyway. */
+private const val RESUME_LINK_WAIT_MS = 8_000L
+
+/** How long after tapping the restart notice listening may still start (App lock in between). */
+private const val RESUME_REQUEST_FRESH_MS = 2 * 60 * 1000L
+
+/** SettingsScreen's key for "Quick Settings tiles" (its SETTINGS_ITEM_INDEX). */
+private const val QUICK_TILES_SECTION = "quick-tiles"
 
 /** How often, while the app stays open, the once-a-day update check is looked at. */
 private const val UPDATE_RECHECK_MS = 60 * 60 * 1000L

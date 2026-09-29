@@ -115,6 +115,7 @@ TOOL_NAMES = {
     "todo_add": "Adding to the to-do list",
     "todo_done": "Ticking off the to-do list",
     "coming_up": "Coming up (timers, alarms, reminders)",
+    "propose_plan": "Running a short plan of its own tools (one card, several steps)",
 }
 
 #: A tool's gate lookup name -> the action it is decided under, as
@@ -252,6 +253,12 @@ class Ctx:
     # The plug-in programs (jarvis_mcp.reach_status): {"servers", "running",
     # "problem", "card_every_start"}; None: read them.
     plugins: Optional[dict] = None
+    # Chatbot conversations (jarvis_chatbot.py): {"routed": bool, "chatbots":
+    # jarvis_chatbot.choices()}; None: read them.
+    chatbot: Optional[dict] = None
+    # Customer-support chats (jarvis_support.py): {"routed": bool, "ready":
+    # "" or why not, "companies": [names]}; None: read them.
+    support: Optional[dict] = None
 
 
 def _gate_action(lookup: str) -> Optional[str]:
@@ -777,6 +784,196 @@ def _plugins(ctx: Ctx) -> dict:
                   "permissions." + (f" Running now: {_join(running)}." if running else ""))
 
 
+def _chatbot_status() -> dict:
+    """jarvis_chatbot's own list of chatbots and whether it is routed. Opens
+    nothing: each adapter's ready() only looks for Playwright and the
+    browser profile folder."""
+    try:
+        import jarvis_chatbot as CB
+        return {"routed": bool(getattr(CB, "ROUTED", False)), "chatbots": CB.choices()}
+    except Exception:
+        return {"routed": False, "chatbots": [], "missing": True}
+
+
+def _chatbot(ctx: Ctx) -> dict:
+    """Chatbot conversations (jarvis_chatbot.py and its website adapters -
+    jarvis_chatbot_web.py and one site file per website, Gemini first; the
+    owner's decisions of 2026-09-27/28): Jarvis talks to an AI chatbot
+    WEBSITE for the owner, one card per conversation. One row for all of
+    them; `where` names every host that is set up, each its own way out.
+    The API adapters have their own row (_chatbot_api); "a second AI on this
+    PC" has none - it reaches nothing outside the PC."""
+    name = "Chatbot conversations"
+    st = ctx.chatbot if ctx.chatbot is not None else _chatbot_status()
+    bots = [b for b in st.get("chatbots") or [] if b.get("built")
+            and str(b.get("kind") or "website") == "website"]
+    if st.get("missing") or not bots:
+        return _row("chatbot", name, "not_set_up", "", ASK_NA,
+                    "Not set up: no chatbot is built into this PC's Jarvis yet.")
+    names = _join([str(b.get("name") or b.get("id")) for b in bots])
+    tier = "ask"
+    try:
+        tier = str(ctx.tier("chatbot_session"))
+    except Exception:
+        pass
+    if tier == "never":
+        return _row("chatbot", name, "blocked", "", ASK_NEVER,
+                    "Your settings say never, so Jarvis never talks to a chatbot for you.")
+    ready = [b for b in bots if b.get("ready")]
+    if not ready:
+        why = str(bots[0].get("note") or "")
+        if len(bots) > 1 and any(str(b.get("note") or "") != why for b in bots):
+            # Each website is signed in on its own: say so, with the first
+            # one's line, rather than let one site's words speak for all.
+            why = ("none of them is set up on this PC yet; each is signed in on its own. "
+                   + str(bots[0].get("name") or bots[0].get("id")) + ": " + why)
+        return _row("chatbot", name, "not_set_up", "", ASK_NA,
+                    ("Not set up (" + names + "): " + why).strip())
+    ready_names = _join([str(b.get("name") or b.get("id")) for b in ready])
+    if not st.get("routed"):
+        return _row("chatbot", name, "off", "", ASK_NA,
+                    "Ready on this PC (" + ready_names + "), but neither app can start a "
+                    "conversation yet - that comes in a later step.")
+    where = _join([str(b.get("host") or "") for b in ready]) + " (a browser window you can see)"
+    return _row("chatbot", name, "on", where, ASK_EVERY,
+                "Holds a conversation with an AI chatbot website for you: one approval card "
+                "per conversation shows the goal word for word and the most messages and "
+                "minutes. Nothing private is sent, and it stops and asks you at any captcha "
+                "or sign-in page. What the chatbot says is outside text.")
+
+
+def _support_status() -> dict:
+    """jarvis_support's own companies and whether its window can open here
+    (Playwright only - opens nothing)."""
+    try:
+        import jarvis_chatbot as CB
+        import jarvis_support as S
+        try:
+            import jarvis_support_widget as SW
+            why = str(SW.ready() or "")
+        except Exception as exc:
+            why = f"the support window is not on this PC ({type(exc).__name__})"
+        return {"routed": bool(getattr(CB, "ROUTED", False)), "ready": why,
+                "companies": [c.name for c in S.COMPANIES.values()]}
+    except Exception:
+        return {"routed": False, "ready": "", "companies": [], "missing": True}
+
+
+def _support_chat(ctx: Ctx) -> dict:
+    """Customer-support chats (jarvis_support.py and jarvis_support_widget.py,
+    the owner's decisions of 2026-09-28): Jarvis chats with a company's
+    customer support in the owner's name, on the owner's own account, in a
+    browser window the owner can see. One named way out: the help page of
+    the company the owner picks on the card (Groupon first) and its chat
+    maker's host."""
+    name = "Customer-support chats"
+    st = ctx.support if ctx.support is not None else _support_status()
+    if st.get("missing"):
+        return _row("support_chat", name, "not_set_up", "", ASK_NA,
+                    "Not set up: this PC's Jarvis has no customer-support chats yet.")
+    tier = "ask"
+    try:
+        tier = str(ctx.tier("support_chat"))
+    except Exception:
+        pass
+    if tier == "never":
+        return _row("support_chat", name, "blocked", "", ASK_NEVER,
+                    "Your settings say never, so Jarvis never chats with customer support "
+                    "for you.")
+    why = str(st.get("ready") or "")
+    if why:
+        return _row("support_chat", name, "not_set_up", "", ASK_NA,
+                    ("Not set up: " + why).strip())
+    if not st.get("routed"):
+        return _row("support_chat", name, "off", "", ASK_NA,
+                    "Ready on this PC, but neither app can start a support chat yet - run "
+                    "apply-patches.ps1 on the PC.")
+    companies = _join([str(c) for c in st.get("companies") or []]) or "a company you pick"
+    return _row("support_chat", name, "on",
+                "the help page of the company on the card (" + companies + ", or one whose "
+                "help page you type) and its chat window's own host (a browser window you "
+                "can see)", ASK_EVERY,
+                "Chats with a company's customer support for you, in your name, on your own "
+                "account there: one approval card per chat lists every detail Jarvis may "
+                "give, and every offer (a refund, a credit, a cancellation) gets its own card "
+                "- nothing is accepted without it. Identity checks and \"are you a bot?\" are "
+                "handed to you. The company's words are outside text.")
+
+
+#: jarvis_chatbot_api's own notes: no_key_words(), CANNOT_READ and
+#: no_limit_words() (a key but no monthly money limit yet: not used until
+#: one is set - the owner's decision of 2026-09-28).
+_NO_KEY = re.compile(r"^No .+ API key\b")
+_NO_STORE = re.compile(r"^Jarvis cannot read Windows Credential Manager\b")
+_NO_LIMIT = re.compile(r"^No monthly money limit is set for\b")
+
+
+def _chatbot_api(ctx: Ctx) -> dict:
+    """Chatbot conversations through an official API with a key
+    (jarvis_chatbot_api.py, the owner's decision of 2026-09-28): one named
+    way out per service - each service's host is listed once its key is
+    saved. Whether a key is saved is yes or no; the key is never read here
+    beyond that."""
+    name = "Chatbot conversations with a key (API)"
+    st = ctx.chatbot if ctx.chatbot is not None else _chatbot_status()
+    bots = [b for b in st.get("chatbots") or [] if b.get("built")
+            and str(b.get("kind") or "") == "api"]
+    if st.get("missing") or not bots:
+        return _row("chatbot_api", name, "not_set_up", "", ASK_NA,
+                    "Not set up: this PC's Jarvis has no chatbot API adapters yet.")
+    tier = "ask"
+    try:
+        tier = str(ctx.tier("chatbot_session"))
+    except Exception:
+        pass
+    if tier == "never":
+        return _row("chatbot_api", name, "blocked", "", ASK_NEVER,
+                    "Your settings say never, so Jarvis never talks to a chatbot for you.")
+    ready = [b for b in bots if b.get("ready")]
+    if not ready:
+        # Say the TRUE reason: "no key" only for the services whose own
+        # note says so. A bad model line under [chatbot], or a Credential
+        # Manager (the Windows password store) that cannot be read, is
+        # named in that service's own words (jarvis_chatbot_api.ready_for).
+        def names(group):
+            return _join([str(b.get("name") or b.get("id")) for b in group])
+        notes = [(b, str(b.get("note") or "").strip()) for b in bots]
+        no_key = [b for b, n in notes if _NO_KEY.match(n)]
+        no_store = [b for b, n in notes if _NO_STORE.match(n)]
+        no_limit = [b for b, n in notes if _NO_LIMIT.match(n)]
+        parts = [n for b, n in notes
+                 if b not in no_key and b not in no_store and b not in no_limit and n]
+        if no_store:
+            parts.append("Jarvis cannot read Windows Credential Manager (the Windows password "
+                         "store) on this computer, where the key for " + names(no_store)
+                         + " would be kept.")
+        if no_limit:
+            parts.append(("no monthly money limit" if not parts else "No monthly money limit")
+                         + " is set on this PC for " + names(no_limit) + ", so Jarvis does not "
+                         "use it yet. A limit comes first, and is set on the PC only.")
+        if no_key:
+            parts.append(("no key" if not parts else "No key") + " is saved on this PC for "
+                         + names(no_key) + ". Keys are added on the PC only.")
+        return _row("chatbot_api", name, "not_set_up", "", ASK_NA,
+                    "Not set up: " + " ".join(parts))
+    ready_names = _join([str(b.get("name") or b.get("id")) for b in ready])
+    if not st.get("routed"):
+        return _row("chatbot_api", name, "off", "", ASK_NA,
+                    "A key is saved on this PC for " + ready_names + ", but neither app "
+                    "can start a conversation yet - that comes in a later step.")
+    return _row("chatbot_api", name, "on", _join([str(b.get("host") or "") for b in ready]),
+                ASK_EVERY,
+                "Holds a conversation with an AI chatbot through its official API, with the "
+                "key saved on this PC, sent only to that service: one approval card per "
+                "conversation shows the service, the model, the goal word for word and the "
+                "most messages and minutes, and about how much of the monthly money limit is "
+                "left. Each message costs a little on that account; Jarvis stops using a "
+                "service when the monthly limit you set on the PC is reached (an estimate from "
+                "a price list you can correct there), and asks each service it can to keep "
+                "every answer short enough to stay within it. Nothing private is sent, and "
+                "what the chatbot says is outside text.")
+
+
 def _sky_weather(ctx: Ctx) -> dict:
     """The weather behind the animal faces (jarvis_sky.py, 2026-09-28): off
     by default; from the owner's own Home Assistant, or from Open-Meteo on
@@ -824,6 +1021,9 @@ KINDS = (
     ("phone_push", _phone_push),
     ("computer", _computer),
     ("browser", _browser),
+    ("chatbot", _chatbot),
+    ("chatbot_api", _chatbot_api),
+    ("support_chat", _support_chat),
     ("phone_control", _phone),
     ("shell", _shell),
     ("plugins", _plugins),

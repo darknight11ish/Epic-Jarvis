@@ -142,7 +142,7 @@ fn stale(app: &AppHandle) -> bool {
 /// Runs a picker on its own thread: the Windows dialogs need a
 /// single-threaded COM apartment, which a shared runtime worker cannot
 /// promise (the same reason as the memory export's save dialog).
-async fn pick(what: picker::What) -> Result<Option<String>, String> {
+pub(crate) async fn pick(what: picker::What) -> Result<Option<String>, String> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     std::thread::spawn(move || {
         let _ = tx.send(picker::pick(what));
@@ -224,6 +224,9 @@ pub(crate) mod picker {
     pub enum What {
         Folder,
         Zip,
+        /// A ChatGPT, Claude, Gemini or DeepSeek export (`.zip` or `.json`), for the
+        /// Brain's "Bring in chats" (brain/history_import.rs).
+        ChatExport,
     }
 
     /// `Ok(None)` when the owner cancelled.
@@ -255,6 +258,21 @@ pub(crate) mod picker {
                     .map_err(fail)?;
                 dialog
                     .SetOptions(options | FOS_PICKFOLDERS | FOS_FORCEFILESYSTEM | FOS_PATHMUSTEXIST)
+                    .map_err(fail)?;
+            }
+            What::ChatExport => {
+                let types = [COMDLG_FILTERSPEC {
+                    pszName: w!("Chat export (.zip, .json)"),
+                    pszSpec: w!("*.zip;*.json"),
+                }];
+                dialog.SetFileTypes(&types).map_err(fail)?;
+                dialog
+                    .SetTitle(w!("Choose the export ChatGPT, Claude or Google sent you"))
+                    .map_err(fail)?;
+                dialog
+                    .SetOptions(
+                        options | FOS_FORCEFILESYSTEM | FOS_FILEMUSTEXIST | FOS_PATHMUSTEXIST,
+                    )
                     .map_err(fail)?;
             }
             What::Zip => {
@@ -295,10 +313,13 @@ pub(crate) mod picker {
     pub enum What {
         Folder,
         Zip,
+        /// A ChatGPT, Claude, Gemini or DeepSeek export (`.zip` or `.json`), for the
+        /// Brain's "Bring in chats" (brain/history_import.rs).
+        ChatExport,
     }
 
     pub fn pick(what: What) -> Result<Option<String>, String> {
-        let _ = matches!(what, What::Folder | What::Zip);
+        let _ = matches!(what, What::Folder | What::Zip | What::ChatExport);
         Err("choosing a folder or a file needs the Windows dialog".to_string())
     }
 }

@@ -116,6 +116,26 @@ export function faceVoiceView(status) {
   };
 }
 
+/** The four animal faces, and the robot (counted as one here as everywhere,
+ *  2026-09-28), that have a voice of their own. */
+export const ANIMAL_FACES = Object.freeze(["redpanda", "pygmyowl", "seaotter", "monkey", "robot"]);
+
+/**
+ * The one-time question the PC asks after an animal face is picked (the
+ * owner, 2026-09-28): `{show, face, question, use, keep}` from
+ * `face_voice.offer`, or `show: false` when there is none. Every word is
+ * the PC's, shown as it is ("The Red Panda has its own voice. Use it?",
+ * "Use it", "Keep my voice"). voice_training.rs `face_offer_of` checks the
+ * same shape for the Faces window.
+ */
+export function faceOfferView(status) {
+  const o = obj(obj(obj(status).face_voice).offer);
+  const word = (v) => (typeof v === "string" ? v.trim() : "");
+  const view = { face: word(o.face), question: word(o.question), use: word(o.use), keep: word(o.keep) };
+  const whole = ANIMAL_FACES.includes(view.face) && view.question && view.use && view.keep;
+  return whole ? { show: true, ...view } : { show: false, face: "", question: "", use: "", keep: "" };
+}
+
 /** The pitch range when the PC does not say: 3 steps deeper to 4 higher. */
 export const PITCH_RANGE = Object.freeze({ min: -3, max: 4, step: 0.5 });
 
@@ -170,6 +190,8 @@ export function animalVoicesView(status) {
       semitones: a.semitones,
       pace: a.pace,
       changed: yes(a.changed),
+      // Its answer to the one-time question: "use", "keep" or null.
+      answer: a.answer === "use" || a.answer === "keep" ? a.answer : null,
       line: String(a.line || ""),
     }));
   if (!animals.length || !voices.length || !paces.length) {

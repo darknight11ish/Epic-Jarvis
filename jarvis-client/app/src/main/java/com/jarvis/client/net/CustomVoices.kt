@@ -63,6 +63,37 @@ object CustomVoices {
     const val ANIMAL_PATH = "/api/voice/voices/face_animal"
     const val ANIMAL_TRY_PATH = "/api/voice/voices/face_animal/try"
 
+    /** The one-time "The panda has its own voice. Use it?" answer (owner, 2026-09-28). */
+    const val FACE_OFFER_PATH = "/api/voice/voices/face_offer"
+
+    /** The two answers the PC takes, and the buttons' words when it sends none. */
+    const val OFFER_USE = "use"
+    const val OFFER_KEEP = "keep"
+    const val OFFER_USE_LABEL = "Use it"
+    const val OFFER_KEEP_LABEL = "Keep my voice"
+
+    /** Words on an animal's row for changing the one-time answer later (owner, 2026-09-28). */
+    const val CHANGE_TO_USE_LABEL = "Use its own voice"
+    const val CHANGE_TO_KEEP_LABEL = "Keep my voice"
+
+    /**
+     * The small button on an animal's row: "keep" was answered, so offer
+     * [CHANGE_TO_USE_LABEL]; "use" was answered, so offer
+     * [CHANGE_TO_KEEP_LABEL]; not answered (or an older PC) offers nothing.
+     */
+    fun changeMindLabel(answer: String?): String? = when (answer) {
+        OFFER_KEEP -> CHANGE_TO_USE_LABEL
+        OFFER_USE -> CHANGE_TO_KEEP_LABEL
+        else -> null
+    }
+
+    /** What pressing that button answers: true is "use", false is "keep"; null: no button. */
+    fun changeMindUse(answer: String?): Boolean? = when (answer) {
+        OFFER_KEEP -> true
+        OFFER_USE -> false
+        else -> null
+    }
+
     /** The speed plate's heading when the PC sends none - the desktop's words. */
     const val SPEED_TITLE = "How fast Jarvis speaks"
 
@@ -149,6 +180,21 @@ object CustomVoices {
         val animalsTitle: String = ANIMALS_TITLE,
         val animalsDetail: String = "",
         val choices: AnimalChoices = AnimalChoices(),
+        /** The one-time question, or null: none waiting, or a PC too old to ask. */
+        val offer: FaceOffer? = null,
+    )
+
+    /**
+     * The first time the owner picks an animal face, one line asks whether
+     * to use its own voice (owner, 2026-09-28) - remembered per face on the
+     * PC. [question], [use] and [keep] are the PC's own words, shown as they
+     * are. A face never changes the voice by itself: only "Use it" does.
+     */
+    data class FaceOffer(
+        val face: String,
+        val question: String,
+        val use: String = OFFER_USE_LABEL,
+        val keep: String = OFFER_KEEP_LABEL,
     )
 
     /**
@@ -165,6 +211,8 @@ object CustomVoices {
         val pace: String,
         val changed: Boolean = false,
         val line: String = "",
+        /** The owner's one-time answer for this animal: "use", "keep", or null (not answered, or an older PC). */
+        val answer: String? = null,
     )
 
     /** What each animal may be given: the PC's own lists and pitch range. */
@@ -398,6 +446,7 @@ object CustomVoices {
                 pace = a.str("pace").ifBlank { return@mapNotNull null },
                 changed = a.flag("changed"),
                 line = a.str("line"),
+                answer = a.str("answer").takeIf { it == OFFER_USE || it == OFFER_KEEP },
             )
         }
         // Without the lists there is nothing to choose from: no rows at all.
@@ -412,6 +461,19 @@ object CustomVoices {
             animalsTitle = fv.str("animals_title").ifBlank { ANIMALS_TITLE },
             animalsDetail = fv.str("animals_detail"),
             choices = choices,
+            offer = fv.obj("offer")?.let { parseFaceOffer(it) },
+        )
+    }
+
+    /** `face_voice.offer`, or null when it is null, absent, or has no face or question. */
+    fun parseFaceOffer(o: JsonObject): FaceOffer? {
+        val face = o.str("face").ifBlank { return null }
+        val question = o.str("question").ifBlank { return null }
+        return FaceOffer(
+            face = face,
+            question = question,
+            use = o.str("use").ifBlank { OFFER_USE_LABEL },
+            keep = o.str("keep").ifBlank { OFFER_KEEP_LABEL },
         )
     }
 
@@ -468,6 +530,11 @@ object CustomVoices {
 
     /** `{"enabled": true|false}` - "Voice follows the face" on or off. */
     fun faceBody(on: Boolean): String = "{\"enabled\":$on}"
+
+    /** `{"face": "<id>", "answer": "use"|"keep"}` - the one-time question's answer. */
+    fun faceOfferBody(face: String, use: Boolean): String =
+        "{\"face\":" + JarvisApi.quote(face) +
+            ",\"answer\":\"" + (if (use) OFFER_USE else OFFER_KEEP) + "\"}"
 
     /**
      * `{"face", "speaker", "semitones", "pace"}` - one animal's whole voice.

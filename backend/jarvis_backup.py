@@ -205,9 +205,11 @@ _HEADER_STRUCT = struct.Struct(">B I I")   # lanes, memory_kib, iterations
 CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
 CODE_GROUPS, CODE_GROUP_LEN = 4, 5
 
-#: The four real databases this backend has today (verified against the
-#: modules that make them, 2026-09-27 - see the module docstring).
-SOURCE_DBS = ("memory.db", "chat-history.db", "schedule.db", "feedback.db")
+#: The real databases this backend has today (verified against the modules
+#: that make them, 2026-09-27 - see the module docstring). projects.db
+#: (jarvis_projects.py: projects, their benchmarks and every number the
+#: owner logged) joined on 2026-09-28, found by the Projects feature audit.
+SOURCE_DBS = ("memory.db", "chat-history.db", "schedule.db", "feedback.db", "projects.db")
 
 MISSING = "backup.py could not be reached - run apply-patches.ps1 on this PC"
 NO_CRYPTO = ("Backing up needs the `cryptography` package, which is not installed on this "
@@ -220,7 +222,9 @@ LOST_CODE = ("Write this down or save it somewhere safe now - Jarvis will not sh
              "opened again; there is no other way in.")
 ERASE_LIMIT = ("\"Erase the words\" cannot reach into an older backup: an erased fact's "
                "original words may still be readable in a backup kept from before it was "
-               "erased, until that backup ages out of the last {keep} kept.").format(keep=KEEP)
+               "erased, until that backup ages out of the last {keep} kept. A chat you "
+               "delete is the same: it can still be in an older backup until that backup "
+               "ages out.").format(keep=KEEP)
 
 
 class WrongCode(Exception):

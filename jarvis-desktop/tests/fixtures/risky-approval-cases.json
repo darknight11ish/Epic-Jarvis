@@ -266,6 +266,35 @@
       }
     },
     {
+      "message": "Jarvis wants to add its change to one of your apps\nIt cannot be undone.",
+      "name": "adding a change to an app: stays on this PC, no Undo yet - risky",
+      "risky": true,
+      "row": {
+        "action": "app_merge_change",
+        "created": 1799999970.0,
+        "detail": "{}",
+        "expires_in": 150,
+        "id": "a17",
+        "notice": {
+          "approve_ok": false,
+          "body": "adds the change shown on the card to your app's files, exactly as shown; nothing is run; the older version stays in the app's git history, but there is no Undo button for it yet. nothing has happened yet.",
+          "deny_ok": true,
+          "title": "Jarvis wants to add its change to one of your apps",
+          "weight": "heavy"
+        },
+        "prompt": "tool app_merge_change {}",
+        "raised": null,
+        "risk": {
+          "classified": true,
+          "reach": "local",
+          "reversible": "no",
+          "swipe_ok": false,
+          "why": "It cannot be undone."
+        },
+        "tier": "ask"
+      }
+    },
+    {
       "message": "Jarvis wants to add to today's Logseq journal\nUndoing it takes work.",
       "name": "classified, stays on this PC, hard to undo (not risky: only \"no\" is)",
       "risky": false,

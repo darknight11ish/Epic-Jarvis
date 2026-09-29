@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +34,7 @@ import com.jarvis.client.net.VoiceStatus
 import com.jarvis.client.net.VoiceStrict
 import com.jarvis.client.net.WakeWord
 import com.jarvis.client.platform.DisplayRate
+import com.jarvis.client.platform.PlatformReadiness
 import com.jarvis.client.platform.ReadinessItem
 import com.jarvis.client.service.WakeListen
 import com.jarvis.client.ui.parts.Dot
@@ -41,12 +43,14 @@ import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Primary
 import com.jarvis.client.ui.parts.Quiet
+import com.jarvis.client.ui.parts.ScrollToKeyOnce
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.ageText
 import com.jarvis.client.ui.parts.rememberTickingNow
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.voice.BargeIn
 import com.jarvis.client.voice.HeardSound
+import com.jarvis.client.voice.LiveRules
 import com.jarvis.client.voice.OneMoment
 import com.jarvis.client.voice.StrictVoice
 import com.jarvis.client.voice.VoiceTraining
@@ -72,6 +76,8 @@ data class ConnectionInfo(
     val link: LinkState,
     val stale: Boolean,
     val detail: String?,
+    /** "Tailscale (or Meshnet) is off on this phone", or null ([com.jarvis.client.LinkWords.vpnOffLine]). */
+    val vpnLine: String? = null,
 )
 
 /**
@@ -116,11 +122,15 @@ fun ReadinessScreen(
     wakeWordBusy: Boolean = false,
     /** What went wrong, or what the desktop said afterwards. */
     wakeWordNotice: String? = null,
-    /** "Interrupt Jarvis while it talks" on this phone (BargeIn). Null hides the switch. */
-    bargeIn: Boolean? = null,
+    /**
+     * "Interrupting Jarvis" on this phone (LiveRules.INTERRUPT): ONE setting
+     * for Jarvis Live and ordinary replies (the owner's answer of
+     * 2026-09-28). Null hides it.
+     */
+    interrupt: String? = null,
     /** Whether this phone has an echo canceller (the default follows it). */
     bargeInEchoCanceller: Boolean = false,
-    onBargeIn: ((Boolean) -> Unit)? = null,
+    onInterrupt: ((String) -> Unit)? = null,
     /** "Say 'One moment' if I'm kept waiting" on this phone (OneMoment). Null hides the switch. */
     oneMoment: Boolean? = null,
     onOneMoment: ((Boolean) -> Unit)? = null,
@@ -166,8 +176,18 @@ fun ReadinessScreen(
      * exactly as they did.
      */
     onOpenSettings: (() -> Unit)? = null,
+    /**
+     * "Open connection" or "open updates" by voice or chat
+     * ([com.jarvis.client.ui.OpenPlace]): the item key to bring into view
+     * once ("connection" or "this-app"), or null for the top.
+     */
+    initialSection: String? = null,
+    /** Called once [initialSection] has been acted on, so it is not acted on again. */
+    onSectionConsumed: () -> Unit = {},
 ) {
     val chrome = LocalChrome.current
+    val listState = rememberLazyListState()
+    ScrollToKeyOnce(listState, initialSection, onSectionConsumed)
     // Split rather than re-sorted, so within each group the order stays the
     // one PlatformReadiness wrote.
     val warnings = remember(items) { items.filter { it.state == ReadinessItem.State.WARN } }
@@ -185,7 +205,7 @@ fun ReadinessScreen(
             }
         ReadinessItem.Fix.BATTERY ->
             if (item.state == ReadinessItem.State.WARN) {
-                CardFix("Keep link alive", warn = true, onClick = onRequestBatteryExemption)
+                CardFix(PlatformReadiness.KEEP_LINK_ALIVE, warn = true, onClick = onRequestBatteryExemption)
             } else {
                 null
             }
@@ -207,6 +227,7 @@ fun ReadinessScreen(
 
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
+            state = listState,
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -239,9 +260,9 @@ fun ReadinessScreen(
                     pending = wakeWordPending,
                     phone = phoneListening,
                     onPhone = onPhoneListening,
-                    bargeIn = bargeIn,
+                    interrupt = interrupt,
                     bargeInEchoCanceller = bargeInEchoCanceller,
-                    onBargeIn = onBargeIn,
+                    onInterrupt = onInterrupt,
                     oneMoment = oneMoment,
                     onOneMoment = onOneMoment,
                     heardSound = heardSound,
@@ -287,7 +308,10 @@ private fun ConnectionCard(
         !info.paired -> "Not paired"
         info.link == LinkState.OFFLINE -> "Offline"
         info.link == LinkState.RECONNECTING -> "Reconnecting"
-        info.stale -> "Stale"
+        // The same word Home's status line and the desktop use for this
+        // state (LinkWords.CATCHING_UP). It used to say Stale here while
+        // Home said "Catching up…" - two names for one thing.
+        info.stale -> "Catching up…"
         else -> "Connected"
     }
     val line = when {
@@ -322,6 +346,14 @@ private fun ConnectionCard(
         Text(line, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         Gap(6)
         Field("Desktop", info.host.ifBlank { "Not set" }, machine = info.host.isNotBlank())
+
+        // The likeliest reason the link is down, and the one fix the owner can
+        // make in one tap: switch Tailscale or Meshnet back on.
+        val vpnLine = info.vpnLine?.takeIf { info.paired && info.link != LinkState.CONNECTED }
+        if (vpnLine != null) {
+            Gap(6)
+            Text(vpnLine, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+        }
 
         if (problem != null) {
             Gap(6)
@@ -379,6 +411,10 @@ private fun ConnectionCard(
  * reason is never hidden - only left unexplained.
  */
 private fun plainReason(detail: String): String = when {
+    // The PC said why (docs/PAIRING-DESIGN.md §5.3): removed, or the old
+    // shared key retired. Its own sentence, which names what to do.
+    detail == "Token refused" && com.jarvis.client.net.KeyRefusal.words() != null ->
+        com.jarvis.client.net.KeyRefusal.words()!!
     detail == "Token refused" ->
         "The desktop refused this phone's token. Tap Change desktop or token and " +
             "type in the one Jarvis Desktop shows under Settings, \"Show the token " +
@@ -523,9 +559,9 @@ private fun WakeWordCard(
     pending: Boolean,
     phone: WakeListen,
     onPhone: ((Boolean) -> Unit)?,
-    bargeIn: Boolean? = null,
+    interrupt: String? = null,
     bargeInEchoCanceller: Boolean = false,
-    onBargeIn: ((Boolean) -> Unit)? = null,
+    onInterrupt: ((String) -> Unit)? = null,
     oneMoment: Boolean? = null,
     onOneMoment: ((Boolean) -> Unit)? = null,
     heardSound: Boolean? = null,
@@ -626,26 +662,37 @@ private fun WakeWordCard(
             )
         }
 
-        if (bargeIn != null && onBargeIn != null && state == WakeWord.ON) {
+        // "Interrupting Jarvis": ONE setting, for "hey Jarvis" replies and
+        // Jarvis Live alike (the owner's answer of 2026-09-28 merged "Interrupt
+        // Jarvis while it talks" and "Interrupting Jarvis in Live"). Shown
+        // whether or not "hey Jarvis" is on - it matters in Live too. This
+        // phone's own; no card either way.
+        if (interrupt != null && onInterrupt != null) {
             Gap(12)
             Text(
-                "Interrupt Jarvis while it talks",
+                LiveRules.INTERRUPT_TITLE,
                 style = MaterialTheme.typography.labelLarge,
                 color = chrome.textHi,
             )
-            Gap(4)
-            Text(
-                BargeIn.describe(bargeIn, bargeInEchoCanceller),
-                style = MaterialTheme.typography.bodySmall,
-                color = chrome.textMid,
-            )
-            Gap(6)
-            Secondary(
-                text = if (bargeIn) "Stop listening while Jarvis talks" else "Listen while Jarvis talks",
-                enabled = true,
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { onBargeIn(!bargeIn) },
-            )
+            LiveRules.INTERRUPT.forEach { c ->
+                Gap(6)
+                OptionChip(
+                    label = if (c.recommended) "${c.label} (recommended)" else c.label,
+                    isSelected = interrupt == c.id,
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { onInterrupt(c.id) },
+                )
+                Gap(4)
+                Text(c.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+            }
+            if (interrupt == LiveRules.INTERRUPT_VOICE && !bargeInEchoCanceller) {
+                Gap(4)
+                Text(
+                    BargeIn.describe(true, echoCancellerAvailable = false),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = chrome.warnInk,
+                )
+            }
         }
 
         // Not tied to "hey Jarvis": it is about any spoken question, the

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-live-hold"
+description = "Enables the live_hold command without any pre-configured scope."
+commands.allow = ["live_hold"]
+
+[[permission]]
+identifier = "deny-live-hold"
+description = "Denies the live_hold command without any pre-configured scope."
+commands.deny = ["live_hold"]

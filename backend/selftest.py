@@ -860,7 +860,8 @@ class Live:
 
     def __init__(self, *, port=None, http=None, stream_head=None, ollama=None,
                  ollama_post=None, ollama_base=None, tokens=None, backend=None, repo=None, env=None, with_reads=False,
-                 with_chat=False, log_dir=None, token_store=None, reads=None, home=None, power=None):
+                 with_chat=False, log_dir=None, token_store=None, reads=None, home=None, power=None,
+                 phone=None):
         self.env = os.environ if env is None else env
         p = port or (self.env.get("JARVIS_HUD_PORT") or "").strip() or DEFAULT_PORT
         try:
@@ -886,6 +887,7 @@ class Live:
         self.reads = reads              # {"email": fn, "calendar": fn} stand-ins
         self.home = home                # {"check": fn, "weather": fn} stand-ins
         self.power = power              # () -> powercfg's text or None, for the sleep check
+        self.phone = phone              # {"desktop", "addresses", "owns", "connects", "firewall"}
         self.token = None
         self.token_where = None
         self.up = False
@@ -1822,6 +1824,254 @@ def pf_sleep(live: Live) -> list:
              "powercfg /change standby-timeout-ac 0")]
 
 
+# ---- Can the phone reach Jarvis? ------------------------------------------
+#
+# The newcomer play test (docs/studio-2026-09-27/newcomer-playtest.md,
+# "Phone reach"): five things must all be right for the phone to reach
+# Jarvis, and nothing checked them together. This check reads four of them
+# on this PC - the fifth, the phone's own Tailscale or Meshnet, the phone
+# shows itself ("Tailscale (or Meshnet) is off on this phone").
+#
+# READ-ONLY like the rest: it reads Jarvis Desktop's settings file, lists
+# this PC's addresses, opens one connection to Jarvis's own port on this
+# PC's mesh address (and closes it), and on Windows asks PowerShell for the
+# firewall rules. It changes nothing. Every step goes through `live.phone`
+# so its test fakes the Windows calls (test_selftest_preflight.py).
+
+#: Tailscale and NordVPN Meshnet hand out addresses from 100.64.0.0/10
+#: (100.64.x.x to 100.127.x.x) - the only addresses Jarvis Desktop's "Let
+#: my phone reach this" box accepts, besides this PC itself.
+MESH_FIRST, MESH_LAST = (100, 64), (100, 127)
+
+#: Jarvis Desktop's settings file, in %APPDATA%\com.jarvis.desktop
+#: (commands.rs SETTINGS_STORE; tauri-plugin-store keeps it in AppData).
+DESKTOP_STORE = "jarvis-desktop.json"
+
+#: The firewall line docs/INSTALL.md section 3.2 gives. PORT is filled in.
+FIREWALL_LINE = ('New-NetFirewallRule -DisplayName "Jarvis backend (private mesh only)" '
+                 '-Direction Inbound -Action Allow -Protocol TCP -LocalPort PORT '
+                 '-RemoteAddress 100.64.0.0/10 -Profile Any')
+
+#: Asks Windows for the enabled rules that let TCP PORT in. Read-only; no
+#: administrator needed. One line, for Windows PowerShell 5.1.
+FIREWALL_QUERY = ("Get-NetFirewallPortFilter -Protocol TCP | "
+                  "Where-Object { $_.LocalPort -contains 'PORT' } | Get-NetFirewallRule | "
+                  "Where-Object { $_.Enabled -eq 'True' -and $_.Direction -eq 'Inbound' "
+                  "-and $_.Action -eq 'Allow' } | ForEach-Object { $_.DisplayName }")
+
+#: This PC's IPv4 addresses, one per line.
+ADDRESS_QUERY = "Get-NetIPAddress -AddressFamily IPv4 | ForEach-Object { $_.IPAddress }"
+
+#: Where each fix happens in Jarvis Desktop, in its own words (settings.html).
+PHONE_BOX = ("Jarvis Desktop, Settings, Connection, \"Let my phone reach this (Tailscale or "
+             "NordVPN Meshnet)\"")
+SUPERVISE_SWITCH = ("Jarvis Desktop, Settings, More options, \"Starting Jarvis for you\", "
+                    "\"Let Jarvis Desktop start and stop Jarvis\"")
+
+
+def mesh_address(addr) -> bool:
+    """True for a plain IPv4 address in 100.64.0.0/10."""
+    parts = str(addr or "").strip().split(".")
+    if len(parts) != 4 or not all(p.isdigit() and len(p) <= 3 for p in parts):
+        return False
+    n = [int(p) for p in parts]
+    return all(x <= 255 for x in n) and n[0] == 100 and 64 <= n[1] <= 127
+
+
+def _loopback_name(addr) -> bool:
+    return str(addr or "").strip().lower() in ("127.0.0.1", "localhost", "::1")
+
+
+def _powershell(command: str, timeout: float = 60.0) -> "str | None":
+    """Windows PowerShell's output for one read-only command, or None when
+    this is not Windows or it did not answer."""
+    if os.name != "nt":
+        return None
+    try:
+        r = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
+                            command], capture_output=True, text=True, timeout=timeout)
+    except Exception:
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def _desktop_settings(env) -> "dict | None":
+    """Jarvis Desktop's saved settings, or None when there are none here."""
+    base = env.get("APPDATA")
+    if not base:
+        return None
+    try:
+        data = json.loads((Path(base) / DESKTOP_ID / DESKTOP_STORE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _config_bind(backend: Path) -> str:
+    """[security].bind_address in jarvis-framework.toml, or ""."""
+    try:
+        import tomllib
+    except ImportError:
+        return ""
+    for c in (Path(backend) / "jarvis-framework.toml", Path(backend).parent / "jarvis-framework.toml"):
+        try:
+            data = tomllib.loads(c.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        v = (data.get("security") or {}).get("bind_address")
+        return str(v).strip() if isinstance(v, str) else ""
+    return ""
+
+
+def _this_pc_addresses() -> "list | None":
+    """This PC's IPv4 addresses, or None when they cannot be listed."""
+    text = _powershell(ADDRESS_QUERY)
+    if text is not None:
+        return [l.strip() for l in text.splitlines() if l.strip()]
+    try:
+        return sorted({i[4][0] for i in socket.getaddrinfo(socket.gethostname(), None,
+                                                            socket.AF_INET)})
+    except OSError:
+        return None
+
+
+def _owns_address(addr: str) -> bool:
+    """True when `addr` belongs to this PC right now: only then can a socket
+    be bound to it. Bound to port 0 and closed at once - nothing listens."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((addr, 0))
+        return True
+    except OSError:
+        return False
+
+
+def _connects(addr: str, port: int) -> bool:
+    """True when something answers a connection on addr:port. Closed at once."""
+    try:
+        with socket.create_connection((addr, port), timeout=3.0):
+            return True
+    except OSError:
+        return False
+
+
+def _firewall_rules(port: int) -> "list | None":
+    """The names of the enabled inbound rules that let TCP `port` in, or None
+    when Windows did not answer."""
+    text = _powershell(FIREWALL_QUERY.replace("PORT", str(int(port))))
+    if text is None:
+        return None
+    return [l.strip() for l in text.splitlines() if l.strip()]
+
+
+def phone_address(desktop, env, backend) -> tuple:
+    """(address, where it came from, desktop starts Jarvis?) - the address
+    Jarvis is told to listen on for the phone, in the order the three places
+    reach a Jarvis: the desktop app's box (passed on only when it starts
+    Jarvis), JARVIS_HUD_BIND in this window, then the settings file. This PC
+    alone (127.0.0.1, the default) counts as no phone address."""
+    supervise = bool((desktop or {}).get("supervise") is True)
+    v = (desktop or {}).get("bind_address")
+    found = [(v.strip() if isinstance(v, str) else "", "desktop"),
+             ((env.get("JARVIS_HUD_BIND") or "").strip(), "env"),
+             (_config_bind(backend), "config")]
+    for value, where in found:
+        if value and not _loopback_name(value):
+            return value, where, supervise
+    return None, None, supervise
+
+
+_WHERE_WORDS = {
+    "desktop": "typed into " + PHONE_BOX,
+    "env": "JARVIS_HUD_BIND in this window",
+    "config": "[security] bind_address in jarvis-framework.toml",
+}
+
+
+@preflight_check("phone", "Can your phone reach Jarvis?")
+def pf_phone(live: Live) -> list:
+    fns = live.phone or {}
+    port = live.port
+    desktop = (fns.get("desktop") or (lambda: _desktop_settings(live.env)))()
+    addr, where, supervise = phone_address(desktop, live.env, live.backend)
+    listed = (fns.get("addresses") or _this_pc_addresses)()
+    mesh = [a for a in (listed or []) if mesh_address(a)]
+    suggest = mesh[0] if mesh else "this PC's Tailscale or Meshnet address (100.x.x.x)"
+    rows = []
+
+    # 1. Is a phone address set, and is it a mesh one?
+    if addr is None:
+        return [(WARN, "no phone address is set, so your phone cannot reach Jarvis",
+                 "Skip this if you do not use the phone. Otherwise type " + suggest + " into "
+                 + PHONE_BOX + ", press Save, and switch on " + SUPERVISE_SWITCH + " (that "
+                 "is how the address reaches Jarvis). The Tailscale or NordVPN app shows "
+                 "the address.")]
+    if not mesh_address(addr):
+        return [(FAIL, f"the phone address {addr} is not a Tailscale or Meshnet address "
+                       "(100.64.x.x to 100.127.x.x)",
+                 f"It is {_WHERE_WORDS.get(where, where)}. Type {suggest} there instead. "
+                 "A home-network address would open Jarvis to everyone on your Wi-Fi, "
+                 "which is why Jarvis refuses it.")]
+    rows.append((PASS, f"the phone address is {addr} ({_WHERE_WORDS.get(where, where)})"))
+
+    # 2. Is Tailscale or Meshnet on, and is that still this PC's address?
+    owns = (fns.get("owns") or _owns_address)(addr)
+    if not owns:
+        if mesh:
+            rows.append((FAIL, f"this PC's Tailscale or Meshnet address is now {mesh[0]}, "
+                               f"not {addr}",
+                         f"Type {mesh[0]} into {PHONE_BOX}, press Save, then restart Jarvis."))
+        else:
+            rows.append((FAIL, "Tailscale (or Meshnet) is off on this PC: it has no 100.x "
+                               "address",
+                         "Open Tailscale (or the NordVPN app, then Meshnet) on this PC and "
+                         "switch it on. The phone needs it switched on too."))
+        return rows + [(SKIP, "whether Jarvis listens for the phone, because this PC "
+                              "does not have that address")] + _firewall_rows(live, fns, port)
+    rows.append((PASS, f"Tailscale or Meshnet is on: this PC has {addr}"))
+
+    # 3. Is Jarvis listening there?
+    if not live.up:
+        rows.extend(_needs_backend(live, "whether Jarvis listens for the phone"))
+    elif (fns.get("connects") or _connects)(addr, port):
+        rows.append((PASS, f"Jarvis answers on {addr}:{port}, where the phone looks for it"))
+    else:
+        if where == "desktop" and not supervise:
+            fix = ("The desktop app passes this address on only when it starts Jarvis "
+                   "itself, and that is off. Switch on " + SUPERVISE_SWITCH + ", press "
+                   "Save, close the Jarvis you started by hand, then press Start there.")
+        elif where == "desktop":
+            fix = ("Restart Jarvis from the desktop app so it picks the address up: "
+                   "Settings, More options, Stop, then Start.")
+        else:
+            fix = "Restart Jarvis so it reads the address."
+        rows.append((FAIL, f"Jarvis is running, but not listening on {addr}:{port}", fix))
+
+    return rows + _firewall_rows(live, fns, port)
+
+
+def _firewall_rows(live: Live, fns: dict, port: int) -> list:
+    """Does Windows Firewall let the phone in on Jarvis's port?"""
+    ask = fns.get("firewall")
+    if ask is None:
+        if os.name != "nt":
+            return [(SKIP, "the Windows Firewall rule, because this is not Windows")]
+        ask = _firewall_rules
+    names = ask(port)
+    if names is None:
+        return [(WARN, "the Windows Firewall rules could not be read",
+                 "PowerShell did not answer. If the phone cannot connect, run the line in "
+                 "docs/INSTALL.md section 3.2 in PowerShell opened as administrator.")]
+    if names:
+        return [(PASS, f"Windows Firewall lets the phone in on port {port} "
+                       f"(rule: {names[0]})")]
+    return [(WARN, f"no Windows Firewall rule lets the phone in on port {port}",
+             "Windows may block the phone even when everything else is right. A rule for "
+             "Python itself can let it in too; to be sure, open PowerShell as administrator "
+             "(right-click PowerShell, Run as administrator) and run this one line: "
+             + FIREWALL_LINE.replace("PORT", str(port)))]
+
+
 @preflight_check("data_health", "Is Jarvis's own data healthy?")
 def pf_data_health(live: Live) -> list:
     """data-health.patch and jarvis_data_health.py (feasibility I97): does
@@ -1876,9 +2126,85 @@ def pf_credentials(live: Live) -> list:
                    "there)")]
 
 
+@preflight_check("screen", "Can Jarvis look at your screen when you ask?")
+def pf_screen(live: Live) -> list:
+    """"Look at this" and "Watch with me" (the owner's decision of
+    2026-09-28, docs/SCREEN-DESIGN.md). Build steps 1 and 2 are in
+    (jarvis_screen.py: the session rules, the pause rules, the Never look at
+    list); the Windows readers it needs - is the focused box a password box,
+    is the window protected from capture, the window's own text - are step 3,
+    and no route or app screen reaches it yet. So this says so, plainly, as
+    a skip: nothing is broken and there is nothing for the owner to fix.
+    When the readers land, this check asks the running Jarvis instead."""
+    try:
+        import jarvis_screen  # noqa: F401
+        have = True
+    except Exception:
+        have = False
+    return [(SKIP, "looking at the screen (\"Look at this\", \"Watch with me\"), because it "
+                   "is not built on this PC yet",
+             ("Its rules are in jarvis_screen.py; " if have else
+              "jarvis_screen.py is not in the backend folder yet (apply-patches.ps1 copies it "
+              "in); ") + "the Windows readers it needs are the next step. Nothing to fix.")]
+
+
+def llama_config_files(env) -> list:
+    """[(where, Path)] for the llama.cpp settings files that exist. The
+    research audit (docs/RESEARCH-AUDIT-2026-09-28.md section 6, read in
+    llama.cpp's source, not tried on the PC): Ollama's engine reads
+    %PROGRAMDATA%\\llama.cpp\\config.ini, then %APPDATA%\\llama.cpp\\config.ini,
+    before its environment and its own flags - a place a setting can come
+    from that nothing in Jarvis shows."""
+    out = []
+    for var in ("PROGRAMDATA", "APPDATA"):
+        base = (env.get(var) or "").strip()
+        if base:
+            p = Path(base) / "llama.cpp" / "config.ini"
+            if p.is_file():
+                out.append((f"%{var}%\\llama.cpp\\config.ini", p))
+    return out
+
+
+def config_ini_names(path: Path) -> list:
+    """The names of the settings in a config.ini - never their values."""
+    names = []
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return names
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line[0] in "#;[":
+            continue
+        name = line.split("=", 1)[0].strip()
+        if name and "=" in line and name not in names:
+            names.append(name[:60])
+    return names[:12]
+
+
+@preflight_check("engine_config", "Is a hidden llama.cpp settings file changing the engine?")
+def pf_engine_config(live: Live) -> list:
+    env = live.env
+    if not (env.get("PROGRAMDATA") or env.get("APPDATA")):
+        return [(SKIP, "the llama.cpp settings files, because this is not Windows")]
+    found = llama_config_files(env)
+    if not found:
+        return [(PASS, "no llama.cpp config.ini is changing the AI engine behind Jarvis's back")]
+    rows = []
+    for where, path in found:
+        names = config_ini_names(path)
+        rows.append((WARN, f"{where} exists, and Ollama's engine reads settings from it",
+                     ("It sets: " + ", ".join(names) + ". " if names else "")
+                     + "These apply to every model on top of Jarvis's own settings, and "
+                     "nothing in Jarvis shows them. If you did not put it there on purpose, "
+                     "rename it with one line in PowerShell, then quit and restart Ollama: "
+                     f"Rename-Item -Path \"{path}\" -NewName 'config.ini.off'"))
+    return rows
+
+
 # ---------------------------------------------------------------- running
 
-_SHOW = {PASS: "PASS", FAIL: "FAIL", WARN: "WARN", SKIP: "skip"}
+_SHOW ={PASS: "PASS", FAIL: "FAIL", WARN: "WARN", SKIP: "skip"}
 
 
 def run_preflight(live: Live, *, only=None, out=print) -> tuple:

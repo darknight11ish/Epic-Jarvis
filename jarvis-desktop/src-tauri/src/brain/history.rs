@@ -3,11 +3,15 @@
 //!
 //! The PC keeps each conversation, encrypted, when "Keep chat history on
 //! this PC" is on (the default). This window lists them, opens one
-//! read-only, deletes ONE at a time, and changes the two settings. Four
-//! commands, each its own power, like the rest of brain.rs:
+//! read-only, searches what was said, deletes ONE at a time, and changes the
+//! two settings. Five commands, each its own power, like the rest of
+//! brain.rs:
 //!
 //! * [`brain_history_list`] - `GET /api/history`, a page at a time.
 //! * [`brain_history_open`] - `GET /api/history/conversation?id=`.
+//! * [`brain_history_search`] - `GET /api/history/search?q=` (section 71):
+//!   the conversations whose words match, each with a snippet. A read,
+//!   refused while the private lists are hidden, like opening one.
 //! * [`brain_history_delete`] - `POST /api/history/delete`, one id. There is
 //!   no "delete all" here or on the server: irreversible bulk actions stay
 //!   off the API.
@@ -16,6 +20,15 @@
 //!   `ask`), and is held while the event stream is stale (rule 4), exactly
 //!   like the learning switch ([`super::brain_memory_learning`]). OFF is
 //!   never held: it only narrows what Jarvis does.
+//! * [`brain_continue_chat`] - "Continue this chat" (the owner's decision,
+//!   2026-09-28, "Chats, after the chat audit"): brings up the Jarvis bar
+//!   and tells it which conversation to carry on. It sends no words: the
+//!   bar reads the conversation itself with [`chat_continue_open`], the
+//!   quickbar's one read of History - a conversation it may carry on, and
+//!   nothing else.
+//!
+//! The list takes a `kind` (chat, live, support, chatbot, compare): "Live
+//! only" and the other History filters (the chat audit, 2026-09-28).
 //!
 //! "Windows Hello for memory lists and chat history" (lock.rs) covers this list too: while
 //! the Brain's private lists are hidden, the list comes back with its
@@ -45,15 +58,106 @@ pub(crate) const KEEP_DAYS: [u32; 4] = [0, 30, 90, 365];
 pub(crate) const HISTORY_STILL_HIDDEN: &str = "Your chat history is hidden. Press Show on \
      the Brain's History tab and confirm it is you with Windows Hello first.";
 
+/// The kinds of conversation History keeps (`jarvis_chat_log.KINDS`) - the
+/// only `kind` a list may be narrowed to. Anything else is not sent.
+pub(crate) const KINDS: [&str; 5] = ["chat", "live", "support", "chatbot", "compare"];
+
+/// The kinds "Continue this chat" may carry on (`jarvis_chat_log.CONTINUABLE`).
+pub(crate) const CONTINUABLE: [&str; 2] = ["chat", "live"];
+
+/// What the quickbar is told when it asks to carry on a chat it may not:
+/// a support record, a chatbot conversation or a comparison. The Brain
+/// shows the PC's own reason (`continue_why`) before it ever gets here.
+pub(crate) const NOT_CONTINUABLE: &str = "That conversation can't be continued: it is a \
+     record of a chat with someone other than Jarvis.";
+
+/// The event the Jarvis bar hears "Continue this chat" by: the id alone.
+pub(crate) const CONTINUE_EVENT: &str = "continue-chat";
+
 /// A page of the list: 30 unless asked, never more than the server's 100.
 const DEFAULT_LIMIT: u32 = 30;
 const MAX_LIMIT: u32 = 100;
+
+/// "Search what was said" (JARVIS-API.md section 71): the PC's own limits
+/// (`jarvis_chat_log.SEARCH_MAX_CHARS`, `SEARCH_DEFAULT`, `SEARCH_MAX`).
+/// Nothing longer is sent.
+const SEARCH_MAX_CHARS: usize = 100;
+const SEARCH_DEFAULT: u32 = 20;
+const SEARCH_MAX: u32 = 50;
+
+/// What a PC whose backend cannot search the words yet (no
+/// `brain-reads.patch`) is told. The page then searches titles only, and
+/// says so with this sentence. The phone says the same (`ChatLog.SEARCH_OLD`).
+pub(crate) const SEARCH_UPDATE: &str = "This PC's Jarvis can only search titles. To search \
+     what was said, update it by running apply-patches.ps1 on the PC.";
+
+/// What a search is refused with while the private lists are hidden.
+pub(crate) const SEARCH_STILL_HIDDEN: &str = "Your chat history is hidden. Press Show on \
+     the Brain's History tab and confirm it is you with Windows Hello first.";
+
+/// `GET /api/history/search`'s path for these words, or why not. The words
+/// are tidied (runs of spaces become one) and every byte that is not a
+/// plain letter, digit or `-._~` is percent-encoded, so nothing the owner
+/// types can start a second parameter.
+pub(crate) fn search_path(
+    query: &str,
+    limit: Option<u32>,
+    kind: Option<&str>,
+) -> Result<String, String> {
+    let words = query.split_whitespace().collect::<Vec<_>>().join(" ");
+    if words.chars().count() < 2 {
+        return Err("Type at least two letters to search what was said.".to_string());
+    }
+    if words.chars().count() > SEARCH_MAX_CHARS {
+        return Err(format!(
+            "That search is too long. Use up to {SEARCH_MAX_CHARS} characters."
+        ));
+    }
+    let limit = limit.unwrap_or(SEARCH_DEFAULT).clamp(1, SEARCH_MAX);
+    let mut path = format!(
+        "/api/history/search?q={}&limit={limit}",
+        commands::encode_path_segment(&words)
+    );
+    // "Live only" and a typed search combine (the second chat audit,
+    // 2026-09-28, finding 8): the same kinds the list may be narrowed to.
+    match kind.filter(|k| !k.is_empty()) {
+        None => {}
+        Some(k) if KINDS.contains(&k) => path.push_str(&format!("&kind={k}")),
+        Some(k) => return Err(format!("{k:?} is not a kind of conversation History keeps")),
+    }
+    Ok(path)
+}
+
+/// [`brain_history_search`]'s reading of the answer.
+///
+/// * 2xx with `query_ok` and a `conversations` list - passed on as it is.
+/// * 404 or 501 - `{"available": false, "why": SEARCH_UPDATE}`: a backend
+///   without the search, which the page answers by searching titles.
+/// * anything else - the backend's own sentence, or a plain line.
+pub(crate) fn search_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return parsed(body)
+            .filter(|v| {
+                v.get("query_ok").is_some_and(|q| q.is_boolean())
+                    && v.get("conversations").is_some_and(|c| c.is_array())
+            })
+            .ok_or_else(|| UNREADABLE.to_string());
+    }
+    if status == 404 || status == 501 {
+        return Ok(serde_json::json!({ "available": false, "why": SEARCH_UPDATE }));
+    }
+    Err(commands::backend_refusal(status, body))
+}
 
 /// `GET /api/history`'s path for one page. `before` is the `updated` of the
 /// oldest conversation already shown; it is written as the plain number the
 /// page was given (Rust never writes an `f64` in exponent form), so paging
 /// neither repeats nor skips one.
-pub(crate) fn list_path(limit: Option<u32>, before: Option<f64>) -> Result<String, String> {
+pub(crate) fn list_path(
+    limit: Option<u32>,
+    before: Option<f64>,
+    kind: Option<&str>,
+) -> Result<String, String> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
     let mut path = format!("/api/history?limit={limit}");
     if let Some(b) = before {
@@ -62,7 +166,47 @@ pub(crate) fn list_path(limit: Option<u32>, before: Option<f64>) -> Result<Strin
         }
         path.push_str(&format!("&before={b}"));
     }
+    match kind.filter(|k| !k.is_empty()) {
+        None => {}
+        Some(k) if KINDS.contains(&k) => path.push_str(&format!("&kind={k}")),
+        Some(k) => return Err(format!("{k:?} is not a kind of conversation History keeps")),
+    }
     Ok(path)
+}
+
+/// [`chat_continue_open`]'s reading: the conversation, only when it is a
+/// kind the bar may carry on. An older PC that sends no `kind` is an
+/// ordinary chat (every conversation it kept was one, or a support record,
+/// which it cannot tell apart - so it is let through only when no turn is
+/// a support or chatbot row).
+pub(crate) fn continue_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    let conv = conversation_answer(status, body)?;
+    let kind = conv.get("kind").and_then(|k| k.as_str()).unwrap_or("chat");
+    let others = conv
+        .get("turns")
+        .and_then(|t| t.as_array())
+        .is_some_and(|turns| {
+            turns.iter().any(|t| {
+                matches!(
+                    t.get("role").and_then(|r| r.as_str()),
+                    Some("support") | Some("chatbot")
+                )
+            })
+        });
+    if !CONTINUABLE.contains(&kind) || others {
+        return Err(NOT_CONTINUABLE.to_string());
+    }
+    // The PC's own "no" (a chat titled "A difficult moment" is kept but not
+    // carried on - the second chat audit, 2026-09-28): its own plain reason.
+    if conv.get("continuable").and_then(|c| c.as_bool()) == Some(false) {
+        let why = conv
+            .get("continue_why")
+            .and_then(|w| w.as_str())
+            .filter(|w| !w.trim().is_empty())
+            .unwrap_or(NOT_CONTINUABLE);
+        return Err(why.to_string());
+    }
+    Ok(conv)
 }
 
 /// The id, checked before it goes into a URL or a body: 8-64 characters of
@@ -226,8 +370,9 @@ pub async fn brain_history_list(
     app: AppHandle,
     before: Option<f64>,
     limit: Option<u32>,
+    kind: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let path = list_path(limit, before)?;
+    let path = list_path(limit, before, kind.as_deref())?;
     let (status, body) = get(&app, &path).await?;
     let answer = list_answer(status, &body)?;
     Ok(if crate::lock::private_hidden(&app) {
@@ -247,6 +392,118 @@ pub async fn brain_history_open(app: AppHandle, id: String) -> Result<serde_json
     }
     let (status, body) = get(&app, &format!("/api/history/conversation?id={id}")).await?;
     conversation_answer(status, &body)
+}
+
+/// "Continue this chat", from the Brain's History (the owner's decision,
+/// 2026-09-28): brings up the Jarvis bar and tells it which conversation to
+/// carry on - the id only, never a word. The bar reads it itself
+/// ([`chat_continue_open`]). Refused while the private lists are hidden,
+/// like opening one. Not held on a stale link: it changes nothing on the
+/// PC; the next question is held there as any question is.
+#[tauri::command]
+pub async fn brain_continue_chat(app: AppHandle, id: String) -> Result<(), String> {
+    let id = checked_id(&id)?.to_string();
+    if crate::lock::private_hidden(&app) {
+        return Err(HISTORY_STILL_HIDDEN.to_string());
+    }
+    crate::windows::show_quickbar(&app)?;
+    crate::emit_quickbar(&app, CONTINUE_EVENT, Some(id));
+    Ok(())
+}
+
+/// The Jarvis bar's one read of History: a conversation it may carry on
+/// ("Continue this chat", or "Move it here" in Jarvis Live) - a chat or a
+/// Live session, never a support, chatbot or comparison record. Refused
+/// while the private lists are hidden, like opening one in the Brain.
+#[tauri::command]
+pub async fn chat_continue_open(app: AppHandle, id: String) -> Result<serde_json::Value, String> {
+    let id = checked_id(&id)?;
+    if crate::lock::private_hidden(&app) {
+        return Err(HISTORY_STILL_HIDDEN.to_string());
+    }
+    let (status, body) = get(&app, &format!("/api/history/conversation?id={id}")).await?;
+    continue_answer(status, &body)
+}
+
+/// Are the private lists hidden right now ("Hide memory lists and chat
+/// history")? The Jarvis bar asks before it draws the folded thread of
+/// earlier answers (the owner's decision, 2026-09-28, after the second chat
+/// audit: the thread hides with the rest of the chat history; the answer on
+/// screen, being asked about right now, does not). Nothing is read from the
+/// PC and nothing is returned but yes or no.
+#[tauri::command]
+pub async fn chat_thread_hidden(app: AppHandle) -> bool {
+    crate::lock::private_hidden(&app)
+}
+
+/// [`brain_fact_chat`]'s reading: the PC's `{"id", "conversation": null |
+/// {...}}`, or - from a PC without the route (404, 501) - `{"available":
+/// false}`, and "Erase the words" then asks as it did before, without
+/// naming a chat.
+pub(crate) fn fact_chat_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return parsed(body)
+            .filter(|v| v.get("conversation").is_some())
+            .ok_or_else(|| UNREADABLE.to_string());
+    }
+    if status == 404 && body.contains("no fact") {
+        return Err("That fact is no longer on this PC.".to_string());
+    }
+    if status == 404 || status == 501 {
+        return Ok(serde_json::json!({ "available": false }));
+    }
+    Err(commands::backend_refusal(status, body))
+}
+
+/// While the private lists are hidden, the chat's title is taken out (that
+/// there is one stays, so the question still says a chat will go too).
+pub(crate) fn redact_fact_chat(mut v: serde_json::Value) -> serde_json::Value {
+    if let Some(conv) = v.get_mut("conversation").and_then(|c| c.as_object_mut()) {
+        conv.remove("title");
+        conv.insert("hidden".into(), serde_json::json!(true));
+    }
+    v
+}
+
+/// "Which chat did this fact come from?" (the chat audit, 2026-09-28): for
+/// "Erase the words"'s "Also delete the chat it came from", which names that
+/// chat before asking. A read (`GET /api/memory/fact-chat?id=`); it deletes
+/// nothing.
+#[tauri::command]
+pub async fn brain_fact_chat(app: AppHandle, id: i64) -> Result<serde_json::Value, String> {
+    if id <= 0 {
+        return Err("That is not a fact this PC keeps.".to_string());
+    }
+    let (status, body) = get(&app, &format!("/api/memory/fact-chat?id={id}")).await?;
+    let out = fact_chat_answer(status, &body)?;
+    Ok(if crate::lock::private_hidden(&app) {
+        redact_fact_chat(out)
+    } else {
+        out
+    })
+}
+
+/// "Search what was said" (JARVIS-API.md section 71): the kept
+/// conversations whose words hold every search word, each with a short
+/// snippet. A read. The PC opens each kept turn in memory for this one
+/// search and keeps no index and no record of the words; this command
+/// keeps none either, and nothing here reaches the AI model.
+///
+/// Refused while the private lists are hidden, like opening a transcript:
+/// a snippet is what was said.
+#[tauri::command]
+pub async fn brain_history_search(
+    app: AppHandle,
+    query: String,
+    limit: Option<u32>,
+    kind: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let path = search_path(&query, limit, kind.as_deref())?;
+    if crate::lock::private_hidden(&app) {
+        return Err(SEARCH_STILL_HIDDEN.to_string());
+    }
+    let (status, body) = get(&app, &path).await?;
+    search_answer(status, &body)
 }
 
 /// Deletes ONE conversation. It cannot be undone, and the page asks first.
@@ -288,25 +545,89 @@ mod tests {
 
     #[test]
     fn a_page_is_asked_for_within_the_servers_limits() {
-        assert_eq!(list_path(None, None).unwrap(), "/api/history?limit=30");
-        assert_eq!(list_path(Some(0), None).unwrap(), "/api/history?limit=1");
         assert_eq!(
-            list_path(Some(500), None).unwrap(),
+            list_path(None, None, None).unwrap(),
+            "/api/history?limit=30"
+        );
+        assert_eq!(
+            list_path(Some(0), None, None).unwrap(),
+            "/api/history?limit=1"
+        );
+        assert_eq!(
+            list_path(Some(500), None, None).unwrap(),
             "/api/history?limit=100"
         );
         assert_eq!(
-            list_path(Some(30), Some(1_790_000_300.0)).unwrap(),
+            list_path(Some(30), Some(1_790_000_300.0), None).unwrap(),
             "/api/history?limit=30&before=1790000300"
         );
         // A fractional `updated` goes back exactly as it came, never rounded
         // into the next second.
         assert_eq!(
-            list_path(None, Some(1_790_000_300.25)).unwrap(),
+            list_path(None, Some(1_790_000_300.25), None).unwrap(),
             "/api/history?limit=30&before=1790000300.25"
         );
         for bad in [f64::NAN, f64::INFINITY, 0.0, -5.0] {
-            assert!(list_path(None, Some(bad)).is_err(), "{bad}");
+            assert!(list_path(None, Some(bad), None).is_err(), "{bad}");
         }
+    }
+
+    #[test]
+    fn a_kind_is_one_of_the_five_or_nothing() {
+        assert_eq!(
+            list_path(None, None, Some("live")).unwrap(),
+            "/api/history?limit=30&kind=live"
+        );
+        assert_eq!(
+            list_path(None, None, Some("")).unwrap(),
+            "/api/history?limit=30"
+        );
+        assert!(list_path(None, None, Some("live&limit=100")).is_err());
+        assert!(list_path(None, None, Some("imported")).is_err());
+    }
+
+    #[test]
+    fn which_chat_a_fact_came_from() {
+        let got = fact_chat_answer(
+            200,
+            r#"{"id":3,"conversation":{"id":"conv-1","title":"t","updated":5,"kind":"chat"}}"#,
+        )
+        .unwrap();
+        assert_eq!(got["conversation"]["title"], "t");
+        let hidden = redact_fact_chat(got);
+        assert!(hidden["conversation"].get("title").is_none());
+        assert_eq!(hidden["conversation"]["hidden"], true);
+        let none = fact_chat_answer(200, r#"{"id":3,"conversation":null}"#).unwrap();
+        assert!(none["conversation"].is_null());
+        assert_eq!(
+            fact_chat_answer(404, "not found").unwrap()["available"],
+            false
+        );
+        assert!(fact_chat_answer(404, r#"{"error":"no fact with that id"}"#).is_err());
+    }
+
+    #[test]
+    fn only_a_chat_or_a_live_session_is_carried_on() {
+        let chat = r#"{"id":"c1","kind":"chat","turns":[{"role":"user","text":"hi"}]}"#;
+        assert!(continue_answer(200, chat).is_ok());
+        let live = r#"{"id":"c1","kind":"live","turns":[]}"#;
+        assert!(continue_answer(200, live).is_ok());
+        let old = r#"{"id":"c1","turns":[{"role":"user","text":"hi"}]}"#;
+        assert!(continue_answer(200, old).is_ok(), "an older PC's chat");
+        for kind in ["support", "chatbot", "compare", "nonsense"] {
+            let body = format!(r#"{{"id":"c1","kind":"{kind}","turns":[]}}"#);
+            assert_eq!(
+                continue_answer(200, &body).unwrap_err(),
+                NOT_CONTINUABLE,
+                "{kind}"
+            );
+        }
+        let old_support = r#"{"id":"c1","turns":[{"role":"support","text":"x"}]}"#;
+        assert!(
+            continue_answer(200, old_support).is_err(),
+            "an older PC's support record"
+        );
+        assert!(continue_answer(404, "").is_err());
     }
 
     #[test]
@@ -386,6 +707,67 @@ mod tests {
             "History_enable is not set to ask in jarvis-framework.toml"
         );
         assert_eq!(settings_answer(404, "").unwrap_err(), HISTORY_UPDATE);
+    }
+
+    #[test]
+    fn a_search_is_sent_only_within_the_pcs_limits_and_cannot_add_a_parameter() {
+        assert_eq!(
+            search_path("dentist", None, None).unwrap(),
+            "/api/history/search?q=dentist&limit=20"
+        );
+        assert_eq!(
+            search_path("  mill   road ", Some(500), None).unwrap(),
+            "/api/history/search?q=mill%20road&limit=50"
+        );
+        // Nothing the owner types can start a second parameter or become a space.
+        let odd = search_path("a&limit=100000#x+y=z", Some(3), None).unwrap();
+        assert_eq!(
+            odd,
+            "/api/history/search?q=a%26limit%3D100000%23x%2By%3Dz&limit=3"
+        );
+        assert!(search_path("café ☕", None, None)
+            .unwrap()
+            .contains("caf%C3%A9%20%E2%98%95"));
+        assert!(search_path("a", None, None).is_err());
+        assert!(search_path("   ", None, None).is_err());
+        assert!(search_path(&"x".repeat(101), None, None).is_err());
+        assert!(
+            search_path(&"é".repeat(100), None, None).is_ok(),
+            "characters, not bytes"
+        );
+    }
+
+    #[test]
+    fn a_search_can_be_narrowed_to_one_kind_and_only_a_real_one() {
+        assert_eq!(
+            search_path("dentist", None, Some("live")).unwrap(),
+            "/api/history/search?q=dentist&limit=20&kind=live"
+        );
+        assert_eq!(
+            search_path("dentist", None, Some("")).unwrap(),
+            "/api/history/search?q=dentist&limit=20"
+        );
+        assert!(search_path("dentist", None, Some("live&limit=100")).is_err());
+        assert!(search_path("dentist", None, Some("imported")).is_err());
+    }
+
+    #[test]
+    fn a_search_answer_or_title_only_on_an_older_backend() {
+        let body = r#"{"query_ok": true, "conversations": [{"id": "abcdefgh",
+            "snippet": {"parts": [{"text": "dentist", "hit": true}]}}], "more": false}"#;
+        let got = search_answer(200, body).unwrap();
+        assert_eq!(got["conversations"][0]["id"], "abcdefgh");
+        for status in [404, 501] {
+            let old = search_answer(status, "").unwrap();
+            assert_eq!(old["available"], false);
+            assert_eq!(old["why"], SEARCH_UPDATE);
+        }
+        assert!(search_answer(200, r#"{"conversations": []}"#).is_err());
+        assert_eq!(
+            search_answer(500, r#"{"error": "the history store is locked"}"#).unwrap_err(),
+            "The history store is locked"
+        );
+        assert!(SEARCH_STILL_HIDDEN.contains("Windows Hello"));
     }
 
     #[test]

@@ -1,0 +1,84 @@
+# Which `--since` for the next Gemini audit (checked 2026-09-28)
+
+## Answer
+
+**Use `--since 093caeec`** — `093caeec 2026-09-20T17:20:55-07:00 "Fix seven real findings from a Gemini audit, verified against source first (#10)"`.
+It is the last Gemini **code** audit that was run AND is written down as closed. It is an ancestor of
+origin/main (`f81d230d`, 2026-09-27 23:51 -07:00); 818 commits since. This is the tool's own `LAST_AUDIT` default,
+so `py -3 tools\gen_gemini_bundles.py` with no flag already uses it.
+
+Do NOT use `62cb2842` (2026-09-25, "Gemini audit package for everything since the last outside audit").
+That commit only *prepared* a package; there is no record that the package was fully run or closed (below).
+
+## 1. Every Gemini run found
+
+| When | What | Run? | Fixed/closed? | Evidence |
+|---|---|---|---|---|
+| 2026-09-19/20 | Blind code audit, round 1 (bundles `c64c68cd`) | yes | yes: 5 fixed, 4 refuted | `5d089365` / PR #7 `20887086`; branch origin/fix/gemini-audit-confirmed-findings (squash-merged) |
+| 2026-09-20 | Round 2 (split bundle `eb23eab7`) | yes | yes: 7 fixed | `0a8d626e` / PR #10 `093caeec`; branch origin/fix/gemini-audit-2026-09-20 (squash-merged) |
+| earlier (third pass) | Backend review | yes | 9 fixed, 3 refuted | `backend/README.md` ~line 2599 "A third pass - a review from a different model (Gemini)" (predates 09-20) |
+| 2026-09-25 | Package for everything since 093caee (`62cb2842`, `docs/GEMINI-AUDIT-2026-09-25.md`, `tools/gen_gemini_bundles.py`) | **partly, at most** | **some findings only; never closed** | see section 2 |
+| 2026-09-27 | Gemini notes on the 3D animal face | yes | design input only, not a code audit | CLAUDE.md "with Gemini's notes as input, not instructions" |
+| 2026-09-28 | Two Gemini reviews of the outside projects Jarvis names ("vetting Gemini recommendations", branch claude/jarvis-github-repos-b56v1f), plus "fifth Gemini round" (`28ebfc9f`) | yes | recorded in `docs/AUDIT-2026-09-28-REPO-REFS.md` (branch only, not on main): facts, disproven claims, milestones 1-14 queued | That doc says itself they "worked from a list of the GitHub projects Jarvis names, **without the code**". So **not a code audit**; it does not move the baseline. |
+
+Other active branches (research-ff37vy, continuation, audit-competitors, mascot) mention Gemini only as a
+product (the chatbot driver, Gemini Live comparison, Gemini chat import) — no Gemini audit runs.
+
+## 2. Was the 2026-09-25 package run? Partly, and not closed
+
+Evidence that *some* Gemini code findings came back and were fixed on 2026-09-26 (session `015UUeD3...`):
+- Server address on own networks only: `79526e37` (2026-09-26 02:34), `316acfc9`, CLAUDE.md "Decided 2026-09-26, after checking a Gemini audit finding" (added in `b21c34a1`), ARCHITECTURE.md §2 "after a Gemini audit finding".
+- `c78a04e2` (03:43) "Phone control: an unreadable foreground app stops the taps (**outside audit finding 5**)".
+- `9cc21cae` (04:10) deep questions / focus 'On:' hidden — "(Gemini finding checked; continuity #10)".
+
+Evidence that it was NOT completed:
+- No document records the Gemini answers, which of the six sessions ran, or which findings were refuted (unlike the 09-20 rounds). "Finding 5" implies a numbered list; findings 1-4 and 6+ are unaccounted for.
+- `docs/handoff-2026-09-27/HANDOFF.md` §4 "Audits the owner asked for that are NOT done yet" ends: "and **last of all** the Gemini audit package (only when nothing else is running)" — i.e. still outstanding a day later.
+- No commit closes it.
+
+So: partly run (at least three findings, across the desktop, phone and backend abilities), fixed for those three,
+never closed. Using 62cb2842 would drop ~512 commits (09-20..09-25) that no outside model has provably read.
+
+## 3. Recommendation
+
+`--since 093caeec`. Safest choice: nothing is missed. Cost: bundles are big (section 4). If the owner still has
+the 09-25 Gemini answers, record them first; that still would not justify moving the baseline unless all six
+sessions ran.
+
+Also note: origin/main stops at 2026-09-27; 5 active branches are ahead of it (research-ff37vy 136 commits,
+audit-competitors 68, continuation 21, github-repos 19, mascot 17). Either merge first or generate from the branch
+the owner wants audited.
+
+## 4. The tool (`tools/gen_gemini_bundles.py`)
+
+- `LAST_AUDIT = "093caee"` (already correct). Flags: `--since`, `--out` (default `~/jarvis-gemini-audit`). Writes 6 files; diff is `git diff --name-status --diff-filter=AM <since> HEAD` (renames/deletions not listed).
+- Six sessions: 1a backend safety (everything backend not in `ABILITIES`), 1b backend abilities (`ABILITIES` name prefixes, not `backend/rebuilt/`), 2 desktop Rust (`src-tauri` .rs/Cargo.toml/.json + desktop-release.yml), 3 desktop web (`jarvis-desktop/src/` js/html/css), 4a phone core, 4b phone screens (`/ui/`, `/face/`, `/voice/`).
+- Left out, listed: tests/fixtures/`_cases`, backend `_*` files, lock files, patch-history, `.py` files whose head says "GENERATED by".
+
+### Dry run: origin/main `f81d230d`, `--since 093caeec` (818 commits), tokens ≈ chars/4
+
+| file | files | tokens | over 400k? |
+|---|---|---|---|
+| 1a-backend-safety | 124 | **730k** | YES (1.8x) |
+| 1b-backend-abilities | 32 | **431k** | YES |
+| 2-desktop-rust | 58 | 358k | no |
+| 3-desktop-web | 78 | **528k** | YES |
+| 4a-phone-core | 93 | 393k | no (just under) |
+| 4b-phone-screens | 80 | **411k** | YES |
+| total | 465 | ~2.85M | 4 of 6 over |
+
+### Gaps and problems found
+
+1. **Size**: four of six files break the tool's own 400k rule. 1a is the worst.
+   - `ABILITIES` is stale: new abilities since 09-25 fall into "safety" 1a: `jarvis_mcp`, `jarvis_tellme`, `jarvis_focus`, `jarvis_documents`, `jarvis_backup`, `jarvis_mouth`, `jarvis_bakeoff`, `jarvis_tool_updates`, `jarvis_news`, `jarvis_media`, `jarvis_ocr`, `jarvis_watch_notify`, `import_history` (~180k tokens). Moving them would overload 1b, so 1b needs splitting too (e.g. voice vs. everything else).
+   - Test harnesses included in 1a (~49k): `eval_memory.py`, `eval_learner.py`, `selftest.py`, `run_suites.py`, `fake_mcp_server.py`.
+   - `backend/rebuilt/` (~117k) could be its own session.
+   - Generated non-Python files are not caught (the GENERATED check is `.py`-only): `jarvis-desktop/src/critters-gen.js` (94 KB), `faces-spec.js` (70 KB), `jarvis-client/.../face/CritterShaders.kt` (91 KB). Excluding them saves ~65k tokens.
+   - 3 still needs a split (faces.html 295 KB alone ≈ 74k tokens; brain.js 218 KB; main.js 176 KB).
+2. **Files in no session and not listed anywhere** (contradicts the docstring's "not here never reads as does not exist"): `jarvis-desktop/src-tauri/src/hud_bootstrap.js` (39 KB, script injected into the HUD — security-relevant), `jarvis-desktop/src-tauri/permissions/surfaces.toml` (40 KB, Tauri command permissions) and 128 `permissions/autogenerated/*.toml`, `backend/jarvis-primary.Modelfile` (the model's system prompt), `server/jarvis_mobile_ws.py` (26 KB), `scripts/check-backend.ps1`, `.github/workflows/android-apk.yml` and `verify-toolchain.yml`, `jarvis-desktop/critters/*.sksl` (shader sources), `jarvis-desktop/scripts/*`, all of `tools/` (33 .py incl. `tools/tool_eval/`, `check_parity.py`, `gen_notices.py`, `train_wakeword.py`, the `gen_*_cases.py` generators), `jarvis-desktop/src/jarvis-visual-spec.json`. Docs/videos/binaries are reasonably out but also unlisted.
+3. **Wording**: each bundle header hardcodes "(the last outside audit, 2026-09-20)", and the prompt in `docs/GEMINI-AUDIT-2026-09-25.md` says "added or changed in the last five days" — now eight days (and the prompt lists "anything that repeats asks once", which the 2026-09-26 approvals decision changed for plain reminders/alarms/standby).
+4. Phone packages: all current top-level packages (`assistant`, `audio`, `data`, `net`, `platform`, `service`, `widget`, root) land in 4a; `ui`, `face`, `voice` in 4b. None missing.
+
+## Housekeeping done during this check
+- `git fetch origin` and `git fetch --unshallow` (the clone was shallow; merge-base answers were wrong until unshallowed). No working-tree changes.
+- Temporary worktree created at scratchpad `wt`, removed after the run. Dry-run bundles are in scratchpad `gemini-dryrun/`.

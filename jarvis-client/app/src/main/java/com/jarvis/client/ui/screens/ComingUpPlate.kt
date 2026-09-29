@@ -216,6 +216,13 @@ internal fun ComingUpSection(
                     Text(Schedule.TELLME_HINT, style = MaterialTheme.typography.labelSmall,
                         color = chrome.textLo)
                     Gap(14)
+                    // "Remind me next time I talk about ..." - set by saying or
+                    // typing it (no card); its rows are in the list above.
+                    Text(Schedule.NEXT_TIME_TITLE, style = MaterialTheme.typography.labelMedium,
+                        color = chrome.textMid)
+                    Text(Schedule.NEXT_TIME_HINT, style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo)
+                    Gap(14)
                     Text(Schedule.TODO_TITLE, style = MaterialTheme.typography.labelMedium,
                         color = chrome.textMid)
                     val todoItems = Schedule.todoItems(shown)
@@ -472,7 +479,7 @@ private fun ScheduleRow(
  * only ever from the owner's tap. Returns a sentence to show when no app on
  * the phone takes it, else null.
  */
-private fun handToPhone(context: Context, offer: AlsoOnPhone.Offer): String? {
+internal fun handToPhone(context: Context, offer: AlsoOnPhone.Offer): String? {
     val intent = when (offer) {
         is AlsoOnPhone.Offer.ToClock -> Intent(AlarmClock.ACTION_SET_ALARM).apply {
             putExtra(AlarmClock.EXTRA_HOUR, offer.alarm.hour)

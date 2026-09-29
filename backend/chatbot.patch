@@ -1,0 +1,25 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -603,6 +603,7 @@
+     "loosen_what_asks_first",  # jarvis_asks_first.py acts only on tier "ask" (asks-first.patch)
+     "watch_notifications_enable",  # jarvis_watch_notify.py acts only on tier "ask" (watch-notifications.patch)
+     "enable_reading_tool",  # jarvis_asks_first.py acts only on tier "ask" (tools-enable.patch)
+     "restore_backup",  # jarvis_backup.py acts only on tier "ask" (backup.patch)
+     "phone_notifications_read",  # jarvis_phone_notifications.py acts only on tier "ask" (phone-notifications.patch)
++    "chatbot_session",  # jarvis_chatbot.py acts only on tier "ask": ONE card per conversation (chatbot.patch)
+ })
+@@ -716,4 +717,14 @@
+     "restore_backup": ("yes", "local", "replaces your memory, chat history, settings and notes with an older backup, and puts back the key that unlocks your kept chat history; Jarvis backs up your CURRENT data first, with a fresh recovery code, so this restore can itself be undone"),
++    # chatbot.patch (jarvis_chatbot.py and jarvis_chatbot_gemini.py, the
++    # owner's decisions of 2026-09-27 and 2026-09-28). ONE card per
++    # conversation with an AI chatbot website (Gemini first): the goal, word
++    # for word, then Jarvis's own follow-up questions, typed into a browser
++    # window the owner can see, within the messages and minutes on the card.
++    # It leaves this PC and what is sent cannot be taken back, so "no" and
++    # "outbound": a risky approval (Windows Hello on the PC, a screen lock
++    # on the phone). It was already treated as risky before this line, as
++    # an action the gate had not classified; this line gives it its words.
++    "chatbot_session": ("no", "outbound", "holds a conversation with an AI chatbot website for you - Gemini first - sending the goal you approved word for word and then its own follow-up questions, typed into a browser window you can see, within the messages and minutes on the card; nothing private is sent, and what is sent cannot be taken back"),
+ }
+
+ _UNKNOWN_RISK = ("no", "outbound",
