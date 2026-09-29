@@ -38,6 +38,15 @@ object LookGate {
         data class Looked(val app: String, val words: ScreenText.Words) : Outcome()
     }
 
+    /**
+     * Said when Android did not hand the screen over at all (no `onHandleAssist`
+     * within the wait): usually Android's own "Use text from screen" switch for
+     * the assistant app is off. Fixed words; nothing was read.
+     */
+    const val NO_SCREEN =
+        "Android did not give Jarvis the screen. In Android's settings, under the default " +
+            "assistant app, turn on \"Use text from screen\" for Jarvis, then try again."
+
     /** Is the assistant gesture allowed to read the screen right now? */
     fun readingOn(): Boolean =
         JarvisRuntime.isInitialized && JarvisRuntime.settings.security.value.screenRead

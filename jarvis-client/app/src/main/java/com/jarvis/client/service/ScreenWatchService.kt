@@ -202,19 +202,19 @@ class ScreenWatchService : Service() {
             return@withContext ScreenWatch.Grab("", null, ScreenWatch.NEEDS_READ_ON)
         }
         val never = if (JarvisRuntime.isInitialized) JarvisRuntime.settings.security.value.neverApps else emptySet()
-        val front = ScreenWatch.frontApp(usageEvents())
-        val category = front?.let { LookGate.categoryOf(this@ScreenWatchService, it) }
-        val before = ScreenWatch.decide(front, never, category, screenIsOn(), null)
+        val visible = ScreenWatch.visibleApps(usageEvents())
+        val category = { pkg: String -> LookGate.categoryOf(this@ScreenWatchService, pkg) }
+        val before = ScreenWatch.decide(visible, never, category, screenIsOn(), null)
         if (before is ScreenWatch.Verdict.Refuse) return@withContext ScreenWatch.Grab("", null, before.said)
 
         val bitmap = frame() ?: return@withContext ScreenWatch.Grab("", null, NO_PICTURE)
         try {
             val after = ScreenWatch.decide(
-                front, never, category, screenIsOn(), ScreenWatch.looksBlack(sample(bitmap)),
+                visible, never, category, screenIsOn(), ScreenWatch.looksBlack(sample(bitmap)),
             )
             if (after is ScreenWatch.Verdict.Refuse) return@withContext ScreenWatch.Grab("", null, after.said)
-            // The app in front must not have changed while the picture was taken.
-            if (ScreenWatch.frontApp(usageEvents()) != front) {
+            // The apps on screen must not have changed while the picture was taken.
+            if (ScreenWatch.visibleApps(usageEvents()) != visible) {
                 return@withContext ScreenWatch.Grab("", null, NO_PICTURE)
             }
             val out = ByteArrayOutputStream()
@@ -222,7 +222,7 @@ class ScreenWatchService : Service() {
                 return@withContext ScreenWatch.Grab("", null, NO_PICTURE)
             }
             val url = "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
-            ScreenWatch.Grab(LookGate.labelOf(this@ScreenWatchService, front), url, null)
+            ScreenWatch.Grab(LookGate.labelOf(this@ScreenWatchService, visible.lastOrNull()), url, null)
         } finally {
             bitmap.recycle()
         }
@@ -282,7 +282,7 @@ class ScreenWatchService : Service() {
         while (events.hasNextEvent()) {
             events.getNextEvent(one)
             val t = one.eventType
-            if (t == ScreenWatch.EVENT_RESUMED || t == ScreenWatch.EVENT_PAUSED || t == ScreenWatch.EVENT_STOPPED) {
+            if (t in ScreenWatch.EVENT_TYPES) {
                 out += ScreenWatch.UsageEvent(one.timeStamp, t, one.packageName.orEmpty())
             }
         }
@@ -403,6 +403,19 @@ class ScreenWatchService : Service() {
                     AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName,
                 ) == AppOpsManager.MODE_ALLOWED
             }.getOrDefault(false)
+        }
+
+        /**
+         * Can the owner SEE the "Jarvis is watching" notification? Watch never
+         * starts when it cannot be seen: the sign is the safeguard. False when
+         * notifications are off for Jarvis, or this channel is switched off.
+         */
+        fun signVisible(context: Context): Boolean {
+            ensureChannel(context)
+            val manager = ContextCompat.getSystemService(context, NotificationManager::class.java) ?: return false
+            if (!manager.areNotificationsEnabled()) return false
+            val channel = manager.getNotificationChannel(CHANNEL_ID)
+            return channel == null || channel.importance != NotificationManager.IMPORTANCE_NONE
         }
 
         fun ensureChannel(context: Context) {

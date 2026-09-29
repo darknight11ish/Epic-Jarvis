@@ -321,6 +321,12 @@ class MainActivity : FragmentActivity() {
             JarvisRuntime.setNotice(com.jarvis.client.net.ScreenWatch.NEEDS_USAGE)
             return
         }
+        // The notification IS the sign while another app is in front: it never
+        // starts if that sign could not be seen.
+        if (!com.jarvis.client.service.ScreenWatchService.signVisible(this)) {
+            JarvisRuntime.setNotice(com.jarvis.client.net.ScreenWatch.NEEDS_NOTIFICATIONS)
+            return
+        }
         if (com.jarvis.client.net.ScreenWatch.state.value.on) return
         val manager = getSystemService(android.media.projection.MediaProjectionManager::class.java) ?: return
         runCatching { screenShare.launch(manager.createScreenCaptureIntent()) }

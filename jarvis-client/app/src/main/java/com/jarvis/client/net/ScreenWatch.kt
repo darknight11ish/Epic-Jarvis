@@ -58,6 +58,8 @@ object ScreenWatch {
         "is in front and leave your private apps alone. It shows Jarvis which app is open - " +
         "nothing you do inside it."
     const val OPEN_USAGE = "Open Usage access"
+    const val NEEDS_NOTIFICATIONS = "Jarvis must be allowed to show notifications, so you can always see " +
+        "when it is watching. Turn them on for Jarvis in Android's settings, then try again."
     const val NEEDS_READ_ON = "Turn on \"Let Jarvis read this phone's screen\" in Security first."
     const val HOW =
         "Android will ask you to allow screen sharing, every time. When you then ask a question, " +
@@ -87,6 +89,7 @@ object ScreenWatch {
 
     /** The service says a session began. */
     fun started(minutes: Int = MAX_MINUTES) {
+        lastSaid = null
         _state.value = State(true, clock() + minutes.coerceIn(1, MAX_MINUTES) * 60_000L)
     }
 
@@ -126,26 +129,46 @@ object ScreenWatch {
 
     /** `UsageEvents.Event.ACTIVITY_RESUMED` (`MOVE_TO_FOREGROUND` before Android 10 is 1 too). */
     const val EVENT_RESUMED = 1
-    /** `ACTIVITY_PAUSED` and `ACTIVITY_STOPPED`. */
+    /** `ACTIVITY_PAUSED`, `ACTIVITY_STOPPED` and `ACTIVITY_DESTROYED`. */
     const val EVENT_PAUSED = 2
     const val EVENT_STOPPED = 23
+    const val EVENT_DESTROYED = 24
+    /** `SCREEN_NON_INTERACTIVE` and `DEVICE_SHUTDOWN`: nothing is in front any more. */
+    const val EVENT_SCREEN_OFF = 16
+    const val EVENT_SHUTDOWN = 26
+
+    /** The event types worth reading from Android's usage log. */
+    val EVENT_TYPES: Set<Int> = setOf(
+        EVENT_RESUMED, EVENT_PAUSED, EVENT_STOPPED, EVENT_DESTROYED, EVENT_SCREEN_OFF, EVENT_SHUTDOWN,
+    )
 
     /**
-     * The app in front, from the usage events in time order: the last app that
-     * came forward and has not since gone back. Null when the log says nothing
-     * (Usage access not given, or a log too short) - "cannot tell" is a
+     * Every app that may be on screen, from the usage events in time order:
+     * each one that came forward and has not since gone back, the most recent
+     * LAST. More than one is normal in split-screen or picture-in-picture, and
+     * a private app in the other half is on the picture too - so the check
+     * ([decide]) is over ALL of them, not just the newest. The screen going off
+     * or the phone shutting down empties the list. Empty when the log says
+     * nothing (Usage access not given, or a log too short): "cannot tell" is a
      * refusal, never a guess.
      */
-    fun frontApp(events: List<UsageEvent>): String? {
-        var front: String? = null
+    fun visibleApps(events: List<UsageEvent>): List<String> {
+        val open = LinkedHashMap<String, Long>()
         for (e in events.sortedBy { it.at }) {
             when (e.type) {
-                EVENT_RESUMED -> if (e.pkg.isNotBlank()) front = e.pkg
-                EVENT_PAUSED, EVENT_STOPPED -> if (e.pkg == front) front = null
+                EVENT_RESUMED -> if (e.pkg.isNotBlank()) {
+                    open.remove(e.pkg)
+                    open[e.pkg] = e.at
+                }
+                EVENT_PAUSED, EVENT_STOPPED, EVENT_DESTROYED -> open.remove(e.pkg)
+                EVENT_SCREEN_OFF, EVENT_SHUTDOWN -> open.clear()
             }
         }
-        return front
+        return open.keys.toList()
     }
+
+    /** The app most recently brought forward (for the chip's name), or null. */
+    fun frontApp(events: List<UsageEvent>): String? = visibleApps(events).lastOrNull()
 
     /**
      * Is [luma] (one 0..255 brightness per sampled pixel) so dark it must be a
@@ -183,21 +206,25 @@ object ScreenWatch {
     }
 
     /**
-     * May this screen be kept? [front] is the app in front ([frontApp]);
-     * [never] the owner's own list; [category] the app's Play Store category;
-     * [screenOn] is false when the phone is locked or dark; [black] is
-     * [looksBlack] of the picture (null before a picture exists - asked twice:
-     * once before any is taken, once after).
+     * May this screen be kept? [visible] is every app that may be on screen
+     * ([visibleApps]); [never] the owner's own list; [category] gives an app's
+     * Play Store category; [screenOn] is false when the phone is locked or
+     * dark; [black] is [looksBlack] of the picture (null before a picture
+     * exists - asked twice: once before any is taken, once after). One private
+     * app among several is a refusal.
      */
     fun decide(
-        front: String?,
+        visible: List<String>,
         never: Set<String>,
-        category: Int?,
+        category: (String) -> Int?,
         screenOn: Boolean,
         black: Boolean?,
     ): Verdict {
         if (!screenOn) return Verdict.Refuse(DARK_SCREEN)
-        ScreenNever.blocked(front, never, category)?.let { return Verdict.Refuse(ScreenNever.said(it)) }
+        if (visible.isEmpty()) return Verdict.Refuse(ScreenNever.said(ScreenNever.Why.UNKNOWN_APP))
+        for (pkg in visible) {
+            ScreenNever.blocked(pkg, never, category(pkg))?.let { return Verdict.Refuse(ScreenNever.said(it)) }
+        }
         if (black == true) return Verdict.Refuse(PRIVATE_SCREEN)
         return Verdict.Take
     }
@@ -215,6 +242,10 @@ object ScreenWatch {
 
     /** Where a refusal is said (the app's notice line); set by the runtime. */
     @Volatile var say: (String) -> Unit = {}
+
+    private const val SAID_REPEAT_MS = 60_000L
+    @Volatile private var lastSaid: String? = null
+    @Volatile private var lastSaidAt = 0L
 
     /** Set by the running service: ends the session. */
     @Volatile var stopHook: (() -> Unit)? = null
@@ -242,7 +273,16 @@ object ScreenWatch {
         } ?: return
         val url = got.dataUrl
         if (url == null) {
-            got.said?.let(say)
+            // The same sentence is not repeated on every question for a minute
+            // (a typed question inside Jarvis is always about Jarvis itself).
+            got.said?.let {
+                val now = clock()
+                if (it != lastSaid || now - lastSaidAt > SAID_REPEAT_MS) {
+                    lastSaid = it
+                    lastSaidAt = now
+                    say(it)
+                }
+            }
             return
         }
         ScreenLook.hold(app = got.app, words = "", picture = url, shown = true, consume = true)
@@ -255,5 +295,7 @@ object ScreenWatch {
         grabber = null
         say = {}
         stopHook = null
+        lastSaid = null
+        lastSaidAt = 0L
     }
 }

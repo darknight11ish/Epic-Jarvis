@@ -86,9 +86,17 @@ class JarvisVoiceInteractionSession(
         waiting = false
         firstSeen = null
         val withScreen = (showFlags and SHOW_WITH_ASSIST) != 0
-        if (!withScreen || !LookGate.readingOn()) {
+        if (!LookGate.readingOn()) {
             // As before this feature: open Jarvis and end at once.
             openJarvis(withLook = false)
+            finish()
+            return
+        }
+        if (!withScreen) {
+            // Reading is on, but Android is not handing screens to this
+            // assistant: say so, instead of a silent nothing.
+            JarvisRuntime.setNotice(LookGate.NO_SCREEN)
+            openJarvis(withLook = true)
             finish()
             return
         }
@@ -122,6 +130,13 @@ class JarvisVoiceInteractionSession(
         handler.removeCallbacks(giveUp)
         val structure = state?.assistStructure
         firstSeen = null
+        if (state == null) {
+            // Nothing came within the wait.
+            JarvisRuntime.setNotice(LookGate.NO_SCREEN)
+            openJarvis(withLook = true)
+            finish()
+            return
+        }
         val outcome = LookGate.decide(appContext, structure)
         when (outcome) {
             is LookGate.Outcome.Off -> Unit

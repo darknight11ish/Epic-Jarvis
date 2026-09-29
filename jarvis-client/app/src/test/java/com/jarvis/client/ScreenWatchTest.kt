@@ -32,20 +32,49 @@ class ScreenWatchTest {
     private fun ev(at: Long, type: Int, pkg: String) = UsageEvent(at, type, pkg)
 
     @Test
-    fun `the app in front is the last one that came forward and did not go back`() {
+    fun `the apps on screen are those that came forward and did not go back, newest last`() {
         val log = listOf(
             ev(1, ScreenWatch.EVENT_RESUMED, "com.a.app"),
             ev(2, ScreenWatch.EVENT_PAUSED, "com.a.app"),
             ev(3, ScreenWatch.EVENT_RESUMED, "com.b.app"),
         )
+        assertEquals(listOf("com.b.app"), ScreenWatch.visibleApps(log))
         assertEquals("com.b.app", ScreenWatch.frontApp(log))
         // The same log out of order is read in time order.
-        assertEquals("com.b.app", ScreenWatch.frontApp(log.reversed()))
+        assertEquals(listOf("com.b.app"), ScreenWatch.visibleApps(log.reversed()))
         // The front app went away and nothing came forward: unknown.
-        assertNull(ScreenWatch.frontApp(log + ev(4, ScreenWatch.EVENT_STOPPED, "com.b.app")))
+        assertTrue(ScreenWatch.visibleApps(log + ev(4, ScreenWatch.EVENT_STOPPED, "com.b.app")).isEmpty())
+        assertTrue(ScreenWatch.visibleApps(log + ev(4, ScreenWatch.EVENT_DESTROYED, "com.b.app")).isEmpty())
         // A different app pausing does not unseat the front one.
-        assertEquals("com.b.app", ScreenWatch.frontApp(log + ev(4, ScreenWatch.EVENT_PAUSED, "com.a.app")))
-        assertNull("no log, no guess", ScreenWatch.frontApp(emptyList()))
+        assertEquals(
+            listOf("com.b.app"),
+            ScreenWatch.visibleApps(log + ev(4, ScreenWatch.EVENT_PAUSED, "com.a.app")),
+        )
+        assertTrue("no log, no guess", ScreenWatch.visibleApps(emptyList()).isEmpty())
+        assertNull(ScreenWatch.frontApp(emptyList()))
+    }
+
+    @Test
+    fun `split-screen keeps both apps, the screen going off keeps none`() {
+        val split = listOf(
+            ev(1, ScreenWatch.EVENT_RESUMED, "com.a.app"),
+            ev(2, ScreenWatch.EVENT_RESUMED, "com.b.app"),
+        )
+        assertEquals(listOf("com.a.app", "com.b.app"), ScreenWatch.visibleApps(split))
+        // Coming forward again moves an app to the newest place, not twice into the list.
+        assertEquals(
+            listOf("com.b.app", "com.a.app"),
+            ScreenWatch.visibleApps(split + ev(3, ScreenWatch.EVENT_RESUMED, "com.a.app")),
+        )
+        assertTrue(ScreenWatch.visibleApps(split + ev(3, ScreenWatch.EVENT_SCREEN_OFF, "")).isEmpty())
+        assertTrue(ScreenWatch.visibleApps(split + ev(3, ScreenWatch.EVENT_SHUTDOWN, "")).isEmpty())
+        assertEquals(
+            listOf("com.c.app"),
+            ScreenWatch.visibleApps(
+                split + ev(3, ScreenWatch.EVENT_SCREEN_OFF, "") + ev(4, ScreenWatch.EVENT_RESUMED, "com.c.app"),
+            ),
+        )
+        assertTrue("every event type read is one the log can carry", ScreenWatch.EVENT_TYPES.size == 6)
     }
 
     @Test
@@ -72,22 +101,25 @@ class ScreenWatchTest {
     @Test
     fun `nothing is kept from a private app, an unknown one, a dark screen or a black picture`() {
         val none = emptySet<String>()
-        assertEquals(Verdict.Take, ScreenWatch.decide("com.android.chrome", none, null, true, false))
-        assertTrue(ScreenWatch.decide("com.jarvis.client", none, null, true, false) is Verdict.Refuse)
-        assertTrue(ScreenWatch.decide("com.x8bit.bitwarden", none, null, true, false) is Verdict.Refuse)
-        assertTrue(ScreenWatch.decide("com.chase.sig.android", none, null, true, false) is Verdict.Refuse)
-        assertTrue(ScreenWatch.decide("com.somechat.example", setOf("com.somechat.example"), null, true, false) is Verdict.Refuse)
-        assertTrue("cannot tell is a refusal", ScreenWatch.decide(null, none, null, true, false) is Verdict.Refuse)
-        assertEquals(
-            Verdict.Refuse(ScreenWatch.DARK_SCREEN),
-            ScreenWatch.decide("com.android.chrome", none, null, false, false),
-        )
-        assertEquals(
-            Verdict.Refuse(ScreenWatch.PRIVATE_SCREEN),
-            ScreenWatch.decide("com.android.chrome", none, null, true, true),
-        )
+        val noCategory = { _: String -> null as Int? }
+        fun d(vararg apps: String, never: Set<String> = none, on: Boolean = true, black: Boolean? = false) =
+            ScreenWatch.decide(apps.toList(), never, noCategory, on, black)
+        assertEquals(Verdict.Take, d("com.android.chrome"))
+        assertTrue(d("com.jarvis.client") is Verdict.Refuse)
+        assertTrue(d("com.x8bit.bitwarden") is Verdict.Refuse)
+        assertTrue(d("com.chase.sig.android") is Verdict.Refuse)
+        assertTrue(d("com.somechat.example", never = setOf("com.somechat.example")) is Verdict.Refuse)
+        assertTrue("cannot tell is a refusal", d() is Verdict.Refuse)
+        assertEquals(Verdict.Refuse(ScreenWatch.DARK_SCREEN), d("com.android.chrome", on = false))
+        assertEquals(Verdict.Refuse(ScreenWatch.PRIVATE_SCREEN), d("com.android.chrome", black = true))
         // Before any picture exists the black check is not asked yet: still a take.
-        assertEquals(Verdict.Take, ScreenWatch.decide("com.android.chrome", none, null, true, null))
+        assertEquals(Verdict.Take, d("com.android.chrome", black = null))
+        // A private app in the OTHER half of a split screen is on the picture too.
+        assertTrue(d("com.android.chrome", "com.x8bit.bitwarden") is Verdict.Refuse)
+        assertTrue(d("com.chase.sig.android", "com.android.chrome") is Verdict.Refuse)
+        // An app the phone's own category says is a bank, even with an ordinary name.
+        val bankish = { p: String -> if (p == "com.ordinary.name") 6 else null }
+        assertTrue(ScreenWatch.decide(listOf("com.ordinary.name"), none, bankish, true, false) is Verdict.Refuse)
     }
 
     @Test
@@ -144,6 +176,26 @@ class ScreenWatchTest {
         ScreenWatch.beforeQuestion()
         assertEquals(listOf(ScreenWatch.PRIVATE_SCREEN), said)
         assertNull(ScreenLook.forQuestion())
+        Unit
+    }
+
+    @Test
+    fun `the same refusal is not said again on every question for a minute`() = runBlocking {
+        var now = 5_000_000L
+        ScreenWatch.clock = { now }
+        val said = mutableListOf<String>()
+        ScreenWatch.say = { said += it }
+        ScreenWatch.grabber = { ScreenWatch.Grab("", null, "That's one of Jarvis's own screens, so I'm not looking.") }
+        ScreenWatch.started()
+        repeat(3) { ScreenWatch.beforeQuestion() }
+        assertEquals(1, said.size)
+        now += 61_000L
+        ScreenWatch.beforeQuestion()
+        assertEquals(2, said.size)
+        // A different reason is always said.
+        ScreenWatch.grabber = { ScreenWatch.Grab("", null, ScreenWatch.DARK_SCREEN) }
+        ScreenWatch.beforeQuestion()
+        assertEquals(3, said.size)
         Unit
     }
 

@@ -10483,7 +10483,9 @@ refuses to look when pointed at a remote Jarvis.
   taken behind App lock waits for the unlock and is dropped after a minute).
   The words ride with the next question as a `screen_text` part (62.6), shown
   as the chip "Looked at: Chrome screen - words only" with Forget it. No
-  screenshot is asked for.
+  screenshot is asked for. If Android hands the session no screen (its own
+  "Use text from screen" switch for the assistant app is off), Home says so in
+  a fixed sentence instead of nothing.
 - **"Watch this phone with me"** (Home, offered while the same switch is on):
   Android's own screen sharing (`MediaProjection`), **Android's question
   every time**, a foreground service of type `mediaProjection` with the
@@ -10491,13 +10493,18 @@ refuses to look when pointed at a remote Jarvis.
   - Stop ends it", ending after **30 minutes**, when the screen goes off,
   when Android ends the sharing, on Stop, and on Stop everything. **Nothing
   is streamed**: when the owner asks a question, ONE picture (long side at
-  most 1,280 pixels, JPEG) is taken, checked (the app in front from Android's
-  **Usage access** - without it Watch does not start; the same Never look at
-  list; the screen on and unlocked; not almost all black, which is how a
-  secure app draws; the same app still in front after), sent inside that
+  most 1,280 pixels, JPEG) is taken, checked (**every app that may be on
+  screen** - so a private app in the other half of a split screen counts -
+  from Android's **Usage access**: without it Watch does not start; the same
+  Never look at list; the screen on and unlocked; not almost all black, which
+  is how a secure app draws; the same apps still on screen after), sent inside that
   question as an `image_url` part marked `"screen": "phone"`, and used up by
   it. The PC reads the words in it and keeps neither. Any doubt is a refusal,
-  said in a fixed sentence, and the question goes without a picture.
+  said in a fixed sentence (not repeated for a minute), and the question goes
+  without a picture. **Watch never starts unless the owner can see its
+  notification** - notifications for Jarvis, and this channel, must be on -
+  because that notification is the sign while another app is in front; turning
+  the Security switch off while it runs ends it at the next question.
 - **The PC's watching, on the phone**: Home shows the PC's own sign (the
   `screen_watch` event and `GET /api/screen`) with **Stop watching**, never
   held on a stale link. The phone never asks the PC to look or start.
