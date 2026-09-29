@@ -401,7 +401,7 @@ def safe_path(tdir: Path, rel: str) -> Path:
         if p in ("", ".", "..") or low == ".git" or p != p.rstrip(". ") \
                 or low.split(".")[0] in _WINDOWS_DEVICES:
             raise WorkspaceError(f"refused the file name {rel[:80]!r}")
-    if parts[0] == ".jarvis-app.json" and len(parts) == 1:
+    if parts[0].lower() == ".jarvis-app.json" and len(parts) == 1:   # Windows ignores case
         raise WorkspaceError("Jarvis's own note about the app is not changed this way")
     target = (tdir / rel)
     real_root = os.path.realpath(tdir)
@@ -481,11 +481,34 @@ def diff_stat(name: str, task: str) -> list:
     proj, tdir = project_dir(name), task_dir(name, task)
     if not tdir.is_dir():
         raise WorkspaceError("that task is gone - it was merged or thrown away")
-    stat = _git(["diff", "--numstat", f"main...{_branch(task)}"], proj).stdout
+    rng = f"main...{_branch(task)}"
+    stat = _git(["diff", "--numstat", "--no-textconv", rng], proj).stdout
     files = []
     for line in stat.splitlines():
         a, d, path = (line.split("\t", 2) + ["", "", ""])[:3]
         files.append({"path": path, "added": a, "removed": d})
+    if any(f["added"] == "-" or f["removed"] == "-" for f in files):
+        # A .gitattributes line such as `* -diff` or `binary` makes git count
+        # such a file as "-" and print "Binary files differ" in a normal diff -
+        # which would hide the change from the approval card. Count from the
+        # text patch (--text) instead, file by file, in the same order.
+        text = _git(["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--text", rng],
+                    proj).stdout
+        blocks = re.split(r"(?m)^diff --git ", text)[1:]
+        if len(blocks) == len(files):
+            for f, block in zip(files, blocks):
+                if f["added"] != "-" and f["removed"] != "-":
+                    continue
+                added = removed = 0
+                started = False
+                for ln in block.splitlines():
+                    if ln.startswith("@@"):
+                        started = True
+                    elif started and ln.startswith("+"):
+                        added += 1
+                    elif started and ln.startswith("-"):
+                        removed += 1
+                f["added"], f["removed"] = str(added), str(removed)
     return files
 
 
@@ -503,7 +526,8 @@ def diff(name: str, task: str) -> dict:
         raise WorkspaceError("that task is gone - it was merged or thrown away")
     rng = f"main...{_branch(task)}"
     files = diff_stat(name, task)
-    text = _git(["diff", "--no-color", "--no-ext-diff", rng], proj).stdout
+    text = _git(["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--text", rng],
+                proj).stdout
     return {"files": files, "diff": text}
 
 
@@ -564,6 +588,11 @@ def plan_merge(name: str, task: str) -> MergePlan:
     plan.main = _git(["rev-parse", "main"], proj).stdout.strip()
     if not plan.files:
         plan.refused = "this task has not changed anything yet"
+    elif any(f.get("added") == "-" or f.get("removed") == "-" for f in plan.files):
+        # Belt and braces: a file whose lines git cannot count is one the card
+        # could not show whole, and the card is the owner's only look at it.
+        plan.refused = ("a file in this change could not be shown as text, so it cannot "
+                        "be approved - ask Jarvis to leave it out")
     elif len(plan.diff) > MAX_CARD_DIFF_CHARS:
         n = len(plan.files)
         plan.refused = (f"this change is too big to show on one card ({n} "

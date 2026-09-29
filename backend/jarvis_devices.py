@@ -279,6 +279,20 @@ KEY_CARD_TEXT = "\n".join([
     "Devices.",
 ])
 
+#: The same card when this device ALREADY has a key: a swap is a bigger thing than
+#: a first key, and a stolen device key could ask for one, so the words say it.
+KEY_REPLACE_CARD_TEXT = "\n".join([
+    "\"{name}\" already has a signed-approvals key on this PC, and is asking to REPLACE it "
+    "with a new one.",
+    "",
+    "Approve only if you just pressed \"Turn on signed approvals\" on that phone yourself "
+    "(for example because signed approvals stopped working there). Once replaced, the old key "
+    "stops working and that phone's approvals are checked against the new one.",
+    "",
+    "If you did not press it, deny this: someone who holds that phone's key may be trying to "
+    "swap in their own. Denying keeps the key this PC has now.",
+])
+
 UNRETIRE_CARD_TEXT = "\n".join([
     "Let devices that still have the old shared key reach Jarvis again.",
     "",
@@ -1919,14 +1933,15 @@ def _device_only(you) -> Optional[tuple]:
     return None
 
 
-def key_card_text(name: str) -> str:
-    return KEY_CARD_TEXT.format(name=name)
+def key_card_text(name: str, replacing: bool = False) -> str:
+    return (KEY_REPLACE_CARD_TEXT if replacing else KEY_CARD_TEXT).format(name=name)
 
 
 def _k_decide(device_id: str, pid: str, spki: str, name: str, gate: Callable,
-              tier_of: Callable) -> None:
-    """Raise the register_approval_key card and wait for it (its own thread)."""
-    text = key_card_text(name)
+              tier_of: Callable, replacing: bool = False) -> None:
+    """Raise the register_approval_key card and wait for it (its own thread).
+    `replacing`: the device already has a key, so the card says it is a swap."""
+    text = key_card_text(name, replacing)
     try:
         if tier_of(KEY_ACTION) != "ask":
             raise LookupError("tier")
@@ -2011,8 +2026,9 @@ def register_key(body, *, you: str, gate: Optional[Callable] = None,
             _AK_WITHDRAWN.add(old)
         _AK[you] = pid
     name = str(row.get("name") or "This phone")
+    replacing = bool(row.get("approval_key"))
     try:
-        spawn(lambda: _k_decide(you, pid, spki, name, gate, tier_of))
+        spawn(lambda: _k_decide(you, pid, spki, name, gate, tier_of, replacing))
     except Exception:
         with _SIGN_LOCK:
             if _AK.get(you) == pid:
