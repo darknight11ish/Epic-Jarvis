@@ -571,10 +571,12 @@ if (!K) {
         if (want === "below1" ? a < 1 : a === want) return a;
         await new Promise((r) => setTimeout(r, 20));
       }
-      throw new Error(`attention never became ${want}: ${window.__faceOpts.attention}`);
+      throw new Error(`attention never became ${want}: ${window.__faceOpts.attention} (pointer on: ${POINTER_ON}, seconds since last used: ${(performance.now() / 1000 - LAST_ACTIVE).toFixed(1)}, state asked: ${state})`);
     }, { state, want });
     // Six minutes on with nothing happening (LAST_ACTIVE is the page's own memory of when it last was).
-    await page.evaluate(() => { LAST_ACTIVE -= 360; });
+    // A pointer that headless Chromium reports as already over the face would
+    // count as using Jarvis (it did on the runner), so this test says it is not.
+    await page.evaluate(() => { POINTER_ON = false; LAST_ACTIVE -= 360; });
     // It starts to ease: the first value below 1 is part way down, never a snap to 0.
     const easing = { attention: await attnDrive(page, "idle", "below1") };
     assert.ok(easing.attention < 1 && easing.attention > 0, `eased, not snapped: ${easing.attention}`);
