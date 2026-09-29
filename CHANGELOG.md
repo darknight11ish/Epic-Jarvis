@@ -6,6 +6,23 @@ number as the last part - `0.2.57` is a build of 0.2.
 
 ## Not in a numbered version yet
 
+- **Painted eyelids for the four animals (2026-09-29, both apps).** The red
+  panda, pygmy owl, sea otter and monkey now have a lid of their own fur over
+  the top of each eye, so the looks read at a glance: **waiting on you** a
+  level, attentive lid; **something went wrong** a sloped, worried one;
+  **dozing** a heavy, sleepy one. Idle, listening, thinking and talking have
+  none, exactly as before. The lid eases in over about a second, never pops,
+  adds no idle movement, is the same under calm motion and Still, and is left
+  off entirely during a crisis-help answer (the animal stays neutral). It comes
+  down as an animal nods off and lifts a little after the eyes open as it wakes.
+  A blink still shuts the eye all the way, and a shut eye (asleep, mid-blink)
+  keeps its dark line - the lid gives way to it. The robot has none. Painted in
+  the shader's surface colouring, so it costs nothing per march step; the
+  phone's shaders are still under 60,000 (panda 59,693, owl 52,064, otter
+  55,018, monkey 59,602). Pictures in `docs/critters/eyelids/`; details in
+  `docs/CRITTERS.md` "Painted eyelids". Needs the new desktop and phone
+  builds; no backend change.
+
 - **Three drawing fixes for the animal faces (2026-09-29, from the skeptical
   review).** (1) **The robot's eyes now show the colour of what Jarvis is
   doing.** They were coming out nearly white in every state (so listening
