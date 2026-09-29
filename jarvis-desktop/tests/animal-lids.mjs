@@ -262,7 +262,7 @@ if (!K) {
   const page = await browser.newPage();
   await page.setContent("<canvas id=c></canvas>");
   await page.addScriptTag({ content: fs.readFileSync(path.join(SRC, "critters-gen.js"), "utf8") });
-  const COL = { idle: ["#7fe3ff", "#1d6f8a"], approval: ["#ffc14d", "#8a5a10"], standby: ["#9aa3ad", "#3a4048"],
+  const COL = { idle: ["#7fe3ff", "#1d6f8a"], approval: ["#ffc14d", "#8a5a10"], standby: ["#9aa3ad", "#3a4048"], listening: ["#ff8a3d", "#8a3a12"], thinking: ["#8f7bff", "#3a3490"], speaking: ["#9ff0ff", "#2a7890"],
     error: ["#ff5a7a", "#8a1f35"], banked: ["#b0b6bf", "#444a52"] };
 
   /** The uniforms of one animal in one state, settled and between blinks, with the lid as the pose gives it or as asked. */
@@ -282,12 +282,24 @@ if (!K) {
     const VS = "#version 300 es\nvoid main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); gl_Position = vec4(p * 2.0 - 1.0, 0.0, 1.0); }";
     const mk = (t, s) => { const sh = gl.createShader(t); gl.shaderSource(sh, s); gl.compileShader(sh);
       if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); return sh; };
-    const pr = gl.createProgram(); gl.attachShader(pr, mk(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, mk(gl.FRAGMENT_SHADER, window.JARVIS_CRITTERS[id]));
-    gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
-    const loc = {}; const n = gl.getProgramParameter(pr, gl.ACTIVE_UNIFORMS);
-    for (let i = 0; i < n; i++) { const nm = gl.getActiveUniform(pr, i).name.replace(/\[0\]$/, ""); loc[nm] = gl.getUniformLocation(pr, nm); }
+    const build = (src) => {
+      const pr = gl.createProgram(); gl.attachShader(pr, mk(gl.VERTEX_SHADER, VS)); gl.attachShader(pr, mk(gl.FRAGMENT_SHADER, src));
+      gl.linkProgram(pr); if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
+      const loc = {}; const n = gl.getProgramParameter(pr, gl.ACTIVE_UNIFORMS);
+      for (let i = 0; i < n; i++) { const nm = gl.getActiveUniform(pr, i).name.replace(/\[0\]$/, ""); loc[nm] = gl.getUniformLocation(pr, nm); }
+      return { pr, loc };
+    };
+    // The reference is the shader as it was before the lids: eyeLid hands back the eye's own colour and covers nothing.
+    const real = window.JARVIS_CRITTERS[id];
+    const tail = "return float4(mix(ink, fur, cov) * (1.0 - 0.4 * crease), cov);";
+    if (!real.includes(tail)) throw new Error("eyeLid's last line moved: " + tail);
+    // (...and the eyes' sparkle, which the lid hides, is not dimmed by it.)
+    const dim = " * (1.0 - uLid.x)";
+    if (!real.includes(dim)) throw new Error("the sparkle no longer fades with the lid");
+    const REF = build(real.replace(tail, "return float4(ink, 0.0);").split(dim).join("")), REAL = build(real);
     const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
-    const shots = poses.map((p) => {
+    const drawWith = (prog, p) => {
+      const { pr, loc } = prog;
       gl.useProgram(pr); gl.viewport(0, 0, N, N);
       for (const k in p.U) { const v = p.U[k], l = loc[k]; if (!l) continue;
         if (v.length === 1) gl.uniform1f(l, v[0]); else if (v.length === 2) gl.uniform2f(l, v[0], v[1]);
@@ -301,7 +313,8 @@ if (!K) {
       gl.drawArrays(gl.TRIANGLES, 0, 3);
       const out = new Uint8Array(N * N * 4); gl.readPixels(0, 0, N, N, gl.RGBA, gl.UNSIGNED_BYTE, out);
       return out;
-    });
+    };
+    const shots = poses.map((p) => drawWith(REAL, p));
     const luma = (a, i) => 0.3 * a[i * 4] + 0.59 * a[i * 4 + 1] + 0.11 * a[i * 4 + 2];
     const diff = (a, b) => {
       let cnt = 0, x0 = 1e9, x1 = -1, y0 = 1e9, y1 = -1, left = 0;
@@ -317,6 +330,9 @@ if (!K) {
     const out = { N };
     // 0 idle as the pose draws it, 1 forced to no lid: must be the same picture.
     out.idle = diff(shots[0], shots[1]);
+    // ...and both are the picture the shader drew before the lids existed (every lid-less state, not only idle).
+    out.before = [0, 1].concat([14]).map((i) => diff(shots[i], drawWith(REF, poses[i])).cnt);
+    out.beforeAwake = [18, 19, 20].map((i) => diff(shots[i], drawWith(REF, poses[i])).cnt);
     // 5: a nearly shut lid; the box round what it changes is the eye, and the ink in it (lid off, 1) is the eye's dark.
     const big = diff(shots[1], shots[5]);
     out.big = big;
@@ -341,15 +357,19 @@ if (!K) {
       pose(id, "banked"), pose(id, "banked", [0, 0]),                                                                     // 12, 13
       pose(id, "standby"), pose(id, "standby", [0, 0]),                                                                   // 14, 15
       pose(id, "error", [0.42, 1]), pose(id, "error", [0.42, 1]),                                                         // 16, 17 (below: the eyes shut by hand)
+      pose(id, "listening"), pose(id, "thinking"), pose(id, "speaking"),                                                  // 18..20
     ];
     // Asleep the pose has the eyes shut, and the lid must leave the shut eye's line alone; and a blink
     // (an error's eyes squashed to nothing) with the worried lid on it is the same picture as without it.
     list[16].U.uFace = [0, 0, list[16].U.uFace[2]]; list[17].U.uFace = [0, 0, list[17].U.uFace[2]]; list[17].U.uLid = [0, 0];
-    const r = await analyse(id, list, null);
+    const r = await analyse(id, list, null).catch((e) => ({ error: e.message }));
+    if (r.error) { await check(`${id}: the shader can be drawn and compared with the one before the lids`, () => { throw new Error(r.error); }); continue; }
     if (process.env.LIDS_DEBUG) console.log(id, JSON.stringify(r));
     if (r.noGL) { console.log(`skip  ${id}: this browser has no WebGL`); continue; }
-    await check(`${id}: idle is pixel for pixel what it was - a lid of nothing draws nothing`, () => {
-      assert.equal(r.idle.cnt, 0, `${r.idle.cnt} pixels differ`);
+    await check(`${id}: idle is pixel for pixel what it was - a lid of nothing draws nothing (and neither do listening, thinking, speaking, or a shut eye)`, () => {
+      assert.equal(r.idle.cnt, 0, `${r.idle.cnt} pixels differ between the pose's idle and a lid of nothing`);
+      assert.deepEqual(r.before, [0, 0, 0], `idle, idle with no lid and asleep differ from the shader without lids by ${r.before} pixels`);
+      assert.deepEqual(r.beforeAwake, [0, 0, 0], `listening, thinking and speaking differ from the shader without lids by ${r.beforeAwake} pixels`);
     });
     await check(`${id}: a lid changes only the eyes - two clusters, one each side of the head, no bigger than an eye`, () => {
       const b = r.big;
