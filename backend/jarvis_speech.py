@@ -17,8 +17,9 @@ missing module):
     jarvis_speech.say(text)                -> bytes | None  (a WAV)
         since 2026-09-28 a Kokoro WAV may end with a "jmth" chunk after its
         sound: the animals' mouth shapes from Kokoro's own timing
-        (jarvis_mouth.py, docs/LIPSYNC.md); status()'s tts.mouth says if
-        they can be made on this PC, or why not
+        (jarvis_mouth.py, docs/LIPSYNC.md) - on Kokoro v1.0 as well since
+        2026-09-29; status()'s tts.mouth says if they can be made on this
+        PC, or why not
         since 2026-09-24 in the owner's chosen custom voice when there is one
         (jarvis_voices.py: ZipVoice on the processor, or F5-TTS on the second
         card), falling back to Kokoro with the reason recorded; every call's
@@ -2725,13 +2726,18 @@ def kokoro_speak(engine, text: str, sid: int, speed: float, semitones: float = 0
     its pause-shortening off and shortens the pauses with an exact copy of
     sherpa-onnx's own (checked byte for byte, docs/LIPSYNC.md); whenever it
     cannot, this speaks exactly as it always did."""
-    if mouth is not None and not _pack_is_v1():
+    if mouth is not None:
         try:
             import jarvis_mouth
+            # Kokoro v1.0's British voices are read with (and asked of
+            # sherpa-onnx as) their own espeak voice, exactly as
+            # _kokoro_generate asks; every other voice, and all of v0.19,
+            # is read with the engine's own language as before.
+            accent = accent_lang(sid)
             got = jarvis_mouth.speak(engine, text, sid, speed, semitones, pitch_up=pitch_up,
                                      silence_scale=_TTS_SILENCE_SCALE,
-                                     lang=str(_cfg("tts_lang", "en-us") or "en-us"),
-                                     paths=_sherpa_tts_paths())
+                                     lang=accent or str(_cfg("tts_lang", "en-us") or "en-us"),
+                                     paths=_sherpa_tts_paths(), extra_lang=accent)
         except Exception:
             got = False  # anything at all: speak exactly as before
         if got is None:
@@ -2744,22 +2750,6 @@ def kokoro_speak(engine, text: str, sid: int, speed: float, semitones: float = 0
     if audio is None or len(audio.samples) == 0:
         return None
     return pitch_up(audio.samples, semitones), audio.sample_rate
-
-
-def _pack_is_v1() -> bool:
-    """Kokoro v1.0 is installed. jarvis_mouth's timing (`--prepare`) is made
-    from the v0.19 model's own graph and refuses v1.0's, so on v1.0 the
-    mouths are analysed from the sound instead (docs/LIPSYNC.md) - the
-    owner's fallback. Skipping it here means an old timing file left beside a
-    new model can never be paired with it. Never raises."""
-    V = _voices_mod()
-    fn = getattr(V, "pack_kind", None) if V is not None else None
-    if fn is None:
-        return False
-    try:
-        return fn() == "v1"
-    except Exception:
-        return False
 
 
 def accent_lang(sid: int) -> Optional[str]:

@@ -361,5 +361,15 @@ Not on `main` yet (2026-09-29). When it is:
    should say it is busy). Pick a British voice (Emma or George) and ask
    Jarvis a question: it should sound British, not American - **nobody has
    listened to this yet, so tell us if it does not**. With an animal face on,
-   the animals still sound like themselves; their mouths follow the sound
-   rather than Kokoro's own timing on v1.0.
+   the animals still sound like themselves.
+4. **Optional, one more line: exact mouths on the new voices** (added
+   2026-09-29). After step 2, the animals' mouths follow the sound, not
+   Kokoro's own timing, until you run the same one line as for the old pack
+   (`backend\README.md`, **"Mouths that match the words"**, step 2 - it now
+   works on v1.0 too; about ten seconds, it writes one 56 MB file
+   `model.durations.onnx` next to the voice model and says where). It never
+   changes the voice pack, and if it says "this is not the Kokoro v1.0 model
+   file", nothing was made and the mouths simply stay as they are now. Then
+   restart Jarvis, turn an animal face on, ask something out loud, and watch
+   that the lips close on "m", "b" and "p" and round on "oo" and "w" - **nobody
+   has watched this on a v1.0 voice yet, so tell us how it looks**.

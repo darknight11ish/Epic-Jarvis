@@ -588,26 +588,38 @@ def t_british_voices_are_asked_for_british_english():
           S._tts_cache.calls == [(21, 1.0, None)], S._tts_cache.calls)
 
 
-def t_the_old_mouth_timing_is_never_used_with_the_new_pack():
-    reset("v1")
-    seen = []
-    fake = types.ModuleType("jarvis_mouth")
-    fake.speak = lambda *a, **k: seen.append("called") or False
-    saved = sys.modules.get("jarvis_mouth")
-    sys.modules["jarvis_mouth"] = fake
-    try:
-        out = []
-        got = S.kokoro_speak(S._tts_cache, "Hello there.", 3, 1.0, 0.0, mouth=out)
-        check("on Kokoro v1.0 jarvis_mouth is not asked (its timing is v0.19's), the sound is made",
-              got is not None and not seen and out == [], (seen, out))
-        reset("v019")
-        got = S.kokoro_speak(S._tts_cache, "Hello there.", 3, 1.0, 0.0, mouth=[])
-        check("on the old pack it is asked, as before", seen == ["called"], seen)
-    finally:
-        if saved is None:
-            sys.modules.pop("jarvis_mouth", None)
-        else:
-            sys.modules["jarvis_mouth"] = saved
+def t_the_mouth_timing_is_asked_on_both_packs():
+    """2026-09-29: Kokoro v1.0 has its own exact mouth timing now (jarvis_mouth.py
+    reads the pack it finds and refuses a copy made for another one), so
+    kokoro_speak asks for it on either pack - handing a British voice's own
+    language on. If jarvis_mouth cannot, the sound is made as it always was."""
+    for kind in ("v1", "v019"):
+        reset(kind)
+        seen = []
+        fake = types.ModuleType("jarvis_mouth")
+        fake.speak = lambda *a, **k: seen.append(k) or False
+        saved = sys.modules.get("jarvis_mouth")
+        sys.modules["jarvis_mouth"] = fake
+        try:
+            out = []
+            got = S.kokoro_speak(S._tts_cache, "Hello there.", 3, 1.0, 0.0, mouth=out)
+            check(f"on {kind} jarvis_mouth is asked, and when it declines the sound is made "
+                  "the ordinary way with no mouth", got is not None and len(seen) == 1
+                  and out == [], (seen, out))
+            check(f"... an American voice on {kind}: no per-call language",
+                  seen[0].get("extra_lang") is None and seen[0].get("lang") == "en-us", seen[0])
+            got = S.kokoro_speak(S._tts_cache, "Hello there.", 21, 1.0, 0.0, mouth=[])
+            want = "en-gb-x-rp" if kind == "v1" else None
+            check(f"... Emma (21) on {kind}: "
+                  + ("British English handed on, as the sound's own call asks"
+                     if kind == "v1" else "no accent (that pack speaks American only)"),
+                  seen[1].get("extra_lang") == want
+                  and seen[1].get("lang") == (want or "en-us"), seen[1])
+        finally:
+            if saved is None:
+                sys.modules.pop("jarvis_mouth", None)
+            else:
+                sys.modules["jarvis_mouth"] = saved
 
 
 # ---------------------------------------------------------------------- Hear it --

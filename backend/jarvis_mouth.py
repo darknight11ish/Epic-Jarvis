@@ -29,6 +29,16 @@ mouth out from the sound, exactly as they did before this file existed.
 Nothing here can stop Jarvis speaking or make it speak later than a small,
 measured wait (MOUTH_WAIT_S).
 
+KOKORO v1.0 TOO (owner, 2026-09-29: "Build exact timing"). Kokoro v1.0's
+model hands out the same numbers as a second output of its own graph (the
+lengths, after the same Round -> Clip -> Cast, then a Squeeze) - so the one-time
+step slices that out exactly as it does for v0.19, from the ONE pinned model
+file (jarvis_kokoro.V1_MODEL) and no other. What differs is the words -> sounds
+step: sherpa-onnx reads v1.0 text with its own front end (KokoroMultiLangLexicon),
+which changes ":" to ",", folds white space, and joins short sentences into the
+one before - copied below (multilang_pieces()) and, like everything here,
+proved on every sentence by the length check.
+
 HOW IT FITS (docs/LIPSYNC.md, "Mouths from Kokoro's own timing"):
 
   1. words -> speech sounds: espeak-ng, called the way piper-phonemize (the
@@ -100,6 +110,10 @@ KOKORO_FRAME = 600            #: samples per Kokoro duration frame (25 ms at 24 
 SOUND_LEAD = 2 * KOKORO_FRAME  #: samples of the raw sound (50 ms at 24 kHz)
 DURATION_NODE = "/Cast_output_0"  #: Kokoro v0.19's per-sound durations (after Round -> Clip)
 DURATIONS_FILE = "model.durations.onnx"
+#: Kokoro v1.0 declares its lengths as a graph output of its own (its second,
+#: int64: Squeeze <- Cast <- Clip <- Round) instead of an inner node with a
+#: fixed name; prepare() finds it by that shape, never by its auto-made name.
+SHAPE_ONLY_OPS = ("Squeeze", "Reshape", "Identity", "Flatten")
 CHUNK_ID = b"jmth"
 PAYLOAD_HEAD = "v1;src=kokoro;"
 #: How long say() may wait, after the sound is ready, for the timing still
@@ -272,9 +286,47 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def _duration_chain(g, producer, name: str, onnx_mod) -> bool:
+    """`name` holds Kokoro's sound lengths: it is the output of Cast(int64)
+    <- Clip <- Round, optionally seen through shape-only nodes (a Squeeze).
+    Never raises."""
+    hops = 0
+    while name in producer and g.node[producer[name]].op_type in SHAPE_ONLY_OPS and hops < 4:
+        n = g.node[producer[name]]
+        if not n.input:
+            return False
+        name, hops = n.input[0], hops + 1
+    cast = g.node[producer[name]] if name in producer else None
+    if cast is None or cast.op_type != "Cast" or not cast.input or cast.input[0] not in producer:
+        return False
+    clip = g.node[producer[cast.input[0]]]
+    if clip.op_type != "Clip" or not clip.input or clip.input[0] not in producer:
+        return False
+    rnd = g.node[producer[clip.input[0]]]
+    to = next((a.i for a in cast.attribute if a.name == "to"), None)
+    return rnd.op_type == "Round" and to == onnx_mod.TensorProto.INT64
+
+
+def _duration_output(g, producer, onnx_mod) -> str:
+    """The tensor that carries the sound lengths: v0.19's inner node
+    DURATION_NODE, or - Kokoro v1.0 - a declared int64 graph output. Both
+    are known by what computes them (Round -> Clip -> Cast(int64)), so a
+    node that only happens to share v0.19's name (v1.0 has an unrelated
+    "/Cast_output_0") is never taken. Raises ValueError, in plain words."""
+    candidates = [DURATION_NODE] if DURATION_NODE in producer else []
+    candidates += [o.name for o in g.output
+                   if o.type.tensor_type.elem_type == onnx_mod.TensorProto.INT64]
+    for name in candidates:
+        if _duration_chain(g, producer, name, onnx_mod):
+            return name
+    raise ValueError("this voice model has no sound-lengths output computed as Round -> Clip -> "
+                     "Cast(int64), so it is not the Kokoro v0.19 (kokoro-en-v0_19) or Kokoro "
+                     "v1.0 (kokoro-multi-lang-v1_0) model this was made for; nothing was written")
+
+
 def _duration_slice(model, onnx_mod):
-    """The part of Kokoro's graph that computes DURATION_NODE, as a new
-    model: every node the node depends on (walked backwards, including
+    """The part of Kokoro's graph that computes the sound lengths, as a new
+    model: every node the lengths depend on (walked backwards, including
     names used inside sub-graphs), the weights those nodes read, and the
     three inputs. Nothing is changed in the nodes themselves. Raises
     ValueError, in plain words, when this is not the model it expects."""
@@ -284,18 +336,7 @@ def _duration_slice(model, onnx_mod):
     for i, n in enumerate(g.node):
         for o in n.output:
             producer[o] = i
-    i_cast = producer.get(DURATION_NODE)
-    if i_cast is None:
-        raise ValueError(f"this voice model has no {DURATION_NODE} node - it is not the "
-                         "Kokoro v0.19 model (kokoro-en-v0_19) this was made for")
-    cast = g.node[i_cast]
-    clip = g.node[producer[cast.input[0]]] if cast.input and cast.input[0] in producer else None
-    rnd = g.node[producer[clip.input[0]]] if clip is not None and clip.input[0] in producer else None
-    to = next((a.i for a in cast.attribute if a.name == "to"), None)
-    if cast.op_type != "Cast" or clip is None or clip.op_type != "Clip" or rnd is None \
-            or rnd.op_type != "Round" or to != onnx_mod.TensorProto.INT64:
-        raise ValueError(f"{DURATION_NODE} is not Round -> Clip -> Cast(int64) in this model, "
-                         "so it may not be the sound lengths; nothing was written")
+    out_name = _duration_output(g, producer, onnx_mod)
 
     def outer_names(node) -> set:
         out = set()
@@ -311,7 +352,7 @@ def _duration_slice(model, onnx_mod):
                     out |= outer_names(sn)
         return out
 
-    keep, need, todo = set(), set(), [DURATION_NODE]
+    keep, need, todo = set(), set(), [out_name]
     while todo:
         name = todo.pop()
         if name in need:
@@ -329,7 +370,7 @@ def _duration_slice(model, onnx_mod):
         raise ValueError("the sound lengths do not depend on exactly tokens, style and "
                          f"speed here ({[x.name for x in inputs]}); nothing was written")
     graph = helper.make_graph([g.node[i] for i in sorted(keep)], "kokoro_durations", inputs,
-                              [helper.make_tensor_value_info(DURATION_NODE,
+                              [helper.make_tensor_value_info(out_name,
                                                              onnx_mod.TensorProto.INT64, None)],
                               initializer=[x for x in g.initializer if x.name in need])
     out = helper.make_model(graph, opset_imports=list(model.opset_import),
@@ -340,12 +381,34 @@ def _duration_slice(model, onnx_mod):
     return out
 
 
+def _v1_pin() -> Optional[dict]:
+    """jarvis_kokoro.V1_MODEL (the one place the v1.0 model file is pinned),
+    or None when jarvis_kokoro.py is not beside this file."""
+    try:
+        import jarvis_kokoro
+        pin = dict(jarvis_kokoro.V1_MODEL)
+        return pin if pin.get("sha256") and pin.get("bytes") else None
+    except Exception:
+        return None
+
+
+def _model_version(meta: dict) -> int:
+    """Kokoro's own `version` note: absent in v0.19 (so 1), "2" in v1.0."""
+    try:
+        return int(str(meta.get("version", "1")).strip() or 1)
+    except ValueError:
+        return 1
+
+
 def prepare(paths: Optional[dict] = None, force: bool = False,
             say: Callable[[str], None] = print) -> dict:
     """Make model.durations.onnx beside the Kokoro model, once. Idempotent:
     a copy already made from this same model is left alone. The model
     sherpa-onnx speaks with is only READ. Returns {"ok", "did", "path",
-    "why"} and says what it did in plain words through `say`."""
+    "why"} and says what it did in plain words through `say`. Kokoro v1.0
+    is made only from the one pinned file (jarvis_kokoro.V1_MODEL): any
+    other model.onnx in a v1.0 folder gets no copy, and the apps keep
+    working the mouth out from the sound."""
     paths = paths or tts_paths()
     src, dst = Path(paths["model"]), durations_path(paths)
     out = {"ok": False, "did": "nothing", "path": str(dst), "why": ""}
@@ -373,13 +436,31 @@ def prepare(paths: Optional[dict] = None, force: bool = False,
     say(f"Reading {src} (about {size / 1e6:.0f} MB; it is not changed)...")
     try:
         model = onnx.load(str(src))
+        sha = _sha256(src)
+        v1 = _model_version({p.key: p.value for p in model.metadata_props}) >= 2
+        if v1:
+            pin = _v1_pin()
+            if pin is None:
+                raise ValueError("jarvis_kokoro.py (which pins the Kokoro v1.0 model) is not in "
+                                 "the backend folder, so this cannot check the model is the "
+                                 "right one - run the apply-patches step first")
+            if size != int(pin["bytes"]) or sha != str(pin["sha256"]).lower():
+                raise ValueError(
+                    "this is not the Kokoro v1.0 model file Jarvis's install line puts there "
+                    f"(its fingerprint starts {sha[:12]}, the expected one starts "
+                    f"{str(pin['sha256'])[:12]}), so no timing was made from it. Run the "
+                    "\"Upgrade the voice pack to Kokoro v1.0\" line in backend\\README.md "
+                    "again, then this step")
         sub = _duration_slice(model, onnx)
+        out_name = sub.graph.output[0].name
         sub.metadata_props.add(key="jarvis_source_size", value=str(size))
-        sub.metadata_props.add(key="jarvis_source_sha256", value=_sha256(src))
+        sub.metadata_props.add(key="jarvis_source_sha256", value=sha)
         tmp = dst.with_name(dst.name + ".part")
         onnx.save(sub, str(tmp))
         del model
         _check_durations_model(tmp, paths)
+        if v1:
+            _check_against_model(tmp, src, out_name, paths)
         os.replace(tmp, dst)
     except Exception as exc:
         try:
@@ -426,6 +507,26 @@ def _check_durations_model(path: Path, paths: dict) -> None:
                      "speed": np.array([1.0], np.float32)})[0]
     if np.asarray(d).reshape(-1).shape[0] != len(ids) or int(np.asarray(d).sum()) <= 0:
         raise ValueError("the copy did not give one length per sound")
+
+
+def _check_against_model(copy: Path, source: Path, out_name: str, paths: dict) -> None:
+    """Kokoro v1.0 only: the copy must give, for three real inputs, exactly
+    what the voice model itself gives at the output the copy was cut at -
+    the proof that the slice is the model's own sound lengths."""
+    import onnxruntime as ort
+    c = ort.InferenceSession(str(copy), providers=["CPUExecutionProvider"])
+    f = ort.InferenceSession(str(source), providers=["CPUExecutionProvider"])
+    style = _load_voices(paths["voices"], dict(c.get_modelmeta().custom_metadata_map))
+    for ids, sid, speed in (([0, 50, 83, 54, 156, 57, 135, 0], 0, 1.0),
+                            ([0, 50, 83, 54, 156, 57, 135, 4, 16, 50, 83, 0], 3, 0.85),
+                            ([0] + [83, 54, 156, 57, 135] * 9 + [0], 26, 1.3)):
+        feed = {"tokens": np.array([ids], np.int64),
+                "style": style[min(sid, style.shape[0] - 1)][len(ids) - 2][None, :],
+                "speed": np.array([speed], np.float32)}
+        a = np.asarray(c.run(None, feed)[0]).reshape(-1)
+        b = np.asarray(f.run([out_name], feed)[0]).reshape(-1)
+        if a.shape != b.shape or not np.array_equal(a, b):
+            raise ValueError("the copy does not give the voice model's own sound lengths")
 
 
 # --------------------------------------------------------------------------
@@ -574,7 +675,9 @@ def _clause_end(chunk: str, more: bool, lead: str = "") -> str:
 
 def phonemize(text: str, data_dir: str, voice: str = "en-us") -> Optional[List[str]]:
     """Speech sounds for `text`, one string per sentence, exactly as
-    sherpa-onnx's piper-phonemize makes them for Kokoro v0.19 - or None."""
+    sherpa-onnx's piper-phonemize makes them for Kokoro v0.19 - or None.
+    (Kokoro v1.0's front end calls the same routine on the text fixed by
+    multilang_text(); see multilang_pieces().)"""
     # espeak-ng reads a C string: nothing after a NUL character exists for
     # it (or for sherpa-onnx), so nothing after one may count here either.
     raw = text.replace("\ufffd", _FFFD_AS_PIPER).encode("utf-8", "replace").split(b"\0", 1)[0]
@@ -667,6 +770,77 @@ def token_pieces(sentences: Sequence[str], tokens: dict, max_len: int = 511):
     return out
 
 
+#: KokoroMultiLangLexicon::ConvertTextToTokenIds, step one (sherpa-onnx
+#: kokoro-multi-lang-lexicon.cc): these replacements, in this order, on the
+#: text before anything else. A plain ":" becomes ",", and every run of
+#: white space (std::regex's "\s": space, tab, line feeds, form feed) one
+#: space - so a blank line no longer ends a sentence on v1.0.
+_ML_REPLACE = (("\uff0c", ","), (":", ","), ("\u3001", ","), ("\uff1b", ";"), ("\uff1a", ":"),
+               ("\u3002", "."), ("\uff1f", "?"), ("\uff01", "!"))
+_ML_SPACES = re.compile(r"[ \t\n\v\f\r]+")
+#: A run of Chinese characters is read from the pack's Chinese lexicon,
+#: which is not copied here: such a sentence gets no timing.
+_ML_CHINESE = re.compile("[\u4e00-\u9fff]")
+#: What sherpa-onnx takes as a bare punctuation "sentence" (IsPunctuation):
+#: text that is exactly one of these is spoken as [0, that sound, 0].
+_ML_PUNCT = {";", ":", ",", ".", "!", "?", "\u2014", "\u2026", "\"", "(", ")", "\u201c", "\u201d"}
+
+
+def multilang_text(text: str) -> str:
+    """The text as Kokoro v1.0's front end (KokoroMultiLangLexicon) hands it
+    to espeak-ng: see _ML_REPLACE."""
+    for old, new in _ML_REPLACE:
+        text = text.replace(old, new)
+    return _ML_SPACES.sub(" ", text)
+
+
+def join_short_pieces(pieces):
+    """sherpa-onnx's Kokoro v1.0 front end joins a short sentence (at most
+    10 sounds between the two 0 pads) onto the one before it when the two
+    together stay under 50 tokens - or whatever the length when it is under
+    3 sounds: the earlier piece's closing 0 becomes the short one's first
+    sound and the rest follows, so they are spoken (and timed) as ONE piece.
+    A longer sentence is a piece of its own. [(ids, sounds)] in and out."""
+    out = []
+    for ids, labels in pieces:
+        ids, labels = list(ids), list(labels)
+        if len(ids) > 10 + 2 or not out:
+            out.append((ids, labels))
+            continue
+        back_ids, back_labels = out[-1]
+        if len(back_ids) + len(ids) < 50 or len(ids) < 5:
+            back_ids[-1], back_labels[-1] = ids[1], labels[1]
+            back_ids.extend(ids[2:])
+            back_labels.extend(labels[2:])
+        else:
+            out.append((ids, labels))
+    return out
+
+
+def multilang_pieces(text: str, tokens: dict, max_len: int, data_dir: str,
+                     voice: str = "en-us"):
+    """[(ids, sounds)] per piece Kokoro v1.0's sherpa-onnx will speak for
+    `text` in espeak voice `voice` - or None (espeak-ng unavailable, or the
+    text has Chinese in it). The same steps, in the same order, as
+    KokoroMultiLangLexicon with the pack's lexicon left out (Jarvis passes
+    `lang`, not a lexicon): fix the text (multilang_text), a bare
+    punctuation mark stands alone, else espeak-ng's sentences as tokens
+    (token_pieces), then the short ones joined on (join_short_pieces)."""
+    fixed = multilang_text(text)
+    if _ML_CHINESE.search(fixed):
+        return None
+    if fixed == "":
+        return []
+    if fixed in _ML_PUNCT:
+        if fixed not in tokens:
+            return None
+        return [([0, tokens[fixed], 0], ["", fixed, ""])]
+    sents = phonemize(fixed, data_dir, voice)
+    if sents is None:
+        return None
+    return join_short_pieces(token_pieces(sents, tokens, max_len))
+
+
 def _load_voices(path: str, meta: dict):
     dims = [int(x) for x in str(meta.get("style_dim", "511,1,256")).split(",")]
     per = dims[0] * dims[2]
@@ -693,6 +867,19 @@ class _Model:
         if want is not None and want != have:
             raise ValueError("model.durations.onnx was made from a different voice model; "
                              "run the one-time step again")
+        #: "piper": Kokoro v0.19's front end; "multilang": Kokoro v1.0's.
+        self.frontend = "multilang" if _model_version(meta) >= 2 else "piper"
+        if self.frontend == "multilang":
+            # v1.0 timing is only ever paired with the one pinned model file:
+            # made from it (its recorded fingerprint) and still the same size.
+            pin = _v1_pin()
+            if pin is None:
+                raise ValueError("jarvis_kokoro.py (which pins the Kokoro v1.0 model) is missing")
+            if (meta.get("jarvis_source_sha256") != str(pin["sha256"]).lower()
+                    or meta.get("jarvis_source_size") != str(pin["bytes"])
+                    or have != str(pin["bytes"])):
+                raise ValueError("model.durations.onnx was not made from the pinned Kokoro v1.0 "
+                                 "model; run the one-time step again")
         self.meta = meta
         self.sample_rate = int(meta.get("sample_rate", 24000))
         self.tokens = read_tokens(paths["tokens"])
@@ -701,7 +888,11 @@ class _Model:
         self.data_dir = paths["data_dir"]
 
     def durations(self, ids: Sequence[int], sid: int, speed: float):
-        sid = sid if 0 <= sid < self.styles.shape[0] else 0
+        # A voice number the voices file has no row for (a blended-voices file
+        # that is shorter than the pack's, say) gets NO timing - never another
+        # voice's: the caller then speaks with no mouth block.
+        if not 0 <= sid < self.styles.shape[0]:
+            raise ValueError(f"the voices file has no voice number {sid}")
         d = self.session.run(None, {
             "tokens": np.array([list(ids)], dtype=np.int64),
             "style": self.styles[sid][len(ids) - 2][None, :],
@@ -713,8 +904,20 @@ _MODEL_LOCK = threading.Lock()
 _MODEL = {"key": None, "model": None, "why": ""}
 
 
+def _file_version(path) -> tuple:
+    """(size, modified time) of a file, or (None, None): part of what the loaded
+    timing is keyed on, so a voices file written again in place (the blended
+    voices being remade) is read afresh, not from the copy already in memory."""
+    try:
+        st = Path(path).stat()
+        return (st.st_size, st.st_mtime_ns)
+    except (OSError, TypeError, ValueError):
+        return (None, None)
+
+
 def _model(paths: dict) -> Optional[_Model]:
-    key = (paths.get("model"), paths.get("voices"), paths.get("tokens"), paths.get("data_dir"))
+    key = (paths.get("model"), paths.get("voices"), paths.get("tokens"), paths.get("data_dir"),
+           _file_version(paths.get("voices")))
     with _MODEL_LOCK:
         if _MODEL["key"] == key:
             return _MODEL["model"]
@@ -846,12 +1049,20 @@ class Job:
             if m is None:
                 self.why = "the timing model could not be loaded: " + (_MODEL["why"] or "?")
                 return
-            sents = phonemize(self.text, m.data_dir, self.lang)
-            if sents is None:
-                self.why = "espeak-ng: " + (_ESPEAK["why"] or "could not read the text")
-                return
+            if m.frontend == "multilang":
+                todo = multilang_pieces(self.text, m.tokens, m.max_len, m.data_dir, self.lang)
+                if todo is None:
+                    self.why = ("espeak-ng: " + _ESPEAK["why"]) if _ESPEAK["why"] else \
+                        "this text has Chinese characters or could not be read"
+                    return
+            else:
+                sents = phonemize(self.text, m.data_dir, self.lang)
+                if sents is None:
+                    self.why = "espeak-ng: " + (_ESPEAK["why"] or "could not read the text")
+                    return
+                todo = token_pieces(sents, m.tokens, m.max_len)
             pieces = []
-            for ids, labels in token_pieces(sents, m.tokens, m.max_len):
+            for ids, labels in todo:
                 frames = m.durations(ids, self.sid, self.speed)
                 if len(frames) != len(ids):
                     self.why = "the timing model gave the wrong number of lengths"
@@ -863,6 +1074,43 @@ class Job:
         finally:
             self.ms = (time.monotonic() - t0) * 1000.0
             self.done.set()
+
+
+STALE_COPY = ("The timing copy (model.durations.onnx) was made from a different voice model "
+              "than the one installed now. Run the one-time step again (backend\\README.md, "
+              "\"Mouths that match the words\"). Until then the apps work the mouth out from "
+              "the sound, as before.")
+_STALE_CACHE: dict = {}
+
+
+def _stale_copy(paths: dict) -> str:
+    """STALE_COPY when the copy's own notes say it came from a model of
+    another size than the one installed (an old copy beside a new pack, or
+    the other way round) - or, for Kokoro v1.0, from anything but the pinned
+    model file; "" when it fits or cannot be told. The notes are read once
+    per file version, not on every status poll."""
+    try:
+        dst = durations_path(paths)
+        st = dst.stat()
+        key = (str(dst), st.st_mtime_ns, st.st_size)
+        meta = _STALE_CACHE.get(key)
+        if meta is None:
+            meta = _meta_of(dst)
+            _STALE_CACHE.clear()
+            _STALE_CACHE[key] = meta
+        if not meta:
+            return ""
+        have = str(Path(paths["model"]).stat().st_size)
+        if meta.get("jarvis_source_size") not in (None, have):
+            return STALE_COPY
+        if _model_version(meta) >= 2:
+            pin = _v1_pin()
+            if pin is not None and (meta.get("jarvis_source_sha256") != str(pin["sha256"]).lower()
+                                    or have != str(pin["bytes"])):
+                return STALE_COPY
+        return ""
+    except Exception:
+        return ""
 
 
 def ready(paths: Optional[dict] = None) -> Tuple[bool, str]:
@@ -880,6 +1128,9 @@ def ready(paths: Optional[dict] = None) -> Tuple[bool, str]:
         return False, "the Kokoro voice's espeak-ng-data folder is missing"
     if not durations_path(paths).is_file():
         return False, HOW_TO_PREPARE
+    stale = _stale_copy(paths)
+    if stale:
+        return False, stale
     try:
         import onnxruntime  # noqa: F401
     except Exception:
@@ -935,13 +1186,18 @@ class NotHere(Exception):
 
 def speak(engine, text: str, sid: int, speed: float, semitones: float, *,
           pitch_up: Callable, silence_scale: float = 0.2, lang: str = "en-us",
-          paths: Optional[dict] = None, wait: float = MOUTH_WAIT_S):
+          paths: Optional[dict] = None, wait: float = MOUTH_WAIT_S,
+          extra_lang: Optional[str] = None):
     """(samples, sample_rate, payload or None) for the built-in voice,
     with the mouth shapes when they can be made - or raises NotHere before
     any sound was made (the caller then speaks exactly as before). `speed`
     is the pace asked for; Kokoro is asked for speed / f and the sound is
     then raised - or, below 0, lowered - by `semitones` (pitch_up), as
-    kokoro_speak does."""
+    kokoro_speak does. `lang` is the espeak voice the text is read with;
+    `extra_lang` is the same voice when it must also be handed to sherpa-onnx
+    as the per-call language (Kokoro v1.0's British voices - the call
+    jarvis_speech._kokoro_generate makes), else None and sherpa-onnx uses
+    its own."""
     try:
         import sherpa_onnx
         make_config = sherpa_onnx.GenerationConfig
@@ -960,6 +1216,8 @@ def speak(engine, text: str, sid: int, speed: float, semitones: float, *,
         cfg.sid = int(sid)
         cfg.speed = model_speed
         cfg.silence_scale = 1.0
+        if extra_lang:
+            cfg.extra = {"lang": str(extra_lang)}
     except Exception:
         raise NotHere("GenerationConfig is not the expected shape")
     pieces: list = []
@@ -972,7 +1230,14 @@ def speak(engine, text: str, sid: int, speed: float, semitones: float, *,
         audio = engine.generate(text, cfg, keep)
     except TypeError:
         raise NotHere("this sherpa-onnx has no generate(text, config, callback)")
+    except Exception:
+        if extra_lang:
+            # what _kokoro_generate does when the accent cannot be asked for
+            raise NotHere("sherpa-onnx would not take the accent")
+        raise
     if audio is None or len(audio.samples) == 0:
+        if extra_lang:
+            raise NotHere("no sound for the accent")  # the caller's own fallback speaks
         return None
     rate = int(audio.sample_rate)
     whole = np.asarray(audio.samples, dtype=np.float32)
