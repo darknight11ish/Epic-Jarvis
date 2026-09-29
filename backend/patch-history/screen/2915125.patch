@@ -21,18 +21,20 @@
      except Exception:
          return False
  
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
 @@ -3473,6 +3487,22 @@
      except Exception as exc:
-         print(f"  inbox      NOT ON ({type(exc).__name__}) - Inbox tidy is off")
-         print("             until jarvis_inbox_tidy.py is back: run apply-patches.ps1 again")
+         print(f"  sky        NOT ON ({type(exc).__name__}) - the sun, moon and weather are off")
+         print("             until jarvis_sky.py is back: run apply-patches.ps1 again")
 +    # screen.patch ("Look at this" and "Watch with me", the owner's decision
-+    # of 2026-09-28; docs/SCREEN-DESIGN.md, JARVIS-API sections 62 and 96):
++    # of 2026-09-28; docs/SCREEN-DESIGN.md, JARVIS-API sections 62 and 93):
 +    # GET/POST /api/screen (look, ask, start, extend - only from this PC -
 +    # and stop, drop from anywhere) and GET/POST /api/screen/never-look (the
 +    # list of programs and sites Jarvis never looks at: this PC only; adding
 +    # is instant, removing is ONE approval card). No card to look or to
 +    # start: the owner's own act, with a sign on screen the whole time.
-+    # Wrapped round Handler here, before anything listens, like inbox above;
++    # Wrapped round Handler here, before anything listens, like sky above;
 +    # the rules are all in jarvis_screen.py and jarvis_screen_win.py.
 +    try:
 +        import jarvis_screen
@@ -44,6 +46,8 @@
      # Before the main socket, so the banner lists every address together.
      _loopback_companion(bind, HUD_PORT, Handler)
      print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
 @@ -4282,6 +4312,11 @@
                  # from "offer" into "escalate" for a question that had
                  # already cleared every other gate on its own merits.

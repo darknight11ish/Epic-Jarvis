@@ -73,6 +73,8 @@ projects.patch	projects/ef32847.patch	ef3284730bcbc4a1f9ddd20a2e57fe37c1c92888	2
 schedule.patch	schedule/344c940.patch	344c94087a901ed8751c3ef580ead344fc9da9fb	2026-09-27T05:04:58+00:00	Open or adjust any setting by voice or chat
 schedule.patch	schedule/a90e8dc.patch	a90e8dc5323269d0ed88a81271d22ad1b6acf97e	2026-09-25T04:14:33+00:00	Standby schedule (backend): standby on a timetable, every model unloaded, warm-up on waking
 schedule.patch	schedule/97885fd.patch	97885fd9027e5f7c6a3d163fd5133cf634a0562a	2026-09-25T02:17:12+00:00	Timers, alarms, reminders, a to-do list and one scheduler (backend)
+screen.patch	screen/5f4ff23.patch	5f4ff2359a78bd4d91ce02020f14a55a50a34569	2026-09-29T09:18:58+00:00	Merge studio-screen into the research branch: Look at this and Watch with me
+screen.patch	screen/2915125.patch	291512500a68410187aea64bafa68a81eff8c6d1	2026-09-29T05:23:37+00:00	Screen: the PC's Windows readers, the routes, the chat turn and Watch with me by voice
 second-card-suggest.patch	second-card-suggest/5540058.patch	55400589332bd2028eed95bc142bf3b9c57c396e	2026-09-27T14:18:45+00:00	Fix backend audit findings #6, #7, #9 and #10
 second-card-suggest.patch	second-card-suggest/ed7b4b3.patch	ed7b4b3dce2b9439e2a603591af385999cf4434b	2026-09-27T08:55:01+00:00	Fix the backend audit's six real findings, and the phone's own scroll bug
 second-card-suggest.patch	second-card-suggest/476be02.patch	476be02a5a254b7f6868f3aef75fc00288e3aa73	2026-09-27T04:50:08+00:00	Suggest the bigger model when the second card could help

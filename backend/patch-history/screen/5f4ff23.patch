@@ -21,6 +21,8 @@
      except Exception:
          return False
  
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
 @@ -3473,6 +3487,22 @@
      except Exception as exc:
          print(f"  inbox      NOT ON ({type(exc).__name__}) - Inbox tidy is off")
@@ -44,6 +46,8 @@
      # Before the main socket, so the banner lists every address together.
      _loopback_companion(bind, HUD_PORT, Handler)
      print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
 @@ -4282,6 +4312,11 @@
                  # from "offer" into "escalate" for a question that had
                  # already cleared every other gate on its own merits.
