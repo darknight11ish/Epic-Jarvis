@@ -545,7 +545,7 @@ testers, scouts and integration scouts; `.claude/agents/`):
   touch, approved on screen (never by voice), then Undo. "Delete" only ever
   moves to Trash. The card says when the choice came from reading email
   (outside text). A new named way out of the PC (ARCHITECTURE §4) and its
-  own gate action, like sending email. Not built yet.
+  own gate action, like sending email. Built (JARVIS-API §95; merged in PR #30, 2026-09-29). Tried against a stand-in mail server, never a real mailbox.
 - **The phone connects through Tailscale or NordVPN Meshnet only** (owner,
   2026-09-28), replacing "Phone: allow home-network addresses" of
   2026-09-27. Allowing a home address would mean the PC also answering on
@@ -569,7 +569,7 @@ testers, scouts and integration scouts; `.claude/agents/`):
   rated voices, real British pronunciation, and a "Hear it" sample button
   for every voice in both apps. The saved choice moves from a number to the
   voice's name, and the owner's current choice carries over. A 350 MB
-  download on the PC, checksum-pinned. Not built yet.
+  download on the PC, checksum-pinned. Built (JARVIS-API §94; merged in PR #30, 2026-09-29). Nobody has listened to a v1.0 voice yet - the "Hear it" buttons are how to try them.
 - **A "sneaky instruction" (prompt-injection) detector: test two, keep the
   winner** (owner, 2026-09-28) - Meta's Prompt Guard 2 (Llama 4 Community
   Licence: credit "Built with Llama", licence file, the owner downloads it
