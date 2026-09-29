@@ -483,13 +483,17 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus,
-  folders, chatbot, support, historyImport, widgets }) {
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals,
+  folders, chatbot, support, historyImport, widgets, devices }) {
   const listeners = {};
   window.__calls = [];
   window.__emailSending = emailSending || null;
   // folders.rs: { view, addAnswer, removeAnswer, importAnswer } (folders.mjs).
   window.__folders = folders || null;
+  // devices.rs (docs/PAIRING-DESIGN.md): { list, address, start, startFails,
+  // sessions, removeFails, sharedFails } (devices.mjs). Unset, a PC whose
+  // backend has no pairing yet - the Devices card says so and nothing else.
+  window.__devices = devices || null;
   // App lock on or off, for get_app_lock (apps security audit M3).
   window.__appLock = Boolean(appLock);
   const state = {
@@ -782,6 +786,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             window.__taskNotes.push(args.note);
             if (window.__taskNoteFails) throw new Error(window.__taskNoteFails);
             return { ok: true };
+          // voice_training.rs get_face_voice_offer: the Faces window's one
+          // read - the PC's waiting animal voice question, or null, and
+          // whether the link is stale. A scenario sets window.__faceOffer.
+          case "get_face_voice_offer":
+            window.__calls.push(["__offerRead"]);
+            return JSON.parse(JSON.stringify(window.__faceOffer || { offer: null, stale: false }));
           case "get_appearance":
             if (window.__appearanceFails) throw new Error(window.__appearanceFails);
             return window.__appearance;
@@ -884,6 +894,30 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const label = args.feature === "master" ? "The second graphics card" : `"${row ? row.name : args.feature}"`;
             return { ok: true, enabled: false, pending: false, message: `${label} is off.` };
           }
+          // commands.rs set_third_card (2026-09-28): moving one of the
+          // second card's own features onto a third graphics card, or
+          // moving it back off. What jarvis_second_card._request_change_third
+          // does to status()'s "third" key: assigning puts "third" in
+          // `pending` (a card is up, nothing moved yet); unassigning clears
+          // it and `third.assigned` at once.
+          case "set_third_card": {
+            const sc = window.__secondCard;
+            sc.changes.push({ assign: args.assign ?? null });
+            if (sc.setFails) throw new Error(sc.setFails);
+            const st = sc.status;
+            const third = st.third || {};
+            if (args.assign) {
+              if (!st.pending.includes("third")) st.pending.push("third");
+              third.pending = true;
+              return { ok: true, assigned: third.assigned || null, pending: true,
+                       message: "Approve the card on your PC or phone to move it. Nothing changes until you do." };
+            }
+            third.assigned = null;
+            third.pending = false;
+            st.pending = st.pending.filter((p) => p !== "third");
+            return { ok: true, assigned: null, pending: false,
+                     message: "The third card is not running anything." };
+          }
           // "When to suggest the bigger model" - no card either way, so this
           // just flips the one signal in the same status object.
           case "set_second_card_suggest": {
@@ -932,7 +966,11 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           case "set_better_voice":
           case "set_voice_speed":
           case "set_voice_speaker":
-          case "set_voice_face": {
+          case "set_voice_face":
+          case "set_voice_animal":
+          case "reset_voice_animal":
+          case "try_voice_animal":
+          case "answer_face_voice_offer": {
             const v = window.__vt;
             if (cmd !== "voice_sample_level") v.calls.push([cmd, JSON.parse(JSON.stringify(args || {}))]);
             if (v.fails[cmd]) throw new Error(v.fails[cmd]);
@@ -987,6 +1025,20 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 return JSON.parse(JSON.stringify(v.speaker));
               case "set_voice_face":
                 return JSON.parse(JSON.stringify(args.enabled ? v.faceOn : v.faceOff));
+              // Each animal's voice (voice_training.rs): the PC's real
+              // answers; "Try it" a tiny silent WAV, as the Rust hands it on.
+              case "set_voice_animal":
+                return JSON.parse(JSON.stringify(v.animalSet));
+              case "reset_voice_animal":
+                return JSON.parse(JSON.stringify(v.animalReset));
+              case "try_voice_animal":
+                return JSON.parse(JSON.stringify(v.animalTry));
+              // The one-time animal voice question (voice_training.rs
+              // answer_face_voice_offer). The test builds its own answer
+              // in `faceOfferAnswer` - the fixtures may not have it yet.
+              case "answer_face_voice_offer":
+                return JSON.parse(JSON.stringify(v.faceOfferAnswer
+                  || { ok: true, http: 200, message: "Done", face_voice: {} }));
               default:
                 return null;
             }
@@ -1470,6 +1522,36 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return { ok: true, waiting: true, job,
                      said: "It repeats, so it waits for your yes on the card." };
           }
+          // brain/goals.rs (Goals). `window.__goals` is null - a PC without
+          // this feature yet, which Rust answers {available: false} for -
+          // unless the scenario names `goals: {goals}`. Accepting pushes its
+          // check-in job onto the SAME `window.__schedule.jobs` Coming up
+          // reads (creating it, empty, if the scenario named no `schedule` -
+          // exactly as the real backend keeps both on the one scheduler),
+          // waiting, like any other repeat set up on the PC; stopping
+          // removes it again. Words are taken out while the private lists
+          // are hidden, same as brain_schedule above.
+          case "brain_goals": {
+            const g = window.__goals;
+            if (!g) {
+              return { available: false, why: "Your PC's Jarvis does not have Goals yet - " +
+                "run apply-patches.ps1 on the PC." };
+            }
+            g.reads += 1;
+            if (g.fails) throw new Error(g.fails);
+            const out = JSON.parse(JSON.stringify({ available: true, goals: g.goals,
+              limits: { text: 300, steps: 7, goals: 20, by: 40 } }));
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) {
+              for (const gl of out.goals) {
+                gl.text = "";
+                gl.plan = gl.plan.map((s) => ({ ...s, step: "", by: "" }));
+                gl.hidden = true;
+              }
+              out.hidden = true;
+            }
+            return out;
+          }
           // "Widgets you describe" (brain/widgets.rs), as Rust answers.
           case "brain_widgets": {
             const w = window.__widgets;
@@ -1487,6 +1569,81 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               out.hidden = true;
             }
             return out;
+          }
+          case "brain_goals_create": {
+            window.__goalsCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const g = window.__goals;
+            const text = String(args.text || "").trim();
+            if (!text) return { ok: false, error: "a goal needs some words" };
+            if (text.length > 300) {
+              return { ok: false, error: "a goal is longer than 300 characters - say it more briefly" };
+            }
+            const open = g.goals.filter((x) => x.status === "draft" || x.status === "active").length;
+            if (open >= 20) {
+              return { ok: false, error: "there are already 20 goals - stop tracking one before adding another" };
+            }
+            const plan = Array.isArray(args.plan) && args.plan.length
+              ? args.plan.map((s) => ({ step: String(s.step || ""), by: String(s.by || ""), done: Boolean(s.done) }))
+              : [{ step: text, by: "", done: false }];
+            const goal = { id: "g" + g.goals.length.toString(16).padStart(10, "0"), text, plan,
+              status: "draft", created: Date.now() / 1000, changed: Date.now() / 1000 };
+            g.goals.unshift(goal);
+            return { ok: true, goal };
+          }
+          case "brain_goals_accept": {
+            window.__goalsCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const g = window.__goals;
+            const goal = g.goals.find((x) => x.id === args.id);
+            if (!goal) return { ok: false, error: "no such goal" };
+            if (goal.status !== "draft") return { ok: false, error: "that goal is not waiting to be accepted" };
+            const plan = Array.isArray(args.plan) && args.plan.length
+              ? args.plan.map((s) => ({ step: String(s.step || ""), by: String(s.by || ""), done: Boolean(s.done) }))
+              : goal.plan;
+            if (!plan.length) return { ok: false, error: "a plan needs at least one step" };
+            if (plan.length > 7) {
+              return { ok: false, error: "a plan can have at most 7 steps - keep the big ones and drop the rest" };
+            }
+            goal.plan = plan;
+            goal.status = "active";
+            goal.changed = Date.now() / 1000;
+            if (!window.__schedule) window.__schedule = { jobs: [], todo: [], reads: 0, fails: null };
+            const job = { id: "s" + (0xd000000000 + window.__schedule.jobs.length).toString(16),
+              kind: "goal_checkin", text: goal.text, state: "waiting", repeats: true,
+              repeat: "every Monday at 09:00" };
+            window.__schedule.jobs.push(job);
+            g.checkinByGoal = g.checkinByGoal || {};
+            g.checkinByGoal[goal.id] = job.id;
+            return { ok: true, goal: { ...goal, checkin: job } };
+          }
+          case "brain_goals_step": {
+            window.__goalsCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const g = window.__goals;
+            const goal = g.goals.find((x) => x.id === args.id);
+            if (!goal) return { ok: false, error: "no such goal" };
+            const i = args.index;
+            if (typeof i !== "number" || i < 0 || i >= goal.plan.length) {
+              return { ok: false, error: "that is not one of this goal's steps" };
+            }
+            goal.plan[i].done = Boolean(args.done);
+            goal.changed = Date.now() / 1000;
+            return { ok: true, goal: { ...goal } };
+          }
+          case "brain_goals_stop": {
+            window.__goalsCalls.push({ cmd, ...args });
+            if (state.stale) throw new Error("the event stream is stale");
+            const g = window.__goals;
+            const goal = g.goals.find((x) => x.id === args.id);
+            if (!goal) return { ok: false, error: "no such goal" };
+            goal.status = "stopped";
+            goal.changed = Date.now() / 1000;
+            const jobId = (g.checkinByGoal || {})[goal.id];
+            if (jobId && window.__schedule) {
+              window.__schedule.jobs = window.__schedule.jobs.filter((j) => j.id !== jobId);
+            }
+            return { ok: true, goal: { ...goal } };
           }
           case "brain_widgets_draft": {
             window.__widgetCalls.push({ cmd, ...args });
@@ -1534,6 +1691,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
           }
           case "widget_board_action": {
             window.__widgetCalls.push({ cmd, ...args });
+            // brain/widgets.rs: under App lock a tile that acts only opens
+            // the Jarvis bar (the owner, 2026-09-28).
+            if (window.__appLock && !["stop_everything", "brief_me"].includes(args.action)) {
+              window.__barOpened = (window.__barOpened || 0) + 1;
+              return "App lock is on, so this opens the Jarvis bar instead. Unlock it, then ask Jarvis there.";
+            }
             if (state.stale && !["stop_everything", "brief_me"].includes(args.action)) {
               throw new Error("the event stream is stale");
             }
@@ -2066,6 +2229,53 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return window.__folders && window.__folders.removeAnswer || { ok: true };
           case "import_notion":
             return window.__folders && window.__folders.importAnswer || { cancelled: true };
+          // devices.rs: Settings -> Devices. The QR picture is Rust's; here a
+          // scenario's `start.qr_svg` stands in for it. `sessions` answers
+          // pair_session in turn (the last one repeats).
+          case "devices_list": {
+            const d = window.__devices;
+            if (!d || !d.list) {
+              return { available: false,
+                       why: "Your PC's Jarvis cannot pair phones by QR code yet - run apply-patches.ps1 on this PC. Until then, your phone keeps using the old shared key (Settings, Connection)." };
+            }
+            return JSON.parse(JSON.stringify({ available: true, ...d.list }));
+          }
+          case "pair_phone_address":
+            return (window.__devices && window.__devices.address) || { address: null, source: null };
+          case "pair_start": {
+            const d = window.__devices || {};
+            if (d.startFails) throw new Error(d.startFails);
+            d.sessionIndex = 0;
+            d.started = (d.started || 0) + 1;
+            return JSON.parse(JSON.stringify(d.start));
+          }
+          case "pair_session": {
+            const d = window.__devices || {};
+            const all = d.sessions || [{ state: "none" }];
+            if (!d.started && !d.openAtLoad) return { state: "none" };
+            const i = Math.min(d.sessionIndex || 0, all.length - 1);
+            d.sessionIndex = i + 1;
+            return JSON.parse(JSON.stringify(all[i]));
+          }
+          case "pair_cancel":
+            window.__devices.cancelled = (window.__devices.cancelled || 0) + 1;
+            return { ok: true, was: "waiting_for_phone", http: 200 };
+          case "devices_remove": {
+            const d = window.__devices;
+            if (d.removeFails) throw new Error(d.removeFails);
+            const row = d.list.devices.find((x) => x.id === args.id);
+            d.list.devices = d.list.devices.filter((x) => x.id !== args.id);
+            return { ok: true, id: args.id, name: row && row.name, was_this_device: false, http: 200 };
+          }
+          case "devices_shared": {
+            const d = window.__devices;
+            if (d.sharedFails) throw new Error(d.sharedFails);
+            if (args.retired === true) {
+              d.list.shared = { ...d.list.shared, retired: true, retired_at: 1790000000 };
+              return { ok: true, retired: true, http: 200 };
+            }
+            return { ok: true, waiting: true, http: 202 };
+          }
           default: return null;
         }
       },
@@ -2220,6 +2430,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__schedule = schedule ? JSON.parse(JSON.stringify({
     jobs: [], todo: [], reads: 0, fails: null, ...schedule })) : null;
   window.__scheduleCalls = [];
+  window.__goals = goals ? JSON.parse(JSON.stringify({
+    goals: [], reads: 0, fails: null, checkinByGoal: {}, ...goals })) : null;
+  window.__goalsCalls = [];
   // "Widgets you describe" (brain/widgets.rs). Unset, a PC without it.
   // `widgets`/`drafts` are the PC's rows (with said and parts); `shows` maps
   // an id to its GET /api/widgets/show answer; `draft` is the preview the
@@ -2293,6 +2506,17 @@ export function speechLog(page) {
     .map((c) => `${c[0]} ${c[1]}`));
 }
 
+/** `seconds` of silence as a 24 kHz mono 16-bit WAV, base64. */
+function silentWav(seconds) {
+  const n = Math.round(24000 * seconds);
+  const b = Buffer.alloc(44 + n * 2);
+  b.write("RIFF", 0); b.writeUInt32LE(36 + n * 2, 4); b.write("WAVE", 8);
+  b.write("fmt ", 12); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(24000, 24); b.writeUInt32LE(48000, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34);
+  b.write("data", 36); b.writeUInt32LE(n * 2, 40);
+  return b.toString("base64");
+}
+
 /** Opens a page with the bridge installed and the given scenario data. */
 export async function open(browser, base, file, data, viewport) {
   const page = await browser.newPage({ viewport, deviceScaleFactor: 2 });
@@ -2353,6 +2577,10 @@ export async function open(browser, base, file, data, viewport) {
       speaker: TRAINING.answer(TRAINING.voice_posts.speaker_9),
       faceOn: TRAINING.answer(TRAINING.voice_posts.face_on),
       faceOff: TRAINING.answer(TRAINING.voice_posts.face_off),
+      animalSet: TRAINING.answer(TRAINING.voice_posts.animal_set),
+      animalReset: TRAINING.answer(TRAINING.voice_posts.animal_reset),
+      // A tenth of a second of silence, as the Rust hands a WAV on.
+      animalTry: { ok: true, http: 200, audio: `data:audio/wav;base64,${silentWav(0.1)}` },
       ...(data && data.vt),
     },
   });

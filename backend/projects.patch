@@ -1,9 +1,9 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
 @@ -3264,6 +3264,22 @@
+                                             token_ok=_token_ok, read_body=_read_body))
      except Exception as exc:
-         print(f"  sources    NOT ON ({type(exc).__name__}) - \"Where this came from\" is off")
-         print("             until jarvis_sources.py is back: run apply-patches.ps1 again")
+         print(f"  old chats  NOT ON ({type(exc).__name__}) - Bringing in old chats is off")
 +    # projects.patch (the owner's decision of 2026-09-28, "Projects, like
 +    # Claude's Projects and more"; docs/PROJECTS-DESIGN.md build steps 1
 +    # and 2): GET and POST /api/projects, /api/projects/<id> and its

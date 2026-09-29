@@ -154,6 +154,26 @@ class ClientSettings(context: Context) {
         _watchNotifications.value = value
     }
 
+    private val _phoneNotifications = MutableStateFlow(prefs.getBoolean(KEY_PHONE_NOTIFICATIONS, false))
+
+    /**
+     * A CACHE of the PC's own "read my phone's notifications" switch
+     * ([com.jarvis.client.net.PhoneNotifications]), off by default. Not the
+     * setting's only copy: the PC decides it, behind an approval card to
+     * turn it on; this is only what the phone last heard, kept so
+     * [com.jarvis.client.service.PhoneNotificationListenerService] can
+     * decide whether to store anything without a network round trip on
+     * every notification. [com.jarvis.client.JarvisRuntime] writes it
+     * whenever it reads or changes the real setting. Unknown or stale
+     * reads as OFF, on purpose - reading nothing leaks nothing.
+     */
+    val phoneNotifications: StateFlow<Boolean> = _phoneNotifications.asStateFlow()
+
+    fun setPhoneNotifications(value: Boolean) {
+        prefs.edit { putBoolean(KEY_PHONE_NOTIFICATIONS, value) }
+        _phoneNotifications.value = value
+    }
+
     private val _floatingAvatar = MutableStateFlow(
         FloatingAvatarMode.fromWire(prefs.getString(KEY_FLOATING_AVATAR, null)),
     )
@@ -305,6 +325,7 @@ class ClientSettings(context: Context) {
         const val KEY_LIVE_INTERRUPT = "live_interrupt"
         const val KEY_INTERRUPT = "interrupt"
         const val KEY_WATCH_NOTIFICATIONS = "watch_notifications"
+        const val KEY_PHONE_NOTIFICATIONS = "phone_notifications"
         const val KEY_KEEP_ALIVE_OFFERED = "keep_alive_offered"
         const val KEY_KEEP_ALIVE_PENDING = "keep_alive_pending"
         const val KEY_FLOATING_AVATAR = "floating_avatar"

@@ -31,6 +31,7 @@ FAILED, PASSED = [], []
 PATCH = "gate-outcome.patch"
 #: The actions the audit named, each checked below against its module.
 LISTED = ("second_card_enable", "second_card_browser_enable", "second_card_combined_enable",
+          "second_card_third_assign",
           "big_model_enable",
           "learning_enable", "history_enable", "learning_auto_enable",
           "learning_sensitive_enable", "wiki_update", "change_own_config",

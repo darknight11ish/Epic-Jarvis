@@ -7,7 +7,7 @@ import kotlinx.serialization.json.intOrNull
 
 /**
  * "Solve it here" (the owner's decision of 2026-09-28, CLAUDE.md "A captcha
- * can be handed to the owner's phone"; JARVIS-API.md section 60.8; the PC's
+ * can be handed to the owner's phone"; JARVIS-API.md section 87.8; the PC's
  * backend/jarvis_handoff.py).
  *
  * When a chatbot website or a customer-support chat pauses at a captcha, a

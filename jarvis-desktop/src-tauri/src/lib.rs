@@ -29,6 +29,7 @@ pub mod brain;
 pub mod clipboard_privacy;
 pub mod commands;
 pub mod crash_notes;
+pub mod devices;
 pub mod email_sending;
 pub mod folders;
 pub mod hardware;
@@ -43,6 +44,7 @@ pub mod pyfind;
 pub mod reach;
 pub mod screen_work;
 pub mod sidecar;
+pub mod sky;
 pub mod spec;
 pub mod spec_drift;
 pub mod sse;
@@ -153,6 +155,12 @@ pub mod events {
     /// still playing, this is the moment to stop it, before the finished
     /// utterance (`VOICE_HEARD`, above) is anywhere close to ready.
     pub const VOICE_SPEECH_STARTED: &str = "voice-speech-started";
+    /// Payload: none. The talk button is about to open the microphone
+    /// ([`crate::voice::start_voice_capture`]). Sent to every window: an
+    /// animal's "Try it" playing in Settings stops at once, so the owner's
+    /// question is not recorded over it (voice-panel.js `followJarvisVoice`).
+    /// Carries nothing; starts and decides nothing.
+    pub const VOICE_CAPTURE_STARTED: &str = "voice-capture-started";
     /// Payload: none. Sent to the quickbar only, by
     /// [`crate::voice::summon_push_to_talk`] (the HUD's mic button): put
     /// focus on the mic and say how to talk. Starts no recording.
@@ -445,7 +453,7 @@ pub struct RouteState {
 /// numbers, and the GPU probe is a process spawn.
 fn spawn_telemetry_loop(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
-        let mut system = sysinfo::System::new_all();
+        let mut system = telemetry_system();
 
         loop {
             tokio::time::sleep(TELEMETRY_INTERVAL).await;
@@ -496,7 +504,7 @@ fn spawn_telemetry_loop(app: AppHandle) {
                     // The blocking task panicked or was cancelled; `system`
                     // went with it, so start a fresh one for the next tick.
                     eprintln!("[jarvis] telemetry sampling failed: {err}");
-                    system = sysinfo::System::new_all();
+                    system = telemetry_system();
                     continue;
                 }
             };
@@ -505,6 +513,19 @@ fn spawn_telemetry_loop(app: AppHandle) {
             }
         }
     });
+}
+
+/// The sampler's `System`, loading only what `sample_telemetry` reads: CPU
+/// usage and memory. `System::new_all()` also listed every process, disk,
+/// network adapter and user at start-up and kept them for the session,
+/// none of which the widget shows.
+fn telemetry_system() -> sysinfo::System {
+    use sysinfo::{CpuRefreshKind, MemoryRefreshKind, RefreshKind};
+    sysinfo::System::new_with_specifics(
+        RefreshKind::new()
+            .with_cpu(CpuRefreshKind::new().with_cpu_usage())
+            .with_memory(MemoryRefreshKind::everything()),
+    )
 }
 
 /// Default note target for the quick-capture hotkey.
@@ -850,6 +871,11 @@ pub fn run() {
             brain::widgets::widget_board,
             brain::widgets::widget_board_action,
             brain::schedule::brain_schedule_clear_list,
+            brain::goals::brain_goals,
+            brain::goals::brain_goals_create,
+            brain::goals::brain_goals_accept,
+            brain::goals::brain_goals_step,
+            brain::goals::brain_goals_stop,
             brain::photo_reminder::photo_scan,
             brain::photo_reminder::photo_add_reminder,
             brain::history_import::history_import_status,
@@ -917,6 +943,7 @@ pub fn run() {
             commands::reveal_pairing_token,
             commands::get_second_card,
             commands::set_second_card,
+            commands::set_third_card,
             commands::set_second_card_suggest,
             commands::get_backend_capabilities,
             commands::get_big_model,
@@ -950,12 +977,21 @@ pub fn run() {
             backup::backup_now,
             backup::preview_restore,
             backup::restore_backup,
+            devices::pair_phone_address,
+            devices::pair_start,
+            devices::pair_session,
+            devices::pair_cancel,
+            devices::devices_list,
+            devices::devices_remove,
+            devices::devices_shared,
             tool_updates::get_tool_updates,
             tool_updates::check_tool_updates,
             plain_errors::get_manner,
             plain_errors::set_manner,
             plain_errors::set_humor,
             plain_errors::open_fix_place,
+            sky::get_sky,
+            sky::set_sky,
             appearance::get_appearance,
             appearance::set_appearance,
             appearance::appearance_snapshot,
@@ -1040,6 +1076,11 @@ pub fn run() {
             voice_training::set_voice_speed,
             voice_training::set_voice_speaker,
             voice_training::set_voice_face,
+            voice_training::set_voice_animal,
+            voice_training::reset_voice_animal,
+            voice_training::try_voice_animal,
+            voice_training::get_face_voice_offer,
+            voice_training::answer_face_voice_offer,
             vision::local_model_vision,
             // Windows Hello (lock.rs): Settings reads and changes the four
             // Security settings; the Brain's Show button.

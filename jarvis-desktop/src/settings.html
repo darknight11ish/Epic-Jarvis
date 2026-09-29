@@ -53,6 +53,7 @@
         <div class="settings-jump-group">
           <span class="settings-jump-label">Everyday</span>
           <a href="#connection">Connection</a>
+          <a href="#devices">Devices</a>
           <a href="#faq">FAQ</a>
           <a href="#appearance-card">Appearance</a>
           <a href="#voice">Voice</a>
@@ -194,6 +195,86 @@
             </details>
           </span>
           <button class="btn ghost small" id="reconnect" type="button">Reconnect</button>
+        </div>
+      </section>
+
+      <!-- Devices (docs/PAIRING-DESIGN.md, phase 1): pairing a phone by QR
+           code, with a key per device. devices.js fills it; the commands are
+           src-tauri/src/devices.rs. The QR picture is drawn in Rust - this
+           page never holds the text inside it. The approval itself is an
+           ordinary card (the "Open the card" line at the top of this page),
+           never approved here. -->
+      <section class="card" id="devices">
+        <h2>Devices</h2>
+        <p class="note">
+          Each phone gets its own key, and you can remove any one of them
+          without touching the others. To add a phone, press
+          <strong>Pair a phone</strong> and scan the code with the Jarvis app
+          on that phone - over Tailscale or NordVPN Meshnet only.
+        </p>
+        <p class="state" id="dv-state" role="status">Asking Jarvis…</p>
+        <div id="dv-body" hidden>
+          <!-- Pairing a phone -->
+          <div id="dv-address-row" hidden>
+            <label class="field">
+              <span class="label">Your phone reaches this PC at</span>
+              <input id="dv-address" type="text" spellcheck="false" autocomplete="off"
+                     placeholder="my-pc.tail1234.ts.net" />
+            </label>
+            <p class="note" id="dv-address-note">
+              This PC's Tailscale name (it ends in <code>.ts.net</code>) or its
+              NordVPN Meshnet name (it ends in <code>.nord</code>). The Tailscale
+              or NordVPN app shows it. You only type it once.
+            </p>
+          </div>
+          <p class="note" id="dv-address-known" hidden>
+            Your phone reaches this PC at <strong id="dv-address-shown"></strong>.
+            <button class="btn ghost small" id="dv-address-change" type="button">Change</button>
+          </p>
+          <div class="row">
+            <button class="btn" id="dv-pair" type="button">Pair a phone</button>
+            <span class="status" id="dv-pair-status" role="status"></span>
+          </div>
+          <p class="note" id="dv-pair-why" hidden></p>
+
+          <div class="dv-panel" id="dv-panel" hidden>
+            <div id="dv-code-box" hidden>
+              <img class="dv-qr" id="dv-qr" alt="The pairing code. Scan it with the Jarvis app on your phone." />
+              <p class="note">
+                Can't scan? Type this code on the phone:
+                <strong class="dv-code" id="dv-code"></strong>
+              </p>
+              <p class="note" id="dv-countdown"></p>
+            </div>
+            <p class="dv-words" id="dv-words" hidden></p>
+            <p class="note" id="dv-session" role="status" aria-live="polite"></p>
+            <p class="note" id="dv-wrong-tries" hidden></p>
+            <div class="row">
+              <button class="btn ghost" id="dv-cancel" type="button">Cancel</button>
+              <button class="btn ghost" id="dv-close" type="button" hidden>Close</button>
+            </div>
+          </div>
+
+          <!-- The device list -->
+          <h3 class="subhead">Paired devices</h3>
+          <ul class="sc-cards" id="dv-list"></ul>
+          <span class="status" id="dv-status" role="status"></span>
+
+          <!-- The old shared key -->
+          <h3 class="subhead">Old shared key</h3>
+          <p class="note">
+            Used by this PC, and by devices paired before each one had its own key.
+          </p>
+          <p class="note" id="dv-shared-line"></p>
+          <div class="row">
+            <button class="btn ghost" id="dv-retire" type="button" hidden>Retire for other devices</button>
+            <button class="btn ghost" id="dv-bring-back" type="button" hidden>Bring it back</button>
+            <span class="status" id="dv-shared-status" role="status"></span>
+          </div>
+          <!-- "Show the token for my phone" (Connection, above) moves here
+               while the old key still works for other devices, renamed; it
+               is hidden once the key is retired (design 7.1). -->
+          <div id="dv-old-key-slot"></div>
         </div>
       </section>
 
@@ -485,11 +566,11 @@
         <details class="more" id="face-tuning">
           <summary>
             <span class="more-title">Face on this computer</span>
-            <span class="more-detail">Quality, frame rate and speed.</span>
+            <span class="more-detail">Quality, frame rate, speed and keeping the animal still.</span>
           </summary>
           <p class="note">
-            For the face in the widget and the HUD on this computer only. The
-            phone has its own.
+            For the faces on this computer only: the widget, the floating face
+            and the HUD. The phone has its own.
           </p>
 
           <label class="toggle">
@@ -498,7 +579,8 @@
               Auto adjust
               <span class="toggle-detail">
                 Picks quality and frame rate for this computer, and steps down
-                if the face runs slow.
+                if the face runs slow. On a capable graphics chip an animal can
+                go up to Maximum.
               </span>
             </span>
           </label>
@@ -506,13 +588,16 @@
           <div class="field">
             <span class="label" id="face-quality-label">Quality</span>
             <div class="choices" id="face-quality" role="group" aria-labelledby="face-quality-label"></div>
-            <p class="note" id="face-quality-note">High matches the reactor kit. Low is easiest on the graphics card.</p>
+            <p class="note" id="face-quality-note">High matches the reactor kit. Lower is easiest on the graphics chip.</p>
+            <!-- One plain line per level: what it costs (face-tuning.js
+                 QUALITIES, the same words as the phone's Face editor). -->
+            <ul class="note face-level-notes" id="face-quality-levels"></ul>
           </div>
 
           <div class="field">
             <span class="label" id="face-fps-label">Frame rate</span>
             <div class="choices" id="face-fps" role="group" aria-labelledby="face-fps-label"></div>
-            <p class="note">How many times a second the face is drawn. Auto uses the screen's own rate.</p>
+            <p class="note" id="face-fps-note">How many times a second the face is drawn.</p>
           </div>
 
           <div class="field">
@@ -520,6 +605,20 @@
             <div class="choices" id="face-speed" role="group" aria-labelledby="face-speed-label"></div>
             <p class="note">How fast the face moves. It never goes above 1×.</p>
           </div>
+
+          <!-- The owner's "Still" option (2026-09-28). Cosmetic, so no card:
+               it only takes movement away. Shown whatever face is worn - the
+               line says it is for the animals, as the phone's does. -->
+          <label class="toggle">
+            <input id="face-still" type="checkbox" />
+            <span>
+              Keep the animal still
+              <span class="toggle-detail">
+                It only breathes and blinks - no looking around. For the animal
+                faces; the others are not changed.
+              </span>
+            </span>
+          </label>
           <span class="status" id="face-status" role="status"></span>
         </details>
 
@@ -541,12 +640,52 @@
           </span>
         </label>
 
+        <!-- The sun, the moon and the weather behind the animal (the owner's
+             decisions of 2026-09-28; sky-settings.js; sky.rs get_sky, set_sky;
+             backend jarvis_sky.py). Kept on the PC and shared with the phone,
+             so it is not inside "Face on this computer". Both off by default.
+             The town is typed here only; Open-Meteo ON raises ONE approval
+             card; off, Home Assistant and forgetting the town are at once. -->
+        <div id="sky" class="sky-settings">
+          <h3 class="subhead" id="sky-title">Sun, moon and weather</h3>
+          <p class="state" id="sky-state" role="status">Asking Jarvis…</p>
+          <div id="sky-body" hidden>
+            <label class="toggle">
+              <input id="sky-show" type="checkbox" />
+              <span>
+                <span id="sky-show-label">Show the sun and moon behind the animal</span>
+                <span class="toggle-detail" id="sky-show-detail"></span>
+              </span>
+            </label>
+            <div class="field">
+              <label class="label" for="sky-place" id="sky-place-label">Your town</label>
+              <div class="row">
+                <input id="sky-place" type="text" maxlength="120" spellcheck="false" autocomplete="off" />
+                <button class="btn" id="sky-place-set" type="button">Set</button>
+                <button class="btn" id="sky-place-forget" type="button" hidden>Forget my town</button>
+              </div>
+              <p class="note" id="sky-place-detail"></p>
+              <p class="note" id="sky-place-now"></p>
+              <p class="note" id="sky-today"></p>
+            </div>
+            <fieldset class="theme-list" id="sky-weather-list">
+              <legend class="label" id="sky-weather-label">Weather in the animal's scene</legend>
+              <p class="note" id="sky-weather-detail"></p>
+              <div id="sky-weather-choices"></div>
+            </fieldset>
+            <p class="note" id="sky-weather-status" role="status"></p>
+            <span class="status" id="sky-status" role="status"></span>
+          </div>
+        </div>
+
         <h3 class="subhead">Shared with your phone</h3>
         <p class="note">
           The face and the state colours — which face Jarvis wears, and the
           colour and pattern for each thing it can be doing — are shared with
-          your phone. A change made there shows up here too. Nothing else on
-          this page leaves this computer.
+          your phone. A change made there shows up here too. So are the sun,
+          moon and weather settings above (your phone is shown your town, but
+          only this PC can set it). Nothing else on this page leaves this
+          computer.
         </p>
         <p class="state" id="appearance-shared">Checking whether they are shared…</p>
         <div class="row">
@@ -960,9 +1099,36 @@
               </span>
             </label>
             <p class="note" id="cv-face-line" hidden></p>
+            <!-- The one-time question after an animal face is picked (the
+                 owner, 2026-09-28): the PC's own words, verbatim
+                 (custom-voices.js faceOfferView). Each animal keeps its own
+                 answer: "Use it" records yes for that animal and turns the
+                 switch above on; "Keep my voice" records no for it and
+                 leaves the switch as it is. No card either way; greyed on
+                 a stale link (rule 4). -->
+            <div class="row" id="cv-face-offer" hidden>
+              <span id="cv-face-offer-question"></span>
+              <button type="button" class="btn" id="cv-face-offer-use"></button>
+              <button type="button" class="btn ghost" id="cv-face-offer-keep"></button>
+            </div>
             <div class="row">
               <span class="status" id="cv-face-status" role="status"></span>
             </div>
+          </div>
+
+          <!-- Each animal's voice (the owner's choice, 2026-09-28): for the
+               red panda, pygmy owl, sea otter and monkey, one row each - a voice
+               from the built-in list, a pitch (deeper or higher), a pace,
+               "Try it" and "Reset to its own voice". The PC's `face_voice`
+               block, choices and words its own (custom-voices.js
+               animalVoicesView); the rows are built by voice-panel.js
+               paintAnimals. No card either way; a change is held on a stale
+               link (voice_training.rs set_voice_animal); Try it changes
+               nothing, so it is not. The phone's Voices screen has the same. -->
+          <div id="cv-animals" hidden>
+            <h3 class="subhead" id="cv-animals-title">Each animal's voice</h3>
+            <p class="note" id="cv-animals-detail"></p>
+            <div id="cv-animals-list"></div>
           </div>
 
           <h3 class="subhead">Voices</h3>
@@ -1269,6 +1435,28 @@
           <div class="sc-switches" id="sc-switches"></div>
           <div class="row">
             <span class="status" id="sc-status" role="status"></span>
+          </div>
+
+          <!-- A third graphics card (2026-09-28): shown only once Jarvis
+               finds a genuinely capable one. Moving a switch here does not
+               turn it on or off - the switches above still do that - it
+               only says WHICH physical card an already-on switch runs on.
+               Runs at the same time as the second card's own lane, one
+               feature on each. See docs/GPU-SUPPORT-RESEARCH-2026-09-27.md
+               section 1.3: never a default, always a named choice. -->
+          <div id="sc-third-section" hidden>
+            <h3 class="subhead">Third graphics card</h3>
+            <p class="note" id="sc-third-found"></p>
+            <p class="note">
+              Move one of the switches above onto this card. It keeps
+              running there at the same time as the second card's own
+              lane - one feature on each card, never both at once for the
+              same one.
+            </p>
+            <div class="sc-switches" id="sc-third"></div>
+            <div class="row">
+              <span class="status" id="sc-third-status" role="status"></span>
+            </div>
           </div>
 
           <h3 class="subhead">One bigger model on both cards</h3>
@@ -1836,6 +2024,7 @@
       </footer>
     </main>
 
+    <script src="sky.js"></script>
     <script type="module" src="settings.js"></script>
     <script type="module" src="hardware-panel.js"></script>
     <script type="module" src="pc-help.js"></script>
@@ -1844,9 +2033,11 @@
     <script type="module" src="account-secrets-settings.js"></script>
     <script type="module" src="reach-settings.js"></script>
     <script type="module" src="asks-first-settings.js"></script>
+    <script type="module" src="sky-settings.js"></script>
     <script type="module" src="email-sending-settings.js"></script>
     <script type="module" src="folders-settings.js"></script>
     <script type="module" src="backup-settings.js"></script>
+    <script type="module" src="devices.js"></script>
     <script type="module" src="tool-updates-settings.js"></script>
     <script type="module" src="manner-settings.js"></script>
   </body>

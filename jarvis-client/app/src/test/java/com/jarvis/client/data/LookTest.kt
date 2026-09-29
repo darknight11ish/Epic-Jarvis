@@ -22,6 +22,8 @@ class LookTest {
         assertFalse(look.navAlwaysShown)
         assertEquals(1f, look.glow, 0f)
         assertEquals(MotionPref.FOLLOW, look.motion)
+        // "Keep the animal still" is off unless chosen (owner, 2026-09-28).
+        assertFalse(look.stillAnimal)
         assertFalse(look.compact)
         assertTrue(look.makeRoomForApprovals)
         // The default is already inside the ranges setLook clamps to.

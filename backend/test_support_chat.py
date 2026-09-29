@@ -965,16 +965,22 @@ def t_shipped_and_documented():
     start = ps1.index("$PATCHES = @(")
     names = [ln.strip().strip("'") for ln in ps1[start:ps1.index("\n)", start)].splitlines()
              if ln.strip().startswith("'")]
-    # Right after forget-range.patch (its context in jarvis_gate.py). The
-    # patches after it since GitHub's main was merged (brain-reads ->
-    # history-import, 2026-09-28) touch jarvis_hud.py only, never the gate.
+    # After forget-range.patch (its context in jarvis_gate.py). Since
+    # GitHub's main was merged (2026-09-29) sky.patch (jarvis_hud.py only)
+    # and devices.patch (the gate, at other lines; it must stay the very last
+    # patch) follow forget-range.patch, so this one sits between them: what
+    # matters is that no later patch rewrites its lines.
     at = names.index("support-chat.patch") if "support-chat.patch" in names else -1
-    later_gate = [n for n in names[at + 1:]
-                  if "+++ b/jarvis_gate.py" in (HERE / n).read_text(encoding="utf-8")] if at >= 0 else []
-    check("support-chat.patch comes right after forget-range.patch (its context), "
-          "and no later patch touches jarvis_gate.py",
-          at > 0 and names[at - 1] == "forget-range.patch" and not later_gate,
-          (names[at - 1:at + 2], later_gate))
+    fr = names.index("forget-range.patch") if "forget-range.patch" in names else -1
+    try:
+        import _stack as _st
+        rewritten = _st.later_rewriting("support-chat.patch", "support_", names)
+    except Exception as exc:  # noqa: BLE001 - reported as the check's detail
+        rewritten = [repr(exc)]
+    check("support-chat.patch comes after forget-range.patch (its context), "
+          "and no later patch rewrites its lines",
+          at > 0 and fr >= 0 and at > fr and not rewritten,
+          (names[at - 1:at + 2], rewritten))
     try:
         import _stack
         text, log = _stack.stand_in("jarvis_gate.py")

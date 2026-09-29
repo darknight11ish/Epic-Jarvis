@@ -1,0 +1,33 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -577,8 +577,16 @@
+     "control_phone":     ("no", "outbound", "tapping the phone can send a message or complete a purchase"),
+     # A GitHub search that carries your token is not "nothing changes" the
+     # way an anonymous one is - it identifies you to GitHub, even though it
+     # writes nothing there. Kept separate from web_research (which defaults
+     # to auto in jarvis-framework.toml) so authenticating is its own
+     # decision rather than inheriting a tier set for anonymous search.
+     "research_authenticated": ("yes", "outbound", "identifies you to GitHub via your token; nothing is written"),
++    # plan.patch (jarvis_plan.py, "one card, several steps", the owner's
++    # "build it now", 2026-09-28; feasibility audit I61). Classified by its
++    # own worst case even though every risky or result-filled step inside
++    # an approved plan still asks again on ITS OWN action's own risk entry
++    # (this one only covers the safe steps that run without asking a
++    # second time) - "outbound" because a step the model did not flag as
++    # risky could still be wrong about that.
++    "run_plan": ("no", "outbound", "runs every step of an approved plan the model did not flag as risky, at once; a risky or result-filled step always asks again on its own separate card first"),
+     # note-capture.patch (jarvis_note_capture.py). All three stay on this PC:
+@@ -746,6 +746,13 @@
+     # draft-email.patch: jarvis_agent.py's draft_email tool, under the action
+     # name jarvis-framework.toml gives a tier ("ask", and it must stay so).
+     "draft_email": "draft_email",
++    # plan.patch (jarvis_plan.py): propose_plan builds and describes a Plan
++    # only - it reads nothing, sends nothing, and is auto for the same
++    # reason browser_axtree and jarvis_ui_control_plan are: nothing has
++    # happened yet. run_plan is the one card that lets the SAFE steps go
++    # ahead; it needs its own line, not the tier a risky step's own tool
++    # already has.
++    "propose_plan": "auto", "run_plan": "run_plan",
+     # model steward: looking is free, downloading and switching are not, and
+     # they are separate decisions. Reverting is the one that must never wait.
+     "model_list": "auto", "model_recommend": "auto",

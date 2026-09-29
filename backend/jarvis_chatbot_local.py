@@ -3,7 +3,7 @@ talks to another Ollama model on THIS PC. Nothing leaves the PC.
 
 NEW MODULE, shipped whole (like jarvis_chatbot.py, which it plugs into).
 Reachable from both apps through /api/chatbot/* (jarvis_chatbot_routes.py,
-docs/JARVIS-API.md section 60) once a model is chosen (local_model under
+docs/JARVIS-API.md section 87) once a model is chosen (local_model under
 [chatbot]). NOT yet tried against a real Ollama on the owner's PC.
 
 THE OWNER'S DECISION (CLAUDE.md, "The chatbot driver becomes versatile",

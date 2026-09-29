@@ -720,11 +720,11 @@ export function loosens(setting, value, current = "") {
     || (setting === "memory" && value === "memory_aloud")
     || (setting === "sensitive_memory" && value === "sensitive_aloud")
     || (setting === "hands_free" && value === "same_as_button")
-    || (setting === "hands_free_screen" && value === "screen_aloud")
-    || (setting === "live_end" && value === "live_end_windows_lock")
     || (setting === "talk_to_type" && value === "on")
     || (setting === "wake_confirm" && value === "one")
-    || (setting === "voice_id_model" && value === "resnet221");
+    || (setting === "voice_id_model" && value === "resnet221")
+    || (setting === "hands_free_screen" && value === "screen_aloud")
+    || (setting === "live_end" && value === "live_end_windows_lock");
 }
 
 /** The choice of each "Better voice" setting that needs something installed. */

@@ -1,6 +1,6 @@
 //! Brain -> Projects (the owner's decision of 2026-09-28, "Projects, like
 //! Claude's Projects and more"; docs/PROJECTS-DESIGN.md build step 3;
-//! backend/jarvis_projects.py, projects.patch; JARVIS-API.md section 61).
+//! backend/jarvis_projects.py, projects.patch; JARVIS-API.md section 88).
 //!
 //! Three commands, Brain window only (permissions/surfaces.toml,
 //! `brain-projects`):

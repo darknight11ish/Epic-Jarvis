@@ -94,6 +94,7 @@ import {
 } from "./security-settings.js";
 import {
   FRAME_RATES,
+  FRAME_RATE_NOTE,
   loadFaceTuning,
   QUALITIES,
   saveFaceTuning,
@@ -626,6 +627,9 @@ paintTextSize();
    phone. The face frames in the widget and the HUD read the same key. */
 let faceTuning = loadFaceTuning();
 const faceAuto = $("face-auto");
+// "Keep the animal still": every face page on this computer reads it from
+// the same key (faces.html FACE_STILL), eased in over about a second.
+const faceStill = $("face-still");
 const faceStatus = $("face-status");
 
 function choiceRow(box, options, label, onPick) {
@@ -643,6 +647,7 @@ function choiceRow(box, options, label, onPick) {
 
 function paintFaceTuning() {
   if (faceAuto) faceAuto.checked = faceTuning.autoAdjust;
+  if (faceStill) faceStill.checked = faceTuning.still === true;
   const mark = (id, value) => {
     const box = $(id);
     if (!box) return;
@@ -658,8 +663,24 @@ function paintFaceTuning() {
   if (note) {
     note.textContent = faceTuning.autoAdjust
       ? "Auto adjust is choosing. Picking one turns Auto adjust off."
-      : "High matches the reactor kit. Low is easiest on the graphics card.";
+      : "High matches the reactor kit. Lower is easiest on the graphics chip.";
   }
+}
+
+// The level notes and the frame-rate note, written once: they never change.
+{
+  const levels = $("face-quality-levels");
+  if (levels) {
+    for (const q of QUALITIES) {
+      const li = document.createElement("li");
+      const b = document.createElement("strong");
+      b.textContent = q.label;
+      li.append(b, ` - ${q.note}`);
+      levels.append(li);
+    }
+  }
+  const fpsNote = $("face-fps-note");
+  if (fpsNote) fpsNote.textContent = FRAME_RATE_NOTE;
 }
 
 function setFaceTuning(next, said) {
@@ -678,6 +699,12 @@ choiceRow($("face-speed"), SPEEDS, (s) => `${s}×`, (s) =>
 if (faceAuto) {
   faceAuto.addEventListener("change", () =>
     setFaceTuning({ ...faceTuning, autoAdjust: faceAuto.checked }));
+}
+if (faceStill) {
+  faceStill.addEventListener("change", () =>
+    setFaceTuning({ ...faceTuning, still: faceStill.checked },
+      faceStill.checked ? "Saved on this computer. The animal will keep still."
+        : "Saved on this computer. The animal moves as usual."));
 }
 paintFaceTuning();
 
@@ -1568,6 +1595,10 @@ const sc = {
   pinStatus: $("sc-pin-status"),
   combined: $("sc-combined"),
   combinedStatus: $("sc-combined-status"),
+  thirdSection: $("sc-third-section"),
+  thirdFound: $("sc-third-found"),
+  third: $("sc-third"),
+  thirdStatus: $("sc-third-status"),
   suggestTitle: $("sc-suggest-title"),
   suggestDetail: $("sc-suggest-detail"),
   suggestSignals: $("sc-suggest-signals"),
@@ -1924,6 +1955,108 @@ async function scCombinedToggle(input) {
 }
 
 /**
+ * A third graphics card (2026-09-28): moving one of the switches above onto
+ * it, or moving it back off. Reads `status.third` - the same "row" shape as
+ * `status.combined`, plus `card`/`assigned`/`assignable`. A capable third
+ * card that nothing is assigned to does nothing ("no default winner" -
+ * docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section 1.3): the switch never
+ * picks a feature by itself, and this section shows a plain "not used" state
+ * rather than a pre-filled choice.
+ *
+ * A `<select>` plus its own "Move" button, not a checkbox: this is a choice
+ * among several options (one of `assignable`, or "Not used"), not an on/off
+ * switch, and a separate button means picking an option in the list is never
+ * itself the approval - the owner presses Move once they mean it.
+ */
+function scThirdRow(status, names) {
+  const t = status.third || {};
+  sc.thirdSection.hidden = t.capable !== true && !t.assigned;
+  sc.thirdFound.textContent = t.card
+    ? `Found: ${t.card.name || "a graphics card"}${scGigabytes(t.card.total_mb) ? ` (${scGigabytes(t.card.total_mb)})` : ""}.`
+    : "";
+  const row = scNode("div", "sc-switch");
+  row.dataset.id = "third";
+  row.dataset.state = t.pending ? "waiting" : t.assigned ? "on" : "off";
+  const label = scNode("label", "", "Which switch runs here");
+  const select = document.createElement("select");
+  select.id = "sc-third-select";
+  select.className = "field";
+  const noneOpt = document.createElement("option");
+  noneOpt.value = "";
+  noneOpt.textContent = "Not used";
+  select.append(noneOpt);
+  for (const id of t.assignable || []) {
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = names.byId[id] || id;
+    select.append(opt);
+  }
+  // An assigned feature that fell out of `assignable` (turned off since) is
+  // shown anyway, so the select never silently shows the wrong thing.
+  if (t.assigned && !(t.assignable || []).includes(t.assigned)) {
+    const opt = document.createElement("option");
+    opt.value = t.assigned;
+    opt.textContent = names.byId[t.assigned] || t.assigned;
+    select.append(opt);
+  }
+  select.value = t.assigned || "";
+  const held = t.capable !== true ? "Can't be moved yet: no capable third graphics card was found."
+    : t.pending ? SC_WAITING : "";
+  select.disabled = Boolean(held);
+  label.append(select);
+  row.append(label);
+  const move = scNode("button", "btn small", "Move");
+  move.type = "button";
+  move.id = "sc-third-move";
+  move.disabled = Boolean(held);
+  move.addEventListener("click", () => scThirdMove(select));
+  row.append(move);
+  const lines = scNode("div", "sc-lines");
+  const addLine = (className, words) => { if (words) lines.append(scNode("p", className, words)); };
+  addLine("sc-why", t.why);
+  if (t.pending) addLine("sc-held sc-waiting", SC_WAITING);
+  else if (held) addLine("sc-held", held);
+  if (t.assigned) {
+    addLine("sc-model", scModelLine(t));
+    addLine("sc-memory", scMemoryLine(t));
+  }
+  row.append(lines);
+  const focused = scRestoreFocusId || (document.activeElement && document.activeElement.id);
+  sc.third.replaceChildren(row);
+  if (focused === "sc-third-select") {
+    const again = document.getElementById("sc-third-select");
+    if (again) again.focus();
+  }
+}
+
+async function scThirdMove(select) {
+  if (scBusy) return;
+  const assign = select.value || null;
+  const name = assign ? `"${select.options[select.selectedIndex].textContent}"` : "Not used";
+  scBusy = true;
+  scRestoreFocusId = "sc-third-select";
+  select.disabled = true;
+  report(sc.thirdStatus, assign ? `Asking to move ${name} here…` : "Moving it back off…");
+  try {
+    const out = await invoke("set_third_card", { assign });
+    if (assign && out && out.pending === true) {
+      report(sc.thirdStatus, SC_WAITING, "ok");
+      announce(`${name}: ${SC_WAITING}`);
+    } else if (out && typeof out.message === "string" && out.message) {
+      report(sc.thirdStatus, out.message, "ok");
+    } else {
+      report(sc.thirdStatus, assign ? `${name} is moved here.` : "Not used.", "ok");
+    }
+  } catch (error) {
+    report(sc.thirdStatus, scProblemWords(error), "bad");
+    announce(sc.thirdStatus.textContent, "assertive");
+  } finally {
+    scBusy = false;
+  }
+  await loadSecondCard();
+}
+
+/**
  * "When to suggest the bigger model" (2026-09-27): whether Jarvis may OFFER
  * "One bigger model on both cards" on its own - never what it may do
  * without a person's yes, so NEITHER switch here raises an approval card,
@@ -2063,6 +2196,11 @@ function scPaint(status) {
     }
   }
 
+  // A third graphics card (2026-09-28): shown only once one is capable, or
+  // something is still assigned to it (an old choice, kept, even if the
+  // card is gone for the moment).
+  if (sc.thirdSection) scThirdRow(status, names);
+
   // "When to suggest the bigger model": its own subsection, no card either way.
   scPaintSuggest(status);
   // One-shot: consumed by whichever block above matched it.
@@ -2088,11 +2226,15 @@ function scPaint(status) {
     for (const id of scWaiting) {
       if (pending.has(id)) continue;
       const combined = status.combined || {};
+      const third = status.third || {};
       const name = id === "master" ? SC_MASTER.name
         : id === "combined" ? (combined.name || "One bigger model on both cards")
+        : id === "third" ? (third.assigned ? `"${names.byId[third.assigned] || third.assigned}" on the third card`
+                            : "the third card")
         : names.byId[id] || id;
       const on = id === "master" ? status.enabled === true
         : id === "combined" ? combined.enabled === true
+        : id === "third" ? Boolean(third.assigned)
         : names.enabled.has(id);
       report(sc.status, cardEndedWords(name, on, cardLast(status, id, scWaitingSince.get(id))),
         on ? "ok" : null);

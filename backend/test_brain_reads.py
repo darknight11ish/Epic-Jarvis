@@ -615,12 +615,13 @@ def t_patch_and_shipping():
     if text:
         at = text.find("import jarvis_brain_reads")
         sock = text.find("_loopback_companion(bind, HUD_PORT, Handler)", at)
-        check("the install sits after sources' and right before the main socket",
-              text.rfind("import jarvis_sources", 0, at) != -1 and 0 < sock - at < 2400
-              # only the install blocks of the patches after it in between
-              and set(re.findall(r"import (\w+)", text[at:sock])) <= {
-                  "jarvis_brain_reads", "jarvis_photo_remind", "jarvis_history_import"},
-              (at, sock))
+        # Other install blocks may sit between this one and the socket (every
+        # new route patch adds one there); what matters is the order, and
+        # that no later patch rewrites this one's lines.
+        check("the install sits after sources' and before the main socket",
+              text.rfind("import jarvis_sources", 0, at) != -1 and 0 < at < sock, (at, sock))
+        check("no later patch rewrites its install block",
+              not _stack.later_rewriting("brain-reads.patch", "jarvis_brain_reads"))
         check("with the server's own token and origin checks",
               "jarvis_brain_reads.install(Handler, origin_ok=_origin_ok," in text)
         check("its own pre-image was already there (no gap for this patch)",

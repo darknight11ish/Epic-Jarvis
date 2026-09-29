@@ -57,7 +57,7 @@ WHAT IT NEVER DOES
     some captchas can tell, and refuse it - the apps say so, and offer
     "Solve it on the PC instead".
 
-THE PHONE'S SIDE (docs/JARVIS-API.md section 60.8): pictures are asked for
+THE PHONE'S SIDE (docs/JARVIS-API.md section 87.8): pictures are asked for
 only while the "Solve it here" screen is on screen, and never while App lock
 has the app locked; input is held on a stale link (rule 4), and ending never
 is. The desktop shows the same alert and points at the window on the PC.

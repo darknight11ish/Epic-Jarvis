@@ -220,6 +220,11 @@ data class HomeState(
     val stale: Boolean,
     val activity: Activity,
     val faceState: FaceState,
+    /**
+     * Jarvis cannot be reached (`JarvisRuntime.faceOffline`): the face shows
+     * STANDBY with its hollow ring, and says "Jarvis isn't connected".
+     */
+    val faceOffline: Boolean = false,
     val power: String,
     val status: StatusInfo?,
     val pending: List<PendingItem>,
@@ -319,6 +324,14 @@ data class HomeState(
      */
     val calmMotion: Boolean = false,
     /**
+     * A serious moment (`JarvisRuntime.faceSerious`, the `wellbeing` event,
+     * docs/JARVIS-API.md section 38.1): the animal faces hold a calm, plain
+     * pose while a crisis answer is given or spoken. Passed to FaceView.
+     */
+    val faceSerious: Boolean = false,
+    /** "Keep the animal still" (`Look.stillAnimal`), passed to FaceView. */
+    val stillAnimal: Boolean = false,
+    /**
      * The owner's last question, shown as a "You" line above the reply so an
      * answer is never on screen without what it answers. Memory only - see
      * [com.jarvis.client.net.ChatSession.question]; nothing writes it to disk.
@@ -384,6 +397,12 @@ data class HomeState(
      */
     val crisisAnswer: Boolean = false,
     /**
+     * "A cloud model could give this one a second look." - the lane
+     * [com.jarvis.client.net.CloudOffer] read off the answer on screen's
+     * route, or null. See [com.jarvis.client.net.ChatSession.cloudOffer].
+     */
+    val cloudOffer: String? = null,
+    /**
      * Whether the quick-note field is open - the home-screen widget's Note
      * button opens it. See [QuickNotePlate].
      */
@@ -396,6 +415,15 @@ data class HomeState(
      * picture it cannot see.
      */
     val pictureOffered: Boolean = false,
+    /**
+     * Offer the "Notifications" button: reading phone notifications is on
+     * ([com.jarvis.client.JarvisRuntime.phoneNotificationsAllowed]) AND at
+     * least one has actually been captured
+     * ([com.jarvis.client.data.CapturedNotifications.sharedText] is not
+     * null). Hidden otherwise - a button that would attach nothing is not
+     * an offer, and this never appears at all while the setting is off.
+     */
+    val notificationsAttachable: Boolean = false,
     /**
      * The line for a picture waiting to go with the next question, or null
      * when none is attached. See [com.jarvis.client.net.ChatPicture]. The
@@ -555,6 +583,14 @@ data class HomeActions(
      */
     val onMarkAnswer: (turnId: String, tapped: AnswerMark) -> Unit = { _, _ -> },
     /**
+     * "Try the cloud model" on the answer on screen's own cloud offer
+     * ([com.jarvis.client.net.ChatSession.tryCloudForLast]) - a genuinely
+     * new turn, one tap, never a standing choice.
+     */
+    val onTryCloud: () -> Unit = {},
+    /** Dismisses [HomeState.cloudOffer] without asking anything. */
+    val onDismissCloudOffer: () -> Unit = {},
+    /**
      * Forget the conversation and start afresh: the next question goes on
      * its own, with nothing before it. Clears the question and answer on
      * screen. Touches nothing the desktop has learned.
@@ -585,6 +621,14 @@ data class HomeActions(
     val onAttachPicture: () -> Unit = {},
     /** Drop the attached picture without sending it. */
     val onRemovePicture: () -> Unit = {},
+    /**
+     * Puts the recent captured notifications' redacted text into the same
+     * "shared text" chip the Share sheet and the clipboard hotkey use
+     * ([com.jarvis.client.data.CapturedNotifications.sharedText]) - the
+     * owner still presses Send themselves, exactly like any other shared
+     * text; nothing here reaches a chat on its own.
+     */
+    val onAttachNotifications: () -> Unit = {},
     /**
      * "Photo to reminder": send the attached picture to the PC, which
      * PROPOSES a reminder ([com.jarvis.client.net.PhotoReminder]). Sets
@@ -1203,6 +1247,9 @@ private fun ConversationList(
                 waiting = state.chatWaiting,
                 note = state.answerNote,
                 crisis = state.crisisAnswer,
+                cloudOffer = state.cloudOffer,
+                onTryCloud = actions.onTryCloud,
+                onDismissCloudOffer = actions.onDismissCloudOffer,
                 used = UsedAnswer(
                     ids = state.usedIds,
                     canAct = state.link == LinkState.CONNECTED && !state.stale,
@@ -1774,6 +1821,7 @@ private fun FaceBlock(
                 ) {
                     FaceView(
                         state = state.faceState,
+                        offline = state.faceOffline,
                         face = state.face,
                         bindings = state.bindings,
                         notches = state.attention.pending,
@@ -1810,6 +1858,9 @@ private fun FaceBlock(
                         // Slower, never faster. MainActivity works it out from
                         // the Motion setting and the phone's own animation scale.
                         calmMotion = state.calmMotion,
+                        // A crisis answer: calm and plain (section 38.1).
+                        serious = state.faceSerious,
+                        stillMotion = state.stillAnimal,
                     )
                     TickRing(
                         minor = wellChrome.hairline,
@@ -2272,6 +2323,14 @@ private fun Reply(
     // the word check and never learning from it all happen on the PC;
     // this only changes how the words already decided are shown.
     crisis: Boolean = false,
+    // "A cloud model could give this one a second look."
+    // (jarvis_router.choose(), gate "offer" - docs/JARVIS-API.md, "`offer`
+    // in `X-Jarvis-Route`"): the lane [com.jarvis.client.net.CloudOffer]
+    // read off THIS answer's route, or null - no offer, or the owner
+    // already tapped "Try the cloud model" or dismissed it.
+    cloudOffer: String? = null,
+    onTryCloud: () -> Unit = {},
+    onDismissCloudOffer: () -> Unit = {},
 ) {
     val chrome = LocalChrome.current
     val motion = LocalMotion.current
@@ -2373,6 +2432,35 @@ private fun Reply(
                     Gap(6)
                     Text(
                         note,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo,
+                    )
+                }
+                // "Try the cloud model" (docs/JARVIS-API.md, "`offer` in
+                // `X-Jarvis-Route`"): one tap, one question, never a
+                // standing choice - see com.jarvis.client.net.CloudOffer's
+                // own doc for the whole design. Not shown while crisis is
+                // true: the router never offers a cloud lane on a crisis
+                // turn in the first place (jarvis_router.choose()'s own
+                // gates run before gate 6 ever does), but this is the one
+                // place on screen that could show both at once if that
+                // ever changed, and a crisis panel is not where a cloud
+                // upsell belongs.
+                if (cloudOffer != null && !crisis) {
+                    Gap(6)
+                    Text(
+                        com.jarvis.client.net.CloudOffer.LABEL,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textLo,
+                    )
+                    Gap(2)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Quiet(com.jarvis.client.net.CloudOffer.BUTTON, onClick = onTryCloud)
+                        Spacer(Modifier.width(4.dp))
+                        Quiet("Not now", color = chrome.textLo, onClick = onDismissCloudOffer)
+                    }
+                    Text(
+                        com.jarvis.client.net.CloudOffer.MICRO,
                         style = MaterialTheme.typography.labelSmall,
                         color = chrome.textLo,
                     )
@@ -2784,6 +2872,19 @@ private fun Composer(
                 color = chrome.textMid,
                 enabled = state.link == LinkState.CONNECTED && !state.streaming && !state.pictureBusy,
                 onClick = actions.onAttachPicture,
+            )
+            Spacer(Modifier.width(4.dp))
+        }
+        // Only while phone notifications are on AND something has actually
+        // been captured - see HomeState.notificationsAttachable. Attaching
+        // never sends on its own: it fills the same shared-text chip the
+        // Share sheet does, and the owner still presses Send.
+        if (state.notificationsAttachable) {
+            Quiet(
+                "Notifications",
+                color = chrome.textMid,
+                enabled = !state.streaming,
+                onClick = actions.onAttachNotifications,
             )
             Spacer(Modifier.width(4.dp))
         }

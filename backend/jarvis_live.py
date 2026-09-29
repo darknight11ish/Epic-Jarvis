@@ -565,14 +565,27 @@ def _default_power_mode() -> str:
 
 def _default_warm() -> None:
     """Loads the everyday model in the background (jarvis_agent.warm_everyday,
-    this PC's Ollama only), so Live's first answer does not wait for it."""
+    this PC's Ollama only), so Live's first answer does not wait for it. The
+    model is the one chat really uses now (jarvis_power_switch.chat_model,
+    as the waking warm-up does), never a fixed name, and Ollama's own
+    keep-alive setting is left alone (effectiveness audit 2026-09-28, 3.2)."""
     def run():
         try:
             import jarvis_agent
-            jarvis_agent.warm_everyday()
+            jarvis_agent.warm_everyday(model=_chat_model())
         except Exception:
             pass
     threading.Thread(target=run, name="jarvis-live-warm", daemon=True).start()
+
+
+def _chat_model() -> Optional[str]:
+    """The model chat uses now (jarvis_power_switch.chat_model), or None -
+    warm_everyday then asks the same question itself."""
+    try:
+        import jarvis_power_switch
+        return jarvis_power_switch.chat_model()
+    except Exception:
+        return None
 
 
 def _default_windows_locked() -> Optional[bool]:

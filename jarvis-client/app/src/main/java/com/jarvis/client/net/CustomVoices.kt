@@ -36,6 +36,11 @@ import java.util.Locale
  *   becomes that animal's - an on/off switch (`face_voice`), on by default,
  *   the PC's own words and line, no card either way; held on a stale link
  *   like every change sent to the PC.
+ * - EACH ANIMAL'S VOICE: under that switch, for the red panda, pygmy owl,
+ *   sea otter and monkey, one of the built-in voices, a pitch (deeper or higher) and a
+ *   pace - the PC's own choices and words (`face_voice.animals`), no card
+ *   either way, held on a stale link; "Reset to its own voice"; "Try it"
+ *   plays one fixed line the PC says in that voice, and changes nothing.
  *
  * Every card-raising request is held on a stale link (rule 4); the ones
  * that only narrow (built-in voice, delete, better voice off) always go.
@@ -55,6 +60,39 @@ object CustomVoices {
     const val SPEED_PATH = "/api/voice/voices/speed"
     const val SPEAKER_PATH = "/api/voice/voices/speaker"
     const val FACE_PATH = "/api/voice/voices/face"
+    const val ANIMAL_PATH = "/api/voice/voices/face_animal"
+    const val ANIMAL_TRY_PATH = "/api/voice/voices/face_animal/try"
+
+    /** The one-time "The panda has its own voice. Use it?" answer (owner, 2026-09-28). */
+    const val FACE_OFFER_PATH = "/api/voice/voices/face_offer"
+
+    /** The two answers the PC takes, and the buttons' words when it sends none. */
+    const val OFFER_USE = "use"
+    const val OFFER_KEEP = "keep"
+    const val OFFER_USE_LABEL = "Use it"
+    const val OFFER_KEEP_LABEL = "Keep my voice"
+
+    /** Words on an animal's row for changing the one-time answer later (owner, 2026-09-28). */
+    const val CHANGE_TO_USE_LABEL = "Use its own voice"
+    const val CHANGE_TO_KEEP_LABEL = "Keep my voice"
+
+    /**
+     * The small button on an animal's row: "keep" was answered, so offer
+     * [CHANGE_TO_USE_LABEL]; "use" was answered, so offer
+     * [CHANGE_TO_KEEP_LABEL]; not answered (or an older PC) offers nothing.
+     */
+    fun changeMindLabel(answer: String?): String? = when (answer) {
+        OFFER_KEEP -> CHANGE_TO_USE_LABEL
+        OFFER_USE -> CHANGE_TO_KEEP_LABEL
+        else -> null
+    }
+
+    /** What pressing that button answers: true is "use", false is "keep"; null: no button. */
+    fun changeMindUse(answer: String?): Boolean? = when (answer) {
+        OFFER_KEEP -> true
+        OFFER_USE -> false
+        else -> null
+    }
 
     /** The speed plate's heading when the PC sends none - the desktop's words. */
     const val SPEED_TITLE = "How fast Jarvis speaks"
@@ -64,6 +102,9 @@ object CustomVoices {
 
     /** The face-voice switch's label when the PC sends none - the desktop's words. */
     const val FACE_TITLE = "Voice follows the face"
+
+    /** The animals' plate heading when the PC sends none - the desktop's words. */
+    const val ANIMALS_TITLE = "Each animal's voice"
 
     const val BUILTIN = "builtin"
 
@@ -134,6 +175,53 @@ object CustomVoices {
         val title: String = FACE_TITLE,
         val detail: String = "",
         val line: String = "",
+        /** Each animal's voice; empty on a PC too old to have it (nothing is shown). */
+        val animals: List<Animal> = emptyList(),
+        val animalsTitle: String = ANIMALS_TITLE,
+        val animalsDetail: String = "",
+        val choices: AnimalChoices = AnimalChoices(),
+        /** The one-time question, or null: none waiting, or a PC too old to ask. */
+        val offer: FaceOffer? = null,
+    )
+
+    /**
+     * The first time the owner picks an animal face, one line asks whether
+     * to use its own voice (owner, 2026-09-28) - remembered per face on the
+     * PC. [question], [use] and [keep] are the PC's own words, shown as they
+     * are. A face never changes the voice by itself: only "Use it" does.
+     */
+    data class FaceOffer(
+        val face: String,
+        val question: String,
+        val use: String = OFFER_USE_LABEL,
+        val keep: String = OFFER_KEEP_LABEL,
+    )
+
+    /**
+     * One animal's voice as it is now: one of the built-in voices ([speaker]),
+     * a pitch in semitones - "steps" on screen, below 0 deeper - and a pace.
+     * [changed]: the owner picked something other than its own voice, so
+     * "Reset to its own voice" does something. [line] is the PC's own words.
+     */
+    data class Animal(
+        val face: String,
+        val name: String,
+        val speaker: String,
+        val semitones: Double,
+        val pace: String,
+        val changed: Boolean = false,
+        val line: String = "",
+        /** The owner's one-time answer for this animal: "use", "keep", or null (not answered, or an older PC). */
+        val answer: String? = null,
+    )
+
+    /** What each animal may be given: the PC's own lists and pitch range. */
+    data class AnimalChoices(
+        val voices: List<SpeakerChoice> = emptyList(),
+        val paces: List<SpeedChoice> = emptyList(),
+        val pitchMin: Double = -3.0,
+        val pitchMax: Double = 4.0,
+        val pitchStep: Double = 0.5,
     )
 
     /** One engine on the PC: can it speak, and why not. */
@@ -331,14 +419,66 @@ object CustomVoices {
     private fun parseFaceVoice(fv: JsonObject): FaceVoice? {
         val on = (fv["enabled"] as? JsonPrimitive)?.takeIf { !it.isString }?.booleanOrNull
             ?: return null
+        val ch = fv.obj("animal_choices")
+        val pitch = ch?.obj("pitch")
+        val choices = AnimalChoices(
+            voices = (ch?.get("voices") as? JsonArray).orEmpty().mapNotNull { e ->
+                val c = e as? JsonObject ?: return@mapNotNull null
+                val id = c.str("id").ifBlank { return@mapNotNull null }
+                SpeakerChoice(id, c.str("label").ifBlank { return@mapNotNull null })
+            },
+            paces = (ch?.get("paces") as? JsonArray).orEmpty().mapNotNull { e ->
+                val c = e as? JsonObject ?: return@mapNotNull null
+                val id = c.str("id").ifBlank { return@mapNotNull null }
+                SpeedChoice(id, c.str("label").ifBlank { return@mapNotNull null })
+            },
+            pitchMin = pitch?.numOrNull("min") ?: -3.0,
+            pitchMax = pitch?.numOrNull("max") ?: 4.0,
+            pitchStep = pitch?.numOrNull("step")?.takeIf { it > 0 } ?: 0.5,
+        )
+        val animals = (fv["animals"] as? JsonArray).orEmpty().mapNotNull { e ->
+            val a = e as? JsonObject ?: return@mapNotNull null
+            Animal(
+                face = a.str("face").ifBlank { return@mapNotNull null },
+                name = a.str("name").ifBlank { return@mapNotNull null },
+                speaker = a.str("speaker").ifBlank { return@mapNotNull null },
+                semitones = a.numOrNull("semitones") ?: return@mapNotNull null,
+                pace = a.str("pace").ifBlank { return@mapNotNull null },
+                changed = a.flag("changed"),
+                line = a.str("line"),
+                answer = a.str("answer").takeIf { it == OFFER_USE || it == OFFER_KEEP },
+            )
+        }
+        // Without the lists there is nothing to choose from: no rows at all.
+        val usable = choices.voices.isNotEmpty() && choices.paces.isNotEmpty()
         return FaceVoice(
             enabled = on,
             speaking = fv.flag("speaking"),
             title = fv.str("title").ifBlank { FACE_TITLE },
             detail = fv.str("detail"),
             line = fv.str("line"),
+            animals = if (usable) animals else emptyList(),
+            animalsTitle = fv.str("animals_title").ifBlank { ANIMALS_TITLE },
+            animalsDetail = fv.str("animals_detail"),
+            choices = choices,
+            offer = fv.obj("offer")?.let { parseFaceOffer(it) },
         )
     }
+
+    /** `face_voice.offer`, or null when it is null, absent, or has no face or question. */
+    fun parseFaceOffer(o: JsonObject): FaceOffer? {
+        val face = o.str("face").ifBlank { return null }
+        val question = o.str("question").ifBlank { return null }
+        return FaceOffer(
+            face = face,
+            question = question,
+            use = o.str("use").ifBlank { OFFER_USE_LABEL },
+            keep = o.str("keep").ifBlank { OFFER_KEEP_LABEL },
+        )
+    }
+
+    private fun JsonObject.numOrNull(key: String): Double? =
+        (this[key] as? JsonPrimitive)?.takeIf { !it.isString }?.doubleOrNull?.takeIf { it.isFinite() }
 
     /** The GET's answer, or why there is none, from the HTTP result. */
     fun read(result: ApiResult<JsonObject>): Read = when (result) {
@@ -390,6 +530,90 @@ object CustomVoices {
 
     /** `{"enabled": true|false}` - "Voice follows the face" on or off. */
     fun faceBody(on: Boolean): String = "{\"enabled\":$on}"
+
+    /** `{"face": "<id>", "answer": "use"|"keep"}` - the one-time question's answer. */
+    fun faceOfferBody(face: String, use: Boolean): String =
+        "{\"face\":" + JarvisApi.quote(face) +
+            ",\"answer\":\"" + (if (use) OFFER_USE else OFFER_KEEP) + "\"}"
+
+    /**
+     * `{"face", "speaker", "semitones", "pace"}` - one animal's whole voice.
+     * The pitch is sent in whole half steps, the only ones the PC takes.
+     */
+    fun animalBody(face: String, speaker: String, semitones: Double, pace: String): String =
+        "{\"face\":" + JarvisApi.quote(face) +
+            ",\"speaker\":" + JarvisApi.quote(speaker) +
+            ",\"semitones\":" + halfSteps(semitones) +
+            ",\"pace\":" + JarvisApi.quote(pace) + "}"
+
+    /** `{"face", "reset": true}` - "Reset to its own voice". */
+    fun animalResetBody(face: String): String = "{\"face\":" + JarvisApi.quote(face) + ",\"reset\":true}"
+
+    /** `{"face"}` - "Try it". Never any words: the PC says its own line. */
+    fun animalTryBody(face: String): String = "{\"face\":" + JarvisApi.quote(face) + "}"
+
+    /** [semitones] rounded to a half step, as JSON ("2.0", "-1.5"). */
+    fun halfSteps(semitones: Double): String =
+        if (semitones.isFinite()) (Math.round(semitones * 2.0) / 2.0).toString() else "0.0"
+
+    /**
+     * The next pitch one step deeper ([up] false) or higher, held inside the
+     * PC's range - or null at the end of it.
+     */
+    fun nextPitch(now: Double, up: Boolean, c: AnimalChoices): Double? {
+        val next = Math.round((now + if (up) c.pitchStep else -c.pitchStep) * 2.0) / 2.0
+        return next.takeIf { it >= c.pitchMin - 1e-9 && it <= c.pitchMax + 1e-9 }
+    }
+
+    /**
+     * A pitch in plain words: "2 steps higher", "1.5 steps deeper",
+     * "Normal pitch" - the desktop's words (custom-voices.js pitchWords).
+     */
+    fun pitchWords(semitones: Double): String {
+        if (kotlin.math.abs(semitones) < 1e-9) return "Normal pitch"
+        val n = number(kotlin.math.abs(semitones))
+        return "$n step${if (n == "1") "" else "s"} ${if (semitones > 0) "higher" else "deeper"}"
+    }
+
+    /** The short value beside the pitch buttons: "+2", "-1.5", "0". */
+    fun pitchShort(semitones: Double): String =
+        (if (semitones > 0) "+" else "") + number(semitones)
+
+    /** 2.0 -> "2", 1.5 -> "1.5", -0.0 -> "0". */
+    private fun number(v: Double): String {
+        val r = Math.round(v * 2.0) / 2.0
+        return if (r == Math.floor(r)) r.toLong().toString() else r.toString()
+    }
+
+    // "Try it" for one animal, in words. The desktop says exactly the same
+    // (custom-voices.js `TRY_*`, held together by the desktop's
+    // tests/custom-voices.mjs). Refused while Jarvis is talking or
+    // listening, and stopped the moment a question starts
+    // (VoiceSession.tryAnimalVoice / turnStarting).
+
+    /** While the PC makes the sound. */
+    const val TRY_ASKING = "Asking the PC for the sound…"
+
+    /** Refused: Jarvis is talking, or listening to the owner. */
+    const val TRY_BUSY = "Jarvis is busy talking or listening. Try it again in a moment."
+
+    /** Cut short: a question or an answer started while it played. */
+    const val TRY_STOPPED = "Stopped, because Jarvis is talking or listening now."
+
+    /** A PC whose backend has no "Try it" route yet. */
+    const val TRY_UPDATE = "Your PC cannot play an animal's voice yet. Run the patch script on the PC first."
+
+    /** While it plays. */
+    fun tryPlaying(name: String): String = "Playing the $name's voice."
+
+    /** Once it has played to the end. */
+    fun tryDone(name: String): String = "That was the $name's voice."
+
+    /** What "Try it" came to: the PC's sound, or its sentence saying why not. */
+    sealed interface Tried {
+        class Sound(val wav: ByteArray) : Tried
+        data class Refused(val why: String) : Tried
+    }
 
     // ------------------------------------------------------------ answers --
 

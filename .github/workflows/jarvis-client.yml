@@ -967,12 +967,12 @@ jobs:
       # This is the app that actually talks to Jarvis, so it gets the same
       # phone-reachable delivery as the other one: a plain .apk at a stable URL
       # rather than a zip buried in a run the GitHub mobile app cannot download.
-      # Only from the owner's working branch and main: any other branch's
-      # build is tested, and kept as a run artifact, but does not replace the
-      # APK the owner installs (DEPS-TESTS-CI audit B-20, 2026-09-26).
+      # Only from main (the owner, 2026-09-28): any other branch's build is
+      # tested, and kept as a run artifact, but does not replace the APK the
+      # owner installs (DEPS-TESTS-CI audit B-20, 2026-09-26).
       - name: Publish the APK to a rolling release
         id: release
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/claude/admiring-ritchie-5urg5h'
+        if: github.ref == 'refs/heads/main'
         continue-on-error: true
         working-directory: .
         env:
@@ -999,8 +999,8 @@ jobs:
           version="${base%.*}.$GITHUB_RUN_NUMBER"
           file_sha=$(sha256sum "jarvis-client/artifacts/$apk" | cut -d' ' -f1)
 
-          # Short and plain. Only main and the owner's working branch publish
-          # here, so the notes still say which one this is.
+          # Short and plain. Only main publishes here; the notes still name
+          # the branch, so an old release can be told apart.
           notes=$(printf '%s\n' \
             "**Jarvis for Android $version** - from \`$GITHUB_REF_NAME\`, commit [\`$short\`]($commit_url), built $built_at." \
             "" \

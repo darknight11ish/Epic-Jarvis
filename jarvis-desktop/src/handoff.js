@@ -1,7 +1,7 @@
 /**
  * "Solve it here" on the desktop (the owner's decision of 2026-09-28,
  * CLAUDE.md "A captcha can be handed to the owner's phone"; JARVIS-API.md
- * section 60.8; backend/jarvis_handoff.py).
+ * section 87.8; backend/jarvis_handoff.py).
  *
  * When a chatbot conversation or a customer-support chat pauses at a
  * captcha, a sign-in page or an "unusual activity" page, GET

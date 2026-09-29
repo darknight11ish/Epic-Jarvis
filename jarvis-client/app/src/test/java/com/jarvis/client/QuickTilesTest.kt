@@ -81,6 +81,27 @@ class QuickTilesTest {
     }
 
     @Test
+    fun underAppLockAWidgetButtonOnlyOpensJarvisExceptStopEverything() {
+        // The owner, 2026-09-28: under App lock the home-screen widget's
+        // buttons open the locked app first and never act on their own.
+        for (a in listOf(TileAction.FOCUS, TileAction.TIMER, TileAction.PC_PLAY_PAUSE, TileAction.BRIEF_ME)) {
+            assertTrue(a.wire, QuickTiles.widgetOpensApp(a, appLock = true))
+            // Settings that cannot be read count as locked.
+            assertTrue(a.wire, QuickTiles.widgetOpensApp(a, appLock = null))
+        }
+        // Stop everything only makes Jarvis do less: never behind an unlock.
+        assertFalse(QuickTiles.widgetOpensApp(TileAction.STOP_EVERYTHING, appLock = true))
+        assertFalse(QuickTiles.widgetOpensApp(TileAction.STOP_EVERYTHING, appLock = null))
+        // App lock off: the buttons act as before ("Brief me" still only opens the app).
+        for (a in listOf(TileAction.FOCUS, TileAction.TIMER, TileAction.PC_PLAY_PAUSE, TileAction.STOP_EVERYTHING)) {
+            assertFalse(a.wire, QuickTiles.widgetOpensApp(a, appLock = false))
+        }
+        assertTrue(QuickTiles.widgetOpensApp(TileAction.BRIEF_ME, appLock = false))
+        // Tiles keep their own rule: an unlocked phone under App lock still runs.
+        assertEquals(Decision.Run, decide(TileAction.TIMER, appLock = true, phoneLocked = false))
+    }
+
+    @Test
     fun theTileShowsWhetherItCanActNow() {
         assertTrue(QuickTiles.ready(TileAction.TIMER, paired = true, connected = true, stale = false))
         assertFalse(QuickTiles.ready(TileAction.TIMER, paired = true, connected = true, stale = true))

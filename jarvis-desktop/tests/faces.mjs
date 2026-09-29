@@ -281,27 +281,175 @@ await check("CONTROL: a state the spec does not have is ignored, not thrown on",
   assert.deepEqual(errs, [], errs.join(" | "));
 });
 
-await check("a face can be chosen, and the choice is saved", async () => {
-  // Until now nothing in the UI set `face`: the field existed, was sent as
-  // null every time, and the "full editor" could bind states but not pick the
-  // thing being bound.
+const savedDocs = (page) => page.evaluate(() =>
+  window.__calls.filter((c) => c[0] === "__saved").map((c) => c[1]));
+
+await check("a face can be chosen, and \"Use this face\" saves it at once (no Save press)", async () => {
+  // Play test F1 (2026-09-28): "Use this face" used to save nothing until a
+  // small Save chip behind the overlay was found. The phone applies in one tap.
   const page = await open();
   await page.waitForTimeout(2500);
   await page.locator("#grid .card canvas").first().click();
   await page.waitForTimeout(400);
   await page.locator("#solo-use").click();
-  // The solo view is a full overlay and Save is behind it.
-  await page.locator("#solo-close").click();
-  await page.waitForTimeout(200);
-  await page.locator("#save").click();
   await page.waitForTimeout(300);
-  const saved = await page.evaluate(() =>
-    (window.__calls.find((c) => c[0] === "__saved") || [])[1]);
+  const saved = await savedDocs(page);
+  const said = await page.locator("#solo-state").innerText();
+  const undo = await page.locator("#solo-undo").isVisible();
   await page.close();
   const spec = JSON.parse(read("src/jarvis-visual-spec.json"));
-  assert.ok(saved.face, "no face was saved");
-  assert.ok(spec.faces.some((f) => f.id === saved.face),
-    `saved a face the spec does not have: ${saved.face}`);
+  assert.equal(saved.length, 1, "one save, straight away");
+  assert.ok(saved[0].face, "no face was saved");
+  assert.ok(spec.faces.some((f) => f.id === saved[0].face),
+    `saved a face the spec does not have: ${saved[0].face}`);
+  assert.match(said, /is Jarvis's face now/, `said "${said}"`);
+  assert.match(said, /phone wears it too/);
+  assert.equal(undo, true, "Undo is offered");
+});
+
+await check("\"Use this face\" saves the face only - colours still being tried are not published", async () => {
+  const page = await K.open(browser, base, "faces.html", {
+    appearance: { face: "orbit", updated: 1, source: "server", shared: true,
+      bindings: { idle: { pattern: "pulse", color: "violet-4" } } },
+  }, { width: 1300, height: 950 });
+  await page.waitForTimeout(2500);
+  // An unsaved experiment in the editor.
+  await page.locator('#states .chip[data-s="idle"]').click();
+  await page.locator('#patterns .chip[data-p="solid"]').click();
+  await page.locator('#grid canvas[data-face="redpanda"]').click();
+  await page.waitForTimeout(400);
+  await page.locator("#solo-use").click();
+  await page.waitForTimeout(300);
+  const saved = await savedDocs(page);
+  await page.close();
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].face, "redpanda");
+  assert.deepEqual(saved[0].bindings, { idle: { pattern: "pulse", color: "violet-4" } },
+    "the saved colours, not the experiment");
+});
+
+await check("Undo puts the face that was in use back, and saves that", async () => {
+  const page = await K.open(browser, base, "faces.html", {
+    appearance: { face: "orbit", updated: 1, source: "server", shared: true, bindings: {} },
+  }, { width: 1300, height: 950 });
+  await page.waitForTimeout(2500);
+  await page.locator('#grid canvas[data-face="redpanda"]').click();
+  await page.waitForTimeout(400);
+  await page.locator("#solo-use").click();
+  await page.waitForTimeout(300);
+  await page.locator("#solo-undo").click();
+  await page.waitForTimeout(300);
+  const saved = await savedDocs(page);
+  const said = await page.locator("#solo-state").innerText();
+  const undo = await page.locator("#solo-undo").isVisible();
+  const use = await page.locator("#solo-use").innerText();
+  await page.close();
+  assert.deepEqual(saved.map((d) => d.face), ["redpanda", "orbit"]);
+  assert.match(said, /^Undone\./);
+  assert.equal(undo, false, "one Undo per choice");
+  assert.equal(use, "Use this face");
+});
+
+await check("a save that fails leaves the face NOT marked in use", async () => {
+  const page = await K.open(browser, base, "faces.html", { appearanceFails: "Jarvis could not be asked." },
+    { width: 1300, height: 950 });
+  await page.waitForTimeout(2500);
+  await page.locator('#grid canvas[data-face="redpanda"]').click();
+  await page.waitForTimeout(400);
+  await page.locator("#solo-use").click();
+  await page.waitForTimeout(300);
+  const saved = await savedDocs(page);
+  const use = await page.locator("#solo-use").innerText();
+  const said = await page.locator("#solo-state").innerText();
+  await page.close();
+  assert.equal(saved.length, 0, "never publish over a face that did not load");
+  assert.equal(use, "Use this face");
+  assert.match(said, /cannot save/);
+});
+
+await check("the keyboard reaches the faces in two presses: Tab, then Enter on \"Skip to the faces\"", async () => {
+  const page = await open();
+  await page.waitForTimeout(2500);
+  await page.keyboard.press("Tab");
+  const first = await page.evaluate(() => document.activeElement.id);
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(100);
+  const at = await page.evaluate(() => document.activeElement.getAttribute("aria-label"));
+  const count = await page.locator("#face-n").innerText();
+  const cards = await page.locator("#grid .card canvas").count();
+  await page.close();
+  assert.equal(first, "skip-to-faces");
+  assert.match(at || "", / face$/, `focus is on ${at}`);
+  assert.equal(Number(count), cards, "the count on the page is the real one");
+});
+
+await check("the animal voice question: the PC's words after an animal is picked; the answer is sent", async () => {
+  const OFFER = { face: "redpanda", question: "The Red Panda has its own voice. Use it?",
+    use: "Use it", keep: "Keep my voice" };
+  const page = await open();
+  await page.waitForTimeout(2500);
+  await page.evaluate((o) => { window.__faceOffer = { offer: o, stale: false };
+    window.__vt.faceOfferAnswer = { ok: true, http: 200, message: "Jarvis's voice now follows the face" }; },
+  OFFER);
+  await page.locator('#grid canvas[data-face="redpanda"]').click();
+  await page.waitForTimeout(400);
+  await page.locator("#solo-use").click();
+  await page.waitForTimeout(400);
+  const shown = await page.evaluate(() => ({
+    hidden: document.getElementById("solo-offer").hidden,
+    question: document.getElementById("solo-offer-question").textContent,
+    use: document.getElementById("solo-offer-use").textContent,
+    keep: document.getElementById("solo-offer-keep").textContent,
+  }));
+  await page.locator("#solo-offer-use").click();
+  await page.waitForTimeout(300);
+  const sent = await page.evaluate(() => window.__vt.calls
+    .filter((c) => c[0] === "answer_face_voice_offer").map((c) => c[1]));
+  const gone = await page.evaluate(() => document.getElementById("solo-offer").hidden);
+  const said = await page.locator("#solo-state").innerText();
+  await page.close();
+  assert.deepEqual(shown, { hidden: false, ...{ question: OFFER.question, use: OFFER.use, keep: OFFER.keep } });
+  assert.deepEqual(sent, [{ face: "redpanda", answer: "use" }]);
+  assert.equal(gone, true);
+  assert.equal(said, "Jarvis's voice now follows the face.");
+});
+
+await check("the animal voice question: greyed on a stale link; none for a face that is not an animal", async () => {
+  const OFFER = { face: "redpanda", question: "The Red Panda has its own voice. Use it?",
+    use: "Use it", keep: "Keep my voice" };
+  const page = await open();
+  await page.waitForTimeout(2500);
+  await page.evaluate((o) => { window.__faceOffer = { offer: o, stale: true }; }, OFFER);
+  await page.locator('#grid canvas[data-face="redpanda"]').click();
+  await page.waitForTimeout(400);
+  await page.locator("#solo-use").click();
+  await page.waitForTimeout(400);
+  const greyed = await page.evaluate(() => [document.getElementById("solo-offer").hidden,
+    document.getElementById("solo-offer-use").disabled, document.getElementById("solo-offer-keep").disabled]);
+  await page.close();
+  assert.deepEqual(greyed, [false, true, true], "shown, but greyed (rule 4)");
+
+  const other = await open();
+  await other.waitForTimeout(2500);
+  await other.evaluate((o) => { window.__faceOffer = { offer: o, stale: false }; }, OFFER);
+  await other.locator('#grid canvas[data-face="orbit"]').click();
+  await other.waitForTimeout(400);
+  await other.locator("#solo-use").click();
+  await other.waitForTimeout(400);
+  const reads = await other.evaluate(() => window.__calls.filter((c) => c[0] === "__offerRead").length);
+  const hidden = await other.evaluate(() => document.getElementById("solo-offer").hidden);
+  await other.close();
+  assert.equal(reads, 0, "not even asked for a face without a voice of its own");
+  assert.equal(hidden, true);
+});
+
+await check("the Faces window may read only the voice question, never the voices list", async () => {
+  const cap = JSON.parse(read("src-tauri/capabilities/faces.json"));
+  assert.ok(cap.permissions.includes("face-voice-offer"));
+  const toml = read("src-tauri/permissions/surfaces.toml");
+  const set = toml.slice(toml.indexOf('identifier = "face-voice-offer"'));
+  const perms = set.slice(set.indexOf("permissions = ["), set.indexOf("]") + 1);
+  assert.deepEqual(perms.match(/allow-[a-z-]+/g), ["allow-get-face-voice-offer", "allow-answer-face-voice-offer"]);
 });
 
 await check("choosing the same face again clears the choice", async () => {
@@ -313,15 +461,19 @@ await check("choosing the same face again clears the choice", async () => {
   await page.waitForTimeout(400);
   await page.locator("#solo-use").click();
   await page.locator("#solo-use").click();
+  await page.waitForTimeout(400);
+  // Each press saves at once, in order: the last save is "no face".
+  const saved = await savedDocs(page);
   // The solo view is a full overlay and Save is behind it.
   await page.locator("#solo-close").click();
   await page.waitForTimeout(200);
   await page.locator("#save").click();
   await page.waitForTimeout(300);
-  const saved = await page.evaluate(() =>
-    (window.__calls.find((c) => c[0] === "__saved") || [])[1]);
+  const all = await savedDocs(page);
   await page.close();
-  assert.equal(saved.face, null, `face was ${JSON.stringify(saved.face)}`);
+  assert.equal(saved.length, 2, "both presses were saved, none dropped");
+  assert.equal(saved[1].face, null, `face was ${JSON.stringify(saved[1].face)}`);
+  assert.equal(all[all.length - 1].face, null, "Save keeps it cleared");
 });
 
 await check("the window says where a face choice actually lands", async () => {
@@ -497,7 +649,7 @@ await check("every animal's shader is within the size Android's compiler accepts
   }
 });
 
-const ANIMALS = ["redpanda", "pygmyowl", "seaotter"];
+const ANIMALS = ["redpanda", "pygmyowl", "seaotter", "monkey"];
 
 await check("every animal is handed every real state, not a borrowed movement", async () => {
   // Most faces have four motion tables and the shell borrows for the other
@@ -510,20 +662,25 @@ await check("every animal is handed every real state, not a borrowed movement", 
   await page.waitForTimeout(1000);
   const got = await page.evaluate((ids) => ids.map((id) => {
     const th = THEME[id], api = CritterPose.species[id];
-    const pose = (st) => api.uniforms(api.pose(st, st, 9, 3, 0, {}));
-    // "Waving": whichever limb each animal waves with, raised well clear of
-    // where it rests.
-    const wave = {
-      redpanda: () => pose("approval").uPawL[1] - pose("idle").uPawL[1],
-      pygmyowl: () => pose("idle").uWingR0[0] - pose("approval").uWingR0[0],
-      seaotter: () => pose("approval").uPawR[1] - pose("idle").uPawR[1],
-    }[id]();
+    const pose = (st, t = 3) => api.uniforms(api.pose(st, st, 9, t, 0, {}));
+    // Waiting on you: attentive and STILL - eyes wide open on you, and
+    // nothing moving but the breath. (It used to wave; the owner's call,
+    // 2026-09-28: no wave at what may be a serious moment.)
+    let moved = 0;
+    const first = pose("approval", 3);
+    for (let t = 3.1; t < 6; t += 0.1) {
+      const now = pose("approval", t);
+      for (const k of ["uPawL", "uPawR", "uWingL0", "uWingR0", "uHeadR0"]) {
+        if (first[k]) first[k].forEach((v, i) => { moved = Math.max(moved, Math.abs(v - now[k][i])); });
+      }
+    }
+    const waitEyes = Math.max(...[3, 3.5, 4, 4.5, 5].map((t) => pose("approval", t).uFace[0]));
     return {
       id,
       states: th ? Object.keys(th.st) : null,
       standbyEyes: pose("standby").uFace.slice(0, 2),
       idleEyes: pose("idle").uFace.slice(0, 2),
-      wave,
+      moved, waitEyes,
     };
   }), ANIMALS);
   await page.close();
@@ -531,7 +688,10 @@ await check("every animal is handed every real state, not a borrowed movement", 
     assert.deepEqual(a.states, spec.states.map((s) => s.id), `${a.id}: not all eight states`);
     assert.deepEqual(a.standbyEyes, [0, 0], `${a.id}: asleep, but its eyes are open`);
     assert.ok(a.idleEyes[0] > 0.5, `${a.id}: idle, but its eyes are shut`);
-    assert.ok(a.wave > 0.1, `${a.id}: waiting on you, but not waving (${a.wave})`);
+    assert.ok(a.moved < 0.05, `${a.id}: waiting on you, but moving (${a.moved})`);
+    // A little wide, not staring: the owl's are 1.05 (its brows are level
+    // now - wide eyes under its V-shaped brows read as a glare).
+    assert.ok(a.waitEyes > 1.02, `${a.id}: waiting on you, but its eyes are not wide open (${a.waitEyes})`);
   }
 });
 

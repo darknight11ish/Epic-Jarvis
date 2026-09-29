@@ -340,6 +340,9 @@ object PlainErrors {
 
     private const val HIDDEN = "[hidden]"
     private val SHAPES: List<Pair<Regex, String>> = listOf(
+        // A key made for one device (docs/PAIRING-DESIGN.md §5.1), before the
+        // long-run rule below, which the dots inside it would slip past.
+        DeviceKey.PATTERN to HIDDEN,
         Regex("(?i)(x-jarvis-token[\"']?\\s*[:=]\\s*[\"']?)[^\\s\"'&,;]+") to "$1$HIDDEN",
         Regex("(?i)\\b(authorization\\s*:\\s*)(?:bearer|basic|token)?\\s*[^\\s\"',;]+") to "$1$HIDDEN",
         Regex("(?i)\\b(bearer|basic)\\s+[A-Za-z0-9._~+/=-]{8,}") to "$1 $HIDDEN",

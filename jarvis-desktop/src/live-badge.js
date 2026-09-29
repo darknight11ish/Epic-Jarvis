@@ -18,6 +18,9 @@ const TAURI = globalThis.__TAURI__;
 const ME = "desktop";
 /** How long "Heard you - thinking" stays up without anything newer. */
 const HEARD_FOR_MS = 6000;
+/** How long a refusal (a button that did not work) stays up: the watcher
+ *  repaints every second, which used to wipe it at once (audit #6). */
+const ERROR_FOR_MS = 6000;
 /** The badge's size at 100% text, in logical pixels (live.rs BADGE_W/H). */
 const BADGE_W = 420;
 const BADGE_H = 84;
@@ -39,18 +42,23 @@ const el = {
   stop: $("stop"),
 };
 
-let last = { status: null, stale: false, lockUnknown: false, callUnknown: false };
+let last = { status: null, stale: false, lockUnknown: false, callUnknown: false, micWait: "" };
 let heard = { thinking: false, short: false, until: 0 };
 let heardTimer = null;
 let endedBase = null;
 let endedTimer = null;
+let failed = { words: "", until: 0 };
+let failedTimer = null;
 
 async function invoke(command, args = {}) {
   if (!TAURI || !TAURI.core) return null;
   try {
     return await TAURI.core.invoke(command, args);
   } catch (error) {
-    el.detail.textContent = String((error && error.message) || error);
+    failed = { words: String((error && error.message) || error), until: Date.now() + ERROR_FOR_MS };
+    clearTimeout(failedTimer);
+    failedTimer = setTimeout(render, ERROR_FOR_MS + 50);
+    render();
     return null;
   }
 }
@@ -72,9 +80,11 @@ function render() {
   el.title.textContent = sign.title || TITLE;
   let detail = sign.detail;
   const s = last.status || {};
+  if (!detail && sign.stop && last.micWait) detail = last.micWait;
   if (!detail && sign.stop && last.lockUnknown) detail = LOCK_UNKNOWN_WORDS;
   if (!detail && sign.stop && last.callUnknown) detail = SEEN.call_unknown;
   if (!detail && sign.stop) detail = SEEN.end_hint;
+  if (now < failed.until) detail = failed.words;
   el.detail.textContent = detail;
   // The whole sign, whatever fits.
   el.badge.title = detail ? `${el.title.textContent}\n${detail}` : el.title.textContent;
@@ -109,6 +119,8 @@ function take(payload) {
     stale: payload.stale === true,
     lockUnknown: payload.lockUnknown === true,
     callUnknown: payload.callUnknown === true,
+    // live.rs WAIT_TALK_TYPE: talk-to-type holds the microphone for now.
+    micWait: typeof payload.micWait === "string" ? payload.micWait : "",
   };
   const s = last.status || {};
   if (s.state === "ended") {

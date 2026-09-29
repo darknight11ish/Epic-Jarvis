@@ -84,12 +84,14 @@ export const LOCKDOWN_LABEL = "Lockdown";
 export const LOCKDOWN_DETAIL =
   "One tap makes every way out of this PC ask you first, or stop: web search and research, " +
   "sending or saving email, reading your calendar, email and Home Assistant, your smart " +
-  "home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and " +
-  "checking for tool updates. Turning it on is instant, from either app. Turning it off is " +
+  "home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, chatbot " +
+  "conversations, the online weather behind the animal and checking for tool updates. " +
+  "Turning it on is instant, from either app. Turning it off is " +
   "on the PC only, with an approval card and Windows Hello.";
 export const LOCKDOWN_ON_SAYS =
   "Lockdown is on: everything that would leave this PC asks you first, and anything that " +
-  "runs by itself (\"tell me when\", news, the briefing's calendar and email) has stopped.";
+  "runs by itself (\"tell me when\", news, the briefing's calendar and email, chatbot " +
+  "conversations, the online weather) has stopped.";
 export const LOCKDOWN_OFF_SAYS = "Lockdown is off: everything asks first as your settings say.";
 export const LOCKDOWN_ON_LABEL = "Turn on Lockdown";
 export const LOCKDOWN_OFF_LABEL = "Turn off Lockdown";

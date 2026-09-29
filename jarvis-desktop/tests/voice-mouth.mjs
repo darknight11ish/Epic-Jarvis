@@ -153,7 +153,7 @@ await check("the animal's mouth follows the track at the playback clock", async 
 await check("speaking with no real voice keeps an animal's mouth shut", async () => {
   // A typed answer, Quiet mode, an answer kept on screen: the backend still
   // says `speaking`, but nothing is playing.
-  for (const face of ["redpanda", "pygmyowl", "seaotter"]) {
+  for (const face of ["redpanda", "pygmyowl", "seaotter", "monkey"]) {
     const { page, frame, errors } = await host(face);
     await state(page, "speaking");
     // The state takes effect on the face's next drawn frame: wait for it
@@ -234,7 +234,9 @@ await check("while real voice plays, a resting face shows speaking - an approval
   assert.equal((await drawn(frame)).lastState, "approval");
   await state(page, "idle");
   await clock(page, { id, n: 2, t: 0.6, playing: false, end: true });
-  await page.waitForTimeout(900);
+  // Speaking is held for LIP_STATE_HOLD_S (2 s, faces.html) after the voice
+  // stops, so a pause between sentences does not drop out of it; then idle.
+  await page.waitForTimeout(2400);
   const got = await drawn(frame);
   await page.close();
   assert.equal(got.lastState, "idle", "still speaking after the voice ended");

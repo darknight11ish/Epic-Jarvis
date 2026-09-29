@@ -675,6 +675,26 @@ _RERANK_ON = os.environ.get("JARVIS_MEMORY_RERANK", "0").strip().lower() in (
 RERANK_OFF_WHY = ("not switched on until the memory self-test on this PC shows it helps; "
                   "the memory scoreboard page (docs/MEMORY-SCOREBOARD.md) says how to switch it on")
 
+# "Said again" as a tie-breaker (milestone 12, docs/AUDIT-2026-09-28-REPO-REFS.md
+# section 6). When chat recall's merged ranking (RRF) gives two or more of the
+# facts it chose EXACTLY the same score - and the re-ranker, if it ran, the
+# same score too - the fact the owner has said again more often goes first.
+# Nothing else: it runs on the final list, so the same facts come back, the
+# same number of them; it never moves a fact past one the ranking put clearly
+# above it, and it never hides, fades or drops anything (the memory research:
+# "recency as a small tie-break is fine; hiding is not"). Chat recall asks for
+# it (search(said_again=True), through jarvis_past.recall); find_one(),
+# corrections and anything that writes never do.
+#
+# OFF BY DEFAULT, like the re-ranker: kept only if the memory self-test on
+# the PC shows it helps. JARVIS_MEMORY_SAID_AGAIN_TIEBREAK=1 turns it on.
+_SAID_AGAIN_TIEBREAK = os.environ.get(
+    "JARVIS_MEMORY_SAID_AGAIN_TIEBREAK", "0").strip().lower() in ("1", "on", "true", "yes")
+#: Two fused (or re-ranker) scores closer than this are "the same score" -
+#: float noise only (two neighbouring RRF ranks differ by about 1e-4, and
+#: a real difference between two fused sums is many orders above this).
+_TIE_EPS = 1e-12
+
 
 class Reranker:
     """The shape the store relies on: `name`, and score(query, texts) - one
@@ -794,10 +814,12 @@ def reranker_status() -> dict:
         return out
 
 
-def _rerank(query: str, facts: list) -> Optional[list]:
+def _rerank(query: str, facts: list, scores_out: Optional[dict] = None) -> Optional[list]:
     """`facts` re-ordered by the re-ranker, best first - or None, meaning
     "keep the merged order": no re-ranker (yet), one still busy with an
-    earlier question, a failure, or no answer within RERANK_BUDGET_S."""
+    earlier question, a failure, or no answer within RERANK_BUDGET_S.
+    `scores_out`, when given, gets {fact id: re-ranker score} on success
+    (the "said again" tie-break must not undo the re-ranker's order)."""
     rr = reranker()
     if rr is None or len(facts) < 2:
         return None
@@ -826,6 +848,9 @@ def _rerank(query: str, facts: list) -> Optional[list]:
         return None
     with _rr_lock:
         _rr["used"] += 1
+    if scores_out is not None:
+        for f, x in zip(facts, scores):
+            scores_out[f["id"]] = float(x)
     # Stable: equal scores keep the merged order.
     order = sorted(range(len(facts)), key=lambda i: (-scores[i], i))
     return [facts[i] for i in order]
@@ -2304,7 +2329,8 @@ class MemoryStore:
                at: Optional[float] = None, include_retired: bool = False,
                known_at: Optional[float] = None,
                word_floor: Optional[float] = None,
-               entities: bool = False, rerank: bool = False) -> list[dict]:
+               entities: bool = False, rerank: bool = False,
+               said_again: bool = False) -> list[dict]:
         """Words and meaning, fused with reciprocal rank fusion.
 
         at          VALID time: only facts true at that moment (default now).
@@ -2330,6 +2356,13 @@ class MemoryStore:
                     facts that pass every filter are re-ordered by it before
                     the first k are kept. Without a loaded re-ranker, or on
                     any failure, the merged order - exactly as without it.
+        said_again  the "said again" tie-break (milestone 12, above; chat
+                    recall asks for it, through jarvis_past.recall). Only
+                    while _SAID_AGAIN_TIEBREAK is on (it is off by default):
+                    facts in the final list with exactly the same score are
+                    put in "said again" order, most first. The same facts,
+                    the same number; off, or on with no ties, the order is
+                    exactly what it would have been.
         """
         at_given = at is not None
         query = " ".join(str(query).split())
@@ -2459,11 +2492,17 @@ class MemoryStore:
         # I2, "skip it then", was measured and not kept: every fact is kept
         # either way, but the order within them - recall@1 and MRR - got
         # worse without it; the time it would save shows only on the PC).
+        rr_scores: dict = {}
         if rerank:
-            ranked = _rerank(query, out)
+            ranked = _rerank(query, out, rr_scores)
             if ranked is not None:
                 out = ranked
         out = out[:k]
+        if said_again and _SAID_AGAIN_TIEBREAK and len(out) > 1:
+            try:
+                out = self._said_again_ties(out, ranks, rr_scores)
+            except Exception:
+                pass                      # the order as it was: never an error
         if (entities and _ENTITY_RECALL and ENTITY_WHO_MAX > 0 and out
                 and known_at is None and not include_retired and _ASKS_WHO.search(query)):
             # One step out from a person (the memory review, I13): the fact
@@ -2477,6 +2516,37 @@ class MemoryStore:
             except Exception:
                 pass
         return out
+
+    def _said_again_ties(self, out: list, fused: dict, rr_scores: dict) -> list:
+        """`out` with each run of NEIGHBOURS that tie - the same fused score,
+        and the same re-ranker score when it ran - put in "said again" order,
+        most first; equal counts keep their order. A permutation of `out`:
+        nothing added, nothing dropped, and no fact moves past one that
+        scored differently."""
+        counts = {i: v["count"] for i, v in self.said_again_counts(
+            [f["id"] for f in out]).items()}
+        if not counts:
+            return out
+
+        def same(a: dict, b: dict) -> bool:
+            if abs(fused.get(a["id"], 0.0) - fused.get(b["id"], 0.0)) > _TIE_EPS:
+                return False
+            if rr_scores and abs(rr_scores.get(a["id"], 0.0)
+                                 - rr_scores.get(b["id"], 0.0)) > _TIE_EPS:
+                return False
+            return True
+        res: list = []
+        i = 0
+        while i < len(out):
+            j = i + 1
+            while j < len(out) and same(out[j - 1], out[j]):
+                j += 1
+            run = out[i:j]
+            if len(run) > 1:
+                run = sorted(run, key=lambda f: -counts.get(f["id"], 0))   # stable
+            res += run
+            i = j
+        return res
 
     def _who_facts(self, top: list, at: float) -> list:
         """For the people and things the first ENTITY_WHO_FROM of `top`
@@ -2534,8 +2604,10 @@ class MemoryStore:
         only for a turn AFTER the fact was saved (a turn from before is the
         one it was learned from, not a repeat), and never a time in the
         future. The row holds no words: erasing the fact's words leaves it,
-        like the fact's own dates. Nothing reads it to decide anything - it
-        can never make a fact harder to forget, correct or erase."""
+        like the fact's own dates. It never makes a fact harder to forget,
+        correct or erase; the only thing that may read it to decide anything
+        is recall's tie-break (search(said_again=True), off by default),
+        which only orders facts that tie exactly."""
         if how not in ("typed", "voice"):
             return False
         try:
@@ -3206,8 +3278,16 @@ class MemoryStore:
         merged into them), most of them named first, then newest first.
         Never an erased fact; by default only facts true at `at`."""
         ids = []
+        most = self._common_cut(c) if _ENTITY_COMMON_CUT else None
         for r in roots:
-            for e in self._group(c, r):
+            group = self._group(c, r)
+            if most is not None and self._linked_count(c, group) > most:
+                # "Too common to help" (effectiveness audit 2026-09-28, 3.1):
+                # someone linked to most of memory brings back only the
+                # newest facts about them, pushing the relevant ones out.
+                # OFF unless JARVIS_MEMORY_ENTITY_COMMON_CUT=1.
+                continue
+            for e in group:
                 if e not in ids:
                     ids.append(e)
         if not ids:
@@ -3226,6 +3306,28 @@ class MemoryStore:
             f" WHERE fe.entity_id IN ({marks}) AND f.erased_at IS NULL{where}"
             " GROUP BY fe.fact_id ORDER BY n DESC, fe.fact_id DESC LIMIT ?",
             (*ids, *args, int(limit)))]
+
+    @staticmethod
+    def _common_cut(c) -> int:
+        """How many facts one entry may be linked to before it counts as too
+        common to help: max(ENTITY_COMMON_MIN, ENTITY_COMMON_SHARE of every
+        fact not erased)."""
+        total = c.execute("SELECT COUNT(*) FROM facts WHERE erased_at IS NULL").fetchone()[0]
+        return max(ENTITY_COMMON_MIN, int(int(total or 0) * ENTITY_COMMON_SHARE))
+
+    @staticmethod
+    def _linked_count(c, group) -> int:
+        """How many facts (not erased) are linked to this entry or anything
+        merged into it."""
+        group = list(group)
+        if not group:
+            return 0
+        marks = ",".join("?" * len(group))
+        return int(c.execute(
+            "SELECT COUNT(DISTINCT fe.fact_id) FROM fact_entities fe"
+            " JOIN facts f ON f.id = fe.fact_id"
+            f" WHERE fe.entity_id IN ({marks}) AND f.erased_at IS NULL",
+            tuple(group)).fetchone()[0] or 0)
 
     def _note_likely_same(self, c, eid: int, name: str, now: float) -> None:
         """A NEW entry whose name is a likely typo of one already there
@@ -4316,6 +4418,19 @@ ENTITY_KINDS = ("person", "pet", "place", "organisation", "project", "thing")
 #: Chat recall uses the entity layer unless JARVIS_MEMORY_ENTITIES=0.
 _ENTITY_RECALL = os.environ.get("JARVIS_MEMORY_ENTITIES", "1").strip().lower() not in (
     "0", "false", "off", "no")
+
+#: "Too common to help" (the effectiveness audit, 2026-09-28, 3.1): in chat
+#: recall's third list, skip an entry linked to more than
+#: max(ENTITY_COMMON_MIN, ENTITY_COMMON_SHARE x every fact) facts - a person
+#: named in most of memory only floods the top results with their newest
+#: facts. OFF BY DEFAULT, like the tie-breaker: kept only if the memory
+#: self-test on the PC (eval_memory.py, and --locomo) shows no number
+#: getting worse. JARVIS_MEMORY_ENTITY_COMMON_CUT=1 turns it on
+#: (eval_memory.py --common-cut does the same for one run).
+_ENTITY_COMMON_CUT = os.environ.get(
+    "JARVIS_MEMORY_ENTITY_COMMON_CUT", "0").strip().lower() in ("1", "on", "true", "yes")
+ENTITY_COMMON_MIN = 20
+ENTITY_COMMON_SHARE = 0.05
 
 #: An alias that names more than this many different entries ("friend",
 #: with thirty friends in memory) does not say which one - it is ignored.

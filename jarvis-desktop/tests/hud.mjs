@@ -445,11 +445,14 @@ await check("the HUD's own state machine drives the face, offline included", asy
   await page.evaluate(() => { S.online = false; reactor.set("idle"); });
   await page.waitForTimeout(80);
   seen.offline = await frame.evaluate(() => LIVE_STATE);
+  // ...with the hollow "not connected" ring (owner, 2026-09-28).
+  const ringOffline = await frame.evaluate(() => LIVE_OFFLINE);
   const label = await page.locator("#reactor-state").textContent();
   // A page state with no face of its own rests at idle...
   await page.evaluate(() => { S.online = true; reactor.set("dancing"); });
   await page.waitForTimeout(80);
   seen.unknown = await frame.evaluate(() => LIVE_STATE);
+  const ringOnline = await frame.evaluate(() => LIVE_OFFLINE);
   // ...and the face itself ignores a state id the spec does not have,
   // rather than handing the renderer something it would draw as nothing.
   await page.evaluate(() => document.getElementById("reactor").contentWindow
@@ -462,6 +465,40 @@ await check("the HUD's own state machine drives the face, offline included", asy
     offline: "standby", unknown: "idle", bogus: "idle",
   });
   assert.equal(label, "offline");
+  assert.equal(ringOffline, true, "offline must draw the not-connected ring");
+  assert.equal(ringOnline, false, "the ring must go when the HUD is back online");
+  assert.deepEqual(problems, []);
+});
+
+await check("the HUD's face sleeps on standby and goes serious on a crisis answer, from the shell's stream", async () => {
+  const { page, problems } = await openHud(browser, { jarvis: false, ollama: true, proxy: false });
+  const frame = await faceFrame(page);
+  await page.evaluate(() => { S.online = true; reactor.set("idle"); });
+  // What stream.rs pushes into this page (push_to_hud(app, "event", frame)).
+  const feed = (kind, data) => page.evaluate(([k, d]) => window.__jarvisFeed("event", { kind: k, id: 7, data: d }), [kind, data]);
+  await feed("power", { value: "standby" });
+  await page.waitForTimeout(100);
+  const asleep = await frame.evaluate(() => ({ st: LIVE_STATE, off: LIVE_OFFLINE }));
+  // Busy wins over asleep, as in every other window.
+  await page.evaluate(() => reactor.set("thinking"));
+  await page.waitForTimeout(80);
+  const busy = await frame.evaluate(() => LIVE_STATE);
+  await page.evaluate(() => reactor.set("idle"));
+  await feed("power", { value: "active" });
+  await page.waitForTimeout(80);
+  const awake = await frame.evaluate(() => LIVE_STATE);
+  await feed("wellbeing", { serious: true });
+  await page.waitForTimeout(100);
+  const serious = await frame.evaluate(() => faceSerious());
+  await feed("wellbeing", { serious: false });
+  await page.waitForTimeout(100);
+  const over = await frame.evaluate(() => faceSerious());
+  await page.close();
+  assert.deepEqual(asleep, { st: "standby", off: false }, "standby is asleep, not 'not connected'");
+  assert.equal(busy, "thinking");
+  assert.equal(awake, "idle");
+  assert.equal(serious, true, "the HUD's face did not go serious");
+  assert.equal(over, false, "the HUD's face stayed serious");
   assert.deepEqual(problems, []);
 });
 

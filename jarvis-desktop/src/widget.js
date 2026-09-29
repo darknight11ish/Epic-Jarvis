@@ -33,7 +33,8 @@ import {
   followTheme,
   followZoom,
   linkWords,
-  surfaceState,
+  faceSignal,
+  onSerious,
   start as startLink,
 } from "./jarvis-link.js";
 import { TARGETS, fileNote, loadTargets, noTargetsLine, targetName } from "./note-capture.js";
@@ -41,6 +42,7 @@ import { EMAIL_APPROVE, EMAIL_DETAIL, isEmailCard } from "./email-sending.js";
 import { CARD_KICKER, cardTitle } from "./card-words.js";
 import { isHeavy } from "./heavy-approve.js";
 import { relayFaceVoice } from "./face-voice.js";
+import { startSkyFeed } from "./sky-feed.js";
 import {
   actionsOf as focusActionsOf,
   clock as focusClock,
@@ -60,6 +62,7 @@ import {
 } from "./screen-work.js";
 import {
   FACE_OPTION as BOARD_FACE_OPTION,
+  LOCKED_OPENS_BAR as BOARD_LOCKED_OPENS_BAR,
   hideView as boardHideView,
   NEVER_HELD as BOARD_NEVER_HELD,
   paint as paintBoardBlocks,
@@ -599,7 +602,24 @@ function boardCanPress(action) {
   return BOARD_NEVER_HELD.includes(action) || linkWords(currentLink()).canAct;
 }
 
+/** Under App lock the tiles that act open the locked Jarvis bar instead
+ *  (the owner, 2026-09-28) - like the approval's Approve. Stop everything
+ *  and Brief me (which opens the Brain behind the lock) are unchanged. */
+function boardOpensBar(action) {
+  return state.appLock && !BOARD_NEVER_HELD.includes(action);
+}
+
 async function pressBoard(action, btn) {
+  if (boardOpensBar(action)) {
+    flash(BOARD_LOCKED_OPENS_BAR);
+    try {
+      // Rust refuses to act under App lock too: it only opens the bar.
+      await invokeStrict("widget_board_action", { action });
+    } catch (error) {
+      flash(String((error && error.message) || error), "bad");
+    }
+    return;
+  }
   if (!boardCanPress(action)) return;
   btn.disabled = true;
   try {
@@ -666,7 +686,11 @@ let faceAppearance = null;
 function postFace() {
   const frame = dom.faceFrame;
   if (!frame || !frame.contentWindow || !frame.getAttribute("src")) return;
-  const message = { type: "jarvis-hud-face", state: surfaceState(currentLink()) };
+  // state, plus `offline` (the "not connected" ring), `waiting` (banked's
+  // notches) and `serious` (a crisis answer's calm, plain pose, section
+  // 38.1) - jarvis-link.js faceSignal. The widget's own offline row says it
+  // in words.
+  const message = { type: "jarvis-hud-face", ...faceSignal(currentLink()) };
   if (faceAppearance) message.appearance = faceAppearance;
   try {
     frame.contentWindow.postMessage(message, location.origin);
@@ -1709,11 +1733,18 @@ startLink();
   // changes. Read once from Jarvis (so a phone change arrives), then from
   // memory on every change.
   if (dom.faceFrame) dom.faceFrame.addEventListener("load", postFace);
+  // A serious moment starting or ending (the `wellbeing` event, section
+  // 38.1) is not a link change, so it has its own call to post again.
+  onSerious(() => postFace());
   // Lip-sync: Jarvis's voice and the owner's microphone, passed into the
   // face (face-voice.js) - an event reaches this page, never its frame.
   relayFaceVoice(dom.faceFrame, listen);
   listen("appearance-changed", () => readFaceAppearance(false));
   readFaceAppearance(true);
+  // The sun, the moon and the weather behind the animal (sky-feed.js): kept
+  // in this computer's localStorage for the face frame, which holds no
+  // command of its own (capability sky-read).
+  startSkyFeed();
 
   // Ollama and the LiteLLM proxy are not on the bus, so their dots still need
   // one probe. Once, at boot — there is no timer here any more.

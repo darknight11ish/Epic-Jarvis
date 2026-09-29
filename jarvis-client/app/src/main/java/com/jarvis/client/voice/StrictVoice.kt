@@ -406,10 +406,10 @@ object StrictVoice {
             setting == VoiceStrict.MEMORY && view.memory.isBlank() -> NOT_ON_THIS_PC
             setting == VoiceStrict.SENSITIVE_MEMORY && view.sensitiveMemory.isBlank() -> NOT_ON_THIS_PC
             setting == VoiceStrict.HANDS_FREE && view.handsFree.isBlank() -> NOT_ON_THIS_PC
-            setting == VoiceStrict.HANDS_FREE_SCREEN && view.handsFreeScreen.isBlank() -> NOT_ON_THIS_PC
-            setting == VoiceStrict.HANDS_FREE_LIVE && view.handsFreeLive.isBlank() -> NOT_ON_THIS_PC
             setting == VoiceStrict.WAKE_CONFIRM && view.wakeConfirm.isBlank() -> NOT_ON_THIS_PC
             setting == VoiceStrict.VOICE_ID_MODEL && view.voiceIdModel.isBlank() -> NOT_ON_THIS_PC
+            setting == VoiceStrict.HANDS_FREE_SCREEN && view.handsFreeScreen.isBlank() -> NOT_ON_THIS_PC
+            setting == VoiceStrict.HANDS_FREE_LIVE && view.handsFreeLive.isBlank() -> NOT_ON_THIS_PC
             blockedWhy(setting, value, view) != null -> blockedWhy(setting, value, view)
             !settingOpen(setting, view) -> MEMORY_WHILE_VOICE_IS_ENOUGH
             loosening && linkBlocker != null -> linkBlocker

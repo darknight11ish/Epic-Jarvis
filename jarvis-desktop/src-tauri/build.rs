@@ -172,6 +172,12 @@ fn main() {
             "get_backend_capabilities",
             "get_second_card",
             "set_second_card",
+            // Moving one of the second card's own switches onto a third,
+            // capable graphics card, or moving it back off (2026-09-28).
+            // Its own command (the wire shape differs: "assign", not
+            // "enabled"); read is folded into get_second_card's own
+            // answer (status()'s "third" key). Settings window only.
+            "set_third_card",
             // "When to suggest the bigger model" (2026-09-27): no approval
             // card either way, folded into the same Settings section. read
             // is folded into get_second_card's own answer.
@@ -216,6 +222,14 @@ fn main() {
             // way Jarvis can reach something outside itself, written by the
             // PC from its settings. Read only. Settings window only.
             "get_reach",
+            // The sun, the moon and the weather behind the animal faces
+            // (backend/sky.patch, 2026-09-28): the settings and the weather
+            // now (a read - Settings, the Widget and the floating face keep
+            // what drawing needs in this computer's localStorage); ONE
+            // change at a time (Settings only; Open-Meteo ON raises one
+            // approval card on the PC; adding is held on a stale link).
+            "get_sky",
+            "set_sky",
             // Settings' "What asks first" (backend/asks-first.patch): every
             // action and whether it asks, in the PC's words; "Ask me first"
             // on ONE action of the short safe list (stricter at once, never
@@ -257,6 +271,19 @@ fn main() {
             "backup_now",
             "preview_restore",
             "restore_backup",
+            // Settings' "Devices" (docs/PAIRING-DESIGN.md, phase 1): the
+            // address for the QR code, start / watch / cancel a pairing
+            // (the QR code drawn in Rust; the window hidden from screen
+            // capture while a code shows), the device list, Remove ONE
+            // device, and retire / bring back the old shared key. Settings
+            // window only.
+            "pair_phone_address",
+            "pair_start",
+            "pair_session",
+            "pair_cancel",
+            "devices_list",
+            "devices_remove",
+            "devices_shared",
             // Settings' "How Jarvis talks" (backend/manner.patch): warm and
             // brief, or plain. One change at a time, no approval card either
             // way (it changes wording only). Settings window only.
@@ -305,6 +332,11 @@ fn main() {
             "set_voice_speed",
             "set_voice_speaker",
             "set_voice_face",
+            "set_voice_animal",
+            "reset_voice_animal",
+            "try_voice_animal",
+            "get_face_voice_offer",
+            "answer_face_voice_offer",
             // Widget geometry and capture
             "get_appearance",
             "set_appearance",
@@ -399,7 +431,32 @@ fn main() {
             // A NAMED list ("shopping") cleared after the page's "are you
             // sure?", with the count it showed (2026-09-25).
             "brain_schedule_clear_list",
-            // Projects (backend/projects.patch; JARVIS-API section 61; the
+            // Goals (backend/goals.patch, JARVIS-API.md section 59): a
+            // read, one new draft, accepting it (the backend's own one
+            // approval card, through jarvis_schedule.py, never a card of
+            // this app's own making), one step done or not, and Stop
+            // tracking. No card raised here directly; every write held on
+            // a stale link. Brain only.
+            "brain_goals",
+            "brain_goals_create",
+            "brain_goals_accept",
+            "brain_goals_step",
+            "brain_goals_stop",
+            // "Photo to reminder" (photo-reminder.patch, 2026-09-28): the
+            // dates in a picture, read on the PC and PROPOSED (a scan sets
+            // nothing up), and the owner's tap adding ONE reminder - no
+            // card, held on a stale link. The Jarvis bar and the Brain.
+            "photo_scan",
+            "photo_add_reminder",
+            // "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek"
+            // (history-import.patch, 2026-09-28): where a run is (a read),
+            // the Windows "Open" dialog then start (held on a stale link;
+            // it only PROPOSES - every fact waits for its own yes), and
+            // cancel (never held). Brain only.
+            "history_import_status",
+            "history_import_start",
+            "history_import_cancel",
+            // Projects (backend/projects.patch; JARVIS-API section 88; the
             // owner's decision of 2026-09-28): read the projects, ONE change
             // named by an action from a fixed list (the PC raises the only
             // cards: Shareable ON, and taking off a mark Jarvis made), and a
@@ -416,20 +473,6 @@ fn main() {
             // list is hidden) or Undo (no card, never held). Brain only.
             "forget_range_read",
             "forget_range_write",
-            // "Photo to reminder" (photo-reminder.patch, 2026-09-28): the
-            // dates in a picture, read on the PC and PROPOSED (a scan sets
-            // nothing up), and the owner's tap adding ONE reminder - no
-            // card, held on a stale link. The Jarvis bar and the Brain.
-            "photo_scan",
-            "photo_add_reminder",
-            // "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek"
-            // (history-import.patch, 2026-09-28): where a run is (a read),
-            // the Windows "Open" dialog then start (held on a stale link;
-            // it only PROPOSES - every fact waits for its own yes), and
-            // cancel (never held). Brain only.
-            "history_import_status",
-            "history_import_start",
-            "history_import_cancel",
             // Focus sessions (backend/focus.patch): read one, start one
             // (Brain only, held on a stale link), and ONE thing to it -
             // pause, resume, +10 minutes, stop, and the widget's Lock on

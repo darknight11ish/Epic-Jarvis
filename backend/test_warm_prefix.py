@@ -508,6 +508,34 @@ def t_after_waking():
         fake.close()
 
 
+def t_live_warms_the_model_chat_uses():
+    """Effectiveness audit 2026-09-28, 3.2: Jarvis Live's warm-up
+    (warm_everyday) loads the model chat really uses now, not the fixed
+    JARVIS_MODEL name, and sends no keep_alive (Ollama's own setting stays)."""
+    fake = Fake()
+    real = S.chat_model
+    try:
+        S.chat_model = lambda: "switched-model:8b"
+        ok = AG.warm_everyday(fake.url)   # (the fake answers a load oddly; the body is what counts)
+        gens = [json.loads(raw) for path, raw in fake.posts if path == "/api/generate"]
+        check("after a switch from the phone: the switched-to model is loaded",
+              bool(gens) and gens[-1].get("model") == "switched-model:8b", (ok, gens))
+        check("... with no keep_alive (the owner's OLLAMA_KEEP_ALIVE stays in charge)",
+              gens and "keep_alive" not in gens[-1], gens)
+        S.chat_model = lambda: None
+        os.environ.pop("JARVIS_MODEL", None)
+        AG.warm_everyday(fake.url)
+        gens = [json.loads(raw) for path, raw in fake.posts if path == "/api/generate"]
+        check("nothing says which model: the default name, as before",
+              gens[-1].get("model") == "jarvis-primary", gens[-1])
+        AG.warm_everyday(fake.url, model="named:1b")
+        gens = [json.loads(raw) for path, raw in fake.posts if path == "/api/generate"]
+        check("a model named by the caller wins", gens[-1].get("model") == "named:1b")
+    finally:
+        S.chat_model = real
+        fake.close()
+
+
 # --------------------------------------------------------------------------
 #   4. A question arriving meanwhile does not wait for it
 # --------------------------------------------------------------------------
@@ -740,6 +768,7 @@ if __name__ == "__main__":
         for fn in (t_the_same_bytes_as_a_real_turn, t_a_real_question_starts_the_same_way,
                    t_it_records_nothing_and_learns_nothing, t_where_it_is_never_sent,
                    t_the_off_switch_reads_only_a_real_false, t_after_learning, t_after_waking,
+                   t_live_warms_the_model_chat_uses,
                    t_a_question_is_never_kept_waiting, t_a_turn_that_raises_is_still_uncounted,
                    t_its_place_in_the_stack, t_what_the_patch_does):
             print(f"\n--- {fn.__name__} ---")

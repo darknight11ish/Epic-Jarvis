@@ -1,7 +1,7 @@
 //! "Talk to a chatbot for me" (the owner's decisions of 2026-09-27 and
 //! 2026-09-28; docs/CHATBOT-DRIVER-DESIGN.md; backend/chatbot-routes.patch,
 //! `jarvis_chatbot_routes.py` over `jarvis_chatbot.py`; JARVIS-API.md
-//! section 60).
+//! section 87).
 //!
 //! Jarvis asks an AI chatbot about something for the owner and writes its
 //! own follow-ups on the PC, within limits approved on ONE card. The Brain's

@@ -23,6 +23,10 @@
       "title": "Jarvis wants to start a helper task"
     },
     {
+      "action": "app_merge_change",
+      "title": "Jarvis wants to add its change to one of your apps"
+    },
+    {
       "action": "append_logseq_journal",
       "title": "Jarvis wants to add to today's Logseq journal"
     },
@@ -195,6 +199,14 @@
       "title": "Jarvis wants to fetch a web page you're watching"
     },
     {
+      "action": "pair_device",
+      "title": "Jarvis wants to connect a new device"
+    },
+    {
+      "action": "phone_notifications_read",
+      "title": "Jarvis wants to start reading notifications from apps you choose on your phone"
+    },
+    {
       "action": "post_to_external_service",
       "title": "Jarvis wants to post to an outside service"
     },
@@ -231,6 +243,10 @@
       "title": "Jarvis wants to go back to the AI model you had before"
     },
     {
+      "action": "run_plan",
+      "title": "Jarvis wants to run the safe steps of an approved plan"
+    },
+    {
       "action": "run_shell_on_host",
       "title": "Jarvis wants to run a command on this PC"
     },
@@ -253,6 +269,10 @@
     {
       "action": "second_card_enable",
       "title": "Jarvis wants to start using the second graphics card"
+    },
+    {
+      "action": "second_card_third_assign",
+      "title": "Jarvis wants to move a second-card feature onto a third graphics card"
     },
     {
       "action": "send_email",
@@ -281,6 +301,10 @@
     {
       "action": "unclassified_tool",
       "title": "Jarvis wants to use a tool it has no plain name for"
+    },
+    {
+      "action": "unretire_shared_key",
+      "title": "Jarvis wants to let the old shared key work from other devices again"
     },
     {
       "action": "user_profile_manage",

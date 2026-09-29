@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-reset-voice-animal"
+description = "Enables the reset_voice_animal command without any pre-configured scope."
+commands.allow = ["reset_voice_animal"]
+
+[[permission]]
+identifier = "deny-reset-voice-animal"
+description = "Denies the reset_voice_animal command without any pre-configured scope."
+commands.deny = ["reset_voice_animal"]

@@ -92,7 +92,8 @@ needed to make it again: [v1](videos/v1/jarvis-launch-v1.mp4),
   ```
 
 **Look how you like**
-- An animated face shows what Jarvis is doing (20 designs), with themes and
+- An animated face shows what Jarvis is doing (23 designs, three of them
+  animals), with themes and
   colours that match on the PC and the phone.
 
 ## Install it
@@ -148,7 +149,7 @@ The documents to read first: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 
 - **Phone app:** GitHub builds it. A build is published to `client-latest`
   only after an Android emulator has installed and started that exact file,
-  and only from `main` or the working branch - the release notes say which.
+  and only from `main`.
 - **Desktop app:** built on Windows with `npm install` and `npm run tauri build`
   in `jarvis-desktop/`; GitHub also builds the installer.
 - **Every change** runs the tests on GitHub: the backend suites, every

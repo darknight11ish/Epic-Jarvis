@@ -42,6 +42,7 @@ pub mod conversation_facts;
 pub mod fact_history;
 pub mod focus;
 pub mod forget_range;
+pub mod goals;
 pub mod history;
 pub mod history_import;
 pub mod photo_reminder;

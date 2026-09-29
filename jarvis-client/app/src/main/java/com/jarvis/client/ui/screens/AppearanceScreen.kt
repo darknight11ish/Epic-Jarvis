@@ -69,6 +69,7 @@ import com.jarvis.client.face.FaceThumbnail
 import com.jarvis.client.face.FaceView
 import com.jarvis.client.face.Faces
 import com.jarvis.client.face.Pattern
+import com.jarvis.client.face.warmCritterShaders
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Notice
 import com.jarvis.client.ui.parts.Pill
@@ -83,7 +84,9 @@ import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.theme.LocalMotion
 import com.jarvis.client.ui.theme.LocalRadii
 import com.jarvis.client.ui.theme.Themes
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -198,11 +201,30 @@ fun AppearanceScreen(
     onFaceTuningChange: (FaceTuning) -> Unit = {},
     /** Android's own Battery Saver is on, which turns the face's on too. */
     phoneBatterySaver: Boolean = false,
+    /**
+     * The one-time "The panda has its own voice. Use it?" line, drawn right
+     * under the face picker (owner, 2026-09-28). Null draws nothing.
+     */
+    faceVoiceOffer: (@Composable () -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     // What the face is actually running with right now - what Auto picked, or
     // what battery saver forces. Changes rarely (at most every two seconds).
     val liveBudget by FaceQuality.live.collectAsState()
+    // How the face above is running: fps, ms per frame, and an animal's
+    // resolution (about twice a second, only while a face draws).
+    val faceStats by FaceQuality.stats.collectAsState()
+
+    // The picker below draws a still of every face, four of them animals
+    // whose shaders are large. Built here, on a background thread, as the
+    // screen opens, instead of on the main thread in the one frame that first
+    // draws those stills - the picker sits further down the list, so this has
+    // normally finished before it is on screen. If it has not, the first
+    // still simply waits for that same compile (CritterFace.warm). Nothing
+    // drawn changes; an owner who never opens Appearance still never pays.
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.Default) { warmCritterShaders() }
+    }
 
     // Cycle states: steps the one live preview through all eight states every
     // four seconds, so picking colours doesn't mean tapping through them by
@@ -444,8 +466,9 @@ fun AppearanceScreen(
                     "Shared with your desktop",
                     if (desktopSyncs) {
                         "The face and the state colours are sent to your desktop, and a " +
-                            "change made there shows up here too. Nothing else on this " +
-                            "screen leaves the phone."
+                            "change made there shows up here too. The sun, moon and weather " +
+                            "settings are kept on your PC and shared the same way. Nothing " +
+                            "else on this screen leaves the phone."
                     } else {
                         "Not synced: your desktop doesn't support it yet. For now the face " +
                             "and the state colours stay on this phone."
@@ -482,6 +505,7 @@ fun AppearanceScreen(
                                 // Home. Both can only dim and slow the face.
                                 glow = chrome.postScale * look.glow,
                                 calmMotion = look.motion.calmFace(LocalMotion.current.reduced),
+                                stillMotion = look.stillAnimal,
                             )
                         }
                         Gap(8)
@@ -510,6 +534,7 @@ fun AppearanceScreen(
                             tuning = faceTuning,
                             onTuningChange = onFaceTuningChange,
                             live = liveBudget,
+                            stats = faceStats,
                             phoneBatterySaver = phoneBatterySaver,
                             desktopSyncs = desktopSyncs,
                             onRandomise = { roll("New colours.", onRandomise) },
@@ -551,6 +576,10 @@ fun AppearanceScreen(
                                 }
                             }
                         }
+                        faceVoiceOffer?.let {
+                            Gap(8)
+                            it()
+                        }
                         Gap(6)
                         Text(
                             // API §6's own rule: the phone's picker shows only the
@@ -590,6 +619,11 @@ fun AppearanceScreen(
                     }
                 }
             }
+
+            // The sun, moon and weather behind the animal (the owner's
+            // decisions of 2026-09-28): kept on the PC and shared by both
+            // apps, so next to the face, not in this phone's own "More".
+            item(key = "sky") { SkySection() }
 
             item(key = "colours") {
                 Section("State colours") {
@@ -658,7 +692,7 @@ fun AppearanceScreen(
                 Plate {
                     SwitchRow(
                         title = "More options",
-                        detail = if (moreOpen) null else "Glow, motion, text size, spacing and how Home behaves.",
+                        detail = if (moreOpen) null else "Glow, motion, keeping the animal still, text size, spacing and how Home behaves.",
                         checked = moreOpen,
                         onChange = { moreOpen = it },
                     )
@@ -738,6 +772,16 @@ fun AppearanceScreen(
                                     onPick = { onLookChange(look.copy(motion = it)) },
                                 )
                             }
+                            // The owner's "Still" option (2026-09-28). Next to
+                            // Motion, where the desktop keeps its twin (Settings,
+                            // "Face on this computer"). Cosmetic, so no card.
+                            SwitchRow(
+                                title = "Keep the animal still",
+                                detail = "It only breathes and blinks - no looking around. " +
+                                    "For the animal faces; the others are not changed.",
+                                checked = look.stillAnimal,
+                                onChange = { onLookChange(look.copy(stillAnimal = it)) },
+                            )
                             Setting(title = "Spacing") {
                                 Choices(
                                     options = listOf(false, true),

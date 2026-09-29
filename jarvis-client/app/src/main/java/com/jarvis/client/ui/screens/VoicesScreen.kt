@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -30,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.CustomVoices
 import com.jarvis.client.ui.parts.Dot
 import com.jarvis.client.ui.parts.Gap
@@ -81,6 +83,15 @@ fun VoicesScreen(
     setSpeed: suspend (id: String) -> CustomVoices.Answer?,
     setSpeaker: suspend (id: String) -> CustomVoices.Answer?,
     setFace: suspend (on: Boolean) -> CustomVoices.Answer?,
+    /** The one-time "Use it" / "Keep my voice" answer for [face]: true is "Use it". */
+    answerFaceOffer: suspend (face: String, use: Boolean) -> CustomVoices.Answer? = { _, _ -> null },
+    /** One animal's voice, or its reset: the body is CustomVoices.animalBody / animalResetBody. */
+    setAnimal: suspend (json: String) -> CustomVoices.Answer?,
+    /**
+     * "Try it": plays the PC's line in that animal's voice; told the words
+     * to show as it starts playing, and returns the words to show after.
+     */
+    tryAnimal: suspend (face: String, name: String, playing: (String) -> Unit) -> String,
     onPickFile: () -> Unit,
     onClearPicked: () -> Unit,
     onRefresh: suspend () -> Unit,
@@ -196,7 +207,23 @@ fun VoicesScreen(
                         SpeakerPlate(sk, busy, linkBlocker, onSet = { id -> act { setSpeaker(id) } })
                     }
                     s.faceVoice?.let { fv ->
+                        // The one-time question, right above the switch it turns on.
+                        fv.offer?.let { offer ->
+                            FaceVoiceOfferPlate(offer, busy, linkBlocker, onAnswer = { use ->
+                                act { answerFaceOffer(offer.face, use) }
+                            })
+                        }
                         FaceVoicePlate(fv, busy, linkBlocker, onSet = { on -> act { setFace(on) } })
+                        if (fv.animals.isNotEmpty()) {
+                            AnimalVoicesPlate(
+                                fv,
+                                busy,
+                                linkBlocker,
+                                onSet = { json -> act { setAnimal(json) } },
+                                onTry = tryAnimal,
+                                onAnswer = { face, use -> act { answerFaceOffer(face, use) } },
+                            )
+                        }
                     }
 
                     Plate {
@@ -586,6 +613,61 @@ private fun ChoicePlate(
 }
 
 /**
+ * The one-time question the first time the owner picks an animal face
+ * (owner, 2026-09-28): "The panda has its own voice. Use it?" with "Use it"
+ * and "Keep my voice" - every word the PC's own, shown as sent. The PC
+ * remembers the answer per face. No card either way; both buttons are held
+ * on a stale link (rule 4), like the switch below it.
+ */
+@Composable
+internal fun FaceVoiceOfferPlate(
+    offer: CustomVoices.FaceOffer,
+    busy: Boolean,
+    linkBlocker: String?,
+    onAnswer: (use: Boolean) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    Plate {
+        Text(offer.question, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+        Gap(8)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Secondary(offer.use, enabled = !busy && linkBlocker == null, onClick = { onAnswer(true) })
+            Quiet(offer.keep, enabled = !busy && linkBlocker == null, onClick = { onAnswer(false) })
+        }
+        if (linkBlocker != null) {
+            Gap(4)
+            Text(linkBlocker, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
+        }
+    }
+}
+
+/**
+ * [FaceVoiceOfferPlate] where a face is picked (Appearance): reads the PC's
+ * voices answer the runtime already holds, and answers through
+ * [JarvisRuntime.answerFaceVoiceOffer]. Draws nothing when no question is
+ * waiting, or on a PC too old to ask one.
+ */
+@Composable
+internal fun FaceVoiceOfferFromPc(linkBlocker: String?) {
+    val read by JarvisRuntime.customVoices.collectAsState()
+    val offer = (read as? CustomVoices.Read.Loaded)?.status?.faceVoice?.offer ?: return
+    val scope = rememberCoroutineScope()
+    var busy by remember { mutableStateOf(false) }
+    FaceVoiceOfferPlate(offer, busy, linkBlocker, onAnswer = { use ->
+        if (!busy) {
+            busy = true
+            scope.launch {
+                try {
+                    JarvisRuntime.answerFaceVoiceOffer(offer.face, use)
+                } finally {
+                    busy = false
+                }
+            }
+        }
+    })
+}
+
+/**
  * "Voice follows the face": with an animal face showing, the built-in voice
  * becomes that animal's. An on/off switch right under the built-in voice it
  * changes, the PC's own words, and the PC's line saying what is happening
@@ -622,6 +704,158 @@ private fun FaceVoicePlate(
         }
         if (linkBlocker != null) {
             Gap(4)
+            Text(linkBlocker, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
+        }
+    }
+}
+
+/**
+ * Each animal's voice, under "Voice follows the face": for the red panda,
+ * pygmy owl and sea otter, one of the built-in voices, a pitch (deeper or
+ * higher) and a pace - the PC's own choices and words - with "Try it" and
+ * "Reset to its own voice". Every change goes at once, no card either way,
+ * and is held on a stale link like every change sent to the PC. Try it
+ * changes nothing, so it is not held.
+ *
+ * The voice list is folded away behind "Voice: <name>" (eleven chips for
+ * each of four animals would bury the rest of the screen); the pitch is two
+ * buttons either side of its value, which TalkBack reads as words ("2 steps
+ * higher") - the desktop draws it as a slider.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AnimalVoicesPlate(
+    fv: CustomVoices.FaceVoice,
+    busy: Boolean,
+    linkBlocker: String?,
+    onSet: (String) -> Unit,
+    onTry: suspend (face: String, name: String, playing: (String) -> Unit) -> String,
+    onAnswer: (face: String, use: Boolean) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val scope = rememberCoroutineScope()
+    var open by remember { mutableStateOf<String?>(null) }
+    var trying by remember { mutableStateOf<String?>(null) }
+    var said by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val canChange = !busy && linkBlocker == null
+    val c = fv.choices
+    Plate {
+        Text(fv.animalsTitle, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
+        if (fv.animalsDetail.isNotBlank()) {
+            Gap(4)
+            Text(fv.animalsDetail, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        }
+        for (a in fv.animals) {
+            fun send(speaker: String = a.speaker, semitones: Double = a.semitones, pace: String = a.pace) =
+                onSet(CustomVoices.animalBody(a.face, speaker, semitones, pace))
+            Gap(12)
+            Text(a.name, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+            if (a.line.isNotBlank()) {
+                Text(a.line, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+            }
+            val voiceName = c.voices.firstOrNull { it.id == a.speaker }?.label ?: a.speaker
+            Quiet(
+                if (open == a.face) "Voice: $voiceName (close)" else "Voice: $voiceName",
+                modifier = Modifier.semantics {
+                    contentDescription = "${a.name}'s voice: $voiceName. " +
+                        if (open == a.face) "Close the list." else "Choose another."
+                },
+                enabled = canChange,
+                onClick = { open = if (open == a.face) null else a.face },
+            )
+            if (open == a.face) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    for (v in c.voices) {
+                        OptionChip(
+                            v.label,
+                            isSelected = v.id == a.speaker,
+                            enabled = canChange,
+                            onClick = {
+                                open = null
+                                if (v.id != a.speaker) send(speaker = v.id)
+                            },
+                        )
+                    }
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Pitch", style = MaterialTheme.typography.labelMedium, color = chrome.textMid)
+                Spacer(Modifier.width(8.dp))
+                val deeper = CustomVoices.nextPitch(a.semitones, up = false, c)
+                val higher = CustomVoices.nextPitch(a.semitones, up = true, c)
+                Quiet(
+                    "Deeper",
+                    modifier = Modifier.semantics { contentDescription = "Make the ${a.name}'s voice deeper" },
+                    enabled = canChange && deeper != null,
+                    onClick = { deeper?.let { send(semitones = it) } },
+                )
+                Text(
+                    CustomVoices.pitchShort(a.semitones),
+                    modifier = Modifier.semantics {
+                        contentDescription = "${a.name}'s pitch: " + CustomVoices.pitchWords(a.semitones)
+                    },
+                    style = MaterialTheme.typography.labelLarge,
+                    color = chrome.textHi,
+                )
+                Quiet(
+                    "Higher",
+                    modifier = Modifier.semantics { contentDescription = "Make the ${a.name}'s voice higher" },
+                    enabled = canChange && higher != null,
+                    onClick = { higher?.let { send(semitones = it) } },
+                )
+            }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                for (pc in c.paces) {
+                    OptionChip(
+                        pc.label,
+                        modifier = Modifier.semantics { contentDescription = "${a.name}'s pace: ${pc.label}" },
+                        isSelected = pc.id == a.pace,
+                        enabled = canChange,
+                        onClick = { if (pc.id != a.pace) send(pace = pc.id) },
+                    )
+                }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Quiet(
+                    "Try it",
+                    modifier = Modifier.semantics { contentDescription = "Try the ${a.name}'s voice" },
+                    enabled = trying == null,
+                    onClick = {
+                        trying = a.face
+                        // The desktop's words, step by step (CustomVoices `TRY_*`).
+                        said = a.face to CustomVoices.TRY_ASKING
+                        scope.launch {
+                            try {
+                                said = a.face to onTry(a.face, a.name) { words -> said = a.face to words }
+                            } finally {
+                                trying = null
+                            }
+                        }
+                    },
+                )
+                Spacer(Modifier.weight(1f))
+                Quiet(
+                    "Reset to its own voice",
+                    modifier = Modifier.semantics { contentDescription = "Reset the ${a.name} to its own voice" },
+                    enabled = canChange && a.changed,
+                    onClick = { onSet(CustomVoices.animalResetBody(a.face)) },
+                )
+            }
+            // Change the one-time answer later (owner, 2026-09-28): nothing until answered.
+            CustomVoices.changeMindLabel(a.answer)?.let { label ->
+                Quiet(
+                    label,
+                    modifier = Modifier.semantics { contentDescription = "$label for the ${a.name}" },
+                    enabled = canChange,
+                    onClick = { CustomVoices.changeMindUse(a.answer)?.let { use -> onAnswer(a.face, use) } },
+                )
+            }
+            said?.takeIf { it.first == a.face }?.let { (_, words) ->
+                Text(words, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+            }
+        }
+        if (linkBlocker != null) {
+            Gap(6)
             Text(linkBlocker, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
         }
     }

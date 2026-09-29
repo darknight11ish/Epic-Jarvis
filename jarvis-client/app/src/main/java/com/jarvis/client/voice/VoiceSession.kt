@@ -7,6 +7,7 @@ import com.jarvis.client.audio.Recorder
 import com.jarvis.client.audio.Speaker
 import com.jarvis.client.audio.Wav
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.CustomVoices
 import com.jarvis.client.net.FlowStatus
 import com.jarvis.client.net.SaidAloud
 import com.jarvis.client.net.Heard
@@ -599,6 +600,9 @@ class VoiceSession(
         if (_phase.value != Phase.OFF) return null
         val turn = Turn()
         current = turn
+        // Normally already stopped when "hey Jarvis" was heard; this is
+        // the turn itself starting.
+        turnStarting()
         _notice.value = null
         _transcript.value = null
         var verdict: Heard? = null
@@ -722,6 +726,8 @@ class VoiceSession(
                 "The talk button is using the microphone. Try again in a moment.",
             )
         }
+        // A "Try it" clip playing would be recorded as the owner's voice.
+        turnStarting()
         releasing?.join()
         return when (
             val r = recorder.record(
@@ -745,6 +751,92 @@ class VoiceSession(
     fun clearNotice() { _notice.value = null }
 
     fun clearTranscript() { _transcript.value = null }
+
+    /**
+     * "Try it" on the Voices screen: the PC says one fixed line in that
+     * animal's voice as it is now ([JarvisApi.voiceAnimalTry]), and it plays
+     * here - through the same [speaker] as every answer, so a face on screen
+     * moves with it too. Only while nothing else is being heard or said: a
+     * question in progress always wins, and a question that starts while it
+     * plays stops it at once ([turnStarting]), so the microphone never hears
+     * it. Changes nothing on the PC, so it is not held on a stale link.
+     * [progress] is told when it starts playing; the words to show at the
+     * end are returned, always (CustomVoices `TRY_*`, the desktop's words).
+     */
+    suspend fun tryAnimalVoice(
+        face: String,
+        name: String,
+        progress: (String) -> Unit = {},
+    ): String {
+        val seen = turnsStarted.get()
+        if (voiceBusy()) return CustomVoices.TRY_BUSY
+        return when (val r = api.voiceAnimalTry(face)) {
+            is ApiResult.Ok -> when (val t = r.value) {
+                is CustomVoices.Tried.Refused -> t.why
+                is CustomVoices.Tried.Sound -> playTry(t.wav, name, seen, progress)
+            }
+            is ApiResult.Failed -> when (r.error) {
+                com.jarvis.client.net.ApiError.NotFound -> CustomVoices.TRY_UPDATE
+                com.jarvis.client.net.ApiError.BadToken -> "The desktop refused this phone's pairing token."
+                else -> "Could not reach your PC to play it."
+            }
+        }
+    }
+
+    /**
+     * Plays a "Try it" clip unless a turn began since [seen] or one is
+     * running. [tryPlaying] is raised BEFORE that last look and
+     * [turnStarting] bumps [turnsStarted] BEFORE it reads [tryPlaying], so
+     * whichever comes second sees the other: either this refuses, or the
+     * turn stops the clip ([tryCut] covers a stop that lands before
+     * `arm()`, which would otherwise clear it).
+     */
+    private suspend fun playTry(
+        wav: ByteArray,
+        name: String,
+        seen: Long,
+        progress: (String) -> Unit,
+    ): String {
+        tryCut = false
+        tryPlaying = true
+        try {
+            if (turnsStarted.get() != seen || voiceBusy()) return CustomVoices.TRY_BUSY
+            speaker.arm()
+            if (!tryCut) {
+                progress(CustomVoices.tryPlaying(name))
+                speaker.play(wav)
+            }
+        } finally {
+            tryPlaying = false
+        }
+        return if (tryCut) CustomVoices.TRY_STOPPED else CustomVoices.tryDone(name)
+    }
+
+    /** Talking, listening or answering: what "Try it" must never play over. */
+    private fun voiceBusy(): Boolean = _phase.value != Phase.OFF || job?.isCompleted == false
+
+    /** Bumped by every turn that starts; see [playTry]. */
+    private val turnsStarted = java.util.concurrent.atomic.AtomicLong(0)
+
+    /** A "Try it" clip is (about to be) playing. */
+    @Volatile private var tryPlaying = false
+
+    /** A turn cut the "Try it" clip short. */
+    @Volatile private var tryCut = false
+
+    /**
+     * A question is starting - the talk button, "hey Jarvis" heard (called
+     * by [com.jarvis.client.service.WakeWordService] the moment the phrase
+     * is heard, before the rest is recorded), or Train my voice: a "Try it"
+     * clip playing stops now, so the microphone does not hear it. Stops
+     * nothing else: no answer is playing, or the turn would not be starting.
+     */
+    fun turnStarting() {
+        turnsStarted.incrementAndGet()
+        if (!tryPlaying) return
+        tryCut = true
+        speaker.stop()
+    }
 
     /**
      * Opens the microphone.
@@ -778,6 +870,8 @@ class VoiceSession(
         // to carry on. See [Turn].
         val turn = Turn()
         current = turn
+        // A "Try it" clip playing stops before the microphone opens.
+        turnStarting()
         _notice.value = null
         _transcript.value = null
 

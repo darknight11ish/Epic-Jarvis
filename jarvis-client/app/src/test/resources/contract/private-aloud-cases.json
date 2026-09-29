@@ -601,6 +601,34 @@
       "read": false
     },
     {
+      "name": "the tool propose_plan ran",
+      "heard": {
+        "private_aloud": false,
+        "question_private": false,
+        "memory_aloud": true,
+        "sensitive_aloud": false,
+        "screen_aloud": true
+      },
+      "route": {
+        "gate": "offer",
+        "injected_facts": 0,
+        "injected_sensitive": 0
+      },
+      "steps": [
+        {
+          "phase": "tool_started",
+          "tool": "propose_plan"
+        },
+        {
+          "phase": "tool_finished",
+          "ok": true,
+          "tool": "propose_plan"
+        }
+      ],
+      "stream": "live",
+      "read": false
+    },
+    {
       "name": "the tool set_timer ran",
       "heard": {
         "private_aloud": false,

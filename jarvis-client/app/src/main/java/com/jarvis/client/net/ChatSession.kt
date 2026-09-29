@@ -258,6 +258,19 @@ class ChatSession(
      */
     val crisis: StateFlow<Boolean> = _crisis.asStateFlow()
 
+    private val _cloudOffer = MutableStateFlow<String?>(null)
+
+    /**
+     * "A cloud model could give this one a second look." under the answer
+     * on screen - the lane [CloudOffer.laneFromHeader] read off this turn's
+     * `X-Jarvis-Route`, or null: no offer, or the owner has already tapped
+     * "Try the cloud model" or dismissed it ([tryCloudForLast],
+     * [dismissCloudOffer]). Cleared with the answer, like [crisis] and
+     * [usedIds] - the moment a newer question is asked, the old turn's
+     * offer is gone for good, never replayed on top of a different answer.
+     */
+    val cloudOffer: StateFlow<String?> = _cloudOffer.asStateFlow()
+
     private val _openSettings = MutableStateFlow<String?>(null)
 
     /**
@@ -283,6 +296,14 @@ class ChatSession(
      */
     fun consumeOpenSettings() {
         _openSettings.value = null
+    }
+
+    /**
+     * Drops [cloudOffer] without asking anything - the offer's own
+     * "dismissible" half. Safe to call with no offer showing.
+     */
+    fun dismissCloudOffer() {
+        _cloudOffer.value = null
     }
 
     /**
@@ -390,6 +411,13 @@ class ChatSession(
          */
         onStatus: ((String) -> Unit)? = null,
         /**
+         * The owner's yes to [CloudOffer]'s "Try the cloud model" for THIS
+         * one question ([tryCloudForLast]) - sent as `cloud_yes: true`.
+         * Never set on an ordinary send; the router treats its absence as
+         * "no", same as [temporary]'s absence means "not temporary".
+         */
+        cloudYes: Boolean = false,
+        /**
          * Jarvis Live: this spoken question was said in a Live conversation
          * (`live: true` on it - ChatHistory.messages). An answer that is only
          * the side-talk marker ("[not for me]") is then shown as "(not for
@@ -435,6 +463,7 @@ class ChatSession(
         _usedIds.value = emptyList()
         _crisis.value = false
         _openSettings.value = null
+        _cloudOffer.value = null
         // A temporary question goes only to a PC that says it can hold one -
         // asked again now, since the PC may have changed since it was turned on.
         val asTemporary = _temporary.value
@@ -455,7 +484,7 @@ class ChatSession(
         val interrupted = cutOff.take(SystemClock.elapsedRealtime())
         val c = api.chatCall(
             asking, earlier, picture, conversationId,
-            interrupted = interrupted, temporary = asTemporary, live = live,
+            interrupted = interrupted, temporary = asTemporary, cloudYes = cloudYes, live = live,
         )
         if (c == null) {
             // No address to send to: none saved, or a saved one off the
@@ -610,6 +639,11 @@ class ChatSession(
                         // through OpenPlace. Nothing is removed by it.
                         _openSettings.value = Schedule.openSettingsFromRoute(routeHeader)
                             ?: ForgetRange.openFromRoute(routeHeader)
+                        // "A cloud model could give this one a second
+                        // look." (jarvis_router.choose(), gate "offer"):
+                        // read the same way as [crisis] and [usedIds]
+                        // above, off the same header.
+                        _cloudOffer.value = CloudOffer.laneFromHeader(routeHeader)
                     }
                     val temporaryNotes = TemporaryChat.notes(asTemporary, routeHeader)
                     // Decoded as CHARACTERS, not as whatever bytes happened
@@ -883,6 +917,7 @@ class ChatSession(
         _usedIds.value = emptyList()
         _crisis.value = false
         _openSettings.value = null
+        _cloudOffer.value = null
     }
 
     /**
@@ -936,6 +971,21 @@ class ChatSession(
     suspend fun retryLast(): Boolean {
         val (message, provenance, shared) = lastAsked ?: return false
         send(message, provenance = provenance, shared = shared)
+        return true
+    }
+
+    /**
+     * The owner's yes to [CloudOffer]'s "Try the cloud model" - the same
+     * shape as [retryLast]: the same words, tag and shared text, as a new
+     * [send], this time with `cloudYes = true`. A genuinely new turn, not a
+     * replacement - the old answer stays on screen until this one streams
+     * in over it, same as any other question. False when there is nothing
+     * to ask again (a new conversation was started since the offer, or the
+     * owner already moved on to a different question).
+     */
+    suspend fun tryCloudForLast(): Boolean {
+        val (message, provenance, shared) = lastAsked ?: return false
+        send(message, provenance = provenance, shared = shared, cloudYes = true)
         return true
     }
 

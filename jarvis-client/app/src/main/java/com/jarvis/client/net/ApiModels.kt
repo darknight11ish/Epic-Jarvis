@@ -203,7 +203,10 @@ data class ModelOffload(
  * when there has been a switch.
  */
 data class ModelSpeed(
-    /** "Recent answers: about 14 words a second, first word after 0.8 s." Null: no answers yet. */
+    /**
+     * "Recent answers: about 14 words a second, first word after 0.8 s, 90% of the
+     * conversation reused, not read again." Null: no answers yet.
+     */
     val currentLine: String?,
     /** The backend's own "got slower" sentence, or null when nothing slowed down. */
     val slowdownNote: String?,
@@ -239,11 +242,18 @@ data class ModelSpeed(
         private fun line(m: JsonObject): String? {
             val wps = m.num("median_words_per_s")
             val firstMs = m.num("median_first_word_ms")
+            val reused = m.num("median_reused_percent")
             val parts = buildList {
                 if (wps != null) add("about ${Math.round(wps)} words a second")
                 if (firstMs != null) {
                     val tenths = Math.round(firstMs / 100.0)
                     add("first word after ${tenths / 10}.${tenths % 10} s")
+                }
+                // Milestone 7: the share of the conversation Ollama already had
+                // read from the last question and did not read again (its prompt
+                // cache; jarvis_speed.reused_percent). Missing on older rows.
+                if (reused != null) {
+                    add("${Math.round(minOf(100.0, reused))}% of the conversation reused, not read again")
                 }
             }
             if (parts.isEmpty()) return null

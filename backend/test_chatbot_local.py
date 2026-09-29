@@ -575,7 +575,7 @@ def t_no_reach_row_and_shipped():
     check("shipped: in _where.SHIPPED and apply-patches.ps1",
           "jarvis_chatbot_local.py" in SHIPPED and "'jarvis_chatbot_local.py'" in ps1)
     api = (REPO / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
-    check("JARVIS-API.md section 60 describes it", "jarvis_chatbot_local.py" in api
+    check("JARVIS-API.md section 87 describes it", "jarvis_chatbot_local.py" in api
           and "local_ai" in api)
 
 

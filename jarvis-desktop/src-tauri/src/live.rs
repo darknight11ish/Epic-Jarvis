@@ -108,6 +108,10 @@ static SPEAKING: AtomicBool = AtomicBool::new(false);
 /// status `end_on`, read by the watcher). False - App lock's rule - until
 /// the PC says otherwise.
 static END_ON_WINDOWS_LOCK: AtomicBool = AtomicBool::new(false);
+/// A pause ended while talk-to-type held the microphone: Live stays on,
+/// its microphone closed, and listens again once talk-to-type lets go -
+/// it is not ended as if the owner had ended it (the 2026-09-28 audit, #1).
+static TALK_TYPE_WAIT: AtomicBool = AtomicBool::new(false);
 
 pub(crate) const LIVE_MISSING: &str = "This PC's Jarvis does not have Jarvis Live yet. Run \
      scripts\\apply-patches.ps1 on the PC to add it.";
@@ -118,6 +122,30 @@ pub(crate) const APP_LOCK_HELD: &str = "Jarvis is locked (App lock). Open the Ja
 /// The talk button while Live has the microphone (live-rules.js
 /// `SEEN.busy_mic`, the same words on the phone).
 pub(crate) const BUSY_MIC: &str = "Jarvis Live is already listening - just talk";
+/// Shown under the Live sign while talk-to-type holds the microphone.
+pub(crate) const WAIT_TALK_TYPE: &str = "Talk-to-type is using the microphone. Jarvis Live \
+     listens again when you let go of its key.";
+
+/// What the watcher does with Live's microphone after a look.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum MicStep {
+    /// Held (a card, Mute, a stale link...): the microphone closes.
+    Close,
+    /// Talk-to-type has the microphone: Live waits, closed, and stays on.
+    WaitForTalkType,
+    /// Nothing holds it: the microphone opens again.
+    Open,
+}
+
+pub(crate) fn mic_step(held: bool, talk_type_busy: bool) -> MicStep {
+    if held {
+        MicStep::Close
+    } else if talk_type_busy {
+        MicStep::WaitForTalkType
+    } else {
+        MicStep::Open
+    }
+}
 
 /// Whether Live is on here (the tray asks).
 pub fn on_here() -> bool {
@@ -302,6 +330,9 @@ fn payload(app: &AppHandle, status: &serde_json::Value, say: &str) -> serde_json
         "lockUnknown": LOCK_UNKNOWN.load(Ordering::SeqCst),
         "callUnknown": CALL_UNKNOWN.load(Ordering::SeqCst),
     });
+    if on_here() && TALK_TYPE_WAIT.load(Ordering::SeqCst) {
+        out["micWait"] = serde_json::json!(WAIT_TALK_TYPE);
+    }
     if !say.is_empty() {
         // A FIXED line for the bar to say ("I'm listening.") - never
         // anything heard.
@@ -582,6 +613,7 @@ async fn ended_here(app: &AppHandle) {
     ANSWERING_TAP_ONLY.store(false, Ordering::SeqCst);
     SPEAKING.store(false, Ordering::SeqCst);
     LOCK_UNKNOWN.store(false, Ordering::SeqCst);
+    TALK_TYPE_WAIT.store(false, Ordering::SeqCst);
     voice::close_for_live(app).await;
     crate::tray::live_changed(app);
     if was_on {
@@ -607,11 +639,31 @@ fn apply_hold(app: &AppHandle, status: &serde_json::Value) {
         CARD_SHOWN.load(Ordering::SeqCst),
         ANSWERING_TAP_ONLY.load(Ordering::SeqCst),
     );
-    if held {
-        voice::suspend_for_live(app);
-    } else if let Err(why) = voice::resume_for_live(app) {
-        eprintln!("[live] the microphone would not open again: {why}");
-        listener_stopped(app);
+    let talk_type = app.state::<crate::talk_type::TalkTypeState>();
+    match mic_step(held, talk_type.mic_busy()) {
+        MicStep::Close => {
+            TALK_TYPE_WAIT.store(false, Ordering::SeqCst);
+            voice::suspend_for_live(app);
+        }
+        MicStep::WaitForTalkType => {
+            // Talk-to-type refuses while Live is on, so this is only a race
+            // (it started in the instant before Live did). Live waits with
+            // its microphone closed; the watcher looks again every second.
+            TALK_TYPE_WAIT.store(true, Ordering::SeqCst);
+            voice::suspend_for_live(app);
+        }
+        MicStep::Open => {
+            TALK_TYPE_WAIT.store(false, Ordering::SeqCst);
+            if let Err(why) = voice::resume_for_live(app) {
+                if talk_type.mic_busy() {
+                    // Taken between the two looks: wait, as above.
+                    TALK_TYPE_WAIT.store(true, Ordering::SeqCst);
+                    return;
+                }
+                eprintln!("[live] the microphone would not open again: {why}");
+                listener_stopped(app);
+            }
+        }
     }
 }
 
@@ -960,6 +1012,16 @@ mod tests {
         assert!(!on_desktop(&json!({"on": true, "device": "phone"})));
         assert!(!on_desktop(&json!({"on": false, "device": "desktop"})));
         assert!(!on_desktop(&json!({})));
+    }
+
+    #[test]
+    fn talk_to_type_on_the_microphone_makes_live_wait_not_end() {
+        assert_eq!(mic_step(true, false), MicStep::Close);
+        assert_eq!(mic_step(true, true), MicStep::Close);
+        assert_eq!(mic_step(false, true), MicStep::WaitForTalkType);
+        assert_eq!(mic_step(false, false), MicStep::Open);
+        assert!(WAIT_TALK_TYPE.contains("Talk-to-type"));
+        assert!(!WAIT_TALK_TYPE.contains("hey Jarvis"));
     }
 
     #[test]

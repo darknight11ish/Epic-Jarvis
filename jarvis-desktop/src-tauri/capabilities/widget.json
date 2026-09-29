@@ -21,6 +21,7 @@
     "widget-surface",
     "appearance-read",
     "focus",
-    "widget-board"
+    "widget-board",
+    "sky-read"
   ]
 }

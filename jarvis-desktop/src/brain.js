@@ -128,9 +128,26 @@ import {
   tagOf,
   titleOf,
   todoItems,
+  WAITING,
   WENT_OFF_ACTIONS,
   wentOffMeta,
 } from "./coming-up.js";
+import {
+  ACCEPT_LABEL,
+  ADD_STEP_LABEL,
+  BY_PLACEHOLDER,
+  checkinJobFor,
+  checkinLines,
+  EMPTY_GOALS,
+  GOALS_MISSING,
+  openCount,
+  planIsValid,
+  readGoals,
+  REMOVE_STEP_LABEL,
+  statusLabel,
+  STEP_PLACEHOLDER,
+  STOP_LABEL,
+} from "./goals.js";
 import {
   BUILDING as BRIEFING_BUILDING,
   EMPTY as BRIEFING_EMPTY,
@@ -362,6 +379,7 @@ import {
   RUNNING as DEEP_RUNNING,
   runningCount,
 } from "./deep.js";
+import { loadModelsCache, saveModelsCache } from "./models-cache.js";
 
 const TAURI = globalThis.__TAURI__;
 const IS_TAURI = Boolean(TAURI && TAURI.core && TAURI.core.invoke);
@@ -544,6 +562,10 @@ const dom = {
   standbyEnd: $("standby-end"),
   standbyAdd: $("standby-add"),
   standbyIsSet: $("standby-is-set"),
+  goalsList: $("goals-list"),
+  goalsNewForm: $("goals-new-form"),
+  goalsNewText: $("goals-new-text"),
+  goalsNewAdd: $("goals-new-add"),
   today: $("today"),
   widgets: $("widgets"),
   widgetsForm: $("widgets-form"),
@@ -596,6 +618,26 @@ const state = {
 
 /** Whether the four views behind "Advanced" are on the rail right now. */
 let advancedOpen = false;
+
+/**
+ * Seeds the Model pane from disk before the first live read comes back
+ * (or fails), so a cold start with Jarvis not running has something to
+ * paint at once instead of a blank pane while the request times out
+ * (docs/OFFLINE-MODELS-DESIGN-2026-09-27.md). `state.readAt.models` is set
+ * to when the cache was actually read, not to now, so the "as of" wording
+ * in `renderModels` is honest from the very first paint.
+ *
+ * If the first live read of "models" then succeeds, `load()` overwrites
+ * both in the ordinary way. If it fails, `load()`'s existing "keep the last
+ * good read, mark it stale" logic (`state.failed`) takes over unchanged -
+ * this cache is just that "last good read" surviving a restart.
+ */
+(function seedModelsFromDisk() {
+  const cached = loadModelsCache();
+  if (!cached) return;
+  state.data.models = { available: true, ...cached.models };
+  state.readAt.models = cached.at;
+})();
 
 /* "Bring in old chats" (history-import.js; JARVIS-API.md section 85): a
    ChatGPT, Claude, Gemini or DeepSeek export, picked on this PC by the Windows dialog
@@ -857,6 +899,13 @@ async function load(sections, { quiet = false } = {}) {
         // read that asks for it - which may be the Faculties view's, not
         // the Memory tab's. Noted here so it is not lost either way.
         if (section === "memory_pending" && value) noteSleepOffer(value.setup);
+        // Every good models read is written to disk (never on a failed or
+        // "absent" one - `value.available` covers both), so the Model pane
+        // has something honest to show after a restart, not only within
+        // this window's lifetime. See models-cache.js for what is kept.
+        if (section === "models" && value && value.available !== false) {
+          saveModelsCache(value, now);
+        }
         if (failedRead) {
           state.failed[section] = { why: String(value.error || "no reason given"), at: now };
         } else {
@@ -956,6 +1005,7 @@ function render(name) {
       renderChatbot();
       renderSupport();
       renderComingUp();
+      renderGoals();
       renderBriefing();
       renderJobs();
       renderUndo();
@@ -1111,10 +1161,60 @@ function renderCounts() {
    Faculties
    ========================================================================== */
 
+/** Shown when there is no data at all - never a good read this session,
+ *  and nothing cached from an earlier one either. Not "Could not read
+ *  this": that would read as a fault on a machine that has simply never
+ *  once been connected to Jarvis while it was running. */
+const MODELS_NEVER_CONNECTED =
+  "There's nothing to show yet — open this once while Jarvis is running on your PC.";
+
+/** The offline banner's "as of" time, in the same short form the rest of
+ *  the window uses for a moment in the past (not a duration - the owner
+ *  asked for a real time here, not "3h ago", since it may be days old). */
+function asOfWords(atMs) {
+  if (!atMs) return "an earlier connection";
+  try {
+    return new Date(atMs).toLocaleString(undefined, {
+      day: "numeric",
+      month: "short",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  } catch {
+    return "an earlier connection";
+  }
+}
+
 function renderModels() {
-  const body = state.data.models || {};
-  const why = unavailable("models");
-  if (why) return rows(dom.models, [], null, whyNode("models"));
+  const live = sectionState("models");
+  const body = state.data.models;
+  // A body of `{available: false, ...}` (never read, or read but failed
+  // with nothing older to show, or an explicit "this backend does not have
+  // it") counts the same as no body at all here: none of them are data to
+  // draw the pane from. Checking `body` alone would treat a failed read's
+  // own `{available: false}` shape as "there is something to show" - it
+  // very nearly did.
+  const haveGoodData = Boolean(body) && body.available !== false;
+
+  if (!haveGoodData) {
+    // The backend itself says it has no models module (a 404/503, not "no
+    // answer at all") - a fact about this machine, not a stale read, so the
+    // cache (if load() kept one) is not shown in its place.
+    if (live.kind === "absent") return rows(dom.models, [], null, whyNode("models"));
+    // 'reading' or 'failed', and there is nothing to fall back to - not
+    // even a disk cache: never a good read, this session or any earlier
+    // one on this PC. Saying "could not read" would blame a fault where
+    // there has simply never once been a connection.
+    const node = el("p", "empty", live.kind === "reading" ? "Reading…" : MODELS_NEVER_CONNECTED);
+    if (live.kind === "failed") node.append(" ", retryButton("models"));
+    return rows(dom.models, [], null, node);
+  }
+
+  // The most recent read failed and this is the last one that worked -
+  // whether that was earlier this session or, via models-cache.js, from
+  // before the app last restarted. Either way it must never be painted as
+  // if it were live: rule 4, and the design doc's whole point.
+  const stale = live.kind === "stale";
 
   const current = body.current || body.active || "";
   const previous = body.previous || "";
@@ -1131,7 +1231,12 @@ function renderModels() {
     items,
     (m) => {
       const ref = String(m.ref || m.name || m.model || "");
+      // Which model is current is honestly cacheable, but only labelled as
+      // of the cache's own time, never drawn as "this is running now" -
+      // that claim needs a live read (docs/OFFLINE-MODELS-DESIGN-2026-09-27.md
+      // section 5). The quieter note below the list carries it while stale.
       const isCurrent = ref && ref === current;
+      const showAsLiveCurrent = isCurrent && !stale;
       const chats = canChat(m, ref);
       const actions = [];
       if (ref && !isCurrent && chats) {
@@ -1143,8 +1248,8 @@ function renderModels() {
         );
       }
       return row({
-        tag: isCurrent ? "active" : "installed",
-        state: isCurrent ? "present" : "",
+        tag: showAsLiveCurrent ? "active" : "installed",
+        state: showAsLiveCurrent ? "present" : "",
         title: ref || "(unnamed)",
         meta: [
           m.size ? bytes(m.size) : "",
@@ -1159,29 +1264,58 @@ function renderModels() {
     "No models reported."
   );
 
-  // Is the model actually ON the graphics card? Nothing else anywhere says.
-  // llama.cpp spills layers to the CPU silently and Ollama still reports the
-  // model as loaded and healthy, so the only symptom is that everything got
-  // slow - and the owner blames Jarvis rather than the fit.
-  //
-  // Prepended after `rows()` rather than composed before it, because `rows()`
-  // calls replaceChildren on whatever it is given, and the rollback button
-  // below appends to the same element.
-  const off = body.offload || {};
-  if (off.status === "cpu" || off.status === "partial") {
+  if (stale) {
+    // The one clearly-labelled sentence this whole feature is for: what is
+    // shown below is old, roughly how old, and what is deliberately not
+    // shown because only a running Jarvis could know it.
     dom.models.prepend(
-      el("p", "banner", String(off.note || "The model is not on the graphics card."))
+      el(
+        "p",
+        "banner models-offline",
+        `Jarvis isn't running right now, so this list is from the last time it was: ` +
+          `${asOfWords(state.readAt.models)}. Sizes and names are probably still right. ` +
+          `What's actually loaded right now isn't shown, since only a running Jarvis knows that.`
+      )
     );
+    if (current) {
+      dom.models.append(
+        el("p", "note", `As of that last connection, ${current} was the one in use.`)
+      );
+    }
   }
 
-  // How fast answers have been (speed-record.patch). docs/JARVIS-API.md says
-  // show exactly three things: one line for the current model, the backend's
-  // own note only when it got slower, and its own old-vs-new sentence beside
-  // the rollback button. The phone does the same (ApiModels.kt ModelSpeed);
-  // this window ignored the block entirely.
-  const speed = modelSpeed(body.speed, current);
-  if (speed.line) dom.models.append(el("p", "model-speed", speed.line));
-  if (speed.slowdown) dom.models.append(el("p", "banner", speed.slowdown));
+  // Is the model actually ON the graphics card, and how fast have answers
+  // been? Both are live measurements of what Ollama is doing right now, not
+  // facts about a file on disk - shown stale they would read as "this is
+  // happening now" and be wrong, so they are skipped outright while stale
+  // rather than guessed at (docs/OFFLINE-MODELS-DESIGN-2026-09-27.md section
+  // 5). `speed` is also never written to the disk cache in the first place
+  // (models-cache.js), so there would be nothing to show here even for a
+  // read this window never actually saw fail.
+  const speed = stale ? { line: "", slowdown: "", lastSwitch: "" } : modelSpeed(body.speed, current);
+  if (!stale) {
+    // llama.cpp spills layers to the CPU silently and Ollama still reports
+    // the model as loaded and healthy, so the only symptom is that
+    // everything got slow - and the owner blames Jarvis rather than the fit.
+    //
+    // Prepended after `rows()` rather than composed before it, because
+    // `rows()` calls replaceChildren on whatever it is given, and the
+    // rollback button below appends to the same element.
+    const off = body.offload || {};
+    if (off.status === "cpu" || off.status === "partial") {
+      dom.models.prepend(
+        el("p", "banner", String(off.note || "The model is not on the graphics card."))
+      );
+    }
+
+    // How fast answers have been (speed-record.patch). docs/JARVIS-API.md
+    // says show exactly three things: one line for the current model, the
+    // backend's own note only when it got slower, and its own old-vs-new
+    // sentence beside the rollback button. The phone does the same
+    // (ApiModels.kt ModelSpeed); this window ignored the block entirely.
+    if (speed.line) dom.models.append(el("p", "model-speed", speed.line));
+    if (speed.slowdown) dom.models.append(el("p", "banner", speed.slowdown));
+  }
 
   if (previous && previous !== current) {
     if (speed.lastSwitch) dom.models.append(el("p", "model-speed", speed.lastSwitch));
@@ -1291,6 +1425,13 @@ function modelSpeed(speed, current) {
     if (firstMs !== null) {
       const tenths = Math.round(firstMs / 100);
       parts.push(`first word after ${Math.floor(tenths / 10)}.${tenths % 10} s`);
+    }
+    // Milestone 7: the share of the conversation Ollama already had read
+    // from the last question and did not read again (its prompt cache;
+    // jarvis_speed.reused_percent). Missing on older rows and older Ollamas.
+    const reused = num(mine.median_reused_percent);
+    if (reused !== null) {
+      parts.push(`${Math.round(Math.min(100, reused))}% of the conversation reused, not read again`);
     }
     if (parts.length) {
       const n = num(mine.answers);
@@ -4769,7 +4910,7 @@ if (dom.focusStart) {
 
 /* ==========================================================================
    Talk to a chatbot for me (the owner's decisions of 2026-09-27 and
-   2026-09-28; JARVIS-API.md section 60; chatbot.js, brain/chatbot.rs).
+   2026-09-28; JARVIS-API.md section 87; chatbot.js, brain/chatbot.rs).
 
    The form (which chatbot, the goal - "these words will be sent" - the
    most messages and minutes within the version's caps, never-send words)
@@ -5939,7 +6080,13 @@ async function loadComingUp() {
     await loadComingUp();
     return;
   }
-  if (state.view === "work") paintComingUp();
+  if (state.view === "work") {
+    paintComingUp();
+    // A goal's weekly check-in lives on this very list (goals.js's own
+    // module doc says why) - repaint it too, so its "waiting"/"paused"/next
+    // note stays in step with Coming up rather than needing its own read.
+    paintGoals();
+  }
 }
 
 async function scheduleAct(job, action) {
@@ -6378,6 +6525,282 @@ if (dom.standbyAdd) {
   syncLiveButton(dom.standbyAdd);
 }
 
+/* ==========================================================================
+   Goals - a plan the owner edits, one card per acting step (the owner's
+   "build it now", 2026-09-27; JARVIS-API.md section 59; goals.js).
+
+   Read through its own command (brain/goals.rs), not brain_read - the words
+   are taken out while the private lists are hidden, same as Coming up. A new
+   draft and marking a step raise no card; Stop tracking is one tap,
+   immediate, no confirm. Accepting a draft is the only place this can raise
+   a card, and it is the backend's own weekly-check-in card, never one this
+   window invents - see goals.js's own module doc for why that check-in's
+   live state is read from the very same Coming up list rather than a second
+   source of truth.
+   ========================================================================== */
+
+const gl = { view: null, error: "", loading: false, again: false, at: 0 };
+const GOALS_READ_MS = 20000;
+
+/** goal id -> its working plan while it is still a draft, edited but not yet
+ *  sent to Accept. Cleared once accepted (or the goal is gone). */
+const draftPlans = new Map();
+
+/** goal id -> the id of the weekly check-in job accept() handed back for
+ *  it, so a later read can find that SAME job even if its text ever
+ *  changed - a reload of the app still falls back to matching by text
+ *  (goals.js checkinJobFor). */
+const checkinJobIds = new Map();
+
+async function loadGoals() {
+  if (!IS_TAURI) return;
+  if (gl.loading) {
+    gl.again = true;
+    return;
+  }
+  gl.loading = true;
+  try {
+    gl.view = readGoals(await invoke("brain_goals"));
+    gl.error = "";
+  } catch (error) {
+    gl.error = errorText(error);
+  } finally {
+    gl.loading = false;
+    gl.at = Date.now();
+  }
+  if (gl.again) {
+    gl.again = false;
+    await loadGoals();
+    return;
+  }
+  if (state.view === "work") paintGoals();
+}
+
+/** The working copy of a draft's plan - made once, from what the PC sent,
+ *  then edited in place so typing does not get wiped by the next read. */
+function workingPlan(goal) {
+  if (!draftPlans.has(goal.id)) draftPlans.set(goal.id, goal.plan.map((s) => ({ ...s })));
+  return draftPlans.get(goal.id);
+}
+
+async function createGoal() {
+  const input = dom.goalsNewText;
+  const words = input ? input.value.trim() : "";
+  if (!words) return;
+  if (!linkWords(currentLink()).canAct) {
+    toast(STALE_TITLE, "bad");
+    return;
+  }
+  try {
+    const out = await invoke("brain_goals_create", { text: words });
+    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
+    else {
+      toast("Added as a draft.", "ok");
+      input.value = "";
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadGoals();
+}
+
+async function acceptGoal(goal) {
+  const limits = gl.view ? gl.view.limits : undefined;
+  const plan = workingPlan(goal);
+  if (!planIsValid(plan, limits)) {
+    toast("Add at least one step, each with some words, none of them too long.", "bad");
+    return;
+  }
+  try {
+    const out = await invoke("brain_goals_accept", { id: goal.id, plan });
+    if (out && out.ok === false) {
+      toast(String(out.error || "Refused."), "bad");
+    } else {
+      toast("Accepted - Jarvis will check in once a week.", "ok");
+      draftPlans.delete(goal.id);
+      if (out && out.goal && out.goal.checkin && out.goal.checkin.id) {
+        checkinJobIds.set(goal.id, out.goal.checkin.id);
+      }
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadGoals();
+  // The new job is on Coming up's own list, not this read - fetch it too,
+  // straight away, so the check-in's state shows without a second visit.
+  await loadComingUp();
+}
+
+async function goalStep(goal, index, done) {
+  try {
+    const out = await invoke("brain_goals_step", { id: goal.id, index, done });
+    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  await loadGoals();
+}
+
+async function stopGoal(goal) {
+  try {
+    const out = await invoke("brain_goals_stop", { id: goal.id });
+    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
+    else toast("Stopped tracking.", "ok");
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  checkinJobIds.delete(goal.id);
+  await loadGoals();
+  await loadComingUp();
+}
+
+function goalStepEditorRow(plan, index) {
+  const line = el("div", "goal-editor-row");
+  const step = el("input", "field goal-step-field");
+  step.type = "text";
+  step.maxLength = (gl.view && gl.view.limits.text) || 300;
+  step.value = plan[index].step;
+  step.placeholder = STEP_PLACEHOLDER;
+  step.setAttribute("aria-label", STEP_PLACEHOLDER);
+  step.addEventListener("input", () => {
+    plan[index].step = step.value;
+  });
+  const by = el("input", "field goal-by-field");
+  by.type = "text";
+  by.maxLength = (gl.view && gl.view.limits.by) || 40;
+  by.value = plan[index].by;
+  by.placeholder = BY_PLACEHOLDER;
+  by.setAttribute("aria-label", BY_PLACEHOLDER);
+  by.addEventListener("input", () => {
+    plan[index].by = by.value;
+  });
+  line.append(step, by, button(REMOVE_STEP_LABEL, () => {
+    plan.splice(index, 1);
+    paintGoals();
+  }, { danger: true }));
+  return line;
+}
+
+function draftGoalBlock(goal) {
+  const plan = workingPlan(goal);
+  const block = el("div", "goal-block");
+  const head = el("div", "goal-head");
+  head.append(el("span", "goal-title", goal.hidden ? "" : goal.text));
+  head.append(el("span", "row-tag", statusLabel(goal.status)));
+  block.append(head);
+  const steps = el("div", "goal-steps");
+  plan.forEach((_, i) => steps.append(goalStepEditorRow(plan, i)));
+  block.append(steps);
+  const maxSteps = (gl.view && gl.view.limits.steps) || 7;
+  const actions = el("div", "goal-actions");
+  actions.append(button(ADD_STEP_LABEL, () => {
+    if (plan.length >= maxSteps) {
+      toast(`A plan can have at most ${maxSteps} steps - keep the big ones and drop the rest.`, "bad");
+      return;
+    }
+    plan.push({ step: "", by: "", done: false });
+    paintGoals();
+  }));
+  actions.append(button(ACCEPT_LABEL, () => acceptGoal(goal), { live: true }));
+  block.append(actions);
+  return block;
+}
+
+function goalStepRow(goal, step, index) {
+  const line = el("div", "goal-step");
+  const label = el("label", "goal-step-label");
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = step.done;
+  const active = goal.status === "active";
+  box.disabled = !active;
+  if (active) {
+    liveButtons.add(box);
+    syncLiveButton(box);
+  }
+  box.addEventListener("change", async () => {
+    const want = box.checked;
+    box.disabled = true;
+    await goalStep(goal, index, want);
+  });
+  label.append(box, el("span", "goal-step-text", step.step));
+  line.append(label);
+  if (step.by) line.append(el("span", "goal-step-by", step.by));
+  return line;
+}
+
+function activeGoalBlock(goal, jobs) {
+  const block = el("div", "goal-block");
+  const head = el("div", "goal-head");
+  head.append(el("span", "goal-title", goal.hidden ? "" : goal.text));
+  const tag = el("span", "row-tag", statusLabel(goal.status));
+  if (goal.status === "active") tag.dataset.state = "running";
+  head.append(tag);
+  block.append(head);
+  const steps = el("div", "goal-steps");
+  goal.plan.forEach((s, i) => steps.append(goalStepRow(goal, s, i)));
+  block.append(steps);
+  if (goal.status === "active") {
+    const job = checkinJobFor(goal, jobs, checkinJobIds.get(goal.id));
+    if (job) checkinJobIds.set(goal.id, job.id);
+    for (const line of checkinLines(job, WAITING)) block.append(el("p", "goal-note", line));
+    block.append(button(STOP_LABEL, () => stopGoal(goal), { live: true, danger: true }));
+  }
+  return block;
+}
+
+function paintGoals() {
+  const box = dom.goalsList;
+  if (!box) return;
+  const v = gl.view;
+  if (!v) {
+    const line = el("p", "empty", gl.error ? `Could not read Goals: ${gl.error}` : "Reading…");
+    if (gl.error) {
+      line.classList.add("failed");
+      line.append(" ", button("Retry", loadGoals));
+    }
+    box.replaceChildren(line);
+    return;
+  }
+  if (!v.available) {
+    box.replaceChildren(el("p", "empty", v.why || GOALS_MISSING));
+    if (dom.goalsNewForm) dom.goalsNewForm.hidden = true;
+    return;
+  }
+  const full = openCount(v) >= v.limits.goals;
+  if (dom.goalsNewForm) dom.goalsNewForm.hidden = full;
+  if (!v.goals.length) {
+    box.replaceChildren(el("p", "empty", EMPTY_GOALS));
+  } else {
+    const jobs = (upL.view && upL.view.jobs) || [];
+    box.replaceChildren(...v.goals.map((g) =>
+      (g.status === "draft" ? draftGoalBlock(g) : activeGoalBlock(g, jobs))));
+  }
+  // The rows above already carry no words while the private lists are
+  // hidden (Rust blanked them, same as Coming up) - this only adds the
+  // "Show" prompt underneath, exactly as paintComingUp does.
+  if (v.hidden) box.append(hiddenNode(0, "words"));
+  if (full) {
+    box.append(el("p", "empty", `${v.limits.goals} goals are already open - stop tracking one before adding another.`));
+  }
+}
+
+function renderGoals() {
+  paintGoals();
+  if (IS_TAURI && !gl.loading && Date.now() - gl.at > GOALS_READ_MS) loadGoals();
+}
+
+if (dom.goalsNewForm) {
+  dom.goalsNewForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    createGoal();
+  });
+}
+if (dom.goalsNewAdd) {
+  liveButtons.add(dom.goalsNewAdd);
+  syncLiveButton(dom.goalsNewAdd);
+}
+
 // Private answers turned on or off, or a Show ran out: read it again - Rust
 // decides whether the words come back.
 if (IS_TAURI && TAURI.event && TAURI.event.listen) {
@@ -6391,6 +6814,13 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   };
   TAURI.event.listen("security-changed", rereadSchedule);
   TAURI.event.listen("private-hidden", rereadSchedule);
+  // Goals hides its words the same way (brain/goals.rs redact_goals).
+  const rereadGoals = () => {
+    gl.at = 0;
+    if (state.view === "work") loadGoals();
+  };
+  TAURI.event.listen("security-changed", rereadGoals);
+  TAURI.event.listen("private-hidden", rereadGoals);
   // The deep questions are hidden with the lists too (commands.rs get_deep).
   const rereadDeep = () => {
     deep.at = 0;
@@ -8409,6 +8839,10 @@ onEvent((frame) => {
       brief.at = 0;
       if (state.view === "work") loadBriefing();
     }
+    // A goal's weekly check-in was approved, paused or changed (`{id, kind:
+    // "goal_checkin", state}`): Goals reads its state from the very same
+    // Coming up list (goals.js's own module doc says why), so loadComingUp()
+    // above already reads the job again - it repaints Goals itself once done.
   }
 
   const refreshes = {

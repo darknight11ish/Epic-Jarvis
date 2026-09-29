@@ -55,6 +55,9 @@ object OpenPlace {
         "folders" to Where.Go(Screen.SETTINGS, "folders"),
         "backup" to Where.Go(Screen.SETTINGS, "backup"),
         "watch-notify" to Where.Go(Screen.SETTINGS, "watch-notify"),
+        "phone-notify" to Where.Go(Screen.SETTINGS, "phone-notify"),
+        // Settings -> Devices (docs/PAIRING-DESIGN.md section 7.2).
+        "devices" to Where.Go(Screen.SETTINGS, "devices"),
         // "Platform checks": its Connection card, and "This app" with the
         // phone's own "Check for new versions" (the desktop's "updates" card
         // is the desktop app's; this is the nearest thing the phone has).

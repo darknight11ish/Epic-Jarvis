@@ -2568,7 +2568,11 @@ def say(text: str, mic: str = "") -> Optional[bytes]:
     # answer marks when its first sound was ready. Numbers only.
     mark = _flow("say_started")
     mouth: list = []
-    samples, rate, engine, voice, fallback, note, failed = _synthesise(text, mouth=mouth)
+    # A crisis answer is said in the plain built-in voice, not an animal's
+    # (plain_voice_now; the owner's decision of 2026-09-28). The mouth track
+    # is made the same either way.
+    samples, rate, engine, voice, fallback, note, failed = _synthesise(
+        text, mouth=mouth, plain=plain_voice_now(text))
     if samples is None:
         _note_timing("none", voice, text, t0, 0.0, fallback, note, failed=failed)
         return None
@@ -2605,41 +2609,97 @@ def _voices_mod(voices_module=None):
         return None
 
 
-def tts_voice(voices_module=None) -> tuple:
+def plain_voice_now(text: str = "") -> bool:
+    """Say `text` in the PLAIN built-in voice - the owner's own choice, no
+    animal voice, no pitch rise? True while a crisis answer is being given
+    or spoken, and for the crisis help message's own words
+    (jarvis_wellbeing.speak_plainly: "At serious moments the animals drop
+    the cute gestures", the owner's decision of 2026-09-28). A missing or
+    older jarvis_wellbeing.py answers False - the voice as before. Never
+    raises."""
+    try:
+        import jarvis_wellbeing
+        fn = getattr(jarvis_wellbeing, "speak_plainly", None)
+        return bool(fn(text)) if fn is not None else False
+    except Exception:
+        return False
+
+
+def tts_voice(voices_module=None, *, plain: bool = False) -> tuple:
     """(Kokoro voice number, speed, pitch rise) for the built-in voice, read
     ONCE - so one sentence never mixes two faces' settings if the face
-    changes halfway through reading them. Never raises."""
+    changes halfway through reading them. `plain=True` (a crisis answer,
+    plain_voice_now): the face left out - the owner's own built-in choice
+    and speaking speed (jarvis_voices.speaker/speed), no pitch rise. Never
+    raises."""
     V = _voices_mod(voices_module)
+    if plain:
+        if V is not None and hasattr(V, "speaker") and hasattr(V, "speed"):
+            try:
+                return int(V.speaker()), float(V.speed()), 0.0
+            except Exception:
+                pass
+        # No jarvis_voices to ask: the config's own speaker and speed,
+        # never an animal's.
+        try:
+            sid = int(_cfg("tts_speaker_id", 0) or 0)
+        except Exception:
+            sid = 0
+        try:
+            pace = float(_cfg("tts_speed", 1.0) or 1.0)
+        except Exception:
+            pace = 1.0
+        return max(0, sid), (pace if 0.5 <= pace <= 2.0 else 1.0), 0.0
     if V is not None and hasattr(V, "builtin_voice"):
         try:
             sid, speed, semis, _face = V.builtin_voice()
-            return int(sid), float(speed), max(0.0, min(4.0, float(semis)))
+            return int(sid), float(speed), _pitch_range(semis)
         except Exception:
             pass
     return tts_speaker(V), tts_speed(V), 0.0
 
 
 def tts_pitch(voices_module=None) -> float:
-    """How many semitones higher the built-in voice speaks: 0, except while
-    "Voice follows the face" speaks for an animal face (jarvis_voices.
-    builtin_voice()), then that animal's small rise. Never raises."""
+    """How many semitones higher (below 0: deeper) the built-in voice
+    speaks: 0, except while "Voice follows the face" speaks for an animal
+    face (jarvis_voices.builtin_voice()), then that animal's pitch - its own,
+    or the one the owner picked for it. Never raises."""
     V = _voices_mod(voices_module)
     if V is not None and hasattr(V, "builtin_voice"):
         try:
-            return max(0.0, min(4.0, float(V.builtin_voice()[2])))
+            return _pitch_range(V.builtin_voice()[2])
         except Exception:
             pass
     return 0.0
 
 
+#: The pitch the built-in voice may be moved by, in semitones - the range
+#: the owner may pick per animal (jarvis_voices.MIN_SEMITONES/MAX_SEMITONES).
+PITCH_MIN, PITCH_MAX = -3.0, 4.0
+
+
+def _pitch_range(semis) -> float:
+    """`semis` held to PITCH_MIN..PITCH_MAX; anything that is not a finite
+    number is 0 (no change). Never raises."""
+    try:
+        v = float(semis)
+    except (TypeError, ValueError):
+        return 0.0
+    if v != v or v in (float("inf"), float("-inf")):
+        return 0.0
+    return max(PITCH_MIN, min(PITCH_MAX, v))
+
+
 def pitch_up(samples, semitones: float):
     """The sound `semitones` higher, by playing it faster: every frequency
     rises by 2^(semitones/12) and the sound gets shorter by the same factor
-    (which is also what makes a voice sound SMALLER - the cute part). The
-    caller asks Kokoro for slower speech first (kokoro_speak), so the pace
-    comes out as chosen. numpy only, milliseconds. 0, or no numpy, hands the
-    samples back untouched."""
-    if np is None or not semitones or semitones <= 0:
+    (which is also what makes a voice sound SMALLER - the cute part). Below
+    0 it is the other way round: played slower, deeper and longer, by the
+    same rule (f below 1). The caller asks Kokoro for slower (or, deeper,
+    faster) speech first (kokoro_speak), so the pace comes out as chosen,
+    and jarvis_mouth divides its times by the same f. numpy only,
+    milliseconds. 0, or no numpy, hands the samples back untouched."""
+    if np is None or not semitones:
         return samples
     x = np.asarray(samples, dtype=np.float32)
     if len(x) < 2:
@@ -2653,10 +2713,11 @@ def pitch_up(samples, semitones: float):
 def kokoro_speak(engine, text: str, sid: int, speed: float, semitones: float = 0.0,
                  mouth: Optional[list] = None):
     """(samples, sample_rate) from Kokoro in the built-in voice, with the
-    animal pitch rise applied - or None. THE one way the built-in voice is
-    made: the spoken answer (_synthesise) and jarvis_voice_flow's two copies
-    of it (the "One moment." clip and the barge-in reference voice) all come
-    through here, so all three sound the same.
+    animal's pitch applied (higher, or below 0 deeper) - or None. THE one
+    way the built-in voice is made: the spoken answer (_synthesise) and
+    jarvis_voice_flow's two copies of it (the "One moment." clip and the
+    barge-in reference voice) all come through here, so all three sound the
+    same - and so does an animal's "Try it" (jarvis_voices.try_face_animal).
 
     `mouth`: a list to receive the mouth shapes (jarvis_mouth.py) - the
     "jmth" payload, or None - when the caller wants them (say() does). The
@@ -2678,7 +2739,7 @@ def kokoro_speak(engine, text: str, sid: int, speed: float, semitones: float = 0
         if got:
             mouth.append(got[2])
             return got[0], got[1]
-    f = 2.0 ** (max(0.0, float(semitones or 0.0)) / 12.0)
+    f = 2.0 ** (float(semitones or 0.0) / 12.0)
     audio = engine.generate(text, sid=int(sid), speed=float(speed) / f)
     if audio is None or len(audio.samples) == 0:
         return None
@@ -2735,7 +2796,7 @@ def tts_speaker(voices_module=None) -> int:
 
 
 def _synthesise(text: str, *, start_better: bool = True,
-                mouth: Optional[list] = None) -> tuple:
+                mouth: Optional[list] = None, plain: bool = False) -> tuple:
     """The sound for `text`, and nothing else - no timing row, nothing
     remembered: (samples | None, sample_rate, engine, voice, fallback, note,
     failed). say() is this plus its bookkeeping; jarvis_voice_flow makes the
@@ -2747,7 +2808,10 @@ def _synthesise(text: str, *, start_better: bool = True,
     `start_better=False` never STARTS the better voice's program on the
     second card for this sound (it is used if it is already running).
     `mouth`: a list that receives the Kokoro mouth shapes' payload (say()
-    only; kokoro_speak) - nothing is added for a custom voice."""
+    only; kokoro_speak) - nothing is added for a custom voice.
+    `plain=True` (say(), for a crisis answer - plain_voice_now): the
+    built-in voice without the face's animal voice and pitch rise. A custom
+    voice the owner chose still speaks first, as always."""
     voice, fallback, note = "builtin", "", ""
     try:
         import jarvis_voices
@@ -2773,8 +2837,12 @@ def _synthesise(text: str, *, start_better: bool = True,
         return None, 0, "none", voice, fallback, note, "no Kokoro voice is installed"
     try:
         # The animal's pitch rise (tts_pitch) is 0 unless "Voice follows the
-        # face" speaks for an animal face.
-        audio = kokoro_speak(engine, text, *tts_voice(jarvis_voices), mouth=mouth)
+        # face" speaks for an animal face - and never for a crisis answer
+        # (`plain`), which the owner's own built-in voice says.
+        # (`plain` is passed only when set, so a stand-in tts_voice with the
+        # older one-argument shape still works for every other sentence.)
+        voice_now = tts_voice(jarvis_voices, plain=True) if plain else tts_voice(jarvis_voices)
+        audio = kokoro_speak(engine, text, *voice_now, mouth=mouth)
     except Exception:
         return None, 0, "none", voice, fallback, note, "Kokoro failed"
     if audio is None:

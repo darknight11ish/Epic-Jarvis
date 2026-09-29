@@ -64,6 +64,7 @@ TITLES = {
     "run_shell_on_host": "run a command on this PC",
     "control_computer": "use the mouse and keyboard on this PC",
     "control_phone": "tap and type on your phone",
+    "run_plan": "run the safe steps of an approved plan",
     "control_browser": "work a web page for you in a browser",
     "spend_money": "spend money",
     "post_to_external_service": "post to an outside service",
@@ -109,6 +110,7 @@ TITLES = {
     "second_card_enable": "start using the second graphics card",
     "second_card_browser_enable": "turn on browser control, which works real web pages",
     "second_card_combined_enable": "run one bigger model across both graphics cards",
+    "second_card_third_assign": "move a second-card feature onto a third graphics card",
     "big_model_enable": "start the big model for background jobs",
     # --- its own settings and code
     "change_own_config": "change one of its settings",
@@ -134,8 +136,14 @@ TITLES = {
     "better_voice_enable": "turn on the better custom voice",
     # --- notifications
     "watch_notifications_enable": "let your notifications show on a smartwatch too",
+    "phone_notifications_read": "start reading notifications from apps you choose on your phone",
     # --- backups
     "restore_backup": "restore from a backup, replacing what it knows now",
+    # --- devices (jarvis_devices.py, docs/PAIRING-DESIGN.md, 2026-09-28)
+    "pair_device": "connect a new device",
+    "unretire_shared_key": "let the old shared key work from other devices again",
+    # --- the app builder (docs/APP-BUILDER-DESIGN.md)
+    "app_merge_change": "add its change to one of your apps",
     # --- helpers and anything else a tool asks for
     "agent_spawn": "start a helper task",
     "agent_kill": "stop a helper task",

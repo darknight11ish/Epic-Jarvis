@@ -123,3 +123,44 @@ What is not known yet, and waits for the PC run:
 - **How well the real 8B model picks facts out of a conversation.** The
   learner cases above use a stand-in for the model's one judgement call (is
   this a sensitive topic?). `--learner-model` runs the real one.
+
+### LoCoMo "link two facts" questions (milestone 13, added 2026-09-28)
+
+A separate test: `python backend/eval_memory.py --locomo` (on the PC, with
+the real models). It asks 169 multi-hop questions over 5 of LoCoMo's long
+made-up chats (`backend/fixtures/locomo_multihop.json`, CC BY-NC 4.0, test
+data only). One stored item is one line of chat, not a saved fact, so these
+numbers **can't be compared** with the table above or with published LoCoMo
+scores. "Found all" = every chat line the question relies on came back.
+
+| Date | Search | Where measured | Found any @5 | Found all @5 | nDCG@5 | Found all @10 |
+|---|---|---|---|---|---|---|
+| 2026-09-28 | plain | build machine, words only | 45.0% | 9.5% | 0.238 | 18.9% |
+| 2026-09-28 | with the entity layer (how chat recall runs) | build machine, words only | 32.0% | 3.6% | 0.124 | 11.8% |
+| 2026-09-28 | entity layer + "too common to help" cut (OFF by default) | build machine, words only | 42.6% | 8.3% | 0.218 | 18.9% |
+| - | both, real models | **the PC - not run yet** | - | - | - | - |
+
+**Worth knowing:** on this data, words only, the entity layer made every
+number worse, in every one of the five chats. The cause was found by the
+effectiveness audit (`docs/audit-2026-09-28/03-effectiveness.md`, 3.1): a
+person named in most of the chat lines ("Caroline", in 291 of 419) brings
+back only their newest lines as a third list, pushing the relevant ones out
+of the top 5. A cut that skips a name linked to more than max(20, 5% of all
+facts) is built, **switched off** (`JARVIS_MEMORY_ENTITY_COMMON_CUT=1`, or
+`eval_memory.py --common-cut` for one run). With it on, words only, LoCoMo
+went back up (above) and the main self-test (0/100/1,000 filler) was
+unchanged. It stays off until the PC run shows no number getting worse
+(`docs/UPDATE-AND-CHECK-2026-09-28.md` has the one-line command). This is
+the baseline milestone 5 (multi-hop memory) has to beat.
+
+### "Said again" as a tie-breaker (milestone 12, added 2026-09-28, OFF)
+
+Switched on only with `JARVIS_MEMORY_SAID_AGAIN_TIEBREAK=1`. It reorders only
+facts that scored exactly the same, putting the one said more often first;
+it never adds, drops or hides a fact (`backend/README.md`, "Said again").
+
+| Date | Where measured | Result |
+|---|---|---|
+| 2026-09-28 | build machine, words only, re-ranker off, 71 to 10,071 facts | **No change**: 0 questions reordered at every size, every number identical (recall@5 80.9% at 71 facts, 79.8% at 10,071). The 6 exact ties involving a repeated fact already had it first. |
+| - | the PC, real models | **not run yet** - ties should be commoner with meaning search on, so only this run can say whether it helps. It stays off unless this run improves a number. |
+

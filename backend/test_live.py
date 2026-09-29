@@ -185,6 +185,31 @@ def t_start_stop_and_the_limits():
           and "screen_lock" in L.APP_END_REASONS, e.status())
 
 
+def t_the_warm_up_uses_the_model_chat_uses():
+    """Effectiveness audit 2026-09-28, 3.2: pressing Live warms the model
+    chat really uses (jarvis_power_switch.chat_model), not a fixed name."""
+    import threading
+    seen = []
+    saved = {n: sys.modules.get(n) for n in ("jarvis_agent", "jarvis_power_switch")}
+    agent = types.ModuleType("jarvis_agent")
+    agent.warm_everyday = lambda **kw: seen.append(kw) or True
+    power = types.ModuleType("jarvis_power_switch")
+    power.chat_model = lambda: "switched-model:8b"
+    sys.modules["jarvis_agent"], sys.modules["jarvis_power_switch"] = agent, power
+    try:
+        L._default_warm()
+        for th in [x for x in threading.enumerate() if x.name == "jarvis-live-warm"]:
+            th.join(5)
+    finally:
+        for n, m in saved.items():
+            if m is None:
+                sys.modules.pop(n, None)
+            else:
+                sys.modules[n] = m
+    check("Live warms the model chat uses now, by name", seen == [{"model": "switched-model:8b"}],
+          seen)
+
+
 def t_no_live_without_a_real_voice_check():
     w = World(voice_ready=lambda d: L.NEEDS_VOICE)
     out = w.engine.start("phone")
@@ -1444,7 +1469,8 @@ def t_the_module_keeps_to_itself():
     # The one exception: pressing Live warms the everyday model through
     # jarvis_agent.warm_everyday (this PC's Ollama only, never on Standby).
     warm = code.count("jarvis_agent")
-    code = code.replace("import jarvis_agent", "").replace("jarvis_agent.warm_everyday()", "")
+    code = code.replace("import jarvis_agent", "").replace(
+        "jarvis_agent.warm_everyday(model=_chat_model())", "")
     check("no AI model, no chat path, no cloud: nothing here talks to one (but the warm-up, "
           "through jarvis_agent)", warm == 2 and
           not re.search(r"jarvis_agent|ollama|/api/chat|jarvis_router|urllib\.request|http",

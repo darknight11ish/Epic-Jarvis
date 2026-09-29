@@ -1558,13 +1558,18 @@ def _run_widget(f: dict, conversation, messages) -> Result:
 
 #: "Ring my phone" (jarvis_find_phone.py, 2026-09-28). A phone the owner
 #: names ("ring my work phone") is kept, so the answer can say plainly that
-#: Jarvis cannot tell phones apart yet.
+#: Jarvis cannot tell phones apart yet. Only the owner's OWN phone: the word
+#: before "phone" must be one of these, never a person ("call my mum's
+#: phone", "ring my sister's mobile" - the owner means to call someone, and
+#: ringing their own phone at full volume would be the wrong thing; those go
+#: to the model). Bug audit 2026-09-28, F6.
+_OWN_PHONE = r"(?:work|personal|other|old|new|own|second|spare|main|android)"
 _RING = re.compile(
-    r"(?:ring|call|buzz|beep)\s+(?:my|the)\s+(?:(?P<name>[a-z][a-z' ]{0,20}?)\s+)?"
+    r"(?:ring|call|buzz|beep)\s+(?:my|the)\s+(?:(?P<name>" + _OWN_PHONE + r")\s+)?"
     r"(?:phone|mobile|cell(?:\s*phone)?|android)"
-    r"|(?:find|locate)\s+(?:my|the)\s+(?:(?P<name2>[a-z][a-z' ]{0,20}?)\s+)?"
+    r"|(?:find|locate)\s+(?:my|the)\s+(?:(?P<name2>" + _OWN_PHONE + r")\s+)?"
     r"(?:phone|mobile|cell(?:\s*phone)?|android)"
-    r"|where(?:'s|\s+is)\s+my\s+(?:(?P<name3>[a-z][a-z' ]{0,20}?)\s+)?"
+    r"|where(?:'s|\s+is)\s+my\s+(?:(?P<name3>" + _OWN_PHONE + r")\s+)?"
     r"(?:phone|mobile|cell(?:\s*phone)?|android)"
     r"|make\s+my\s+(?:phone|mobile)\s+ring|i\s+(?:can'?t|cannot)\s+find\s+my\s+phone")
 _RING_STOP = re.compile(r"stop\s+ringing(?:\s+(?:my|the)\s+(?:phone|mobile))?"

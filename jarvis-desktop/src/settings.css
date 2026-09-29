@@ -497,6 +497,11 @@ select:focus-visible {
   line-height: 1.55;
 }
 
+/* The face's quality levels, one line each (Face on this computer). */
+.face-level-notes { list-style: none; padding: 0; }
+.face-level-notes li { margin: 0 0 2px; }
+.face-level-notes strong { color: var(--text); font-weight: 600; }
+
 /* The shared live region in jarvis-link.js is an off-screen element with this
    class. It has to exist in every window that calls `announce()`, or the
    announcement is visible text in the corner of the page. */
@@ -957,6 +962,24 @@ select:focus-visible {
 .cv-voice input { accent-color: var(--cyan); margin: 0; flex: none; }
 .cv-voice .cv-text { display: flex; flex-direction: column; min-width: 0; }
 #voices textarea, #voices input[type="text"] { width: 100%; }
+/* Each animal's voice (voice-panel.js paintAnimals): one compact row per
+   animal - its name and the PC's line, then voice, pitch, pace, Try it and
+   Reset. Wraps onto a second line in a narrow window. */
+.cv-animal {
+  padding: 8px 0;
+  border-top: 1px solid var(--line-soft);
+}
+.cv-animal:first-child { border-top: none; }
+.cv-animal-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 6px; }
+.cv-animal-name { font-size: var(--text-sm); font-weight: 600; color: var(--text); }
+.cv-animal-line { font-size: var(--text-xs); color: var(--text-muted); }
+.cv-animal-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.cv-animal-field { display: flex; align-items: center; gap: 6px; font-size: var(--text-sm); color: var(--text-muted); }
+.cv-animal select { min-width: 0; width: 200px; padding: 5px 8px; }
+.cv-animal input[type="range"] { accent-color: var(--cyan); width: 120px; margin: 0; }
+.cv-animal-pitch { min-width: 2.6em; font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text); }
+.cv-animal .choices { margin-bottom: 0; }
+.cv-animal .status { display: block; margin-top: 4px; }
 #voice .sc-gpu[data-tone="ok"] .sc-gpu-role { color: var(--ok-text); }
 
 /* Morning briefing (briefing-settings.js): the set-up form. */
@@ -1027,3 +1050,42 @@ select:focus-visible {
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
+
+/* --------------------------------------------------------------------------
+   Devices (docs/PAIRING-DESIGN.md 7.1): the pairing panel. The QR picture
+   carries its own white ground and quiet border (a camera reads dark on
+   light, whatever the theme), so only its size is set here.
+   -------------------------------------------------------------------------- */
+
+.dv-panel {
+  margin: 10px 0 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.dv-qr {
+  display: block;
+  width: 232px;
+  max-width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  border-radius: 4px;
+}
+
+.dv-code {
+  font-family: var(--font-mono);
+  font-size: var(--text-lg);
+  letter-spacing: 0.08em;
+  color: var(--text);
+}
+
+.dv-words {
+  margin: 8px 0;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text);
+}
+
+#dv-session[data-tone="bad"] { color: var(--bad-text); }
+#dv-session[data-tone="ok"] { color: var(--ok-text); }

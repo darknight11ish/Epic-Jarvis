@@ -687,6 +687,17 @@
                 <button id="standby-add" class="btn small" type="submit">Set up</button>
               </form>
             </div>
+            <div class="card card-wide" id="goals-card">
+              <h2>Goals</h2>
+              <p class="note">Say what you want, add a few steps with rough dates, then Accept. Jarvis checks in once a week - only ever a nudge, never an action. Ticking a step off, and Stop tracking, need no approval card.</p>
+              <div id="goals-list"></div>
+              <h3 class="subhead">New goal</h3>
+              <form id="goals-new-form" class="todo-form" autocomplete="off">
+                <input id="goals-new-text" class="field todo-text" type="text" maxlength="300"
+                       placeholder="What do you want to get done?" aria-label="A new goal, in your own words">
+                <button id="goals-new-add" class="btn small" type="submit">Add</button>
+              </form>
+            </div>
             <div class="card card-wide" id="briefing-card">
               <h2>Morning briefing</h2>
               <p class="note">A short list of your day, put together on your PC without the AI model. It only reads: it changes nothing and approves nothing.</p>

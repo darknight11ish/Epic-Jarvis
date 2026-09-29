@@ -440,7 +440,7 @@ def request_approval(c: Compare, *, deps: Optional[CB.Deps] = None) -> bool:
     d = deps or CB.DEPS
     if c.problem:
         return False
-    why = CB.tier_problem(d)
+    why = CB.tier_problem(d) or CB.lockdown_problem(c.chatbots, d)
     if why:
         c.state, c.problem = "refused", why
         return False
@@ -483,6 +483,10 @@ class _Stop(Exception):
     pass
 
 
+class _Lockdown(Exception):
+    pass
+
+
 def _result(c: Compare, *, ok: bool, paused: bool = False, reason: str = "") -> dict:
     return {"ok": ok, "paused": paused, "done": list(range(1, _sent(c) + 1)),
             "not_run": _steps(c) if paused else [], "reason": reason, "compare": c.id,
@@ -496,13 +500,13 @@ def _drop(m, d: CB.Deps) -> None:
     CB._end_now(m, "needs_owner", DROPPED[code].format(name=CB._name(m)), d)
 
 
-def _stop_members(c: Compare, d: CB.Deps) -> None:
+def _stop_members(c: Compare, d: CB.Deps, code: str = "stopped") -> None:
     for m in c.members:
         m.stop_requested = True
         if not _final(m):
             words = NOT_ASKED.format(name=CB._name(m)) if not m.turns_used else ""
             try:
-                CB._end_now(m, "stopped", words, d)
+                CB._end_now(m, code, words, d)
             except Exception:
                 pass
 
@@ -540,6 +544,8 @@ def run(c: Compare, *, approved, announce: Optional[Callable[[str], None]] = Non
             sig = checkpoint() if checkpoint is not None else None
             if sig == "stop" or c.stop_requested or CB._stopped_since(mark):
                 raise _Stop()
+            if CB.lockdown_problem(c.chatbots, d):
+                raise _Lockdown()
             if sig == "pause":
                 raise _Pause()
             prefix = f"Comparing ({i + 1} of {n}): "
@@ -553,8 +559,13 @@ def run(c: Compare, *, approved, announce: Optional[Callable[[str], None]] = Non
                 # run() refused it (it changed after the card): left out.
                 CB._end_now(m, "adapter_failed", f"{CB._name(m)} could not be asked, so it "
                                                   f"was left out.", d)
+            if m.ended_code == "lockdown":
+                raise _Lockdown()
             if m.ended_code == "stopped" or c.stop_requested or CB._stopped_since(mark):
                 raise _Stop()
+    except _Lockdown:
+        _finish(c, "lockdown", d)
+        return _result(c, ok=True, reason=c.ended_words)
     except _Pause:
         with _LOCK:
             c.state, c.paused_code, c.paused_why = "paused", "paused", PAUSED_WORDS
@@ -576,6 +587,8 @@ def run(c: Compare, *, approved, announce: Optional[Callable[[str], None]] = Non
 ENDED = {
     "done": "Finished: Jarvis has been through every chatbot on the card.",
     "stopped": "You stopped the comparison. Nothing more is sent to any of the chatbots.",
+    "lockdown": ("Lockdown was turned on, so the comparison stopped. Nothing more is sent to "
+                 "any of the chatbots."),
 }
 
 
@@ -585,12 +598,12 @@ def _finish(c: Compare, code: str, d: CB.Deps, *, words: str = "") -> None:
     with _LOCK:
         if c.state in ("done", "stopped"):
             return
-        c.state = "stopped" if code == "stopped" else "done"
+        c.state = "stopped" if code in ("stopped", "lockdown") else "done"
         c.ended_code = code
         c.ended_words = words or ENDED.get(code, "It ended.")
         c.steps = []
-    if code == "stopped":
-        _stop_members(c, d)
+    if code in ("stopped", "lockdown"):
+        _stop_members(c, d, code)
     # A stop means "do less": no model call for the summary then. On one
     # card the owner's own chat goes first, for a while.
     use_model = code == "done"
@@ -934,6 +947,25 @@ def _stop_everything() -> Optional[str]:
     for c in idle:
         try:
             _finish(c, "stopped", CB.DEPS)
+        except Exception:
+            pass
+    if not live:
+        return None
+    return "The chatbot comparison stopped; nothing more is sent to any of the chatbots."
+
+
+def stop_for_lockdown() -> Optional[str]:
+    """Lockdown was just turned on: end every comparison that asks a chatbot
+    outside this PC. A running one stops before its next message (run() and
+    jarvis_chatbot.run() read Lockdown themselves); a paused one ends here,
+    so Resume cannot pick it up. Quick, never waits."""
+    with _LOCK:
+        live = [c for c in _COMPARES.values()
+                if _live(c) and any(CB.goes_out(x) for x in c.chatbots)]
+        idle = [c for c in live if c.state == "paused"]
+    for c in idle:
+        try:
+            _finish(c, "lockdown", CB.DEPS)
         except Exception:
             pass
     if not live:

@@ -20,7 +20,7 @@ jarvis_chatbot.py imports this module at its end; load_sites(), at the end
 of THIS module, imports every site file in SITE_MODULES, and each one
 registers itself in the driver's list. Every site is reachable from both
 apps through /api/chatbot/* (jarvis_chatbot_routes.py, docs/JARVIS-API.md
-section 60) once Playwright is installed and that site's window has been
+section 87) once Playwright is installed and that site's window has been
 signed in. NONE of them has yet been tried against its real site.
 
 THE OWNER'S DECISIONS (CLAUDE.md, 2026-09-28; docs/CHATBOT-DRIVER-DESIGN.md)

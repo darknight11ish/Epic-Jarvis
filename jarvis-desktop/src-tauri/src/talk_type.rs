@@ -298,12 +298,13 @@ fn may_act(app: &AppHandle) -> Result<(), &'static str> {
 }
 
 fn mic_free(app: &AppHandle) -> Result<(), &'static str> {
-    // Jarvis Live owns the microphone while it is on - even while it is
-    // closed for a pause - exactly as it does for the talk button
-    // (voice.rs start_voice_capture): a talk-to-type recorder opened during
-    // a pause would stop Live from listening again when the pause ends.
+    // Live first: its listener is the same one "hey Jarvis" uses, so the
+    // check below would blame "hey Jarvis" - and a paused Live has no
+    // listener open at all, yet will want the microphone back. (Jarvis Live
+    // owns the microphone while it is on, also while closed for a pause,
+    // exactly as for the talk button - voice.rs start_voice_capture.)
     if crate::voice::LIVE_MODE.load(Ordering::SeqCst) {
-        return Err(crate::live::BUSY_MIC);
+        return Err(MIC_LIVE);
     }
     if app.state::<crate::voice::AutoListenState>().busy() {
         return Err(MIC_WAKE);
@@ -367,6 +368,11 @@ async fn start(app: AppHandle, gen: u64) {
         tell(&app, why);
         return;
     }
+
+    // Before the microphone opens: an animal's "Try it" playing in Settings
+    // stops now, as it does for the talk button (voice.rs), so it is not
+    // typed into the owner's words.
+    crate::emit_all(&app, crate::events::VOICE_CAPTURE_STARTED, ());
 
     let opener = app.clone();
     let opened = tauri::async_runtime::spawn_blocking(move || open_microphone(opener, gen))

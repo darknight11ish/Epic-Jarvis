@@ -5,14 +5,17 @@ import android.os.SystemClock
 import android.util.Log
 import com.jarvis.client.data.AppearanceStore
 import com.jarvis.client.data.ClientSettings
+import com.jarvis.client.data.ModelsCacheStore
 import com.jarvis.client.data.TokenStore
 import com.jarvis.client.net.ActivityEvent
 import com.jarvis.client.net.AnswerMark
 import com.jarvis.client.net.AnswerMarkState
 import com.jarvis.client.net.ApiError
+import com.jarvis.client.net.CachedModels
 import com.jarvis.client.net.Feedback
 import com.jarvis.client.net.MemoryCards
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.onOk
 import com.jarvis.client.net.Attention
 import com.jarvis.client.net.DigestItem
 import com.jarvis.client.net.GateHistoryItem
@@ -23,7 +26,6 @@ import com.jarvis.client.net.UndoEntry
 import com.jarvis.client.net.EventStream
 import com.jarvis.client.net.ChatSession
 import com.jarvis.client.net.JarvisApi
-import com.jarvis.client.net.onOk
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.net.BigModel
 import com.jarvis.client.net.Hardware
@@ -347,14 +349,42 @@ object JarvisRuntime {
     }
 
     /**
-     * `/api/models`, or null when this backend does not offer the capability
-     * or has not been asked yet. Switching between models the desktop already
-     * has was allowed onto the phone on 2026-09-18, and installing a typed
-     * model name on 2026-09-20 (CLAUDE.md) - both only ever ASK, through an
-     * approval card. Browsing what could be installed is still off the phone.
+     * `/api/models`, or null when this backend does not offer the capability,
+     * has not been asked yet, or the most recent read failed. Switching
+     * between models the desktop already has was allowed onto the phone on
+     * 2026-09-18, and installing a typed model name on 2026-09-20
+     * (CLAUDE.md) - both only ever ASK, through an approval card. Browsing
+     * what could be installed is still off the phone.
+     *
+     * Null on a failure - rather than the previous session's last good
+     * value staying put in silence - since [refreshModels]'s 2026-09-28
+     * cache addition: [modelsCache] is what a failed read falls back to
+     * now, WITH a visible "last saw this at…" label
+     * (`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`), so there is no longer a
+     * reason for this flow to also carry an unlabelled stale answer. This
+     * has no other reader today ([modelsView] combines this with
+     * [modelsCache] for `BrainScreen.kt`'s `ModelsPlate`), so nothing else
+     * depended on the old behaviour.
      */
     private val _models = MutableStateFlow<ModelsInfo?>(null)
     val models: StateFlow<ModelsInfo?> = _models.asStateFlow()
+
+    private lateinit var modelsCacheStore: ModelsCacheStore
+
+    private val _modelsCache = MutableStateFlow<CachedModels?>(null)
+
+    /**
+     * The phone's own last successful `GET /api/models` read, held on disk
+     * (`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`) so Brain -> Model has
+     * something to show, clearly marked as old, whenever [refreshModels]
+     * fails - including on a cold start, before any read this run has
+     * succeeded at all. Loaded once at [initialize] and refreshed only as
+     * a side effect of a live read succeeding; never re-read specially,
+     * per the design doc's section 4 ("do not sync or refresh the cache on
+     * demand"). See [com.jarvis.client.net.ModelsView] for how the screen
+     * turns this, plus [models], into what it actually draws.
+     */
+    val modelsCache: StateFlow<CachedModels?> = _modelsCache.asStateFlow()
 
     /**
      * `/api/second-card`: what the PC found, and the second-card switches
@@ -504,6 +534,46 @@ object JarvisRuntime {
      */
     val face: StateFlow<FaceState> = _face.asStateFlow()
 
+    private val _faceOffline = MutableStateFlow(false)
+
+    /**
+     * Jarvis cannot be reached: the link has been down or stale past the
+     * grace ([com.jarvis.client.face.FaceLink]). [face] is STANDBY while this
+     * is true; the face adds its hollow ring and TalkBack says "Jarvis isn't
+     * connected" (FaceView's `offline`).
+     */
+    val faceOffline: StateFlow<Boolean> = _faceOffline.asStateFlow()
+
+    private val _faceSerious = MutableStateFlow(false)
+
+    /**
+     * A serious moment: a crisis answer is being given or spoken
+     * (docs/JARVIS-API.md section 38.1, the `wellbeing` event). The animal
+     * faces hold a calm, plain, neutral pose while this is true (FaceView's
+     * `serious`); the mouth still follows the voice. Set by the event only -
+     * true on `{"serious": true}`, false on `{"serious": false}` - with a
+     * safety net: [SERIOUS_NET_MS] after the last true with no false, it
+     * ends by itself, so a missed frame can never leave the face neutral for
+     * good. A reconnect keeps what it had (section 38.1).
+     */
+    val faceSerious: StateFlow<Boolean> = _faceSerious.asStateFlow()
+    private var seriousNet: Job? = null
+
+    /** The serious moment's safety net: 600 s + 300 s (section 38.1). */
+    private const val SERIOUS_NET_MS = 900_000L
+
+    /** Where the phone keeps its copy of the sky settings (SkySettings.encode). */
+    private const val SKY_PREFS = "jarvis_sky"
+    private const val SKY_KEY = "stored"
+
+    /**
+     * When the link was cut - down, or up but stale - for the face; 0 while
+     * it is healthy. Set from [linkDownSince] when that is earlier (the drop
+     * itself), else from the moment the face job first saw it. Only the face
+     * job touches it.
+     */
+    private var faceCutSince = 0L
+
     private var streamJob: Job? = null
     private var watchdog: Job? = null
     private var faceJob: Job? = null
@@ -557,6 +627,7 @@ object JarvisRuntime {
         // bug cannot come back the next time something is inserted here.
         val clientSettings = ClientSettings(app)
         val tokenStore = TokenStore(app)
+        val modelsStore = ModelsCacheStore(app)
         val jarvisApi = JarvisApi(clientSettings, tokenStore)
         // A temporary chat only on a PC that says it has one (docs/JARVIS-API.md
         // section 18.1): read from the last handshake, when it is asked.
@@ -642,6 +713,12 @@ object JarvisRuntime {
         tokens = tokenStore
         api = jarvisApi
         appearance = AppearanceStore(app)
+        modelsCacheStore = modelsStore
+        // Read once, at startup - so a cold start with Jarvis off has
+        // something to paint at once instead of a blank screen while the
+        // first live read times out. Never re-read after this except as a
+        // side effect of a live read succeeding, in refreshModels().
+        _modelsCache.value = modelsStore.load()
         updates = UpdateChecker(clientSettings)
         chat = chatSession
         voice = voiceSession
@@ -651,18 +728,39 @@ object JarvisRuntime {
         stream = EventStream(jarvisApi)
         started = true
 
+        // The sun, moon and weather behind the animals (SkySettings): this
+        // phone's last copy first, so the sky shows at once and while the PC
+        // cannot be reached; then the PC's, every POLL_MS while connected.
+        com.jarvis.client.face.SkyNow.stored = com.jarvis.client.net.SkySettings.decode(
+            runCatching { app.getSharedPreferences(SKY_PREFS, Context.MODE_PRIVATE).getString(SKY_KEY, null) }
+                .getOrNull(),
+        )
+        scope.launch {
+            _link.collectLatest { link ->
+                if (link != LinkState.CONNECTED) return@collectLatest
+                while (true) {
+                    runCatching { sky() }
+                    delay(com.jarvis.client.net.SkySettings.POLL_MS)
+                }
+            }
+        }
+
         faceJob = scope.launch {
+            // `_stale` is in the combine: a stale link is as cut as a dropped
+            // one (rule 4 blocks acting on it), and the face has to hear
+            // about it and about its end.
             combine(_link, _activity, _power, _pending, _attention) { _, _, _, _, _ -> }
                 .combine(voice.phase) { _, _ -> }
+                .combine(_stale) { _, _ -> }
                 .collectLatest {
-                    _face.value = resolveFace()
-                    if (_link.value != LinkState.CONNECTED) {
-                        // Re-evaluate once the grace window is up, so a reconnect
-                        // that does not come back does eventually show as an
-                        // error. collectLatest cancels this the moment anything
+                    val wait = publishFace()
+                    if (wait > 0L) {
+                        // Re-evaluate once the grace is up, so a reconnect that
+                        // does not come back does eventually show as offline.
+                        // collectLatest cancels this the moment anything
                         // changes, so a reconnect that succeeds never reaches it.
-                        delay(RECONNECT_GRACE_MS)
-                        _face.value = resolveFace()
+                        delay(wait)
+                        publishFace()
                     }
                 }
         }
@@ -709,13 +807,25 @@ object JarvisRuntime {
         }
         // "Jarvis widget" 1-3 (docs/JARVIS-API.md section 86): redrawn - and
         // so read again from the PC - when the link comes or goes stale, when
-        // a timer or reminder changes, when the saved widgets change here, or
-        // when a slot is given another widget. Never on a clock of its own
-        // beyond the launcher's half-hourly update.
+        // a timer or reminder changes, when the saved widgets change here,
+        // when a slot is given another widget, or when App lock or "Hide
+        // memory lists" changes (so the words hide, and the buttons turn into
+        // "open Jarvis", at once - not up to 30 minutes later). Never on a
+        // clock of its own beyond the launcher's half-hourly update.
         boardJob?.cancel()
         boardJob = scope.launch {
             combine(_link, _stale, _scheduleTick, _widgetsTick, settings.homeWidgets) { _, _, _, _, _ -> }
+                .combine(settings.security) { _, _ -> }
                 .collect { com.jarvis.client.widget.JarvisBoardWidgets.updateAll(app) }
+        }
+        // "Reading phone notifications": turning it off is immediate, so
+        // whenever the switch reads as off - pressed here, or learned from
+        // the PC - nothing captured stays on this phone (audit A3). Also
+        // runs once at start: an off switch never has rows behind it.
+        scope.launch {
+            settings.phoneNotifications.collect { on ->
+                if (!on) runCatching { com.jarvis.client.data.CapturedNotifications(app).clear() }
+            }
         }
     }
 
@@ -756,7 +866,11 @@ object JarvisRuntime {
      */
     private fun describe(e: ApiError, handshake: Boolean = false): String {
         if (e == ApiError.AlreadyHandled) return "Already handled elsewhere."
-        val shown = com.jarvis.client.net.PlainErrors.forApiError(e, handshake)
+        val plain = com.jarvis.client.net.PlainErrors.forApiError(e, handshake)
+        // A refused key whose 401 said why (docs/PAIRING-DESIGN.md §5.3):
+        // that sentence instead of the general one. Otherwise unchanged.
+        val why = if (e == ApiError.BadToken) com.jarvis.client.net.KeyRefusal.words() else null
+        val shown = if (why != null) plain.copy(says = why, fix = "") else plain
         _problem.value = shown
         return shown.text
     }
@@ -1142,6 +1256,8 @@ object JarvisRuntime {
     private suspend fun onEvent(event: SseEvent) {
         when (event.kind) {
             "approval" -> {
+                val phoneCardBefore = com.jarvis.client.net.PhoneNotifications
+                    .cardWaiting(_pending.value.map { it.action })
                 refreshPending()
                 // A second-card switch waiting on a card has no event of its
                 // own (docs/JARVIS-API.md section 12: "re-read it after a
@@ -1177,6 +1293,15 @@ object JarvisRuntime {
                 // would otherwise leave "Waiting" on the Voices screen.
                 val cv = customVoiceStatus()
                 if (cv != null && (cv.pending != null || cv.better.pending)) refreshCustomVoices()
+                // "Read phone notifications" has no event of its own either:
+                // when its card leaves the queue (decided on the PC or here),
+                // the switch is read again, so the listener's cached copy
+                // follows it without the settings page being open (audit A2).
+                val phoneCardNow = com.jarvis.client.net.PhoneNotifications
+                    .cardWaiting(_pending.value.map { it.action })
+                if (phoneCardBefore && !phoneCardNow) {
+                    scope.launch { runCatching { phoneNotificationsSettings() } }
+                }
             }
             // A custom-voice card ended, a voice was deleted, the voice went
             // back to the built-in one, or the better voice went off
@@ -1297,7 +1422,29 @@ object JarvisRuntime {
                 )
                 _steps.update { com.jarvis.client.net.Steps.append(it, line) }
             }
+            // A serious moment starts or ends (section 38.1): one boolean,
+            // never a word. A second true while one is open just restarts
+            // the safety net.
+            "wellbeing" -> {
+                // A JSON true or false only - never the string "true", as
+                // the desktop (typeof ... === "boolean").
+                val serious = ((event.data as? JsonObject)?.get("serious") as? JsonPrimitive)
+                    ?.takeIf { !it.isString }?.content?.toBooleanStrictOrNull()
+                if (serious != null) onSerious(serious)
+            }
             else -> Log.d(TAG, "unhandled event kind '${event.kind}'")
+        }
+    }
+
+    private fun onSerious(serious: Boolean) {
+        seriousNet?.cancel()
+        seriousNet = null
+        _faceSerious.value = serious
+        if (serious) {
+            seriousNet = scope.launch {
+                delay(SERIOUS_NET_MS)
+                _faceSerious.value = false
+            }
         }
     }
 
@@ -1310,6 +1457,11 @@ object JarvisRuntime {
         refreshSecondCard()
         // And one more, so chat can say where a `#log` line will be filed.
         noteTargets()
+        // The "read phone notifications" switch, so a change made on the PC
+        // (or a card approved there) reaches this phone on reconnect, not
+        // only when its settings page opens (audit A2). Its own failure,
+        // including a PC without the route, changes nothing.
+        runCatching { phoneNotificationsSettings() }
     }
 
     suspend fun refreshStatus() {
@@ -1331,13 +1483,34 @@ object JarvisRuntime {
     /**
      * Re-reads the model list, on a backend that has one. On any other it is
      * cleared, so the picker hides rather than showing a stale list.
+     *
+     * A live success also writes [modelsCache] to disk
+     * (`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`), so the next cold start -
+     * or the very next failure - has something to replay. A failure clears
+     * [models] rather than leaving the last good answer sitting there
+     * unlabelled: `BrainScreen.kt`'s `ModelsPlate` reads [models] together
+     * with [modelsCache] through [com.jarvis.client.net.modelsView], and
+     * that function's whole contract is that a null [models] means "fall
+     * back to the cache, and say plainly it is old" - a stale value left in
+     * [models] itself would draw as though it were still live. The on-disk
+     * cache is never touched by a failure either way: only a fresh success
+     * is ever worth keeping, never re-read specially, per the design doc's
+     * "never fetched specially" rule.
      */
     suspend fun refreshModels() {
         if (version.value?.can("models") != true) {
             _models.value = null
             return
         }
-        api.models().onOk { _models.value = it }
+        when (val result = api.models()) {
+            is ApiResult.Ok -> {
+                _models.value = result.value
+                val cached = CachedModels.from(result.value, System.currentTimeMillis())
+                modelsCacheStore.save(cached)
+                _modelsCache.value = cached
+            }
+            is ApiResult.Failed -> _models.value = null
+        }
     }
 
     /**
@@ -1511,6 +1684,21 @@ object JarvisRuntime {
         val result = api.setSecondCard(feature, enabled)
         // The card should appear in this phone's approvals too.
         if (enabled && result is ApiResult.Ok) refreshPending()
+        refreshSecondCard()
+        return SecondCard.replyLine(result)
+    }
+
+    /**
+     * Moving one of the second card's own switches onto a third, capable
+     * graphics card, or moving it back off (2026-09-28). `assign` a feature
+     * id raises one approval card (the card should appear in this phone's
+     * approvals too, the same as [setSecondCard]'s own ON); `assign = null`
+     * unassigns at once.
+     */
+    suspend fun setThirdCard(assign: String?): String? {
+        actionBlocker()?.let { return it }
+        val result = api.setThirdCard(assign)
+        if (assign != null && result is ApiResult.Ok) refreshPending()
         refreshSecondCard()
         return SecondCard.replyLine(result)
     }
@@ -1901,6 +2089,49 @@ object JarvisRuntime {
         return com.jarvis.client.net.Manner.humorReplyLine(api.mannerPost(body), on)
     }
 
+    // ------------------------------------------ sun, moon and weather ----
+
+    /**
+     * `GET /api/sky` (the owner's decisions of 2026-09-28). A good answer is
+     * also kept for the faces ([com.jarvis.client.face.SkyNow]) and in this
+     * phone's own settings - only the rounded position and the weather
+     * numbers, never the town's name - so the sky keeps moving while the PC
+     * cannot be reached. An older PC means nothing is drawn.
+     */
+    suspend fun sky(): ApiResult<JsonObject> {
+        val r = api.sky()
+        when (r) {
+            is ApiResult.Ok -> com.jarvis.client.net.SkySettings.parse(r.value)?.let { keepSky(it) }
+            is ApiResult.Failed -> if (com.jarvis.client.net.SkySettings.missing(r.error)) keepSky(null)
+        }
+        return r
+    }
+
+    private fun keepSky(v: com.jarvis.client.net.SkySettings.View?) {
+        val s = com.jarvis.client.net.SkySettings.storedOf(v)
+        com.jarvis.client.face.SkyNow.stored = s
+        runCatching {
+            appContext?.getSharedPreferences(SKY_PREFS, Context.MODE_PRIVATE)?.edit()
+                ?.putString(SKY_KEY, com.jarvis.client.net.SkySettings.encode(s))?.apply()
+        }
+    }
+
+    /**
+     * ONE sky change ([com.jarvis.client.net.SkySettings]'s bodies: show on or
+     * off, forget the town, a weather source). Adding something is held on a
+     * stale link ([actionBlocker], rule 4); hiding, forgetting and "off" never
+     * are - they only make Jarvis do less. Open-Meteo ON approves nothing
+     * here: the PC raises ONE approval card.
+     */
+    suspend fun setSky(body: String): String {
+        if (com.jarvis.client.net.SkySettings.adds(body)) actionBlocker()?.let { return it }
+        val r = api.skyPost(body)
+        if (r is ApiResult.Ok) {
+            (r.value["view"] as? JsonObject)?.let { com.jarvis.client.net.SkySettings.parse(it) }?.let { keepSky(it) }
+        }
+        return com.jarvis.client.net.SkySettings.replyLine(r)
+    }
+
     /** Re-reads `/api/deep`. Starts nothing on the PC. */
     suspend fun refreshDeep() {
         _deep.value = BigModel.deepReadOf(api.deep())
@@ -2244,6 +2475,29 @@ object JarvisRuntime {
     suspend fun setVoiceFace(on: Boolean): CustomVoices.Answer? {
         actionBlocker()?.let { _customVoiceNote.value = it; return null }
         return postCustomVoice(CustomVoices.FACE_PATH, CustomVoices.faceBody(on))
+    }
+
+    /**
+     * The one-time "The panda has its own voice. Use it?" (owner,
+     * 2026-09-28): [use] true is "Use it", false "Keep my voice"; the PC
+     * remembers the answer per face. Same shape as [setVoiceFace]: no card,
+     * held on a stale link (rule 4). Re-reads the voices afterwards, so the
+     * question goes away and the switch shows its new state.
+     */
+    suspend fun answerFaceVoiceOffer(face: String, use: Boolean): CustomVoices.Answer? {
+        actionBlocker()?.let { _customVoiceNote.value = it; return null }
+        return postCustomVoice(CustomVoices.FACE_OFFER_PATH, CustomVoices.faceOfferBody(face, use))
+    }
+
+    /**
+     * One animal's own voice, pitch and pace, or "Reset to its own voice" -
+     * [json] is [CustomVoices.animalBody] or [CustomVoices.animalResetBody].
+     * Same shape as [setVoiceFace]: no card either way, held on a stale link
+     * (rule 4). ("Try it" changes nothing: VoiceSession.tryAnimalVoice.)
+     */
+    suspend fun setVoiceAnimal(json: String): CustomVoices.Answer? {
+        actionBlocker()?.let { _customVoiceNote.value = it; return null }
+        return postCustomVoice(CustomVoices.ANIMAL_PATH, json)
     }
 
     private val _customVoiceNote = MutableStateFlow<String?>(null)
@@ -3336,6 +3590,125 @@ object JarvisRuntime {
         }
     }
 
+    /**
+     * Read by [com.jarvis.client.service.PhoneNotificationListenerService]
+     * to decide whether to store anything at all - the cached last-known
+     * answer from the PC ([ClientSettings.phoneNotifications]), or false
+     * (read nothing - the safe direction) if [settings] has not been set
+     * up yet.
+     */
+    fun phoneNotificationsAllowed(): Boolean =
+        if (::settings.isInitialized) settings.phoneNotifications.value else false
+
+    @Volatile private var phoneNotificationsCheckedAt = 0L
+
+    /**
+     * Called by the listener for a notification that passed every gate:
+     * asks the PC for the switch again first (at most once every
+     * [PHONE_NOTIFICATIONS_RECHECK_MS]), then runs [store] only if it is
+     * still on. So turning it off on the PC stops capture at the next
+     * notification, not only once this phone's settings page is opened
+     * (audit 06-decisions V3). With no link the last answer stands, as
+     * [phoneNotificationsSettings] already says.
+     */
+    fun storeIfPhoneNotificationsStillOn(store: () -> Unit) {
+        if (!started) return
+        scope.launch {
+            val now = System.currentTimeMillis()
+            if (isPaired() && now - phoneNotificationsCheckedAt >= PHONE_NOTIFICATIONS_RECHECK_MS) {
+                phoneNotificationsCheckedAt = now
+                runCatching { phoneNotificationsSettings() }
+            }
+            if (phoneNotificationsAllowed()) kotlinx.coroutines.withContext(Dispatchers.IO) { store() }
+        }
+    }
+
+    // -------------------------------------------- reading phone notifications ----
+    // docs/JARVIS-API.md §61; see [com.jarvis.client.net.PhoneNotifications]
+    // and ui/screens/PhoneNotificationsPlate.kt. OFF by default, ON is one
+    // approval card. Every successful read or write updates
+    // [ClientSettings]'s cache, which the listener service reads - the only
+    // reason this route is read at all off the settings screen.
+
+    // -------------------------------------------------- pairing and devices ----
+    // docs/PAIRING-DESIGN.md: QR-code pairing (net/Pairing.kt,
+    // net/PairingFlow.kt) and Settings -> Devices (net/Devices.kt,
+    // ui/screens/DevicesPlate.kt).
+
+    /**
+     * The one pairing attempt, for the whole process - so turning the phone
+     * does not drop it. Its secrets live in memory only (never saved state).
+     */
+    val pairing: com.jarvis.client.net.PairingFlow by lazy {
+        com.jarvis.client.net.PairingFlow(
+            scope = scope,
+            transport = object : com.jarvis.client.net.PairTransport {
+                override suspend fun post(base: String, path: String, json: String) = api.pairPost(base, path, json)
+            },
+            wordList = { appContext?.let { com.jarvis.client.data.PairWords.load(it) } },
+        )
+    }
+
+    /** `GET /api/devices`. A read: not held on a stale link. */
+    suspend fun devices(): ApiResult<JsonObject> = api.devices()
+
+    /**
+     * Remove ONE device (design §6.4). Immediate and never held on a stale
+     * link: it only takes access away, like Forget. @return the sentence to
+     * show, and whether the device removed was this phone itself.
+     */
+    suspend fun removeDevice(device: com.jarvis.client.net.Devices.Device): Pair<String, Boolean> =
+        when (val r = api.devicesPost(com.jarvis.client.net.Devices.REMOVE_PATH, com.jarvis.client.net.Devices.removeBody(device.id))) {
+            is ApiResult.Ok -> {
+                val (code, body) = r.value
+                val self = code == 200 && (com.jarvis.client.net.Devices.removedThisPhone(body) || device.thisDevice)
+                com.jarvis.client.net.Devices.removeSaid(code, body, device.name) to self
+            }
+            is ApiResult.Failed -> ("Not removed. " + describe(r.error)) to false
+        }
+
+    /** "Retire for other devices" - stricter, so immediate (design §6.4). @return the sentence to show. */
+    suspend fun retireSharedKey(): String =
+        when (val r = api.devicesPost(com.jarvis.client.net.Devices.SHARED_PATH, com.jarvis.client.net.Devices.RETIRE_BODY)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Devices.retireSaid(r.value.first, r.value.second)
+            is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
+
+    /**
+     * `GET /api/notifications/phone`. Updates the cache on success; leaves
+     * it alone on failure (a stale cache is never worse than no cache, and
+     * an app briefly offline should not stop reading notifications it was
+     * already allowed to read).
+     */
+    suspend fun phoneNotificationsSettings(): ApiResult<JsonObject> {
+        val r = api.phoneNotificationsSettings()
+        if (r is ApiResult.Ok) {
+            com.jarvis.client.net.PhoneNotifications.enabled(r.value)?.let { settings.setPhoneNotifications(it) }
+        }
+        return r
+    }
+
+    /**
+     * The switch. ON is held on a stale link (rule 4) and raises an
+     * approval card on the PC; OFF is never held. @return the sentence to
+     * show under the switch.
+     */
+    suspend fun setPhoneNotifications(on: Boolean): String {
+        if (on) actionBlocker()?.let { return it }
+        return when (val r = writeNoticingCards { api.setPhoneNotifications(on) }) {
+            is ApiResult.Ok -> {
+                // Only a real Done (not Waiting) means the PC actually
+                // changed it - an ON that is still waiting for its card
+                // must not flip the cache early.
+                if (r.value is com.jarvis.client.net.DesktopWrite.Outcome.Done) {
+                    settings.setPhoneNotifications(on)
+                }
+                com.jarvis.client.net.PhoneNotifications.said(on, r.value)
+            }
+            is ApiResult.Failed -> "Not changed. " + describe(r.error)
+        }
+    }
+
     // ----------------------------------------------- automatic learning ----
     // docs/JARVIS-API.md section 19 (2026-09-24) - see
     // [com.jarvis.client.net.AutoLearn] and ui/screens/AutoLearnPlate.kt.
@@ -3796,6 +4169,130 @@ object JarvisRuntime {
             }
             is ApiResult.Failed -> false to ("Not set up. " + describe(r.error))
         }
+    }
+
+    /**
+     * ONE scheduler job by id - the same read a notification uses to get its
+     * words ([com.jarvis.client.net.Schedule.parseOne]). Goals uses this to
+     * re-check its own weekly check-in while its card might still be
+     * waiting: Goals has no route of its own that hands that state out
+     * again once the [acceptGoal] answer that first carried it is gone (see
+     * [com.jarvis.client.net.Goals]'s own doc comment). A read: never held.
+     */
+    suspend fun scheduleJob(id: String): com.jarvis.client.net.Schedule.Job? {
+        if (!com.jarvis.client.net.Schedule.validId(id)) return null
+        return when (val r = api.scheduleJob(id)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Schedule.parseOne(r.value)
+            is ApiResult.Failed -> null
+        }
+    }
+
+    // -------------------------------------------------------------- Goals ----
+    // "Goals: a plan the owner edits, one card per acting step" (the
+    // owner's "build it now", 2026-09-27) - see [com.jarvis.client.net.Goals]
+    // and ui/screens/GoalsPlate.kt.
+
+    private val _goalsTick = MutableStateFlow(0)
+
+    /**
+     * Goes up by one after every change made from this phone, so Brain's
+     * "Goals" reads itself again - the same shape as [sharedTick]: there is
+     * no push event for a goal changing, so the other app's own edit shows
+     * on the next read, Refresh.
+     */
+    val goalsTick: StateFlow<Int> = _goalsTick.asStateFlow()
+
+    /** `GET /api/goals`. A read: never held. */
+    suspend fun goals(): ApiResult<JsonObject> = api.goals()
+
+    /**
+     * A new draft, in the owner's own words - with their own plan once they
+     * have typed one (or asked Jarvis to suggest one first, in ordinary
+     * chat, and pasted it in). No card: a draft is content, not action,
+     * exactly like an email draft. Held on a stale link (rule 4), like
+     * every change. @return whether it was started, the new goal if so, and
+     * the sentence to show.
+     */
+    suspend fun createGoal(
+        text: String,
+        plan: List<com.jarvis.client.net.Goals.Step>? = null,
+    ): Triple<Boolean, com.jarvis.client.net.Goals.Goal?, String> {
+        actionBlocker()?.let { return Triple(false, null, it) }
+        val result = when (val r = api.goalsWrite(com.jarvis.client.net.Goals.PATH,
+            com.jarvis.client.net.Goals.createBody(text, plan))) {
+            is ApiResult.Ok -> com.jarvis.client.net.Goals.createdSaid(r.value)
+            is ApiResult.Failed -> Triple(false, null, "Not started. " + describe(r.error))
+        }
+        if (result.first) _goalsTick.update { n -> n + 1 }
+        return result
+    }
+
+    /**
+     * Keeps the owner's edited plan (or the draft exactly as it stood) and
+     * starts the weekly check-in - the PC's ONE approval card, the same
+     * mechanism a repeating reminder already raises. Held on a stale link;
+     * the freshly-raised card is read into [pending] at once, rather than
+     * waiting for the next `pending` event, so the Approvals list shows it
+     * without a delay. @return whether it was accepted, the accepted goal
+     * with its check-in job if so, and the sentence to show.
+     */
+    suspend fun acceptGoal(
+        id: String,
+        plan: List<com.jarvis.client.net.Goals.Step>? = null,
+    ): Triple<Boolean, com.jarvis.client.net.Goals.Accepted?, String> {
+        actionBlocker()?.let { return Triple(false, null, it) }
+        if (!com.jarvis.client.net.Goals.validId(id)) return Triple(false, null, "That is not one of your goals.")
+        val result = when (val r = api.goalsWrite("/api/goals/$id/accept",
+            com.jarvis.client.net.Goals.acceptBody(plan))) {
+            is ApiResult.Ok -> com.jarvis.client.net.Goals.acceptedSaid(r.value)
+            is ApiResult.Failed -> Triple(false, null, "Not accepted. " + describe(r.error))
+        }
+        if (result.first) {
+            _goalsTick.update { n -> n + 1 }
+            refreshPending()
+        }
+        return result
+    }
+
+    /**
+     * Marks one step of an active goal done or not - no card, the same
+     * shape as ticking off a to-do item. Held on a stale link. @return
+     * whether it changed, the updated goal if so, and the sentence to show.
+     */
+    suspend fun setGoalStep(
+        id: String,
+        index: Int,
+        done: Boolean,
+    ): Triple<Boolean, com.jarvis.client.net.Goals.Goal?, String> {
+        actionBlocker()?.let { return Triple(false, null, it) }
+        if (!com.jarvis.client.net.Goals.validId(id)) return Triple(false, null, "That is not one of your goals.")
+        val result = when (val r = api.goalsWrite("/api/goals/$id/step",
+            com.jarvis.client.net.Goals.stepBody(index, done))) {
+            is ApiResult.Ok -> com.jarvis.client.net.Goals.changedSaid(r.value)
+            is ApiResult.Failed -> Triple(false, null, "Not changed. " + describe(r.error))
+        }
+        if (result.first) _goalsTick.update { n -> n + 1 }
+        return result
+    }
+
+    /**
+     * Stops tracking a goal and deletes its check-in job. No card,
+     * immediate - the same rule every "stop tracking this" control in this
+     * project follows - and no confirm dialog: the backend's own design
+     * requires stopping to be one tap. Held on a stale link, like every
+     * change. @return whether it stopped, the stopped goal if so, and the
+     * sentence to show.
+     */
+    suspend fun stopGoal(id: String): Triple<Boolean, com.jarvis.client.net.Goals.Goal?, String> {
+        actionBlocker()?.let { return Triple(false, null, it) }
+        if (!com.jarvis.client.net.Goals.validId(id)) return Triple(false, null, "That is not one of your goals.")
+        val result = when (val r = api.goalsWrite("/api/goals/$id/stop",
+            com.jarvis.client.net.Goals.STOP_BODY)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Goals.changedSaid(r.value, doneWord = "Stopped.")
+            is ApiResult.Failed -> Triple(false, null, "Not changed. " + describe(r.error))
+        }
+        if (result.first) _goalsTick.update { n -> n + 1 }
+        return result
     }
 
     /**
@@ -4574,6 +5071,9 @@ object JarvisRuntime {
         "Open Jarvis, then start Live from the Live screen."
     private const val LIVE_NOT_ALLOWED_SAID = "Open Jarvis to start Live."
     private const val LIVE_WATCH_MS = 1000L
+
+    /** How often a captured notification asks the PC for its switch again, at most. */
+    private const val PHONE_NOTIFICATIONS_RECHECK_MS = 15_000L
     private const val LIVE_WATCH_SLOW_MS = 5000L
     private const val LIVE_WATCH_FAILURES = 10
     private const val LIVE_WATCH_GIVE_UP = 10 + 120 // about ten more minutes, every 5 s
@@ -5325,7 +5825,7 @@ object JarvisRuntime {
     }
 
     // -------------------------------------------------------- projects ----
-    // docs/JARVIS-API.md section 61 (the owner's decision of 2026-09-28) -
+    // docs/JARVIS-API.md section 88 (the owner's decision of 2026-09-28) -
     // see [com.jarvis.client.net.Projects] and ui/screens/ProjectsPlate.kt.
     // The phone reads everything from the PC and keeps none of it.
 
@@ -5848,34 +6348,42 @@ object JarvisRuntime {
      */
     fun faceState(): FaceState = _face.value
 
-    private fun resolveFace(nowMs: Long = System.currentTimeMillis()): FaceState {
-        if (_link.value != LinkState.CONNECTED) {
-            // A dropped radio on a train is not Jarvis being broken, and the
-            // spec's error face is a *reversed* motion — a deliberately alarming
-            // thing to show for a three-second blip between two cell towers.
-            // Inside the grace window the face holds whatever it was doing; the
-            // link bar already says "Reconnecting" in words, which is the honest
-            // place for that news.
-            //
-            // Time since the link dropped, not which enum we are in: the stream
-            // reports OFFLINE from the second retry onward, and it is still
-            // retrying, so branching on the enum would put the error face up
-            // about a second after the first failure.
+    /**
+     * Works out the face and whether Jarvis is out of reach, and publishes
+     * both. @return how long until that answer changes by itself (the rest
+     * of the reconnect grace), or 0.
+     *
+     * A cut link - down, or up but stale - shows the STANDBY pose with the
+     * offline ring once it has lasted [com.jarvis.client.face.FaceLink.GRACE_MS]
+     * (the owner's decision, 2026-09-28; the rules and the reasons are
+     * FaceLink's). It used to go to the reversed ERROR motion after the
+     * grace and to BANKED after three minutes - which TalkBack read as
+     * "notes saved for later", about a PC nobody could hear.
+     *
+     * The grace itself is kept: a dropped radio on a train is not Jarvis
+     * going away, and inside it the face holds whatever it was doing while
+     * the link bar says "Reconnecting" in words - except an approval face,
+     * which goes at once, since its buttons are already blocked (rule 4).
+     * Timed from when the link dropped, not from which enum it is in: the
+     * stream reports OFFLINE from the second retry onward and is still
+     * retrying.
+     */
+    private fun publishFace(nowMs: Long = System.currentTimeMillis()): Long {
+        val cut = _link.value != LinkState.CONNECTED || _stale.value
+        if (!cut) {
+            faceCutSince = 0L
+        } else if (faceCutSince == 0L) {
             val down = linkDownSince
-            if (down != 0L) {
-                val silentFor = nowMs - down
-                // Long enough that this is almost certainly not a blip - the
-                // laptop lid is closed, or the machine actually went to sleep.
-                // The spec's error face is a deliberately alarming reversed
-                // motion, and a sleeping machine is not a broken one. BANKED
-                // already exists for exactly "nothing is wrong, nothing needs
-                // you right now" - reused rather than inventing a state the
-                // desktop would also need to agree on, since this is a purely
-                // local, phone-side judgement call about how long is "a while".
-                if (silentFor > LONG_SILENCE_MS) return FaceState.BANKED
-                if (silentFor > RECONNECT_GRACE_MS) return FaceState.ERROR
-            }
+            faceCutSince = if (down != 0L && down < nowMs) down else nowMs
         }
+        val shown = com.jarvis.client.face.FaceLink.shown(resolveFace(), faceCutSince, nowMs)
+        _faceOffline.value = shown.offline
+        _face.value = shown.state
+        return if (shown.offline) 0L else com.jarvis.client.face.FaceLink.graceLeftMs(faceCutSince, nowMs)
+    }
+
+    /** The face on a healthy link; [publishFace] decides what a cut one shows. */
+    private fun resolveFace(): FaceState {
         // This device's own microphone is a fact only this device knows: the
         // server has no idea the mic is open until the utterance arrives, so
         // there is nothing to re-derive and nothing to disagree with. The
@@ -5941,24 +6449,8 @@ object JarvisRuntime {
     /** A status line, not a log: anything longer is cut before it is shown. */
     private const val ACTIVITY_DETAIL_MAX = 200
 
-    /**
-     * How long a reconnect may run before the face admits something is wrong.
-     * Long enough to cover a handover between cell towers or a screen-off doze
-     * wakeup; short enough that a desktop that has actually gone away does not
-     * keep pretending to think.
-     */
-    private const val RECONNECT_GRACE_MS = 12_000L
-
     /** When to re-read the second-card switches after a decision: see [recheckSecondCardAfterDecision]. */
     private val SECOND_CARD_RECHECK_MS = longArrayOf(0L, 1_500L, 5_000L)
-
-    /**
-     * Past this, "reconnecting" stops being the honest word for it. Short
-     * enough that checking the phone a few minutes after the desktop actually
-     * went to sleep shows calm rather than alarm; long enough that no real
-     * network blip - a train, a lift, a bad patch of wifi - ever reaches it.
-     */
-    private const val LONG_SILENCE_MS = 180_000L
 
     /** When the link was last lost, or 0 while it is up. */
     @Volatile private var linkDownSince = 0L

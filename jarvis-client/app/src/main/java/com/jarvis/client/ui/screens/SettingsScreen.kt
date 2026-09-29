@@ -13,6 +13,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.LinkState
@@ -83,7 +85,9 @@ private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "folders" to 9,
     "backup" to 10,
     "watch-notify" to 11,
-    "quick-tiles" to 12,
+    "phone-notify" to 12,
+    "devices" to 13,
+    "quick-tiles" to 14,
 )
 
 /**
@@ -133,6 +137,15 @@ fun SettingsScreen(
     /** "Quick Settings tiles" - saved on this phone only, like Floating Jarvis. */
     quickTiles: List<TileAction?> = List(QuickTiles.SLOTS) { null },
     onQuickTileChange: (slot: Int, action: TileAction?) -> Unit = { _, _ -> },
+    /**
+     * "Reading phone notifications" (docs/JARVIS-API.md §61): whether
+     * Android's own "Notification access" is currently granted
+     * (`NotificationManagerCompat.getEnabledListenerPackages`, re-read on
+     * resume - the same `tick` pattern [overlayGranted] already uses), and
+     * the button that opens that OS screen.
+     */
+    notificationAccessGranted: Boolean = false,
+    onOpenNotificationAccess: () -> Unit = {},
     /**
      * "Open <a settings section>" by voice or chat
      * (`jarvis_settings_registry.py`, docs/JARVIS-API.md section 58.1): the
@@ -286,6 +299,33 @@ fun SettingsScreen(
             item(key = "folders") { FoldersSection() }
             item(key = "backup") { BackupSection() }
             item(key = "watch-notify") { WatchNotifySection(canAct = canAct) }
+            item(key = "phone-notify") {
+                PhoneNotificationsSection(
+                    canAct = canAct,
+                    notificationAccessGranted = notificationAccessGranted,
+                    onOpenNotificationAccess = onOpenNotificationAccess,
+                )
+            }
+
+            // Every device with its own key (docs/PAIRING-DESIGN.md section 7.2),
+            // shown only when the PC reports pairing (section 5.5).
+            item(key = "devices") {
+                val version by com.jarvis.client.JarvisRuntime.version.collectAsState()
+                if (version?.can("pairing") == true) {
+                    DevicesSection()
+                } else {
+                    Section("Devices") {
+                        Plate {
+                            Text(
+                                com.jarvis.client.net.Devices.MISSING,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = chrome.textLo,
+                            )
+                        }
+                    }
+                }
+            }
+
             item(key = "quick-tiles") {
                 QuickTilesSection(tiles = quickTiles, onChange = onQuickTileChange)
             }

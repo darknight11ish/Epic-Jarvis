@@ -1,5 +1,5 @@
 """jarvis_chatbot_routes.py - the routes both apps use to have Jarvis talk to
-an AI chatbot for the owner (docs/JARVIS-API.md section 60; step 3 of the
+an AI chatbot for the owner (docs/JARVIS-API.md section 87; step 3 of the
 chatbot driver's build, docs/CHATBOT-DRIVER-DESIGN.md section 8).
 
 NEW MODULE, shipped whole; chatbot-routes.patch adds one install() call to
@@ -25,7 +25,7 @@ This file only turns HTTP into those calls:
                                       GET (`limits`).
 
 "Ask several and compare" (jarvis_chatbot_compare.py, the owner's decision
-of 2026-09-28; JARVIS-API section 60.7):
+of 2026-09-28; JARVIS-API section 87.7):
 
     GET  /api/chatbot/status          also carries `compare`: the latest
          (?compare=)                  comparison still going, or the one
@@ -71,7 +71,7 @@ driver, reached through the same routes file:
 
 "Solve it here" - a captcha or sign-in page handed to the owner's phone
 (jarvis_handoff.py, the owner's decision of 2026-09-28; JARVIS-API section
-60.8). Every rule is jarvis_handoff's; these only turn HTTP into its calls:
+87.8). Every rule is jarvis_handoff's; these only turn HTTP into its calls:
 
     GET  /api/chatbot/status          also carries `handoff`: is a page
                                       waiting for the owner (a conversation

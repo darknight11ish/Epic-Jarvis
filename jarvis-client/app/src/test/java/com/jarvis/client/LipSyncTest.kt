@@ -23,6 +23,7 @@ import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import kotlin.math.abs
+import kotlin.math.max
 import kotlin.math.sin
 
 /**
@@ -128,7 +129,7 @@ class LipSyncTest {
 
     @Test
     fun `sample reads LEAD_S ahead and interpolates between frames`() {
-        val n = 20
+        val n = 40
         val ramp = FloatArray(n) { it / (n - 1f) }
         val track = LipSync.Track(LipSync.FPS, ramp, ramp, FloatArray(n), FloatArray(n))
         val out = FloatArray(4)
@@ -144,6 +145,34 @@ class LipSyncTest {
         assertEquals(0.5f * 7.5f / (n - 1f), out[1], 1e-4f)
         assertTrue(LipSync.sample(track, 0.1f, out))
         assertEquals("fully in from ONSET_S on", out[0], out[1], 1e-6f)
+        // ...and faded out over the track's last ONSET_S (the level is not):
+        // a clip whose sound runs to its end must not snap shut in one frame.
+        val lastT = (n - 1) / 100f - LipSync.LEAD_S
+        assertTrue(LipSync.sample(track, lastT - 0.025f, out))
+        assertEquals("the level is not faded", (n - 3.5f) / (n - 1f), out[0], 1e-4f)
+        assertEquals("half faded out 25 ms before the end", 0.5f * out[0], out[1], 1e-4f)
+        assertTrue(LipSync.sample(track, lastT - 0.0001f, out))
+        assertTrue("shut at the last frame: ${out[1]}", out[1] < 0.01f)
+        assertTrue(LipSync.sample(track, lastT - 0.06f, out))
+        assertEquals("not faded before the last ONSET_S", out[0], out[1], 1e-6f)
+    }
+
+    @Test
+    fun `a sample that is not a number counts as silence, never a NaN mouth`() {
+        val rate = 24_000
+        val clean = FloatArray(rate) { i -> if (i in 6_000 until 18_000) (0.4 * sin(2 * Math.PI * 200 * i / rate)).toFloat() else 0f }
+        val want = LipSync.analyse(clean, rate)
+        for (bad in listOf(Float.NaN, Float.POSITIVE_INFINITY, Float.NEGATIVE_INFINITY)) {
+            val dirty = clean.copyOf()
+            dirty[3_000] = bad
+            val got = LipSync.analyse(dirty, rate)
+            for ((a, b) in listOf(want.level to got.level, want.open to got.open, want.wide to got.wide, want.round to got.round)) {
+                assertArrayEquals("$bad at a silent sample is silence", a, b, 0f)
+            }
+            dirty[12_000] = bad
+            val mid = LipSync.analyse(dirty, rate)
+            for (ch in listOf(mid.level, mid.open, mid.wide, mid.round)) for (v in ch) assertTrue("$bad in the sound gave $v", v in 0f..1f)
+        }
     }
 
     @Test
@@ -162,6 +191,17 @@ class LipSyncTest {
         assertEquals(1, LipSync.analyse(ShortArray(441), 44_100).n)
         assertEquals(2, LipSync.analyse(ShortArray(442), 44_100).n)
         assertEquals(2, LipSync.analyse(ShortArray(320), 16_000).n)
+        // A voiced sound at a rate no WAV here has (the voice's pitch is only
+        // looked for from 4 kHz up): a track in range, never an exception.
+        for (rate in listOf(1, 100, 1000, 3999, 4000, 192_000)) {
+            val len = max(rate, 400)
+            val buzz = ShortArray(len) { i ->
+                val t = i.toDouble() / rate
+                (8000 * (sin(2 * Math.PI * 150 * t) + 0.5 * sin(2 * Math.PI * 900 * t))).toInt().toShort()
+            }
+            val tr = LipSync.analyse(buzz, rate)
+            for (ch in listOf(tr.level, tr.open, tr.wide, tr.round)) for (v in ch) assertTrue("$rate Hz gave $v", v in 0f..1f)
+        }
     }
 
     @Test

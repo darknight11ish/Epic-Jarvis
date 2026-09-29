@@ -15,6 +15,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import okhttp3.Call
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -241,6 +242,25 @@ class JarvisApi(
         // profile, would see the token in the clear. The desktop's clients
         // use no proxy either (`.no_proxy()`).
         .proxy(java.net.Proxy.NO_PROXY)
+        // Why a key was refused (docs/PAIRING-DESIGN.md §5.3): a 401 may
+        // carry `"key": "device_removed"` or `"shared_retired"`, which
+        // [KeyRefusal] keeps - the reason word only, never the body - so the
+        // places that already say "your PC did not accept this phone's key"
+        // can say which. Every request made WITH a key that is answered
+        // without a 401 clears it. [streamClient] and [shortCall] inherit
+        // this, so the event stream's refusal is read too. The two no-key
+        // pairing routes carry no key and are left alone.
+        .addInterceptor { chain ->
+            val response = chain.proceed(chain.request())
+            if (chain.request().header(TOKEN_HEADER) != null) {
+                if (response.code == 401) {
+                    KeyRefusal.note(runCatching { response.peekBody(2_048L).string() }.getOrNull())
+                } else {
+                    KeyRefusal.clear()
+                }
+            }
+            response
+        }
         .build()
 
     /**
@@ -573,6 +593,77 @@ class JarvisApi(
     suspend fun setWatchNotify(on: Boolean): ApiResult<DesktopWrite.Outcome> =
         postWrite(WatchNotify.PATH, WatchNotify.enabledBody(on))
 
+    // ------------------------------------------------- pairing and devices ----
+    // docs/PAIRING-DESIGN.md §6.2 and §6.4.
+
+    /**
+     * One of the two pairing routes that take NO key (`/api/pair/claim`,
+     * `/api/pair/collect`): the phone has none yet, and the sums in the body
+     * are what prove it may ask. Sent to [base] - the PC named by the QR code
+     * or the typed name, never the saved address - and deliberately not
+     * [authed]: no `X-Jarvis-Token`. It still sends `X-Jarvis-Client: hud`,
+     * which the PC's origin check requires of every request. Status 0 means
+     * nothing answered. Nothing about the request or its answer is logged.
+     */
+    suspend fun pairPost(base: String, path: String, json: String): Pair<Int, JsonObject?> =
+        withContext(Dispatchers.IO) {
+            if (path != Pairing.CLAIM_PATH && path != Pairing.COLLECT_PATH) return@withContext 0 to null
+            val target = runCatching { (base.trimEnd('/') + path).toHttpUrlOrNull() }.getOrNull()
+                ?: return@withContext 0 to null
+            val req = Request.Builder()
+                .url(target)
+                .post(json.toRequestBody("application/json".toMediaType()))
+                .header(CLIENT_HEADER, CLIENT_VALUE)
+                .header("Accept", "application/json")
+                .build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    resp.code to runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                }
+            }.getOrElse { 0 to null }
+        }
+
+    /** `GET /api/devices`: every device with its own key, and the old shared key's state. */
+    suspend fun devices(): ApiResult<JsonObject> = probe(Devices.PATH)
+
+    /**
+     * `POST /api/devices/remove` or `/api/devices/shared`: the status and the
+     * body come back together ([Devices.removeSaid], [Devices.retireSaid]),
+     * so the PC's reason is shown. A 401 is a refused key.
+     */
+    suspend fun devicesPost(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            if (path != Devices.REMOVE_PATH && path != Devices.SHARED_PATH) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a devices route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    if (resp.code == 401) ApiResult.Failed(ApiError.BadToken) else ApiResult.Ok(resp.code to obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    // ------------------------------------------------- reading phone notifications ----
+    // docs/JARVIS-API.md §61; see [PhoneNotifications] for the shapes and
+    // words. This switch is decided on the PC, the same as every other one
+    // here, even though only this phone ever acts on it (ARCHITECTURE §8).
+
+    /** `GET /api/notifications/phone`: `{"enabled", "waiting", "last", "why"}`. */
+    suspend fun phoneNotificationsSettings(): ApiResult<JsonObject> = probe(PhoneNotifications.PATH)
+
+    /**
+     * The switch. ON answers 202 waiting while its approval card is up; OFF
+     * is immediate, and withdraws an ON card still waiting.
+     */
+    suspend fun setPhoneNotifications(on: Boolean): ApiResult<DesktopWrite.Outcome> =
+        postWrite(PhoneNotifications.PATH, PhoneNotifications.enabledBody(on))
+
     /**
      * [probe], except that a 503 keeps its body: `ApiError.Server(503, body)`
      * instead of [ApiError.NotAvailable], so the PC's own `error` ("automatic
@@ -831,6 +922,46 @@ class JarvisApi(
         }
 
     /**
+     * `GET /api/goals`: every goal, draft or active or stopped ([Goals.parse]).
+     * A 404 or 501 is a PC without Goals ([Goals.missing]). A read.
+     */
+    suspend fun goals(): ApiResult<JsonObject> = probe(Goals.PATH)
+
+    /** `GET /api/goals/<id>`: one goal ([Goals.parseOne]). A read. */
+    suspend fun goal(id: String): ApiResult<JsonObject> {
+        if (!Goals.validId(id)) return ApiResult.Failed(ApiError.Malformed("not a goal id"))
+        return probe("${Goals.PATH}/$id")
+    }
+
+    /**
+     * `POST /api/goals` (a new draft), `.../accept`, `.../step` or
+     * `.../stop`. The status and body come back whole ([Goals.Reply]), like
+     * [scheduleWrite]: a 404 that says "no such goal" and a 404 from a PC
+     * without Goals at all must read differently ([Goals.createdSaid] /
+     * [Goals.acceptedSaid] / [Goals.changedSaid]).
+     */
+    suspend fun goalsWrite(path: String, json: String): ApiResult<Goals.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Goals.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `GET /api/memory/used?ids=`: the words of the few facts an answer used
      * (its `X-Jarvis-Route` names them by id only), or that automatic
      * learning just saved (the `memory_saved` event's ids) - the owner's
@@ -922,7 +1053,7 @@ class JarvisApi(
         }
 
     /**
-     * Projects (docs/JARVIS-API.md section 61): a read (`json` null, a GET)
+     * Projects (docs/JARVIS-API.md section 88): a read (`json` null, a GET)
      * or ONE change (a POST of `json`). The path comes from [Projects] -
      * [Projects.PATH], [Projects.projectPath], [Projects.benchPath] or
      * [Projects.writePath] - and nothing outside `/api/projects` is sent.
@@ -1121,6 +1252,31 @@ class JarvisApi(
                 noAddress(),
             )
             val body = SecondCard.postBody(feature, enabled)
+                .toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    SecondCard.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * Moving one of the second card's own switches onto a third, capable
+     * graphics card, or moving it back off (2026-09-28). Assigning a
+     * feature id raises one approval card and changes nothing until it is
+     * approved; `assign = null` unassigns at once. See
+     * [SecondCard.classifyPost] for which answers come back as sentences.
+     */
+    suspend fun setThirdCard(assign: String?): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(SecondCard.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = SecondCard.postThirdBody(assign)
                 .toRequestBody("application/json".toMediaType())
             val req = Request.Builder().url(target).post(body).authed().build()
             runCatching {
@@ -1411,7 +1567,7 @@ class JarvisApi(
     }
 
     /**
-     * "Solve it here" (JARVIS-API §60.8): `POST /api/chatbot/handoff/start`,
+     * "Solve it here" (JARVIS-API §87.8): `POST /api/chatbot/handoff/start`,
      * `/input` or `/end`, with a body made by [Handoff.startBody],
      * [Handoff.tapBody] and the rest, or [Handoff.endBody]. Any other path is
      * refused here, before anything is sent. The status and body come back
@@ -1521,6 +1677,37 @@ class JarvisApi(
     suspend fun mannerPost(json: String): ApiResult<JsonObject> =
         withContext(Dispatchers.IO) {
             val target = url(Manner.PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    WebSearch.classifyPost(resp.code, obj)
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
+     * `GET /api/sky` - the sun, moon and weather behind the animal faces
+     * ([SkySettings.parse]): whether they show, the town as the PC's list
+     * names it and its position rounded to 0.1 degree, the weather now as
+     * five numbers, and the PC's own words. A read; the PC reads the weather
+     * (at most every 20 minutes) only while an app asks.
+     */
+    suspend fun sky(): ApiResult<JsonObject> = probe(SkySettings.PATH)
+
+    /**
+     * `POST /api/sky` with ONE change made by [SkySettings] (show on or off,
+     * forget the town, a weather source) - never a town: that is typed on the
+     * PC only. Open-Meteo ON approves nothing here: the PC raises ONE card.
+     */
+    suspend fun skyPost(json: String): ApiResult<JsonObject> =
+        withContext(Dispatchers.IO) {
+            val target = url(SkySettings.PATH) ?: return@withContext ApiResult.Failed(
                 noAddress(),
             )
             val body = json.toRequestBody("application/json".toMediaType())
@@ -1880,6 +2067,49 @@ class JarvisApi(
         postVoice(path, json).map { (code, body) -> CustomVoices.answer(code, body) }
 
     /**
+     * "Try it" for one animal's voice ([CustomVoices.ANIMAL_TRY_PATH]): the
+     * PC says one fixed line of its own in that voice and sends the WAV,
+     * like `/api/voice/say`. A refusal (400/503 with `error`) is the PC's
+     * own sentence; a 404 is a PC too old to have it. Nothing is logged.
+     */
+    suspend fun voiceAnimalTry(face: String): ApiResult<CustomVoices.Tried> =
+        withContext(Dispatchers.IO) {
+            val target = url(CustomVoices.ANIMAL_TRY_PATH) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = CustomVoices.animalTryBody(face).toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed()
+                .header("Accept", "audio/wav")
+                .build()
+            runCatching {
+                client.newCall(req).execute().use { resp ->
+                    val type = resp.header("Content-Type").orEmpty()
+                    when {
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.isSuccessful && type.startsWith("audio/") -> {
+                            val bytes = resp.body?.bytes()
+                            if (bytes == null || bytes.isEmpty()) {
+                                ApiResult.Ok(CustomVoices.Tried.Refused("Your PC sent no sound."))
+                            } else {
+                                ApiResult.Ok(CustomVoices.Tried.Sound(bytes))
+                            }
+                        }
+                        else -> {
+                            val text = resp.body?.string().orEmpty()
+                            val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                            val why = (obj?.get("error") as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
+                            when {
+                                resp.code == 404 && obj?.containsKey("ok") != true -> ApiResult.Failed(ApiError.NotFound)
+                                why.isNotBlank() -> ApiResult.Ok(CustomVoices.Tried.Refused(CustomVoices.sentence(why)))
+                                else -> ApiResult.Failed(ApiError.Server(resp.code, ""))
+                            }
+                        }
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * A voice POST whose refusals carry the PC's own sentence: (status,
      * body) for any answer with a JSON object in it, so a 400/409/503 with
      * `error` reaches the owner as it was written. A 404 is "this PC has no
@@ -2202,12 +2432,14 @@ class JarvisApi(
         conversationId: String? = null,
         interrupted: String? = null,
         temporary: Boolean = false,
+        /** See [ChatHistory.requestBody]'s own doc on this same parameter. */
+        cloudYes: Boolean = false,
         live: Boolean = false,
     ): Call? {
         val target = url("/api/chat") ?: return null
         val body = ChatHistory.requestBody(
             history, asking, picture, conversationId,
-            interrupted = interrupted, temporary = temporary, live = live,
+            interrupted = interrupted, temporary = temporary, cloudYes = cloudYes, live = live,
         )
             .toRequestBody("application/json".toMediaType())
         val req = Request.Builder().url(target).post(body).authed().build()

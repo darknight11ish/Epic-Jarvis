@@ -534,11 +534,65 @@ def voices_cases():
         # place both apps keep the face), its own voice stands in.
         (w.dir / "appearance.json").write_text(json.dumps({"face": "redpanda"}),
                                                encoding="utf-8")
+        # It ships OFF (the owner's 2026-09-28 decision), and each animal
+        # keeps its OWN answer to the one-time question: with the panda never
+        # answered for, face_voice.offer asks "The Red Panda has its own
+        # voice. Use it?" ("face_default_off" shows it). The owner says "Use
+        # it", as they would, which records it for the panda and turns the
+        # switch on - so the panda's own voice stands in. "Keep my voice"
+        # and an animal never answered for are further down.
+        keep(w, "face_default_off", VO.status(), statuses)
+        post("/api/voice/voices/face_offer", {"face": "redpanda", "answer": "use"})
         keep(w, "face_showing", VO.status(), statuses)
         keep(w, "face_off", post("/api/voice/voices/face", {"enabled": False}), posts)
         keep(w, "face_voice_off", VO.status(), statuses)
         keep(w, "face_on", post("/api/voice/voices/face", {"enabled": True}), posts)
         keep(w, "face_bad", post("/api/voice/voices/face", {"enabled": "yes"}), posts)
+        # Each animal's own voice, pitch and pace (2026-09-28): at once, no
+        # card either way; "Reset to its own voice"; a pitch out of range;
+        # "Try it" for a face that is not an animal (its WAV answer is
+        # bytes, not JSON, so only its refusal is kept here).
+        keep(w, "animal_set", post("/api/voice/voices/face_animal",
+                                   {"face": "redpanda", "speaker": "3", "semitones": -1.5,
+                                    "pace": "faster"}), posts)
+        keep(w, "animal_changed", VO.status(), statuses)
+        keep(w, "animal_reset", post("/api/voice/voices/face_animal",
+                                     {"face": "redpanda", "reset": True}), posts)
+        keep(w, "animal_bad", post("/api/voice/voices/face_animal",
+                                   {"face": "redpanda", "speaker": "3", "semitones": 9,
+                                    "pace": "normal"}), posts)
+        keep(w, "animal_try_bad", post("/api/voice/voices/face_animal/try", {"face": "orbit"}),
+             posts)
+        # "Try it" while another is still being made: one at a time.
+        with VO._TRY_LOCK:
+            keep(w, "animal_try_busy", post("/api/voice/voices/face_animal/try",
+                                            {"face": "redpanda"}), posts)
+
+    # Each animal keeps its own answer (the owner, 2026-09-28): the panda
+    # "Keep my voice" (the switch stays off), then the owl "Use it" (the
+    # switch turns on and the owl speaks) - the panda still keeps the normal
+    # voice ("face_kept_on"), and the monkey, never answered for, asks with
+    # the switch on and does not speak as itself ("face_unanswered_on").
+    with World("both") as w:
+        (w.dir / "appearance.json").write_text(json.dumps({"face": "redpanda"}),
+                                               encoding="utf-8")
+        keep(w, "face_offer_keep", post("/api/voice/voices/face_offer",
+                                        {"face": "redpanda", "answer": "keep"}), posts)
+        keep(w, "face_offer_answered", VO.status(), statuses)
+        keep(w, "face_offer_bad", post("/api/voice/voices/face_offer",
+                                       {"face": "redpanda", "answer": "maybe"}), posts)
+        (w.dir / "appearance.json").write_text(json.dumps({"face": "pygmyowl"}),
+                                               encoding="utf-8")
+        keep(w, "face_offer_owl", VO.status(), statuses)
+        keep(w, "face_offer_use", post("/api/voice/voices/face_offer",
+                                       {"face": "pygmyowl", "answer": "use"}), posts)
+        keep(w, "face_offer_used", VO.status(), statuses)
+        (w.dir / "appearance.json").write_text(json.dumps({"face": "redpanda"}),
+                                               encoding="utf-8")
+        keep(w, "face_kept_on", VO.status(), statuses)
+        (w.dir / "appearance.json").write_text(json.dumps({"face": "monkey"}),
+                                               encoding="utf-8")
+        keep(w, "face_unanswered_on", VO.status(), statuses)
 
     # A custom voice chosen, but ZipVoice's files are not on this PC: the
     # built-in voice speaks, and says why.

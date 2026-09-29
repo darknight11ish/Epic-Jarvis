@@ -285,6 +285,13 @@ second_card_browser_enable = "ask"
 # cards to itself). Nothing leaves this PC. Must stay "ask", the same reason
 # as above.
 second_card_combined_enable = "ask"
+# Moving one of the switches above onto a THIRD graphics card (alongside
+# the second card's own lane, never instead of it) has its own line too:
+# docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section 1.3 says which card runs
+# which feature must always be a real, named choice - never a default, and
+# never folded into second_card_enable's own tier. Must stay "ask", the
+# same reason as above.
+second_card_third_assign = "ask"
 
 # --- The wiki builder (Brain window or phone: "Add to wiki") -------------
 # Adding one document from <your vault>/Jarvis Wiki/Sources writes pages in
@@ -357,6 +364,16 @@ watch_notifications_enable = "ask"
 # and a restore refuses to go ahead. "Back up now" itself asks nothing - the
 # owner already approved the folder it writes into (change_own_config).
 restore_backup            = "ask"
+
+# --- Devices (jarvis_devices.py, docs/PAIRING-DESIGN.md, 2026-09-28) -----
+# Connecting a new phone gives it a key of its own; bringing the old shared
+# key back lets other devices use it again. Both are ONE card, always with
+# Windows Hello and always from this PC (jarvis_owner_check.PC_ONLY_ACTIONS),
+# whatever these lines say. Must stay "ask": anything else and pairing (or
+# bringing the key back) refuses to go ahead. Removing a device and retiring
+# the old shared key never ask - they only take access away.
+pair_device               = "ask"
+unretire_shared_key       = "ask"
 
 
 # ------------------------------------------------------------------------
@@ -685,6 +702,13 @@ keep_alive = "30m"
 # attention, and llama.cpp will not load a model that way with it off
 # (docs/HARDWARE-PROFILES.md, section 2.2).
 flash_attention = "auto"
+# A THIRD graphics card's own lane (2026-09-28) can run at the SAME TIME as
+# the second card's own lane above - one feature on each card at once - so
+# it needs its own port, never this file's `port` (which the second card's
+# lane and "One bigger model on both cards" already share safely, because
+# those two are never running at the same time). Not 11434 (the everyday
+# Ollama) or the `port` above.
+third_port = 11436
 
 # ------------------------------------------------------------------------
 # 9b2. TALKING TO AN AI CHATBOT FOR YOU (jarvis_chatbot.py)

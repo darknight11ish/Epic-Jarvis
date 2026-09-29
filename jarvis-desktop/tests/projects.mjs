@@ -1,6 +1,6 @@
 /**
  * Brain -> Projects on the desktop (the owner's decision of 2026-09-28;
- * docs/PROJECTS-DESIGN.md build step 3; JARVIS-API.md section 61;
+ * docs/PROJECTS-DESIGN.md build step 3; JARVIS-API.md section 88;
  * src/projects.js, src/projects-panel.js, src/projects.css,
  * src-tauri/src/brain/projects.rs).
  *

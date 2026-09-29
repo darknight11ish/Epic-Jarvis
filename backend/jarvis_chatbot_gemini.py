@@ -3,7 +3,7 @@ Jarvis types into gemini.google.com in a browser window the owner can see.
 
 NEW MODULE, shipped whole (like jarvis_chatbot.py, which it plugs into).
 STEP 2 OF THE CHATBOT DRIVER. Reachable from both apps through
-/api/chatbot/* (jarvis_chatbot_routes.py, docs/JARVIS-API.md section 60)
+/api/chatbot/* (jarvis_chatbot_routes.py, docs/JARVIS-API.md section 87)
 once Playwright is installed and the window has been signed in. NOT yet
 tried against the real gemini.google.com.
 

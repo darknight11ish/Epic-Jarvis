@@ -82,11 +82,23 @@ jarvis_sensitive.py's health words.
 
 NO OFF SWITCH
 The owner's own instruction: this is not a setting either app can turn off.
+
+THE SERIOUS MOMENT (the owner's decision, 2026-09-28)
+"At serious moments the animals drop the cute gestures": while a crisis
+answer is being given, the animal faces show a neutral pose and Jarvis
+speaks in its plain built-in voice - not an animal's voice, no pitch rise.
+serious_begin()/serious_end()/serious_calm() below keep one in-memory
+window (timestamps only - never a word of the turn); jarvis_speech.say()
+asks speak_plainly(text) per sentence, and both apps hear of the window as a
+`wellbeing` event, {"serious": true | false} - see "The serious moment"
+further down, and docs/JARVIS-API.md section 38.1.
 """
 from __future__ import annotations
 
 import re
-from typing import Optional
+import threading
+import time
+from typing import Callable, Optional
 
 #: The numbers this module ever gives out. The owner is in the US
 #: (CLAUDE.md, 2026-09-27); no other country's numbers are held here.
@@ -174,7 +186,8 @@ def view() -> dict:
     pattern jarvis_manner.view() uses to keep two apps' wording from
     drifting: one source on the backend, read by both. No settings here (the
     owner's own instruction: no off switch), so there is nothing to change,
-    only words to display."""
+    only words to display - and `serious`, whether the serious moment is on
+    now (see "The serious moment" below)."""
     return {
         "available": True,
         "help_number": HELP_NUMBER,
@@ -184,6 +197,10 @@ def view() -> dict:
         "reply_spoken": REPLY_SPOKEN,
         "repeat": REPEAT,
         "repeat_spoken": REPEAT_SPOKEN,
+        # The serious moment (below; 2026-09-28): a crisis answer is being
+        # given or spoken right now - the one live field, for an app that
+        # (re)connected and missed the `wellbeing` event.
+        "serious": serious_now(),
     }
 
 
@@ -308,3 +325,247 @@ def shown_before(messages) -> bool:
             if isinstance(c, str) and SHOWN_MARKER in c:
                 return True
     return False
+
+
+# --------------------------------------------------------------------------
+#   The serious moment (the owner's decision, 2026-09-28)
+# --------------------------------------------------------------------------
+#
+# "At serious moments the animals drop the cute gestures": for a crisis
+# answer the animal faces show a neutral pose, and Jarvis speaks in its
+# PLAIN built-in voice - the owner's own built-in choice, no animal voice, no
+# pitch rise (jarvis_voices.plain_voice). A voice the owner recorded still
+# speaks as it always does; only "Voice follows the face" is set aside.
+#
+# WHY A WINDOW, NOT A FLAG ON THE SAY REQUEST
+# Both apps speak an answer one sentence at a time, each through
+# `POST /api/voice/say {"text": ...}` - and that route hands say() the text
+# and nothing else. Telling it "this sentence is from a crisis answer" per
+# request would need both apps changed first. Instead the PC keeps ONE
+# window here: opened when a crisis turn starts (run_local_turn, before the
+# first word), and when the turn ends, kept open long enough to SPEAK the
+# whole answer at the slowest speaking speed (serious_end). Every sentence
+# say() makes while it is open is plain. It closes early when the owner's
+# next ordinary question starts (serious_calm) - both apps drop whatever of
+# the last answer was still queued to be said at that moment, so nothing of
+# the crisis answer is left to speak.
+#
+# AND THE HELP WORDS THEMSELVES, WHATEVER THE WINDOW SAYS
+# help_words(text) recognises the fixed help message (REPLY, REPLY_SPOKEN,
+# REPEAT, REPEAT_SPOKEN) in a sentence - so "Call nine eight eight" is said
+# plainly even if it is spoken long after the window closed (a paused
+# answer, a "read it again").
+#
+# WHAT IS KEPT: two timestamps and a counter, in memory. Never a word of the
+# turn, never on disk, never logged; gone when the backend restarts. The
+# answer's LENGTH is used once, to work out how long the window stays open,
+# and not kept. The event carries one boolean.
+#
+# ERRING ON THE SAFE SIDE: a sentence said inside the window that was NOT
+# part of the crisis answer (an alarm's words a minute later) is also said
+# plainly, and the faces stay neutral for up to SERIOUS_GRACE_MAX_SECONDS
+# after the answer ended. The opposite mistake - an animal's voice reading
+# out the help line - is the one this is here to prevent.
+
+#: The event both apps hear: {"serious": true} as a crisis answer starts,
+#: {"serious": false} when the window closes. One boolean, nothing else.
+SERIOUS_EVENT = "wellbeing"
+#: A crisis turn that never reported its end (a crash mid-turn) stops
+#: counting as serious after this long.
+SERIOUS_OPEN_MAX_SECONDS = 600.0
+#: After the turn ends: at least this long, at most SERIOUS_GRACE_MAX.
+SERIOUS_GRACE_MIN_SECONDS = 30.0
+SERIOUS_GRACE_MAX_SECONDS = 300.0
+#: The slowest pace an answer can be spoken at (0.5x of Kokoro's ~2.5
+#: words a second - the lowest speed the settings file allows; the app's
+#: own "Slower" is 0.85x), a little under, so the window outlasts the speech.
+SLOWEST_WORDS_PER_SECOND = 1.2
+
+_SERIOUS_LOCK = threading.Lock()
+#: `open` counts the crisis turns still being answered - two can overlap (a
+#: second upset message while the first is answered, on either device), and
+#: the moment must last until the LAST of them has been spoken. `since` is
+#: when the newest began (the safety cap counts from it); `until` is when an
+#: ended moment's speech is over; `gen` tells a late timer it is stale.
+_SERIOUS = {"gen": 0, "open": 0, "since": 0.0, "until": 0.0}
+
+#: Stand-ins for tests: the clock, a timer and the event bus.
+_now: Callable[[], float] = time.monotonic
+
+
+def _later(seconds: float, fn: Callable[[], None]) -> None:
+    t = threading.Timer(max(0.0, float(seconds)), fn)
+    t.daemon = True
+    t.start()
+
+
+def _publish(serious: bool) -> None:
+    """The `wellbeing` event, best-effort: a missing bus changes nothing.
+    Called with _SERIOUS_LOCK held, so two changes racing each other can
+    never reach the apps in the wrong order (the bus only takes its own
+    lock and calls nobody back)."""
+    try:
+        import jarvis_events
+        jarvis_events.BUS.publish(SERIOUS_EVENT, {"serious": bool(serious)})
+    except Exception:
+        pass
+
+
+def _settle_locked(now: float) -> None:
+    """A moment whose newest crisis turn began more than the safety cap ago,
+    and never reported its end (a crash mid-turn), is over: close it and
+    tell both apps once, so an ordinary question afterwards is not left
+    waiting on the apps' own 900 s net."""
+    s = _SERIOUS
+    if s["open"] and now - s["since"] >= SERIOUS_OPEN_MAX_SECONDS:
+        s.update(gen=s["gen"] + 1, open=0, until=0.0)
+        _publish(False)
+
+
+def _serious_locked(now: float) -> bool:
+    _settle_locked(now)
+    return bool(_SERIOUS["open"]) or now < _SERIOUS["until"]
+
+
+def serious_now() -> bool:
+    """True while a crisis answer is being given, or may still be being
+    spoken (see above). Never raises."""
+    try:
+        with _SERIOUS_LOCK:
+            return _serious_locked(_now())
+    except Exception:
+        return False
+
+
+def grace_seconds(words: int) -> float:
+    """How long the window stays open after a crisis turn of `words` words
+    ends: long enough to speak it all at the slowest pace, within limits."""
+    try:
+        n = max(0, int(words))
+    except (TypeError, ValueError):
+        n = 0
+    return float(min(SERIOUS_GRACE_MAX_SECONDS,
+                     SERIOUS_GRACE_MIN_SECONDS + n / SLOWEST_WORDS_PER_SECOND))
+
+
+def serious_begin() -> None:
+    """A crisis turn starts (jarvis_agent.run_local_turn, before its first
+    word): the window opens (or stays open, one more turn in it) and both
+    apps are told. Never raises."""
+    try:
+        with _SERIOUS_LOCK:
+            now = _now()
+            _settle_locked(now)
+            _SERIOUS.update(gen=_SERIOUS["gen"] + 1, open=_SERIOUS["open"] + 1, since=now)
+            _publish(True)
+    except Exception:
+        return
+
+
+def serious_end(words: int = 0) -> None:
+    """A crisis turn ended, `words` long: the window stays open until the
+    answer can have been spoken (grace_seconds) - and while any other crisis
+    turn is still being answered - then closes by itself and both apps are
+    told. Never raises."""
+    try:
+        grace = grace_seconds(words)
+        with _SERIOUS_LOCK:
+            now = _now()
+            _settle_locked(now)
+            if not _SERIOUS["open"]:
+                return          # the safety cap already closed it
+            # Whichever is later: this answer's speech, or an earlier one's.
+            wait = max(grace, _SERIOUS["until"] - now)
+            _SERIOUS.update(open=_SERIOUS["open"] - 1, until=now + wait)
+            if _SERIOUS["open"]:
+                return          # another crisis turn is still being answered
+            gen = _SERIOUS["gen"]
+        _later(wait, lambda: _expire(gen))
+    except Exception:
+        pass
+
+
+def _expire(gen: int) -> None:
+    """The timer serious_end started: closes the window it was set for -
+    not a newer one a later crisis turn opened."""
+    try:
+        with _SERIOUS_LOCK:
+            if _SERIOUS["gen"] != gen or _SERIOUS["open"] or not _SERIOUS["until"]:
+                return
+            _SERIOUS.update(until=0.0)
+            _publish(False)
+    except Exception:
+        return
+
+
+def serious_calm() -> None:
+    """The owner's next ordinary question starts: an ENDED crisis answer's
+    window closes now (both apps drop what was left of that answer to say).
+    A crisis turn still being answered - another device's - is left alone.
+    Tells both apps only when something was open. Never raises."""
+    try:
+        with _SERIOUS_LOCK:
+            _settle_locked(_now())
+            # `until` still set means the closing `false` has not been sent
+            # yet (_expire clears it when it sends one) - even if the time
+            # just ran out and the timer is a moment late - so it is sent
+            # here, once; the late timer then finds a newer `gen` and stays
+            # quiet.
+            if _SERIOUS["open"] or not _SERIOUS["until"]:
+                return
+            _SERIOUS.update(gen=_SERIOUS["gen"] + 1, until=0.0)
+            _publish(False)
+    except Exception:
+        return
+
+
+def _reset_serious_for_tests() -> None:
+    with _SERIOUS_LOCK:
+        _SERIOUS.update(gen=0, open=0, since=0.0, until=0.0)
+
+
+def _plain_words(text: str) -> str:
+    """Lower case letters and digits only, one space between: how a
+    sentence is compared with the fixed help texts, whatever markdown,
+    punctuation or curly quotes either side had."""
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", _fold(text)).split())
+
+
+_HELP_TEXTS = tuple(_plain_words(t) for t in (REPLY, REPLY_SPOKEN, REPEAT, REPEAT_SPOKEN))
+#: A piece of the help message this long or longer, found in a sentence (or
+#: a sentence found inside the help message), is the help message. Shorter
+#: pieces ("I'm still here.") are ordinary words too.
+_HELP_MIN = 24
+_HELP_PIECES = tuple(sorted({
+    p for t in (REPLY, REPLY_SPOKEN, REPEAT, REPEAT_SPOKEN)
+    for p in (_plain_words(x) for x in re.split(r"[.!?\n]+", t))
+    if len(p) >= _HELP_MIN}))
+#: The words that are only ever the help line, however a sentence is cut
+#: (both apps start speaking at the first comma).
+_HELP_RX = re.compile(r"(?<![0-9a-z])(?:988|nine eight eight|crisis lifeline"
+                      r"|call 911|call nine one one)(?![0-9a-z])")
+
+
+def help_words(text: str) -> bool:
+    """True when `text` - one sentence or phrase about to be spoken - is
+    part of the fixed help message, or names the help line. Never raises."""
+    if not isinstance(text, str):
+        return False
+    try:
+        t = _plain_words(text)
+    except Exception:
+        return False
+    if not t:
+        return False
+    if _HELP_RX.search(t):
+        return True
+    if len(t) >= _HELP_MIN and any(t in h for h in _HELP_TEXTS):
+        return True
+    return any(p in t for p in _HELP_PIECES)
+
+
+def speak_plainly(text: str = "") -> bool:
+    """jarvis_speech.say()'s one question: say this in the plain built-in
+    voice, not an animal's? True inside the serious window, or for the help
+    message's own words. Never raises."""
+    return serious_now() or help_words(text)

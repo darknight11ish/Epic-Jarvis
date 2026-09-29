@@ -2,6 +2,7 @@ package com.jarvis.client.net
 
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -48,6 +49,18 @@ object SecondCard {
 
     /** The Pictures feature: the only one the phone's chat looks at. */
     const val VISION = "vision"
+
+    /**
+     * A third graphics card (2026-09-28): its own id in `POST` and in
+     * `pending` - never one of [Status.features], and never [MASTER]/
+     * [COMBINED] either. Moving a switch here does not turn it on or off
+     * (the switches above still do that) - it only says WHICH physical
+     * card an already-on switch runs on, alongside the second card's own
+     * lane, never instead of it. See
+     * docs/GPU-SUPPORT-RESEARCH-2026-09-27.md section 1.3: never a
+     * default, always a named choice.
+     */
+    const val THIRD = "third"
 
     /** The words for the main switch. The backend has no row for it. */
     const val MASTER_NAME = "Use the second graphics card"
@@ -132,6 +145,12 @@ object SecondCard {
          * these raises NO approval card either way.
          */
         val suggest: Suggest? = null,
+        /**
+         * A third graphics card (2026-09-28) - null from an older PC. Not
+         * one of [features]: it is not itself a switch, it says WHICH card
+         * an already-on feature's switch runs on.
+         */
+        val third: ThirdCard? = null,
     ) {
         fun feature(id: String): Feature? = features.firstOrNull { it.id == id }
     }
@@ -161,6 +180,36 @@ object SecondCard {
         val model: String?,
         val context: Int?,
         val memoryGib: Double?,
+        val why: String,
+    )
+
+    /**
+     * `status()["third"]` (2026-09-28): a third, genuinely capable graphics
+     * card, and which of [Status.features] (if any) is moved onto it. Never
+     * a default: [assigned] is null until the owner names one, even with a
+     * capable [cardName] sitting right there. Runs at the same time as the
+     * second card's own lane - a feature moved here does not stop working
+     * on account of the switches above; it only runs somewhere else.
+     */
+    data class ThirdCard(
+        /** A genuinely capable third card is here right now. */
+        val capable: Boolean,
+        /** Null when [capable] is false. */
+        val cardName: String?,
+        val cardTotalMb: Int?,
+        /** One of [Status.features]' ids, or null: nothing is moved here. */
+        val assigned: String?,
+        /** Which switches could be moved here right now - already on. */
+        val assignable: List<String>,
+        val pending: Boolean,
+        /** "off", "starting", "running" or "failed". */
+        val laneState: String,
+        val laneWhy: String,
+        /** Null unless [assigned] names a feature. */
+        val model: String?,
+        val context: Int?,
+        val memoryGib: Double?,
+        val modelInstalled: Boolean?,
         val why: String,
     )
 
@@ -243,6 +292,24 @@ object SecondCard {
                     context = c.int("context"),
                     memoryGib = (c["memory_gib"] as? JsonPrimitive)?.doubleOrNull,
                     why = c.str("why").orEmpty(),
+                )
+            },
+            third = (obj["third"] as? JsonObject)?.let { t ->
+                val card = t["card"] as? JsonObject
+                ThirdCard(
+                    capable = t.bool("capable") ?: false,
+                    cardName = card?.str("name"),
+                    cardTotalMb = card?.int("total_mb"),
+                    assigned = t.str("assigned"),
+                    assignable = (t["assignable"] as? JsonArray).orEmpty().mapNotNull { it.asString() },
+                    pending = t.bool("pending") ?: false,
+                    laneState = (t["lane"] as? JsonObject)?.str("state") ?: "off",
+                    laneWhy = (t["lane"] as? JsonObject)?.str("why").orEmpty(),
+                    model = t.str("model"),
+                    context = t.int("context"),
+                    memoryGib = (t["memory_gib"] as? JsonPrimitive)?.doubleOrNull,
+                    modelInstalled = t.bool("model_installed"),
+                    why = t.str("why").orEmpty(),
                 )
             },
             suggest = (obj["suggest"] as? JsonObject)?.let { sug ->
@@ -411,6 +478,74 @@ object SecondCard {
         return "Model: $model.$ctx$size"
     }
 
+    /** One choice on the third-card plate: [value] null means "Not used". */
+    data class ThirdOption(val value: String?, val label: String, val selected: Boolean)
+
+    /**
+     * The third card's own options: "Not used" plus one per switch that is
+     * actually on right now ([ThirdCard.assignable]) - a switch the owner
+     * has not turned on cannot be moved here (its own switch above turns it
+     * on; this only ever says where). If [ThirdCard.assigned] names a
+     * switch that fell out of `assignable` since (turned off again), it is
+     * still offered, selected, so the list never silently shows the wrong
+     * thing. Null when there is no [Status.third] at all (an older PC).
+     */
+    fun thirdOptions(s: Status): List<ThirdOption>? {
+        val t = s.third ?: return null
+        val ids = if (t.assigned != null && t.assigned !in t.assignable) {
+            t.assignable + t.assigned
+        } else {
+            t.assignable
+        }
+        val options = mutableListOf(ThirdOption(null, "Not used", selected = t.assigned == null))
+        for (id in ids) {
+            options += ThirdOption(id, s.feature(id)?.name ?: id, selected = t.assigned == id)
+        }
+        return options
+    }
+
+    /** Whether the third-card plate can be changed right now. */
+    fun thirdCanChange(s: Status): Boolean {
+        val t = s.third ?: return false
+        return t.capable && !t.pending
+    }
+
+    /** The line under the third-card plate: waiting, why it cannot be moved, or the PC's own why. */
+    fun thirdLine(s: Status): String {
+        val t = s.third ?: return ""
+        return if (t.pending) WAITING else t.why
+    }
+
+    /** [modelLine]'s shape for [ThirdCard]: null unless a feature is assigned. */
+    fun thirdModelLine(t: ThirdCard): String? {
+        val model = t.model ?: return null
+        val size = t.memoryGib?.let { " Uses about ${"%.1f".format(java.util.Locale.ROOT, it)} GB of the third card." }
+            .orEmpty()
+        return when (t.modelInstalled) {
+            true -> "Model: $model (installed).$size"
+            false -> "Model: $model - not installed on your PC yet. To install it, type " +
+                "$model into the Install box under Model above. Nothing downloads until you " +
+                "approve that card.$size"
+            null -> "Model: $model (your PC could not tell whether it is installed).$size"
+        }
+    }
+
+    /** [lastLine]'s shape for the third card, whose "name" depends on which feature was asked for. */
+    fun thirdLastLine(s: Status): String? {
+        val last = s.last ?: return null
+        val t = s.third
+        if (last.feature != THIRD || t?.pending == true || t?.assigned != null) return null
+        last.why?.let { return it }
+        return when (last.outcome) {
+            "denied" -> "You said no, so it stays where it was."
+            "timed_out", "expired" -> "Nobody answered the card in time, so it stays where it was."
+            "withdrawn" -> "You changed it while its card was waiting, so approving that card changed nothing."
+            "failed" -> "It could not be moved."
+            "refused" -> "It was not moved: your PC refused it."
+            else -> "The last card for the third card ended: ${last.outcome.replace('_', ' ')}."
+        }
+    }
+
     fun view(s: Status, f: Feature): SwitchView {
         val waiting = f.id in s.pending
         val missing = f.needs.filter { need -> s.feature(need)?.enabled != true }
@@ -525,6 +660,16 @@ object SecondCard {
     fun postBody(feature: String, enabled: Boolean): String = buildJsonObject {
         put("feature", feature)
         put("enabled", enabled)
+    }.toString()
+
+    /**
+     * `{"feature": "third", "assign": "<feature id>" | null}` (2026-09-28) -
+     * moves a switch onto the third card ([assign] a feature id), or moves
+     * it back off ([assign] null). Built as JSON, never glued.
+     */
+    fun postThirdBody(assign: String?): String = buildJsonObject {
+        put("feature", THIRD)
+        if (assign == null) put("assign", JsonNull) else put("assign", assign)
     }.toString()
 
     /**

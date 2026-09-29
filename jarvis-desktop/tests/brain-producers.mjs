@@ -68,7 +68,10 @@ for i in range(30):
     slow = i >= 20
     log.append({"kind": "answer", "model": "qwen3:8b", "first_word_ms": 900 if slow else 800,
                 "words_per_s": 9.0 if slow else 14.2, "tokens_per_s": 12.0 if slow else 19.0,
-                "on_gpu_percent": 100, "at": 1700000000 + i})
+                "on_gpu_percent": 100, "at": 1700000000 + i,
+                # Milestone 7: Ollama's prompt counts, from i >= 10 only - the
+                # first ten stand for older rows written before the counts.
+                **({"prompt_tokens": 4000, "cached_tokens": 3600} if i >= 10 else {})})
 log.append({"kind": "switch", "old_model": "llama3.1:8b", "new_model": "qwen3:8b",
             "old_tokens_per_s": 21.0, "new_tokens_per_s": 19.0, "old_source": "measured"})
 print(json.dumps(S.view(log=log, current="qwen3:8b")))
@@ -129,6 +132,8 @@ await check("Models shows how fast recent answers were, from the real speed bloc
   const text = await page.locator("#models").innerText();
   await page.close();
   assert.match(text, /Recent answers: about \d+ words a second, first word after \d\.\d s/);
+  // Milestone 7: the reused share, from the rows that have it; older rows skipped.
+  assert.match(text, /, 90% of the conversation reused, not read again/);
   assert.match(text, /slower than the 20 before them/, "the backend's own slowdown note");
   assert.ok(SPEED.last_switch_note && text.includes(SPEED.last_switch_note.trim()),
     "the backend's own old-vs-new sentence, word for word");

@@ -793,12 +793,13 @@ def t_fit():
     start = ps1.index("$PATCHES = @(")
     names = [l.strip().strip("'") for l in ps1[start:ps1.index("\n)", start)].splitlines()
              if l.strip().startswith("'")]
-    # Its context is chatbot.patch's and live.patch's own lines, so it must
-    # come after both. (It was last until support-chat.patch, whose context
-    # is this patch's own lines, went after it.)
-    check("forget-range.patch comes after the patches its context comes from",
-          names.index("forget-range.patch") > max(names.index("chatbot.patch"),
-                                                   names.index("live.patch")), names[-3:])
+    try:
+        import _stack as _st
+        rewritten = _st.later_rewriting("forget-range.patch", "forget_range", names)
+    except Exception as exc:  # noqa: BLE001 - reported as the check's detail
+        rewritten = [repr(exc)]
+    check("forget-range.patch is in apply-patches.ps1, and no later patch rewrites its lines",
+          "forget-range.patch" in names and not rewritten, rewritten or names[-3:])
     check("jarvis_forget_range.py is shipped", "'jarvis_forget_range.py'" in ps1)
     try:
         import _stack

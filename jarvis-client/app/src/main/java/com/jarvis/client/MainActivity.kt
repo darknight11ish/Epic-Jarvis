@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.lifecycleScope
 import com.jarvis.client.data.CheckMethod
@@ -85,6 +86,7 @@ import com.jarvis.client.ui.screens.BrainScreen
 import com.jarvis.client.ui.screens.ConnectionInfo
 import com.jarvis.client.ui.screens.CrashScreen
 import com.jarvis.client.ui.screens.FaceSpecimen
+import com.jarvis.client.ui.screens.FaceVoiceOfferFromPc
 import com.jarvis.client.ui.screens.FaqScreen
 import com.jarvis.client.ui.screens.HistoryScreen
 import com.jarvis.client.ui.screens.HomeActions
@@ -855,6 +857,8 @@ class MainActivity : FragmentActivity() {
         val stale by JarvisRuntime.stale.collectAsState()
         val activity by JarvisRuntime.activity.collectAsState()
         val faceState by JarvisRuntime.face.collectAsState()
+        val faceOffline by JarvisRuntime.faceOffline.collectAsState()
+        val faceSerious by JarvisRuntime.faceSerious.collectAsState()
         val power by JarvisRuntime.power.collectAsState()
         val lockdown by JarvisRuntime.lockdown.collectAsState()
 
@@ -904,6 +908,11 @@ class MainActivity : FragmentActivity() {
         val inboxRead by JarvisRuntime.inboxRead.collectAsState()
         val brain by JarvisRuntime.brain.collectAsState()
         val models by JarvisRuntime.models.collectAsState()
+        // The phone's own last successful `GET /api/models` read, held on
+        // disk so Brain -> Model has something to show, clearly marked as
+        // old, when [models] above is null because the live read failed
+        // (docs/OFFLINE-MODELS-DESIGN-2026-09-27.md).
+        val modelsCache by JarvisRuntime.modelsCache.collectAsState()
         val activityDetail by JarvisRuntime.activityDetail.collectAsState()
         var modelBusy by remember { mutableStateOf(false) }
         // The second graphics card: what the PC last said, which switch has a
@@ -988,6 +997,11 @@ class MainActivity : FragmentActivity() {
         // The crisis help line (jarvis_wellbeing.py, 2026-09-27): whether
         // the answer on screen is shown as a calm, plain panel.
         val crisisAnswer by chat.crisis.collectAsState()
+        // "A cloud model could give this one a second look."
+        // (jarvis_router.choose()'s gate "offer", docs/JARVIS-API.md,
+        // "`offer` in `X-Jarvis-Route`") - the lane named on the answer on
+        // screen's route, or null.
+        val cloudOffer by chat.cloudOffer.collectAsState()
         // "Open <a settings section>" by voice or chat
         // (jarvis_settings_registry.py, docs/JARVIS-API.md section 58.1):
         // jump to Settings, at the section the answer named. Pure
@@ -1111,8 +1125,15 @@ class MainActivity : FragmentActivity() {
         // stops firing - it fails towards "stays on Home", never towards
         // unpairing, because nothing here clears the saved token.
         val badTokenNotice = remember { JarvisRuntime.noticeFor(ApiError.BadToken) }
+        // When the PC said WHY it refused the key (docs/PAIRING-DESIGN.md
+        // section 5.3 - removed on the PC, or the old shared key retired),
+        // the notice is that sentence instead (JarvisRuntime.describe), so it
+        // is matched too, and the pairing screen shows it.
+        val keyRefusalReason by com.jarvis.client.net.KeyRefusal.reason.collectAsState()
+        val refusedWords = com.jarvis.client.net.KeyRefusal.words(keyRefusalReason) ?: badTokenNotice
         val tokenRefused = paired &&
-            (linkDetail == TOKEN_REFUSED_DETAIL || notice == badTokenNotice)
+            (linkDetail == TOKEN_REFUSED_DETAIL || notice == badTokenNotice ||
+                com.jarvis.client.net.KeyRefusal.isWords(notice))
         LaunchedEffect(tokenRefused) {
             if (!tokenRefused) {
                 tokenRefusalHandled = false
@@ -1464,13 +1485,117 @@ class MainActivity : FragmentActivity() {
                 val leaveRepair: () -> Unit = {
                     if (!busy) {
                         repairing = false
-                        if (notice == badTokenNotice) JarvisRuntime.clearNotice()
+                        if (notice == badTokenNotice || com.jarvis.client.net.KeyRefusal.isWords(notice)) {
+                            JarvisRuntime.clearNotice()
+                        }
                     }
                 }
                 if (replacing) {
                     // System back does the same as the on-screen button.
                     // Composed after NavBackHandler, so it takes the press first.
                     BackHandler(onBack = leaveRepair)
+                }
+                // Saves an address and a key, shakes hands with them, and puts
+                // the old ones back if that fails - for a typed token and for
+                // the key the PC hands over after QR-code pairing alike
+                // (docs/PAIRING-DESIGN.md section 7.2: never lock the owner out).
+                val pairWith: (String, String) -> Unit = { host, token ->
+                    busy = true
+                    scope.launch {
+                        // Only filled in when re-pairing. Held in this
+                        // coroutine and nowhere else, never logged, and
+                        // dropped when it ends. `oldToken` stays empty when
+                        // no new token was typed - then the stored one is
+                        // never touched, so there is nothing to put back.
+                        var oldHost = ""
+                        var oldToken = ""
+                        // `wrote`: the new address may already be saved, so
+                        // there is something to undo. `connected`: the new
+                        // pair answered and is being kept.
+                        var wrote = false
+                        var connected = false
+                        try {
+                            // Off the main thread. `setToken` generates a
+                            // hardware-backed AES key on first pair, which is
+                            // a TEE/StrongBox round trip — several hundred
+                            // milliseconds to a couple of seconds, blocking
+                            // the UI so hard that the button could not even
+                            // repaint into its own busy state, and an ANR
+                            // candidate on a slow device.
+                            withContext(Dispatchers.IO) {
+                                if (replacing) {
+                                    oldHost = JarvisRuntime.settings.host.value
+                                    if (token.isNotBlank()) oldToken = JarvisRuntime.tokens.token()
+                                }
+                                wrote = true
+                                JarvisRuntime.settings.setHost(host)
+                                if (token.isNotBlank()) JarvisRuntime.tokens.setToken(token)
+                            }
+                            val result = JarvisRuntime.handshake()
+                            if (result is ApiResult.Ok) {
+                                connected = true
+                                busy = false
+                                paired = true
+                                // The first pairing on this phone queues the
+                                // one-time "Background restart" offer on Home
+                                // (walk-through C9). Offered, never asked for
+                                // by a dialog, and never again after.
+                                if (!replacing) JarvisRuntime.settings.queueKeepAliveOffer()
+                                repairing = false
+                                pairingHost = JarvisRuntime.settings.host.value
+                                // The stream lives in the service, not here:
+                                // a backgrounded activity's connection is
+                                // suspended within about a minute, which is
+                                // exactly how approvals silently stop
+                                // arriving.
+                                EventService.start(this@MainActivity)
+                                if (replacing) {
+                                    // The running stream is still talking
+                                    // to the old desktop, or retrying the old
+                                    // token. Replaced the same way Home's
+                                    // Retry does it, so it picks up the new
+                                    // address and token now rather than at
+                                    // its next backoff.
+                                    JarvisRuntime.startStream(force = true)
+                                    scope.launch { JarvisRuntime.refreshAll() }
+                                }
+                                // Picks up whatever face the owner's other
+                                // device already chose, the moment there is
+                                // somewhere to ask. A no-op, silently, on a
+                                // backend without the capability.
+                                JarvisRuntime.refreshAppearance()
+                            }
+                        } finally {
+                            // A re-pair that did not connect changes
+                            // nothing: the desktop and token that were in
+                            // use go back. A typo must never be what
+                            // unpairs a phone that was working. The
+                            // handshake's own notice stays up to say why.
+                            //
+                            // In `finally`, and NonCancellable, because this
+                            // coroutine dies with the composition: a
+                            // rotation mid-handshake used to cancel it
+                            // before the put-back ran, leaving the new,
+                            // unchecked pair saved and in use - the
+                            // opposite of what the re-pair screen promises.
+                            //
+                            // `oldToken` is empty when it could not be read
+                            // (the Keystore is briefly unavailable) - then
+                            // there is nothing to restore, and clearing the
+                            // new one would unpair the phone outright, so
+                            // the new one is left.
+                            if (replacing && wrote && !connected) {
+                                withContext(NonCancellable + Dispatchers.IO) {
+                                    JarvisRuntime.settings.setHost(oldHost)
+                                    if (oldToken.isNotEmpty()) JarvisRuntime.tokens.setToken(oldToken)
+                                }
+                            }
+                            // Only after the put-back: re-enabling Connect
+                            // first would let a second tap read the failed
+                            // address as the "old" one to restore.
+                            if (!connected) busy = false
+                        }
+                    }
                 }
                 PairingScreen(
                     onKeyShownChange = { pairingKeyShown = it },
@@ -1483,105 +1608,15 @@ class MainActivity : FragmentActivity() {
                     // (OwnNetwork): it is never used, so the app opens here,
                     // and this sentence is the reason.
                     notice = notice ?: JarvisRuntime.settings.baseProblem()
-                        ?: if (tokenRefused) badTokenNotice else null,
-                    onPair = { host, token ->
-                        busy = true
-                        scope.launch {
-                            // Only filled in when re-pairing. Held in this
-                            // coroutine and nowhere else, never logged, and
-                            // dropped when it ends. `oldToken` stays empty when
-                            // no new token was typed - then the stored one is
-                            // never touched, so there is nothing to put back.
-                            var oldHost = ""
-                            var oldToken = ""
-                            // `wrote`: the new address may already be saved, so
-                            // there is something to undo. `connected`: the new
-                            // pair answered and is being kept.
-                            var wrote = false
-                            var connected = false
-                            try {
-                                // Off the main thread. `setToken` generates a
-                                // hardware-backed AES key on first pair, which is
-                                // a TEE/StrongBox round trip — several hundred
-                                // milliseconds to a couple of seconds, blocking
-                                // the UI so hard that the button could not even
-                                // repaint into its own busy state, and an ANR
-                                // candidate on a slow device.
-                                withContext(Dispatchers.IO) {
-                                    if (replacing) {
-                                        oldHost = JarvisRuntime.settings.host.value
-                                        if (token.isNotBlank()) oldToken = JarvisRuntime.tokens.token()
-                                    }
-                                    wrote = true
-                                    JarvisRuntime.settings.setHost(host)
-                                    if (token.isNotBlank()) JarvisRuntime.tokens.setToken(token)
-                                }
-                                val result = JarvisRuntime.handshake()
-                                if (result is ApiResult.Ok) {
-                                    connected = true
-                                    busy = false
-                                    paired = true
-                                    // The first pairing on this phone queues the
-                                    // one-time "Background restart" offer on Home
-                                    // (walk-through C9). Offered, never asked for
-                                    // by a dialog, and never again after.
-                                    if (!replacing) JarvisRuntime.settings.queueKeepAliveOffer()
-                                    repairing = false
-                                    pairingHost = JarvisRuntime.settings.host.value
-                                    // The stream lives in the service, not here:
-                                    // a backgrounded activity's connection is
-                                    // suspended within about a minute, which is
-                                    // exactly how approvals silently stop
-                                    // arriving.
-                                    EventService.start(this@MainActivity)
-                                    if (replacing) {
-                                        // The running stream is still talking
-                                        // to the old desktop, or retrying the old
-                                        // token. Replaced the same way Home's
-                                        // Retry does it, so it picks up the new
-                                        // address and token now rather than at
-                                        // its next backoff.
-                                        JarvisRuntime.startStream(force = true)
-                                        scope.launch { JarvisRuntime.refreshAll() }
-                                    }
-                                    // Picks up whatever face the owner's other
-                                    // device already chose, the moment there is
-                                    // somewhere to ask. A no-op, silently, on a
-                                    // backend without the capability.
-                                    JarvisRuntime.refreshAppearance()
-                                }
-                            } finally {
-                                // A re-pair that did not connect changes
-                                // nothing: the desktop and token that were in
-                                // use go back. A typo must never be what
-                                // unpairs a phone that was working. The
-                                // handshake's own notice stays up to say why.
-                                //
-                                // In `finally`, and NonCancellable, because this
-                                // coroutine dies with the composition: a
-                                // rotation mid-handshake used to cancel it
-                                // before the put-back ran, leaving the new,
-                                // unchecked pair saved and in use - the
-                                // opposite of what the re-pair screen promises.
-                                //
-                                // `oldToken` is empty when it could not be read
-                                // (the Keystore is briefly unavailable) - then
-                                // there is nothing to restore, and clearing the
-                                // new one would unpair the phone outright, so
-                                // the new one is left.
-                                if (replacing && wrote && !connected) {
-                                    withContext(NonCancellable + Dispatchers.IO) {
-                                        JarvisRuntime.settings.setHost(oldHost)
-                                        if (oldToken.isNotEmpty()) JarvisRuntime.tokens.setToken(oldToken)
-                                    }
-                                }
-                                // Only after the put-back: re-enabling Connect
-                                // first would let a second tap read the failed
-                                // address as the "old" one to restore.
-                                if (!connected) busy = false
-                            }
-                        }
-                    },
+                        ?: if (tokenRefused) refusedWords else null,
+                    // QR-code pairing (docs/PAIRING-DESIGN.md section 7.2): offered
+                    // before anything is paired, and when the PC says it has
+                    // it - or has not said (a refused key cannot even read
+                    // the version, and that is exactly when it is needed).
+                    offerCodePairing = !replacing || JarvisRuntime.version.value == null ||
+                        JarvisRuntime.can("pairing"),
+                    onDeviceKey = pairWith,
+                    onPair = pairWith,
                     onOpenReadiness = { nav.go(Screen.CHECKS) },
                     modifier = root,
                     onHostChange = { pairingHost = it },
@@ -1880,6 +1915,11 @@ class MainActivity : FragmentActivity() {
                             setSpeed = { id -> JarvisRuntime.setVoiceSpeed(id) },
                             setSpeaker = { id -> JarvisRuntime.setVoiceSpeaker(id) },
                             setFace = { on -> JarvisRuntime.setVoiceFace(on) },
+                            answerFaceOffer = { f, use -> JarvisRuntime.answerFaceVoiceOffer(f, use) },
+                            setAnimal = { json -> JarvisRuntime.setVoiceAnimal(json) },
+                            tryAnimal = { face, name, playing ->
+                                JarvisRuntime.voice.tryAnimalVoice(face, name, playing)
+                            },
                             // Any audio type: the file is checked for being a WAV
                             // once read, and says so plainly when it is not.
                             onPickFile = { pickVoiceFile.launch(arrayOf("audio/*")) },
@@ -2017,6 +2057,7 @@ class MainActivity : FragmentActivity() {
                             notice = notice,
                             onDismissNotice = { JarvisRuntime.clearNotice() },
                             models = models,
+                            modelsCache = modelsCache,
                             modelBusy = modelBusy,
                             onSwitchModel = { ref ->
                                 if (!modelBusy) {
@@ -2084,6 +2125,24 @@ class MainActivity : FragmentActivity() {
                                     scope.launch {
                                         try {
                                             secondCardNotice = JarvisRuntime.setSecondCard(feature, enabled)
+                                        } finally {
+                                            secondCardBusy = null
+                                        }
+                                    }
+                                }
+                            },
+                            // A third graphics card (2026-09-28): moving a
+                            // switch onto it, or off. Marked busy the same
+                            // way as onSetSecondCard, under SecondCard.THIRD
+                            // rather than a feature id - there is no single
+                            // switch this request is about.
+                            onSetThirdCard = { assign ->
+                                if (secondCardBusy == null) {
+                                    secondCardBusy = SecondCard.THIRD
+                                    secondCardNotice = null
+                                    scope.launch {
+                                        try {
+                                            secondCardNotice = JarvisRuntime.setThirdCard(assign)
                                         } finally {
                                             secondCardBusy = null
                                         }
@@ -2259,6 +2318,11 @@ class MainActivity : FragmentActivity() {
                         },
                         onRequestOverlay = ::requestOverlayPermission,
                         onOpenBubbleSettings = ::openBubbleSettings,
+                        notificationAccessGranted = remember(tick) {
+                            NotificationManagerCompat.getEnabledListenerPackages(this@MainActivity)
+                                .contains(packageName)
+                        },
+                        onOpenNotificationAccess = ::openNotificationAccessSettings,
                         quickTiles = quickTiles,
                         onQuickTileChange = { slot, action ->
                             JarvisRuntime.settings.setQuickTile(slot, action)
@@ -2305,7 +2369,12 @@ class MainActivity : FragmentActivity() {
                         // face and its bindings are the shared vocabulary.
                         onPickFace = {
                             appearance.setFace(it.id)
-                            scope.launch { JarvisRuntime.pushAppearance() }
+                            scope.launch {
+                                JarvisRuntime.pushAppearance()
+                                // An animal picked for the first time: the PC
+                                // may now ask "Use its own voice?" - read it.
+                                JarvisRuntime.refreshCustomVoices()
+                            }
                         },
                         // Randomise and Reset do NOT push straight away any more.
                         // The screen offers ten seconds of Undo, and the desktop
@@ -2347,6 +2416,9 @@ class MainActivity : FragmentActivity() {
                         faceTile = { f, selected, onClick ->
                             FaceSpecimen(face = f, bindings = bindings, isSelected = selected, onClick = onClick)
                         },
+                        faceVoiceOffer = {
+                            FaceVoiceOfferFromPc(linkBlocker = remember(link, stale) { JarvisRuntime.actionBlocker() })
+                        },
                     )
 
                     Screen.HOME -> HomeScreen(
@@ -2357,6 +2429,8 @@ class MainActivity : FragmentActivity() {
                             stale = stale,
                             activity = activity,
                             faceState = faceState,
+                            faceOffline = faceOffline,
+                            faceSerious = faceSerious,
                             power = power,
                             status = status,
                             pending = pending,
@@ -2382,6 +2456,7 @@ class MainActivity : FragmentActivity() {
                             tapFaceOpensMind = look.tapFaceOpensMind,
                             glow = look.glow,
                             calmMotion = calmMotion,
+                            stillAnimal = look.stillAnimal,
                             lastUserText = lastQuestion,
                             answerFeedback = Feedback.viewFor(answerTurnId, answerMark),
                             conversationTurns = conversation.size,
@@ -2407,6 +2482,15 @@ class MainActivity : FragmentActivity() {
                             // reading the words in a picture (2026-09-26), as
                             // the PC last reported it. The send asks again first.
                             pictureOffered = SecondCard.picturesTaken(secondCard),
+                            // Reading phone notifications (2026-09-28): only
+                            // offered once the setting is on AND something
+                            // has actually been captured - a button that
+                            // would attach nothing is not an offer.
+                            notificationsAttachable = remember(tick) {
+                                JarvisRuntime.phoneNotificationsAllowed() &&
+                                    com.jarvis.client.data.CapturedNotifications(this@MainActivity)
+                                        .sharedText() != null
+                            },
                             pictureLine = picture.value?.let {
                                 ChatPicture.attachedLine(it, wordsOnly = !SecondCard.visionAvailable(secondCard))
                             },
@@ -2421,6 +2505,7 @@ class MainActivity : FragmentActivity() {
                             usedIds = usedIds,
                             answerTurnId = answerTurnId,
                             crisisAnswer = crisisAnswer,
+                            cloudOffer = cloudOffer,
                             memoryHidden = privateHidden,
                             swipeDecides = security.swipeDecides,
                             showPrivateBusy = ownerCheckBusy.value,
@@ -2508,6 +2593,15 @@ class MainActivity : FragmentActivity() {
                                     )
                                 },
                                 onRemovePicture = { picture.value = null },
+                                // Fills the SAME shared-text chip the Share
+                                // sheet already uses - the owner still
+                                // presses Send. Never sent, learned, or read
+                                // by anything until they do.
+                                onAttachNotifications = {
+                                    com.jarvis.client.data.CapturedNotifications(this@MainActivity)
+                                        .sharedText()
+                                        ?.let { sharedHeld = Provenance.joinShared(sharedHeld, it) }
+                                },
                                 onFindDateInPicture = ::findDateInPicture,
                                 onInterrupt = { chat.cancel() },
                                 // Said on Home, and read out by TalkBack (the chat audit).
@@ -2613,6 +2707,14 @@ class MainActivity : FragmentActivity() {
                                 onMarkAnswer = { turnId, mark ->
                                     JarvisRuntime.markAnswerDetached(turnId, mark)
                                 },
+                                // "Try the cloud model": a genuinely new
+                                // turn, the same shape as onSend below, so
+                                // it runs on this composable's own scope
+                                // rather than the runtime's - a rotation
+                                // mid-answer already cancels an ordinary
+                                // question the same way.
+                                onTryCloud = { scope.launch { chat.tryCloudForLast() } },
+                                onDismissCloudOffer = { chat.dismissCloudOffer() },
                                 // backend/note-capture.patch. The runtime reports
                                 // how it ended, in the desktop's own words.
                                 onFileNote = { target, text ->
@@ -2973,6 +3075,23 @@ class MainActivity : FragmentActivity() {
                 )
             }
         }
+    }
+
+    /**
+     * Android's own "Notification access" screen
+     * (`Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS`), for "reading
+     * phone notifications". `PhoneNotificationsPlate.kt`'s own explanation
+     * of what this OS-level access actually grants is shown BEFORE this is
+     * ever called, always - it is unusually broad (every notification, on
+     * every app, once granted), unlike an ordinary runtime permission
+     * dialog, and there is no direct way to grant it: only this screen,
+     * only the owner's own tap. `notificationAccessGranted` keeps reading
+     * the real answer either way, the same pattern `overlayGranted` above
+     * already follows.
+     */
+    private fun openNotificationAccessSettings() {
+        runCatching { startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+            .onFailure { runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) } }
     }
 
     /**

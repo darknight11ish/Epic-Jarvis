@@ -2,14 +2,13 @@
 
 **Read this paragraph before you trust anything else on this page.**
 
-Eight files in this repository cite `docs/JARVIS-API.md` as the authoritative
-contract — `CLAUDE.md`, the top-level `README.md`, `ApiModels.kt`,
-`TokenStore.kt`, `stream.rs`, `main.js` and others. That file has never
-existed. Checked on 2026-09-20: it is not in the working tree, and
-`git log --all -- "**/JARVIS-API.md"` returns **zero** commits — it was never
-added and never deleted. So every "§4 says…" comment in this codebase points
-at a document nobody here has. This page is an attempt to fill that hole
-honestly, not to pretend the hole was never there.
+This page was first reconstructed on 2026-09-20 from the two apps' call
+sites, when no API document existed at all. Since then most of the backend
+has been added to this repository (`backend/`: the shipped modules and the
+patches), and the sections from §11 on are written from that code. The
+owner's own `jarvis_hud.py`, `jarvis_gate.py` and `jarvis_extract.py` still
+live only on the PC, so sections 1-10 are still read from the apps. Where
+this page and the backend disagree, the backend wins.
 
 ## What this is
 
@@ -21,7 +20,9 @@ check any line of it yourself.
 
 - **It is not the backend's contract.** The Python backend (`jarvis_hud.py`
   and friends) lives on the owner's Windows machine, outside this repository —
-  `docs/ARCHITECTURE.md` §9 says where. Nobody writing this page could read it.
+  `docs/ARCHITECTURE.md` §9 says where. The routes the patches and shipped
+  modules add are read from that code; the owner's own routes (sections 1-10)
+  were read from the apps.
 - **It describes what the clients EXPECT, not what the server GUARANTEES.**
   A row below saying a route takes `{"id": …}` means "the phone sends that",
   not "the server accepts that".
@@ -58,6 +59,15 @@ check "first-party, let it through". It proves nothing: anything can send the
 word `hud`. `docs/CROSS-CLIENT-CONTRACT.md` §1 spells out the consequence —
 the server cannot tell the laptop from the phone, so no per-device permission
 scheme can be built on it.
+
+**Since 2026-09-28 the key itself can say which device it is** (section 90,
+QR-code pairing): a paired phone holds a key of its own, `jdk1.<device id>.
+<secret>`, sent in the same `X-Jarvis-Token` header. `X-Jarvis-Client` is
+still not identity; the key now is. The old shared key keeps working until
+the owner retires it, and after that works on the PC itself only. A 401 for
+a device key the PC removed, or for the retired shared key from another
+device, carries `"key": "device_removed"` or `"key": "shared_retired"`
+(section 90.5).
 
 Sent by:
 - Android: `jarvis-client/app/src/main/java/com/jarvis/client/net/JarvisApi.kt:257`
@@ -184,9 +194,15 @@ words (`stream.rs:18-20`, `JarvisRuntime.kt:662-665`).
 | `focus` | A focus session started, changed or ended - `{"state": "started" \| "changed" \| "ended"}` - or has a line to say, `{"state": "callout", "seq"}`; never what was in front (section 26). The Brain's Work tab and the widget read `GET /api/focus` again (`brain.js`, `widget.js`); on `callout` the Rust fetches the line as SOUND from this PC only and the Jarvis bar plays it (`brain/focus.rs` `play_callout`) | the Brain's Focus session reads itself again (`JarvisRuntime.onEvent` -> `focusTick`); a `callout` is ignored - the line is the PC's alone |
 | `live` | Jarvis Live changed: the whole `GET /api/voice/live` object - fixed words and numbers only, never anything said (section 63). The desktop's watcher reads the session itself once a second while Live is on here (`live.rs`); a session on the PHONE shows in the Jarvis bar too (the review of 2026-09-28; the tray marks only a session on this PC), and Brain → Now shows it as one readable line | Reads `GET /api/voice/live` again (`JarvisRuntime.onEvent` -> `liveRead`) |
 | `deep` | A deep question finished: `{"id", "state": "done" \| "failed"}` only, never the question or the answer (`jarvis_big_model.py`, section 14). Nothing in Rust reads for it (`stream.rs`); it is fanned out, and the Brain re-reads `GET /api/deep` (`brain.js`, Deep questions) | Re-reads `/api/deep` and `/api/big-model` (`JarvisRuntime.onEvent`: `refreshDeep`, `refreshBigModel`) |
+| `wellbeing` | **Since 2026-09-28** (`backend/jarvis_wellbeing.py`, section 38.1): `{"serious": true}` as a crisis answer starts, `{"serious": false}` when its serious moment is over - one boolean, never a word. Nothing in Rust reads for it (`stream.rs`); it is fanned out to every window like any other frame. `jarvis-link.js` keeps it once for the widget and the floating face (`noteWellbeing`, `faceSignal().serious`, 900 s net), the HUD page reads it from its own stream (`jarvis_hud.html`), and each posts `serious` to its face frame (`faces.html`), whose animals hold a calm, plain pose | `JarvisRuntime.onEvent`'s `"wellbeing"` branch sets `faceSerious` (900 s net), which the Home face reads (`HomeState.faceSerious` -> `FaceView`'s `serious`) |
+
+`devices` (section 90, `backend/jarvis_devices.py`): `{}` and nothing else -
+a device was paired or removed, or the old shared key was retired or
+brought back. Both apps re-read `GET /api/devices` when they show it.
 
 `attention` is the one kind that carries its own state instead of ringing a
-bell (`stream.rs:506-511`).
+bell (`stream.rs:506-511`). `wellbeing` (above) carries one boolean for the
+same reason: there is nothing behind it to re-fetch.
 
 `step` (`backend/jarvis_agent.py`, `_step_event`) is published by the tool
 loop while it answers: `{"phase": "model" | "tool_started" | "tool_finished"
@@ -569,13 +585,17 @@ and `inject_memory` is false. The same happens, with a sentence of its own,
 when `OLLAMA_URL` is not this PC. Apps show the error as they show any
 other; nothing new to handle.
 
-**`offer` in `X-Jarvis-Route`** (the router, 2026-09-24): a cloud lane that
-could have answered this turn, named but NOT used - gate `"offer"`, `where`
-`"local"`. The router sends a turn to a cloud lane only when the owner said
-yes for that one question (`jarvis_router.choose(owner_said_yes=True)`), and
-never for a turn a privacy gate kept local; those carry no `offer` at all.
-No app sends that yes yet - asking is built with "model advice" - so today
-no answer goes to a cloud lane on its own. Apps that do not know `offer`
+**`offer` in `X-Jarvis-Route`** (the router, 2026-09-24; the "yes" button,
+2026-09-27): a cloud lane that could have answered this turn, named but NOT
+used - gate `"offer"`, `where` `"local"`. The router sends a turn to a
+cloud lane only when the owner said yes for that one question
+(`jarvis_router.choose(owner_said_yes=True)`), and never for a turn a
+privacy gate kept local; those carry no `offer` at all. Both apps show
+"Try the cloud model" under an answer whose route carries `gate: "offer"`
+and a non-empty `offer`, right beside "Not now" - one tap, one question,
+never a standing choice (§18.1, `cloud_yes`; `backend/cloud-say-yes.patch`).
+Pressing it resends the exact same question with `cloud_yes: true`; nothing
+else from the conversation goes with it. Apps that do not know `offer`
 read the turn as local, which it is.
 
 **`second_card` in `X-Jarvis-Route`** (`second-card.patch`, 2026-09-24): on a
@@ -944,6 +964,16 @@ not in plain words - e.g. the one-time step to run>", "made", "skipped"
 of them got no block), "last_skip_why", "last_ms" (how long the last
 timing took)}`.
 
+**Since 2026-09-28 a crisis answer is said in the plain built-in voice**
+(section 38.1): while a crisis answer is being given or spoken, and for the
+crisis help message's own words at any time, `/api/voice/say` speaks in the
+owner's own built-in voice choice at their own speed - not the animal face's
+voice, no pitch rise ("Voice follows the face" is set aside for those
+sentences; the switch itself is not changed). A recorded custom voice the
+owner chose still speaks as always. The request is unchanged (`{"text"}`
+only), the answer is the same WAV, and the `jmth` mouth chunk is made the
+same way. Nothing for either app to change for the sound.
+
 **The audio format: 16-bit PCM in a WAV container. The two apps send
 different rates, and the server copes with both** (checked against the code
 on 2026-09-24):
@@ -1147,7 +1177,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/version` | GET | `sidecar.rs:321`, `stream.rs:569` | `JarvisApi.kt:268` | The handshake. **Branch on capabilities, never on version numbers** (`JarvisRuntime.kt:394-396`). Also carries `activity` (the state word) - since 2026-09-23 in the rebuilt `jarvis_events.hello()`, which did not send it before. `capabilities.power` is `jarvis_power.status()` (`mode`, `why`, `quiet_hours`, ...) rather than a bare `true`; `capabilities.appearance` is true when `appearance.patch` is in the running server; `capabilities.temporary_chat` (2026-09-25) when `temporary-chat.patch` is - both apps offer a temporary chat only then (§4), the desktop asking through `temporary_chat_available` and again in `stream_chat`. `capabilities.owner_check` (2026-09-25) is `"backend"` when `owner-check.patch` has wrapped the running server's `/api/approve` (§3, "The PC's own check before an approval"); the desktop then leaves Windows Hello for risky cards to the backend. `capabilities.stop_all` (2026-09-25) is true when `stop-all.patch` has wrapped the running server's POST handler, so `POST /api/stop_all` answers (§28). `started` (2026-09-25) is when the server process started, in epoch seconds (§29). The desktop falls back to `/api/status` for anything an older server leaves out. |
 | `/api/status` | GET | `commands.rs:677`, `routes.rs:16`, `stream.rs` (power/activity fallback) | `JarvisApi.kt:271` | Reports the power mode (written by `POST /api/power` since `power-mode.patch`). Also `held` (a boolean): **what sets it is not documented anywhere in this repository** - it comes from the owner's `jarvis_hud.py`. Two phone comments used to give it two different meanings; the Brain screen now says only "something held back" and points to the undo shelf, and the quick-settings tile does not read it. |
 | `/api/graph` | GET | **no longer** (the HUD page only, through `hud_proxy.rs`) | **no — by rule** | The memory graph stays off the phone. **Taken off the Brain's allowlist on 2026-09-28** (§71.3, privacy finding B1): its fact dots were not hidden by "Windows Hello for memory lists". Galaxy is drawn from `/api/memory/entities` instead. The HUD's copy loses its fact, document and person dots while the lists are hidden (`lock/rules.rs` `redact_graph`). |
-| `/api/models` | GET | `routes.rs:17` | `JarvisApi.kt:300` | Phone reads it only where the handshake reports the `models` capability. |
+| `/api/models` | GET | `routes.rs:17` | `JarvisApi.kt:300` | Phone reads it only where the handshake reports the `models` capability. A failed read falls back to the phone's own last successful one, cached on disk and clearly marked as old - see the note below the table. |
 | `/api/compute` | GET | `routes.rs:18` | via `probe` | GPU/VRAM plan. Shape undocumented — see below. |
 | `/api/skills` | GET | `routes.rs:19` | via `probe` | |
 | `/api/jobs` | GET | `routes.rs:20` | `JarvisApi.kt:286` | List key: `jobs`. |
@@ -1165,7 +1195,7 @@ path ever appears in it (`routes.rs:67-101`).
 | `/api/digest` | GET | `attention.rs:81`, `routes.rs:35` | `JarvisApi.kt:280` | List key: `digest`. |
 | `/api/config` | GET | `routes.rs:36` | **no** | **Read-only: writing answers 501.** This is why there is no shared place to store a preference — `API-DISAGREEMENTS.md` §11. |
 | `/api/visual-spec` | GET | `spec_drift.rs:50` | **no** | Desktop checks its bundled spec against the server's at startup. The phone never fetches it. |
-| `/api/appearance` | GET / POST | `appearance.rs` | `JarvisApi.getAppearance` / `postAppearance` | `appearance.patch`. `/api/version` lists `capabilities.appearance` (rebuilt `jarvis_events.hello()`); the phone also tries the route once when the flag is absent. See §7.3. |
+| `/api/appearance` | GET / POST | `appearance.rs` | `JarvisApi.getAppearance` / `postAppearance` | `appearance.patch`. `/api/version` lists `capabilities.appearance` (rebuilt `jarvis_events.hello()`); the phone also tries the route once when the flag is absent. See §7.3. Not in this document, on purpose: display choices kept on ONE device - the face's quality, frame rate and speed, and "Keep the animal still" (2026-09-28; the animals only breathe and blink). The desktop keeps them in its own storage (`jarvis.faceTuning`, `face-tuning.js`), the phone in its Look (`still_animal`, `AppearanceStore.kt`); neither is sent to the PC's backend or the other device, and none raises a card. |
 | `/api/feedback/counts` | GET | **no** | **no** (not built - see the `turn_id` note in §4) | `feedback.patch`. Token + origin. `{"facts": {"<fact id>": {"helpful", "harmful"}}, "skill_notes": {same shape}, "answers_marked": {"right", "wrong"}, "retire_cards_raised", "threshold": {"min_wrong": 5, "ratio": 3}, "note"}`. Match a fact id to its words with `/api/memory/facts`, and show `note` with the counts: a fact in a wrong answer did not necessarily cause it. `503` if `jarvis_feedback.py` is missing. |
 | `/api/feedback/mark?turn_id=<id>` | GET | **no** | **no** - not needed: the phone keeps the mark for the one answer on screen in memory, and that answer is gone when the app is | `feedback.patch`. The current mark on one answer: `200 {"turn_id", "mark"}` (`"right"`, `"wrong"` or `"none"`), `404` if the id is unknown on this machine. |
 | `/api/skills/suggestions` | GET | **no** | **no** | `skill-suggest.patch`. Read-only, same guard as `/api/skills`. `{available, enabled, recording, tier, why_off, min_repeats, window_days, every_hours, in_flight, next_offer_after, ledger_error, note, chains: [{chain, turns, last_seen, status}], offers: [newest first, up to 50]}`; `status` is `eligible`, `counting`, `asked_before`, `declined`, `saved` or `covered`. `{"available": false, "reason"}` if the module is missing. **No approve or save button on this screen** - an offer is decided only on its approval card (§3, action `modify_own_code`). |
@@ -1183,14 +1213,22 @@ path ever appears in it (`routes.rs:67-101`).
 `{"available": true, "recent": [up to 20 answer rows, oldest first; since
 2026-09-26 a row may also carry "cached_tokens" (how much of the prompt
 Ollama reused) and "prompt_rounds" (requests to the model in that answer,
-whose "prompt_tokens" and "cached_tokens" are summed) - numbers only, and
-neither app needs to show them],
+whose "prompt_tokens" and "cached_tokens" are summed) - numbers only; the
+apps read the share below, not these],
 "by_model": {"<model>": {"answers", "median_first_word_ms",
 "median_tokens_per_s", "median_words_per_s", "median_on_gpu_percent",
-"last_at"}}, "last_switch": null | {...}, "last_switch_note": null | "<sentence>",
+"median_reused_percent", "reused_answers", "last_at"}}, "last_switch": null | {...}, "last_switch_note": null | "<sentence>",
 "slowdown": null | {"slower", "change_percent", "recent_tokens_per_s",
-"earlier_tokens_per_s"}, "note"}`, or `{"available": false, "note"}`. Show one
-line for `by_model[current]`; show `note` as a warning line only when
+"earlier_tokens_per_s"}, "note"}`, or `{"available": false, "note"}`. `median_reused_percent` (milestone 7,
+2026-09-28) is the middle, over the answers that have both counts, of
+`cached_tokens` out of `prompt_tokens` as a percentage - how much of the
+conversation Ollama had already read from the last question and did not
+read again (its prompt cache); `reused_answers` is how many answers had the
+counts. It is `null` when none did: rows from before 2026-09-26, an older
+Ollama, or answers with no tools switched on (those are relayed as the app
+asked, and neither app asks for the counts). Show one
+line for `by_model[current]`, ending with "N% of the conversation reused,
+not read again" when `median_reused_percent` is a number; show `note` as a warning line only when
 `slowdown.slower` is true; show `last_switch_note` word for word beside the
 rollback button when `last_switch` is set. Numbers only - nothing in it is
 conversation text. **Android** does exactly those three things in the Brain's Model
@@ -1201,6 +1239,41 @@ since 2026-09-23 (Brain → Model → Models, `brain.js` `modelSpeed`, a
 line-for-line port); before that it ignored the block. Both apps can also
 **install** a model there now - a typed name, one approval card, no
 catalogue.
+
+**The desktop's Brain → Model, when `/api/models` cannot be read at all**
+(`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`; `models-cache.js`, `brain.js`
+`renderModels`) - client-side behaviour, no wire change: the desktop keeps
+its own last successful read of this route in `localStorage`
+(`jarvis.brain.modelsCache`), holding only `current`, `previous` and
+`installed[].{ref,size,family}` - never `speed` or `offload`, which are
+stripped before the write, not merely hidden after. When the live read
+then fails with Jarvis not reachable at all (`read: "failed"`, not
+`"absent"`), the pane shows that cache instead of going blank, with a
+plain banner naming the real time it is from and hiding the model-in-use
+highlight, the on/off-graphics-card note and the recent-speed lines - all
+of which are facts about what Ollama is doing right now, not about a file
+on disk, and would read as live if shown stale. A backend that genuinely
+has no `/api/models` (`read: "absent"`, a 404/503) is shown as that fact,
+never as the stale cache. A machine that has never once completed a live
+read, with nothing cached either, is told plainly that there is nothing to
+show yet, rather than being told a read "failed".
+
+**Android caches its own last successful `/api/models` read on disk** the
+same way (`docs/OFFLINE-MODELS-DESIGN-2026-09-27.md`, no wire change -
+client-only). Every live success writes the offline-safe subset (`current`,
+`previous`, `installed`) to `ModelsCacheStore`, dropping `offload` and
+`speed` for the same reason the desktop does. When a live read fails, Brain
+-> Model falls back to that cache and says so plainly - "Can't reach
+Jarvis - showing what it last saw, <age>" - with Use, Install and Roll back
+dimmed the same way they already dim while the link is down or stale (rule
+4). No prior cache at all reads "There's nothing to show yet - open this
+once while Jarvis is running on your PC." The cache is written only as a
+side effect of an ordinary live read succeeding, never fetched specially -
+it is not a live disk read (the phone has no access to the PC's disk) and
+not a browsable catalogue: it only ever replays what the phone already
+showed live once (CLAUDE.md: "do not build the model catalogue... on the
+phone"). See `net/ModelsCache.kt` (`CachedModels`, `ModelsView`,
+`modelsView()`) and `data/ModelsCacheStore.kt`.
 
 **`/api/graph` gains `sources.documents_not_ours`** (`documents-owned.patch`):
 true means a `documents` table made by another program (most likely
@@ -1508,7 +1581,8 @@ they explain why several obvious routes are missing rather than forgotten.
    `jarvis-android` became unusable.
 
 Reconstructed 2026-09-20 from client call sites on branch
-`fix/audit-remaining-four`. Roughly 55 distinct endpoint paths.
+`fix/audit-remaining-four`. About 55 distinct endpoint paths then; about 200
+by 2026-09-28.
 
 ---
 
@@ -1640,7 +1714,7 @@ deciding whether pictures can be sent. `tools/check_parity.py` records
 | Route | Body | Answers | Notes |
 |---|---|---|---|
 | `GET /api/second-card` | - | 200 `status()` (below); 503 `{"available": false, "error"}` if `jarvis_second_card.py` is missing | Token + origin. Card names and hardware ids (`GPU-...`); never a token. Re-read it after a card is decided - there is no event for it. |
-| `POST /api/second-card` | `{"feature": "master" \| "combined" \| "<feature id>", "enabled": true \| false}` | 200 `{"ok": true, "pending": true, "enabled": false, "message"}` - a card is up, nothing is on yet; 200 `{"ok": true, "enabled": false, "pending": false, "message"}` - off; 200 `{"ok": true, "enabled": true, "pending": false, "message"}` - already on; **409** a card for that switch already waits, (2026-09-24) "Not now: the big model is using the ...; it stops after N idle minutes" - an ON that would start the second Ollama while the big model holds that card, or (2026-09-27) `feature: "combined"` while a feature below is genuinely on, or a feature/master while `combined` is on ("needs both cards to itself" / "Turn that off first"); **400** unknown feature, `enabled` not a boolean, the main switch off, or a needed feature off; **503** no capable second card (the sentence says why), (2026-09-27) `combined` with only one card or too little memory between the two, or the switch's action is not tier `ask` (`second_card_enable`, `second_card_browser_enable` for Browser control, or `second_card_combined_enable`) | ON is one approval card: action `second_card_enable`, except Browser control (`second_card_browser_enable`, since it lets Jarvis work pages on the internet) and `combined` (`second_card_combined_enable`, since it ties up both cards). OFF is immediate. Show `error` word for word. |
+| `POST /api/second-card` | `{"feature": "master" \| "combined" \| "<feature id>", "enabled": true \| false}`, or (2026-09-28) `{"feature": "third", "assign": "<feature id>" \| null}` | 200 `{"ok": true, "pending": true, "enabled": false, "message"}` - a card is up, nothing is on yet; 200 `{"ok": true, "enabled": false, "pending": false, "message"}` - off; 200 `{"ok": true, "enabled": true, "pending": false, "message"}` - already on; **409** a card for that switch already waits, (2026-09-24) "Not now: the big model is using the ...; it stops after N idle minutes" - an ON that would start the second Ollama while the big model holds that card, or (2026-09-27) `feature: "combined"` while a feature below is genuinely on, or a feature/master while `combined` is on ("needs both cards to itself" / "Turn that off first"); **400** unknown feature, `enabled` not a boolean, the main switch off, or a needed feature off; **503** no capable second card (the sentence says why), (2026-09-27) `combined` with only one card or too little memory between the two, or the switch's action is not tier `ask` (`second_card_enable`, `second_card_browser_enable` for Browser control, or `second_card_combined_enable`) | ON is one approval card: action `second_card_enable`, except Browser control (`second_card_browser_enable`, since it lets Jarvis work pages on the internet) and `combined` (`second_card_combined_enable`, since it ties up both cards). OFF is immediate. Show `error` word for word. `feature: "third"` (2026-09-28) is its own shape, its own answers and its own action (`second_card_third_assign`) - see the section below. |
 
 **`status()`** - the real output of each case is in
 `jarvis-desktop/tests/fixtures/second-card-cases.json` (`one_card`,
@@ -1699,6 +1773,106 @@ in words, what is missing. A switch whose card has gone stays `enabled` with
 the owner's everyday Ollama on the main card; show it with a copy button and
 `pin_note` above it, on the desktop. The phone shows `pin_note` only (the
 command is run on the PC).
+
+**A third graphics card - the data-model reshape only (added 2026-09-28,
+`docs/GPU-SUPPORT-RESEARCH-2026-09-27.md`).** That research found `_detect()`
+picked exactly one "second" candidate from however many capable extra cards
+were actually plugged in, and threw the rest away - a real, capable third
+card was already detected and already discarded, silently. Its
+recommendation #1 was to fix that shape first, on its own, with no change to
+this route's JSON at all: **`GET /api/second-card`'s answer above is
+BYTE-FOR-BYTE UNCHANGED by this work**, on a PC with any number of cards.
+What changed is internal only: `jarvis_second_card.detect()` now also keeps
+every capable non-primary card (not just the best one) as an internal list,
+and a new internal function, `extra_lanes(det)`, turns every card beyond
+the one already running as "second" into `second`'s own plain-dict shape -
+so a third capable card is visible to Python callers as data, in the same
+shape the route already uses, rather than only as a "why" sentence on an
+"unused" row in `cards[]` (which already correctly explained why it was not
+picked, and still does, word for word). Neither this route, nor either
+app, nor `jarvis_agent.choose_lane()`'s routing of the model's own tool
+calls, changed in any way - **a third card cannot run anything yet.**
+Building that (its own lane process, a real per-card approval decision, and
+a UI row in both apps - none of which exist today) is a separate, larger
+piece of work, deliberately left for a dedicated follow-up rather than
+built in the same pass as this shape change; see the "A THIRD CARD" section
+of `jarvis_second_card.py`'s own module docstring for the full reasoning.
+`jarvis_hardware.py`'s preset system (`lane_plan()`) is unchanged too - it
+stays a two-slot design (`chat_card`/`lane_card`) on purpose; only the
+non-preset detection path (`_detect()`) got the reshape. `"combined"`
+(below) is unaffected either way: it already only ever reads the
+`"primary"` and `"second"` rows of `cards[]`, so a third capable card was
+already left out of it, without any code change.
+
+**A third graphics card's own lane (added 2026-09-28).** The follow-up
+piece the reshape above deliberately left for later: a genuinely capable
+third card can now be given ONE of the five features above, so it runs
+ALONGSIDE the second card's own lane - never instead of it, and never
+picked for the owner. `docs/GPU-SUPPORT-RESEARCH-2026-09-27.md` §1.3 is
+explicit that which card runs which feature must always be a real, named
+choice; this is built exactly that way, as its own approval card that
+names the physical card.
+
+*The switch.* One new field, `third_feature`, in `jarvis_second_card.py`'s
+own switches file - `null` (the default, even with a capable third card
+sitting right there: "no default winner") or one of the five feature ids.
+It only ever says WHERE an already-on feature's model calls go; the
+feature's own switch (above) still says WHETHER it is on at all, unchanged.
+There is only one third lane, so only one feature at a time can be moved
+there.
+
+*The route.* Still `POST /api/second-card`, with a body shaped
+differently for this one case: `{"feature": "third", "assign": "<feature
+id>" | null}` (never `"enabled"` - `assign` replaces it for this feature
+value only). `assign: null` unassigns at once, no card, like every OFF
+here. A real feature id raises one approval card (`second_card_third_assign`,
+tier `ask`) that names the third card, its model and its memory, and says
+this runs AT THE SAME TIME as the second card's own lane - `describe_third_assign()`
+in `jarvis_second_card.py` is the whole card, word for word. **400** the
+feature is not on yet ("Turn ... on first"), an unknown feature id, or
+`assign` is neither a string nor `null`; **409** a card for it already
+waits; **503** no capable third card right now, or the action's tier is
+not `ask`. Reusing `second_card_enable`'s own action was considered and
+rejected on purpose: this decision is fundamentally about WHICH physical
+card, which `second_card_enable`'s own wording ("nothing leaves this PC")
+never says, and giving it a separate action lets the "What asks first"
+page (§ below) and the risk table describe it on its own terms - the same
+reasoning `second_card_browser_enable` and `second_card_combined_enable`
+already followed for their own, differently-shaped decisions.
+
+*`GET /api/second-card`'s new `"third"` key* (purely additive - every
+existing key is unchanged): `{"capable": bool, "card": {"uuid", "index",
+"name", "total_mb", "compute_cap"} | null, "assigned": "<feature id>" |
+null, "assignable": [feature ids currently on and eligible to be moved],
+"pending": bool, "lane": {"state", "why"}, "model", "context", "memory_gib",
+"model_installed", "why"}` - the same "row" shape and plain-English `why`
+style `"combined"` already uses, so both apps' UI code can reuse the exact
+same rendering pattern.
+
+*The lane process.* A third, literal `_LaneProcess` (`_THIRD_LANE`) -
+mirroring `_LANE` and `_COMBINED_LANE`, not a new dict-keyed structure.
+Considered and explained in `jarvis_second_card.py`'s own module docstring
+("THE LANE PROCESS" section): the class already carries no assumption
+about which lane it is, so one more literal instance costs the same as a
+dict entry would, without touching either existing singleton's own
+call sites in a module this safety-critical. It has its own port
+(`[second_card] third_port` in `jarvis-framework.toml`, default 11436)
+and its own log file (`second-card-third-ollama.log`), because - unlike
+`_LANE`/`_COMBINED_LANE`, which are mutually exclusive and safely share
+one port - the third lane runs at the SAME TIME as the second card's own
+lane. `jarvis_agent.choose_lane()` and every other existing caller of
+`lane_for()` are UNTOUCHED: `lane_for(feature)` itself now checks the new
+assignment internally and returns a `Lane` pointed at whichever process is
+actually running that feature, exactly as before from every caller's own
+point of view.
+
+*What stays exactly as it was.* Presets (`jarvis_hardware.py`) stay
+two-slot - a third card does nothing under a chosen preset, in words
+("no capable third graphics card"). `"combined"` stays two-card-only,
+unaffected by any of this. `cards[]`'s own per-row text for an unassigned
+capable third card is unchanged too (still "unused ... has more memory") -
+the fuller, current story lives in the new `"third"` key instead, so
+nothing that existed before this needed to change.
 
 **"One bigger model on both cards" (added 2026-09-27).** A third mode,
 alongside the five features above and alongside a chosen hardware preset's
@@ -2116,7 +2290,7 @@ loaded to answer it). Choosing a voice beyond what a PC's real model has is
 no different from setting `tts_speaker_id` too high by hand today.
 
 **Voice follows the face** (added 2026-09-27, the owner's choice): with one
-of the animal faces showing (red panda, pygmy owl, sea otter -
+of the animal faces showing (red panda, pygmy owl, sea otter, monkey -
 `docs/CRITTERS.md`), the **built-in** voice becomes that animal's: one of
 Kokoro's own voices already installed, its own pace, and a small pitch rise
 (`jarvis_voices.FACE_VOICES`). The face is read from `<config
@@ -2125,7 +2299,7 @@ order: a custom voice the owner chose; then the face's voice; then the
 built-in voice choice above. The owner's speaking speed still applies on
 top of the animal's pace. A chosen recorded voice wins; when it cannot be
 used right now, the built-in voice speaks instead - and so, with an animal
-face showing, the animal does, and `face_voice.line` says so. An on/off switch, **on by default**, right under
+face showing, the animal does, and `face_voice.line` says so. An on/off switch, **off by default** (the owner's 2026-09-28 decision), right under
 the built-in voice choice in both apps: `status()` carries it and every word
 (`face_voice`, below); `POST /api/voice/voices/face` sets it. **No card
 either way** - it only changes how Jarvis sounds, never what it does, asks
@@ -2133,6 +2307,78 @@ or remembers - but held on a stale link like every change. While an
 animal's voice stands in, `speaker.note` says so, so choosing a built-in
 voice and hearing no change does not look broken. The animals' voices were
 picked from Kokoro's published descriptions, not listened to.
+
+**The one-time question** (added 2026-09-28, the owner's decision): the
+first time the owner picks an animal face, one line asks "The Red Panda has
+its own voice. Use it?" with two buttons, **Use it** and **Keep my voice**.
+`face_voice.offer` carries it, word for word (`{"face", "question", "use",
+"keep"}`), and is `null` unless the face showing is an animal the owner has
+not answered for yet - **whether "Voice follows the face" is on or off**.
+Both apps show it where the face is picked (and may show it wherever
+`face_voice` is shown), and post the answer to `POST
+/api/voice/voices/face_offer`. **Each animal keeps its own answer** (the
+owner, 2026-09-28): the PC keeps it per face (`<config
+dir>/voices/state.json`, `face_answers`: `{face: "use" | "keep"}`), so the
+question never comes back for that face. An animal speaks in its own voice
+only while the switch is on **and** its answer is "use"; with no answer, or
+"keep", the built-in voice stays as it is. "Use it" records "use" and turns
+the switch on; "Keep my voice" records "keep" and leaves the switch as it
+is. The switch stays the master: off, no animal voice at all (the answers
+are kept). A damaged answer reads as no answer. A face never changes the
+voice by itself. **No card either way** - the switch it turns on has none -
+but held on a stale link like every change.
+
+**Each animal's voice** (added 2026-09-28, the owner's choice "per animal,
+built-in voices"): the `FACE_VOICES` rows are only where each animal
+starts. For each of the three the owner may pick **any of the eleven
+built-in voices** (`speaker.choices`), a **pitch** from 3 steps deeper to 4
+steps higher in half steps (a step is a semitone; below 0 the sound is
+played slower, so it is deeper and longer - Kokoro is asked for faster
+speech first, so the pace still comes out as chosen), and a **pace**
+(Slower / Normal / Faster, still times the owner's own speaking speed).
+`status()` carries every animal's current choice, the lists to choose from
+and all the words (`face_voice.animals`, `animal_choices`, below);
+`POST /api/voice/voices/face_animal` sets one animal, or resets it to its
+own voice. **No card either way**, the switch's own reason; held on a stale
+link like every change. Kept in `<config dir>/voices/state.json`
+(`face_animals`, only for an animal whose choice differs from its own). The
+switch still decides whether any animal voice is used at all: off, every
+face speaks in the owner's single built-in voice, and the per-animal
+choices wait. A recorded voice still wins, and a crisis answer is still
+said in the plain voice. **The mouths keep matching whatever is chosen**:
+the mouth timing (`jmth`) is divided by the same pitch factor the sound is
+played at (docs/LIPSYNC.md). The "One moment." clip and the talk-over
+reference voice follow the choice (both read the voice through
+`jarvis_speech.tts_voice`). **"Try it"**: `POST
+/api/voice/voices/face_animal/try {"face"}` answers a WAV of one fixed line
+the PC says itself ("Hello, it's Jarvis. This is how I sound as the Red
+Panda.") in that animal's voice as it is now - whether or not that face is
+showing or the switch is on - with the `jmth` chunk when the PC makes one.
+It changes and keeps nothing, so it is not held on a stale link; an app
+never sends the words. **One at a time**: a second "Try it" while the PC is
+still making one is refused at once, 429 in words (added 2026-09-28).
+
+**"Try it" never plays over Jarvis, in either app** (2026-09-28). Both
+refuse it while Jarvis is talking or listening ("Jarvis is busy talking or
+listening. Try it again in a moment."), and stop it the moment a question
+or an answer starts ("Stopped, because Jarvis is talking or listening
+now."), so the microphone never hears it. The phone asks its own voice
+session and is stopped by the talk button, "hey Jarvis" being heard and
+Train my voice (`VoiceSession.turnStarting`). The desktop's Rust refuses
+while the talk button records, and Settings stops the clip on the
+`voice-capture-started`, `voice-speech-started`, `voice-heard`, `face-voice`
+(the Jarvis bar speaking) and `stop-everything` events, and on the link's
+activity turning to listening, thinking, working or speaking (not trusted
+on a stale link); a recording in Settings stops it too. Both say the same
+words throughout: "Asking the PC for the sound…", "Playing the Red Panda's
+voice.", "That was the Red Panda's voice.", and on a PC without the route
+"Your PC cannot play an animal's voice yet. Run the patch script on the PC
+first." **Where it plays:** on the phone, through the same speaker as every
+answer, so the face on the phone moves with it. On the desktop, in the
+Settings window only - the faces in the other windows (the Widget, the
+floating face, the HUD) do **not** move with it, because only the Jarvis bar
+may send the `face-voice` lip-sync messages (`face_voice` is in its
+permission set alone), and widening that for a preview was not worth it.
 
 **Where the audio goes: nowhere.** The recording is held in the PC's memory
 until the card is answered; approved, it is kept in
@@ -2151,8 +2397,9 @@ any voice print changes.
 All routes: token + origin, like every other write. A client sends
 `X-Jarvis-Client: hud` as always. **Hold on a stale link (rule 4) every
 POST that raises a card** - adding a voice, switching to a custom one,
-better voice ON - and the speed, the built-in voice choice and "Voice
-follows the face" (a change, though each raises none). Deleting a voice, going back to the built-in one and
+better voice ON - and the speed, the built-in voice choice, "Voice
+follows the face" and each animal's voice (a change, though each raises
+none). "Try it" changes nothing and is never held. Deleting a voice, going back to the built-in one and
 better voice OFF only take something away and always go (both apps). Show every `error` and `why` word for word: they are written for the
 owner.
 
@@ -2165,6 +2412,9 @@ owner.
 | `POST /api/voice/voices/speed` | `{"speed": "slower" \| "normal" \| "faster"}` (one of `speed.choices[].id`) | **200** `{"ok": true, "message": "Jarvis now speaks faster.", "speed": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "the speed must be slower, normal or faster"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speed", "outcome": "set"}`). |
 | `POST /api/voice/voices/speaker` (added 2026-09-27) | `{"speaker": "0".."10"}` (one of `speaker.choices[].id`) | **200** `{"ok": true, "message": "Jarvis's built-in voice is now British (male) - George.", "speaker": {...as in status()}}` at once, no card; **400** `{"ok": false, "error": "choose one of the listed voices"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "speaker", "outcome": "set"}`). |
 | `POST /api/voice/voices/face` (added 2026-09-27) | `{"enabled": true \| false}` (nothing else in the body) | **200** `{"ok": true, "message": "Jarvis's voice now follows the face." \| "Jarvis's voice now stays the same whatever the face.", "face_voice": {...as in status()}}` at once, no card either way; **400** `{"ok": false, "error": "choose on or off"}` for anything else; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json`. Rings the `voices` event (`{"what": "face_voice", "outcome": "on" \| "off"}`). |
+| `POST /api/voice/voices/face_offer` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey", "answer": "use" \| "keep"}` (both, nothing else) | **200** `{"ok": true, "message": "The Red Panda speaks in its own voice now. \"Voice follows the face\" is on; turn it off in the voice settings to go back." \| "Jarvis keeps your voice for the Red Panda. Each animal asks once for itself.", "face_voice": {...as in status(), with "offer": null}}` at once, no card either way; **400** `{"ok": false, "error"}` in words - "send the face and the answer, \"use\" or \"keep\"", "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey", "the answer must be \"use\" or \"keep\""; 500 `{"ok": false, "error"}` if it could not be saved | The answer is kept for that face alone (`face_answers` in `<config dir>/voices/state.json`); an animal speaks as itself only with the switch on and its answer "use". "use" also turns "Voice follows the face" on; "keep" leaves the switch as it is. Rings the `voices` event (`{"what": "face_offer", "outcome": "use" \| "keep"}`). The audit line has the face and the answer only. |
+| `POST /api/voice/voices/face_animal` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey", "speaker": "0".."10", "semitones": -3.0..4.0 in steps of 0.5, "pace": "slower" \| "normal" \| "faster"}` (all four, nothing else), or `{"face": ..., "reset": true}` | **200** `{"ok": true, "message": "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster." \| "The Red Panda speaks in its own voice again.", "face_voice": {...as in status()}}` at once, no card either way (with the switch off the message adds that it is heard once the switch is on; with it on, and that animal not answered for or answered "keep", the message says so); **400** `{"ok": false, "error"}` in words - "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey", "choose a voice, a pitch and a pace for the animal", "choose one of the listed voices", "the pitch must be from 3 steps deeper to 4 steps higher, in half steps", "the pace must be slower, normal or faster", "to reset, send reset: true"; 500 `{"ok": false, "error"}` if it could not be saved | Kept in `<config dir>/voices/state.json` (`face_animals`); a choice equal to the animal's own voice is kept as none. Rings the `voices` event (`{"what": "face_animal", "outcome": "set" \| "reset"}`). The audit line has the face and the choice only. |
+| `POST /api/voice/voices/face_animal/try` (added 2026-09-28) | `{"face": "redpanda" \| "pygmyowl" \| "seaotter" \| "monkey"}` (nothing else - never any words) | **200** `audio/wav`: one fixed line in that animal's voice as it is now (with a `jmth` chunk when the PC makes one); **400** `{"ok": false, "error": "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey"}`; **429** `{"ok": false, "error": "the PC is still making the sound for the last Try it. Try it again in a moment"}` - one at a time; **503** `{"ok": false, "error": "this PC has no built-in voice to play it with"}` or why the voice failed | No card, nothing saved, no event, no audit line. Not held on a stale link. Both apps play it where they are (the desktop's Settings window - the faces in its other windows do not move; the phone through its answer speaker), never while Jarvis is talking or listening, and stop it when a question or answer starts (above). |
 | `POST /api/voice/voices/better` | `{"enabled": true \| false}` | `false`: **200** `{"ok": true, "enabled": false, "pending": false, "message"}` at once, and the F5 program stops. `true`: **202** `{"ok": true, "enabled": false, "pending": true, "message"}` - ONE card (`better_voice_enable`); **200** `{"ok": true, "enabled": true, "pending": false, "message"}` if already on; **409** `{"ok": false, "pending": true, "error"}` a card waits; **503** `{"ok": false, "error"}` no capable second card, or the tier is not `ask`; **400** `enabled` not a boolean | Offer the switch only when `better_voice.can_turn_on` is true. |
 
 Errors from the route itself (not the module): **400** `{"error": "the
@@ -2214,13 +2464,28 @@ request.
              "default": "0",
              "title": "Jarvis's built-in voice", "detail": str, "note": str,
              "choices": [{"id": "0", "label": "American (female)"}, ... 11 in all]},   absent on an older PC: show nothing
- "face_voice": {"enabled": bool,          the switch (on unless the owner turned it off)
-                "default": true,
+ "face_voice": {"enabled": bool,          the switch, the master (off unless turned on; off = no animal voice)
+                "default": false,
                 "face": "" | "<face id>",  the face saved in appearance.json ("" if none)
-                "speaking": bool,         an animal's voice is the one speaking now
-                "name": "" | "Red Panda" | "Pygmy Owl" | "Sea Otter",
+                "speaking": bool,         an animal's voice is the one speaking now (the switch on AND its answer "use")
+                "name": "" | "Red Panda" | "Pygmy Owl" | "Sea Otter" | "Monkey",
                 "line": str,              what is happening now, one sentence: show it under the switch
-                "title": "Voice follows the face", "detail": str},   absent on an older PC: show nothing
+                "title": "Voice follows the face", "detail": str,   absent on an older PC: show nothing
+                "animals": [{"face": "redpanda", "name": "Red Panda",   one row each, in this order
+                             "speaker": "1", "voice": "Bella", "semitones": 2.0, "pace": "normal",
+                             "changed": bool,     the owner's choice differs from its own (Reset does something)
+                             "own": {"speaker", "semitones", "pace"},   where it starts
+                             "answer": "use" | "keep" | null,   its one-time question's answer (null: not asked yet)
+                             "line": "Bella, 2 steps higher, at normal pace."}, ...],
+                "animals_title": "Each animal's voice", "animals_detail": str,
+                "animal_choices": {"voices": [{"id", "label"}, ... the 11 of speaker.choices],
+                                   "paces": [{"id": "slower", "label": "Slower"}, ...],
+                                   "pitch": {"min": -3.0, "max": 4.0, "step": 0.5}},
+                "offer": null | {"face": "redpanda",   the one-time question (added 2026-09-28)
+                                 "question": "The Red Panda has its own voice. Use it?",
+                                 "use": "Use it", "keep": "Keep my voice"}},
+                                  animals absent on an older PC: show the switch only;
+                                  offer absent on an older PC: ask nothing
  "pending": {"kind": "create" | "switch", "voice": "<id>", "name": str, "expires_in": <seconds>} | null,
  "last": {"kind": "create" | "switch", "voice": "<id>",
           "outcome": "created"|"switched"|"denied"|"timed_out"|"withdrawn"|"refused"|"failed",
@@ -3133,6 +3398,17 @@ On the request:
   the mode is on, and never `false`. Taken off with the other three before
   any model sees the request. Sent only to a PC whose `/api/version`
   reports `capabilities.temporary_chat`.
+- `cloud_yes` (2026-09-27, `backend/cloud-say-yes.patch`): the owner's yes
+  to "Try the cloud model" for THIS one question - the app's answer to a
+  `gate: "offer"` route on the answer just before it (§4, "`offer` in
+  `X-Jarvis-Route`"). Only JSON `true` counts, and both apps send it only
+  when the owner actually pressed the button, never `false`; it is passed
+  into `jarvis_router.choose(owner_said_yes=...)`, so it can only ever turn
+  THIS question's own gate 6 from "offer" into "escalate" - every earlier
+  gate (private, tainted, a picture, no lane, no budget) already ran on
+  this question's own merits before the offer was ever made. A PC without
+  the patch sees nothing different: `cloud_yes` is simply an unused key on
+  its request body.
 
 On each `role: "user"` message:
 
@@ -3428,8 +3704,8 @@ else `chat`):
 | `chat` | an ordinary chat, typed or spoken | no tag | yes |
 | `live` | a Jarvis Live session (its first message came with `live: true`) | "Live · 12 min · Today 14:05" in place of the date | yes |
 | `support` | a customer-support chat's record (§65.5) | "Support chat" | no - "A customer-support record can't be continued: it is the company's words and what was sent in your name, kept as your record." |
-| `chatbot` | a conversation Jarvis had with another AI (§60), kept when it ends | "Chat with an AI" | no - its replies are outside text, not a conversation with Jarvis |
-| `compare` | "Ask several and compare" (§60.7): every chatbot's conversation and the summary, as ONE record | "Comparison" | no, for the same reason |
+| `chatbot` | a conversation Jarvis had with another AI (§87), kept when it ends | "Chat with an AI" | no - its replies are outside text, not a conversation with Jarvis |
+| `compare` | "Ask several and compare" (§87.7): every chatbot's conversation and the summary, as ONE record | "Comparison" | no, for the same reason |
 
 `chatbot` and `compare` records (`jarvis_chat_log.record_chatbot`, from
 `jarvis_chatbot.keep_in_history` and `jarvis_chatbot_compare.keep_in_history`)
@@ -3575,7 +3851,7 @@ is additive; an older PC or app simply lacks it.
   "read outside text" now marks the answer that read it, not "You"; a
   support or chatbot record has its own note above it.
 - **Chatbot and comparison chats say whether they were kept.** A session and
-  a comparison carry `history: {kept, why}` once they end (§60.3 views), and
+  a comparison carry `history: {kept, why}` once they end (§87.3 views), and
   the summary notes no longer promise History: "Kept in your encrypted chat
   history on the PC." / "Not kept in your chat history: <why>", with "Open in
   History" when kept, on both apps (the support plate had the same line).
@@ -5418,7 +5694,7 @@ calendar (reading); email (reading); email (sending - "not set up" until
 sending is built; adding it is one `KINDS` entry); Home Assistant (reading);
 Home Assistant (changing things); notes (searching); notes (writing); GitHub
 research; phone notifications (ntfy); computer control; browser control;
-chatbot conversations (id `chatbot`, since 2026-09-28 - section 60: "Not
+chatbot conversations (id `chatbot`, since 2026-09-28 - section 87: "Not
 set up" with the reason, "Off" while no app can start one, "On" once
 routed); phone control; commands on this PC; plug-in programs (MCP, id
 `plugins`, since 2026-09-26 - section 37); the second graphics card; the
@@ -7202,6 +7478,91 @@ card is ever raised for it. `backend/test_wellbeing.py` proves the ordering,
 the no-tools behaviour, the failure path, the repeat line, and the
 learner exclusion, with no model and no network.
 
+### 38.1 The serious moment: a neutral face and the plain voice (added 2026-09-28)
+
+The owner's decision, 2026-09-28: "At serious moments the animals drop the
+cute gestures." For a crisis answer the animal faces show a neutral pose,
+and Jarvis speaks in its plain built-in voice - not the animal's voice, no
+pitch rise.
+
+**How the PC knows.** One in-memory window in `jarvis_wellbeing.py`
+(timestamps and a counter only - never a word of the turn, never on disk,
+never logged, gone on restart):
+
+- **Opens** when a crisis turn starts - `jarvis_agent.run_local_turn`, after
+  the reply's headers went out and before the model is asked, so before the
+  first word.
+- **When the turn ends** (answered, or the help message sent alone after a
+  failure) it stays open long enough to SPEAK the whole answer at the
+  slowest speaking speed: 30 s plus one second per 1.2 words of the answer,
+  at most 300 s (`grace_seconds`; the answer's length is used once and not
+  kept). Then it closes by itself.
+- **Closes at once** when the owner's next ordinary question starts - both
+  apps drop whatever of the last answer was still queued to be said when a
+  new question is sent. A crisis answer still being written (asked from the
+  other device) is never closed this way.
+- A crisis turn that never reports its end (a crash) stops counting after
+  600 s.
+
+**The voice - no app change.** `POST /api/voice/say` is unchanged. Every
+sentence said while the window is open is spoken in the owner's own
+built-in voice choice at their own speed, no pitch rise. So are the help
+message's own words (`REPLY`, `REPLY_SPOKEN`, `REPEAT`, `REPEAT_SPOKEN`,
+or any piece naming 988 / "nine eight eight" / the Crisis Lifeline / "call
+911") at ANY time - even spoken long after the window closed (a paused
+answer, "read it again"). A recorded custom voice the owner chose still
+speaks as always. The mouth chunk (`jmth`) is made the same way. While the
+window is open, the PC's "is that the owner talking over Jarvis?" check
+(section 17, `source=barge_in`) also compares against the plain voice.
+
+**The event - what each app reads (built 2026-09-28 on both apps: the
+desktop's `jarvis-link.js` for the widget and the floating face, the HUD
+page's own stream, and `faces.html` for each face frame; the phone's
+`JarvisRuntime.onEvent` -> `faceSerious` -> the Home face).**
+Event kind `wellbeing`, data `{"serious": true}` when the window opens and
+`{"serious": false}` when it closes (by itself, or on the next ordinary
+question). One boolean; no text, no conversation id. A second crisis turn
+while one is open sends `{"serious": true}` again - treat it as idempotent.
+
+- **Start the neutral pose** on `{"serious": true}`. The app that ASKED can
+  also start it one step earlier, from its own reply header: `X-Jarvis-Route`
+  `"wellbeing": "crisis"` (section 38 above; the desktop's
+  `state.turnRoute.wellbeing`, the phone's `ChatSession.crisis`) - but only
+  where `backend/wellbeing.patch` applied, so the event is the one to rely on.
+- **End it** on `{"serious": false}`. As a safety net, an app that has heard
+  no `false` 900 s (600 + 300) after the last `true` ends it itself, so a
+  missed frame can never leave the face neutral for good.
+- **On reconnect** (`hello`, stale or not) keep what you had until the next
+  `wellbeing` frame or the 900 s net - there is no route that reports the
+  window's state (`GET /api/wellbeing`'s `view()` carries `serious` too, but
+  that route is proposed, not confirmed wired - see above).
+- **Neutral means**: no cute gestures - no idle wiggles, tilts, happy or
+  playful poses; the face stays calm, and the mouth still follows the sound
+  (the lip-sync is unchanged). The exact pose is the apps' call
+  (`docs/CRITTERS.md`). Every
+  window that draws a face reads it: on the desktop the frame is fanned
+  out to every window (`stream.rs`); `jarvis-link.js` keeps it for the
+  widget and the floating face, which post `serious` to their face frames
+  with the rest of `faceSignal`, and the HUD page reads it from its own
+  stream and posts it to its frame the same way. On the phone,
+  `JarvisRuntime.onEvent`'s `"wellbeing"` branch sets `faceSerious`, which
+  the Home face reads. ("Floating Jarvis" on the phone is the app's icon,
+  not the animal, so it has nothing to change.) Only a JSON `true` or
+  `false` counts, on both apps - a string such as `"true"` is ignored.
+- **Nothing else changes**: no card, no setting, no off switch (the crisis
+  help line has none), and the chat panel's own crisis styling (section 38)
+  is untouched.
+
+**Erring on the safe side, said plainly.** Anything said inside the window
+that was NOT part of the crisis answer (an alarm's words a minute later) is
+also said plainly, and the faces stay neutral up to 300 s after the answer
+ended. The opposite mistake - an animal's voice reading out the help line -
+is the one this exists to prevent. Not covered: the "One moment." clip
+(section 17) is made ahead of time in the voice in use and is not remade
+plainly for a crisis turn. `backend/test_wellbeing.py` section 7 proves
+the window, the event, the help words, the plain voice with the mouth track,
+and the barge-in reference, with no model and no network.
+
 ## 39. Smartwatch notifications (added 2026-09-27)
 
 The owner's decision (`CLAUDE.md`, 2026-09-25, the competitiveness audit;
@@ -8322,7 +8683,7 @@ healthy?" (§ "Build order", `docs/FEASIBILITY-AUDIT-2026-09-26.md`).
 
 - **The chat history database** (`chat-history.db`, §29), **the memory
   database** (`memory.db`) and, since 2026-09-28, **the projects
-  database** (`projects.db`, §61) each open `mode=ro` (never created, never
+  database** (`projects.db`, §88) each open `mode=ro` (never created, never
   written to) and pass SQLite's own `PRAGMA integrity_check`. A file that
   does not exist yet - history off, nothing learned yet, no project made
   yet - is `ok`, never a warning.
@@ -9263,7 +9624,7 @@ at - "turn off my calendar" and "turn on the special mode" are not real
 settings and go to the model, same as "ask, don't guess"
 (`docs/CUTTING-EDGE-2026-09-26-round2-tools.md`'s principle, reused here).
 
-Ten settings are covered - the ones that already sit behind a single
+Eleven settings are covered - the ones that already sit behind a single
 proven `handle_*`/`request_*` entry point this file can call exactly as
 the REST route does, never a copy of its logic:
 
@@ -9276,6 +9637,7 @@ the REST route does, never a copy of its logic:
 | Lights, plugs and fans without a card | "turn on/off lights without asking" | `jarvis_asks_first.handle_lights()` (§33) |
 | "Ask before every web search" | "turn on/off asking before every web search" | `jarvis_search.request_ask_every_time()` (§23) |
 | Smartwatch notifications | "turn on/off smartwatch notifications" | `jarvis_watch_notify.request()` (§39) |
+| Reading phone notifications | "turn on/off phone notifications" | `jarvis_phone_notifications.request()` (§61) |
 | Morning briefing senders shown | "turn on/off senders in my briefing" | `jarvis_briefing.handle_senders()` (§22) |
 | "What asks first" - loosen/stricter | "stop asking before my calendar" / "ask me before my calendar" | `jarvis_asks_first.handle_tier()` (§32) |
 | Offering a reading tool to the AI model | "let/don't let the AI model read my calendar" | `jarvis_asks_first.handle_tools()` (§43) |
@@ -9355,880 +9717,471 @@ second version of any of it.
   Hello stand-in (`jarvis_owner_check.set_verifier`) and a sandboxed copy
   of `jarvis-framework.toml`, never the real thing.
 
-## 60. Chatbot conversations - Jarvis talks to an AI chatbot for you (core, routes, both apps' screens, and Gemini plus eight more website adapters built 2026-09-28)
-
-**Routed, on both apps' screens, with the Gemini website adapter - but not
-yet tried against the real gemini.google.com** (the owner's self-check in
-§60.4 does that). The design is `docs/CHATBOT-DRIVER-DESIGN.md` (with "The
-owner's answers (2026-09-28)"); the owner's decisions are in `CLAUDE.md`
-(2026-09-27 and 2026-09-28).
-
-- The backend core: `backend/jarvis_chatbot.py`, shipped whole, tested by
-  `backend/test_chatbot.py` against a stand-in chatbot (`FakeChatbot`).
-- The Gemini website adapter: `backend/jarvis_chatbot_gemini.py`, shipped
-  whole, tested by `backend/test_chatbot_gemini.py` against a fake Gemini
-  page on 127.0.0.1 in a real browser. `backend/chatbot.patch` gives the
-  gate its `_RISK` line.
-- The routes: `backend/jarvis_chatbot_routes.py`, shipped whole, and
-  `backend/chatbot-routes.patch` (one `install()` call in `jarvis_hud.py`),
-  tested by `backend/test_chatbot_routes.py`. `tools/gen_chatbot_cases.py`
-  writes the routes' real answers, and the sentences both apps show
-  (`jarvis_chatbot_routes.WORDS`), into both apps' contract file.
-- The desktop: Brain -> Work -> "Talk to a chatbot for me" (`src/chatbot.js`,
-  `brain.js`, `src-tauri/src/brain/chatbot.rs`; `tests/chatbot.mjs`).
-- The phone: Brain -> "Talk to a chatbot for me" (`net/Chatbot.kt`,
-  `ui/screens/ChatbotPlate.kt`; `ChatbotTest`), and an ongoing notification
-  while one is going ("Talking to Gemini, 3 of 5", with Stop;
-  `service/ChatbotNotifier.kt`).
-- **Eight more websites** (the owner's "the chatbot driver becomes
-  versatile", 2026-09-28), built the same open way (§60.5): each a thin site
-  file over one shared base, `backend/jarvis_chatbot_web.py`, tested by
-  `backend/test_chatbot_sites.py`. None of their selectors is checked against
-  the real sites yet either.
-- **API adapters and a second AI on this PC** (the same decision): §60.4.1,
-  `backend/jarvis_chatbot_api.py` (one entry per service - OpenAI, DeepSeek,
-  Mistral, xAI, OpenRouter, Groq - tested by `backend/test_chatbot_api.py`
-  against a fake OpenAI-style server), and §60.4.2,
-  `backend/jarvis_chatbot_local.py` (another Ollama model on this PC, tested
-  by `backend/test_chatbot_local.py` against a fake Ollama).
-- **Ask several and compare** (the same decision, point 4): §60.7,
-  `backend/jarvis_chatbot_compare.py` - two or more chatbots, ONE card, one
-  after another, ONE summary; on both apps' screens.
-
-### 60.1 What it is
-
-The owner gives a goal ("find out how to keep houseplants alive in a dark
-flat"). Jarvis sends the goal, word for word, to the chatbot, then writes
-its own follow-ups on this PC and sends them **without asking each time**,
-within limits the owner approved on **one** card: the most messages, the
-longest time, and words it must never send. It stops by itself when the
-goal looks met, a limit is reached, the chatbot refuses twice, the answers
-go in circles, or the chatbot asks about the owner (that question comes
-back to the owner, never answered). It **pauses and asks** at a captcha, a
-sign-in page or an "unusual activity" page (never solved or skipped), and
-when its own message is blocked twice by the last check.
-
-### 60.2 The card
-
-Gate action `chatbot_session`, tier `ask` only (any other tier refuses to
-start; `never` switches the feature off). A risky approval: it leaves the
-PC and cannot be taken back. The card text is `jarvis_chatbot.describe()`:
-the chatbot and how it is reached, the goal marked "These words will be
-sent first", the limits, the built-in and the owner's never-send words, the
-version (one card or two), and "If you say no: nothing is sent". One card
-per conversation; **any** change to a limit is a new card; Resume is
-`/api/task/resume`'s own card. No "always allow". The goal goes through the
-same last check as every message **before** the card; a goal that fails is
-refused with the reason and no card.
-
-### 60.3 The routes
-
-Every route is behind the server's own origin and token checks, like every
-other route; both apps send the token and `X-Jarvis-Client: hud`.
-
-| route | body | answer |
-|---|---|---|
-| `GET /api/chatbot/status` (`?id=`) | - | `jarvis_chatbot.view()` plus `"available": true` and `"limits": {"waiting", "said"}` (the last limits change for the conversation shown): `{"routed": true, "chatbots": [{"id","name","host","built","ready","note","kind","money"?}], "tier": {"id","name","words","why","turns_default","turns_max","minutes_default","minutes_max","compare_min","compare_max"}, "session": <session> or null, "limits"}`. With no `id`, the latest conversation still going (null when none - an ended one is read by its id); an unknown id is `session: null` (conversations are kept in memory only, so a backend restart loses them); an id that is not `chat_` and 12 hex digits is a 400. The one thing a read may change: a paused conversation that can no longer be resumed (Stop on the task, or its hour ran out, so `jarvis_task_control` no longer holds it) is ended - "stopped", its window closed - once a read has seen it so for 10 seconds; before, it stayed "paused" with a Resume that could only fail until a new conversation was planned |
-| `POST /api/chatbot/start` | `{"chatbot", "goal", "max_messages"?, "max_minutes"?, "never_send"?: [..]}` | 202 `{"ok", "session", "asking": true, "message"}` - the card is asked on a background thread and nothing is sent until a person approves it; 400 `{"ok": false, "error", "session"}` when `plan()` refused it (the reason as a sentence: "Gemini through its website is not built yet.", "The goal cannot be sent: it held an email address. Nothing would be sent.", "At most 8 messages in this version."), with no card; 409 while another conversation is going (asking, running or paused), and 409 when `chatbot_session` is not tier "ask" (switched off, or a tier that would ask nobody) - no card either way |
-| `POST /api/chatbot/stop` | `{"id"}` | 200 `{"ok", "session", "message"}`; never a card, never held on a stale link; 400 for a bad id, 404 for an unknown one, 409 when it has already ended |
-| `POST /api/chatbot/limits` | `{"id", "max_messages"?, "max_minutes"?, "never_send"?}` | 202 `{"ok", "asking": true, "session", "message"}` - a NEW card, asked on a background thread; the limits change only on a yes, and the outcome is on the next GET's `limits` (`waiting` while the card is up, then `said`). 200 `{"changed": false}` for the limits it already has; 400 for a number past this version's most (checked now, before any card); 404 unknown; 409 when it is not running or paused, when a limits card is already waiting, or when the tier is not "ask" |
-
-**No event of its own.** The core reports progress on the one activity
-line (`set_activity("working", "Talking to Gemini: message 3 of 5.")`); it
-publishes no transcript on the bus. Both apps read `GET /api/chatbot/status`
-again every 4 seconds while a conversation is going, and on every activity
-event. The phone starts its ongoing notification from an activity line that
-looks like a conversation's (`Chatbot.isChatbotActivity`), so one started
-on the desktop shows there too.
-
-**In the apps.** Start, Resume and Change limits are held on a stale link
-(rule 4: they send, or raise a card to); Stop and Pause are not. While
-"Hide memory lists and chat history" is on, the goal, the never-send words,
-the transcript, the summary, the chatbot's question and the end words are
-not shown (the desktop's Rust takes them out; the phone's plate leaves them
-out); the counts, the state and the version stay. The phone's notification
-carries only the chatbot's name and the counts, never the goal or a word of
-the conversation, and a locked phone shows only "Jarvis is talking to a
-chatbot for you."
-
-Pause and Resume are the existing `/api/task/pause` and `/api/task/resume`
-(tool name `chatbot_session`); Stop is also `/api/task/stop`, and Stop
-everything (`/api/stop_all`) stops a conversation too.
-
-`<session>` is `jarvis_chatbot.session_view()`: `id`, `chatbot`, `name`,
-`goal`, `state` (`asking`, `approved`, `running`, `paused`, `done`,
-`stopped`, `refused`), `tier`, `tier_name`, `messages_used`,
-`max_messages`, `minutes_used`, `max_minutes`, `never_send`, `paused` (why,
-in plain words), `ended` (why), `question` (the chatbot's question about
-the owner, handed back), `problem`, `summary`, `read_aloud: false`, `usage`, and
-`transcript`: `[{"who": "jarvis" | "chatbot", "n", "text", "at",
-"outside_text", "source"?, "move"?, "cut_off"?}]`. `cut_off: true` (a
-chatbot turn only, and only when true) marks an answer that the money
-limit's answer-length cap cut short (§60.4.1); both apps show
-`WORDS.cut_off` under it: "Jarvis asked for a short answer so it stays
-within your limit; the rest was cut off."
-
-**Outside text.** Every chatbot turn has `outside_text: true` and `source:
-"chatbot_transcript"`; the summary (`answer`, `claims` with
-`source_given`, `open`, `messages`, `minutes`, `ended`) is outside text
-too. Apps show them, never read them aloud, and never offer to remember
-anything from them.
-
-`chatbots[].kind` is how each is reached: `"website"` (a browser window on
-the PC), `"api"` (an official API with a key, §60.4.1) or `"local"` (a
-second AI on this PC, §60.4.2). Both apps group their chooser by it, in
-that order, under the PC's own headings (`WORDS` `kind_website`,
-`kind_api`, `kind_local`: "Websites (a browser window on the PC)", "With a
-key (each message costs a little)", "On this PC"), one chatbot per line
-with the `note` under any that is not ready. An older PC that sends no
-`kind` is read as all websites.
-
-`session.usage` is what an API (or local) conversation has used so far -
-`{"model", "requests", "prompt_tokens", "completion_tokens",
-"total_tokens", "retries", "dollars", "cost"}` as the adapter counted it -
-or `null` for a website conversation. `dollars` is the estimate as a number
-and `cost` the same as the PC writes it ("$0.03"; an amount under a cent
-shows as "$0.01", never as free); an API conversation has both, a second AI
-on this PC has neither. Both apps show one line from `WORDS.usage_line`:
-"Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini,
-about $0.01" (the model part left out when there is none, the "about" part
-when there is no `cost` - an older PC); in a comparison, one line per
-chatbot. Counts only, so it stays shown while the private lists are hidden.
-
-`chatbots[].money` (API services only, and only once a monthly money limit
-is set - §60.4.1) is this month's limit as the PC writes it: `{"company":
-"OpenAI", "limit": "$5.00", "left": "$4.55", "spent": "$0.45", "until":
-"October 1", "reached": false}`. Both apps show it with `WORDS.money_left`,
-"About {left} of {limit} left this month for {company} (prices are
-estimates you can correct on the PC).", under that chatbot in the chooser,
-and `WORDS.money_pc_only` once under the "With a key" group. Neither app can
-change a limit or a price: that is the PC's command line only.
-
-`chatbots[].ready` is false, and `note` says why in plain words with the
-one line that fixes it, when the chatbot is built but cannot run on this PC
-yet (for Gemini: Playwright not installed, or its window never signed in).
-`POST /api/chatbot/start` for a chatbot that is not ready answers 400 with
-that same `note` as `error`, before any card.
-
-### 60.4 Gemini through its website (`jarvis_chatbot_gemini.py`)
-
-Driven **openly** (the owner's decision of 2026-09-28): Playwright for
-Python drives a real, visible Chromium (or Edge) window, launched
-`headless=False` with Playwright's own defaults. No stealth plug-in, no
-change to how the browser presents itself, nothing that hides that a
-program is driving, no proxy, no captcha solving. It types at a fixed pace
-(45 ms a character; a line break is Shift+Enter so a message is never sent
-in halves), clicks only the message box and the send button, opens a new
-chat every conversation and reads only the newest reply that appeared after
-its own message - never the sidebar or another chat, never a link. The only
-address it opens by itself is `https://gemini.google.com/app`; any other is
-refused. A reply is complete when Gemini's "Stop response" button is gone
-and the text has not changed for 3 seconds.
-
-`status()` answers `needs_owner` - and the adapter does nothing else - at a
-captcha (`captcha`), a sign-in page, sign-in form or "Sign in" button
-(`login`), an "unusual traffic" / "verify it's you" page (`unusual`), a
-notice laid over the page, another host, another chat, or a missing message
-box (each named in `reason`). The driver pauses and asks; the owner deals
-with it in the visible window, then presses Resume.
-
-One browser profile used only for this, at
-`<config>/chatbot/gemini-profile` (normally
-`%USERPROFILE%\.openjarvis\chatbot\gemini-profile`), signed in **once, by
-hand**, to the spare Google account used only by Jarvis. Jarvis never types,
-sees or keeps the password. The owner's three lines, in PowerShell:
-
-- install (once): `py -3 -m pip install playwright; py -3 -m playwright install chromium`
-- sign in (once): `cd "<your backend folder>"; py -3 jarvis_chatbot_gemini.py sign-in`
-- check the selectors (sends two fixed questions in one new chat, "What is
-  2 plus 2?" then "And what is 3 plus 3?" - the second proves the
-  conversation carries on in the same chat - and prints PASS/FAIL per step
-  and which selector matched):
-  `cd "<your backend folder>"; py -3 jarvis_chatbot_gemini.py check; Write-Host "The results are also saved in $env:USERPROFILE\.openjarvis\chatbot\gemini-check.txt"`
-
-`JARVIS_GEMINI_BROWSER=msedge` (or `chrome`) uses the browser already on
-the PC instead of Playwright's Chromium.
-
-**"Signed in" means the sign-in finished** (2026-09-28): the sign-in helper
-writes a small note, `jarvis-signed-in.txt` (the date, nothing else), into
-the profile folder only when it sees the site's message box. The profile
-folder alone is not enough - opening the sign-in window makes it - so a
-folder without the note reads "not signed in yet", with the sign-in line.
-A window signed in before this note existed must run its sign-in line once
-more; if it is still signed in, it finishes as soon as the message box
-shows.
-
-### 60.4.1 Through an official API with a key (`jarvis_chatbot_api.py`, 2026-09-28)
-
-One adapter family speaking the OpenAI-style "Chat Completions" API
-(`POST <base>/chat/completions`, `{"model", "messages", "stream": false}`
-plus that service's answer-length cap field - see "The hard stop" below -
-one answer back), registered as one chatbot per service so the card names
-the exact service, host and model. `chatbots[].kind` is `"api"` for these,
-`"website"` for Gemini and `"local"` for 60.4.2.
-
-| id | name | base address | default model | address checked |
-|---|---|---|---|---|
-| `openai_api` | ChatGPT (OpenAI API) | `https://api.openai.com/v1` | `gpt-5-mini` | yes - openai/openai-python |
-| `deepseek_api` | DeepSeek (API) | `https://api.deepseek.com` | `deepseek-chat` | **unverified** (docs blocked from the build container) |
-| `mistral_api` | Mistral (API) | `https://api.mistral.ai/v1` | `mistral-small-latest` | yes - mistralai/client-python |
-| `xai_api` | Grok (xAI API) | `https://api.x.ai/v1` | `grok-4.6` | host yes (xai-sdk-python); the `/v1/chat/completions` path seen in xAI's own client (xai-org/grok-build), **not** in its API reference (blocked) |
-| `openrouter_api` | OpenRouter (API) | `https://openrouter.ai/api/v1` | `openai/gpt-5-mini` | yes - OpenRouterTeam/typescript-sdk |
-| `groq_api` | Groq (API) | `https://api.groq.com/openai/v1` | `openai/gpt-oss-20b` | yes - groq/groq-python |
-
-The default models are a cheap first choice, **not checked against any
-price list**. `<id>_model = "..."` under `[chatbot]` in
-`jarvis-framework.toml` changes one; it is read once, when Jarvis starts,
-so a card and its conversation always name the same model.
-
-**Keys (rule 3).** Windows Credential Manager, one entry per service
-(`Jarvis Backend/OpenAI API key`, `.../DeepSeek API key`, `.../Mistral AI
-API key`, `.../xAI API key`, `.../OpenRouter API key`, `.../Groq API key`),
-through the same `jarvis_token_store` code as the web-search keys. Entered
-on the PC only, one line in PowerShell in Jarvis's folder (the key is
-pasted at a hidden prompt):
-`py -3 jarvis_chatbot_api.py key openai` (or `deepseek`, `mistral`, `xai`,
-`openrouter`, `groq`); `forget-key <service>` removes it, `status` lists
-which are saved. A service with no key is `ready: false` with that line as
-its `note`, before any card. The key goes in the `Authorization` header to
-that service's own https host and port only (checked at open and before
-every request), a redirect is refused, nothing is logged, and an error
-never quotes the service's own error text.
-
-**Errors** end the conversation with plain words (the session's `ended`):
-the key refused (401/403, with the line to save it again), no credit (402),
-an unknown model (404), too many requests (429), a problem on the
-service's side (5xx), no answer within 75 seconds, no connection, a
-redirect. A 429 is retried **at most once**, and only when its
-`Retry-After` is at most 20 seconds; nothing else is retried.
-
-**Money: a monthly limit per service (the owner's decision, 2026-09-28).**
-"A monthly amount per service, set on the PC; Jarvis stops that service
-when it is reached, and the approval card shows how much is left. Prices
-change, so the amount is an estimate from a price list the owner can see
-and correct, and the card says 'about'."
-
-- **No limit, no conversation.** A service with a key but no limit is
-  `ready: false`, its `note` "No monthly money limit is set for OpenAI, so
-  Jarvis will not use ChatGPT (OpenAI API) yet. Set one on the PC, ...:
-  py -3 jarvis_chatbot_api.py limit openai 5", and a start is a 400 with
-  that sentence, before any card. The no-key note now ends with the same
-  limit line, since the limit is the next step.
-- **Set on the PC only**, one line in PowerShell in Jarvis's folder, the
-  same place keys are added - raising a limit is a loosening, so there is
-  no route for it (or for a price) and neither app can change one:
-  `py -3 jarvis_chatbot_api.py limit openai 5` ($5 a calendar month; `none`
-  removes it and the service is then not used), `price openai 0.25 2.00`
-  (dollars per million word-pieces in, then out, for the model in use;
-  `price openai default` goes back), `spent` (this month, every limit, and
-  every price with where it came from).
-- **The price list** (`DEFAULT_PRICES`, written 2026-09-28, **every one
-  UNVERIFIED** - from memory, no price page was reachable; `spent` marks
-  each default "UNVERIFIED - check <price page>"):
-
-  | service | model | $ per million in | $ per million out |
-  |---|---|---|---|
-  | `openai_api` | `gpt-5-mini` | 0.25 | 2.00 |
-  | `deepseek_api` | `deepseek-chat` | 0.28 | 0.42 |
-  | `mistral_api` | `mistral-small-latest` | 0.10 | 0.30 |
-  | `xai_api` | `grok-4.6` | 3.00 | 15.00 (no price was known for this name; Grok 4's, the highest here, as a cautious guess) |
-  | `openrouter_api` | `openai/gpt-5-mini` | 0.25 | 2.00 |
-  | `groq_api` | `openai/gpt-oss-20b` | 0.10 | 0.50 |
-
-  A model the list does not know (a `<id>_model` line) has no price and is
-  not used until the owner sets one with `price` - without a price there
-  is no way to keep to the limit.
-- **What is counted:** each answer's `usage` (tokens in and out) times the
-  price, per calendar month in the PC's local time, in
-  `<Jarvis's settings folder>/chatbot/api-money.json` (numbers only - never
-  the key, never a word of a message; the last 13 months). OpenRouter's own
-  `usage.cost` (dollars), when it sends one, is counted instead of the
-  estimate; no other service's `cost` field is trusted. An answer with no
-  `usage` is estimated from its length (4 characters a word-piece). A file
-  that cannot be read stops every API chatbot until it is fixed (it never
-  reads as "nothing spent").
-- **When it stops:** a service whose month has reached its limit is
-  `ready: false` ("You set $5.00 a month for OpenAI; about $5.02 is used
-  this month. Raise the limit on the PC or wait until October 1."), so no
-  card. And right before EVERY message the core asks the adapter's
-  `before_send()` (and `send()` checks again): that request must fit in
-  what is left - with the answer-length cap below, at least 256
-  word-pieces of answer after everything it resends (3 characters a
-  word-piece, erring high); for DeepSeek (no cap), its worst case,
-  8,000 word-pieces of answer plus 8,000 for hidden reasoning - or the
-  conversation ends there
-  (`ended_code` "money_limit", ok, not an error) with "The next message to
-  ... could cost up to about $0.02, which would pass the $0.02 a month you
-  set for OpenAI (about $0.01 is used this month). Nothing more was sent.
-  Raise the limit on the PC or wait until October 1." In a comparison
-  (§60.7), a service already at its limit, or with none set, is refused
-  when the comparison is planned - like one with no key, with its own
-  sentence and no card - while one whose next message would pass the limit
-  during the comparison drops out and the others carry on.
-- **The card** (single and compare) says "About $4.55 of $5.00 left this
-  month for OpenAI (prices are estimates you can correct on the PC)." and,
-  when what is left may not cover even one message, "That may not be
-  enough for one more message; if so, Jarvis stops before sending it."
-  Its note adds "It also asks OpenAI to keep each answer short enough to
-  stay within that limit." - or, for DeepSeek, "Jarvis cannot yet ask
-  DeepSeek to keep answers short (that setting could not be checked), so
-  it stops earlier instead."
-
-**The hard stop: each answer's length is capped** (the owner's decision,
-2026-09-28: "Jarvis also asks each service to cap how long an answer can
-be, so one long answer cannot carry a month past the limit. Each service
-names that setting differently, so each one's own documentation is checked
-before it is used.")
-
-- **Every request carries a cap** in that service's own field. The cap is
-  the SMALLER of 8,000 word-pieces (a sensible most for one message) and
-  what is left of the month's limit, after the worst case of what the
-  message sends, turned into answer word-pieces at that model's out price
-  (`reply_cap`) - less 8,000 word-pieces of room for hidden reasoning
-  where the service does not say its cap covers it. So the cap shrinks as
-  the month is used, and the service itself will not write, or bill, an
-  answer past the limit, as far as its own counting goes. When what is
-  left cannot pay for even 256 word-pieces, the message is refused with
-  the "could cost up to ... would pass" words above.
-- **The field per service** (checked 2026-09-28; every provider's
-  documentation site was blocked from the build container, so each was
-  read in the provider's own code on GitHub):
-
-  | service | field | where it was checked | hidden reasoning |
-  |---|---|---|---|
-  | `openai_api` | `max_completion_tokens` | openai/openai-python `src/openai/types/chat/completion_create_params.py`: "An upper bound for the number of tokens that can be generated for a completion, including visible output tokens and reasoning tokens"; `max_tokens` there is "deprecated in favor of `max_completion_tokens`, and is not compatible with o-series models" | **inside the cap** (OpenAI's own words): the cap bounds the whole bill |
-  | `groq_api` | `max_completion_tokens` | groq/groq-python, the same file name; `max_tokens`: "Deprecated in favor of `max_completion_tokens`" | not stated; 8,000 of room kept |
-  | `openrouter_api` | `max_completion_tokens` | OpenRouterTeam/typescript-sdk `src/models/chatrequest.ts`: "Maximum tokens in completion"; `max_tokens`: "deprecated, use max_completion_tokens" | not stated (it passes the request on to the model's company); 8,000 of room kept |
-  | `mistral_api` | `max_tokens` | mistralai/client-python `src/mistralai/client/models/chatcompletionrequest.py`: "The maximum number of tokens to generate in the completion" | not stated; 8,000 of room kept |
-  | `xai_api` | `max_tokens` | **xAI's own client code, not its API reference** (blocked): xai-org/grok-build sends `max_tokens` in its Chat Completions request to `<base>/chat/completions`, base `https://api.x.ai/v1`; xai-org/xai-sdk-python `chat.py` names the same for its gRPC API | not stated; 8,000 of room kept |
-  | `deepseek_api` | **none sent - unverified** | DeepSeek's API reference could not be opened and it has no SDK for this API on GitHub (its own deepseek-harness speaks the Anthropic-style endpoint, a different API) | the worst-case check above is its only guard |
-
-- **An answer cut short** (`finish_reason` "length", with a cap sent) is
-  kept and marked `cut_off: true` in the transcript; both apps show
-  `WORDS.cut_off` under it. A "length" with no cap sent (DeepSeek) is not
-  Jarvis's doing and gets no note. An answer the cap stopped before any
-  of it was written (a "thinking" model spent it all on hidden reasoning)
-  ends the conversation with "... used up the answer length Jarvis asked
-  for, to stay within your money limit, before writing any answer."
-- `py -3 jarvis_chatbot_api.py spent` says, per service, which field caps
-  its answers and where that was checked, whether hidden reasoning counts
-  inside it, and, for DeepSeek, "NO CAP IS SENT" with why.
-- **Honest limits.** It is still an estimate: a default price may be wrong
-  until the owner corrects it. Only OpenAI's cap is known to bound the
-  whole bill. For Groq, OpenRouter, Mistral and xAI the cap bounds the
-  visible answer and 8,000 word-pieces of room is kept for hidden
-  reasoning - a guess; for DeepSeek nothing is capped. On those, a longer
-  hidden reasoning (or a longer DeepSeek answer) can still carry a month a
-  little over. xAI's field comes from xAI's own client code, not its
-  published reference; if xAI ever refused it, the conversation would end
-  with "refused the message (error 400)".
-
-### 60.4.2 A second AI on this PC (`jarvis_chatbot_local.py`, 2026-09-28)
-
-Chatbot id `local_ai`, kind `"local"`, host `"this PC"`: another Ollama
-model on this PC. **Nothing leaves the PC**, so it has no row in "What
-Jarvis can reach" and the card says so; its replies are still outside
-text (another model's words are not the owner's), and the last check still
-runs before every message.
-
-- **Which model:** `local_model = "<name>"` under `[chatbot]`, a name
-  `ollama list` shows (read once, at start). `py -3
-  jarvis_chatbot_local.py models` lists them; `... status` says whether it
-  can be used now, and where. A model the PC does not have is refused;
-  nothing is ever downloaded.
-- **Never a cloud model:** a name with `-cloud` / `:cloud` is refused
-  before any card (`jarvis_router.is_remote_model` plus this file's own
-  pattern). **Loopback only:** 127.0.0.1 / localhost / ::1, never through a
-  proxy, redirects refused.
-- **One graphics card** (the core's limited version): only the everyday
-  model already loaded is allowed, at chat's own context size, and it waits
-  while the owner chats. It is the same model Jarvis uses, given only the
-  conversation - a fresh look, not a different AI; the card says so. Any
-  other model is `ready: false`: "needs your second graphics card".
-- **Two graphics cards** (the core's full version, the same check): any
-  model the PC has, up to 9 GiB on disk, in the second card's Ollama. That
-  card holds one model at a time, so a model other than the lane's own
-  swaps with Jarvis's driver model every message (a few seconds each); the
-  card says so.
-
-### 60.5 More chatbot websites (`jarvis_chatbot_web.py` and one site file each)
-
-The owner's decision of 2026-09-28 ("The chatbot driver becomes
-versatile"): ChatGPT, Claude, Microsoft Copilot, Perplexity **and other
-commonly used chatbot websites**, each driven **openly like Gemini** with
-its **own spare account** used only by Jarvis. The last four in the table
-(DeepSeek, Grok, Le Chat, Meta AI) are the studio's reading of "other
-commonly used" - the owner can drop any of them.
-
-Everything in 60.4 applies to every one of them, word for word: it lives in
-ONE shared base, `backend/jarvis_chatbot_web.py` (the browser thread, the
-visible `headless=False` window with Playwright's own defaults, the fixed
-typing pace, the host lock, "the reply is finished", every `needs_owner`
-page, the sign-in helper and the self-check). Each site file holds only its
-own `SELECTORS` table (plain CSS, role and aria-label first, with
-fallbacks), its host, the hosts of its sign-in pages, and its words. Every
-send-button selector names "send" or "submit", so a fallback can never
-click some other button. Each has its own browser profile,
-`<config>/chatbot/<site>-profile` (normally
-`%USERPROFILE%\.openjarvis\chatbot\<site>-profile`), and its own check
-report, `<config>/chatbot/<site>-check.txt`.
-
-| id | host (the only one it opens) | sign in once, by hand (PowerShell) | self-check (PowerShell) |
-|---|---|---|---|
-| `gemini_web` | `gemini.google.com` | `cd "<your backend folder>"; py -3 jarvis_chatbot_gemini.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_gemini.py check` |
-| `chatgpt_web` | `chatgpt.com` | `cd "<your backend folder>"; py -3 jarvis_chatbot_chatgpt.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_chatgpt.py check` |
-| `claude_web` | `claude.ai` | `cd "<your backend folder>"; py -3 jarvis_chatbot_claude.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_claude.py check` |
-| `copilot_web` | `copilot.microsoft.com` | `cd "<your backend folder>"; py -3 jarvis_chatbot_copilot.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_copilot.py check` |
-| `perplexity_web` | `www.perplexity.ai` | `cd "<your backend folder>"; py -3 jarvis_chatbot_perplexity.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_perplexity.py check` |
-| `deepseek_web` | `chat.deepseek.com` | `cd "<your backend folder>"; py -3 jarvis_chatbot_deepseek.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_deepseek.py check` |
-| `grok_web` | `grok.com` | `cd "<your backend folder>"; py -3 jarvis_chatbot_grok.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_grok.py check` |
-| `lechat_web` | `chat.mistral.ai` | `cd "<your backend folder>"; py -3 jarvis_chatbot_lechat.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_lechat.py check` |
-| `metaai_web` | `www.meta.ai` | `cd "<your backend folder>"; py -3 jarvis_chatbot_metaai.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_metaai.py check` |
-
-Each self-check sends two fixed questions in one new chat ("What is 2 plus
-2?", then "And what is 3 plus 3?") and prints PASS/FAIL per step and which
-selector matched. The second question is there because a site gives a new
-chat its own address around the first reply: a wrong `chat_address` guess
-in a site file shows only on the next message, and the check names that
-line when it does. `JARVIS_<SITE>_BROWSER`
-(for example `JARVIS_CHATGPT_BROWSER=msedge`), or `JARVIS_CHATBOT_BROWSER`
-for all of them, uses a browser already on the PC.
-
-**Sign-in pages** are recognised (reason `login`) on the site's own sign-in
-address and on the hosts its "Sign in with ..." buttons lead to (Google,
-Microsoft, Apple, X, Facebook and the sites' own `auth.` hosts, listed in
-each file's `SIGN_IN_HOSTS`); the window never opens any of them by
-itself. The shared "needs the owner" checks also know Cloudflare's "verify
-you are human" page and the reCAPTCHA, hCaptcha, Turnstile and Arkose
-checks - Jarvis stops at all of them and never solves one.
-
-**Perplexity's sources.** A Perplexity reply is the answer's words, then
-`Sources listed by Perplexity (links not opened):` and each listed link as
-plain text, `1. <label> - <address>`: read from the reply's own links with
-`get_attribute("href")`, never clicked, opened or followed; http(s) only,
-each once, at most 20. So a comparison can say which answers came with
-sources. Like every reply, it is outside text.
-
-**Each card note says, in plain words:** driven openly (a person's pace, a
-window you can see, never hidden, never a captcha solved); that site's
-terms (OpenAI's terms forbid automatically extracting ChatGPT's answers,
-as quoted in `docs/CHATBOT-DRIVER-DESIGN.md`; for the others, "their terms
-restrict automated access" - not read word for word); a spare account used
-only by Jarvis, never the owner's own; and that the account may be blocked
-or closed.
-
-**Not verified, said plainly:** no selector in any of these files has been
-tried against its real site - the container they were built in cannot
-reach them, and must not automate them. Each was written from how the site
-is generally known to be built, and each site's self-check on the owner's
-PC is the proof. Not checked either: whether Meta allows a second account
-kept only for this.
-
-### 60.6 Not decided or not built
-
-Money: asking each service to cap an answer's length (so the worst case is
-a promise, not an estimate), asking OpenRouter for its real cost on every
-answer (its "usage accounting" request field, not checked), and checking
-the default prices against each company's price page.
-
-Starting a conversation by saying it ("ask Gemini for me about ...") -
-today only the form starts one; task notes to a running conversation ("ask
-it about X too"); the two-card version's
-measurements; checking the selectors of every website on the owner's PC (the
-self-checks in §60.4 and §60.5).
-
-**Kept in History since the chat audit (2026-09-28).** A finished
-conversation, and a finished comparison as ONE record, is kept in the
-encrypted chat history (kinds `chatbot` and `compare`, §18.6): outside
-text, never learned from, never read aloud, read-only in both apps' History.
-While it runs it is still in memory only: a restart mid-conversation loses
-it ("That conversation is no longer in memory: Jarvis on the PC restarted. A
-conversation that finished is kept in History."). The summary's note says
-where it will be kept. The desktop keeps the last conversation's and
-comparison's IDS (never a word) across closing the Brain window, so a
-finished summary no longer vanishes with it (desktop B2 of the chat audit).
-
-### 60.7 Ask several and compare (`jarvis_chatbot_compare.py`, 2026-09-28)
-
-The owner's decision (CLAUDE.md, "The chatbot driver becomes versatile",
-point 4): "ask several AIs the same question, one card listing every AI it
-will ask, one summary of agreements, disagreements and sources". Built on
-the backend and both apps; like everything else in §60, **not yet tried
-against the real sites**. Tested by `backend/test_chatbot_compare.py`;
-the routes' real answers are the `compare_*` cases in both apps' contract
-file (`tools/gen_chatbot_cases.py`).
-
-**What it does.** Two or more chatbots from `chatbots` (built AND ready -
-the same check a single conversation makes) are asked the same goal, **one
-after another**, each in its own ordinary conversation (§60.1): the same
-driver loop, the same clean context (the goal and THAT chatbot's replies
-only - the chatbots never see each other's answers), the same last check
-before every message, the same never-send words, and the same per-chatbot
-limits (the form's most messages and most minutes apply to each chatbot on
-its own). When the last one ends, Jarvis's own model on this PC writes ONE
-summary.
-
-**How many chatbots (confirmed by the owner, 2026-09-28):** 2 to 3 on one
-graphics card, 2 to 4 on two (`jarvis_chatbot_compare.MAX_AIS`); one after
-another in both. The numbers are in `tier.compare_min` / `tier.compare_max`.
-
-**One card.** Gate action `chatbot_session` (the same card kind, tier `ask`
-only, a risky approval, no "always allow"). `describe()` lists every
-chatbot, numbered, by name and address (and each one's own card note, e.g.
-the website terms, and for an API service "About $X of $Y left this month
-for <company> ..." - §60.4.1), the goal word for word "sent first to each of them",
-the limits per chatbot AND in all ("at most 3 messages to each chatbot, the
-goal included (9 in all)"), the never-send words, that the chatbots never
-see each other's answers, what happens when one drops out, the version, and
-"If you say no: nothing is sent, and no chatbot window is opened." The goal
-meets the last check before the card; a goal that fails raises no card. A
-"no" leaves every chatbot unopened.
-
-**When one cannot go on.** An error, a closed page, no reply, two blocked
-messages, a question about the owner, an API service's monthly money limit
-(the next message's worst case would pass it - §60.4.1), or a captcha /
-sign-in / "unusual activity" page: that chatbot is **left out** (its window closed; a captcha
-is never solved or skipped) and the others carry on. A single conversation
-would pause and ask; a comparison does not, so one chatbot's page never
-holds up the others. The summary's `dropped` says who and why, in plain
-words from the backend (never the model's).
-
-**Pause, Resume, Stop.** The comparison is ONE `jarvis_task_control` task
-(tool `chatbot_compare`): `/api/task/pause` pauses the whole comparison
-(the reply on its way is read first), `/api/task/resume` is one card naming
-every chatbot and what each has done so far. Stop - `POST
-/api/chatbot/compare/stop`, `/api/chatbot/stop` with any of its
-conversations' ids, `/api/task/stop`, or Stop everything - ends every
-conversation in it; the ones not asked yet are never opened. A stop writes
-no model summary.
-
-| route | body | answer |
-|---|---|---|
-| `GET /api/chatbot/status` (`?compare=`) | - | as §60.3, plus `"compare": <compare> or null` (with no `compare`, the latest comparison still going; an ended one is read by its id; an unknown id is null; an id that is not `cmp_` and 12 hex digits is a 400) and `tier.compare_min`, `tier.compare_max`. `session` is never one of a comparison's conversations. A paused comparison `jarvis_task_control` no longer holds is ended after 10 seconds, like a single one |
-| `POST /api/chatbot/compare/start` | `{"chatbots": [ids], "goal", "max_messages"?, "max_minutes"?, "never_send"?}` | 202 `{"ok", "compare", "asking": true, "message"}` - ONE card on a background thread; 400 `{"ok": false, "error", "compare"}` when `plan()` refused it ("Pick at least 2 chatbots to compare.", "Pick at most 3 chatbots in this version.", a chatbot that is not ready says why, the goal's last check), no card; 409 while a comparison or a single conversation is going, or when `chatbot_session` is not tier "ask" |
-| `POST /api/chatbot/compare/stop` | `{"id"}` | 200 `{"ok", "compare", "message"}`; never a card, never held on a stale link; 400 bad id, 404 unknown, 409 already ended |
-
-`POST /api/chatbot/start` answers 409 while a comparison is going (one
-browser window, one card on screen at a time), and a comparison cannot
-start while a single conversation is going.
-
-`<compare>`: `id`, `goal`, `state` (as a session's), `tier`, `tier_name`,
-`chatbots: [{"id","name"}]`, `count`, `current` (index of the chatbot being
-asked), `current_name`, `messages_used` (in all), `max_messages` and
-`max_minutes` (each), `never_send`, `paused`, `ended`, `problem`,
-`read_aloud: false`, `members` (each a `<session>` as §60.3, with `compare`
-set and `summary: null` - a conversation in a comparison has no summary of
-its own), and `summary`:
-
-```
-{"answer", "agree": [..], "disagree": [{"point", "views": [{"who", "said"}]}],
- "sources": [{"who", "items": [..], "checked": false}], "sources_checked": false,
- "dropped": [{"who", "why"}], "answered": [names], "open": [..], "by_model",
- "messages", "ended", "outside_text": true, "read_aloud": false,
- "source": "chatbot_transcript"}
-```
-
-`who` is always one of the chatbots asked: a view or source the model gives
-to any other name is dropped. `sources` are the web addresses found in each
-chatbot's own replies by plain code, then the ones the model lists; Jarvis
-opens none of them and checks none of them. The summary is outside text:
-shown, never learned from, never read aloud.
-
-**In the apps.** The same form, with "Ask several and compare": one tick
-box (desktop) or pick-several list (phone) per chatbot, "Chatbots to ask
-(pick 2 to 3)". Start (compare) is held on a stale link; Stop and Pause are
-not; Resume is. While it runs: "Comparing 3 chatbots: asking ChatGPT, 2 of
-3", each chatbot's line ("Claude: Waiting its turn."), each conversation
-under its chatbot's name in the outside-text style, and at the end the
-summary. While "Hide memory lists and chat history" is on, the goal, the
-never-send words, every conversation, the questions and the summary are not
-shown (the desktop's Rust takes them out; the phone's plate leaves them
-out). The phone's ongoing notification reads "Comparing 3 chatbots: asking
-ChatGPT, 2 of 3" and its Stop stops the whole comparison. No change to
-limits mid-comparison: stop it and start a new one.
-
-Activity lines: each conversation's own, prefixed "Comparing (2 of 3): ",
-and "You paused the comparison. ..." - the phone's `isChatbotActivity`
-knows both, and "Continuing chatbot_compare..." after a Resume.
-
-### 60.8 "Solve it here" - a captcha or sign-in page handed to the phone (`jarvis_handoff.py`, 2026-09-28)
-
-The owner's decision (CLAUDE.md, "A captcha can be handed to the owner's
-phone"): when a chatbot website (60.4, 60.5) or a customer-support chat (65)
-pauses at a captcha, a sign-in page or an "unusual activity" page, the phone
-gets an alert and offers **"Solve it here"**: a live picture of THAT ONE
-browser window, sent PC to phone over the owner's own link, never saved, and
-the owner's taps and typing passed to that window only while Jarvis is
-paused there. Solving it in the window on the PC still works. Jarvis itself
-never solves a captcha. Every rule is `jarvis_handoff.py`'s; the routes are
-answered by `jarvis_chatbot_routes.py` (shipped whole - no patch).
-
-**What starts one.** Only a session paused with the code `captcha`, `login`
-or `unusual` (the adapter's own "needs the owner" words, 60.4), whose adapter
-is a browser window. Never: a running session, any other pause (a card, an
-"are you a bot?" question, an identity check, Pause), a comparison's
-conversation (a chatbot at a captcha is left out of a comparison, not
-paused), an API service or the second local AI (no window).
-
-**`GET /api/chatbot/status`** also carries `handoff` - never a picture, never
-a word from the page:
-
-```json
-{"available": true, "kind": "chatbot", "id": "chat_...", "site": "Gemini",
- "reason": "captcha", "reason_words": "a captcha (a \"prove you are a person\" check)",
- "title": "Gemini needs you",
- "text": "Jarvis paused: a captcha (...). Solve it here, or in the window on the PC.",
- "active": "ho_...", "ended": {}}
-```
-
-`{"available": false, "active": "", "ended": {...}}` when nothing waits.
-`kind` is `chatbot` or `support`; `active` is the hand-off going on now for
-that session, or `""`.
-
-| Route | Body / query | What it does |
-|---|---|---|
-| `POST /api/chatbot/handoff/start` | `{"kind", "id"}` | Starts passing that one window on - **no card** (nothing leaves the owner's devices; nothing is done but what the owner does). The hosts the window may show meanwhile are fixed now: the site's own, its sign-in hosts, and the one it shows at this moment. One hand-off at a time: a new one ends the old. 409 with the reason when nothing waits. Returns `handoff` (`ho_` + 16 hex), `frames_per_s`, `idle_s` |
-| `GET /api/chatbot/handoff/frame?h=` | | ONE picture: Playwright's own screenshot of that ONE page (never the screen, another window or a tab) as a JPEG in page pixels, base64 in `jpeg`, with `width`, `height`, `seq`. Kept nowhere - not on disk, not in memory after the answer. At most 2 a second (429 with `retry_ms`) |
-| `POST /api/chatbot/handoff/input` | `{"h", "type": "tap", "x", "y"}` (fractions 0..1 of the last picture), `{"type": "text", "text"}` (1-200 characters, no control characters), `{"type": "key", "key"}` (Enter, Backspace, Delete, Tab, Escape, Space, the arrows - nothing that reaches the browser itself), `{"type": "scroll", "dy"}` (capped at 1500) | ONE input from the owner, to that page only. At most 30 in 3 seconds. The audit line has counts and key names, never typed text |
-| `POST /api/chatbot/handoff/end` | `{"h"}` | Ends it. Never held, never a card |
-
-**Every picture and every input checks again**, first, that the session is
-still paused at that same code with that same window, and that the window
-shows one of the fixed hosts - and checks the host again after an input.
-Otherwise the answer is **410** with `ended` and the sentence in `error`:
-`resumed` (the owner pressed Resume, or the session runs again), `stopped`,
-`left` (the window went to another site - nothing more is passed on),
-`closed`, `idle` (no picture asked for 45 seconds: the phone left the
-screen), `time` (15 minutes), `stop_all` (Stop everything ends it too),
-`replaced`, `owner`. The words are `jarvis_handoff.ENDED`; the sentences the
-apps show are `jarvis_handoff.WORDS` (`tools/gen_handoff_cases.py` writes
-both apps' `handoff-cases.json` from the real routes).
-
-**What the apps must do.**
-- **Phone** (`net/Handoff.kt`, `ui/screens/HandoffScreen.kt`,
-  `service/HandoffNotifier.kt`): an alert when `handoff` becomes available -
-  its own channel, **always kept on the phone** (`setLocalOnly(true)`), the
-  site and the reason only; while App lock or "Hide memory lists and chat
-  history" is on, only "A website Jarvis is using needs you", and the lock
-  screen always shows only that. "Solve it here" opens the screen (behind
-  App lock, as ever): the picture is asked for about once a second only
-  while the screen is in front and the app unlocked (it is not composed
-  behind the lock screen), held in memory for the screen only, and
-  screenshots of Jarvis are blocked while it shows. A tap on the picture
-  goes as fractions; a tap on the margin goes nowhere; typing is masked on a
-  sign-in page and never kept in the app's saved state. **Input is held on a
-  stale link** ("The link to your PC is catching up, so your taps and typing
-  are held until it is back."); End and "Solve it on the PC instead" never
-  are. The screen says plainly: "Some captchas refuse taps passed on from a
-  phone this way. If it keeps saying no, solve it on the PC instead." The
-  Brain's chatbot and support plates show "Solve it here" on the paused
-  session too.
-- **Desktop** (`src/handoff.js`): the window is right there, so the Brain's
-  Work tab shows the same alert on the paused session ("Gemini needs you on
-  this PC", pointing at the browser window). It **never calls** the picture
-  or input routes (`tests/handoff.mjs` checks) - one-sided on purpose
-  (ARCHITECTURE.md section 8).
-
-**Said plainly.** A tap passed on this way reaches the page as Playwright's
-own mouse event; a captcha may tell, and refuse it. A site that opens a new
-window or tab for a sign-in is finished on the PC: only the first window is
-passed on. A typed password travels over the owner's own link (Tailscale or
-Meshnet, scrambled) and through the PC's memory for that one input; it is
-never logged or kept. Tried against a fake page in a real Chromium
-(`test_handoff.py`); not yet against a real captcha.
-
-## 61. Projects: projects, life benchmarks and their numbers (added 2026-09-28)
-
-The owner's decision of 2026-09-28 (`CLAUDE.md`, "Projects, like Claude's
-Projects and more"), designed in `docs/PROJECTS-DESIGN.md`; this section is
-its **build steps 1 to 3**. `backend/jarvis_projects.py` (shipped
-whole), `projects.patch`, `projects.db` in the settings folder.
-**Both apps call these routes since build step 3 (2026-09-28)** - see
-61.6; `tools/check_parity.py` lists them as `ported`.
-
-Numbered 61: section 59 is Goals on the continuation branch
-(`claude/jarvis-continuation-03kls1`, not merged here yet) and 60 the
-chatbot driver.
-
-**What is not here yet, said plainly:** running a benchmark's command (the
-fence, build step 6) - a coding benchmark's command is kept as words and
-marked `"runnable": false`; Jarvis changing code (`project_edit`, after the
-12 GB card is measured); the project chat context and project-labelled
-facts (step 4); the chat-history `project` column (step 4 - nothing can
-set it until `/api/chat` carries a project id); and anything the Shareable
-switch would one day let out (it is a switch only; nothing is ever sent).
-Goals live on the continuation branch, so a project keeps a list of goal
-ids on its own side; the goals.db `project` column and a goal step's
-measure come after that branch merges.
-
-### 61.1 Who may do what, and which ask first
-
-| What | Card? | From |
-|---|---|---|
-| Create, edit, delete a project; its instructions, notes, goal ids, work list | no | either app |
-| Choose a coding project's folder | no card here - the folder must already be on "Folders Jarvis may look in" (§35), whose adding is the PC's own card | **PC only** (`403`, `"pc_only": true` from anywhere else) |
-| Clear a project's folder | no | either app (Jarvis sees less) |
-| Shareable **on** | **one card**, `change_own_config` at tier `ask` | either app |
-| Shareable off | no, instant (a waiting card is withdrawn) | either app |
-| Define, edit, delete a number benchmark; log a number; remove one number | no | either app, or the owner's own words ("I ran 5 km", 60.4) |
-| Write or change a coding benchmark's command | no card (nothing runs); the words are kept | **PC only** |
-| Take the owner's own private mark off a benchmark | no card, instant | either app |
-| Take off a private mark Jarvis made from the name ("5k time" read as money) | **one card**, `change_own_config` at tier `ask` - afterwards its numbers may be read aloud (the owner, 2026-09-28) | either app |
-
-"No card" rows are the owner writing down their own things, like a to-do
-item. Every other action still follows ARCHITECTURE §3.
-
-### 61.2 Routes
-
-Every route is token + origin, POST bodies are JSON objects, and an error
-is `{"ok": false, "error": "<a plain sentence>"}` with `400` (a limit or a
-bad field), `403` (PC only), `404` (no such project, benchmark or number),
-`409` (a limit on how many, a name used twice, a card already waiting) or
-`503`.
+## 59. Goals: a plan the owner edits, one card per acting step (added 2026-09-27)
+
+The owner's "build it now" (2026-09-27, after the Jarvis evaluation;
+`docs/creativity-2026-09-25/future.md` idea 3, the feasibility audit's
+I63/I64). The owner says "I want to get the garage insulated before
+winter." and writes - or asks Jarvis, in an ordinary chat message, to
+suggest - a short plan: a handful of named steps, each with a rough date.
+That draft is edited and accepted here. From then on the goal sits on
+Coming up, and once a week Jarvis quietly checks whether the next step is
+still on track and says so. **Nothing here ever acts.** When a step needs
+real action (search for installers, draft an email, add a calendar
+entry), the owner asks Jarvis for that in an ordinary chat message, and
+THAT tool use goes through the exact same per-action approval card any
+chat turn already goes through - this feature adds no new way to act, and
+no new gate logic. `backend/jarvis_goals.py` (shipped whole, `goals.patch`
+adds the routes).
+
+**Not the same thing as "the plan card"** (the feasibility audit's I61;
+CLAUDE.md's "the plan card is allowed later, only after the multi-step
+safety tests pass"). That is a BATCHING mechanism: one yes that would run
+several safe steps at once, gated behind the multi-step tool-calling
+safety tests (`tools/tool_eval`) because batching approvals is close to
+"approves in bulk". Goals never batches anything - every acting step is
+its own separate card, exactly like ordinary chat tool use today - so it
+does not touch that gate and was never waiting on it.
 
 | Route | Method | Body | Answers |
 |---|---|---|---|
-| `/api/projects` | GET | - | `{"ok", "available": true, "title": "Projects", "projects": [summary], "empty", "max": 30}` |
-| `/api/projects` | POST | `{"name", "kind": "coding"\|"life", "instructions"?, "notes"?, "goals"?, "work_list"?, "folder"?}` | `{"ok", "project": full}` |
-| `/api/projects/<id>` | GET | - | `{"ok", "project": full}` |
-| `/api/projects/<id>` | POST | any of `name`, `instructions`, `notes`, `goals`, `work_list`, `folder`, `"shareable": false` | `{"ok", "project": full}`. `"shareable": true` is refused here (use `/shareable`); `kind` never changes |
-| `/api/projects/<id>/delete` | POST | `{}` | `{"ok", "deleted": true}` - its benchmarks and numbers go with it (the apps ask "are you sure?" first) |
-| `/api/projects/<id>/shareable` | POST | `{"on": true\|false}` | off: `200` at once. on: `202` `{"ok", "waiting": true, ...}` and ONE card; the outcome shows as `shareable_last` |
-| `/api/projects/<id>/benchmarks` | POST | `{"name", "kind": "number"\|"command", "unit"?, "better"?: "higher"\|"lower", "target"?, "sensitive"?, "command"?}` | `{"ok", "benchmark": view}` |
-| `/api/projects/<id>/benchmarks/<bid>` | GET | `?points=N` (default 365, at most 1000) | `{"ok", "benchmark": view + "points": [{"id", "at", "value"}]}` - oldest first, for a chart |
-| `/api/projects/<id>/benchmarks/<bid>` | POST | any of `name`, `unit`, `better`, `target`, `sensitive`, `command` (PC only) | `{"ok", "benchmark": view}` |
-| `/api/projects/<id>/benchmarks/<bid>/delete` | POST | `{}` | `{"ok", "deleted": true}` |
-| `/api/projects/<id>/benchmarks/<bid>/log` | POST | `{"value", "at"?}` (`at`: seconds since 1970, at most a day ahead) | `{"ok", "benchmark": view + "logged"}` |
-| `/api/projects/<id>/benchmarks/<bid>/results/<rid>/delete` | POST | `{}` | `{"ok", "deleted": true}` (a typo) |
-| `/api/projects/<id>/benchmarks/<bid>/unmark` | POST | `{}` | the owner's own mark comes off at once: `200` `{"ok", "changed", "benchmark", "message"}`; a mark Jarvis made from the name: `202` `{"ok", "waiting": true, "changed", "benchmark", "message"}` and ONE card (a waiting card: `409`). Both marks: the owner's comes off at once and the card is for Jarvis's. Nothing to take off: `200` with `changed: false` |
+| `/api/goals` | GET | - | `{"ok", "goals": [<goal>, ...], "limits": {"text", "steps", "goals", "by"}}` |
+| `/api/goals` | POST | `{"text", "plan"?}` | `{"ok", "goal"}` - a new DRAFT. `plan`, if given, is the owner's own steps (or something they asked Jarvis to suggest first, in ordinary chat, and pasted in); omitted, the draft's one step is the goal's own words. **No approval card**: a draft is content, not action, exactly like an email draft (§40). |
+| `/api/goals/<id>` | GET | - | `{"ok", "goal"}`; 404 `{"ok": false, "error": "no such goal"}` |
+| `/api/goals/<id>/accept` | POST | `{"plan"?}` | The owner's edited plan (or the draft as it stood) is kept, and the goal becomes `active`. Sets up a weekly check-in on `jarvis_schedule.py`'s repeating jobs (§21) **at once, with no approval card** (the owner, 2026-09-28: like a plain repeating reminder, decided 2026-09-26 - only the owner's own tap sets one, it reads nothing new and acts on nothing, and Stop tracking deletes it at once). `{"ok", "goal"}` with `goal.checkin` (the scheduler's own job view, `"state": "active"` straight away; it is never `"waiting"` any more). Before 2026-09-28 this raised one `schedule_repeat` card. |
+| `/api/goals/<id>/step` | POST | `{"index", "done"}` | Marks one step done or not. **No card** - the same shape as ticking off a to-do item. |
+| `/api/goals/<id>/stop` | POST | - | Stops tracking the goal and deletes its check-in job. **No card, immediate** - the same rule every "stop tracking this" control in this project follows. |
 
-**A project** (`full`; the list's `summary` leaves out `instructions`,
-`notes` and `benchmark_list`): `id`, `name`, `kind`, `instructions`,
-`notes` (list of lines), `folder` (`null` or `{"path", "name", "listed",
-"said"}` - `listed` false, with a sentence, when the folder has since left
-"Folders Jarvis may look in"), `shareable` (false by default),
-`shareable_waiting`, `shareable_last`, `work_list` (`null` or `{"name",
-"title"}` - a named list on the one scheduler, §21; its items are read
-and added through `/api/schedule` like any named list), `goals` (goal
-ids), `benchmarks` (a count), `benchmark_list`, `created`, `changed`,
-`max`.
+A goal: `{"id", "text", "plan": [{"step", "by", "done"}, ...], "status":
+"draft"|"active"|"done"|"stopped", "created", "changed"}`. `by` is a
+free-text rough label ("before winter", "by Friday", or "") - never a
+strict calendar date, since the goal is a nudge, not a scheduler entry of
+its own. At most 7 steps (`MAX_STEPS`), kept short on purpose: the
+creativity doc's own named risk is nagging, and an 8B model is weak at
+long plans. At most 20 open goals (draft + active) at once.
 
-**A benchmark** (`view`): `id`, `name`, `kind`, `unit`, `better`,
-`target`, `sensitive`, `sensitive_why` (`"health"`, `"money"`, another
-sensitive topic, or `"you marked it"`), `marked_by_you`,
-`keep_on_screen`, `keep_on_screen_words`, `results` (a count), `latest`
-(`{"id", "value", "at"}` or `null`), `change` (60.3), `created`,
-`changed`, and the private mark's state (2026-09-28): `mark_auto` (the
-topic the name looks like, or `""`), `mark_auto_removed` (the owner took
-it off with a card), `unmark` (`"card"`, `"instant"` or `""` - how the
-mark would come off), `unmark_waiting`, `unmark_last` (`{"outcome",
-"why", "at", "message"}` or `null`); a command benchmark adds `command`,
-`"runnable": false` and `not_runnable_why`.
+**The weekly check-in calls no model and no tool.** It only looks at the
+goal's own already-stored plan and picks the first step not yet marked
+done, so the nudge is entirely deterministic and cheap - never a read of
+anything new, never learned as a fact, never counted as an offer (the
+back-off, §22, is not involved: this is the owner's own already-accepted
+repeat firing on schedule, not something asked for the first time). The
+nudge is the check-in job's own `note` (§21's job shape), shown under it in
+both apps' Coming up, exactly like any other job's note.
 
-**Limits:** 30 projects; a name 60 characters; instructions 1,500
-characters (the design's hard limit for what a project chat can carry on
-the 8 GB card); 10 notes of 200 characters, one line each; 20 goal ids;
-12 benchmarks per project, their names 40 characters, units 16; a command
-300 characters, one line; 5,000 numbers per benchmark.
+**Rule 1 (local-first).** `jarvis_goals.py` makes no network call of any
+kind - no model, no cloud, nothing. A goal's words never leave the PC
+through anything in this module. Drafting the first plan with Jarvis's
+help happens through ordinary chat (`/api/chat`, already shipped, already
+safe), which the owner then pastes into `POST /api/goals`'s `plan` -
+deliberately not a call this module makes itself, since the real way this
+backend talks to a local model takes its network calls from `jarvis_hud.py`
+(not in this repository, `docs/ARCHITECTURE.md` §9), and guessing at that
+integration rather than verifying it would be exactly the mistake
+CLAUDE.md's "do not claim more than the evidence supports" section exists
+to prevent.
 
-### 61.3 Better or worse than last time
+**Rule 4 (no auto-approve, no approve-all).** Accepting a goal approves
+NOTHING that acts - it only starts a repeating check-in, which is data,
+not action. Every acting step still needs its own separate card, raised by
+the ordinary chat/tool path, never by this feature.
 
-`change` compares the newest number with the one before it:
-`{"direction": "up"|"down"|"same", "by", "verdict": "better"|"worse"|
-"same"|null, "said", "target_reached"}`. **Without `better` there is no
-verdict** - up is not always good (a weight, a 5k time), so Jarvis says
-only "Higher than last time (by 1)." and does not guess. `target_reached`
-needs both a target and `better`. The first number says "The first
-number." `null` before any number.
+**Both apps' UI is built.** The phone: Brain, "Goals", right beside "Coming
+up" (`net/Goals.kt`, `ui/screens/GoalsPlate.kt`) - it reuses
+`net/Schedule.kt`'s own job parser to read the check-in job `accept`'s
+answer carries, and `Schedule.actionsOf` gives that row no Pause/Delete of
+its own, since only Stop tracking, on the goal itself, can take the
+check-in down cleanly. The desktop: Brain -> Work -> Goals, beside Coming
+up (`jarvis-desktop/src/goals.js`, `brain.js`, `src-tauri/src/brain/
+goals.rs`) - it reads its own limits back from `GET /api/goals` rather
+than hard-coding them, and redacts a goal's and a step's own words under
+the same "Windows Hello for memory lists and chat history" gate Coming up
+already uses. Both apps find the weekly check-in's live state (paused, its
+next-run note; "waiting for the card" can no longer happen since the
+check-in needs no card, 2026-09-28) by reading the SAME Coming up list
+the job already appears on (kind `goal_checkin`, `owner_listed=True`,
+unchanged from the backend's own default) - the ONLY place that state can
+still be read once a screen's own copy of one `accept` answer is gone,
+since no Goals route hands it out again; neither app invents a second
+source of truth for one job's state. `tools/check_parity.py` is clean.
 
-### 61.4 Logging by voice or chat, without the model
+## 60. "One card, several steps" - the plan card (added 2026-09-28, SWITCHED OFF)
 
-`jarvis_quick.py` answers "log 5 km run", "log my weight as 72.5 kg", "I
-ran 5 km", "I walked 10,000 steps today", "I did 20 push ups", "my weight
-is 72 kg" (and "... yesterday") **only when a life benchmark fits** - a
-shared word that says what was done, and the same unit (5 km is never
-logged as miles; there is no converting). No benchmark fits: the sentence
-is not ours and goes to the model as before. Two fit: Jarvis asks which
-and logs nothing. Only the owner's own typed or spoken words, like
-everything in `jarvis_quick.py`; `projects.db` is read only after a
-sentence already has this shape, and never created by it. The answer is
-`quick: "project_log"` in `X-Jarvis-Route` and, for a sensitive
-benchmark, `gate: "private"` - kept on screen, never read aloud. The
-scheduler is told the sentence was a command, so it is never learned as a
-fact: life numbers are project data, not memory (`docs/PROJECTS-DESIGN.md`
-§2).
+The owner's own words, 2026-09-28: "add the ability for jarvis to request a
+multi-step process that it does on its own, and it sends me a detailed
+approval card that I only give to approve once." This is the feasibility
+audit's I61, "the plan card" (`docs/FEASIBILITY-AUDIT-2026-09-26.md` line
+67) - the owner already decided, 2026-09-27, that it is "allowed later,
+only after the multi-step safety tests pass." `backend/jarvis_plan.py`
+(shipped whole, `plan-gate.patch` teaches `jarvis_gate.py` its two new
+action names) is that mechanism, fully built and tested - **and switched
+off**, on purpose, until a real run of `tools/tool_eval/ollama_tool_eval.py`
+on the owner's own PC clears the bar. See that module's own docstring for
+the full reasoning; this section is the route-level contract once it is
+wired in.
 
-### 61.5 Sensitive numbers
+**Not the same mechanism as `jarvis_ui_control.py`/`jarvis_android_control.py`/
+`jarvis_browser_control.py`'s own "one card, several steps".** Those three
+run every enumerated step once their one card is approved, including a
+step the model flagged `heavy` - the right shape for a single-domain tool.
+`jarvis_plan.py` is stricter, because a plan step can be ANY tool: **a
+risky step, or a step whose arguments came from an earlier step's real
+result, always gets its OWN separate card mid-run**, on the strength of
+the model's own real tool-calling gate - never the one card that started
+the plan. Only the steps neither of those applies to run on that one card
+alone.
 
-A benchmark about health or money is marked from its name and unit - a
-short benchmark word list in `jarvis_projects.py` ("weight", "heart
-rate", "calories", "sleep", "savings", "spending", a currency sign, ...)
-and then `jarvis_sensitive.topic()` - or by the owner (`"sensitive":
-true`). `keep_on_screen` then says: never read aloud, and never sent
-anywhere (nothing here sends anything; a later Shareable send refuses
-these). The owner can take their own mark off at once. **A mark made from
-the name comes off only with ONE card** (the owner's answer of
-2026-09-28: `jarvis_sensitive` reads "5k" as money, so a "5k time"
-benchmark is marked money). The card (`jarvis_projects.unmark_card`) names
-the benchmark, the project and why it was marked, says the numbers may be
-read aloud afterwards, and "If you say no: nothing changes." The yes is
-written only if the benchmark still has the words the card showed; a
-rename, a new unit, the owner's own new mark or a delete while it waits
-makes a late yes change nothing. **Renaming a benchmark or changing its
-unit checks the name again**: a mark taken off comes back when the new
-words still look like health or money. The quick command (61.4) follows
-the same marks.
+The four conditions this mechanism enforces (I61's own Rules/Security
+notes):
+1. Every step is shown, in full, on the one card - `describe()`, never a
+   vaguer summary.
+2. A step whose arguments are filled in from an EARLIER step's real result
+   is asked again, individually, with the real value - it could not be
+   shown truthfully on the first card.
+3. A risky step always gets its own card, whatever the rest of the plan
+   looks like.
+4. The plan grants nothing for later: once it ends - finished, stopped,
+   paused, or a risky step's own card was denied - continuing needs a
+   brand new proposal and a brand new decision on a fresh one card, never
+   an automatic resume.
+And: **a plan can only come from the owner's own words** - it is refused
+outright, before anything is shown, if the turn read outside text (an
+email, a file, a web page). A planted instruction is exactly what a
+plausible-sounding multi-step plan would be a good way to hide.
 
-### 61.6 The apps (build step 3, 2026-09-28)
+**The safety gate, measured, not promised.** `jarvis_plan.enabled(model)`
+reads `tools/tool_eval/tool_eval_results.json` - the file
+`ollama_tool_eval.py` writes after a real run against the owner's own
+model - and says yes only once that run's own numbers, for this model,
+clear TWO bars: the multi-step suite passes at least 90% of its cases, AND
+the injection suite carried ZERO planted instructions into a tool call, of
+any it tried. No file, a stale one, or numbers under the bar: `enabled()`
+says exactly why, in one sentence - the same "measured before switched on"
+rule the memory re-ranker already follows (`docs/MEMORY-SCOREBOARD.md`).
+Nothing about this feature can be turned on by a setting, a card, or an
+app - only a real, run, passing result unlocks it.
 
-**Desktop: Brain -> Projects** (`jarvis-desktop/src/projects.js`,
-`projects-panel.js`, `projects.css`; `src-tauri/src/brain/projects.rs`).
-Three commands, Brain window only (`brain-projects` in
-`permissions/surfaces.toml`): `projects_read` (a read, hidden in Rust while
-the private lists are hidden, keeping only how many projects there are),
-`projects_write` (ONE change named by an action from a fixed list - the page
-never names a URL; held on a stale link except Shareable OFF; a folder typed
-into a body is refused) and `projects_choose_folder` (the Windows folder
-picker, then `{"folder"}` to this PC's Jarvis; held on a stale link).
+**What is built:**
+- `jarvis_plan.py`: `propose()` (validates and shapes a plan, refuses on
+  outside text or anything malformed), `describe()` (the one card's full
+  text), `run()` (executes it: safe steps run once; a risky or
+  result-filled step's own `gate_check` is consulted, blocking, before it
+  runs; a denial anywhere stops the whole plan there; `checkpoint`/
+  `announce` hooks match `jarvis_ui_control.py`'s own, so a caller wires
+  pause/stop and the live-progress line the exact same way), `enabled()`
+  (the safety gate above). `backend/test_plan.py`, 72 checks.
+- `plan-gate.patch`: two append-only hunks against `jarvis_gate.py` -
+  `run_plan`'s own risk classification (classified by its own worst case,
+  `("no", "outbound", ...)`, the same reasoning as `control_computer`'s
+  entry, even though every risky step inside still asks on ITS OWN
+  action's entry) and a tier line, `"propose_plan": "auto", "run_plan":
+  "run_plan"` (proposing and describing a plan reads and sends nothing, so
+  it is `auto`, the same reason `jarvis_ui_control_plan` is; `run_plan`
+  itself must stay `ask` - refusing to let it become anything else is
+  `jarvis_plan.py`'s own job, not this line's).
+- `jarvis_card_words.TITLES["run_plan"]` = "run the safe steps of an
+  approved plan" - so a card for it reads in plain words like any other.
 
-**Phone: Brain -> Projects** (`ProjectsPlate.kt`, `net/Projects.kt`,
-`JarvisRuntime.projectsRead` / `projectsWrite`). The same screen, minus
-what is the PC's: a coding project and its folder, and a benchmark's
-command, show "Set on your PC" (the PC refuses them from the phone too:
-ARCHITECTURE section 8). It creates life projects only.
+**Wired in, 2026-09-28 (still switched off - see below).**
+`propose_plan` is now a real, model-callable tool in `jarvis_agent.py`'s
+`TOOLS` table - one tool, not two: its `gate_lookup_name` resolves to
+`run_plan` (the action the real card is raised under), the same way
+`control_computer`'s model-facing name differs from its own gate key. In
+order:
+- `_one_call` refuses a `propose_plan` call OUTRIGHT, before `prepare()`
+  ever runs - the same point `send_email`/`draft_email` are refused
+  outright - via `_propose_plan_refusal(watch)`: first `jarvis_plan.
+  enabled(model)` (so the feature genuinely cannot be reached at all until
+  that says yes, whatever a tier says), then the same signals
+  `note_needs_a_person()` already treats as "not really the owner's own
+  words right now" (`watch.tainted`, `.read`, `.provenance`,
+  `.app_context`), folded into the one `tainted` flag `jarvis_plan.
+  propose()` itself checks.
+- `Tool.prepare` calls `jarvis_plan.propose()` and `describe()` (a
+  `Refused` it raises propagates out as an ordinary tool-result error, the
+  same generic path every other tool's malformed-arguments case already
+  uses); `Tool.execute` calls `jarvis_plan.run()`.
+- **`run_step`/`gate_check` (`_plan_step_dispatch`)**: each step goes
+  through the SAME `check_call()` schema check, `Tool.prepare()`, the real
+  `jarvis_gate.action_for_tool()` lookup and the real `checker()` call a
+  direct model call to that tool already goes through - never a shortcut.
+  This closes a real gap rather than assuming one away: `jarvis_plan.run()`
+  only calls the `gate_check` it is given for a step the MODEL itself
+  flagged `risky` or `from_step` - a step it did not flag goes straight to
+  `run_step`, with no separate gate_check call at all. Trusting that flag
+  alone would let a step the model happened to call "safe" run an
+  "ask"-tier tool with nobody really asked. So the real check lives in one
+  place both `gate_check` and `run_step` call, cached by the step's own
+  identity - whichever of the two `jarvis_plan.run()` calls first for a
+  given step is the one that actually asks (or is silently auto-approved,
+  for a genuinely auto-tier tool); the other reads the same cached verdict
+  back rather than asking twice for the same step. Send an email, save a
+  draft, and set a timer/reminder/to-do item cannot be named in a step -
+  each has its own turn-shaped pre-gate check (rule 1's lane check, a
+  "problem" state, or no real `Tool.execute()` at all for the schedule
+  tools) that this dispatcher does not reproduce; a step naming one is
+  refused with a plain reason instead.
+- **Deliberately NOT added to `_TASK_MODULES`** (Pause/Resume): that
+  mechanism's generic Resume path calls `module.run(plan, approved=True,
+  announce=..., checkpoint=...)` with no way to supply `run_step`/
+  `gate_check`, which `jarvis_plan.run()` requires - and `jarvis_plan.py`'s
+  own condition 4 already requires "never an automatic resume" regardless.
+  "Stop everything" still reaches a running plan, through the plain
+  `watch.stopped()` check every tool already has, threaded to
+  `jarvis_plan.run()`'s own `checkpoint` and to a step's own `checkpoint`
+  when that step's tool is one of the three that take one.
+- **Fixed 2026-09-28, after the bug audit (F1-F4)** - the plan card is
+  still switched off; these make it keep its own promises once it is on:
+  - **The one card shows every step's arguments in full** (a "With:" line
+    under each step - the note's exact text, the search words), not only
+    the tool's name and the model's reason.
+  - **"Asks again on its own card" is now true for every tool.** A step
+    marked `risky` or `from_step` whose own tool is `auto`/`notify` goes to
+    the gate as `run_plan` (tier `ask`), so a real card is raised, and it
+    runs only on a person's yes; a yes nobody gave (a gate answering
+    `auto`) is refused. `never` stays `never`.
+  - **A result-filled step really receives the earlier result.** The step
+    writes `{{step N}}` in the argument that uses step N's result (N counted
+    from 1, as the card counts); `propose()` refuses a `from_step` step with
+    no such placeholder, one naming a different step, or a placeholder with
+    no `from_step`. At run time the placeholder is replaced with step N's
+    real result (as JSON, at most 2,000 characters, "[cut short]" when
+    longer), and THAT step - with the real value - is what its own card
+    shows and what runs. The plan itself is not changed.
+  - **Each step's result counts as outside text for the rest of the turn**
+    (`_TurnWatch.took_in`, as a direct call's does), so a note write later
+    in the same plan, after a step that read something (email, memory, a
+    web page), waits for a yes on the "after outside text" card
+    (`write_notes_after_outside_text`), the 2026-09-24 rule the direct path
+    already followed; "Where this came from" also gets its sources.
+- Card-count (`CARDS_PER_TURN`) and card-length (`_GATE_DETAIL_LIMIT`)
+  limits apply per step, exactly as they do for a direct call - a plan
+  cannot use its own steps to get around either. A step naming a plug-in
+  (`outside_program`) tool is refused, never run through the bridge's own
+  separate verdict-checking shape.
+- Deliberately simplified, and left that way rather than guessed at
+  further: a step to `home_control` gets no "lights without a card"
+  bypass even when the owner's own setting would give one to a direct
+  call - always the real gate instead, which is stricter than necessary,
+  never a bypass.
+- `propose_plan` joins the `NEEDS_A_PERSON` set (this session's own belt
+  the same three multi-step tools already wear) and the `control` tool
+  group for the short tool list (not a new group of its own - a new
+  group's name would add to `more_tools`' own description and enum on
+  every turn, already near its own 300-token budget; a group's members
+  cost nothing extra there, and it fits: like the other three, it is a
+  more involved, multi-step way of acting, never a plain read or write).
+- Verified: `backend/test_agent_plan_wiring.py` (new) - the tool is
+  invisible/refused while `jarvis_plan.enabled()` says no (the shipped
+  default, today); a tainted turn refuses outright before `prepare()`
+  runs; a safe step runs with no card of its own; a risky step raises its
+  own separate card mid-run even inside an approved plan; a step whose
+  real tier needs a person, even when the model marked it NOT risky, still
+  gets asked (the gap above); a denial anywhere stops the whole run; a
+  step naming send_email/draft_email/a schedule tool/a plug-in tool is
+  refused rather than run through a shortcut. `backend/test_plan.py` (72
+  checks, unchanged) and the existing `test_agent.py`/`test_tool_text.py`/
+  `test_short_tool_list.py` suites all still pass.
 
-Under the instructions both apps say "In your own words. Saved for later:
-Jarvis does not read this in chats yet." - since the chat audit
-(2026-09-28): they used to promise "Jarvis reads this in this project's
-chats", and project chats are step 4, not built. (History already has the
-`project` column for them, empty.)
+**Not yet built:** a UI in either app. Once switched on, a plan's card is
+shown exactly like any other approval card already is - `describe()`'s
+text is plain enough that no new card SHAPE is needed, only the ordinary
+approval flow already both apps have.
 
-Both show: the list and New project; instructions and notes (Save); the
-Shareable switch (ON asks with a card, OFF is instant and works on a stale
-link); the work list's name; each benchmark with its latest number,
-"better or worse than last time", a chart of dated points with the target
-as a dashed line, Log, the numbers with Remove, "private - not read aloud"
-on a private one (the line after logging one says only "Logged.", so the
-number is never spoken), the private-mark button (a card for Jarvis's own
-mark, instant for the owner's) or Mark private, and Delete; deleting a
-project or a benchmark asks "are you sure?" first.
+## 61. Reading phone notifications (phone, added 2026-09-28)
 
-**One contract file** for both apps: `tools/gen_projects_cases.py` writes
-the backend's real answers, the screens' shared `words`, how a number is
-written (`numbers`) and where a chart's bottom and top go (`scales`) to
-`jarvis-desktop/tests/fixtures/projects-cases.json` and
-`jarvis-client/app/src/test/resources/contract/projects-cases.json`.
-`tests/projects.mjs`, `brain/projects.rs`'s tests and `ProjectsTest`
-build against it; `test_projects.py` fails when it is out of date.
+The owner's decision, `CLAUDE.md`, 2026-09-26 (queued after the four
+cutting-edge groups and the security audit; built 2026-09-28): "reading
+phone notifications is added as an option. The safe version only: off by
+default, turning it on raises an approval card, turning it off is
+immediate; only apps the owner chooses (never banking); one-time codes
+hidden before anything reaches the model; treated as outside text - never
+makes Jarvis act and is never saved as a fact; shown or summarised only
+when the owner asks; nothing leaves the owner's own devices. Never text
+messages (SMS), and Jarvis never replies or sends."
 
-**"What asks first" (§32)** has a Projects group since 2026-09-28 (the
-feature audit): three fixed rows, decided in the code - making, changing
-and deleting a project and logging your own numbers (no card), making a
-project Shareable (asks every time), and taking a private mark off (asks
-when Jarvis made the mark).
+**Phone-only, like the smartwatch setting it copies the shape of** (§8's
+"one-sided on purpose" table has the reason): a Windows desktop has no
+comparable OS surface - "which app posted a notification, and what did it
+say" is an Android concept with no PC equivalent this project has any
+reason to invent one for.
 
-**Kept in backups and checked by data health** (§45, §49) since the same
-audit: `projects.db` was missing from both.
+### 61.1 The PC-decided master switch - the ONLY part on the backend
+
+`backend/jarvis_phone_notifications.py` (shipped whole,
+`phone-notifications.patch` teaches `jarvis_gate.py` the one new action
+name), copied deliberately from `jarvis_watch_notify.py`'s own shape: off
+by default, ON is one approval card, OFF is instant, decided on the PC
+like every switch of this shape even though only the phone ever acts on
+it (`docs/ARCHITECTURE.md` §3, "A second door to the same gates").
+
+| Route | Method | Body | Notes |
+|---|---|---|---|
+| `/api/notifications/phone` | GET | - | `{"enabled", "waiting", "last", "why"}` - the same shape `GET /api/notifications/watch` already answers. |
+| `/api/notifications/phone` | POST | `{"enabled": bool}` | ON: 202 `{"waiting": true, ...}` while the approval card (action `phone_notifications_read`, tier `ask`) is up - nothing changes until a person approves it. OFF: 200 at once, and withdraws a waiting ON card. |
+
+**This module never sees a notification's own text, ever.** It is a plain
+on/off switch and nothing else - the same division `jarvis_watch_notify.py`
+draws for the smartwatch setting. Turning it OFF does not revoke Android's
+own "Notification access" grant (only Android's own Settings screen can);
+it tells the phone to stop reading notifications and stop offering them to
+Jarvis, at once. `jarvis_settings_registry.py` gives it the usual second
+door too - "open phone notifications" / "turn on/off phone notifications"
+by voice or chat, calling this exact function, never a new one
+(`set_phone_notifications`, `BoolSetting("phone_notifications", ...)`).
+
+### 61.2 Android's own "Notification access" - explained before it is ever opened
+
+`NotificationListenerService` is unusually broad: once the owner grants it
+(`Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS` - a special, OS-level
+access screen, NOT a runtime permission dialog), the app COULD be offered
+every notification on the phone, from every app. `PhoneNotificationsPlate.kt`
+says this in plain words, with the current granted/not-granted state
+(`NotificationManagerCompat.getEnabledListenerPackages`, re-read on
+resume) and the button that opens that screen, BEFORE the owner is ever
+sent there - the same pattern `FloatingAvatarPlate.kt` already follows for
+"draw over other apps".
+
+Granting it changes nothing by itself: Jarvis's own switch (61.1, off by
+default) and the per-app allow list (61.3, empty by default) both still
+have to say yes before a single notification is stored.
+
+### 61.3 The per-app allow list - empty by default, banking and SMS blocked outright
+
+`data/NotificationAllowList.kt` (pure logic, unit-tested in
+`NotificationAllowListTest.kt`) and its Android-backed half,
+`data/NotificationAllowListStore.kt` (per-device `SharedPreferences`,
+never synced - the same rule every other per-device setting in this app
+already follows). Empty until the owner adds an app, from the list
+Android itself reports as installed (`PackageManager.getInstalledApplic
+ations`) - never a name typed by hand, never a network lookup.
+
+**Banking apps are blocked outright, not just discouraged in words** -
+the stricter of the two choices the task allowed, because a real (if
+imperfect) signal exists for both halves of the check:
+- Android's own Play Store category for the app (`ApplicationInfo
+  .category == CATEGORY_FINANCE`, set by the app's own developer); or
+- a short, curated list of well-known banking, brokerage and payment
+  package-name substrings (`chase`, `paypal`, `coinbase`, `robinhood`,
+  `wellsfargo`, ...; `NotificationAllowList.BANKING_SUBSTRINGS` has the
+  rest), for a sideloaded APK or an older build with no category set.
+
+**Said plainly, because it would be dishonest not to:** this is a
+heuristic, not a guarantee. A bank whose category is unset AND whose
+package name matches nothing on the list is not caught here; the card and
+the allow-list screen both say plainly that Jarvis cannot always tell,
+and ask the owner not to add one regardless.
+
+**SMS/Messages is blocked by what the phone itself says its default SMS
+app is, not by a name guess:** `Telephony.Sms.getDefaultSmsPackage` names
+whichever package currently sends and receives text messages on this
+phone - whatever it is called, OEM rebrand or third-party app included.
+(Fixed 2026-09-28: the original build called `RoleManager
+.getRoleHolders(ROLE_SMS)` for this, which turned out to be hidden from
+the public SDK stub the app actually compiles against - a real CI compile
+failure caught it, not a review. `Telephony.Sms.getDefaultSmsPackage` is
+the public, working equivalent; it needs the `<queries>` element for
+`android.provider.Telephony.SMS_DELIVER` that `AndroidManifest.xml` now
+has, the same Android 11+ package-visibility reason the app-picker's own
+`<queries>` entry exists.) `NotificationAllowList.KNOWN_SMS_PACKAGES` is
+kept only as a second, static line of defence for a phone where that call
+answers nothing. Even a
+package that somehow reached the list some other way is dropped a second
+time, in `PhoneNotificationListenerService` itself, by the same check -
+CLAUDE.md's "even if the owner tries to add the Messages app" is met at
+both the add step and the read step, not only one of them.
+
+### 61.4 The listener, the redaction, and the local store
+
+`service/PhoneNotificationListenerService.kt`
+(`android.service.notification.NotificationListenerService`, bound only by
+the system - `BIND_NOTIFICATION_LISTENER_SERVICE`, `exported="false"`).
+For every notification posted, in order (cheapest checks first, so an app
+that fails an early one never has its text even read out):
+
+1. `JarvisRuntime.phoneNotificationsAllowed()` - the cached answer from
+   61.1's switch. OFF: nothing else in this list runs.
+2. SMS check (61.3's second layer).
+3. The per-app allow list (61.3) - only a chosen app's notification survives.
+4. `data/NotificationRedactor.kt` - **applied to the title and the text
+   before anything is stored, always** (CLAUDE.md's "one-time codes hidden
+   before anything reaches the model" - applied here to storage itself,
+   stricter than literally asked, since a code that never reaches disk
+   cannot leak from a lost phone or a backup either).
+
+**The redaction heuristic, and its real limits** (unit-tested in
+`NotificationRedactorTest.kt`; the class's own doc has the full list):
+catches a plain 4-8 digit run near an English trigger word ("code",
+"otp", "verification", "passcode", "2fa", ...), the common "NNN NNN" /
+"NNN-NNN" six-digit grouping with or without one, and a bare 4-8 digit
+notification (Google's "G-123456" shape included) even with no trigger
+word at all. Does NOT catch: a non-digit code, a trigger word in another
+language, a bare digit run with no trigger word buried in a longer
+sentence, or a code split some other way. Deliberately over-redacts
+(a year or reference number near the word "code") rather than
+under-redacts - the real failure this exists to prevent.
+
+Redacted notifications are kept in `data/CapturedNotifications.kt` - a
+private, per-device `SharedPreferences` file, capped at 200 rows and 7
+days, NEVER sent anywhere on its own. `android:allowBackup="false"` on
+this whole app already keeps it out of any phone backup.
+
+**When the switch goes off, the copies go too** (2026-09-28, audit A3):
+whenever the phone's cached switch reads as off - pressed on the phone,
+or learned from the PC - every captured row is deleted. Removing an app
+from the allow list deletes that app's rows, a notification updated in
+place replaces its row instead of repeating it, and the plate has
+"Delete captured notifications", which asks "are you sure?" first, like
+Forget. **How the phone hears the PC's switch** (there is no event for
+it): it reads `GET /api/notifications/phone` on every (re)connect, when a
+`phone_notifications_read` card leaves the queue, and - at most every 15
+seconds - before storing a captured notification, which is stored only if
+the PC still says on. With no link, the last answer stands.
+
+### 61.5 Reading one into a chat - no new backend plumbing, on purpose
+
+**"Shown or summarised only when the owner asks"** is met by reusing the
+EXACT mechanism the Share sheet and the desktop's clipboard hotkey already
+use (§18, `ChatSession.send`'s `shared` parameter): a "Notifications"
+button beside "Photo" in the composer (shown only once something has
+actually been captured) puts `CapturedNotifications.sharedText()` into the
+same held chip `sharedLine` already shows, with the same Dismiss. The
+owner still presses Send themselves - attaching never sends on its own.
+
+Because that text goes in as its own message with no `provenance` tag at
+all (the same shape a Share-sheet message already has), the backend's
+EXISTING outside-text rule - only `typed` and `voice` are the owner's own
+words (§18, "What the PC does with the tags in the answering loop") -
+already marks the conversation as having read outside text, on its own,
+with no new backend code: never learned as a fact, never makes Jarvis act,
+exactly as CLAUDE.md requires. No new route, no new tag, no new taint
+mechanism - the same one every other outside-text source already uses.
+Jarvis never reads a captured notification any other way: there is no
+tool call, no background job, and no route that returns one without the
+owner's own tap.
+
+### 61.6 Never
+
+- Never sends, replies to, or dismisses a notification - the service has
+  no code path that calls back into `NotificationManager` at all.
+- Never learns a fact from one - outside text is never learned (§5).
+- Never acts on one - reading it into a chat only lets the model SEE it;
+  every action Jarvis might then suggest still goes through the exact same
+  approval card any other action would.
+- Never leaves the owner's own devices unprompted - captured notifications
+  sit on the phone until the owner's own tap sends them, over the same
+  paired link every other chat message already uses.
+
+### 61.7 Tests
+
+`backend/test_phone_notifications.py` (the switch: default off, the card,
+OFF is instant, the routes, the patch applies and reverses - the same
+shape `test_watch_notify.py` already proves). `jarvis-client`'s
+`NotificationRedactorTest.kt` and `NotificationAllowListTest.kt` (pure
+logic, no Android framework, no device needed) prove the redaction
+heuristic's documented behaviour and the banking/SMS refusal - Kotlin
+compilation itself is confirmed only once CI runs (no local Android build,
+`CLAUDE.md`, "How the Android apps get built").
 
 ## 62. Looking at the screen: "Look at this" and "Watch with me" (added 2026-09-28; backend only, not in the apps yet)
 
@@ -11037,7 +10990,7 @@ chat.
   (and the other `notify_*` lines), with Stop; a locked phone shows only
   "Jarvis is chatting with customer support for you."
 - A chat paused at a captcha, a sign-in page or an "unusual activity" page
-  can be handed to the phone - "Solve it here" (60.8). The owner's identity
+  can be handed to the phone - "Solve it here" (87.8). The owner's identity
   checks and "are you a bot?" questions are NOT: those are answered in the
   window on the PC, as before.
 
@@ -11778,6 +11731,21 @@ loosen what asks first", which covers both uses of that card.
   (`jarvis_mcp.card_every_start`); a "tell me when" does not look, and says
   why under the watch (`jarvis_tellme.readiness`); checking for tool updates
   raises its card again.
+- **Chatbot conversations and the online weather** (added 2026-09-28, after
+  the security audit's finding #2): turning Lockdown on ends a chatbot
+  conversation or comparison that is already talking to a chatbot outside
+  this PC (`jarvis_chatbot.stop_for_lockdown`,
+  `jarvis_chatbot_compare.stop_for_lockdown`, called by
+  `request_lockdown`); `run()` also reads Lockdown before the window opens,
+  before every message and while a reply is awaited, so nothing more is
+  sent. It ends with code `"lockdown"` and the words "Lockdown was turned
+  on, so Jarvis stopped. Nothing more is sent to <chatbot>." A new one is
+  refused before any card ("Lockdown is on, so Jarvis does not talk to
+  chatbots until you turn Lockdown off ..."). A chatbot on this PC only
+  (kind `local`) is not a way out and is left alone. The animal scene's
+  weather (`jarvis_sky`) reads neither Open-Meteo nor Home Assistant while
+  Lockdown is on, drops the weather already drawn, and says why under the
+  setting; it reads again as soon as Lockdown is off.
 - **Refused while on**: loosening any action (409), and turning the lights
   setting on (409).
 
@@ -13021,6 +12989,11 @@ and events.
   `textContent` only, never HTML. `widget_board_action` matches the five
   actions on a closed list in Rust; everything but Stop everything and Brief
   me is held on a stale link; Brief me opens the Brain (behind App lock).
+  **While App lock is on, Focus session, 10-min timer and Play/pause PC do
+  not act** (the owner, 2026-09-28): they open the Jarvis bar, which asks
+  Windows Hello, and say "App lock is on, so this opens the Jarvis bar
+  instead. Unlock it, then ask Jarvis there." - checked in `widget.js` and
+  again in Rust before anything is sent. Stop everything still works.
   While App lock is on or the lists are hidden, Rust takes every private
   block's words out. Read when the window opens, on a schedule or focus
   event, and once a minute while shown.
@@ -13035,7 +13008,12 @@ and events.
   every private block shows its label and "Hidden - open Jarvis to see it."
   Buttons follow the tiles exactly (`QuickTiles.decide`,
   `QuickTileService.perform`): held on a stale link except Stop everything;
-  Brief me only opens the app. Nothing of the widget is kept on the phone.
+  Brief me only opens the app. **Under App lock** (the owner, 2026-09-28)
+  every button but Stop everything only opens Jarvis, which asks for the
+  unlock, and never acts on its own (`QuickTiles.widgetOpensApp`); the
+  widget also redraws at once when App lock or "Hide memory lists" changes.
+  The Quick Settings tiles keep their own rule (they can ask Android for
+  the phone's unlock). Nothing of the widget is kept on the phone.
 
 Both apps draw a filled-in widget by one rule, held with the PC's by
 `tools/gen_widget_cases.py` (`tests/fixtures/widget-cases.json` and the
@@ -13064,3 +13042,1184 @@ button on screen that the app does not already know is safe.
 stand-in); the phone half is not compiled here; the desktop's Rust tests
 compile but run only on Windows; the home-screen widget has not been seen
 on a real launcher.
+
+
+## 87. Chatbot conversations - Jarvis talks to an AI chatbot for you (core, routes, both apps' screens, and Gemini plus eight more website adapters built 2026-09-28)
+
+> **Renumbered in the audit integration merge (2026-09-28):** this section was §60 on the `claude/jarvis-ai-assistant-research-ff37vy` branch; §60 is already taken on main's side (the plan card). References that came with that branch were renumbered with it.
+
+**Routed, on both apps' screens, with the Gemini website adapter - but not
+yet tried against the real gemini.google.com** (the owner's self-check in
+§87.4 does that). The design is `docs/CHATBOT-DRIVER-DESIGN.md` (with "The
+owner's answers (2026-09-28)"); the owner's decisions are in `CLAUDE.md`
+(2026-09-27 and 2026-09-28).
+
+- The backend core: `backend/jarvis_chatbot.py`, shipped whole, tested by
+  `backend/test_chatbot.py` against a stand-in chatbot (`FakeChatbot`).
+- The Gemini website adapter: `backend/jarvis_chatbot_gemini.py`, shipped
+  whole, tested by `backend/test_chatbot_gemini.py` against a fake Gemini
+  page on 127.0.0.1 in a real browser. `backend/chatbot.patch` gives the
+  gate its `_RISK` line.
+- The routes: `backend/jarvis_chatbot_routes.py`, shipped whole, and
+  `backend/chatbot-routes.patch` (one `install()` call in `jarvis_hud.py`),
+  tested by `backend/test_chatbot_routes.py`. `tools/gen_chatbot_cases.py`
+  writes the routes' real answers, and the sentences both apps show
+  (`jarvis_chatbot_routes.WORDS`), into both apps' contract file.
+- The desktop: Brain -> Work -> "Talk to a chatbot for me" (`src/chatbot.js`,
+  `brain.js`, `src-tauri/src/brain/chatbot.rs`; `tests/chatbot.mjs`).
+- The phone: Brain -> "Talk to a chatbot for me" (`net/Chatbot.kt`,
+  `ui/screens/ChatbotPlate.kt`; `ChatbotTest`), and an ongoing notification
+  while one is going ("Talking to Gemini, 3 of 5", with Stop;
+  `service/ChatbotNotifier.kt`).
+- **Eight more websites** (the owner's "the chatbot driver becomes
+  versatile", 2026-09-28), built the same open way (§87.5): each a thin site
+  file over one shared base, `backend/jarvis_chatbot_web.py`, tested by
+  `backend/test_chatbot_sites.py`. None of their selectors is checked against
+  the real sites yet either.
+- **API adapters and a second AI on this PC** (the same decision): §87.4.1,
+  `backend/jarvis_chatbot_api.py` (one entry per service - OpenAI, DeepSeek,
+  Mistral, xAI, OpenRouter, Groq - tested by `backend/test_chatbot_api.py`
+  against a fake OpenAI-style server), and §87.4.2,
+  `backend/jarvis_chatbot_local.py` (another Ollama model on this PC, tested
+  by `backend/test_chatbot_local.py` against a fake Ollama).
+- **Ask several and compare** (the same decision, point 4): §87.7,
+  `backend/jarvis_chatbot_compare.py` - two or more chatbots, ONE card, one
+  after another, ONE summary; on both apps' screens.
+
+### 87.1 What it is
+
+The owner gives a goal ("find out how to keep houseplants alive in a dark
+flat"). Jarvis sends the goal, word for word, to the chatbot, then writes
+its own follow-ups on this PC and sends them **without asking each time**,
+within limits the owner approved on **one** card: the most messages, the
+longest time, and words it must never send. It stops by itself when the
+goal looks met, a limit is reached, the chatbot refuses twice, the answers
+go in circles, or the chatbot asks about the owner (that question comes
+back to the owner, never answered). It **pauses and asks** at a captcha, a
+sign-in page or an "unusual activity" page (never solved or skipped), and
+when its own message is blocked twice by the last check.
+
+### 87.2 The card
+
+Gate action `chatbot_session`, tier `ask` only (any other tier refuses to
+start; `never` switches the feature off). A risky approval: it leaves the
+PC and cannot be taken back. The card text is `jarvis_chatbot.describe()`:
+the chatbot and how it is reached, the goal marked "These words will be
+sent first", the limits, the built-in and the owner's never-send words, the
+version (one card or two), and "If you say no: nothing is sent". One card
+per conversation; **any** change to a limit is a new card; Resume is
+`/api/task/resume`'s own card. No "always allow". The goal goes through the
+same last check as every message **before** the card; a goal that fails is
+refused with the reason and no card.
+
+### 87.3 The routes
+
+Every route is behind the server's own origin and token checks, like every
+other route; both apps send the token and `X-Jarvis-Client: hud`.
+
+| route | body | answer |
+|---|---|---|
+| `GET /api/chatbot/status` (`?id=`) | - | `jarvis_chatbot.view()` plus `"available": true` and `"limits": {"waiting", "said"}` (the last limits change for the conversation shown): `{"routed": true, "chatbots": [{"id","name","host","built","ready","note","kind","money"?}], "tier": {"id","name","words","why","turns_default","turns_max","minutes_default","minutes_max","compare_min","compare_max"}, "session": <session> or null, "limits"}`. With no `id`, the latest conversation still going (null when none - an ended one is read by its id); an unknown id is `session: null` (conversations are kept in memory only, so a backend restart loses them); an id that is not `chat_` and 12 hex digits is a 400. The one thing a read may change: a paused conversation that can no longer be resumed (Stop on the task, or its hour ran out, so `jarvis_task_control` no longer holds it) is ended - "stopped", its window closed - once a read has seen it so for 10 seconds; before, it stayed "paused" with a Resume that could only fail until a new conversation was planned |
+| `POST /api/chatbot/start` | `{"chatbot", "goal", "max_messages"?, "max_minutes"?, "never_send"?: [..]}` | 202 `{"ok", "session", "asking": true, "message"}` - the card is asked on a background thread and nothing is sent until a person approves it; 400 `{"ok": false, "error", "session"}` when `plan()` refused it (the reason as a sentence: "Gemini through its website is not built yet.", "The goal cannot be sent: it held an email address. Nothing would be sent.", "At most 8 messages in this version."), with no card; 409 while another conversation is going (asking, running or paused), and 409 when `chatbot_session` is not tier "ask" (switched off, or a tier that would ask nobody) - no card either way |
+| `POST /api/chatbot/stop` | `{"id"}` | 200 `{"ok", "session", "message"}`; never a card, never held on a stale link; 400 for a bad id, 404 for an unknown one, 409 when it has already ended |
+| `POST /api/chatbot/limits` | `{"id", "max_messages"?, "max_minutes"?, "never_send"?}` | 202 `{"ok", "asking": true, "session", "message"}` - a NEW card, asked on a background thread; the limits change only on a yes, and the outcome is on the next GET's `limits` (`waiting` while the card is up, then `said`). 200 `{"changed": false}` for the limits it already has; 400 for a number past this version's most (checked now, before any card); 404 unknown; 409 when it is not running or paused, when a limits card is already waiting, or when the tier is not "ask" |
+
+**No event of its own.** The core reports progress on the one activity
+line (`set_activity("working", "Talking to Gemini: message 3 of 5.")`); it
+publishes no transcript on the bus. Both apps read `GET /api/chatbot/status`
+again every 4 seconds while a conversation is going, and on every activity
+event. The phone starts its ongoing notification from an activity line that
+looks like a conversation's (`Chatbot.isChatbotActivity`), so one started
+on the desktop shows there too.
+
+**In the apps.** Start, Resume and Change limits are held on a stale link
+(rule 4: they send, or raise a card to); Stop and Pause are not. While
+"Hide memory lists and chat history" is on, the goal, the never-send words,
+the transcript, the summary, the chatbot's question and the end words are
+not shown (the desktop's Rust takes them out; the phone's plate leaves them
+out); the counts, the state and the version stay. The phone's notification
+carries only the chatbot's name and the counts, never the goal or a word of
+the conversation, and a locked phone shows only "Jarvis is talking to a
+chatbot for you."
+
+Pause and Resume are the existing `/api/task/pause` and `/api/task/resume`
+(tool name `chatbot_session`); Stop is also `/api/task/stop`, and Stop
+everything (`/api/stop_all`) stops a conversation too.
+
+`<session>` is `jarvis_chatbot.session_view()`: `id`, `chatbot`, `name`,
+`goal`, `state` (`asking`, `approved`, `running`, `paused`, `done`,
+`stopped`, `refused`), `tier`, `tier_name`, `messages_used`,
+`max_messages`, `minutes_used`, `max_minutes`, `never_send`, `paused` (why,
+in plain words), `ended` (why), `question` (the chatbot's question about
+the owner, handed back), `problem`, `summary`, `read_aloud: false`, `usage`, and
+`transcript`: `[{"who": "jarvis" | "chatbot", "n", "text", "at",
+"outside_text", "source"?, "move"?, "cut_off"?}]`. `cut_off: true` (a
+chatbot turn only, and only when true) marks an answer that the money
+limit's answer-length cap cut short (§87.4.1); both apps show
+`WORDS.cut_off` under it: "Jarvis asked for a short answer so it stays
+within your limit; the rest was cut off."
+
+**Outside text.** Every chatbot turn has `outside_text: true` and `source:
+"chatbot_transcript"`; the summary (`answer`, `claims` with
+`source_given`, `open`, `messages`, `minutes`, `ended`) is outside text
+too. Apps show them, never read them aloud, and never offer to remember
+anything from them.
+
+`chatbots[].kind` is how each is reached: `"website"` (a browser window on
+the PC), `"api"` (an official API with a key, §87.4.1) or `"local"` (a
+second AI on this PC, §87.4.2). Both apps group their chooser by it, in
+that order, under the PC's own headings (`WORDS` `kind_website`,
+`kind_api`, `kind_local`: "Websites (a browser window on the PC)", "With a
+key (each message costs a little)", "On this PC"), one chatbot per line
+with the `note` under any that is not ready. An older PC that sends no
+`kind` is read as all websites.
+
+`session.usage` is what an API (or local) conversation has used so far -
+`{"model", "requests", "prompt_tokens", "completion_tokens",
+"total_tokens", "retries", "dollars", "cost"}` as the adapter counted it -
+or `null` for a website conversation. `dollars` is the estimate as a number
+and `cost` the same as the PC writes it ("$0.03"; an amount under a cent
+shows as "$0.01", never as free); an API conversation has both, a second AI
+on this PC has neither. Both apps show one line from `WORDS.usage_line`:
+"Used so far: 3 requests, 4,215 word-pieces (tokens), model gpt-5-mini,
+about $0.01" (the model part left out when there is none, the "about" part
+when there is no `cost` - an older PC); in a comparison, one line per
+chatbot. Counts only, so it stays shown while the private lists are hidden.
+
+`chatbots[].money` (API services only, and only once a monthly money limit
+is set - §87.4.1) is this month's limit as the PC writes it: `{"company":
+"OpenAI", "limit": "$5.00", "left": "$4.55", "spent": "$0.45", "until":
+"October 1", "reached": false}`. Both apps show it with `WORDS.money_left`,
+"About {left} of {limit} left this month for {company} (prices are
+estimates you can correct on the PC).", under that chatbot in the chooser,
+and `WORDS.money_pc_only` once under the "With a key" group. Neither app can
+change a limit or a price: that is the PC's command line only.
+
+`chatbots[].ready` is false, and `note` says why in plain words with the
+one line that fixes it, when the chatbot is built but cannot run on this PC
+yet (for Gemini: Playwright not installed, or its window never signed in).
+`POST /api/chatbot/start` for a chatbot that is not ready answers 400 with
+that same `note` as `error`, before any card.
+
+### 87.4 Gemini through its website (`jarvis_chatbot_gemini.py`)
+
+Driven **openly** (the owner's decision of 2026-09-28): Playwright for
+Python drives a real, visible Chromium (or Edge) window, launched
+`headless=False` with Playwright's own defaults. No stealth plug-in, no
+change to how the browser presents itself, nothing that hides that a
+program is driving, no proxy, no captcha solving. It types at a fixed pace
+(45 ms a character; a line break is Shift+Enter so a message is never sent
+in halves), clicks only the message box and the send button, opens a new
+chat every conversation and reads only the newest reply that appeared after
+its own message - never the sidebar or another chat, never a link. The only
+address it opens by itself is `https://gemini.google.com/app`; any other is
+refused. A reply is complete when Gemini's "Stop response" button is gone
+and the text has not changed for 3 seconds.
+
+`status()` answers `needs_owner` - and the adapter does nothing else - at a
+captcha (`captcha`), a sign-in page, sign-in form or "Sign in" button
+(`login`), an "unusual traffic" / "verify it's you" page (`unusual`), a
+notice laid over the page, another host, another chat, or a missing message
+box (each named in `reason`). The driver pauses and asks; the owner deals
+with it in the visible window, then presses Resume.
+
+One browser profile used only for this, at
+`<config>/chatbot/gemini-profile` (normally
+`%USERPROFILE%\.openjarvis\chatbot\gemini-profile`), signed in **once, by
+hand**, to the spare Google account used only by Jarvis. Jarvis never types,
+sees or keeps the password. The owner's three lines, in PowerShell:
+
+- install (once): `py -3 -m pip install playwright; py -3 -m playwright install chromium`
+- sign in (once): `cd "<your backend folder>"; py -3 jarvis_chatbot_gemini.py sign-in`
+- check the selectors (sends two fixed questions in one new chat, "What is
+  2 plus 2?" then "And what is 3 plus 3?" - the second proves the
+  conversation carries on in the same chat - and prints PASS/FAIL per step
+  and which selector matched):
+  `cd "<your backend folder>"; py -3 jarvis_chatbot_gemini.py check; Write-Host "The results are also saved in $env:USERPROFILE\.openjarvis\chatbot\gemini-check.txt"`
+
+`JARVIS_GEMINI_BROWSER=msedge` (or `chrome`) uses the browser already on
+the PC instead of Playwright's Chromium.
+
+**"Signed in" means the sign-in finished** (2026-09-28): the sign-in helper
+writes a small note, `jarvis-signed-in.txt` (the date, nothing else), into
+the profile folder only when it sees the site's message box. The profile
+folder alone is not enough - opening the sign-in window makes it - so a
+folder without the note reads "not signed in yet", with the sign-in line.
+A window signed in before this note existed must run its sign-in line once
+more; if it is still signed in, it finishes as soon as the message box
+shows.
+
+### 87.4.1 Through an official API with a key (`jarvis_chatbot_api.py`, 2026-09-28)
+
+One adapter family speaking the OpenAI-style "Chat Completions" API
+(`POST <base>/chat/completions`, `{"model", "messages", "stream": false}`
+plus that service's answer-length cap field - see "The hard stop" below -
+one answer back), registered as one chatbot per service so the card names
+the exact service, host and model. `chatbots[].kind` is `"api"` for these,
+`"website"` for Gemini and `"local"` for 87.4.2.
+
+| id | name | base address | default model | address checked |
+|---|---|---|---|---|
+| `openai_api` | ChatGPT (OpenAI API) | `https://api.openai.com/v1` | `gpt-5-mini` | yes - openai/openai-python |
+| `deepseek_api` | DeepSeek (API) | `https://api.deepseek.com` | `deepseek-chat` | **unverified** (docs blocked from the build container) |
+| `mistral_api` | Mistral (API) | `https://api.mistral.ai/v1` | `mistral-small-latest` | yes - mistralai/client-python |
+| `xai_api` | Grok (xAI API) | `https://api.x.ai/v1` | `grok-4.6` | host yes (xai-sdk-python); the `/v1/chat/completions` path seen in xAI's own client (xai-org/grok-build), **not** in its API reference (blocked) |
+| `openrouter_api` | OpenRouter (API) | `https://openrouter.ai/api/v1` | `openai/gpt-5-mini` | yes - OpenRouterTeam/typescript-sdk |
+| `groq_api` | Groq (API) | `https://api.groq.com/openai/v1` | `openai/gpt-oss-20b` | yes - groq/groq-python |
+
+The default models are a cheap first choice, **not checked against any
+price list**. `<id>_model = "..."` under `[chatbot]` in
+`jarvis-framework.toml` changes one; it is read once, when Jarvis starts,
+so a card and its conversation always name the same model.
+
+**Keys (rule 3).** Windows Credential Manager, one entry per service
+(`Jarvis Backend/OpenAI API key`, `.../DeepSeek API key`, `.../Mistral AI
+API key`, `.../xAI API key`, `.../OpenRouter API key`, `.../Groq API key`),
+through the same `jarvis_token_store` code as the web-search keys. Entered
+on the PC only, one line in PowerShell in Jarvis's folder (the key is
+pasted at a hidden prompt):
+`py -3 jarvis_chatbot_api.py key openai` (or `deepseek`, `mistral`, `xai`,
+`openrouter`, `groq`); `forget-key <service>` removes it, `status` lists
+which are saved. A service with no key is `ready: false` with that line as
+its `note`, before any card. The key goes in the `Authorization` header to
+that service's own https host and port only (checked at open and before
+every request), a redirect is refused, nothing is logged, and an error
+never quotes the service's own error text.
+
+**Errors** end the conversation with plain words (the session's `ended`):
+the key refused (401/403, with the line to save it again), no credit (402),
+an unknown model (404), too many requests (429), a problem on the
+service's side (5xx), no answer within 75 seconds, no connection, a
+redirect. A 429 is retried **at most once**, and only when its
+`Retry-After` is at most 20 seconds; nothing else is retried.
+
+**Money: a monthly limit per service (the owner's decision, 2026-09-28).**
+"A monthly amount per service, set on the PC; Jarvis stops that service
+when it is reached, and the approval card shows how much is left. Prices
+change, so the amount is an estimate from a price list the owner can see
+and correct, and the card says 'about'."
+
+- **No limit, no conversation.** A service with a key but no limit is
+  `ready: false`, its `note` "No monthly money limit is set for OpenAI, so
+  Jarvis will not use ChatGPT (OpenAI API) yet. Set one on the PC, ...:
+  py -3 jarvis_chatbot_api.py limit openai 5", and a start is a 400 with
+  that sentence, before any card. The no-key note now ends with the same
+  limit line, since the limit is the next step.
+- **Set on the PC only**, one line in PowerShell in Jarvis's folder, the
+  same place keys are added - raising a limit is a loosening, so there is
+  no route for it (or for a price) and neither app can change one:
+  `py -3 jarvis_chatbot_api.py limit openai 5` ($5 a calendar month; `none`
+  removes it and the service is then not used), `price openai 0.25 2.00`
+  (dollars per million word-pieces in, then out, for the model in use;
+  `price openai default` goes back), `spent` (this month, every limit, and
+  every price with where it came from).
+- **The price list** (`DEFAULT_PRICES`, written 2026-09-28, **every one
+  UNVERIFIED** - from memory, no price page was reachable; `spent` marks
+  each default "UNVERIFIED - check <price page>"):
+
+  | service | model | $ per million in | $ per million out |
+  |---|---|---|---|
+  | `openai_api` | `gpt-5-mini` | 0.25 | 2.00 |
+  | `deepseek_api` | `deepseek-chat` | 0.28 | 0.42 |
+  | `mistral_api` | `mistral-small-latest` | 0.10 | 0.30 |
+  | `xai_api` | `grok-4.6` | 3.00 | 15.00 (no price was known for this name; Grok 4's, the highest here, as a cautious guess) |
+  | `openrouter_api` | `openai/gpt-5-mini` | 0.25 | 2.00 |
+  | `groq_api` | `openai/gpt-oss-20b` | 0.10 | 0.50 |
+
+  A model the list does not know (a `<id>_model` line) has no price and is
+  not used until the owner sets one with `price` - without a price there
+  is no way to keep to the limit.
+- **What is counted:** each answer's `usage` (tokens in and out) times the
+  price, per calendar month in the PC's local time, in
+  `<Jarvis's settings folder>/chatbot/api-money.json` (numbers only - never
+  the key, never a word of a message; the last 13 months). OpenRouter's own
+  `usage.cost` (dollars), when it sends one, is counted instead of the
+  estimate; no other service's `cost` field is trusted. An answer with no
+  `usage` is estimated from its length (4 characters a word-piece). A file
+  that cannot be read stops every API chatbot until it is fixed (it never
+  reads as "nothing spent").
+- **When it stops:** a service whose month has reached its limit is
+  `ready: false` ("You set $5.00 a month for OpenAI; about $5.02 is used
+  this month. Raise the limit on the PC or wait until October 1."), so no
+  card. And right before EVERY message the core asks the adapter's
+  `before_send()` (and `send()` checks again): that request must fit in
+  what is left - with the answer-length cap below, at least 256
+  word-pieces of answer after everything it resends (3 characters a
+  word-piece, erring high); for DeepSeek (no cap), its worst case,
+  8,000 word-pieces of answer plus 8,000 for hidden reasoning - or the
+  conversation ends there
+  (`ended_code` "money_limit", ok, not an error) with "The next message to
+  ... could cost up to about $0.02, which would pass the $0.02 a month you
+  set for OpenAI (about $0.01 is used this month). Nothing more was sent.
+  Raise the limit on the PC or wait until October 1." In a comparison
+  (§87.7), a service already at its limit, or with none set, is refused
+  when the comparison is planned - like one with no key, with its own
+  sentence and no card - while one whose next message would pass the limit
+  during the comparison drops out and the others carry on.
+- **The card** (single and compare) says "About $4.55 of $5.00 left this
+  month for OpenAI (prices are estimates you can correct on the PC)." and,
+  when what is left may not cover even one message, "That may not be
+  enough for one more message; if so, Jarvis stops before sending it."
+  Its note adds "It also asks OpenAI to keep each answer short enough to
+  stay within that limit." - or, for DeepSeek, "Jarvis cannot yet ask
+  DeepSeek to keep answers short (that setting could not be checked), so
+  it stops earlier instead."
+
+**The hard stop: each answer's length is capped** (the owner's decision,
+2026-09-28: "Jarvis also asks each service to cap how long an answer can
+be, so one long answer cannot carry a month past the limit. Each service
+names that setting differently, so each one's own documentation is checked
+before it is used.")
+
+- **Every request carries a cap** in that service's own field. The cap is
+  the SMALLER of 8,000 word-pieces (a sensible most for one message) and
+  what is left of the month's limit, after the worst case of what the
+  message sends, turned into answer word-pieces at that model's out price
+  (`reply_cap`) - less 8,000 word-pieces of room for hidden reasoning
+  where the service does not say its cap covers it. So the cap shrinks as
+  the month is used, and the service itself will not write, or bill, an
+  answer past the limit, as far as its own counting goes. When what is
+  left cannot pay for even 256 word-pieces, the message is refused with
+  the "could cost up to ... would pass" words above.
+- **The field per service** (checked 2026-09-28; every provider's
+  documentation site was blocked from the build container, so each was
+  read in the provider's own code on GitHub):
+
+  | service | field | where it was checked | hidden reasoning |
+  |---|---|---|---|
+  | `openai_api` | `max_completion_tokens` | openai/openai-python `src/openai/types/chat/completion_create_params.py`: "An upper bound for the number of tokens that can be generated for a completion, including visible output tokens and reasoning tokens"; `max_tokens` there is "deprecated in favor of `max_completion_tokens`, and is not compatible with o-series models" | **inside the cap** (OpenAI's own words): the cap bounds the whole bill |
+  | `groq_api` | `max_completion_tokens` | groq/groq-python, the same file name; `max_tokens`: "Deprecated in favor of `max_completion_tokens`" | not stated; 8,000 of room kept |
+  | `openrouter_api` | `max_completion_tokens` | OpenRouterTeam/typescript-sdk `src/models/chatrequest.ts`: "Maximum tokens in completion"; `max_tokens`: "deprecated, use max_completion_tokens" | not stated (it passes the request on to the model's company); 8,000 of room kept |
+  | `mistral_api` | `max_tokens` | mistralai/client-python `src/mistralai/client/models/chatcompletionrequest.py`: "The maximum number of tokens to generate in the completion" | not stated; 8,000 of room kept |
+  | `xai_api` | `max_tokens` | **xAI's own client code, not its API reference** (blocked): xai-org/grok-build sends `max_tokens` in its Chat Completions request to `<base>/chat/completions`, base `https://api.x.ai/v1`; xai-org/xai-sdk-python `chat.py` names the same for its gRPC API | not stated; 8,000 of room kept |
+  | `deepseek_api` | **none sent - unverified** | DeepSeek's API reference could not be opened and it has no SDK for this API on GitHub (its own deepseek-harness speaks the Anthropic-style endpoint, a different API) | the worst-case check above is its only guard |
+
+- **An answer cut short** (`finish_reason` "length", with a cap sent) is
+  kept and marked `cut_off: true` in the transcript; both apps show
+  `WORDS.cut_off` under it. A "length" with no cap sent (DeepSeek) is not
+  Jarvis's doing and gets no note. An answer the cap stopped before any
+  of it was written (a "thinking" model spent it all on hidden reasoning)
+  ends the conversation with "... used up the answer length Jarvis asked
+  for, to stay within your money limit, before writing any answer."
+- `py -3 jarvis_chatbot_api.py spent` says, per service, which field caps
+  its answers and where that was checked, whether hidden reasoning counts
+  inside it, and, for DeepSeek, "NO CAP IS SENT" with why.
+- **Honest limits.** It is still an estimate: a default price may be wrong
+  until the owner corrects it. Only OpenAI's cap is known to bound the
+  whole bill. For Groq, OpenRouter, Mistral and xAI the cap bounds the
+  visible answer and 8,000 word-pieces of room is kept for hidden
+  reasoning - a guess; for DeepSeek nothing is capped. On those, a longer
+  hidden reasoning (or a longer DeepSeek answer) can still carry a month a
+  little over. xAI's field comes from xAI's own client code, not its
+  published reference; if xAI ever refused it, the conversation would end
+  with "refused the message (error 400)".
+
+### 87.4.2 A second AI on this PC (`jarvis_chatbot_local.py`, 2026-09-28)
+
+Chatbot id `local_ai`, kind `"local"`, host `"this PC"`: another Ollama
+model on this PC. **Nothing leaves the PC**, so it has no row in "What
+Jarvis can reach" and the card says so; its replies are still outside
+text (another model's words are not the owner's), and the last check still
+runs before every message.
+
+- **Which model:** `local_model = "<name>"` under `[chatbot]`, a name
+  `ollama list` shows (read once, at start). `py -3
+  jarvis_chatbot_local.py models` lists them; `... status` says whether it
+  can be used now, and where. A model the PC does not have is refused;
+  nothing is ever downloaded.
+- **Never a cloud model:** a name with `-cloud` / `:cloud` is refused
+  before any card (`jarvis_router.is_remote_model` plus this file's own
+  pattern). **Loopback only:** 127.0.0.1 / localhost / ::1, never through a
+  proxy, redirects refused.
+- **One graphics card** (the core's limited version): only the everyday
+  model already loaded is allowed, at chat's own context size, and it waits
+  while the owner chats. It is the same model Jarvis uses, given only the
+  conversation - a fresh look, not a different AI; the card says so. Any
+  other model is `ready: false`: "needs your second graphics card".
+- **Two graphics cards** (the core's full version, the same check): any
+  model the PC has, up to 9 GiB on disk, in the second card's Ollama. That
+  card holds one model at a time, so a model other than the lane's own
+  swaps with Jarvis's driver model every message (a few seconds each); the
+  card says so.
+
+### 87.5 More chatbot websites (`jarvis_chatbot_web.py` and one site file each)
+
+The owner's decision of 2026-09-28 ("The chatbot driver becomes
+versatile"): ChatGPT, Claude, Microsoft Copilot, Perplexity **and other
+commonly used chatbot websites**, each driven **openly like Gemini** with
+its **own spare account** used only by Jarvis. The last four in the table
+(DeepSeek, Grok, Le Chat, Meta AI) are the studio's reading of "other
+commonly used" - the owner can drop any of them.
+
+Everything in 87.4 applies to every one of them, word for word: it lives in
+ONE shared base, `backend/jarvis_chatbot_web.py` (the browser thread, the
+visible `headless=False` window with Playwright's own defaults, the fixed
+typing pace, the host lock, "the reply is finished", every `needs_owner`
+page, the sign-in helper and the self-check). Each site file holds only its
+own `SELECTORS` table (plain CSS, role and aria-label first, with
+fallbacks), its host, the hosts of its sign-in pages, and its words. Every
+send-button selector names "send" or "submit", so a fallback can never
+click some other button. Each has its own browser profile,
+`<config>/chatbot/<site>-profile` (normally
+`%USERPROFILE%\.openjarvis\chatbot\<site>-profile`), and its own check
+report, `<config>/chatbot/<site>-check.txt`.
+
+| id | host (the only one it opens) | sign in once, by hand (PowerShell) | self-check (PowerShell) |
+|---|---|---|---|
+| `gemini_web` | `gemini.google.com` | `cd "<your backend folder>"; py -3 jarvis_chatbot_gemini.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_gemini.py check` |
+| `chatgpt_web` | `chatgpt.com` | `cd "<your backend folder>"; py -3 jarvis_chatbot_chatgpt.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_chatgpt.py check` |
+| `claude_web` | `claude.ai` | `cd "<your backend folder>"; py -3 jarvis_chatbot_claude.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_claude.py check` |
+| `copilot_web` | `copilot.microsoft.com` | `cd "<your backend folder>"; py -3 jarvis_chatbot_copilot.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_copilot.py check` |
+| `perplexity_web` | `www.perplexity.ai` | `cd "<your backend folder>"; py -3 jarvis_chatbot_perplexity.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_perplexity.py check` |
+| `deepseek_web` | `chat.deepseek.com` | `cd "<your backend folder>"; py -3 jarvis_chatbot_deepseek.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_deepseek.py check` |
+| `grok_web` | `grok.com` | `cd "<your backend folder>"; py -3 jarvis_chatbot_grok.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_grok.py check` |
+| `lechat_web` | `chat.mistral.ai` | `cd "<your backend folder>"; py -3 jarvis_chatbot_lechat.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_lechat.py check` |
+| `metaai_web` | `www.meta.ai` | `cd "<your backend folder>"; py -3 jarvis_chatbot_metaai.py sign-in` | `cd "<your backend folder>"; py -3 jarvis_chatbot_metaai.py check` |
+
+Each self-check sends two fixed questions in one new chat ("What is 2 plus
+2?", then "And what is 3 plus 3?") and prints PASS/FAIL per step and which
+selector matched. The second question is there because a site gives a new
+chat its own address around the first reply: a wrong `chat_address` guess
+in a site file shows only on the next message, and the check names that
+line when it does. `JARVIS_<SITE>_BROWSER`
+(for example `JARVIS_CHATGPT_BROWSER=msedge`), or `JARVIS_CHATBOT_BROWSER`
+for all of them, uses a browser already on the PC.
+
+**Sign-in pages** are recognised (reason `login`) on the site's own sign-in
+address and on the hosts its "Sign in with ..." buttons lead to (Google,
+Microsoft, Apple, X, Facebook and the sites' own `auth.` hosts, listed in
+each file's `SIGN_IN_HOSTS`); the window never opens any of them by
+itself. The shared "needs the owner" checks also know Cloudflare's "verify
+you are human" page and the reCAPTCHA, hCaptcha, Turnstile and Arkose
+checks - Jarvis stops at all of them and never solves one.
+
+**Perplexity's sources.** A Perplexity reply is the answer's words, then
+`Sources listed by Perplexity (links not opened):` and each listed link as
+plain text, `1. <label> - <address>`: read from the reply's own links with
+`get_attribute("href")`, never clicked, opened or followed; http(s) only,
+each once, at most 20. So a comparison can say which answers came with
+sources. Like every reply, it is outside text.
+
+**Each card note says, in plain words:** driven openly (a person's pace, a
+window you can see, never hidden, never a captcha solved); that site's
+terms (OpenAI's terms forbid automatically extracting ChatGPT's answers,
+as quoted in `docs/CHATBOT-DRIVER-DESIGN.md`; for the others, "their terms
+restrict automated access" - not read word for word); a spare account used
+only by Jarvis, never the owner's own; and that the account may be blocked
+or closed.
+
+**Not verified, said plainly:** no selector in any of these files has been
+tried against its real site - the container they were built in cannot
+reach them, and must not automate them. Each was written from how the site
+is generally known to be built, and each site's self-check on the owner's
+PC is the proof. Not checked either: whether Meta allows a second account
+kept only for this.
+
+### 87.6 Not decided or not built
+
+Money: asking each service to cap an answer's length (so the worst case is
+a promise, not an estimate), asking OpenRouter for its real cost on every
+answer (its "usage accounting" request field, not checked), and checking
+the default prices against each company's price page.
+
+Starting a conversation by saying it ("ask Gemini for me about ...") -
+today only the form starts one; task notes to a running conversation ("ask
+it about X too"); the two-card version's
+measurements; checking the selectors of every website on the owner's PC (the
+self-checks in §87.4 and §87.5).
+
+**Kept in History since the chat audit (2026-09-28).** A finished
+conversation, and a finished comparison as ONE record, is kept in the
+encrypted chat history (kinds `chatbot` and `compare`, §18.6): outside
+text, never learned from, never read aloud, read-only in both apps' History.
+While it runs it is still in memory only: a restart mid-conversation loses
+it ("That conversation is no longer in memory: Jarvis on the PC restarted. A
+conversation that finished is kept in History."). The summary's note says
+where it will be kept. The desktop keeps the last conversation's and
+comparison's IDS (never a word) across closing the Brain window, so a
+finished summary no longer vanishes with it (desktop B2 of the chat audit).
+
+### 87.7 Ask several and compare (`jarvis_chatbot_compare.py`, 2026-09-28)
+
+The owner's decision (CLAUDE.md, "The chatbot driver becomes versatile",
+point 4): "ask several AIs the same question, one card listing every AI it
+will ask, one summary of agreements, disagreements and sources". Built on
+the backend and both apps; like everything else in §87, **not yet tried
+against the real sites**. Tested by `backend/test_chatbot_compare.py`;
+the routes' real answers are the `compare_*` cases in both apps' contract
+file (`tools/gen_chatbot_cases.py`).
+
+**What it does.** Two or more chatbots from `chatbots` (built AND ready -
+the same check a single conversation makes) are asked the same goal, **one
+after another**, each in its own ordinary conversation (§87.1): the same
+driver loop, the same clean context (the goal and THAT chatbot's replies
+only - the chatbots never see each other's answers), the same last check
+before every message, the same never-send words, and the same per-chatbot
+limits (the form's most messages and most minutes apply to each chatbot on
+its own). When the last one ends, Jarvis's own model on this PC writes ONE
+summary.
+
+**How many chatbots (confirmed by the owner, 2026-09-28):** 2 to 3 on one
+graphics card, 2 to 4 on two (`jarvis_chatbot_compare.MAX_AIS`); one after
+another in both. The numbers are in `tier.compare_min` / `tier.compare_max`.
+
+**One card.** Gate action `chatbot_session` (the same card kind, tier `ask`
+only, a risky approval, no "always allow"). `describe()` lists every
+chatbot, numbered, by name and address (and each one's own card note, e.g.
+the website terms, and for an API service "About $X of $Y left this month
+for <company> ..." - §87.4.1), the goal word for word "sent first to each of them",
+the limits per chatbot AND in all ("at most 3 messages to each chatbot, the
+goal included (9 in all)"), the never-send words, that the chatbots never
+see each other's answers, what happens when one drops out, the version, and
+"If you say no: nothing is sent, and no chatbot window is opened." The goal
+meets the last check before the card; a goal that fails raises no card. A
+"no" leaves every chatbot unopened.
+
+**When one cannot go on.** An error, a closed page, no reply, two blocked
+messages, a question about the owner, an API service's monthly money limit
+(the next message's worst case would pass it - §87.4.1), or a captcha /
+sign-in / "unusual activity" page: that chatbot is **left out** (its window closed; a captcha
+is never solved or skipped) and the others carry on. A single conversation
+would pause and ask; a comparison does not, so one chatbot's page never
+holds up the others. The summary's `dropped` says who and why, in plain
+words from the backend (never the model's).
+
+**Pause, Resume, Stop.** The comparison is ONE `jarvis_task_control` task
+(tool `chatbot_compare`): `/api/task/pause` pauses the whole comparison
+(the reply on its way is read first), `/api/task/resume` is one card naming
+every chatbot and what each has done so far. Stop - `POST
+/api/chatbot/compare/stop`, `/api/chatbot/stop` with any of its
+conversations' ids, `/api/task/stop`, or Stop everything - ends every
+conversation in it; the ones not asked yet are never opened. A stop writes
+no model summary.
+
+| route | body | answer |
+|---|---|---|
+| `GET /api/chatbot/status` (`?compare=`) | - | as §87.3, plus `"compare": <compare> or null` (with no `compare`, the latest comparison still going; an ended one is read by its id; an unknown id is null; an id that is not `cmp_` and 12 hex digits is a 400) and `tier.compare_min`, `tier.compare_max`. `session` is never one of a comparison's conversations. A paused comparison `jarvis_task_control` no longer holds is ended after 10 seconds, like a single one |
+| `POST /api/chatbot/compare/start` | `{"chatbots": [ids], "goal", "max_messages"?, "max_minutes"?, "never_send"?}` | 202 `{"ok", "compare", "asking": true, "message"}` - ONE card on a background thread; 400 `{"ok": false, "error", "compare"}` when `plan()` refused it ("Pick at least 2 chatbots to compare.", "Pick at most 3 chatbots in this version.", a chatbot that is not ready says why, the goal's last check), no card; 409 while a comparison or a single conversation is going, or when `chatbot_session` is not tier "ask" |
+| `POST /api/chatbot/compare/stop` | `{"id"}` | 200 `{"ok", "compare", "message"}`; never a card, never held on a stale link; 400 bad id, 404 unknown, 409 already ended |
+
+`POST /api/chatbot/start` answers 409 while a comparison is going (one
+browser window, one card on screen at a time), and a comparison cannot
+start while a single conversation is going.
+
+`<compare>`: `id`, `goal`, `state` (as a session's), `tier`, `tier_name`,
+`chatbots: [{"id","name"}]`, `count`, `current` (index of the chatbot being
+asked), `current_name`, `messages_used` (in all), `max_messages` and
+`max_minutes` (each), `never_send`, `paused`, `ended`, `problem`,
+`read_aloud: false`, `members` (each a `<session>` as §87.3, with `compare`
+set and `summary: null` - a conversation in a comparison has no summary of
+its own), and `summary`:
+
+```
+{"answer", "agree": [..], "disagree": [{"point", "views": [{"who", "said"}]}],
+ "sources": [{"who", "items": [..], "checked": false}], "sources_checked": false,
+ "dropped": [{"who", "why"}], "answered": [names], "open": [..], "by_model",
+ "messages", "ended", "outside_text": true, "read_aloud": false,
+ "source": "chatbot_transcript"}
+```
+
+`who` is always one of the chatbots asked: a view or source the model gives
+to any other name is dropped. `sources` are the web addresses found in each
+chatbot's own replies by plain code, then the ones the model lists; Jarvis
+opens none of them and checks none of them. The summary is outside text:
+shown, never learned from, never read aloud.
+
+**In the apps.** The same form, with "Ask several and compare": one tick
+box (desktop) or pick-several list (phone) per chatbot, "Chatbots to ask
+(pick 2 to 3)". Start (compare) is held on a stale link; Stop and Pause are
+not; Resume is. While it runs: "Comparing 3 chatbots: asking ChatGPT, 2 of
+3", each chatbot's line ("Claude: Waiting its turn."), each conversation
+under its chatbot's name in the outside-text style, and at the end the
+summary. While "Hide memory lists and chat history" is on, the goal, the
+never-send words, every conversation, the questions and the summary are not
+shown (the desktop's Rust takes them out; the phone's plate leaves them
+out). The phone's ongoing notification reads "Comparing 3 chatbots: asking
+ChatGPT, 2 of 3" and its Stop stops the whole comparison. No change to
+limits mid-comparison: stop it and start a new one.
+
+Activity lines: each conversation's own, prefixed "Comparing (2 of 3): ",
+and "You paused the comparison. ..." - the phone's `isChatbotActivity`
+knows both, and "Continuing chatbot_compare..." after a Resume.
+
+### 87.8 "Solve it here" - a captcha or sign-in page handed to the phone (`jarvis_handoff.py`, 2026-09-28)
+
+The owner's decision (CLAUDE.md, "A captcha can be handed to the owner's
+phone"): when a chatbot website (87.4, 87.5) or a customer-support chat (65)
+pauses at a captcha, a sign-in page or an "unusual activity" page, the phone
+gets an alert and offers **"Solve it here"**: a live picture of THAT ONE
+browser window, sent PC to phone over the owner's own link, never saved, and
+the owner's taps and typing passed to that window only while Jarvis is
+paused there. Solving it in the window on the PC still works. Jarvis itself
+never solves a captcha. Every rule is `jarvis_handoff.py`'s; the routes are
+answered by `jarvis_chatbot_routes.py` (shipped whole - no patch).
+
+**What starts one.** Only a session paused with the code `captcha`, `login`
+or `unusual` (the adapter's own "needs the owner" words, 87.4), whose adapter
+is a browser window. Never: a running session, any other pause (a card, an
+"are you a bot?" question, an identity check, Pause), a comparison's
+conversation (a chatbot at a captcha is left out of a comparison, not
+paused), an API service or the second local AI (no window).
+
+**`GET /api/chatbot/status`** also carries `handoff` - never a picture, never
+a word from the page:
+
+```json
+{"available": true, "kind": "chatbot", "id": "chat_...", "site": "Gemini",
+ "reason": "captcha", "reason_words": "a captcha (a \"prove you are a person\" check)",
+ "title": "Gemini needs you",
+ "text": "Jarvis paused: a captcha (...). Solve it here, or in the window on the PC.",
+ "active": "ho_...", "ended": {}}
+```
+
+`{"available": false, "active": "", "ended": {...}}` when nothing waits.
+`kind` is `chatbot` or `support`; `active` is the hand-off going on now for
+that session, or `""`.
+
+| Route | Body / query | What it does |
+|---|---|---|
+| `POST /api/chatbot/handoff/start` | `{"kind", "id"}` | Starts passing that one window on - **no card** (nothing leaves the owner's devices; nothing is done but what the owner does). The hosts the window may show meanwhile are fixed now: the site's own, its sign-in hosts, and the one it shows at this moment. One hand-off at a time: a new one ends the old. 409 with the reason when nothing waits. Returns `handoff` (`ho_` + 16 hex), `frames_per_s`, `idle_s` |
+| `GET /api/chatbot/handoff/frame?h=` | | ONE picture: Playwright's own screenshot of that ONE page (never the screen, another window or a tab) as a JPEG in page pixels, base64 in `jpeg`, with `width`, `height`, `seq`. Kept nowhere - not on disk, not in memory after the answer. At most 2 a second (429 with `retry_ms`) |
+| `POST /api/chatbot/handoff/input` | `{"h", "type": "tap", "x", "y"}` (fractions 0..1 of the last picture), `{"type": "text", "text"}` (1-200 characters, no control characters), `{"type": "key", "key"}` (Enter, Backspace, Delete, Tab, Escape, Space, the arrows - nothing that reaches the browser itself), `{"type": "scroll", "dy"}` (capped at 1500) | ONE input from the owner, to that page only. At most 30 in 3 seconds. The audit line has counts and key names, never typed text |
+| `POST /api/chatbot/handoff/end` | `{"h"}` | Ends it. Never held, never a card |
+
+**Every picture and every input checks again**, first, that the session is
+still paused at that same code with that same window, and that the window
+shows one of the fixed hosts - and checks the host again after an input.
+Otherwise the answer is **410** with `ended` and the sentence in `error`:
+`resumed` (the owner pressed Resume, or the session runs again), `stopped`,
+`left` (the window went to another site - nothing more is passed on),
+`closed`, `idle` (no picture asked for 45 seconds: the phone left the
+screen), `time` (15 minutes), `stop_all` (Stop everything ends it too),
+`replaced`, `owner`. The words are `jarvis_handoff.ENDED`; the sentences the
+apps show are `jarvis_handoff.WORDS` (`tools/gen_handoff_cases.py` writes
+both apps' `handoff-cases.json` from the real routes).
+
+**What the apps must do.**
+- **Phone** (`net/Handoff.kt`, `ui/screens/HandoffScreen.kt`,
+  `service/HandoffNotifier.kt`): an alert when `handoff` becomes available -
+  its own channel, **always kept on the phone** (`setLocalOnly(true)`), the
+  site and the reason only; while App lock or "Hide memory lists and chat
+  history" is on, only "A website Jarvis is using needs you", and the lock
+  screen always shows only that. "Solve it here" opens the screen (behind
+  App lock, as ever): the picture is asked for about once a second only
+  while the screen is in front and the app unlocked (it is not composed
+  behind the lock screen), held in memory for the screen only, and
+  screenshots of Jarvis are blocked while it shows. A tap on the picture
+  goes as fractions; a tap on the margin goes nowhere; typing is masked on a
+  sign-in page and never kept in the app's saved state. **Input is held on a
+  stale link** ("The link to your PC is catching up, so your taps and typing
+  are held until it is back."); End and "Solve it on the PC instead" never
+  are. The screen says plainly: "Some captchas refuse taps passed on from a
+  phone this way. If it keeps saying no, solve it on the PC instead." The
+  Brain's chatbot and support plates show "Solve it here" on the paused
+  session too.
+- **Desktop** (`src/handoff.js`): the window is right there, so the Brain's
+  Work tab shows the same alert on the paused session ("Gemini needs you on
+  this PC", pointing at the browser window). It **never calls** the picture
+  or input routes (`tests/handoff.mjs` checks) - one-sided on purpose
+  (ARCHITECTURE.md section 8).
+
+**Said plainly.** A tap passed on this way reaches the page as Playwright's
+own mouse event; a captcha may tell, and refuse it. A site that opens a new
+window or tab for a sign-in is finished on the PC: only the first window is
+passed on. A typed password travels over the owner's own link (Tailscale or
+Meshnet, scrambled) and through the PC's memory for that one input; it is
+never logged or kept. Tried against a fake page in a real Chromium
+(`test_handoff.py`); not yet against a real captcha.
+
+## 88. Projects: projects, life benchmarks and their numbers (added 2026-09-28)
+
+> **Renumbered in the audit integration merge (2026-09-28):** this section was §61 on the `claude/jarvis-ai-assistant-research-ff37vy` branch; §61 is already taken on main's side (reading phone notifications). References that came with that branch were renumbered with it.
+
+The owner's decision of 2026-09-28 (`CLAUDE.md`, "Projects, like Claude's
+Projects and more"), designed in `docs/PROJECTS-DESIGN.md`; this section is
+its **build steps 1 to 3**. `backend/jarvis_projects.py` (shipped
+whole), `projects.patch`, `projects.db` in the settings folder.
+**Both apps call these routes since build step 3 (2026-09-28)** - see
+61.6; `tools/check_parity.py` lists them as `ported`.
+
+Numbered 61: section 59 is Goals on the continuation branch
+(`claude/jarvis-continuation-03kls1`, not merged here yet) and 60 the
+chatbot driver.
+
+**What is not here yet, said plainly:** running a benchmark's command (the
+fence, build step 6) - a coding benchmark's command is kept as words and
+marked `"runnable": false`; Jarvis changing code (`project_edit`, after the
+12 GB card is measured); the project chat context and project-labelled
+facts (step 4); the chat-history `project` column (step 4 - nothing can
+set it until `/api/chat` carries a project id); and anything the Shareable
+switch would one day let out (it is a switch only; nothing is ever sent).
+Goals live on the continuation branch, so a project keeps a list of goal
+ids on its own side; the goals.db `project` column and a goal step's
+measure come after that branch merges.
+
+### 88.1 Who may do what, and which ask first
+
+| What | Card? | From |
+|---|---|---|
+| Create, edit, delete a project; its instructions, notes, goal ids, work list | no | either app |
+| Choose a coding project's folder | no card here - the folder must already be on "Folders Jarvis may look in" (§35), whose adding is the PC's own card | **PC only** (`403`, `"pc_only": true` from anywhere else) |
+| Clear a project's folder | no | either app (Jarvis sees less) |
+| Shareable **on** | **one card**, `change_own_config` at tier `ask` | either app |
+| Shareable off | no, instant (a waiting card is withdrawn) | either app |
+| Define, edit, delete a number benchmark; log a number; remove one number | no | either app, or the owner's own words ("I ran 5 km", 88.4) |
+| Write or change a coding benchmark's command | no card (nothing runs); the words are kept | **PC only** |
+| Take the owner's own private mark off a benchmark | no card, instant | either app |
+| Take off a private mark Jarvis made from the name ("5k time" read as money) | **one card**, `change_own_config` at tier `ask` - afterwards its numbers may be read aloud (the owner, 2026-09-28) | either app |
+
+"No card" rows are the owner writing down their own things, like a to-do
+item. Every other action still follows ARCHITECTURE §3.
+
+### 88.2 Routes
+
+Every route is token + origin, POST bodies are JSON objects, and an error
+is `{"ok": false, "error": "<a plain sentence>"}` with `400` (a limit or a
+bad field), `403` (PC only), `404` (no such project, benchmark or number),
+`409` (a limit on how many, a name used twice, a card already waiting) or
+`503`.
+
+| Route | Method | Body | Answers |
+|---|---|---|---|
+| `/api/projects` | GET | - | `{"ok", "available": true, "title": "Projects", "projects": [summary], "empty", "max": 30}` |
+| `/api/projects` | POST | `{"name", "kind": "coding"\|"life", "instructions"?, "notes"?, "goals"?, "work_list"?, "folder"?}` | `{"ok", "project": full}` |
+| `/api/projects/<id>` | GET | - | `{"ok", "project": full}` |
+| `/api/projects/<id>` | POST | any of `name`, `instructions`, `notes`, `goals`, `work_list`, `folder`, `"shareable": false` | `{"ok", "project": full}`. `"shareable": true` is refused here (use `/shareable`); `kind` never changes |
+| `/api/projects/<id>/delete` | POST | `{}` | `{"ok", "deleted": true}` - its benchmarks and numbers go with it (the apps ask "are you sure?" first) |
+| `/api/projects/<id>/shareable` | POST | `{"on": true\|false}` | off: `200` at once. on: `202` `{"ok", "waiting": true, ...}` and ONE card; the outcome shows as `shareable_last` |
+| `/api/projects/<id>/benchmarks` | POST | `{"name", "kind": "number"\|"command", "unit"?, "better"?: "higher"\|"lower", "target"?, "sensitive"?, "command"?}` | `{"ok", "benchmark": view}` |
+| `/api/projects/<id>/benchmarks/<bid>` | GET | `?points=N` (default 365, at most 1000) | `{"ok", "benchmark": view + "points": [{"id", "at", "value"}]}` - oldest first, for a chart |
+| `/api/projects/<id>/benchmarks/<bid>` | POST | any of `name`, `unit`, `better`, `target`, `sensitive`, `command` (PC only) | `{"ok", "benchmark": view}` |
+| `/api/projects/<id>/benchmarks/<bid>/delete` | POST | `{}` | `{"ok", "deleted": true}` |
+| `/api/projects/<id>/benchmarks/<bid>/log` | POST | `{"value", "at"?}` (`at`: seconds since 1970, at most a day ahead) | `{"ok", "benchmark": view + "logged"}` |
+| `/api/projects/<id>/benchmarks/<bid>/results/<rid>/delete` | POST | `{}` | `{"ok", "deleted": true}` (a typo) |
+| `/api/projects/<id>/benchmarks/<bid>/unmark` | POST | `{}` | the owner's own mark comes off at once: `200` `{"ok", "changed", "benchmark", "message"}`; a mark Jarvis made from the name: `202` `{"ok", "waiting": true, "changed", "benchmark", "message"}` and ONE card (a waiting card: `409`). Both marks: the owner's comes off at once and the card is for Jarvis's. Nothing to take off: `200` with `changed: false` |
+
+**A project** (`full`; the list's `summary` leaves out `instructions`,
+`notes` and `benchmark_list`): `id`, `name`, `kind`, `instructions`,
+`notes` (list of lines), `folder` (`null` or `{"path", "name", "listed",
+"said"}` - `listed` false, with a sentence, when the folder has since left
+"Folders Jarvis may look in"), `shareable` (false by default),
+`shareable_waiting`, `shareable_last`, `work_list` (`null` or `{"name",
+"title"}` - a named list on the one scheduler, §21; its items are read
+and added through `/api/schedule` like any named list), `goals` (goal
+ids), `benchmarks` (a count), `benchmark_list`, `created`, `changed`,
+`max`.
+
+**A benchmark** (`view`): `id`, `name`, `kind`, `unit`, `better`,
+`target`, `sensitive`, `sensitive_why` (`"health"`, `"money"`, another
+sensitive topic, or `"you marked it"`), `marked_by_you`,
+`keep_on_screen`, `keep_on_screen_words`, `results` (a count), `latest`
+(`{"id", "value", "at"}` or `null`), `change` (88.3), `created`,
+`changed`, and the private mark's state (2026-09-28): `mark_auto` (the
+topic the name looks like, or `""`), `mark_auto_removed` (the owner took
+it off with a card), `unmark` (`"card"`, `"instant"` or `""` - how the
+mark would come off), `unmark_waiting`, `unmark_last` (`{"outcome",
+"why", "at", "message"}` or `null`); a command benchmark adds `command`,
+`"runnable": false` and `not_runnable_why`.
+
+**Limits:** 30 projects; a name 60 characters; instructions 1,500
+characters (the design's hard limit for what a project chat can carry on
+the 8 GB card); 10 notes of 200 characters, one line each; 20 goal ids;
+12 benchmarks per project, their names 40 characters, units 16; a command
+300 characters, one line; 5,000 numbers per benchmark.
+
+### 88.3 Better or worse than last time
+
+`change` compares the newest number with the one before it:
+`{"direction": "up"|"down"|"same", "by", "verdict": "better"|"worse"|
+"same"|null, "said", "target_reached"}`. **Without `better` there is no
+verdict** - up is not always good (a weight, a 5k time), so Jarvis says
+only "Higher than last time (by 1)." and does not guess. `target_reached`
+needs both a target and `better`. The first number says "The first
+number." `null` before any number.
+
+### 88.4 Logging by voice or chat, without the model
+
+`jarvis_quick.py` answers "log 5 km run", "log my weight as 72.5 kg", "I
+ran 5 km", "I walked 10,000 steps today", "I did 20 push ups", "my weight
+is 72 kg" (and "... yesterday") **only when a life benchmark fits** - a
+shared word that says what was done, and the same unit (5 km is never
+logged as miles; there is no converting). No benchmark fits: the sentence
+is not ours and goes to the model as before. Two fit: Jarvis asks which
+and logs nothing. Only the owner's own typed or spoken words, like
+everything in `jarvis_quick.py`; `projects.db` is read only after a
+sentence already has this shape, and never created by it. The answer is
+`quick: "project_log"` in `X-Jarvis-Route` and, for a sensitive
+benchmark, `gate: "private"` - kept on screen, never read aloud. The
+scheduler is told the sentence was a command, so it is never learned as a
+fact: life numbers are project data, not memory (`docs/PROJECTS-DESIGN.md`
+§2).
+
+### 88.5 Sensitive numbers
+
+A benchmark about health or money is marked from its name and unit - a
+short benchmark word list in `jarvis_projects.py` ("weight", "heart
+rate", "calories", "sleep", "savings", "spending", a currency sign, ...)
+and then `jarvis_sensitive.topic()` - or by the owner (`"sensitive":
+true`). `keep_on_screen` then says: never read aloud, and never sent
+anywhere (nothing here sends anything; a later Shareable send refuses
+these). The owner can take their own mark off at once. **A mark made from
+the name comes off only with ONE card** (the owner's answer of
+2026-09-28: `jarvis_sensitive` reads "5k" as money, so a "5k time"
+benchmark is marked money). The card (`jarvis_projects.unmark_card`) names
+the benchmark, the project and why it was marked, says the numbers may be
+read aloud afterwards, and "If you say no: nothing changes." The yes is
+written only if the benchmark still has the words the card showed; a
+rename, a new unit, the owner's own new mark or a delete while it waits
+makes a late yes change nothing. **Renaming a benchmark or changing its
+unit checks the name again**: a mark taken off comes back when the new
+words still look like health or money. The quick command (61.4) follows
+the same marks.
+
+### 88.6 The apps (build step 3, 2026-09-28)
+
+**Desktop: Brain -> Projects** (`jarvis-desktop/src/projects.js`,
+`projects-panel.js`, `projects.css`; `src-tauri/src/brain/projects.rs`).
+Three commands, Brain window only (`brain-projects` in
+`permissions/surfaces.toml`): `projects_read` (a read, hidden in Rust while
+the private lists are hidden, keeping only how many projects there are),
+`projects_write` (ONE change named by an action from a fixed list - the page
+never names a URL; held on a stale link except Shareable OFF; a folder typed
+into a body is refused) and `projects_choose_folder` (the Windows folder
+picker, then `{"folder"}` to this PC's Jarvis; held on a stale link).
+
+**Phone: Brain -> Projects** (`ProjectsPlate.kt`, `net/Projects.kt`,
+`JarvisRuntime.projectsRead` / `projectsWrite`). The same screen, minus
+what is the PC's: a coding project and its folder, and a benchmark's
+command, show "Set on your PC" (the PC refuses them from the phone too:
+ARCHITECTURE section 8). It creates life projects only.
+
+Under the instructions both apps say "In your own words. Saved for later:
+Jarvis does not read this in chats yet." - since the chat audit
+(2026-09-28): they used to promise "Jarvis reads this in this project's
+chats", and project chats are step 4, not built. (History already has the
+`project` column for them, empty.)
+
+Both show: the list and New project; instructions and notes (Save); the
+Shareable switch (ON asks with a card, OFF is instant and works on a stale
+link); the work list's name; each benchmark with its latest number,
+"better or worse than last time", a chart of dated points with the target
+as a dashed line, Log, the numbers with Remove, "private - not read aloud"
+on a private one (the line after logging one says only "Logged.", so the
+number is never spoken), the private-mark button (a card for Jarvis's own
+mark, instant for the owner's) or Mark private, and Delete; deleting a
+project or a benchmark asks "are you sure?" first.
+
+**One contract file** for both apps: `tools/gen_projects_cases.py` writes
+the backend's real answers, the screens' shared `words`, how a number is
+written (`numbers`) and where a chart's bottom and top go (`scales`) to
+`jarvis-desktop/tests/fixtures/projects-cases.json` and
+`jarvis-client/app/src/test/resources/contract/projects-cases.json`.
+`tests/projects.mjs`, `brain/projects.rs`'s tests and `ProjectsTest`
+build against it; `test_projects.py` fails when it is out of date.
+
+**"What asks first" (§32)** has a Projects group since 2026-09-28 (the
+feature audit): three fixed rows, decided in the code - making, changing
+and deleting a project and logging your own numbers (no card), making a
+project Shareable (asks every time), and taking a private mark off (asks
+when Jarvis made the mark).
+
+**Kept in backups and checked by data health** (§45, §49) since the same
+audit: `projects.db` was missing from both.
+
+## 89. The sun, the moon and the weather behind the animals (added 2026-09-28)
+
+> **Renumbered in the audit integration merge (2026-09-28):** this section was §59 on the `claude/jarvis-3d-animal-mascot-8dr0tb` branch; §59 is already Goals on main's side. References that came with that branch were renumbered with it.
+
+The owner's decisions (`CLAUDE.md`, 2026-09-28): "Sun and moon behind the
+animals, optional (off by default)" - the real sun and moon for the date and
+time, worked out on the owner's own devices from a town typed once on the
+PC, nothing online - and "Weather in the animals' scene, optional (off by
+default)": rain, snow or wind, from the owner's own Home Assistant or from
+Open-Meteo online, whose ON is an approval card.
+
+`backend/jarvis_sky.py` (and its town list `jarvis_sky_places.py`), shipped
+whole; `sky.patch` adds the route at start-up the same way `news.patch` does.
+The sun and moon are **not** worked out on the PC: each app does that itself
+(`jarvis-desktop/src/sky.js`, the phone's `face/Sky.kt`, a line-for-line
+copy held equal by `tools/gen_sky.py`'s `sky-golden.json`), from the
+position this route hands over, so the phone's sky keeps moving while the PC
+cannot be reached. `docs/CRITTERS.md`, "The sky behind the animals", has the
+formulas and the look.
+
+### 89.1 The route
+
+| Route | Body | Answers |
+|---|---|---|
+| `GET /api/sky` | - | **200** the view below. Also starts ONE weather read in the background when the source is not off and the last read is older than 20 minutes (a failed one: 30 minutes) - there is no timer of its own, so the weather is read only while an app is asking. |
+| `POST /api/sky` | ONE change: `{"show": true \| false}`, `{"place": "<town, or a position like 39.7, -105.0>"}`, `{"forget_place": true}` or `{"weather": "off" \| "home_assistant" \| "open_meteo"}` | **200** `{"ok": true, "said", "view"}`; **202** `{"ok": true, "waiting": true, "said", "view"}` - Open-Meteo's ONE card is raised; **400** `{"ok": false, "error"}` in words (two changes at once, a town not in the list, a position off the Earth); **403** a town sent from any device but this PC; **409** Open-Meteo without a town; **503** the card's tier is not `ask` |
+
+Behind the token and the origin check, like every route. The town is set
+from **this PC only** (`jarvis_owner_check.from_this_pc`, the rule "Folders
+Jarvis may look in" uses): the phone shows it and can forget it, never set it
+(`docs/ARCHITECTURE.md` §8). Showing, hiding and forgetting need no card
+either way; each app holds a change that ADDS something (showing, a weather
+source) on a stale link and never one that takes something away.
+
+```
+{"available": true, "title": "Sun, moon and weather",
+ "show": bool, "show_label", "show_detail",
+ "place": null | {"name": "Denver, Colorado, United States", "lat": 39.7, "lon": -105.0},
+ "place_label", "place_detail" (this PC: how to type it; another device: "typed on the PC"),
+ "place_none", "forget_label", "can_set_place": bool (true on this PC only),
+ "weather": {"source": "off" | "home_assistant" | "open_meteo",
+             "choices": [{"id", "label", "why"}, ...three],
+             "now": null | {"rain", "snow", "wind", "cloud", "fog": 0..1, "dir": 1 | -1, "at": seconds},
+             "status": one plain sentence ("Off.", "Rain, windy, from Open-Meteo.",
+                       "No weather drawn: Open-Meteo did not answer (TimeoutError). Jarvis tries again in about 30 minutes."),
+             "waiting": bool, "last": null | {"outcome", "message", "why", "at"},
+             "label", "detail"},
+ "why": "" | why the settings could not be read (then all off)}
+```
+
+`dir` is which way the weather drifts ON THE SCREEN (+1 right): the frame
+looks toward the equator (south in the northern half of the world), so a west
+wind drifts left there. `tools/gen_sky_cases.py` writes the real answers in
+six situations to `contract/sky-cases.json` / `tests/fixtures/sky-cases.json`.
+
+### 89.2 The town: offline, rounded, never logged
+
+The name is looked up in `jarvis_sky_places.py`: GeoNames' towns (CC BY 4.0;
+`THIRD-PARTY-NOTICES.txt`) - every town of about 15,000 people or more in the
+US, Canada, the UK, Ireland, Australia and New Zealand, 50,000 or more
+elsewhere, and every capital; about 16,000. Accents and "Saint"/"St." are
+ignored; "Portland" means the bigger one, and "Portland, Maine" or "Portland,
+ME" picks; a town not in the list says so and suggests typing the position.
+**No geocoding service is ever asked.** Only the position rounded to 0.1
+degree (about 11 km) is kept, in `<config dir>/sky.json`, beside the name as
+the list spells it. It is never written to the log or the audit log (counts
+and outcomes only - `test_sky.py` checks), never offered to the AI model, and
+leaves this PC only to the owner's own apps and, if the owner approved it for
+that very position, to Open-Meteo (§89.3). The desktop keeps the rounded
+position (never the name) in its localStorage for the face pages; the phone
+keeps the same in its own settings (`allowBackup` is off).
+
+### 89.3 The weather
+
+* **Off** (the default): nothing is read, and a weather read in progress is
+  dropped.
+* **My Home Assistant**: the morning briefing's own weather device and rules
+  (`jarvis_briefing._weather_source`: set up), read with ONE plain GET of
+  that device's state (`jarvis_home.plan_states` / `run`) through the gate as
+  `home_read`, and only at tier `auto` - at `notify` the owner would be told
+  about a read every 20 minutes, the reasoning "tell me when" gives. Any
+  other tier leaves it out and says why - the scene never raises a card. Choosing it needs no card: it is
+  the owner's-own-accounts lane (ARCHITECTURE §4), already listed.
+* **Open-Meteo (online)**: ONE plain GET of
+  `https://api.open-meteo.com/v1/forecast?latitude=39.7&longitude=-105.0&current=weather_code,cloud_cover,wind_speed_10m,wind_direction_10m&wind_speed_unit=ms`
+  - the rounded position and four value names, nothing else of the owner's.
+  No key, no cookie, no proxy, no redirect followed, 10 seconds, 64 KB at
+  most, and the connection checked to be on the open internet
+  (`jarvis_local_http.public_urlopen`). Switching it ON is ONE card
+  (`change_own_config`, tier `ask` only, `leaves_this_pc: true`) naming the
+  exact numbers sent; the yes covers THAT position - typing another town
+  switches it off again (the answer says so). Switching it off, or to
+  another source, is at once and withdraws a waiting card. ARCHITECTURE §4
+  lists it as its own way out; "What Jarvis can reach" has a row for it.
+
+Whichever source: the answer becomes the five numbers (Home Assistant's
+conditions and WMO weather codes, `HA_WEATHER` / `WMO`; thunder is heavy
+rain - nothing in the scene flashes), wind 14 m/s or more is 1. It is never
+given to the AI model, never learned from, never read aloud. A failure is
+quiet: no weather is drawn, and the status line says why.
+
+### 89.4 What each app draws
+
+Behind the animal faces only (drawn after the ground and before the animal;
+the desktop's GLSL gets `uSeeThrough` so the uncovered part of the picture
+stays see-through - the phone's AGSL already returns it that way), in every
+place the animal is drawn: the desktop's Faces window, Widget, floating face
+and HUD (their frames read localStorage, kept fresh by Settings, the Widget
+and the floating face, `sky-feed.js`), and the phone's Home and Appearance
+preview. It dims with the animal on standby, keeps showing while Jarvis is
+not connected and in a serious moment, is unchanged by "Keep the animal
+still" (it is the sky, not the animal), and under calm (reduced) motion the
+weather holds still. Weather older than 90 minutes is not drawn.
+
+---
+
+## 90. Pairing a phone by QR code, with a key per device (added 2026-09-28)
+
+The owner's decisions (`CLAUDE.md`, 2026-09-24 and 2026-09-28): "Phone
+pairing by QR code, with a short typed code as the backup, confirmed by an
+approval card on the PC before any key is handed over", built together with
+a key per device, "listed in both apps with its own Remove". The design,
+with every reason, is `docs/PAIRING-DESIGN.md` - phase 1 (this section).
+Phase 2, a fingerprint-signed yes for risky cards from the phone, is not
+built.
+
+`backend/jarvis_devices.py`, shipped whole; `devices.patch` adds one block to
+`jarvis_hud.py` BEFORE every module is handed `_token_ok` (so the device-key
+check reaches every route), and the two cards' lines to `jarvis_gate.py`.
+`GET /api/version` says `capabilities.pairing: {"version": 1}` once it is
+running (absent or `false` on an older PC); both apps show pairing and
+Devices only then. A PC without `jarvis_devices.py` answers 404 on every
+route below.
+
+Every answer is JSON. Every route passes the server's origin check as today,
+so every request sends `X-Jarvis-Client: hud`. **PC only** means the request
+comes from this PC (`jarvis_owner_check.from_this_pc`), else
+`403 {"ok": false, "pc_only": true, "error": "This can only be done on the PC itself."}`.
+**Mesh only** means it comes from Tailscale or NordVPN Meshnet
+(`100.64.0.0/10`, `fd7a:115c:a1e0::/48`) **and not from this PC**, else
+`403 {"ok": false, "reason": "not_mesh", "error": <sentence>}`.
+Refusals carry `"ok": false` and a plain `"error"` sentence beside the
+fields below; the sentences are in `tools/gen_pairing_cases.py`'s shared
+cases file, which both apps read.
+
+### 90.1 The key
+
+`jdk1.<id>.<secret>`: `<id>` is `d` + 8 lowercase hex characters (safe to
+show and log); `<secret>` is 43 characters of base64url (32 random bytes).
+Pattern: `jdk1\.d[0-9a-f]{8}\.[A-Za-z0-9_-]{43}`. The PC keeps only its
+SHA-256 (`<settings folder>/devices/registry.json`, a subfolder, so a backup
+never holds it). The phone keeps it in `TokenStore`, like the old key. It is
+never logged: the backend's log scrubber (`jarvis_scrub.py`) knows its
+shape, and the shared cases file gives the same cases to the phone's crash
+log and the desktop's log scrubber.
+
+### 90.2 Starting and watching a pairing (PC only, key required)
+
+| Route | Body | Answers |
+|---|---|---|
+| `POST /api/pair/start` | `{"address": "jarvis-pc.tail1234.ts.net", "port": 4719}` (`port` optional: the server's own) | **200** `{"ok": true, "pair_id", "qr", "code", "expires_in": 600, "tries_left": 3}`. **400** `{"reason": "address"}` (the phone's own sentence: the address must be on the owner's networks AND a `.ts.net` or `.nord` name) or `{"reason": "bad_request"}` (a bad port). **503** when pairing cannot work here (the device list cannot be read; `pair_device` not "ask"; approvals not checked by this PC). Starting again cancels the previous session and withdraws its card. |
+| `GET /api/pair/session` | - | **200** `{"state", "expires_in", "tries_left", "device_name", "words", "wrong_tries_from", "message"}`, or `{"state": "none"}`. `words` from `waiting_for_card` on; `message` is the sentence for the state. **Never** the QR text, the secret or the code. |
+| `POST /api/pair/cancel` | `{}` | **200** `{"ok": true, "was": "<state>"}`. A waiting card is withdrawn: approving it afterwards makes no key. |
+
+States: `waiting_for_phone` -> `waiting_for_card` -> `approved` -> `done`,
+or it ends as `denied`, `timed_out` (the card ran out), `expired` (10
+minutes), `burnt` (3 wrong tries), `cancelled` or `refused` (the gate
+refused - wrong tier, gate failure). At most one session at a time.
+
+The QR text - in `start`'s answer **only**, never logged or sent in an
+event - is
+`jarvis-pair:1/<host>/<port>/<pair_id>/<secret>/<expires>`: exactly six
+parts; `host` lower case, `[a-z0-9.-]`, ending `.ts.net` or `.nord`;
+`port` 1-65535 with no leading zero; `pair_id` 16 lowercase hex; `secret`
+22 base64url characters (16 bytes); `expires` 10 digits (a countdown only -
+the PC decides). A version other than `1` is "newer"; anything else "not a
+Jarvis pairing code". The typed `code` is 8 characters of Crockford's
+alphabet (`0-9 A-Z` without `I L O U`), shown `K7QM-4TXD`; the phone
+normalises it (upper case, spaces and `-` removed, `O`->`0`, `I`/`L`->`1`).
+
+### 90.3 The phone's half (no key, mesh only)
+
+The only routes in Jarvis that take no key: the phone has none yet. The QR
+secret or the typed code proves it may ask - without ever being sent.
+
+**`POST /api/pair/claim`** `{"method": "qr", "pair_id", "phone_nonce", "name", "proof"}`
+(`method: "code"` leaves out `pair_id`).
+
+| Answer | Body |
+|---|---|
+| `202` | `{"state": "waiting_for_card", "pair_id", "pc_nonce", "pc_proof", "words": [4 words], "expires_in"}` - the `pair_device` card is up on the PC. The phone checks `pc_proof`, works the words out itself and refuses if they differ. |
+| `403` | `{"reason": "wrong_proof", "tries_left": n}` - counts toward the 3 tries; at 0 the session is burnt. A claim for a session already claimed counts too. |
+| `403` | `{"reason": "not_mesh"}` - not Tailscale/Meshnet, or the PC itself. |
+| `410` | `{"reason": "gone", "state": "expired" \| "burnt" \| "cancelled" \| "used" \| "none"}` |
+| `400` | `{"reason": "name" \| "bad_request"}` - the name is outside the rule, or the request cannot be read. Not a try. |
+| `503` | `{"reason": "card"}` - the card could not be raised; the code still works. |
+
+**`POST /api/pair/collect`** `{"pair_id", "proof"}` - every 2 s while the card waits.
+
+| Answer | Body |
+|---|---|
+| `202` | `{"state": "waiting_for_card", "expires_in"}` |
+| `200` | `{"state": "approved", "device_id", "token"}` - the key, **once**; the session ends (`done`). |
+| `403` | `{"state": "denied"}` |
+| `410` | `{"state": "timed_out" \| "expired" \| "cancelled" \| "refused" \| "used" \| "none"}` (a burnt session answers `cancelled` here) |
+| `403` | `{"reason": "wrong_proof", "tries_left": n}` - counts toward the 3 tries |
+| `503` | the device list could not be written; the session stays `approved`, so collecting again works |
+
+`phone_nonce` is 16 random bytes, base64url without padding (22
+characters). `name` is 1-40 characters (counted as Unicode code points):
+letters and digits of any script, space, and `- _ . ' ( )` - nothing else,
+refused rather than cleaned, since it is part of the sums and shown on the
+card.
+
+The sums (HMAC-SHA256; `b64u` = base64url without padding; `\0` = a zero
+byte; text UTF-8; the nonces as their base64url text):
+
+```
+K        = the 16 secret bytes from the QR code                (method "qr")
+         = SHA256("jarvis-pair-code-v1" \0 CODE)               (method "code", normalised)
+ref      = pair_id (method "qr") or "-" (method "code")
+T        = "jarvis-pair-v1" \0 method \0 ref \0 phone_nonce \0 name
+proof    = b64u(HMAC(K, "claim" \0 T))
+pc_proof = b64u(HMAC(K, "pc" \0 T \0 pc_nonce))
+words    = D = HMAC(K, "words" \0 T \0 pc_nonce);
+           word i (i = 0..3) = WORDS[(D[2i]*256 + D[2i+1]) mod 1296]
+collect  = b64u(HMAC(K, "collect" \0 pair_id \0 phone_nonce))
+```
+
+`WORDS` is `contract/pair-words.txt` (the EFF short word list 2, 1,296
+words). The design's test vectors (`docs/PAIRING-DESIGN.md` 6.2) are in the
+shared cases file and checked by `backend/test_pairing_cases.py`.
+
+### 90.4 The approval cards
+
+- **`pair_device`**, tier `ask`: "Jarvis wants to connect a new device" -
+  the phone's name and the four words, and "If you did not press 'Pair a
+  phone', deny this". In `jarvis_owner_check.PC_ONLY_ACTIONS`: approved on
+  this PC only, always with Windows Hello; on a PC without Windows Hello it
+  is refused (the owner's "no lock, no risky approval"), so pairing waits
+  until it is set up - the old shared key still works meanwhile. The key is
+  made only after the card is approved, never before. The card lives the
+  usual `approval_timeout_seconds`; the 10-minute session covers the
+  scanning before it.
+- **`unretire_shared_key`**, tier `ask`, also PC only with Windows Hello:
+  bringing the old shared key back for other devices.
+
+Both are in the gate's `_NO_RULE_FROM_DENIAL` (a "no" answers one card, it
+is not a standing wish) and its `_RISK` table (local, reversible).
+
+### 90.5 The device list (any key)
+
+**`GET /api/devices`**
+
+```json
+{"you": "d3f9a1c2e",
+ "devices": [
+   {"id": "pc", "name": "This PC", "kind": "pc", "removable": false, "this_device": false},
+   {"id": "d3f9a1c2e", "name": "Pixel 9", "kind": "phone",
+    "created": 1790000000, "last_seen": 1790003580,
+    "this_device": true, "removable": true, "approval_key": false}],
+ "shared": {"retired": false, "retired_at": null,
+            "last_other_seen": 1790003000, "last_other_address": "100.101.2.3",
+            "can_bring_back_here": false},
+ "pairing": {"available": true, "why_not": null}}
+```
+
+`you` is `"pc"` (this PC), `"shared"` (the old shared key from another
+device) or the caller's device id. Never a key, never a hash; removed
+devices are not listed. `last_seen` is rounded to the minute and written at
+most once a minute. `shared.retired` is also `true` when the device list
+cannot be read (it then works on this PC only). `shared.waiting: true`
+appears while a Bring back card waits. `pairing.why_not` is a sentence when
+pairing cannot work (the list cannot be read; `pair_device` not "ask";
+approvals not checked by this PC). Windows Hello being missing is found only
+when the card is approved - Windows cannot be asked without showing the
+prompt.
+
+| Route | Body | Answers |
+|---|---|---|
+| `POST /api/devices/remove` | `{"id": "d3f9a1c2e"}` and nothing else | **200** `{"ok": true, "id", "name", "was_this_device"}`, immediate, no card. **404** `{"reason": "no_such_device"}`; **400** `{"reason": "not_removable"}` for `"pc"`, `{"reason": "bad_request"}` for anything else (a list is refused - no "remove all"). Audit line `devices.removed` with the id only; a `devices` event. The removed device's open connections stop at their next write (the event stream's keepalive: about 10 s); a phone removing itself still gets this answer. |
+| `POST /api/devices/shared` | `{"retired": true}` | **200** `{"ok": true, "retired": true, "retired_at"}`, immediate, no card, from either app. **409** `{"reason": "uses_it_yourself"}` when this very request used the shared key from another device - it would cut itself off. |
+| `POST /api/devices/shared` | `{"retired": false}` | Bring it back: **PC only** (403 otherwise), **409** `{"lockdown": true}` while Lockdown is on, else **202** `{"ok": true, "waiting": true}` and ONE `unretire_shared_key` card (Windows Hello). Retiring again while it waits withdraws it. Already not retired: **200** `{"ok": true, "retired": false}`. |
+
+A 401 for a device key the PC removed (or never had) carries `"key":
+"device_removed"`; for the old shared key from another device after Retire,
+`"key": "shared_retired"`. Both apps say the design's sentences (in the
+shared cases file); without `key`, today's words.
+
+### 90.6 Failing safe
+
+- No `jarvis_devices.py`, or its block fails: nothing is replaced - only the
+  shared key works, exactly as before - and the banner says "devices NOT ON".
+- A device list that cannot be read: every device key is refused, and the
+  shared key is treated as retired for other devices - this PC keeps
+  working, so the owner can see what is wrong. `py -3 jarvis_devices.py
+  --start-fresh` on the PC moves it aside (there is no route for this;
+  every phone then pairs again).
+- Retire never touches this PC, and cannot be pressed by the device that
+  still depends on the shared key.

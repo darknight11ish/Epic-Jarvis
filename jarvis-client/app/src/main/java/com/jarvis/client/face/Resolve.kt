@@ -96,6 +96,16 @@ class FlashGovernor {
         window.clear(); extreme = Float.NaN; safe = null; dir = 0
     }
 
+    /**
+     * The caller's clock was moved back by [by] seconds (FaceHost keeps its
+     * clock small - see FaceClock). The transitions already counted move with
+     * it, so the last second's budget is neither lost nor stuck: unshifted,
+     * they would sit "in the future", never age out, and hold the colour.
+     */
+    fun shift(by: Float) {
+        for (i in window.indices) window[i] = window[i] - by
+    }
+
     fun govern(out: Swatch, t: Float): Swatch {
         // Pruned on EVERY call, not only when a transition is detected. Pruning
         // inside the transition branch leaves stale entries whenever the colour
@@ -311,6 +321,11 @@ class StrobeBudget {
     private var startedAt: Float? = null
 
     fun reset() { startedAt = null }
+
+    /** The caller's clock was moved back by [by] seconds: see [FlashGovernor.shift]. */
+    fun shift(by: Float) {
+        startedAt = startedAt?.let { it - by }
+    }
 
     /** True when this strobe has run past its limit and must be held. */
     fun spent(isStrobe: Boolean, t: Float): Boolean {

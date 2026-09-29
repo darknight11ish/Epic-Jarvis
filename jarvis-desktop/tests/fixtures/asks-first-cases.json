@@ -474,6 +474,15 @@
        "title": "Tap and type on your phone"
       },
       {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
+      },
+      {
        "fixed": true,
        "id": "fixed:plugin_start",
        "note": "Asks every time a plug-in program starts.",
@@ -513,6 +522,33 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
+      },
+      {
+       "action": "pair_device",
+       "fixed": false,
+       "id": "pair_device",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect a new device"
+      },
+      {
+       "action": "unretire_shared_key",
+       "fixed": false,
+       "id": "unretire_shared_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let the old shared key work from other devices again"
       }
      ],
      "title": "This PC and your phone"
@@ -591,6 +627,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run one bigger model across both graphics cards"
+      },
+      {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
       },
       {
        "action": "big_model_enable",
@@ -727,6 +772,15 @@
        "title": "Let your notifications show on a smartwatch too"
       },
       {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -827,11 +881,11 @@
    },
    "lockdown": {
     "can_turn_off": true,
-    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
+    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, chatbot conversations, the online weather behind the animal and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
     "label": "Lockdown",
     "last": null,
     "on": true,
-    "says": "Lockdown is on: everything that would leave this PC asks you first, and anything that runs by itself (\"tell me when\", news, the briefing's calendar and email) has stopped.",
+    "says": "Lockdown is on: everything that would leave this PC asks you first, and anything that runs by itself (\"tell me when\", news, the briefing's calendar and email, chatbot conversations, the online weather) has stopped.",
     "waiting": true,
     "why": ""
    },
@@ -1357,6 +1411,15 @@
        "title": "Tap and type on your phone"
       },
       {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
+      },
+      {
        "fixed": true,
        "id": "fixed:plugin_start",
        "note": "Asks every time a plug-in program starts.",
@@ -1396,6 +1459,33 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
+      },
+      {
+       "action": "pair_device",
+       "fixed": false,
+       "id": "pair_device",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect a new device"
+      },
+      {
+       "action": "unretire_shared_key",
+       "fixed": false,
+       "id": "unretire_shared_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let the old shared key work from other devices again"
       }
      ],
      "title": "This PC and your phone"
@@ -1474,6 +1564,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run one bigger model across both graphics cards"
+      },
+      {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
       },
       {
        "action": "big_model_enable",
@@ -1610,6 +1709,15 @@
        "title": "Let your notifications show on a smartwatch too"
       },
       {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -1710,11 +1818,11 @@
    },
    "lockdown": {
     "can_turn_off": true,
-    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
+    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, chatbot conversations, the online weather behind the animal and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
     "label": "Lockdown",
     "last": null,
     "on": true,
-    "says": "Lockdown is on: everything that would leave this PC asks you first, and anything that runs by itself (\"tell me when\", news, the briefing's calendar and email) has stopped.",
+    "says": "Lockdown is on: everything that would leave this PC asks you first, and anything that runs by itself (\"tell me when\", news, the briefing's calendar and email, chatbot conversations, the online weather) has stopped.",
     "waiting": false,
     "why": ""
    },
@@ -2236,6 +2344,15 @@
        "title": "Tap and type on your phone"
       },
       {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
+      },
+      {
        "fixed": true,
        "id": "fixed:plugin_start",
        "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
@@ -2275,6 +2392,33 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
+      },
+      {
+       "action": "pair_device",
+       "fixed": false,
+       "id": "pair_device",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect a new device"
+      },
+      {
+       "action": "unretire_shared_key",
+       "fixed": false,
+       "id": "unretire_shared_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let the old shared key work from other devices again"
       }
      ],
      "title": "This PC and your phone"
@@ -2352,6 +2496,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run one bigger model across both graphics cards"
+      },
+      {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
       },
       {
        "action": "big_model_enable",
@@ -2488,6 +2641,15 @@
        "title": "Let your notifications show on a smartwatch too"
       },
       {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -2588,7 +2750,7 @@
    },
    "lockdown": {
     "can_turn_off": false,
-    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
+    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, chatbot conversations, the online weather behind the animal and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
     "label": "Lockdown",
     "last": null,
     "on": false,
@@ -3109,6 +3271,15 @@
        "title": "Tap and type on your phone"
       },
       {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
+      },
+      {
        "fixed": true,
        "id": "fixed:plugin_start",
        "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
@@ -3148,6 +3319,33 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
+      },
+      {
+       "action": "pair_device",
+       "fixed": false,
+       "id": "pair_device",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect a new device"
+      },
+      {
+       "action": "unretire_shared_key",
+       "fixed": false,
+       "id": "unretire_shared_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let the old shared key work from other devices again"
       }
      ],
      "title": "This PC and your phone"
@@ -3225,6 +3423,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run one bigger model across both graphics cards"
+      },
+      {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
       },
       {
        "action": "big_model_enable",
@@ -3361,6 +3568,15 @@
        "title": "Let your notifications show on a smartwatch too"
       },
       {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -3461,7 +3677,7 @@
    },
    "lockdown": {
     "can_turn_off": false,
-    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
+    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, chatbot conversations, the online weather behind the animal and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
     "label": "Lockdown",
     "last": null,
     "on": false,
@@ -3982,6 +4198,15 @@
        "title": "Tap and type on your phone"
       },
       {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
+      },
+      {
        "fixed": true,
        "id": "fixed:plugin_start",
        "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
@@ -4021,6 +4246,33 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
+      },
+      {
+       "action": "pair_device",
+       "fixed": false,
+       "id": "pair_device",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect a new device"
+      },
+      {
+       "action": "unretire_shared_key",
+       "fixed": false,
+       "id": "unretire_shared_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let the old shared key work from other devices again"
       }
      ],
      "title": "This PC and your phone"
@@ -4098,6 +4350,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run one bigger model across both graphics cards"
+      },
+      {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
       },
       {
        "action": "big_model_enable",
@@ -4234,6 +4495,15 @@
        "title": "Let your notifications show on a smartwatch too"
       },
       {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -4334,7 +4604,7 @@
    },
    "lockdown": {
     "can_turn_off": false,
-    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
+    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, chatbot conversations, the online weather behind the animal and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
     "label": "Lockdown",
     "last": null,
     "on": false,
@@ -4868,6 +5138,15 @@
        "title": "Tap and type on your phone"
       },
       {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
+      },
+      {
        "fixed": true,
        "id": "fixed:plugin_start",
        "note": "Asks every time a plug-in program starts.",
@@ -4907,6 +5186,33 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
+      },
+      {
+       "action": "pair_device",
+       "fixed": false,
+       "id": "pair_device",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect a new device"
+      },
+      {
+       "action": "unretire_shared_key",
+       "fixed": false,
+       "id": "unretire_shared_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let the old shared key work from other devices again"
       }
      ],
      "title": "This PC and your phone"
@@ -4985,6 +5291,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run one bigger model across both graphics cards"
+      },
+      {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
       },
       {
        "action": "big_model_enable",
@@ -5121,6 +5436,15 @@
        "title": "Let your notifications show on a smartwatch too"
       },
       {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -5221,11 +5545,11 @@
    },
    "lockdown": {
     "can_turn_off": false,
-    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
+    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, chatbot conversations, the online weather behind the animal and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
     "label": "Lockdown",
     "last": null,
     "on": true,
-    "says": "Lockdown is on: everything that would leave this PC asks you first, and anything that runs by itself (\"tell me when\", news, the briefing's calendar and email) has stopped.",
+    "says": "Lockdown is on: everything that would leave this PC asks you first, and anything that runs by itself (\"tell me when\", news, the briefing's calendar and email, chatbot conversations, the online weather) has stopped.",
     "waiting": false,
     "why": ""
    },
@@ -5747,6 +6071,15 @@
        "title": "Tap and type on your phone"
       },
       {
+       "action": "run_plan",
+       "fixed": false,
+       "id": "run_plan",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Run the safe steps of an approved plan"
+      },
+      {
        "fixed": true,
        "id": "fixed:plugin_start",
        "note": "Asks when you add a program under [mcp] in your settings file, and again whenever the program or its version changes.",
@@ -5786,6 +6119,33 @@
        "says": "Does it without asking",
        "tier": "auto",
        "title": "Change its power mode (Active, Quiet or Standby)"
+      },
+      {
+       "action": "app_merge_change",
+       "fixed": false,
+       "id": "app_merge_change",
+       "note": "Only your settings file (jarvis-framework.toml) changes this one.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Add its change to one of your apps"
+      },
+      {
+       "action": "pair_device",
+       "fixed": false,
+       "id": "pair_device",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Connect a new device"
+      },
+      {
+       "action": "unretire_shared_key",
+       "fixed": false,
+       "id": "unretire_shared_key",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let the old shared key work from other devices again"
       }
      ],
      "title": "This PC and your phone"
@@ -5863,6 +6223,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Run one bigger model across both graphics cards"
+      },
+      {
+       "action": "second_card_third_assign",
+       "fixed": false,
+       "id": "second_card_third_assign",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Move a second-card feature onto a third graphics card"
       },
       {
        "action": "big_model_enable",
@@ -5999,6 +6368,15 @@
        "title": "Let your notifications show on a smartwatch too"
       },
       {
+       "action": "phone_notifications_read",
+       "fixed": false,
+       "id": "phone_notifications_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -6099,7 +6477,7 @@
    },
    "lockdown": {
     "can_turn_off": false,
-    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
+    "detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, chatbot conversations, the online weather behind the animal and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
     "label": "Lockdown",
     "last": null,
     "on": false,
@@ -6186,12 +6564,12 @@
   "lights_label": "Lights, plugs and fans without a card",
   "lights_waiting": "Waiting for your yes on the approval card, on your PC or phone.",
   "lockdown_action": "lockdown",
-  "lockdown_detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
+  "lockdown_detail": "One tap makes every way out of this PC ask you first, or stop: web search and research, sending or saving email, reading your calendar, email and Home Assistant, your smart home, news feeds and \"tell me when\" watches, plug-in programs, cloud AI models, chatbot conversations, the online weather behind the animal and checking for tool updates. Turning it on is instant, from either app. Turning it off is on the PC only, with an approval card and Windows Hello.",
   "lockdown_label": "Lockdown",
   "lockdown_off_label": "Turn off Lockdown",
   "lockdown_off_says": "Lockdown is off: everything asks first as your settings say.",
   "lockdown_on_label": "Turn on Lockdown",
-  "lockdown_on_says": "Lockdown is on: everything that would leave this PC asks you first, and anything that runs by itself (\"tell me when\", news, the briefing's calendar and email) has stopped.",
+  "lockdown_on_says": "Lockdown is on: everything that would leave this PC asks you first, and anything that runs by itself (\"tell me when\", news, the briefing's calendar and email, chatbot conversations, the online weather) has stopped.",
   "lockdown_pc_only": "Lockdown can only be turned off on the PC (Settings, What asks first), with an approval card and Windows Hello.",
   "lockdown_row_note": "Lockdown is on, so this asks you first - or stops, if it runs by itself.",
   "lockdown_waiting": "Waiting for your yes on the approval card, and Windows Hello, on your PC.",

@@ -1,10 +1,11 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -603,5 +603,6 @@
+@@ -603,6 +603,7 @@
      "loosen_what_asks_first",  # jarvis_asks_first.py acts only on tier "ask" (asks-first.patch)
      "watch_notifications_enable",  # jarvis_watch_notify.py acts only on tier "ask" (watch-notifications.patch)
      "enable_reading_tool",  # jarvis_asks_first.py acts only on tier "ask" (tools-enable.patch)
      "restore_backup",  # jarvis_backup.py acts only on tier "ask" (backup.patch)
+     "phone_notifications_read",  # jarvis_phone_notifications.py acts only on tier "ask" (phone-notifications.patch)
 +    "chatbot_session",  # jarvis_chatbot.py acts only on tier "ask": ONE card per conversation (chatbot.patch)
  })
 @@ -716,4 +717,14 @@

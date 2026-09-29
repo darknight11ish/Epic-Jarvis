@@ -1642,7 +1642,7 @@ def get() -> Projects:
 
 
 # --------------------------------------------------------------------------
-#   The routes (docs/JARVIS-API.md section 61)
+#   The routes (docs/JARVIS-API.md section 88)
 # --------------------------------------------------------------------------
 
 PATH = "/api/projects"

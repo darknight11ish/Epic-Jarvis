@@ -115,6 +115,7 @@ TOOL_NAMES = {
     "todo_add": "Adding to the to-do list",
     "todo_done": "Ticking off the to-do list",
     "coming_up": "Coming up (timers, alarms, reminders)",
+    "propose_plan": "Running a short plan of its own tools (one card, several steps)",
 }
 
 #: A tool's gate lookup name -> the action it is decided under, as
@@ -973,6 +974,37 @@ def _chatbot_api(ctx: Ctx) -> dict:
                 "what the chatbot says is outside text.")
 
 
+def _sky_weather(ctx: Ctx) -> dict:
+    """The weather behind the animal faces (jarvis_sky.py, 2026-09-28): off
+    by default; from the owner's own Home Assistant, or from Open-Meteo on
+    the internet - the one choice that is a new way out (ARCHITECTURE
+    section 4). Its settings file only: nothing is read or woken here."""
+    name = "Weather for the animal's scene"
+    try:
+        import jarvis_sky as SKY
+        s = SKY.load()
+    except Exception:
+        return _row("sky_weather", name, "off", "", ASK_NA,
+                    "Off: the sky settings are not on this PC.")
+    if s["weather"] == "open_meteo":
+        return _row("sky_weather", name, "on", SKY.OPEN_METEO_HOST,
+                    "Asked once, when you switched it on",
+                    "Sends only your rough position (about 11 km) to Open-Meteo, about every "
+                    "20 minutes while a face is showing, and draws rain, snow or wind behind "
+                    "the animal. Nothing else is sent.")
+    if s["weather"] == "home_assistant":
+        url = ctx.env("JARVIS_HOME_URL")
+        return _row("sky_weather", name, "on" if url else "not_set_up",
+                    where_words(host_of(url)), ASK_NA,
+                    "Reads the weather device your Home Assistant already has, on your home "
+                    "network, and draws it behind the animal." if url else
+                    "Chosen, but Home Assistant is not set up on this PC, so no weather is "
+                    "drawn.")
+    return _row("sky_weather", name, "off", "", ASK_NA,
+                "Off: no weather is drawn behind the animal. The sun and moon never go "
+                "online - they are worked out on your own devices.")
+
+
 #: Every way Jarvis can reach something outside itself, in the order both
 #: apps show them. A new way out is ONE entry here.
 KINDS = (
@@ -997,6 +1029,7 @@ KINDS = (
     ("plugins", _plugins),
     ("second_card", _second_card),
     ("big_model", _big_model),
+    ("sky_weather", _sky_weather),
 )
 
 

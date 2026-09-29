@@ -1,5 +1,5 @@
 """test_projects.py - Projects, build steps 1 and 2 (jarvis_projects.py,
-projects.patch, docs/JARVIS-API.md section 61, docs/PROJECTS-DESIGN.md).
+projects.patch, docs/JARVIS-API.md section 88, docs/PROJECTS-DESIGN.md).
 
     python3 backend/test_projects.py
 

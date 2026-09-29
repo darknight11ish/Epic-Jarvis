@@ -1,7 +1,7 @@
 /**
  * Projects (the owner's decision of 2026-09-28, "Projects, like Claude's
  * Projects and more"; docs/PROJECTS-DESIGN.md build step 3; JARVIS-API.md
- * section 61; backend jarvis_projects.py) - the words, and how to read what
+ * section 88; backend jarvis_projects.py) - the words, and how to read what
  * the PC sends. No DOM: projects-panel.js draws it.
  *
  * The phone says the same words (net/Projects.kt). Both apps are tested

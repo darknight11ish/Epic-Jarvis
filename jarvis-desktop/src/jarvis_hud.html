@@ -812,6 +812,9 @@ const S = {
   // message as `provenance` and stays with it in `messages`, so it is sent
   // again with that turn - same rules as the quickbar (chat-history.js).
   inputTag: "typed",
+  // The PC's power mode ("active", "quiet", "standby"): read at boot from
+  // /api/status and kept by the `power` event. Only the face reads it.
+  power: "active",
   graph: null,
   traces: [],
   activeTrace: null,
@@ -1022,7 +1025,23 @@ const reactor = (() => {
   // replies, and a red face for "Ollama is not open yet" would be alarm
   // about an ordinary morning.
   const FACE_STATE = { idle:"idle", listening:"listening", thinking:"thinking", speaking:"speaking" };
-  const faceState = () => S.online ? (FACE_STATE[S.state] || "idle") : "standby";
+  // Resting while the PC has put Jarvis on standby (or quiet) is "standby"
+  // too - asleep, with its rising Zs on an animal - as every other window
+  // shows it (jarvis-link.js surfaceState). `S.power` comes from the status
+  // read at boot and the `power` event (see subscribe()).
+  const faceState = () => {
+    if (!S.online) return "standby";
+    const st = FACE_STATE[S.state] || "idle";
+    return st === "idle" && (S.power === "standby" || S.power === "quiet") ? "standby" : st;
+  };
+
+  // A serious moment (docs/JARVIS-API.md section 38.1): the `wellbeing`
+  // event's one boolean. The animals hold a calm, plain pose while it is on.
+  // Over by itself 900 s after the last `true` with no `false` (the section's
+  // safety net), so a missed frame never leaves the face plain for good.
+  const SERIOUS_NET_MS = 900000;
+  let seriousAt = null, seriousTimer = null;
+  const serious = () => seriousAt !== null && Date.now() - seriousAt < SERIOUS_NET_MS;
 
   let appearance = null;   // the owner's document, once the shell pushes one
   let ready = false;       // false until we know which face to load
@@ -1032,7 +1051,12 @@ const reactor = (() => {
   function post(){
     const w = frame.contentWindow;
     // "/" = this page's own origin, and the only receiver the bridge accepts.
-    if (w) w.postMessage({ type:"jarvis-hud-face", state:faceState(), appearance }, "/");
+    // `offline`: the hollow "not connected" ring (faces.html drawOfflineRing)
+    // - this page's own offline, which already shows as standby. No
+    // `waiting`: this page never shows banked, it has no attention budget.
+    // `serious`: see above.
+    if (w) w.postMessage({ type:"jarvis-hud-face", state:faceState(), offline:!S.online,
+                           serious:serious(), appearance }, "/");
   }
 
   /* Loads, reloads or unloads the frame to match what should be showing.
@@ -1116,6 +1140,19 @@ const reactor = (() => {
     show(on){
       visible = !!on;
       sync();
+    },
+    /** The `wellbeing` event: a serious moment starts (true) or ends. */
+    setSerious(on){
+      if (seriousTimer) { clearTimeout(seriousTimer); seriousTimer = null; }
+      seriousAt = on === true ? Date.now() : null;
+      if (seriousAt !== null) seriousTimer = setTimeout(() => { seriousTimer = null; post(); }, SERIOUS_NET_MS + 50);
+      post();
+    },
+    /** The PC's power mode: "active", "quiet" or "standby". */
+    setPower(mode){
+      if (typeof mode !== "string" || !mode || mode === S.power) return;
+      S.power = mode;
+      post();
     }
   };
 })();
@@ -1979,6 +2016,9 @@ async function boot(){
     // probes :8000 itself - that check lives in jarvis_hud.py on the owner's
     // machine, whose code is not in this repository.
     S.online = !!status.ollama;
+    // A string or {mode}, as stream.rs's power_mode reads it.
+    const pm = status.power && (typeof status.power === "string" ? status.power : status.power.mode);
+    if (typeof pm === "string" && pm) S.power = pm;
     S.lanes = status.lanes || [];
     S.defaultModel = status.default_model || "local model";
     led("led-ollama", status.ollama);
@@ -2399,6 +2439,20 @@ function subscribe(){
     else if (kind === "finding") initPoll();
     else if (kind === "activity" && typeof onActivity === "function") onActivity(d);
   };
+
+  // Named events reach addEventListener, never onmessage (hud_bootstrap.js's
+  // shim follows the EventSource spec on that). The face's two: a serious
+  // moment (`{"serious": bool}`, section 38.1) and the power mode
+  // (`{"value": "standby"}`, what stream.rs reads).
+  const dataOf = (m) => { try { return JSON.parse(m.data || "{}") || {}; } catch(e){ return {}; } };
+  es.addEventListener("wellbeing", (m) => {
+    const d = dataOf(m);
+    if (typeof d.serious === "boolean") reactor.setSerious(d.serious);
+  });
+  es.addEventListener("power", (m) => {
+    const d = dataOf(m);
+    reactor.setPower(typeof d.value === "string" ? d.value : d.mode);
+  });
 
   es.onerror = () => {
     STREAM.live = false;

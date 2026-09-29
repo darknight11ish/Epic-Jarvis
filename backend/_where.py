@@ -207,6 +207,65 @@ SHIPPED = (
     # result this turn, by reference; GET /api/chat/sources
     # (feasibility I42/I132, answer-sources.patch)
     "jarvis_sources.py",
+    # the app builder's workspace: app projects, a separate copy per task, one
+    # card showing the full diff before anything reaches the app; runs nothing
+    # (docs/APP-BUILDER-DESIGN.md, milestone A - no patch, no tool yet)
+    "jarvis_app_workspace.py",
+    # "Goals with one card per step" (the owner's "build it now",
+    # 2026-09-27; goals.patch): a goal's own plan and weekly check-in.
+    "jarvis_goals.py",
+    # "One card, several steps" (the owner's own words, 2026-09-28;
+    # plan-gate.patch): SWITCHED OFF until tools/tool_eval clears the bar.
+    "jarvis_plan.py",
+    # Reading phone notifications (2026-09-26 decision, built 2026-09-28;
+    # phone-notifications.patch): off by default, ON is one approval card,
+    # OFF is instant; never sees a notification's own text - that lives on
+    # the phone.
+    "jarvis_phone_notifications.py",
+    # The Brain upgrades (2026-09-28, brain-reads.patch): GET
+    # /api/history/search and /api/memory/fact-history, for the apps only
+    # (and, since the memory dates group, /api/memory/conversation-facts)
+    "jarvis_brain_reads.py",
+    # "remind me next time I talk about X": a kind on the one scheduler,
+    # brought up beside the question by jarvis_agent.py - no patch
+    "jarvis_next_time.py",
+    # "ring my phone": ONE ring_phone event the phone rings for - no patch
+    "jarvis_find_phone.py",
+    # "Where did I put ...?" (2026-09-28): the places the owner said,
+    # answered without the model; jarvis_quick.py and jarvis_auto_learn.py
+    # call it, no patch
+    "jarvis_places.py",
+    # The overnight tidy (2026-09-28): "Still true?" and "Which is true
+    # now?" review cards only, a kind of job on the one scheduler, no patch
+    "jarvis_tidy.py",
+    # "Better voice" (2026-09-28): the second "hey Jarvis" detector
+    # (microWakeWord); jarvis_speech.py and jarvis_voice.py call it
+    "jarvis_microwake.py",
+    # Today cards (2026-09-28): the owner's own words shown on the Today
+    # part of both apps at a time, on chosen days - a kind of job on the one
+    # scheduler, no card, no patch
+    "jarvis_today.py",
+    # "Photo to reminder" (2026-09-28, photo-reminder.patch): POST
+    # /api/photo/scan reads a picture's dates with plain code and PROPOSES a
+    # reminder; it sets nothing up itself
+    "jarvis_photo_remind.py",
+    # "PC help" (2026-09-28): why is my PC slow, how full is my disk, what is
+    # using the graphics card - read-only, answered without the model;
+    # jarvis_quick.py and jarvis_brain_reads.py (GET /api/pc/help) call it
+    "jarvis_pc_help.py",
+    # "Smarter answers" (2026-09-28): the "I've done it" check at the end of
+    # an answer; jarvis_agent.py calls it, and the tool test shares its
+    # pattern - no patch
+    "jarvis_claims.py",
+    # "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek" (2026-09-28,
+    # history-import.patch): the importer itself, and the Brain button's
+    # background run of it - every fact it finds waits for a yes
+    "import_history.py",
+    "jarvis_history_import.py",
+    # "Widgets you describe" (2026-09-28): a small checked description (never
+    # code) of what a home-screen / desktop widget shows; switched on by
+    # jarvis_brain_reads.install(), no patch of its own
+    "jarvis_widgets.py",
     # A conversation with an AI chatbot for the owner: the driver, the last
     # check, one card per conversation
     "jarvis_chatbot.py",
@@ -262,53 +321,16 @@ SHIPPED = (
     # which reaches it; the gate's risk lines are support-chat.patch.
     "jarvis_support.py",
     "jarvis_support_widget.py",
-    # The Brain upgrades (2026-09-28, brain-reads.patch): GET
-    # /api/history/search and /api/memory/fact-history, for the apps only
-    # (and, since the memory dates group, /api/memory/conversation-facts)
-    "jarvis_brain_reads.py",
-    # "remind me next time I talk about X": a kind on the one scheduler,
-    # brought up beside the question by jarvis_agent.py - no patch
-    "jarvis_next_time.py",
-    # "ring my phone": ONE ring_phone event the phone rings for - no patch
-    "jarvis_find_phone.py",
-    # "Where did I put ...?" (2026-09-28): the places the owner said,
-    # answered without the model; jarvis_quick.py and jarvis_auto_learn.py
-    # call it, no patch
-    "jarvis_places.py",
-    # The overnight tidy (2026-09-28): "Still true?" and "Which is true
-    # now?" review cards only, a kind of job on the one scheduler, no patch
-    "jarvis_tidy.py",
-    # "Better voice" (2026-09-28): the second "hey Jarvis" detector
-    # (microWakeWord); jarvis_speech.py and jarvis_voice.py call it
-    "jarvis_microwake.py",
-    # Today cards (2026-09-28): the owner's own words shown on the Today
-    # part of both apps at a time, on chosen days - a kind of job on the one
-    # scheduler, no card, no patch
-    "jarvis_today.py",
-    # "Photo to reminder" (2026-09-28, photo-reminder.patch): POST
-    # /api/photo/scan reads a picture's dates with plain code and PROPOSES a
-    # reminder; it sets nothing up itself
-    "jarvis_photo_remind.py",
-    # "PC help" (2026-09-28): why is my PC slow, how full is my disk, what is
-    # using the graphics card - read-only, answered without the model;
-    # jarvis_quick.py and jarvis_brain_reads.py (GET /api/pc/help) call it
-    "jarvis_pc_help.py",
-    # "Smarter answers" (2026-09-28): the "I've done it" check at the end of
-    # an answer; jarvis_agent.py calls it, and the tool test shares its
-    # pattern - no patch
-    "jarvis_claims.py",
-    # "Bring in chats from ChatGPT, Claude, Gemini or DeepSeek" (2026-09-28,
-    # history-import.patch): the importer itself, and the Brain button's
-    # background run of it - every fact it finds waits for a yes
-    "import_history.py",
-    "jarvis_history_import.py",
-    # "Widgets you describe" (2026-09-28): a small checked description (never
-    # code) of what a home-screen / desktop widget shows; switched on by
-    # jarvis_brain_reads.install(), no patch of its own
-    "jarvis_widgets.py",
     # "Solve it here" (2026-09-28): a captcha or sign-in page handed to the
     # owner's phone. No patch: jarvis_chatbot_routes.py answers its routes.
     "jarvis_handoff.py",
+    # the sun, the moon and the weather behind the animal faces, and the
+    # town list it finds a place in without going online (sky.patch)
+    "jarvis_sky.py", "jarvis_sky_places.py",
+    # pairing a phone by QR code, with a key per device (devices.patch,
+    # docs/PAIRING-DESIGN.md phase 1): the check on every request's key,
+    # the registry of key hashes, the pairing session and its card
+    "jarvis_devices.py",
 )
 
 

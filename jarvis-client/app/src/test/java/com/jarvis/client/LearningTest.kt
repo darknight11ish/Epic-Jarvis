@@ -384,6 +384,35 @@ class LearningTest {
     }
 
     @Test
+    fun `the reused share joins the speed line only when the backend has one`() {
+        // Milestone 7: jarvis_speed.summary's median_reused_percent - how much of
+        // the conversation Ollama had already read and did not read again.
+        val withShare = ModelSpeed.from(
+            obj(
+                """{"available": true, "by_model": {"qwen3:8b": {"answers": 12,
+                     "median_first_word_ms": 840, "median_words_per_s": 30.6,
+                     "median_reused_percent": 89.6, "reused_answers": 9}}}""",
+            ),
+            "qwen3:8b",
+        )
+        assertEquals(
+            "Recent answers: about 31 words a second, first word after 0.8 s, " +
+                "90% of the conversation reused, not read again (middle of the last 12 answers).",
+            withShare!!.currentLine,
+        )
+        // Older rows only (or an older Ollama): null, and the line is as before.
+        val without = ModelSpeed.from(
+            obj(
+                """{"available": true, "by_model": {"qwen3:8b": {"answers": 3,
+                     "median_words_per_s": 30.6, "median_reused_percent": null,
+                     "reused_answers": 0}}}""",
+            ),
+            "qwen3:8b",
+        )
+        assertEquals("Recent answers: about 31 words a second (middle of the last 3 answers).", without!!.currentLine)
+    }
+
+    @Test
     fun `the slowdown note shows only when the backend says slower`() {
         val s = ModelSpeed.from(
             obj(

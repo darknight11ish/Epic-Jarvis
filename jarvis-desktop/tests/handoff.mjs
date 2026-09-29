@@ -1,6 +1,6 @@
 /**
  * "Solve it here" on the desktop (the owner's decision of 2026-09-28;
- * JARVIS-API.md section 60.8; src/handoff.js; backend/jarvis_handoff.py).
+ * JARVIS-API.md section 87.8; src/handoff.js; backend/jarvis_handoff.py).
  *
  * What must hold:
  * - the words are the PC's (jarvis_handoff.WORDS) and the phone's, word for

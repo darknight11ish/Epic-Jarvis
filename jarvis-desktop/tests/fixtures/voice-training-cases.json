@@ -11299,6 +11299,333 @@
       },
       "code": 200
     },
+    "animal_bad": {
+      "body": {
+        "error": "the pitch must be from 3 steps deeper to 4 steps higher, in half steps",
+        "ok": false
+      },
+      "code": 400
+    },
+    "animal_reset": {
+      "body": {
+        "face_voice": {
+          "animal_choices": {
+            "paces": [
+              {
+                "id": "slower",
+                "label": "Slower"
+              },
+              {
+                "id": "normal",
+                "label": "Normal"
+              },
+              {
+                "id": "faster",
+                "label": "Faster"
+              }
+            ],
+            "pitch": {
+              "max": 4.0,
+              "min": -3.0,
+              "step": 0.5
+            },
+            "voices": [
+              {
+                "id": "0",
+                "label": "American (female)"
+              },
+              {
+                "id": "1",
+                "label": "American (female) - Bella"
+              },
+              {
+                "id": "2",
+                "label": "American (female) - Nicole"
+              },
+              {
+                "id": "3",
+                "label": "American (female) - Sarah"
+              },
+              {
+                "id": "4",
+                "label": "American (female) - Sky"
+              },
+              {
+                "id": "5",
+                "label": "American (male) - Adam"
+              },
+              {
+                "id": "6",
+                "label": "American (male) - Michael"
+              },
+              {
+                "id": "7",
+                "label": "British (female) - Emma"
+              },
+              {
+                "id": "8",
+                "label": "British (female) - Isabella"
+              },
+              {
+                "id": "9",
+                "label": "British (male) - George"
+              },
+              {
+                "id": "10",
+                "label": "British (male) - Lewis"
+              }
+            ]
+          },
+          "animals": [
+            {
+              "answer": "use",
+              "changed": false,
+              "face": "redpanda",
+              "line": "Bella, 2 steps higher, at normal pace.",
+              "name": "Red Panda",
+              "own": {
+                "pace": "normal",
+                "semitones": 2.0,
+                "speaker": "1"
+              },
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1",
+              "voice": "Bella"
+            },
+            {
+              "answer": null,
+              "changed": false,
+              "face": "pygmyowl",
+              "line": "Nicole, 1 step higher, a little slower.",
+              "name": "Pygmy Owl",
+              "own": {
+                "pace": "slower",
+                "semitones": 1.0,
+                "speaker": "2"
+              },
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2",
+              "voice": "Nicole"
+            },
+            {
+              "answer": null,
+              "changed": false,
+              "face": "seaotter",
+              "line": "Sarah, 3 steps higher, a little faster.",
+              "name": "Sea Otter",
+              "own": {
+                "pace": "faster",
+                "semitones": 3.0,
+                "speaker": "3"
+              },
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3",
+              "voice": "Sarah"
+            },
+            {
+              "answer": null,
+              "changed": false,
+              "face": "monkey",
+              "line": "Michael, 1 step higher, at normal pace.",
+              "name": "Monkey",
+              "own": {
+                "pace": "normal",
+                "semitones": 1.0,
+                "speaker": "6"
+              },
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6",
+              "voice": "Michael"
+            }
+          ],
+          "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+          "animals_title": "Each animal's voice",
+          "default": false,
+          "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+          "enabled": true,
+          "face": "redpanda",
+          "line": "Speaking as the Red Panda: Bella, a little higher.",
+          "name": "Red Panda",
+          "offer": null,
+          "speaking": true,
+          "title": "Voice follows the face"
+        },
+        "message": "The Red Panda speaks in its own voice again.",
+        "ok": true
+      },
+      "code": 200
+    },
+    "animal_set": {
+      "body": {
+        "face_voice": {
+          "animal_choices": {
+            "paces": [
+              {
+                "id": "slower",
+                "label": "Slower"
+              },
+              {
+                "id": "normal",
+                "label": "Normal"
+              },
+              {
+                "id": "faster",
+                "label": "Faster"
+              }
+            ],
+            "pitch": {
+              "max": 4.0,
+              "min": -3.0,
+              "step": 0.5
+            },
+            "voices": [
+              {
+                "id": "0",
+                "label": "American (female)"
+              },
+              {
+                "id": "1",
+                "label": "American (female) - Bella"
+              },
+              {
+                "id": "2",
+                "label": "American (female) - Nicole"
+              },
+              {
+                "id": "3",
+                "label": "American (female) - Sarah"
+              },
+              {
+                "id": "4",
+                "label": "American (female) - Sky"
+              },
+              {
+                "id": "5",
+                "label": "American (male) - Adam"
+              },
+              {
+                "id": "6",
+                "label": "American (male) - Michael"
+              },
+              {
+                "id": "7",
+                "label": "British (female) - Emma"
+              },
+              {
+                "id": "8",
+                "label": "British (female) - Isabella"
+              },
+              {
+                "id": "9",
+                "label": "British (male) - George"
+              },
+              {
+                "id": "10",
+                "label": "British (male) - Lewis"
+              }
+            ]
+          },
+          "animals": [
+            {
+              "answer": "use",
+              "changed": true,
+              "face": "redpanda",
+              "line": "Sarah, 1.5 steps deeper, a little faster.",
+              "name": "Red Panda",
+              "own": {
+                "pace": "normal",
+                "semitones": 2.0,
+                "speaker": "1"
+              },
+              "pace": "faster",
+              "semitones": -1.5,
+              "speaker": "3",
+              "voice": "Sarah"
+            },
+            {
+              "answer": null,
+              "changed": false,
+              "face": "pygmyowl",
+              "line": "Nicole, 1 step higher, a little slower.",
+              "name": "Pygmy Owl",
+              "own": {
+                "pace": "slower",
+                "semitones": 1.0,
+                "speaker": "2"
+              },
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2",
+              "voice": "Nicole"
+            },
+            {
+              "answer": null,
+              "changed": false,
+              "face": "seaotter",
+              "line": "Sarah, 3 steps higher, a little faster.",
+              "name": "Sea Otter",
+              "own": {
+                "pace": "faster",
+                "semitones": 3.0,
+                "speaker": "3"
+              },
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3",
+              "voice": "Sarah"
+            },
+            {
+              "answer": null,
+              "changed": false,
+              "face": "monkey",
+              "line": "Michael, 1 step higher, at normal pace.",
+              "name": "Monkey",
+              "own": {
+                "pace": "normal",
+                "semitones": 1.0,
+                "speaker": "6"
+              },
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6",
+              "voice": "Michael"
+            }
+          ],
+          "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+          "animals_title": "Each animal's voice",
+          "default": false,
+          "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+          "enabled": true,
+          "face": "redpanda",
+          "line": "Speaking as the Red Panda: Sarah, a little deeper.",
+          "name": "Red Panda",
+          "offer": null,
+          "speaking": true,
+          "title": "Voice follows the face"
+        },
+        "message": "The Red Panda's voice is now Sarah, 1.5 steps deeper, a little faster.",
+        "ok": true
+      },
+      "code": 200
+    },
+    "animal_try_bad": {
+      "body": {
+        "error": "choose the Red Panda, the Pygmy Owl, the Sea Otter or the Monkey",
+        "ok": false
+      },
+      "code": 400
+    },
+    "animal_try_busy": {
+      "body": {
+        "error": "the PC is still making the sound for the last Try it. Try it again in a moment",
+        "ok": false
+      },
+      "code": 429
+    },
     "better_no_card": {
       "body": {
         "error": "the better voice cannot be turned on: it needs a capable second graphics card (only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER))",
@@ -11406,12 +11733,148 @@
     "face_off": {
       "body": {
         "face_voice": {
-          "default": true,
-          "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and a slightly higher pitch. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+          "animal_choices": {
+            "paces": [
+              {
+                "id": "slower",
+                "label": "Slower"
+              },
+              {
+                "id": "normal",
+                "label": "Normal"
+              },
+              {
+                "id": "faster",
+                "label": "Faster"
+              }
+            ],
+            "pitch": {
+              "max": 4.0,
+              "min": -3.0,
+              "step": 0.5
+            },
+            "voices": [
+              {
+                "id": "0",
+                "label": "American (female)"
+              },
+              {
+                "id": "1",
+                "label": "American (female) - Bella"
+              },
+              {
+                "id": "2",
+                "label": "American (female) - Nicole"
+              },
+              {
+                "id": "3",
+                "label": "American (female) - Sarah"
+              },
+              {
+                "id": "4",
+                "label": "American (female) - Sky"
+              },
+              {
+                "id": "5",
+                "label": "American (male) - Adam"
+              },
+              {
+                "id": "6",
+                "label": "American (male) - Michael"
+              },
+              {
+                "id": "7",
+                "label": "British (female) - Emma"
+              },
+              {
+                "id": "8",
+                "label": "British (female) - Isabella"
+              },
+              {
+                "id": "9",
+                "label": "British (male) - George"
+              },
+              {
+                "id": "10",
+                "label": "British (male) - Lewis"
+              }
+            ]
+          },
+          "animals": [
+            {
+              "answer": "use",
+              "changed": false,
+              "face": "redpanda",
+              "line": "Bella, 2 steps higher, at normal pace.",
+              "name": "Red Panda",
+              "own": {
+                "pace": "normal",
+                "semitones": 2.0,
+                "speaker": "1"
+              },
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1",
+              "voice": "Bella"
+            },
+            {
+              "answer": null,
+              "changed": false,
+              "face": "pygmyowl",
+              "line": "Nicole, 1 step higher, a little slower.",
+              "name": "Pygmy Owl",
+              "own": {
+                "pace": "slower",
+                "semitones": 1.0,
+                "speaker": "2"
+              },
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2",
+              "voice": "Nicole"
+            },
+            {
+              "answer": null,
+              "changed": false,
+              "face": "seaotter",
+              "line": "Sarah, 3 steps higher, a little faster.",
+              "name": "Sea Otter",
+              "own": {
+                "pace": "faster",
+                "semitones": 3.0,
+                "speaker": "3"
+              },
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3",
+              "voice": "Sarah"
+            },
+            {
+              "answer": null,
+              "changed": false,
+              "face": "monkey",
+              "line": "Michael, 1 step higher, at normal pace.",
+              "name": "Monkey",
+              "own": {
+                "pace": "normal",
+                "semitones": 1.0,
+                "speaker": "6"
+              },
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6",
+              "voice": "Michael"
+            }
+          ],
+          "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+          "animals_title": "Each animal's voice",
+          "default": false,
+          "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
           "enabled": false,
           "face": "redpanda",
           "line": "Off: the built-in voice stays the same whatever the face.",
           "name": "Red Panda",
+          "offer": null,
           "speaking": false,
           "title": "Voice follows the face"
         },
@@ -11420,15 +11883,464 @@
       },
       "code": 200
     },
+    "face_offer_bad": {
+      "body": {
+        "error": "the answer must be \"use\" or \"keep\"",
+        "ok": false
+      },
+      "code": 400
+    },
+    "face_offer_keep": {
+      "body": {
+        "face_voice": {
+          "animal_choices": {
+            "paces": [
+              {
+                "id": "slower",
+                "label": "Slower"
+              },
+              {
+                "id": "normal",
+                "label": "Normal"
+              },
+              {
+                "id": "faster",
+                "label": "Faster"
+              }
+            ],
+            "pitch": {
+              "max": 4.0,
+              "min": -3.0,
+              "step": 0.5
+            },
+            "voices": [
+              {
+                "id": "0",
+                "label": "American (female)"
+              },
+              {
+                "id": "1",
+                "label": "American (female) - Bella"
+              },
+              {
+                "id": "2",
+                "label": "American (female) - Nicole"
+              },
+              {
+                "id": "3",
+                "label": "American (female) - Sarah"
+              },
+              {
+                "id": "4",
+                "label": "American (female) - Sky"
+              },
+              {
+                "id": "5",
+                "label": "American (male) - Adam"
+              },
+              {
+                "id": "6",
+                "label": "American (male) - Michael"
+              },
+              {
+                "id": "7",
+                "label": "British (female) - Emma"
+              },
+              {
+                "id": "8",
+                "label": "British (female) - Isabella"
+              },
+              {
+                "id": "9",
+                "label": "British (male) - George"
+              },
+              {
+                "id": "10",
+                "label": "British (male) - Lewis"
+              }
+            ]
+          },
+          "animals": [
+            {
+              "answer": "keep",
+              "changed": false,
+              "face": "redpanda",
+              "line": "Bella, 2 steps higher, at normal pace.",
+              "name": "Red Panda",
+              "own": {
+                "pace": "normal",
+                "semitones": 2.0,
+                "speaker": "1"
+              },
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1",
+              "voice": "Bella"
+            },
+            {
+              "answer": null,
+              "changed": false,
+              "face": "pygmyowl",
+              "line": "Nicole, 1 step higher, a little slower.",
+              "name": "Pygmy Owl",
+              "own": {
+                "pace": "slower",
+                "semitones": 1.0,
+                "speaker": "2"
+              },
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2",
+              "voice": "Nicole"
+            },
+            {
+              "answer": null,
+              "changed": false,
+              "face": "seaotter",
+              "line": "Sarah, 3 steps higher, a little faster.",
+              "name": "Sea Otter",
+              "own": {
+                "pace": "faster",
+                "semitones": 3.0,
+                "speaker": "3"
+              },
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3",
+              "voice": "Sarah"
+            },
+            {
+              "answer": null,
+              "changed": false,
+              "face": "monkey",
+              "line": "Michael, 1 step higher, at normal pace.",
+              "name": "Monkey",
+              "own": {
+                "pace": "normal",
+                "semitones": 1.0,
+                "speaker": "6"
+              },
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6",
+              "voice": "Michael"
+            }
+          ],
+          "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+          "animals_title": "Each animal's voice",
+          "default": false,
+          "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+          "enabled": false,
+          "face": "redpanda",
+          "line": "Off: the built-in voice stays the same whatever the face.",
+          "name": "Red Panda",
+          "offer": null,
+          "speaking": false,
+          "title": "Voice follows the face"
+        },
+        "message": "Jarvis keeps your voice for the Red Panda. Each animal asks once for itself.",
+        "ok": true
+      },
+      "code": 200
+    },
+    "face_offer_use": {
+      "body": {
+        "face_voice": {
+          "animal_choices": {
+            "paces": [
+              {
+                "id": "slower",
+                "label": "Slower"
+              },
+              {
+                "id": "normal",
+                "label": "Normal"
+              },
+              {
+                "id": "faster",
+                "label": "Faster"
+              }
+            ],
+            "pitch": {
+              "max": 4.0,
+              "min": -3.0,
+              "step": 0.5
+            },
+            "voices": [
+              {
+                "id": "0",
+                "label": "American (female)"
+              },
+              {
+                "id": "1",
+                "label": "American (female) - Bella"
+              },
+              {
+                "id": "2",
+                "label": "American (female) - Nicole"
+              },
+              {
+                "id": "3",
+                "label": "American (female) - Sarah"
+              },
+              {
+                "id": "4",
+                "label": "American (female) - Sky"
+              },
+              {
+                "id": "5",
+                "label": "American (male) - Adam"
+              },
+              {
+                "id": "6",
+                "label": "American (male) - Michael"
+              },
+              {
+                "id": "7",
+                "label": "British (female) - Emma"
+              },
+              {
+                "id": "8",
+                "label": "British (female) - Isabella"
+              },
+              {
+                "id": "9",
+                "label": "British (male) - George"
+              },
+              {
+                "id": "10",
+                "label": "British (male) - Lewis"
+              }
+            ]
+          },
+          "animals": [
+            {
+              "answer": "keep",
+              "changed": false,
+              "face": "redpanda",
+              "line": "Bella, 2 steps higher, at normal pace.",
+              "name": "Red Panda",
+              "own": {
+                "pace": "normal",
+                "semitones": 2.0,
+                "speaker": "1"
+              },
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1",
+              "voice": "Bella"
+            },
+            {
+              "answer": "use",
+              "changed": false,
+              "face": "pygmyowl",
+              "line": "Nicole, 1 step higher, a little slower.",
+              "name": "Pygmy Owl",
+              "own": {
+                "pace": "slower",
+                "semitones": 1.0,
+                "speaker": "2"
+              },
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2",
+              "voice": "Nicole"
+            },
+            {
+              "answer": null,
+              "changed": false,
+              "face": "seaotter",
+              "line": "Sarah, 3 steps higher, a little faster.",
+              "name": "Sea Otter",
+              "own": {
+                "pace": "faster",
+                "semitones": 3.0,
+                "speaker": "3"
+              },
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3",
+              "voice": "Sarah"
+            },
+            {
+              "answer": null,
+              "changed": false,
+              "face": "monkey",
+              "line": "Michael, 1 step higher, at normal pace.",
+              "name": "Monkey",
+              "own": {
+                "pace": "normal",
+                "semitones": 1.0,
+                "speaker": "6"
+              },
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6",
+              "voice": "Michael"
+            }
+          ],
+          "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+          "animals_title": "Each animal's voice",
+          "default": false,
+          "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+          "enabled": true,
+          "face": "pygmyowl",
+          "line": "Speaking as the Pygmy Owl: Nicole, a little higher.",
+          "name": "Pygmy Owl",
+          "offer": null,
+          "speaking": true,
+          "title": "Voice follows the face"
+        },
+        "message": "The Pygmy Owl speaks in its own voice now. \"Voice follows the face\" is on; turn it off in the voice settings to go back.",
+        "ok": true
+      },
+      "code": 200
+    },
     "face_on": {
       "body": {
         "face_voice": {
-          "default": true,
-          "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and a slightly higher pitch. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+          "animal_choices": {
+            "paces": [
+              {
+                "id": "slower",
+                "label": "Slower"
+              },
+              {
+                "id": "normal",
+                "label": "Normal"
+              },
+              {
+                "id": "faster",
+                "label": "Faster"
+              }
+            ],
+            "pitch": {
+              "max": 4.0,
+              "min": -3.0,
+              "step": 0.5
+            },
+            "voices": [
+              {
+                "id": "0",
+                "label": "American (female)"
+              },
+              {
+                "id": "1",
+                "label": "American (female) - Bella"
+              },
+              {
+                "id": "2",
+                "label": "American (female) - Nicole"
+              },
+              {
+                "id": "3",
+                "label": "American (female) - Sarah"
+              },
+              {
+                "id": "4",
+                "label": "American (female) - Sky"
+              },
+              {
+                "id": "5",
+                "label": "American (male) - Adam"
+              },
+              {
+                "id": "6",
+                "label": "American (male) - Michael"
+              },
+              {
+                "id": "7",
+                "label": "British (female) - Emma"
+              },
+              {
+                "id": "8",
+                "label": "British (female) - Isabella"
+              },
+              {
+                "id": "9",
+                "label": "British (male) - George"
+              },
+              {
+                "id": "10",
+                "label": "British (male) - Lewis"
+              }
+            ]
+          },
+          "animals": [
+            {
+              "answer": "use",
+              "changed": false,
+              "face": "redpanda",
+              "line": "Bella, 2 steps higher, at normal pace.",
+              "name": "Red Panda",
+              "own": {
+                "pace": "normal",
+                "semitones": 2.0,
+                "speaker": "1"
+              },
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1",
+              "voice": "Bella"
+            },
+            {
+              "answer": null,
+              "changed": false,
+              "face": "pygmyowl",
+              "line": "Nicole, 1 step higher, a little slower.",
+              "name": "Pygmy Owl",
+              "own": {
+                "pace": "slower",
+                "semitones": 1.0,
+                "speaker": "2"
+              },
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2",
+              "voice": "Nicole"
+            },
+            {
+              "answer": null,
+              "changed": false,
+              "face": "seaotter",
+              "line": "Sarah, 3 steps higher, a little faster.",
+              "name": "Sea Otter",
+              "own": {
+                "pace": "faster",
+                "semitones": 3.0,
+                "speaker": "3"
+              },
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3",
+              "voice": "Sarah"
+            },
+            {
+              "answer": null,
+              "changed": false,
+              "face": "monkey",
+              "line": "Michael, 1 step higher, at normal pace.",
+              "name": "Monkey",
+              "own": {
+                "pace": "normal",
+                "semitones": 1.0,
+                "speaker": "6"
+              },
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6",
+              "voice": "Michael"
+            }
+          ],
+          "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+          "animals_title": "Each animal's voice",
+          "default": false,
+          "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
           "enabled": true,
           "face": "redpanda",
           "line": "Speaking as the Red Panda: Bella, a little higher.",
           "name": "Red Panda",
+          "offer": null,
           "speaking": true,
           "title": "Voice follows the face"
         },
@@ -11597,12 +12509,148 @@
         }
       },
       "face_voice": {
-        "default": true,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and a slightly higher pitch. A voice you recorded still wins. It changes nothing else, so it never asks first.",
-        "enabled": true,
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
         "face": "",
-        "line": "No face is saved on this PC yet, so there is no animal voice to use.",
+        "line": "Off: the built-in voice stays the same whatever the face.",
         "name": "",
+        "offer": null,
         "speaking": false,
         "title": "Voice follows the face"
       },
@@ -11743,6 +12791,325 @@
         }
       ]
     },
+    "animal_changed": {
+      "active": "builtin",
+      "active_name": "Built-in voice",
+      "available": true,
+      "better_voice": {
+        "can_turn_on": false,
+        "card": null,
+        "enabled": false,
+        "files": false,
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "idle_minutes": 10,
+        "last": null,
+        "load_seconds": null,
+        "need_mb": 3072,
+        "need_mb_measured": false,
+        "pending": false,
+        "state": "off",
+        "state_why": "the better-voice switch is off",
+        "why": "needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)"
+      },
+      "engines": {
+        "f5": {
+          "available": false,
+          "where": "the second graphics card",
+          "why": "the better-voice switch is off"
+        },
+        "kokoro": {
+          "available": true,
+          "why": ""
+        },
+        "zipvoice": {
+          "available": true,
+          "where": "this PC's processor",
+          "why": ""
+        }
+      },
+      "face_voice": {
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": "use",
+            "changed": true,
+            "face": "redpanda",
+            "line": "Sarah, 1.5 steps deeper, a little faster.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "faster",
+            "semitones": -1.5,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": true,
+        "face": "redpanda",
+        "line": "Speaking as the Red Panda: Sarah, a little deeper.",
+        "name": "Red Panda",
+        "offer": null,
+        "speaking": true,
+        "title": "Voice follows the face"
+      },
+      "fallback": "",
+      "last": {
+        "at": 1790000000.0,
+        "kind": "switch",
+        "outcome": "switched",
+        "voice": "grandpa",
+        "why": "Jarvis now speaks in \"Grandpa\"."
+      },
+      "limits": {
+        "max_clip_bytes": 2900000,
+        "max_name_chars": 40,
+        "max_seconds": 10.0,
+        "max_transcript_chars": 300,
+        "max_voices": 20,
+        "min_seconds": 3.0
+      },
+      "pending": null,
+      "sentences": [
+        "Good morning. I checked your calendar, and you have two meetings this afternoon.",
+        "The quick brown fox jumps over the lazy dog, then runs back home for dinner.",
+        "It is a bright, cool day, with a gentle breeze coming in from the sea.",
+        "Your parcel arrived at noon, and I left a reminder to open it this evening.",
+        "Would you like me to read that again, a little more slowly this time?"
+      ],
+      "speaker": {
+        "choice": "9",
+        "choices": [
+          {
+            "id": "0",
+            "label": "American (female)"
+          },
+          {
+            "id": "1",
+            "label": "American (female) - Bella"
+          },
+          {
+            "id": "2",
+            "label": "American (female) - Nicole"
+          },
+          {
+            "id": "3",
+            "label": "American (female) - Sarah"
+          },
+          {
+            "id": "4",
+            "label": "American (female) - Sky"
+          },
+          {
+            "id": "5",
+            "label": "American (male) - Adam"
+          },
+          {
+            "id": "6",
+            "label": "American (male) - Michael"
+          },
+          {
+            "id": "7",
+            "label": "British (female) - Emma"
+          },
+          {
+            "id": "8",
+            "label": "British (female) - Isabella"
+          },
+          {
+            "id": "9",
+            "label": "British (male) - George"
+          },
+          {
+            "id": "10",
+            "label": "British (male) - Lewis"
+          }
+        ],
+        "default": "0",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "note": "While the Red Panda face is showing, its own voice speaks instead (\"Voice follows the face\" is on); this choice is used the rest of the time.",
+        "title": "Jarvis's built-in voice",
+        "value": 9
+      },
+      "speaking_with": "kokoro",
+      "speed": {
+        "choice": "faster",
+        "choices": [
+          {
+            "id": "slower",
+            "label": "Slower"
+          },
+          {
+            "id": "normal",
+            "label": "Normal"
+          },
+          {
+            "id": "faster",
+            "label": "Faster"
+          }
+        ],
+        "default": "normal",
+        "detail": "Every voice made on your PC speaks at this speed. It changes nothing else, so it never asks first.",
+        "note": "",
+        "title": "How fast Jarvis speaks",
+        "value": 1.15
+      },
+      "timings": [
+        {
+          "at": 1790000000.0,
+          "audio_seconds": 3.6,
+          "chars": 54,
+          "engine": "zipvoice",
+          "failed": "",
+          "fallback": "",
+          "note": "",
+          "rtf": 0.233,
+          "seconds": 0.84,
+          "voice": "grandpa"
+        },
+        {
+          "at": 1790000000.0,
+          "audio_seconds": 0.5,
+          "chars": 5,
+          "engine": "zipvoice",
+          "failed": "",
+          "fallback": "",
+          "note": "",
+          "rtf": 1.68,
+          "seconds": 0.84,
+          "voice": "grandpa"
+        }
+      ],
+      "voices": [
+        {
+          "builtin": true,
+          "id": "builtin",
+          "name": "Built-in voice",
+          "ready": true,
+          "why": ""
+        }
+      ]
+    },
     "better_capable": {
       "active": "builtin",
       "active_name": "Built-in voice",
@@ -11780,12 +13147,148 @@
         }
       },
       "face_voice": {
-        "default": true,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and a slightly higher pitch. A voice you recorded still wins. It changes nothing else, so it never asks first.",
-        "enabled": true,
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
         "face": "",
-        "line": "No face is saved on this PC yet, so there is no animal voice to use.",
+        "line": "Off: the built-in voice stays the same whatever the face.",
         "name": "",
+        "offer": null,
         "speaking": false,
         "title": "Voice follows the face"
       },
@@ -11936,12 +13439,148 @@
         }
       },
       "face_voice": {
-        "default": true,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and a slightly higher pitch. A voice you recorded still wins. It changes nothing else, so it never asks first.",
-        "enabled": true,
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
         "face": "",
-        "line": "No face is saved on this PC yet, so there is no animal voice to use.",
+        "line": "Off: the built-in voice stays the same whatever the face.",
         "name": "",
+        "offer": null,
         "speaking": false,
         "title": "Voice follows the face"
       },
@@ -12088,12 +13727,148 @@
         }
       },
       "face_voice": {
-        "default": true,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and a slightly higher pitch. A voice you recorded still wins. It changes nothing else, so it never asks first.",
-        "enabled": true,
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
         "face": "",
-        "line": "No face is saved on this PC yet, so there is no animal voice to use.",
+        "line": "Off: the built-in voice stays the same whatever the face.",
         "name": "",
+        "offer": null,
         "speaking": false,
         "title": "Voice follows the face"
       },
@@ -12240,12 +14015,148 @@
         }
       },
       "face_voice": {
-        "default": true,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and a slightly higher pitch. A voice you recorded still wins. It changes nothing else, so it never asks first.",
-        "enabled": true,
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
         "face": "",
-        "line": "No face is saved on this PC yet, so there is no animal voice to use.",
+        "line": "Off: the built-in voice stays the same whatever the face.",
         "name": "",
+        "offer": null,
         "speaking": false,
         "title": "Voice follows the face"
       },
@@ -12392,12 +14303,148 @@
         }
       },
       "face_voice": {
-        "default": true,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and a slightly higher pitch. A voice you recorded still wins. It changes nothing else, so it never asks first.",
-        "enabled": true,
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
         "face": "",
-        "line": "No face is saved on this PC yet, so there is no animal voice to use.",
+        "line": "Off: the built-in voice stays the same whatever the face.",
         "name": "",
+        "offer": null,
         "speaking": false,
         "title": "Voice follows the face"
       },
@@ -12513,6 +14560,1487 @@
         }
       ]
     },
+    "face_default_off": {
+      "active": "builtin",
+      "active_name": "Built-in voice",
+      "available": true,
+      "better_voice": {
+        "can_turn_on": false,
+        "card": null,
+        "enabled": false,
+        "files": false,
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "idle_minutes": 10,
+        "last": null,
+        "load_seconds": null,
+        "need_mb": 3072,
+        "need_mb_measured": false,
+        "pending": false,
+        "state": "off",
+        "state_why": "the better-voice switch is off",
+        "why": "needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)"
+      },
+      "engines": {
+        "f5": {
+          "available": false,
+          "where": "the second graphics card",
+          "why": "the better-voice switch is off"
+        },
+        "kokoro": {
+          "available": true,
+          "why": ""
+        },
+        "zipvoice": {
+          "available": true,
+          "where": "this PC's processor",
+          "why": ""
+        }
+      },
+      "face_voice": {
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
+        "face": "redpanda",
+        "line": "Off: the built-in voice stays the same whatever the face.",
+        "name": "Red Panda",
+        "offer": {
+          "face": "redpanda",
+          "keep": "Keep my voice",
+          "question": "The Red Panda has its own voice. Use it?",
+          "use": "Use it"
+        },
+        "speaking": false,
+        "title": "Voice follows the face"
+      },
+      "fallback": "",
+      "last": {
+        "at": 1790000000.0,
+        "kind": "switch",
+        "outcome": "switched",
+        "voice": "grandpa",
+        "why": "Jarvis now speaks in \"Grandpa\"."
+      },
+      "limits": {
+        "max_clip_bytes": 2900000,
+        "max_name_chars": 40,
+        "max_seconds": 10.0,
+        "max_transcript_chars": 300,
+        "max_voices": 20,
+        "min_seconds": 3.0
+      },
+      "pending": null,
+      "sentences": [
+        "Good morning. I checked your calendar, and you have two meetings this afternoon.",
+        "The quick brown fox jumps over the lazy dog, then runs back home for dinner.",
+        "It is a bright, cool day, with a gentle breeze coming in from the sea.",
+        "Your parcel arrived at noon, and I left a reminder to open it this evening.",
+        "Would you like me to read that again, a little more slowly this time?"
+      ],
+      "speaker": {
+        "choice": "9",
+        "choices": [
+          {
+            "id": "0",
+            "label": "American (female)"
+          },
+          {
+            "id": "1",
+            "label": "American (female) - Bella"
+          },
+          {
+            "id": "2",
+            "label": "American (female) - Nicole"
+          },
+          {
+            "id": "3",
+            "label": "American (female) - Sarah"
+          },
+          {
+            "id": "4",
+            "label": "American (female) - Sky"
+          },
+          {
+            "id": "5",
+            "label": "American (male) - Adam"
+          },
+          {
+            "id": "6",
+            "label": "American (male) - Michael"
+          },
+          {
+            "id": "7",
+            "label": "British (female) - Emma"
+          },
+          {
+            "id": "8",
+            "label": "British (female) - Isabella"
+          },
+          {
+            "id": "9",
+            "label": "British (male) - George"
+          },
+          {
+            "id": "10",
+            "label": "British (male) - Lewis"
+          }
+        ],
+        "default": "0",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "note": "",
+        "title": "Jarvis's built-in voice",
+        "value": 9
+      },
+      "speaking_with": "kokoro",
+      "speed": {
+        "choice": "faster",
+        "choices": [
+          {
+            "id": "slower",
+            "label": "Slower"
+          },
+          {
+            "id": "normal",
+            "label": "Normal"
+          },
+          {
+            "id": "faster",
+            "label": "Faster"
+          }
+        ],
+        "default": "normal",
+        "detail": "Every voice made on your PC speaks at this speed. It changes nothing else, so it never asks first.",
+        "note": "",
+        "title": "How fast Jarvis speaks",
+        "value": 1.15
+      },
+      "timings": [
+        {
+          "at": 1790000000.0,
+          "audio_seconds": 3.6,
+          "chars": 54,
+          "engine": "zipvoice",
+          "failed": "",
+          "fallback": "",
+          "note": "",
+          "rtf": 0.233,
+          "seconds": 0.84,
+          "voice": "grandpa"
+        },
+        {
+          "at": 1790000000.0,
+          "audio_seconds": 0.5,
+          "chars": 5,
+          "engine": "zipvoice",
+          "failed": "",
+          "fallback": "",
+          "note": "",
+          "rtf": 1.68,
+          "seconds": 0.84,
+          "voice": "grandpa"
+        }
+      ],
+      "voices": [
+        {
+          "builtin": true,
+          "id": "builtin",
+          "name": "Built-in voice",
+          "ready": true,
+          "why": ""
+        }
+      ]
+    },
+    "face_kept_on": {
+      "active": "builtin",
+      "active_name": "Built-in voice",
+      "available": true,
+      "better_voice": {
+        "can_turn_on": false,
+        "card": null,
+        "enabled": false,
+        "files": false,
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "idle_minutes": 10,
+        "last": null,
+        "load_seconds": null,
+        "need_mb": 3072,
+        "need_mb_measured": false,
+        "pending": false,
+        "state": "off",
+        "state_why": "not running - it starts when Jarvis speaks in a custom voice",
+        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+      },
+      "engines": {
+        "f5": {
+          "available": false,
+          "where": "the second graphics card",
+          "why": "not running - it starts when Jarvis speaks in a custom voice"
+        },
+        "kokoro": {
+          "available": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        },
+        "zipvoice": {
+          "available": false,
+          "where": "this PC's processor",
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+        }
+      },
+      "face_voice": {
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": "keep",
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": "use",
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": true,
+        "face": "redpanda",
+        "line": "You chose to keep your voice for the Red Panda.",
+        "name": "Red Panda",
+        "offer": null,
+        "speaking": false,
+        "title": "Voice follows the face"
+      },
+      "fallback": "",
+      "last": null,
+      "limits": {
+        "max_clip_bytes": 2900000,
+        "max_name_chars": 40,
+        "max_seconds": 10.0,
+        "max_transcript_chars": 300,
+        "max_voices": 20,
+        "min_seconds": 3.0
+      },
+      "pending": null,
+      "sentences": [
+        "Good morning. I checked your calendar, and you have two meetings this afternoon.",
+        "The quick brown fox jumps over the lazy dog, then runs back home for dinner.",
+        "It is a bright, cool day, with a gentle breeze coming in from the sea.",
+        "Your parcel arrived at noon, and I left a reminder to open it this evening.",
+        "Would you like me to read that again, a little more slowly this time?"
+      ],
+      "speaker": {
+        "choice": "0",
+        "choices": [
+          {
+            "id": "0",
+            "label": "American (female)"
+          },
+          {
+            "id": "1",
+            "label": "American (female) - Bella"
+          },
+          {
+            "id": "2",
+            "label": "American (female) - Nicole"
+          },
+          {
+            "id": "3",
+            "label": "American (female) - Sarah"
+          },
+          {
+            "id": "4",
+            "label": "American (female) - Sky"
+          },
+          {
+            "id": "5",
+            "label": "American (male) - Adam"
+          },
+          {
+            "id": "6",
+            "label": "American (male) - Michael"
+          },
+          {
+            "id": "7",
+            "label": "British (female) - Emma"
+          },
+          {
+            "id": "8",
+            "label": "British (female) - Isabella"
+          },
+          {
+            "id": "9",
+            "label": "British (male) - George"
+          },
+          {
+            "id": "10",
+            "label": "British (male) - Lewis"
+          }
+        ],
+        "default": "0",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "note": "",
+        "title": "Jarvis's built-in voice",
+        "value": 0
+      },
+      "speaking_with": "kokoro",
+      "speed": {
+        "choice": "normal",
+        "choices": [
+          {
+            "id": "slower",
+            "label": "Slower"
+          },
+          {
+            "id": "normal",
+            "label": "Normal"
+          },
+          {
+            "id": "faster",
+            "label": "Faster"
+          }
+        ],
+        "default": "normal",
+        "detail": "Every voice made on your PC speaks at this speed. It changes nothing else, so it never asks first.",
+        "note": "",
+        "title": "How fast Jarvis speaks",
+        "value": 1.0
+      },
+      "timings": [],
+      "voices": [
+        {
+          "builtin": true,
+          "id": "builtin",
+          "name": "Built-in voice",
+          "ready": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        }
+      ]
+    },
+    "face_offer_answered": {
+      "active": "builtin",
+      "active_name": "Built-in voice",
+      "available": true,
+      "better_voice": {
+        "can_turn_on": false,
+        "card": null,
+        "enabled": false,
+        "files": false,
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "idle_minutes": 10,
+        "last": null,
+        "load_seconds": null,
+        "need_mb": 3072,
+        "need_mb_measured": false,
+        "pending": false,
+        "state": "off",
+        "state_why": "not running - it starts when Jarvis speaks in a custom voice",
+        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+      },
+      "engines": {
+        "f5": {
+          "available": false,
+          "where": "the second graphics card",
+          "why": "not running - it starts when Jarvis speaks in a custom voice"
+        },
+        "kokoro": {
+          "available": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        },
+        "zipvoice": {
+          "available": false,
+          "where": "this PC's processor",
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+        }
+      },
+      "face_voice": {
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": "keep",
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
+        "face": "redpanda",
+        "line": "Off: the built-in voice stays the same whatever the face.",
+        "name": "Red Panda",
+        "offer": null,
+        "speaking": false,
+        "title": "Voice follows the face"
+      },
+      "fallback": "",
+      "last": null,
+      "limits": {
+        "max_clip_bytes": 2900000,
+        "max_name_chars": 40,
+        "max_seconds": 10.0,
+        "max_transcript_chars": 300,
+        "max_voices": 20,
+        "min_seconds": 3.0
+      },
+      "pending": null,
+      "sentences": [
+        "Good morning. I checked your calendar, and you have two meetings this afternoon.",
+        "The quick brown fox jumps over the lazy dog, then runs back home for dinner.",
+        "It is a bright, cool day, with a gentle breeze coming in from the sea.",
+        "Your parcel arrived at noon, and I left a reminder to open it this evening.",
+        "Would you like me to read that again, a little more slowly this time?"
+      ],
+      "speaker": {
+        "choice": "0",
+        "choices": [
+          {
+            "id": "0",
+            "label": "American (female)"
+          },
+          {
+            "id": "1",
+            "label": "American (female) - Bella"
+          },
+          {
+            "id": "2",
+            "label": "American (female) - Nicole"
+          },
+          {
+            "id": "3",
+            "label": "American (female) - Sarah"
+          },
+          {
+            "id": "4",
+            "label": "American (female) - Sky"
+          },
+          {
+            "id": "5",
+            "label": "American (male) - Adam"
+          },
+          {
+            "id": "6",
+            "label": "American (male) - Michael"
+          },
+          {
+            "id": "7",
+            "label": "British (female) - Emma"
+          },
+          {
+            "id": "8",
+            "label": "British (female) - Isabella"
+          },
+          {
+            "id": "9",
+            "label": "British (male) - George"
+          },
+          {
+            "id": "10",
+            "label": "British (male) - Lewis"
+          }
+        ],
+        "default": "0",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "note": "",
+        "title": "Jarvis's built-in voice",
+        "value": 0
+      },
+      "speaking_with": "kokoro",
+      "speed": {
+        "choice": "normal",
+        "choices": [
+          {
+            "id": "slower",
+            "label": "Slower"
+          },
+          {
+            "id": "normal",
+            "label": "Normal"
+          },
+          {
+            "id": "faster",
+            "label": "Faster"
+          }
+        ],
+        "default": "normal",
+        "detail": "Every voice made on your PC speaks at this speed. It changes nothing else, so it never asks first.",
+        "note": "",
+        "title": "How fast Jarvis speaks",
+        "value": 1.0
+      },
+      "timings": [],
+      "voices": [
+        {
+          "builtin": true,
+          "id": "builtin",
+          "name": "Built-in voice",
+          "ready": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        }
+      ]
+    },
+    "face_offer_owl": {
+      "active": "builtin",
+      "active_name": "Built-in voice",
+      "available": true,
+      "better_voice": {
+        "can_turn_on": false,
+        "card": null,
+        "enabled": false,
+        "files": false,
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "idle_minutes": 10,
+        "last": null,
+        "load_seconds": null,
+        "need_mb": 3072,
+        "need_mb_measured": false,
+        "pending": false,
+        "state": "off",
+        "state_why": "not running - it starts when Jarvis speaks in a custom voice",
+        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+      },
+      "engines": {
+        "f5": {
+          "available": false,
+          "where": "the second graphics card",
+          "why": "not running - it starts when Jarvis speaks in a custom voice"
+        },
+        "kokoro": {
+          "available": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        },
+        "zipvoice": {
+          "available": false,
+          "where": "this PC's processor",
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+        }
+      },
+      "face_voice": {
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": "keep",
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
+        "face": "pygmyowl",
+        "line": "Off: the built-in voice stays the same whatever the face.",
+        "name": "Pygmy Owl",
+        "offer": {
+          "face": "pygmyowl",
+          "keep": "Keep my voice",
+          "question": "The Pygmy Owl has its own voice. Use it?",
+          "use": "Use it"
+        },
+        "speaking": false,
+        "title": "Voice follows the face"
+      },
+      "fallback": "",
+      "last": null,
+      "limits": {
+        "max_clip_bytes": 2900000,
+        "max_name_chars": 40,
+        "max_seconds": 10.0,
+        "max_transcript_chars": 300,
+        "max_voices": 20,
+        "min_seconds": 3.0
+      },
+      "pending": null,
+      "sentences": [
+        "Good morning. I checked your calendar, and you have two meetings this afternoon.",
+        "The quick brown fox jumps over the lazy dog, then runs back home for dinner.",
+        "It is a bright, cool day, with a gentle breeze coming in from the sea.",
+        "Your parcel arrived at noon, and I left a reminder to open it this evening.",
+        "Would you like me to read that again, a little more slowly this time?"
+      ],
+      "speaker": {
+        "choice": "0",
+        "choices": [
+          {
+            "id": "0",
+            "label": "American (female)"
+          },
+          {
+            "id": "1",
+            "label": "American (female) - Bella"
+          },
+          {
+            "id": "2",
+            "label": "American (female) - Nicole"
+          },
+          {
+            "id": "3",
+            "label": "American (female) - Sarah"
+          },
+          {
+            "id": "4",
+            "label": "American (female) - Sky"
+          },
+          {
+            "id": "5",
+            "label": "American (male) - Adam"
+          },
+          {
+            "id": "6",
+            "label": "American (male) - Michael"
+          },
+          {
+            "id": "7",
+            "label": "British (female) - Emma"
+          },
+          {
+            "id": "8",
+            "label": "British (female) - Isabella"
+          },
+          {
+            "id": "9",
+            "label": "British (male) - George"
+          },
+          {
+            "id": "10",
+            "label": "British (male) - Lewis"
+          }
+        ],
+        "default": "0",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "note": "",
+        "title": "Jarvis's built-in voice",
+        "value": 0
+      },
+      "speaking_with": "kokoro",
+      "speed": {
+        "choice": "normal",
+        "choices": [
+          {
+            "id": "slower",
+            "label": "Slower"
+          },
+          {
+            "id": "normal",
+            "label": "Normal"
+          },
+          {
+            "id": "faster",
+            "label": "Faster"
+          }
+        ],
+        "default": "normal",
+        "detail": "Every voice made on your PC speaks at this speed. It changes nothing else, so it never asks first.",
+        "note": "",
+        "title": "How fast Jarvis speaks",
+        "value": 1.0
+      },
+      "timings": [],
+      "voices": [
+        {
+          "builtin": true,
+          "id": "builtin",
+          "name": "Built-in voice",
+          "ready": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        }
+      ]
+    },
+    "face_offer_used": {
+      "active": "builtin",
+      "active_name": "Built-in voice",
+      "available": true,
+      "better_voice": {
+        "can_turn_on": false,
+        "card": null,
+        "enabled": false,
+        "files": false,
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "idle_minutes": 10,
+        "last": null,
+        "load_seconds": null,
+        "need_mb": 3072,
+        "need_mb_measured": false,
+        "pending": false,
+        "state": "off",
+        "state_why": "not running - it starts when Jarvis speaks in a custom voice",
+        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+      },
+      "engines": {
+        "f5": {
+          "available": false,
+          "where": "the second graphics card",
+          "why": "not running - it starts when Jarvis speaks in a custom voice"
+        },
+        "kokoro": {
+          "available": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        },
+        "zipvoice": {
+          "available": false,
+          "where": "this PC's processor",
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+        }
+      },
+      "face_voice": {
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": "keep",
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": "use",
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": true,
+        "face": "pygmyowl",
+        "line": "Speaking as the Pygmy Owl: Nicole, a little higher.",
+        "name": "Pygmy Owl",
+        "offer": null,
+        "speaking": true,
+        "title": "Voice follows the face"
+      },
+      "fallback": "",
+      "last": null,
+      "limits": {
+        "max_clip_bytes": 2900000,
+        "max_name_chars": 40,
+        "max_seconds": 10.0,
+        "max_transcript_chars": 300,
+        "max_voices": 20,
+        "min_seconds": 3.0
+      },
+      "pending": null,
+      "sentences": [
+        "Good morning. I checked your calendar, and you have two meetings this afternoon.",
+        "The quick brown fox jumps over the lazy dog, then runs back home for dinner.",
+        "It is a bright, cool day, with a gentle breeze coming in from the sea.",
+        "Your parcel arrived at noon, and I left a reminder to open it this evening.",
+        "Would you like me to read that again, a little more slowly this time?"
+      ],
+      "speaker": {
+        "choice": "0",
+        "choices": [
+          {
+            "id": "0",
+            "label": "American (female)"
+          },
+          {
+            "id": "1",
+            "label": "American (female) - Bella"
+          },
+          {
+            "id": "2",
+            "label": "American (female) - Nicole"
+          },
+          {
+            "id": "3",
+            "label": "American (female) - Sarah"
+          },
+          {
+            "id": "4",
+            "label": "American (female) - Sky"
+          },
+          {
+            "id": "5",
+            "label": "American (male) - Adam"
+          },
+          {
+            "id": "6",
+            "label": "American (male) - Michael"
+          },
+          {
+            "id": "7",
+            "label": "British (female) - Emma"
+          },
+          {
+            "id": "8",
+            "label": "British (female) - Isabella"
+          },
+          {
+            "id": "9",
+            "label": "British (male) - George"
+          },
+          {
+            "id": "10",
+            "label": "British (male) - Lewis"
+          }
+        ],
+        "default": "0",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "note": "While the Pygmy Owl face is showing, its own voice speaks instead (\"Voice follows the face\" is on); this choice is used the rest of the time.",
+        "title": "Jarvis's built-in voice",
+        "value": 0
+      },
+      "speaking_with": "kokoro",
+      "speed": {
+        "choice": "normal",
+        "choices": [
+          {
+            "id": "slower",
+            "label": "Slower"
+          },
+          {
+            "id": "normal",
+            "label": "Normal"
+          },
+          {
+            "id": "faster",
+            "label": "Faster"
+          }
+        ],
+        "default": "normal",
+        "detail": "Every voice made on your PC speaks at this speed. It changes nothing else, so it never asks first.",
+        "note": "",
+        "title": "How fast Jarvis speaks",
+        "value": 1.0
+      },
+      "timings": [],
+      "voices": [
+        {
+          "builtin": true,
+          "id": "builtin",
+          "name": "Built-in voice",
+          "ready": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        }
+      ]
+    },
     "face_showing": {
       "active": "builtin",
       "active_name": "Built-in voice",
@@ -12550,12 +16078,148 @@
         }
       },
       "face_voice": {
-        "default": true,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and a slightly higher pitch. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": "use",
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": true,
         "face": "redpanda",
         "line": "Speaking as the Red Panda: Bella, a little higher.",
         "name": "Red Panda",
+        "offer": null,
         "speaking": true,
         "title": "Voice follows the face"
       },
@@ -12633,7 +16297,7 @@
         ],
         "default": "0",
         "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
-        "note": "While the Red Panda face is showing, its own voice speaks instead (\"Voice follows the face\" is on); this choice is used with any other face.",
+        "note": "While the Red Panda face is showing, its own voice speaks instead (\"Voice follows the face\" is on); this choice is used the rest of the time.",
         "title": "Jarvis's built-in voice",
         "value": 9
       },
@@ -12696,6 +16360,299 @@
         }
       ]
     },
+    "face_unanswered_on": {
+      "active": "builtin",
+      "active_name": "Built-in voice",
+      "available": true,
+      "better_voice": {
+        "can_turn_on": false,
+        "card": null,
+        "enabled": false,
+        "files": false,
+        "files_why": "the F5-TTS model files are not on this PC yet (missing model_1250000.safetensors, vocos/config.yaml and vocos/pytorch_model.bin in ~/.openjarvis/voice-models/f5-tts); backend/README.md, \"The better voice\", has the install",
+        "idle_minutes": 10,
+        "last": null,
+        "load_seconds": null,
+        "need_mb": 3072,
+        "need_mb_measured": false,
+        "pending": false,
+        "state": "off",
+        "state_why": "not running - it starts when Jarvis speaks in a custom voice",
+        "why": "needs a capable second graphics card: no NVIDIA graphics card could be read (nvidia-smi is missing or did not answer)"
+      },
+      "engines": {
+        "f5": {
+          "available": false,
+          "where": "the second graphics card",
+          "why": "not running - it starts when Jarvis speaks in a custom voice"
+        },
+        "kokoro": {
+          "available": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        },
+        "zipvoice": {
+          "available": false,
+          "where": "this PC's processor",
+          "why": "the ZipVoice model files are not on this PC yet (missing tokens, encoder, decoder, vocoder, espeak-ng-data in ~/.openjarvis/voice-models/zipvoice); backend/README.md, \"Custom voices\", has the one-line install"
+        }
+      },
+      "face_voice": {
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": "keep",
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": "use",
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": true,
+        "face": "monkey",
+        "line": "The Monkey will ask once whether to use its own voice.",
+        "name": "Monkey",
+        "offer": {
+          "face": "monkey",
+          "keep": "Keep my voice",
+          "question": "The Monkey has its own voice. Use it?",
+          "use": "Use it"
+        },
+        "speaking": false,
+        "title": "Voice follows the face"
+      },
+      "fallback": "",
+      "last": null,
+      "limits": {
+        "max_clip_bytes": 2900000,
+        "max_name_chars": 40,
+        "max_seconds": 10.0,
+        "max_transcript_chars": 300,
+        "max_voices": 20,
+        "min_seconds": 3.0
+      },
+      "pending": null,
+      "sentences": [
+        "Good morning. I checked your calendar, and you have two meetings this afternoon.",
+        "The quick brown fox jumps over the lazy dog, then runs back home for dinner.",
+        "It is a bright, cool day, with a gentle breeze coming in from the sea.",
+        "Your parcel arrived at noon, and I left a reminder to open it this evening.",
+        "Would you like me to read that again, a little more slowly this time?"
+      ],
+      "speaker": {
+        "choice": "0",
+        "choices": [
+          {
+            "id": "0",
+            "label": "American (female)"
+          },
+          {
+            "id": "1",
+            "label": "American (female) - Bella"
+          },
+          {
+            "id": "2",
+            "label": "American (female) - Nicole"
+          },
+          {
+            "id": "3",
+            "label": "American (female) - Sarah"
+          },
+          {
+            "id": "4",
+            "label": "American (female) - Sky"
+          },
+          {
+            "id": "5",
+            "label": "American (male) - Adam"
+          },
+          {
+            "id": "6",
+            "label": "American (male) - Michael"
+          },
+          {
+            "id": "7",
+            "label": "British (female) - Emma"
+          },
+          {
+            "id": "8",
+            "label": "British (female) - Isabella"
+          },
+          {
+            "id": "9",
+            "label": "British (male) - George"
+          },
+          {
+            "id": "10",
+            "label": "British (male) - Lewis"
+          }
+        ],
+        "default": "0",
+        "detail": "Which of Kokoro's voices Jarvis's built-in voice uses - never a voice you recorded, which stays under \"Voices\" below.",
+        "note": "",
+        "title": "Jarvis's built-in voice",
+        "value": 0
+      },
+      "speaking_with": "kokoro",
+      "speed": {
+        "choice": "normal",
+        "choices": [
+          {
+            "id": "slower",
+            "label": "Slower"
+          },
+          {
+            "id": "normal",
+            "label": "Normal"
+          },
+          {
+            "id": "faster",
+            "label": "Faster"
+          }
+        ],
+        "default": "normal",
+        "detail": "Every voice made on your PC speaks at this speed. It changes nothing else, so it never asks first.",
+        "note": "",
+        "title": "How fast Jarvis speaks",
+        "value": 1.0
+      },
+      "timings": [],
+      "voices": [
+        {
+          "builtin": true,
+          "id": "builtin",
+          "name": "Built-in voice",
+          "ready": false,
+          "why": "the built-in voice's Kokoro files are not on this PC yet (looked under ~/.openjarvis/voice-models/tts)"
+        }
+      ]
+    },
     "face_voice_off": {
       "active": "builtin",
       "active_name": "Built-in voice",
@@ -12733,12 +16690,148 @@
         }
       },
       "face_voice": {
-        "default": true,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and a slightly higher pitch. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": "use",
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
         "enabled": false,
         "face": "redpanda",
         "line": "Off: the built-in voice stays the same whatever the face.",
         "name": "Red Panda",
+        "offer": null,
         "speaking": false,
         "title": "Voice follows the face"
       },
@@ -12916,12 +17009,148 @@
         }
       },
       "face_voice": {
-        "default": true,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and a slightly higher pitch. A voice you recorded still wins. It changes nothing else, so it never asks first.",
-        "enabled": true,
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
         "face": "",
-        "line": "No face is saved on this PC yet, so there is no animal voice to use.",
+        "line": "Off: the built-in voice stays the same whatever the face.",
         "name": "",
+        "offer": null,
         "speaking": false,
         "title": "Voice follows the face"
       },
@@ -13097,12 +17326,148 @@
         }
       },
       "face_voice": {
-        "default": true,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and a slightly higher pitch. A voice you recorded still wins. It changes nothing else, so it never asks first.",
-        "enabled": true,
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
         "face": "",
-        "line": "No face is saved on this PC yet, so there is no animal voice to use.",
+        "line": "Off: the built-in voice stays the same whatever the face.",
         "name": "",
+        "offer": null,
         "speaking": false,
         "title": "Voice follows the face"
       },
@@ -13280,12 +17645,148 @@
         }
       },
       "face_voice": {
-        "default": true,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and a slightly higher pitch. A voice you recorded still wins. It changes nothing else, so it never asks first.",
-        "enabled": true,
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
         "face": "",
-        "line": "No face is saved on this PC yet, so there is no animal voice to use.",
+        "line": "Off: the built-in voice stays the same whatever the face.",
         "name": "",
+        "offer": null,
         "speaking": false,
         "title": "Voice follows the face"
       },
@@ -13473,12 +17974,148 @@
         }
       },
       "face_voice": {
-        "default": true,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and a slightly higher pitch. A voice you recorded still wins. It changes nothing else, so it never asks first.",
-        "enabled": true,
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
         "face": "",
-        "line": "No face is saved on this PC yet, so there is no animal voice to use.",
+        "line": "Off: the built-in voice stays the same whatever the face.",
         "name": "",
+        "offer": null,
         "speaking": false,
         "title": "Voice follows the face"
       },
@@ -13656,12 +18293,148 @@
         }
       },
       "face_voice": {
-        "default": true,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and a slightly higher pitch. A voice you recorded still wins. It changes nothing else, so it never asks first.",
-        "enabled": true,
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
         "face": "",
-        "line": "No face is saved on this PC yet, so there is no animal voice to use.",
+        "line": "Off: the built-in voice stays the same whatever the face.",
         "name": "",
+        "offer": null,
         "speaking": false,
         "title": "Voice follows the face"
       },
@@ -13829,12 +18602,148 @@
         }
       },
       "face_voice": {
-        "default": true,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and a slightly higher pitch. A voice you recorded still wins. It changes nothing else, so it never asks first.",
-        "enabled": true,
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
         "face": "",
-        "line": "No face is saved on this PC yet, so there is no animal voice to use.",
+        "line": "Off: the built-in voice stays the same whatever the face.",
         "name": "",
+        "offer": null,
         "speaking": false,
         "title": "Voice follows the face"
       },
@@ -13997,12 +18906,148 @@
         }
       },
       "face_voice": {
-        "default": true,
-        "detail": "With an animal face showing, Jarvis's built-in voice becomes that animal's: its own voice, pace and a slightly higher pitch. A voice you recorded still wins. It changes nothing else, so it never asks first.",
-        "enabled": true,
+        "animal_choices": {
+          "paces": [
+            {
+              "id": "slower",
+              "label": "Slower"
+            },
+            {
+              "id": "normal",
+              "label": "Normal"
+            },
+            {
+              "id": "faster",
+              "label": "Faster"
+            }
+          ],
+          "pitch": {
+            "max": 4.0,
+            "min": -3.0,
+            "step": 0.5
+          },
+          "voices": [
+            {
+              "id": "0",
+              "label": "American (female)"
+            },
+            {
+              "id": "1",
+              "label": "American (female) - Bella"
+            },
+            {
+              "id": "2",
+              "label": "American (female) - Nicole"
+            },
+            {
+              "id": "3",
+              "label": "American (female) - Sarah"
+            },
+            {
+              "id": "4",
+              "label": "American (female) - Sky"
+            },
+            {
+              "id": "5",
+              "label": "American (male) - Adam"
+            },
+            {
+              "id": "6",
+              "label": "American (male) - Michael"
+            },
+            {
+              "id": "7",
+              "label": "British (female) - Emma"
+            },
+            {
+              "id": "8",
+              "label": "British (female) - Isabella"
+            },
+            {
+              "id": "9",
+              "label": "British (male) - George"
+            },
+            {
+              "id": "10",
+              "label": "British (male) - Lewis"
+            }
+          ]
+        },
+        "animals": [
+          {
+            "answer": null,
+            "changed": false,
+            "face": "redpanda",
+            "line": "Bella, 2 steps higher, at normal pace.",
+            "name": "Red Panda",
+            "own": {
+              "pace": "normal",
+              "semitones": 2.0,
+              "speaker": "1"
+            },
+            "pace": "normal",
+            "semitones": 2.0,
+            "speaker": "1",
+            "voice": "Bella"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "pygmyowl",
+            "line": "Nicole, 1 step higher, a little slower.",
+            "name": "Pygmy Owl",
+            "own": {
+              "pace": "slower",
+              "semitones": 1.0,
+              "speaker": "2"
+            },
+            "pace": "slower",
+            "semitones": 1.0,
+            "speaker": "2",
+            "voice": "Nicole"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "seaotter",
+            "line": "Sarah, 3 steps higher, a little faster.",
+            "name": "Sea Otter",
+            "own": {
+              "pace": "faster",
+              "semitones": 3.0,
+              "speaker": "3"
+            },
+            "pace": "faster",
+            "semitones": 3.0,
+            "speaker": "3",
+            "voice": "Sarah"
+          },
+          {
+            "answer": null,
+            "changed": false,
+            "face": "monkey",
+            "line": "Michael, 1 step higher, at normal pace.",
+            "name": "Monkey",
+            "own": {
+              "pace": "normal",
+              "semitones": 1.0,
+              "speaker": "6"
+            },
+            "pace": "normal",
+            "semitones": 1.0,
+            "speaker": "6",
+            "voice": "Michael"
+          }
+        ],
+        "animals_detail": "Pick a voice, a pitch and a pace for each animal. Its mouth moves with whatever you pick. It changes nothing else, so it never asks first.",
+        "animals_title": "Each animal's voice",
+        "default": false,
+        "detail": "Each animal asks once whether to use its own voice. With this on, only the animals you said yes to speak in their own voice, pace and pitch; off, none do, and your answers are kept. A voice you recorded still wins. It changes nothing else, so it never asks first.",
+        "enabled": false,
         "face": "",
-        "line": "No face is saved on this PC yet, so there is no animal voice to use.",
+        "line": "Off: the built-in voice stays the same whatever the face.",
         "name": "",
+        "offer": null,
         "speaking": false,
         "title": "Voice follows the face"
       },

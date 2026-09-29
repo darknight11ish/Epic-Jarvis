@@ -418,10 +418,19 @@ async fn connect_once(app: &AppHandle, base: &str) -> Result<String, String> {
         return Err(match status.as_u16() {
             // The server's own words for these two, so the message names the
             // fix rather than the symptom.
-            401 => "Jarvis refused this app's token. Open Settings, then \
-                    Connection, and paste the token again. Technical detail: the \
-                    server refused the event stream (HTTP 401, bad or missing token)."
-                .to_string(),
+            // A key the owner removed or retired on the PC says so, in
+            // words (docs/PAIRING-DESIGN.md 5.3), rather than "paste it
+            // again" - pasting the same key again would not help.
+            401 => match crate::devices::refused_key_words(body) {
+                Some(words) => format!(
+                    "{words} Technical detail: the server refused the event stream \
+                     (HTTP 401)."
+                ),
+                None => "Jarvis refused this app's token. Open Settings, then \
+                         Connection, and paste the token again. Technical detail: the \
+                         server refused the event stream (HTTP 401, bad or missing token)."
+                    .to_string(),
+            },
             403 => "Jarvis refused this app. Technical detail: the server refused \
                     the event stream as cross-origin. The desktop client sends \
                     X-Jarvis-Client: hud, so this means JARVIS_HUD_ORIGINS does \

@@ -730,6 +730,19 @@
                       aria-expanded="false" aria-controls="answer-sources-list"></button>
               <div class="answer-used-list" id="answer-sources-list" hidden></div>
             </div>
+            <!-- "A cloud model could give this one a second look."
+                 (jarvis_router.choose()'s gate "offer", docs/JARVIS-API.md,
+                 "`offer` in `X-Jarvis-Route`"): one tap, one question,
+                 never a standing choice. Hidden whenever the answer above
+                 carries no offer, or the owner already acted on it
+                 (main.js). Same fixed wording as the phone's
+                 net/CloudOffer.kt, word for word. -->
+            <div class="answer-cloud-offer" id="answer-cloud-offer" hidden>
+              <p class="answer-cloud-offer-label">A cloud model could give this one a second look.</p>
+              <button class="text-button" type="button" id="cloud-offer-try">Try the cloud model</button>
+              <button class="text-button" type="button" id="cloud-offer-dismiss">Not now</button>
+              <p class="answer-cloud-offer-micro">Sends only this question - nothing else from this conversation.</p>
+            </div>
           </div>
 
           <footer class="card-foot">

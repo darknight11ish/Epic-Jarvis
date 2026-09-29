@@ -3,13 +3,13 @@
 Status (corrected 2026-09-28): **built, reachable from both apps, not yet
 tried against the real sites.** The core (`backend/jarvis_chatbot.py`), its
 routes (`backend/jarvis_chatbot_routes.py`) and both apps' screens
-(`docs/JARVIS-API.md` section 60); Gemini's website adapter
+(`docs/JARVIS-API.md` section 87); Gemini's website adapter
 (`backend/jarvis_chatbot_gemini.py`, driven openly as the owner chose).
 Since "the chatbot driver becomes versatile" (owner, 2026-09-28), eight
 more websites are built the same open way over one shared base
 (`backend/jarvis_chatbot_web.py`): ChatGPT, Claude, Copilot, Perplexity,
 DeepSeek, Grok, Le Chat and Meta AI, each with its own spare account and
-self-check, none yet tried against its real site (section 60.5); the API
+self-check, none yet tried against its real site (section 87.5); the API
 adapters (`backend/jarvis_chatbot_api.py`: OpenAI, DeepSeek, Mistral, xAI,
 OpenRouter, Groq, one key each); "a second AI on this PC"
 (`backend/jarvis_chatbot_local.py`); and "Ask several and compare"
@@ -125,7 +125,7 @@ and a daily ceiling, but **a monthly limit per API service, set on the PC**
 left ("About $4.55 of $5.00 left this month for OpenAI (prices are
 estimates you can correct on the PC).") instead of setting an amount per
 conversation. How it works (`backend/jarvis_chatbot_api.py`, JARVIS-API
-§60.4.1):
+§87.4.1):
 
 - **No limit, no conversation**: a service with a key but no monthly limit
   is not ready, and says so, before any card.
@@ -333,7 +333,7 @@ real sites** (like everything above). The owner's decision (CLAUDE.md,
 "The chatbot driver becomes versatile", point 4): "compare: ask several AIs
 the same question, one card listing every AI it will ask, one summary of
 agreements, disagreements and sources." Routes and fields:
-`docs/JARVIS-API.md` section 60.7.
+`docs/JARVIS-API.md` section 87.7.
 
 ### In plain words
 
@@ -628,7 +628,7 @@ The owner's decision (CLAUDE.md, "A captcha can be handed to the owner's
 phone"), item 2 of the build queue. Every website adapter already stops at a
 captcha, a sign-in page or an "unusual activity" page and asks the owner
 (section 1, "driven openly"); until now the only place to deal with it was
-the window on the PC. `jarvis_handoff.py` (JARVIS-API §60.8) adds the phone:
+the window on the PC. `jarvis_handoff.py` (JARVIS-API §87.8) adds the phone:
 
 - **The alert** names the site and the reason only, on its own channel,
   always kept on the phone, and says nothing about the site while App lock

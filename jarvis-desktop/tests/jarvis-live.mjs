@@ -200,14 +200,46 @@ await check("the commands are registered, allowed and held by the bar and the ba
   }
   const bar = JSON.parse(read("src-tauri/capabilities/quickbar.json"));
   assert.ok(bar.permissions.includes("live"));
+  assert.ok(bar.permissions.includes("live-hold"), "the bar holds the microphone for cards and answers");
   const badge = JSON.parse(read("src-tauri/capabilities/live-badge.json"));
   assert.deepEqual(badge.windows, ["live-badge"]);
   assert.ok(badge.permissions.includes("live"));
+  // The badge never calls live_hold, so it does not hold it (audit #5).
+  assert.ok(!badge.permissions.includes("live-hold"));
+  assert.ok(!read("src/live-badge.js").includes("live_hold"));
+  const toml = read("src-tauri/permissions/surfaces.toml");
+  const liveSet = toml.slice(toml.indexOf('identifier = "live"\n'), toml.indexOf('identifier = "live-hold"'));
+  assert.ok(liveSet.length > 0 && !liveSet.includes("allow-live-hold"), "live_hold is its own set");
   assert.ok(!badge.permissions.includes("voice") && !badge.permissions.includes("approvals"));
   for (const f of ["brain.json", "settings.json", "widget.json", "hud.json", "floating.json", "faces.json"]) {
     const cap = JSON.parse(read(`src-tauri/capabilities/${f}`));
     assert.ok(!cap.permissions.includes("live"), f);
+    assert.ok(!cap.permissions.includes("live-hold"), f);
   }
+});
+
+await check("talk-to-type and Live on the microphone: two-sided, and the words name Jarvis Live (audit #1)", () => {
+  const tt = read("src-tauri/src/talk_type.rs");
+  const free = tt.slice(tt.indexOf("fn mic_free"), tt.indexOf("/// Is the switch on?"));
+  const liveAt = free.indexOf("LIVE_MODE");
+  assert.ok(liveAt > 0 && liveAt < free.indexOf("AutoListenState"), "Live is asked before the hey Jarvis listener");
+  assert.ok(free.includes("Err(MIC_LIVE)"));
+  const rules = read("src-tauri/src/talk_type/rules.rs");
+  const m = rules.match(/const MIC_LIVE: &str = "([^;]*)";/s);
+  assert.ok(m && m[1].includes("Jarvis Live") && !m[1].includes("hey Jarvis"), "MIC_LIVE names Jarvis Live");
+  // A pause ending while talk-to-type holds the microphone makes Live wait, not end.
+  const live = read("src-tauri/src/live.rs");
+  const hold = live.slice(live.indexOf("fn apply_hold"), live.indexOf("fn spawn_watcher"));
+  assert.ok(hold.includes("MicStep::WaitForTalkType") && hold.includes("mic_busy()"));
+  assert.ok(live.includes('out["micWait"] = serde_json::json!(WAIT_TALK_TYPE)'));
+  // #7: talk-to-type stops an animal's "Try it" before the microphone opens.
+  const start = tt.slice(tt.indexOf("async fn start("), tt.indexOf("fn open_microphone("));
+  const emitAt = start.indexOf("VOICE_CAPTURE_STARTED");
+  assert.ok(emitAt > 0 && emitAt < start.indexOf("open_microphone(opener"), "Try it stops first");
+  // #2: Settings recording during Live says Live ended.
+  const vt = read("src-tauri/src/voice_training.rs");
+  assert.ok(vt.includes('"Jarvis Live ended because Settings is recording."'));
+  assert.ok(vt.includes("LIVE_MODE") && vt.includes("LIVE_ENDED_FOR_SETTINGS"));
 });
 
 await check("no clash with the Brain's \"Live\" tab: the bar's ids are jarvis-live-*", () => {
@@ -284,6 +316,42 @@ if (K) {
     return page;
   };
   const hear = (page, heard) => page.evaluate((h) => window.__emit("voice-heard", h), heard);
+
+  await check("talk-to-type holding the microphone: the sign says Live is waiting for it", async () => {
+    const page = await K.open(browser, base, "index.html", { chatReplies: [] });
+    const WAIT = "Talk-to-type is using the microphone. Jarvis Live listens again when you let go of its key.";
+    await page.evaluate(([st, w]) => window.__emit("live-status", { status: st, stale: false, micWait: w }), [ON, WAIT]);
+    await page.waitForTimeout(100);
+    assert.equal((await page.textContent("#jarvis-live-detail")).trim(), WAIT);
+    await page.evaluate((st) => window.__emit("live-status", { status: st, stale: false }), ON);
+    await page.waitForTimeout(100);
+    assert.notEqual((await page.textContent("#jarvis-live-detail")).trim(), WAIT, "gone once it lets go");
+    await page.close();
+  });
+
+  await check("the badge: a refused button's words stay about six seconds, through the watcher's repaints (audit #6)", async () => {
+    const page = await K.open(browser, base, "live-badge.html", { chatReplies: [] });
+    await page.evaluate(() => {
+      const real = window.__TAURI__.core.invoke;
+      window.__TAURI__.core.invoke = (cmd, args) => cmd === "live_stop"
+        ? Promise.reject(new Error("The connection to Jarvis is catching up.")) : real(cmd, args);
+    });
+    await page.evaluate((st) => window.__emit("live-status", { status: st, stale: false }), ON);
+    await page.waitForTimeout(50);
+    await page.click("#stop");
+    await page.waitForTimeout(50);
+    const WORDS = "The connection to Jarvis is catching up.";
+    assert.equal((await page.textContent("#detail")).trim(), WORDS);
+    // The watcher repaints every second: the words stay.
+    await page.evaluate((st) => window.__emit("live-status", { status: st, stale: false }), ON);
+    await page.waitForTimeout(1200);
+    await page.evaluate((st) => window.__emit("live-status", { status: st, stale: false }), ON);
+    assert.equal((await page.textContent("#detail")).trim(), WORDS);
+    await page.waitForTimeout(5200);
+    await page.evaluate((st) => window.__emit("live-status", { status: st, stale: false }), ON);
+    assert.notEqual((await page.textContent("#detail")).trim(), WORDS, "gone after about six seconds");
+    await page.close();
+  });
 
   await check("the sign in the bar: title, minutes, End Live and Mic off, the end hint; the Live button pressed", async () => {
     const page = await bar([]);

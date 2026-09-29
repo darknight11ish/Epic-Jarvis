@@ -53,9 +53,9 @@ from this file, so a new section needs a phone decision too. Said plainly here r
 claimed as a feature: a per-app wording would need the backend to read
 `X-Jarvis-Client` for this, which it does not do today.
 
-ADJUSTABLE covers ten settings behind a SINGLE existing boolean or choice
-function, picked because each already has a proven `handle_*`/`request_*`
-entry point this file can call exactly as the REST route does:
+ADJUSTABLE covers eleven settings behind a SINGLE existing boolean or
+choice function, picked because each already has a proven `handle_*`/
+`request_*` entry point this file can call exactly as the REST route does:
   * web_search_provider  - jarvis_search.use()            (already a quick
                             path: jarvis_quick._web_search/_run_search; kept
                             registered here for "open web search" and so
@@ -67,6 +67,7 @@ entry point this file can call exactly as the REST route does:
   * lights_without_card   - jarvis_asks_first.handle_lights()
   * ask_before_every_search - jarvis_search.request_ask_every_time()
   * smartwatch_notifications - jarvis_watch_notify.request()
+  * phone_notifications   - jarvis_phone_notifications.request() (2026-09-28)
   * briefing_senders      - jarvis_briefing.handle_senders()
   * loosen_asks_first     - jarvis_asks_first.handle_tier()   (PC_ONLY_ACTIONS)
   * enable_reading_tool   - jarvis_asks_first.handle_tools()  (PC_ONLY_ACTIONS)
@@ -75,7 +76,9 @@ Left OUT of "adjust", on purpose, said plainly rather than guessed at:
   * Voice (speed, built-in speaker, the better voice, voice follows the
     face - that last one IS a single on/off, but it lives on the voice
     screen with the rest and has not been offered as a spoken "adjust";
-    "open Jarvis's voice" reaches it), hardware/models, the
+    "open Jarvis's voice" reaches it; each animal's own voice, pitch and
+    pace, 2026-09-28, is a multi-field row, so open-only too),
+    hardware/models, the
     second graphics card, the big model, backups, custom voices, and
     Accounts (credentials) - each is either a multi-field control with no
     single "on/off" a spoken sentence maps to safely, or (Accounts) a
@@ -161,6 +164,8 @@ SECTIONS: tuple = (
             app="desktop"),
     Section("watch-notify", ("smartwatch notifications", "watch notifications"),
             app="phone"),
+    Section("phone-notify", ("phone notifications", "reading phone notifications",
+                            "notifications on my phone"), app="phone"),
 )
 
 #: id -> Section, for a direct lookup once a name has matched.
@@ -279,6 +284,17 @@ def set_watch_notify(on: bool, *, peer=None, local=None) -> Outcome:
     except Exception:
         return _missing("smartwatch notifications")
     code, out = WN.request(bool(on), WN.set_enabled)
+    return _say(code, out)
+
+
+# --- reading phone notifications (jarvis_phone_notifications.py) ----------
+
+def set_phone_notifications(on: bool, *, peer=None, local=None) -> Outcome:
+    try:
+        import jarvis_phone_notifications as PN
+    except Exception:
+        return _missing("reading phone notifications")
+    code, out = PN.request(bool(on), PN.set_enabled)
     return _say(code, out)
 
 
@@ -445,6 +461,10 @@ BOOL_SETTINGS: tuple = (
                ("smartwatch notifications", "watch notifications",
                 "notifications on my watch"),
                "watch-notify", set_watch_notify),
+    BoolSetting("phone_notifications",
+               ("phone notifications", "reading phone notifications",
+                "notifications on my phone"),
+               "phone-notify", set_phone_notifications),
     BoolSetting("briefing_senders",
                ("senders in my briefing", "showing senders in my briefing",
                 "email senders in the morning briefing"),

@@ -779,6 +779,278 @@ def _plain_prepare(label: str) -> Callable[[dict], tuple]:
     return lambda args: (None, f"{label}: {json.dumps(args, ensure_ascii=False)}")
 
 
+# --------------------------------------------------------------------------
+#   "One card, several steps" - the plan card (jarvis_plan.py, SWITCHED OFF;
+#   the owner's own words, 2026-09-28). See docs/JARVIS-API.md §60 and
+#   jarvis_plan.py's own docstring for the full design; this is the wiring.
+# --------------------------------------------------------------------------
+#
+# Tools a plan step may never name. Each of these has its own bespoke,
+# TURN-shaped check in _one_call, before it ever reaches the generic
+# Tool.prepare()/gate/execute() contract _plan_step_dispatch reuses for
+# every other step:
+#   - the SCHEDULE_TOOLS' own Tool.execute is a dummy that always returns
+#     {"ok": False} - the real path is _schedule_call, not the Tool
+#     contract at all;
+#   - send_email/draft_email are refused outright by their own rule-1 lane
+#     check and "problem" state (_send_email_refusal, _draft_email_refusal)
+#     BEFORE prepare() ever runs - a check this dispatcher does not
+#     reproduce;
+#   - propose_plan itself, so a plan cannot name a step that starts another
+#     plan.
+# A step naming one of these is refused with a plain reason, rather than
+# guessing at a smaller version of a check this file is most careful about
+# getting right.
+_PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "propose_plan"})
+
+#: The gate action a plan step is put to when it must be asked about on its
+#: own card (marked risky, or filled in from an earlier step's result) but
+#: its own tool's tier would not ask ("auto"/"notify"): the plan's own "ask"
+#: action, so a real card is raised and only a person's yes lets it run.
+#: Bug audit 2026-09-28, F2: before this, such a step was put to the gate at
+#: its own tier and an auto-tier tool ran with nobody asked, although the
+#: plan card had promised "asks again on its own card".
+PLAN_STEP_ASK_ACTION = "run_plan"
+
+
+def _plan_step_excluded(tool_name: str) -> bool:
+    """True for a tool a plan step may never name (see _PLAN_EXCLUDED_STEPS
+    just above). Checks SCHEDULE_TOOLS by NAME, not by copying its members
+    into a second set here - SCHEDULE_TOOLS is defined further down in this
+    file, but that is fine: this function is only ever called once a turn
+    is actually running, by which point the whole module has loaded, and a
+    second, hand-kept copy of its members is exactly the kind of list that
+    quietly drifts from the one it was copied from (CLAUDE.md: the phone's
+    and desktop's own "open a chat" phrase lists, before they were unified)."""
+    return tool_name in _PLAN_EXCLUDED_STEPS or tool_name in SCHEDULE_TOOLS
+
+
+class _PlanStepVerdict:
+    """The same shape jarvis_plan.run()'s gate_check contract needs
+    (.allowed, and for the record .outcome/.reason) - for a step this
+    dispatcher refused before it ever reached the real gate (an unknown or
+    excluded tool, a broken prepare(), a length or card-count refusal). A
+    step that DID reach jarvis_gate keeps the REAL verdict object
+    jarvis_gate.check() returned, completely unchanged - so the plan's own
+    audit trail (outcome, tier, request_id) is the exact same one every
+    other tool call already gets, never a stand-in for it."""
+
+    def __init__(self, allowed: bool, reason: str = "", outcome: str = ""):
+        self.allowed = allowed
+        self.reason = reason
+        self.outcome = outcome or ("approved" if allowed else "refused")
+
+
+def _plan_step_dispatch(tools: dict, names: list, checker, watch: "_TurnWatch",
+                        announce, checkpoint, out: "_Out"):
+    """Builds the matched (gate_check, run_step) pair `jarvis_plan.run()`
+    needs to execute one step of an approved plan - through the SAME
+    per-tool contract a direct model call to that tool already goes
+    through: check_call's own schema check, tool.prepare(), the real
+    jarvis_gate.action_for_tool() lookup, the real checker() call (which
+    silently auto-approves an auto-tier tool and genuinely asks an
+    ask-tier one, exactly as it does for a direct call), and only then
+    tool.execute() - never a shortcut around any of that.
+
+    WHY THIS DOES ITS OWN GATE CHECK RATHER THAN TRUSTING THE MODEL'S OWN
+    `risky`/`from_step` FLAGS: `jarvis_plan.run()` calls the `gate_check`
+    it is given ONLY for a step the model itself marked as needing one
+    (`step.needs_own_card`); a step it did NOT mark goes straight to
+    `run_step`, with no separate gate_check call at all. That flag is the
+    model's own self-report, not the tool's real configured tier - trusting
+    it alone would let a step the model happened to call "safe" run an
+    "ask"-tier tool with nobody really asked, which is exactly the shortcut
+    this dispatcher must not be (CLAUDE.md: "never a shortcut that skips a
+    tool's own prepare()/gate check"). So the real check lives in
+    `_resolve`, called by BOTH `gate_check` and `run_step`, and cached by
+    the step's own identity (`id(step)`): whichever of the two
+    `jarvis_plan.run()` calls first for a given step is the one that
+    actually asks (or is silently auto-approved, for an auto-tier tool);
+    the other, when it is also called for that same step, reads the same
+    cached verdict back rather than asking a second card for it.
+
+    Deliberately simplified, and left that way rather than guessed at
+    further (see the module docstring and the wiring's own commit/report):
+    a plan step gets no "lights without a card" bypass (LIGHTS_WITHOUT_CARD)
+    even when the owner's setting would normally give one to a direct
+    home_control call - it always goes through the real gate instead, which
+    is stricter than necessary, never a bypass. A plugin (outside_program)
+    tool can never be named by a step at all (see _PLAN_EXCLUDED_STEPS's
+    own docstring for the rest of that list, and why)."""
+    cache: dict = {}   # id(step) -> (tool, state, checked_args, verdict)
+
+    def _resolve(step):
+        key = id(step)
+        if key in cache:
+            return cache[key]
+
+        def refuse(reason: str, outcome: str = ""):
+            v = _PlanStepVerdict(False, reason=reason, outcome=outcome)
+            cache[key] = (None, None, None, v)
+            return cache[key]
+
+        if _plan_step_excluded(step.tool):
+            return refuse(f"{step.tool} cannot be run as a plan step - ask for it directly "
+                         f"instead.")
+        tool = tools.get(step.tool) if step.tool in names else None
+        if tool is None:
+            return refuse(f"{step.tool!r} is not a tool Jarvis has on this turn.")
+        if getattr(tool, "outside_program", False) is True:
+            return refuse(f"{step.tool} is a tool from a plug-in program, which cannot be "
+                         f"run as a plan step - ask for it directly instead.")
+        checked_args, problem = check_call(step.tool, step.args, names, tools)
+        if problem is not None:
+            return refuse(problem)
+        if (step.tool == FILES_TOOL
+                and str(checked_args.get("action") or "").strip().lower() == "read"):
+            if watch.file_parts >= FILES_PARTS_PER_TURN:
+                return refuse(FILES_PARTS_REFUSED.format(n=watch.file_parts))
+            watch.file_parts += 1
+        try:
+            state, plan_text = tool.prepare(checked_args)
+        except Exception as exc:
+            return refuse(f"{step.tool} could not accept its arguments: "
+                         f"{type(exc).__name__}: {exc}")
+        lookup_name = tool.gate_lookup_name(checked_args) if tool.gate_lookup_name else step.tool
+        action_name = lookup_name
+        try:
+            import jarvis_gate
+            action_name, _ = jarvis_gate.action_for_tool(lookup_name, checked_args)
+        except Exception:
+            pass
+        # A step the plan card promised would ask again on its own card
+        # (risky, or result-filled), and a note write once this turn - this
+        # plan included - has read outside text (NOTE_WRITES, the 2026-09-24
+        # rule the direct path already follows): each needs a PERSON's yes.
+        # When the tool's own tier would not ask, it goes to the gate as an
+        # "ask" action instead - never "never", which stays refused.
+        note_why = watch.note_needs_a_person() if step.tool in NOTE_WRITES else ""
+        must_ask = bool(step.needs_own_card or note_why)
+        if must_ask and _tier_of(action_name) in ("auto", "notify"):
+            action_name = NOTE_AFTER_OUTSIDE_ACTION if note_why else PLAN_STEP_ASK_ACTION
+        shaped = f"Plan step - {step.why}\n\n{plan_text}"
+        if note_why:
+            shaped = f"{note_why}\n\n{shaped}"
+        if _card_would_be_cut(step.tool, action_name, shaped):
+            return refuse("refused: this step's own card would be too long to show in "
+                         "full, so nobody was asked and it did not run.")
+        if watch.cards >= CARDS_PER_TURN and _would_ask(step.tool, action_name):
+            return refuse(CARD_LIMIT_ERROR.format(n=CARDS_PER_TURN))
+        out.set_status("approval")
+        verdict = checker(action_name, {"text": shaped},
+                          f"plan step {step.tool} "
+                          f"{json.dumps(checked_args, ensure_ascii=False)[:1500]}")
+        out.card_answered(verdict)
+        out.set_status("thinking")
+        if _a_card_was_shown(verdict):
+            watch.cards += 1
+        if (getattr(verdict, "allowed", False)
+                and (step.tool in NEEDS_A_PERSON or must_ask)
+                and not _a_person_said_yes(verdict)):
+            vtier = getattr(verdict, "tier", None) or "unknown"
+            why_person = (NEEDS_A_PERSON[step.tool] if step.tool in NEEDS_A_PERSON
+                          else "was promised its own card on the plan card"
+                          if step.needs_own_card
+                          else "writes a note after Jarvis read outside text")
+            verdict = _PlanStepVerdict(
+                False, outcome=str(getattr(verdict, "outcome", None) or "unknown"),
+                reason=(f"{step.tool} {why_person}, so it only runs after "
+                        f"the owner approves it on a card - but the approval gate let it "
+                        f"through at tier {vtier!r} without asking anyone. Nothing ran. "
+                        f"To use it, set {action_name} to \"ask\" in "
+                        f"jarvis-framework.toml's [autonomy.tiers]."))
+        cache[key] = (tool, state, checked_args, verdict)
+        return cache[key]
+
+    def gate_check(step):
+        _, _, _, verdict = _resolve(step)
+        return verdict
+
+    def run_step(step):
+        tool, state, checked_args, verdict = _resolve(step)
+        if not getattr(verdict, "allowed", False):
+            raise RuntimeError(f"refused: {getattr(verdict, 'reason', 'not approved')}")
+        kwargs = {}
+        if tool.needs_announce:
+            kwargs["announce"] = announce
+        if step.tool in _TASK_MODULES:
+            kwargs["checkpoint"] = checkpoint
+        result = tool.execute(checked_args, state, **kwargs)
+        # Each step's result is outside text for the rest of the turn, just
+        # as a direct call's is: what it read, its sources, and - for a later
+        # note write in this same plan - the "after outside text" rule above
+        # (bug audit 2026-09-28, F4).
+        try:
+            watch.took_in(step.tool, result)
+        except Exception:
+            pass
+        return result
+
+    return gate_check, run_step
+
+
+def _prepare_propose_plan(args: dict):
+    import jarvis_plan
+    plan_obj = jarvis_plan.propose(str(args.get("goal", "")), args.get("steps") or [],
+                                   tainted=False)
+    return plan_obj, jarvis_plan.describe(plan_obj)
+
+
+def _run_propose_plan(args: dict, plan_obj, *, announce=None, checkpoint=None,
+                      checker=None, watch=None, tools=None, names=None,
+                      out=None, **_) -> dict:
+    """Runs an approved plan: the SAFE steps at once, on the strength of the
+    one card that just approved this call; a risky or result-filled step's
+    own separate card is asked mid-run by _plan_step_dispatch, exactly as
+    jarvis_plan.run()'s own contract requires. `checker`/`watch`/`tools`/
+    `names`/`out` are wired only by _one_call's own "name == 'propose_plan'"
+    branch - never omitted there - because without them a step could not be
+    gate-checked at all; called with any of them missing, this refuses
+    rather than silently letting steps run unchecked."""
+    if plan_obj is None:
+        return {"ok": False, "error": "the plan mechanism is not available here"}
+    if checker is None or watch is None or out is None:
+        return {"ok": False, "error": "refused: the plan runner is missing its own gate "
+                                      "wiring, so no step could be checked. Nothing ran."}
+    import jarvis_plan
+    gate_check, run_step = _plan_step_dispatch(
+        tools if tools is not None else TOOLS,
+        names if names is not None else list(TOOLS),
+        checker, watch, announce, checkpoint, out)
+    return jarvis_plan.run(plan_obj, run_step=run_step, gate_check=gate_check,
+                           announce=announce, checkpoint=checkpoint, approved=True)
+
+
+def _propose_plan_refusal(watch: "_TurnWatch") -> str:
+    """Why this turn may not even propose a plan, or "". Checked in
+    _one_call BEFORE tool.prepare() ever runs - the same point send_email
+    and draft_email are refused outright - so a refused proposal is never
+    even built, let alone shown. Fails closed: a missing jarvis_plan.py, or
+    a safety-gate result this PC has not measured yet, both refuse rather
+    than guess.
+
+    Combines the same signals note_needs_a_person() already treats as "not
+    really the owner's own words right now" (a reading tool ran this turn,
+    the conversation is tainted, the newest message was not typed or said
+    by the owner, or the app added its own context) into the single
+    `tainted` flag jarvis_plan.propose() itself checks - a plan is at least
+    as sensitive as a note write, and a planted instruction is exactly what
+    a plausible-sounding multi-step plan would be a good way to hide
+    (jarvis_plan.py's own docstring)."""
+    try:
+        import jarvis_plan
+    except Exception as exc:
+        return f"refused: the plan mechanism is not available here ({type(exc).__name__})."
+    lane = getattr(watch, "lane", None)
+    model = lane.get("model") if isinstance(lane, dict) else None
+    ok, why = jarvis_plan.enabled(model or "jarvis-primary")
+    if not ok:
+        return f"refused: {why}"
+    if watch.tainted or watch.read or watch.provenance or watch.app_context:
+        return jarvis_plan.refusal_for_taint(True)
+    return ""
+
+
 TOOLS: dict = {
     "calculator": Tool(
         "calculator", "Evaluate a plain arithmetic expression.",
@@ -1087,6 +1359,40 @@ TOOLS: dict = {
         gate_lookup_name=lambda args: "create_joplin_note",
         instead={"append_obsidian_daily": "To add to today's daily note, use "
                                           "append_obsidian_daily."}),
+    # "One card, several steps" - the plan card (jarvis_plan.py; the
+    # owner's own words, 2026-09-28). SWITCHED OFF until jarvis_plan.
+    # enabled() says a real run of tools/tool_eval/ollama_tool_eval.py on
+    # THIS model has cleared its two safety bars - checked in
+    # _propose_plan_refusal, BEFORE prepare() ever runs, the same point
+    # send_email/draft_email are refused outright (see _one_call). Its
+    # gate_lookup_name resolves to "run_plan" (tier "ask" - jarvis_plan's
+    # OWN "propose_plan" gate action stays "auto": nothing has happened yet
+    # at prepare() time, the same reason jarvis_ui_control_plan is auto),
+    # so the real card the owner sees is titled from
+    # jarvis_card_words.TITLES["run_plan"]. Each step's own tool then goes
+    # through the exact same prepare()/gate/execute() contract a direct
+    # call to it would (_plan_step_dispatch): a risky or result-filled
+    # step, or one whose real configured tier needs a person regardless of
+    # what the model called it, always asks again on its own separate
+    # card.
+    "propose_plan": Tool(
+        "propose_plan",
+        "Propose a short plan (up to 8 steps) using your other tools, shown as ONE "
+        "approval card. Only from the owner's own words, never after reading outside "
+        "text. Mark a step `risky`, or set `from_step` and write {{step N}} where an "
+        "earlier step's result goes - both always get their own card first. send_email, "
+        "draft_email and timers/reminders/the to-do list cannot be steps.",
+        {"type": "object", "properties": {
+            "goal": {"type": "string"},
+            "steps": {"type": "array", "items": {"type": "object", "properties": {
+                "tool": {"type": "string"}, "args": {"type": "object"}, "why": {"type": "string"},
+                "risky": {"type": "boolean", "description": "ask again before running"},
+                "from_step": {"type": "integer", "description": "earlier step depended on"}},
+                "required": ["tool", "why"]}}},
+         "required": ["goal", "steps"]},
+        _prepare_propose_plan, _run_propose_plan,
+        needs_announce=True,
+        gate_lookup_name=lambda args: "run_plan"),
     # Timers, alarms, reminders and the to-do list (jarvis_schedule.py). Most
     # of these never reach the model: jarvis_quick.py answers the plain ones
     # in /api/chat before the model is asked (schedule.patch). These are for
@@ -1354,6 +1660,8 @@ NEEDS_A_PERSON = {
     "home_control": "changes something real in the house",
     "send_email": "sends an email in the owner's name, which cannot be taken back",
     "draft_email": "writes into the owner's own Drafts folder on their mail account",
+    "propose_plan": "runs the safe steps of an approved plan at once, which can do "
+                    "anything the tools inside it can do",
 }
 
 #: The same rule for every tool from a plug-in program (jarvis_mcp.py): a
@@ -3441,8 +3749,18 @@ TOOL_GROUPS = (
     ("documents", "find and read files in the folders the owner listed", ("my_files",)),
     ("files", "read a file on this PC, run a command", ("file_read", "shell_exec")),
     ("github", "check GitHub for an existing library", ("github_search",)),
+    # propose_plan (jarvis_plan.py, "one card, several steps") joins this
+    # group rather than starting a new one: a NEW group's name would add
+    # to more_tools' own description and enum every turn (more_tools_schema
+    # lists every group by NAME, never by member), which is already near
+    # its own 300-token budget (test_short_tool_list.py) - a group's members
+    # cost nothing extra there. It fits: like the other three, it is a more
+    # involved, multi-step way of acting, never a plain read or a plain
+    # write - and it SHIPS OFF regardless (jarvis_plan.enabled()) until the
+    # safety test clears it, so being grouped with three tools that are
+    # already offered by default costs nothing while it stays off.
     ("control", "click or type in a program, tap on the phone, drive a web page",
-     ("control_computer", "control_phone", "browser_control")),
+     ("control_computer", "control_phone", "browser_control", "propose_plan")),
     # The plug-in programs (jarvis_mcp.py). Their tools are reached ONLY
     # through here - never in the core, whether or not the short list is on.
     ("plugins", "read-only tools from plug-in programs on this PC", ()),
@@ -4456,17 +4774,36 @@ def _note_side_talk(text: str) -> None:
         pass
 
 
+def _chat_model_now() -> Optional[str]:
+    """jarvis_power_switch.chat_model() - the everyday model chat uses now -
+    or JARVIS_MODEL when that module is not here."""
+    try:
+        import jarvis_power_switch
+        got = jarvis_power_switch.chat_model()
+    except Exception:
+        got = None
+    return got or (os.environ.get("JARVIS_MODEL") or "").strip() or None
+
+
 def warm_everyday(ollama_url: Optional[str] = None, model: Optional[str] = None) -> bool:
     """Loads the everyday model into the graphics card now (Ollama's own
     "load with an empty prompt"), so Jarvis Live's first answer does not wait
     for it. THIS PC's Ollama only; never a cloud model. Best effort: False
-    when it could not. jarvis_live.py calls it - never on Standby."""
+    when it could not. jarvis_live.py calls it - never on Standby.
+
+    With no `model`, the model chat really uses right now
+    (jarvis_power_switch.chat_model: the owner's current model, else
+    JARVIS_MODEL) - after a switch from the phone, warming the old name
+    would load a second model onto a card with room for one (effectiveness
+    audit 2026-09-28, 3.2). No keep_alive is sent, so Ollama's own setting
+    (OLLAMA_KEEP_ALIVE=-1, MODEL-TOPOLOGY) is left alone - the preload
+    jarvis_power_switch.warm_up already does the same."""
     url = (ollama_url or os.environ.get("OLLAMA_URL") or "http://127.0.0.1:11434").rstrip("/")
-    name = model or os.environ.get("JARVIS_MODEL") or "jarvis-primary"
+    name = model or _chat_model_now() or "jarvis-primary"
     try:
         if not _is_this_machine(url) or local_model_refusal(url, name):
             return False
-        _get_json(f"{url}/api/generate", {"model": name, "keep_alive": "30m"}, timeout=120.0)
+        _get_json(f"{url}/api/generate", {"model": name}, timeout=120.0)
         return True
     except Exception:
         return False
@@ -4776,6 +5113,24 @@ def crisis_shown_before(messages) -> bool:
         return bool(jarvis_wellbeing.shown_before(messages))
     except Exception:
         return False
+
+
+def serious_moment(step: str, *args) -> None:
+    """The serious moment (jarvis_wellbeing.py; the owner's decision of
+    2026-09-28, "At serious moments the animals drop the cute gestures"):
+    `step` is "begin" (a crisis turn starts), "calm" (an ordinary one
+    starts) or "end" (the crisis turn ended; `args` = its length in words).
+    While it lasts, say() speaks in the plain built-in voice and both apps
+    hear a `wellbeing` event, {"serious": true | false}, for the neutral
+    pose. Cosmetic only: a missing or older module, or anything at all
+    going wrong, changes nothing and never costs the owner their answer."""
+    try:
+        import jarvis_wellbeing
+        fn = getattr(jarvis_wellbeing, "serious_" + str(step), None)
+        if fn is not None:
+            fn(*args)
+    except Exception:
+        pass
 
 
 def keep_rules_first(msgs: list) -> list:
@@ -5638,6 +5993,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             watch.stop_mark = sa.begin_turn()
         except Exception:
             sa = None
+    # The serious moment (serious_moment): before the first word, so the
+    # first sentence of a crisis answer is already said plainly and the
+    # faces go neutral before it; an ordinary question ends an earlier
+    # crisis answer's moment. Ended in the `finally` below.
+    serious_moment("begin" if watch.crisis else "calm")
     try:
         # Security audit H1: nothing is sent to a "local" model that is not on
         # this PC - the everyday model, or the second card's lane if one was
@@ -5802,6 +6162,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 sa.end_turn()
             except Exception:
                 pass
+        if watch.crisis:
+            # Kept open until the whole answer can have been spoken - its
+            # length in words, used once and not kept (jarvis_wellbeing.
+            # grace_seconds).
+            serious_moment("end", len("".join(answer).split()))
         stop_beat.set()
         beat.join(timeout=2)
         # After the answer, so counting can never delay it, and in a
@@ -5955,6 +6320,18 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                           "content": _tool_content({"ok": False, "saved": False,
                                                     "error": why})})
+            steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+            say_step("tool_refused", name)
+            return
+    if name == "propose_plan":
+        # Refused before anything is planned or anyone asked - the safety
+        # gate (jarvis_plan.enabled()) and outside text, at the same point
+        # send_email/draft_email are refused outright. See
+        # _propose_plan_refusal.
+        why = _propose_plan_refusal(watch)
+        if why:
+            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                          "content": _tool_content({"ok": False, "error": why})})
             steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
             say_step("tool_refused", name)
             return
@@ -6177,6 +6554,28 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             # anything (jarvis_mcp.Bridge.run: a person's yes, for this
             # action, used once).
             kwargs["verdict"] = verdict
+        if name == "propose_plan":
+            # The extra context this ONE tool's execute() needs to dispatch
+            # each of its own steps through the exact same per-tool
+            # prepare()/gate/execute() contract a direct model call to that
+            # tool already goes through (_plan_step_dispatch) - never
+            # threaded to any other tool's execute(). Deliberately NOT
+            # added to _TASK_MODULES (see that dict's own use just below):
+            # jarvis_plan.run()'s own contract needs run_step/gate_check,
+            # which the generic Pause/Resume path (jarvis_task_control.
+            # resume(), module.run(plan, approved=True, announce=...,
+            # checkpoint=...)) has no way to supply - and jarvis_plan.py's
+            # own condition 4 already requires "never an automatic resume"
+            # regardless. "Stop everything" alone still reaches a running
+            # plan, through the plain watch.stopped() check every tool
+            # already has, never through the task-control checkpoint that
+            # a real task registration would otherwise give it.
+            kwargs["checker"] = checker
+            kwargs["watch"] = watch
+            kwargs["tools"] = every
+            kwargs["names"] = names
+            kwargs["out"] = out
+            kwargs["checkpoint"] = (lambda w=watch: "stop" if w.stopped() else None)
         # A multi-step plan: register it so Pause/Stop can reach it, and hand
         # run() the checkpoint it reads before every step. The id is the
         # approval card's own when there was one, so "this task" and "that
