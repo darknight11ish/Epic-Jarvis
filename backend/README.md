@@ -6301,6 +6301,32 @@ all in `jarvis_chat_log.py`, shipped whole, so no patch changed for it:
 - `jarvis_live.py`: the Live session carries its chat's `conversation_id`,
   so "Move it here" carries on the same chat.
 - `jarvis_forget_range.py`: a support record is listed unticked.
+
+**Since the second chat audit (2026-09-28; docs/JARVIS-API.md section 18.7)**:
+
+- `jarvis_chat_log.py`: `_rehydrate` puts a continued chat's own typed and
+  spoken messages (from the encrypted record only, never shared, pasted,
+  chatbot, support, crisis or outside-text rows) back in the live-turn
+  registry after a restart or "Continue this chat", so learned facts save
+  again instead of waiting as cards; a Forget or Erase floor (`hush:<cid>`
+  in the `meta` table) keeps forgotten and erased words out for good. A
+  chat titled "A difficult moment" cannot be continued. `search()` takes a
+  `kind`.
+- `jarvis_intake.py`: the ids of conversations that were games are kept
+  (bounded), so a game stays temporary after the apps' window slides; the
+  quick path, `jarvis_agent._looks_temporary` and `jarvis_next_time` ask the
+  same question. `games-temporary.patch` passes the conversation id.
+- `jarvis_auto_learn.py` + `auto-learn.patch`: a proposal remembers its
+  conversation (`auto_learn_notes.conversation_id`), and a fact accepted by
+  hand keeps it, so "Erase the words ... also delete the chat" finds it.
+- `jarvis_chatbot.py` / `jarvis_chatbot_compare.py`: a finished session says
+  whether it went to History (`history: {kept, why}`).
+- `jarvis_forget_range.py`: a chat that spills outside the days starts
+  unticked, and the card says what stays.
+- `jarvis_backup.py`: the backup's note also names deleted chats.
+- Tests: `test_auto_learn.py`, `test_chat_log.py`, `test_chat_kinds.py`,
+  `test_games_temp_chat.py`, `test_manner.py`, `test_forget_range.py`,
+  `test_brain_reads.py`, `test_chatbot.py`.
 - `games-temporary.patch` now really keeps a game or role-play out of
   History (it handed `record_turn` the request without the temporary flag),
   and `temporary-chat.patch` takes Jarvis Live's `live` mark off before any

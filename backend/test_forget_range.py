@@ -413,6 +413,8 @@ def t_the_card():
                   "saved 3 September", "4 September · 2 messages", "Undo",
                   "Saying yes out loud does not approve it"):
         check(f"the card says {words!r}", words in prompt, prompt)
+    check("the card says what stays (the second chat audit): unticked facts and older backups",
+          "Facts you did not tick stay. Copies in older backups stay until they age out." in prompt, prompt)
     check("the unticked fact is not on the card", "pears" not in prompt)
     check("the card's detail says it stays on this PC", detail["leaves_this_pc"] is False
           and detail["text"] == prompt and detail["facts"] == 2 and detail["chats"] == 2)

@@ -1637,7 +1637,10 @@ class ChatLog:
 
     def tainted_from(self, cid):
         """The number of the first turn that read outside text, or None. Every
-        turn from that one on is tainted (for the later learning build)."""
+        turn from that one on is tainted. The running PC does not call this
+        (the learner reads each turn's own `read_outside` mark, and
+        _rehydrate does the same per row); it is kept for the tests that
+        pin the marks (the second chat audit, 2026-09-28)."""
         if not self.db_path.exists():
             return None
         with self._lock, closing(self._connect()) as c:

@@ -522,6 +522,9 @@ def card_text(frame: Frame, facts: list, chats: list) -> str:
             if c.get("spills"):
                 lines.append("   It also has messages from outside these days: the whole chat "
                              "is deleted.")
+        # What deleting a chat does not touch (the second chat audit,
+        # 2026-09-28): the same sentence every delete dialog says.
+        lines.append("Facts you did not tick stay. Copies in older backups stay until they age out.")
         lines.append("")
     lines += [
         f"For {UNDO_MINUTES} minutes after you approve, one tap on Undo puts everything back. "
