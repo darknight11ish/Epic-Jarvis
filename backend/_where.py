@@ -182,6 +182,9 @@ SHIPPED = (
     "jarvis_documents.py",
     # the words in a picture, read on this PC and marked as outside text (no patch)
     "jarvis_ocr.py",
+    # screen safety (2026-09-29): secrets in a picture of the screen are painted
+    # black before anything reads it (no patch)
+    "jarvis_secret_rules.py", "jarvis_secrets.py", "jarvis_picture.py",
     # plug-in programs (MCP): read-only tools from programs on this PC, through more_tools
     "jarvis_mcp.py",
     # the crisis help line: the word check, the fixed US help message, the note to the model

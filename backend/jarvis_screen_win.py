@@ -23,6 +23,21 @@ WHAT IS TESTED, AND WHAT IS NOT
     turns on; Firefox and custom-drawn programs may not - the design says
     so plainly ("programs that do not mark password boxes").
 
+SCREEN SAFETY (2026-09-29, the owner's "all three"): the picture is taken with
+every window Jarvis must not show painted SOLID BLACK - not only the one in
+front. The window list (`_list_windows`, EnumWindows, top of the stack first)
+is read just before and just after the grab; `must_hide` says which windows
+go black (a program on the Never look at list, a private browser window,
+Jarvis's own windows, the lock screen and admin prompts, and a browser that is
+not in front on a listed site or whose site cannot be read); `mask_rects`
+takes away what an OPAQUE window in front already hides (a see-through or
+click-through one never counts - it could be an invisible overlay); and
+`take_picture` fails closed: no Never look at list, no window list, no
+picture. The rules are tested on any machine (backend/test_screen_masks.py);
+EnumWindows and the address-box reads are not run here. The window's own text
+walk skips off-screen controls, never reads a password box's value, and has a
+quarter-second budget.
+
 FAIL SAFE. Any check that raises or cannot answer returns None, which
 jarvis_screen.pause_reason turns into a pause ("cannot_check"), never a
 look. Nothing here is written to disk: the picture is bytes in memory, the
@@ -44,7 +59,7 @@ except Exception:  # pragma: no cover - shipped beside it
 
 #: Node budget and time budget for the window-text walk.
 UI_NODE_BUDGET = 700
-UI_TIME_BUDGET_S = 2.5
+UI_TIME_BUDGET_S = 0.25
 UI_DEPTH = 14
 
 # --------------------------------------------------------------------------
@@ -120,6 +135,130 @@ def clip_rect(rect: tuple, screen: tuple) -> Optional[tuple]:
     return (l, t, r, b) if r - l >= 8 and b - t >= 8 else None
 
 
+#: How far a masked rectangle is grown on every side, in pixels, so the
+#: window's shadow and the frame's rounding never leave a line of it showing.
+MASK_MARGIN = 2
+#: The most rectangles one window may be cut into before its whole frame is
+#: painted instead (a safe over-cover).
+MASK_MAX_PIECES = 200
+#: How many browser windows' address boxes are read per picture; a browser
+#: past that is treated as "cannot tell which site", so it is hidden.
+ADDRESS_MAX_WINDOWS = 4
+
+
+def subtract_rects(rect: tuple, cutters) -> list:
+    """The parts of `rect` (left, top, right, bottom) that none of `cutters`
+    covers, as a list of rectangles. Pure geometry."""
+    pieces = [tuple(rect)]
+    for c in cutters:
+        nxt = []
+        for (l, t, r, b) in pieces:
+            il, it, ir, ib = max(l, c[0]), max(t, c[1]), min(r, c[2]), min(b, c[3])
+            if ir <= il or ib <= it:
+                nxt.append((l, t, r, b))
+                continue
+            if it > t:
+                nxt.append((l, t, r, it))
+            if ib < b:
+                nxt.append((l, ib, r, b))
+            if il > l:
+                nxt.append((l, it, il, ib))
+            if ir < r:
+                nxt.append((ir, it, r, ib))
+        pieces = nxt
+        if not pieces:
+            break
+    return pieces
+
+
+def _grow(rect: tuple, by: int) -> tuple:
+    return (rect[0] - by, rect[1] - by, rect[2] + by, rect[3] + by)
+
+
+def _clip(rect: tuple, to: tuple) -> Optional[tuple]:
+    l, t, r, b = max(rect[0], to[0]), max(rect[1], to[1]), min(rect[2], to[2]), min(rect[3], to[3])
+    return (l, t, r, b) if r > l and b > t else None
+
+
+def must_hide(w: dict, never, *, front_hwnd=None,
+              address_of: Optional[Callable] = None) -> bool:
+    """Is this window one Jarvis must never show in a picture?
+      * a program on the owner's Never look at list (and the lock screen and
+        admin prompts, which are never on it);
+      * one of Jarvis's own windows;
+      * a private browser window;
+      * a browser window, not the one in front, showing a site on the list -
+        or one whose site cannot be read while the list holds sites (the
+        same "cannot tell" rule as a pause).
+    `address_of(w)` gives that window's site ("" when it cannot be read)."""
+    import jarvis_screen as S            # the lists and the words live there
+    exe = ntpath.basename(str(w.get("exe") or "")).lower()
+    if not exe:
+        return False
+    if never.has_program(exe) or exe in S.LOCK_EXES or exe in S.ADMIN_EXES:
+        return True
+    if front is not None and (exe in front.JARVIS_EXES
+                              or front._is_jarvis_title(str(w.get("title") or ""))):
+        return True
+    if front is not None and exe in front.BROWSERS:
+        if S.is_private_title(w.get("title")):
+            return True
+        if never.holds_sites() and w.get("hwnd") != front_hwnd:
+            site = address_of(w) if address_of else ""
+            return (not site) or never.has_site(site)
+    return False
+
+
+def mask_rects(windows: list, *, capture_rect: tuple, never, front_hwnd=None,
+               address_of: Optional[Callable] = None) -> list:
+    """The rectangles (screen pixels, inside `capture_rect`) to paint black.
+    `windows` are the visible windows top of the stack first, each {"hwnd",
+    "exe", "title", "rect": (l, t, r, b), "opaque": bool}. For every window
+    that must_hide, its rectangle minus the part hidden behind an OPAQUE
+    window above it (a window that is see-through or lets clicks through
+    never counts as hiding anything - it could be an invisible overlay),
+    grown by MASK_MARGIN and clipped to the picture. Fail closed: a window
+    cut into too many pieces is painted whole. Never asks `address_of` about
+    a window that is entirely hidden."""
+    out = []
+    asked = [0]
+
+    def site_of(w) -> str:
+        if address_of is None:
+            return ""
+        asked[0] += 1
+        if asked[0] > ADDRESS_MAX_WINDOWS:
+            return ""
+        try:
+            return str(address_of(w) or "")
+        except Exception:
+            return ""
+
+    above: list = []
+    for w in windows:
+        rect = _clip(tuple(w["rect"]), capture_rect)
+        if rect is not None:
+            parts = subtract_rects(rect, above)
+            if parts and must_hide(w, never, front_hwnd=front_hwnd, address_of=site_of):
+                if len(parts) > MASK_MAX_PIECES:
+                    parts = [rect]
+                for p in parts:
+                    g = _clip(_grow(p, MASK_MARGIN), capture_rect)
+                    if g:
+                        out.append(g)
+        if w.get("opaque"):
+            r = _clip(tuple(w["rect"]), capture_rect)
+            if r:
+                above.append(r)
+    return out
+
+
+def local_boxes(rects: list, capture_rect: tuple) -> list:
+    """Screen rectangles as boxes in the picture's own pixels."""
+    l0, t0 = capture_rect[0], capture_rect[1]
+    return [(r[0] - l0, r[1] - t0, r[2] - l0, r[3] - t0) for r in rects]
+
+
 def walk_words(root, children: Callable, describe: Callable, *,
                budget: int = UI_NODE_BUDGET, seconds: float = UI_TIME_BUDGET_S,
                depth: int = UI_DEPTH, clock: Callable[[], float] = time.monotonic) -> list:
@@ -158,6 +297,8 @@ def walk_words(root, children: Callable, describe: Callable, *,
                 # True, or anything odd: skipped, and so is everything in it
                 out.append({"text": "", "password": True})
                 continue
+            if info.get("offscreen") is not False and info.get("offscreen") is not None:
+                continue                        # off screen (or cannot tell): not read, nor what is in it
             kind = str(info.get("type") or "")
             if kind in ("EditControl", "DocumentControl"):
                 add(info.get("value") or info.get("name"))
@@ -417,12 +558,169 @@ def _max_png() -> int:
         return 4 * 1024 * 1024
 
 
-def capture(snap: dict, whole: bool = False) -> Optional[bytes]:
+def _exe_of_hwnd(hwnd) -> str:
+    """The program file behind a window ("" when it cannot be told)."""
+    import ctypes
+    from ctypes import wintypes
+    user32 = _user32()
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    user32.GetWindowThreadProcessId.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.QueryFullProcessImageNameW.argtypes = (
+        wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD))
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    h = kernel32.OpenProcess(0x1000, False, pid.value)      # PROCESS_QUERY_LIMITED_INFORMATION
+    if not h:
+        return ""
+    try:
+        size = wintypes.DWORD(1024)
+        buf = ctypes.create_unicode_buffer(1024)
+        return buf.value if kernel32.QueryFullProcessImageNameW(h, 0, buf, ctypes.byref(size)) else ""
+    finally:
+        kernel32.CloseHandle(h)
+
+
+def _list_windows() -> Optional[list]:
+    """The visible top-level windows on the desktop, TOP OF THE STACK FIRST
+    (the order EnumWindows gives): [{"hwnd", "exe", "title", "rect": (l, t,
+    r, b), "opaque"}]. Minimised windows and windows Windows "cloaks" (on
+    another virtual desktop, or suspended) are left out - neither is on
+    screen. `opaque` is False for a window that is see-through or lets clicks
+    pass through (WS_EX_LAYERED or WS_EX_TRANSPARENT): it could be an invisible
+    overlay, so it never counts as hiding what is behind it.
+
+    None when the list cannot be read - FAIL CLOSED: the caller then hands
+    on no picture at all. Not run in the development container."""
+    import ctypes
+    from ctypes import wintypes
+    try:
+        user32 = _user32()
+        dwm = ctypes.WinDLL("dwmapi")
+
+        class RECT(ctypes.Structure):
+            _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                        ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+
+        enum_proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        user32.IsWindowVisible.argtypes = (wintypes.HWND,)
+        user32.IsIconic.argtypes = (wintypes.HWND,)
+        user32.GetWindowRect.argtypes = (wintypes.HWND, ctypes.POINTER(RECT))
+        user32.GetWindowLongW.restype = ctypes.c_long
+        user32.GetWindowLongW.argtypes = (wintypes.HWND, ctypes.c_int)
+        user32.GetWindowTextLengthW.argtypes = (wintypes.HWND,)
+        user32.GetWindowTextW.argtypes = (wintypes.HWND, wintypes.LPWSTR, ctypes.c_int)
+        user32.EnumWindows.argtypes = (enum_proc, wintypes.LPARAM)
+        out: list = []
+        bad = [0]
+
+        def each(hwnd, _lparam):
+            try:
+                if not user32.IsWindowVisible(hwnd) or user32.IsIconic(hwnd):
+                    return True
+                cloaked = wintypes.DWORD(0)
+                if dwm.DwmGetWindowAttribute(wintypes.HWND(hwnd), 14, ctypes.byref(cloaked),
+                                             ctypes.sizeof(cloaked)) == 0 and cloaked.value:
+                    return True                      # DWMWA_CLOAKED
+                r = RECT()
+                # DWMWA_EXTENDED_FRAME_BOUNDS: the visible frame; the plain rectangle
+                # includes an invisible resize border.
+                if dwm.DwmGetWindowAttribute(wintypes.HWND(hwnd), 9, ctypes.byref(r),
+                                             ctypes.sizeof(r)) != 0:
+                    if not user32.GetWindowRect(hwnd, ctypes.byref(r)):
+                        bad[0] += 1
+                        return True
+                if r.right - r.left <= 0 or r.bottom - r.top <= 0:
+                    return True
+                ex = user32.GetWindowLongW(hwnd, -20) & 0xFFFFFFFF      # GWL_EXSTYLE
+                n = max(0, int(user32.GetWindowTextLengthW(hwnd)))
+                tbuf = ctypes.create_unicode_buffer(n + 1)
+                user32.GetWindowTextW(hwnd, tbuf, n + 1)
+                out.append({"hwnd": int(hwnd), "exe": _exe_of_hwnd(hwnd), "title": tbuf.value,
+                            "rect": (r.left, r.top, r.right, r.bottom),
+                            "opaque": not (ex & 0x00080000 or ex & 0x00000020)})
+            except Exception:
+                bad[0] += 1
+            return True
+
+        if not user32.EnumWindows(enum_proc(each), 0):
+            return None
+        return None if bad[0] else out
+    except Exception:
+        return None
+
+
+def _address_of(w: dict) -> str:
+    """The SITE a browser window shows (the host of its address box, "" when
+    it cannot be read). Slow (UI Automation) - asked only for a browser
+    window with something visible in the picture."""
+    exe = ntpath.basename(str(w.get("exe") or "")).lower()
+    family = front.BROWSERS.get(exe) if front is not None else None
+    if not family:
+        return ""
+    with front._thread_context():
+        return front.site_of(front.host_of(front._address_box_value(w["hwnd"], family)))
+
+
+def take_picture(snap: dict, whole: bool, never, *, rect_of: Callable, grab: Callable,
+                 list_windows: Callable, address_of: Callable) -> Optional[bytes]:
+    """The whole safe capture, with every Windows call handed in (so the
+    rules are tested on any machine): the rectangle, the window list just
+    BEFORE the grab, the grab, the window list just AFTER it (a window that
+    opened or closed while it ran is covered too), every window that must be
+    hidden painted SOLID BLACK on the pixels, then the PNG.
+
+    FAIL CLOSED - None, no picture at all - when: there is no Never look at
+    list or it cannot be read; the rectangle, the grab or EITHER window list
+    cannot be had; anything in the masking raises."""
+    if never is None or getattr(never, "broken", True):
+        return None
+    try:
+        rect = rect_of(snap["hwnd"], whole)
+        if rect is None:
+            return None
+        before = list_windows()
+        got = grab(rect)
+        after = list_windows()
+        if got is None or before is None or after is None:
+            return None
+        seen: dict = {}
+
+        def address(w) -> str:
+            if w["hwnd"] not in seen:
+                seen[w["hwnd"]] = address_of(w)
+            return seen[w["hwnd"]]
+
+        rects = []
+        for wins in (before, after):
+            rects += mask_rects(wins, capture_rect=rect, never=never,
+                                front_hwnd=snap["hwnd"], address_of=address)
+        bgra, w, h = got
+        if rects:
+            import jarvis_picture
+            pix = bytearray(bgra)
+            jarvis_picture.paint_black(pix, w, h, local_boxes(rects, rect))
+            bgra = bytes(pix)
+        png = png_from_bgra(bgra, w, h)
+        if len(png) > _max_png() and w >= 16 and h >= 16:
+            png = png_half_size(bgra, w, h)
+        return png if len(png) <= _max_png() else None
+    except Exception:
+        return None
+
+
+def capture(snap: dict, whole: bool = False, never=None) -> Optional[bytes]:
     """The picture: a PNG of the window in front (or, with `whole`, its
-    whole monitor), in memory. None when it cannot be taken. Never touches
-    the disk."""
+    whole monitor), in memory, with every window Jarvis must not show
+    painted SOLID BLACK (see must_hide and take_picture). `never` is the
+    owner's Never look at list (jarvis_screen.NeverLook). None when it cannot
+    be taken OR cannot be made safe: FAIL CLOSED. Never touches the disk."""
     import ctypes
     if os.name != "nt" or not isinstance(snap, dict) or snap.get("hwnd") is None:
+        return None
+    if never is None or getattr(never, "broken", True):
         return None
     user32 = _user32()
     old = None
@@ -435,23 +733,16 @@ def capture(snap: dict, whole: bool = False) -> Optional[bytes]:
             old = user32.SetThreadDpiAwarenessContext(ctypes.c_void_p(-4))
         except Exception:
             old = None
-        rect = _rect_of(snap["hwnd"], whole)
-        if rect is None:
-            return None
-        got = _grab_bgra(rect)
+        return take_picture(snap, whole, never, rect_of=_rect_of, grab=_grab_bgra,
+                            list_windows=_list_windows, address_of=_address_of)
+    except Exception:
+        return None
     finally:
         if old:
             try:
                 user32.SetThreadDpiAwarenessContext(ctypes.c_void_p(old))
             except Exception:
                 pass
-    if got is None:
-        return None
-    bgra, w, h = got
-    png = png_from_bgra(bgra, w, h)
-    if len(png) > _max_png() and w >= 16 and h >= 16:
-        png = png_half_size(bgra, w, h)
-    return png if len(png) <= _max_png() else None
 
 
 def ui_text(snap: dict) -> list:
@@ -477,6 +768,12 @@ def ui_text(snap: dict) -> list:
             pw = True                        # cannot tell: treated as a password box
         if pw:
             return {"password": True}
+        try:
+            off = c.IsOffscreen
+        except Exception:
+            off = True
+        if off is None or off:               # off screen, or cannot tell: not read
+            return {"offscreen": True, "password": False}
         kind = c.ControlTypeName
         value = ""
         if kind in ("EditControl", "DocumentControl"):
@@ -485,7 +782,7 @@ def ui_text(snap: dict) -> list:
                 value = str(p.Value or "") if p is not None else ""
             except Exception:
                 value = ""
-        return {"type": kind, "name": c.Name, "value": value, "password": False}
+        return {"type": kind, "name": c.Name, "value": value, "password": False, "offscreen": False}
 
     try:
         with front._thread_context():
@@ -497,6 +794,12 @@ def ui_text(snap: dict) -> list:
         return []
 
 
-def readers() -> dict:
-    """The three readers jarvis_screen.Screen is built from."""
-    return {"front_reader": front_snapshot, "capture": capture, "ui_text": ui_text}
+def readers(never=None) -> dict:
+    """The three readers jarvis_screen.Screen is built from. `never` is the
+    owner's Never look at list, or a function that gives it (the picture
+    cannot be taken without it - it is what says which windows to paint
+    black)."""
+    def take(snap: dict, whole: bool = False) -> Optional[bytes]:
+        return capture(snap, whole, never=never() if callable(never) else never)
+
+    return {"front_reader": front_snapshot, "capture": take, "ui_text": ui_text}

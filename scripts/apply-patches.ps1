@@ -980,7 +980,11 @@ $SHIPPED = @(
     # --- folders Jarvis may look in (documents.patch) ---
     'jarvis_documents.py'        # "Folders Jarvis may look in": the list, the my_files tool (find, search, read PDFs and Word files in parts), the Notion import
     # --- the words in a picture (2026-09-26) ---
-    'jarvis_ocr.py'              # reads the words in a picture with Windows' own text recognition, on this PC; jarvis_agent.py marks them as outside text; no patch
+    'jarvis_ocr.py'              # reads the words in a picture (and where each one sits) with Windows' own text recognition, on this PC, inside Jarvis through the pywinrt packages or else through PowerShell; jarvis_agent.py marks them as outside text; no patch
+    # --- screen safety (2026-09-29): secrets in a picture of the screen are painted black before anything reads it ---
+    'jarvis_secret_rules.py'     # GENERATED (tools/gen_secret_rules.py): gitleaks's rule data (MIT), what a key, token or password looks like; no patch
+    'jarvis_secrets.py'          # finds secrets in the words read from a picture (gitleaks + Presidio patterns, a card must pass the check digit) and works out the black boxes; no patch
+    'jarvis_picture.py'          # paints SOLID BLACK boxes on a picture and hands on only a checked one; jarvis_screen.clean_picture is the door; no patch
     # --- plug-in programs (MCP), reached only through more_tools("plugins") ---
     'jarvis_mcp.py'              # read-only tools from programs on this PC you list under [mcp]; stdio only; every call asks
     # --- the crisis help line (2026-09-27) ---

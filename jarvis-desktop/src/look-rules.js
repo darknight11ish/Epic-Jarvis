@@ -169,10 +169,13 @@ export const SETTINGS = Object.freeze({
     "Jarvis looks at your screen only when you ask. \"Look at this\" reads the words on the window in front, once " +
     "(its key is under Shortcuts). \"Watch with me\" keeps a sign on screen the whole time and takes a fresh look each " +
     "time you start a question. Jarvis reads the words only: a picture is never saved, and what it read is never kept in " +
-    "your chats. It pauses on password boxes, on anything on the list below, and on windows that ask not to be captured.",
+    "your chats. Anything that looks like a key, a password or a card number is hidden first. It pauses on password " +
+    "boxes, on private browser windows, on anything on the list below, and on windows that ask not to be captured.",
   neverTitle: "Never look at",
   neverDetail:
-    "Programs and websites Jarvis never looks at - it starts with password managers and Windows sign-in. " +
+    "Programs and websites Jarvis never looks at - it starts with password managers, Windows sign-in and streaming " +
+    "video sites. A window on this list is painted black in what Jarvis looks at, even when it is behind another " +
+    "window; so is a private browser window. " +
     "Adding one is instant. Taking one off asks you first, with a card, because it lets Jarvis read that one again. " +
     "This list lives on this PC only.",
   empty: "Nothing added of your own yet. Add your bank here.",
