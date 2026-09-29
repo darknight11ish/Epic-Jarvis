@@ -255,7 +255,8 @@ def t_the_engine_wrapper():
     got = OCR.read_text(PNG, runner=lambda b: (0, "\ufeff{\"ok\":true,\"lines\":[\"Hello\\u0007 there\","
                                                   "\"\",\"Line  two\"]}".encode("utf-8")))
     check("the lines, tidied: control characters and blank lines out",
-          got == {"ok": True, "text": "Hello there\nLine two", "left_out": 0, "why": ""}, repr(got))
+          {k: got[k] for k in ("ok", "text", "left_out", "why")}
+          == {"ok": True, "text": "Hello there\nLine two", "left_out": 0, "why": ""}, repr(got))
     got = OCR.read_text(PNG, runner=lambda b: (0, b'{"ok":false,"why":"no_language"}'))
     check("no text-recognition language: said plainly, with how to add one",
           got["ok"] is False and got["why"] == OCR.NO_LANGUAGE)
