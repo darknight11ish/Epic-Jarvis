@@ -813,6 +813,7 @@ def with_screen(messages: list, mark: str = "", *, engine=None,
     if mark not in MARKS and not has_text_part:
         return msgs, info
     kept, added, words = [], [], []
+    empty_part = False
     try:
         for p in parts:
             if isinstance(p, dict) and p.get("type") == "screen_text":
@@ -820,6 +821,8 @@ def with_screen(messages: list, mark: str = "", *, engine=None,
                 t = str(p.get("text") or "")
                 if t.strip():
                     words.append(t)
+                else:
+                    empty_part = True      # a look that read nothing: said plainly, below
                 continue
             if mark == "phone" and _is_image(p):
                 continue                    # read below; never sent on
@@ -842,7 +845,7 @@ def with_screen(messages: list, mark: str = "", *, engine=None,
             body = label_phone_text(joined)
             info.update(read=True, text=clip(joined, UI_MAX_CHARS * 2)[0])
             added.append({"type": "text", "text": body})
-        elif mark == "phone":
+        elif mark == "phone" or empty_part:
             added.append({"type": "text", "text": SCREEN_TEXT_NONE})
         elif mark == "look":
             info["mode"] = "look"

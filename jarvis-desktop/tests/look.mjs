@@ -157,6 +157,7 @@ await check("a refused look shows the PC's own words, and no mark follows", asyn
 
 await check("the bar closing takes the note away", async () => {
   const page = await bar({ status: STATUS.off, never: NEVER });
+  await emit(page, "screen-status", { status: HELD, stale: false });
   await emit(page, "screen-look", { ok: true, note: NOTE, said: "" });
   await page.waitForTimeout(60);
   assert.equal(await page.isHidden("#watch-strip"), false);
@@ -219,11 +220,22 @@ await check("Settings: the list, adding at once, taking one off asks for a card 
   await page.close();
 });
 
-await check("Settings on a PC without it: the PC's own reason, no list", async () => {
+await check("Settings on a PC that cannot look: the PC's own reason, no surprise", async () => {
+  const why = "Looking at the screen is off on this PC. This is not Windows.";
+  const page = await K.open(browser, base, "settings.html", {
+    chatReplies: [], screen: { status: { ...STATUS.off, available: false, unavailable_why: why }, never: NEVER } });
+  await page.waitForTimeout(200);
+  assert.equal(await page.isHidden("#sl-state"), false);
+  assert.equal((await page.textContent("#sl-state")).trim(), why);
+  await page.close();
+});
+
+await check("Settings on a PC without the feature at all: the plain sentence, no list", async () => {
   const page = await K.open(browser, base, "settings.html", { chatReplies: [] });
   await page.waitForTimeout(200);
   assert.equal(await page.isHidden("#sl-state"), false);
-  assert.match(await page.textContent("#sl-state"), /off on this PC/);
+  assert.match(await page.textContent("#sl-state"), /does not have "Look at this"/);
+  assert.equal(await page.isHidden("#sl-body"), true);
   await page.close();
 });
 

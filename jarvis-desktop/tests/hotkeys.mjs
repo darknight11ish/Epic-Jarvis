@@ -403,11 +403,13 @@ await check("CONTROL: the page still works when nothing is refused", async () =>
   await page.close();
   // Jarvis Live's key ships off (the owner's decision of 2026-09-28): it
   // says "off", and every key that ships on is working.
-  const on = list.filter((r) => r.name !== "Start or end Jarvis Live");
-  assert.equal(on.length, list.length - 1);
+  // Watch with me's key ships off too (the design, 2026-09-28).
+  const OFF = ["Start or end Jarvis Live", "Start or stop Watch with me"];
+  const on = list.filter((r) => !OFF.includes(r.name));
+  assert.equal(on.length, list.length - OFF.length);
   assert.ok(on.every((r) => r.bound === "true"));
   assert.ok(on.every((r) => /working/i.test(r.state)));
-  assert.equal(list.find((r) => r.name === "Start or end Jarvis Live").state, "off");
+  for (const name of OFF) assert.equal(list.find((r) => r.name === name).state, "off");
 });
 
 await browser.close();
