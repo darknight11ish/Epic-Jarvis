@@ -167,8 +167,11 @@ class LiveExtrasTest {
         assertTrue(alias.contains("android.intent.action.SEND"))
         assertTrue(alias.contains("android:mimeType=\"text/plain\""))
         assertFalse("images are not shared into Live", alias.contains("image/"))
-        // No new dangerous permission for any of it.
-        for (p in listOf("BLUETOOTH_CONNECT", "READ_PHONE_STATE", "CAMERA\"", "BLUETOOTH\"")) {
+        // No new dangerous permission for any of it. (CAMERA is in the manifest
+        // for "Scan the code on your PC" - QR pairing, asked for on a tap - and
+        // nothing about Live uses it: the Live camera stays off until the 12 GB
+        // card passes the photo test.)
+        for (p in listOf("BLUETOOTH_CONNECT", "READ_PHONE_STATE", "BLUETOOTH\"")) {
             assertFalse("the manifest asks for $p", manifest.contains("android.permission.$p"))
         }
     }
