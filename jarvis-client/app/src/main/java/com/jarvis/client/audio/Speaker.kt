@@ -130,7 +130,7 @@ class Speaker(private val context: Context) {
      * phrase end of the clip playing, on the clock the mouth reads (the
      * heard one: [HeardClock]) - the whole clip was read before it started,
      * so its ends are known ahead, and the face's gestures land on them.
-     * [NO_PHRASE_END] means the clip has none left; -1 means there is no
+     * [LipSync.NO_PHRASE_END] means the clip has none left; -1 means there is no
      * track at all (the phone's own voice, and the silence): then the face
      * listens to the level instead.
      */
@@ -144,7 +144,7 @@ class Speaker(private val context: Context) {
                     // Outside the clip (its first lead-in, its very end) this
                     // writes zeros: a voice is on, the mouth is closed.
                     LipSync.sample(h.lips, t, out)
-                    if (out.size > 4) out[4] = nextEnd(h.ends, t)
+                    if (out.size > 4) out[4] = LipSync.nextEnd(h.ends, t)
                     return true
                 }
             } else {
@@ -719,17 +719,4 @@ class Speaker(private val context: Context) {
         /** How often a paused reply looks again for resume or stop. */
         const val PAUSE_POLL_MS = 20L
     }
-}
-
-/** What [nextEnd] answers when the clip has a track but no phrase end is left in it. */
-internal const val NO_PHRASE_END = 1e9f
-
-/**
- * Seconds from heard time [t] until the first phrase end after it in [ends]
- * (sorted, seconds into the clip), or [NO_PHRASE_END] when none is left. The
- * face hands the next one to the pose ahead of time (`CritterPose.aheadStep`).
- */
-internal fun nextEnd(ends: FloatArray, t: Float): Float {
-    for (e in ends) if (e > t) return e - t
-    return NO_PHRASE_END
 }

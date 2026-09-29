@@ -108,6 +108,19 @@ object LipSync {
         return out.toFloatArray()
     }
 
+    /** What [nextEnd] answers when the clip has a track but no phrase end is left in it. */
+    const val NO_PHRASE_END = 1e9f
+
+    /**
+     * Seconds from heard time [t] until the first phrase end after it in [ends]
+     * (sorted, seconds into the clip), or [NO_PHRASE_END] when none is left. The
+     * face hands the next one to the pose ahead of time (`CritterPose.aheadStep`).
+     */
+    fun nextEnd(ends: FloatArray, t: Float): Float {
+        for (e in ends) if (e > t) return e - t
+        return NO_PHRASE_END
+    }
+
     /** 16-bit mono PCM, as [Speaker] plays it. */
     fun analyse(pcm: ShortArray, sampleRate: Int): Track =
         analyse(FloatArray(pcm.size) { pcm[it] / 32768f }, sampleRate)

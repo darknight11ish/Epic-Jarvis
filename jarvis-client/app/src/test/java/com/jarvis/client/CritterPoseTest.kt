@@ -1452,4 +1452,109 @@ class CritterPoseTest {
             assertTrue("${a.id} cute at $st: speed changed by $w a second in one frame", w < 0.25f)
         }
     }
+
+    // ---- Motion after the skeptical review (2026-09-29): the desktop's animal-motion.mjs, on the phone's copies ----
+
+    @Test
+    fun `the slow wander is smooth, bounded, fast at most 2 over scale, and repeats only after 4096 s`() {
+        for (scale in listOf(4f, 16f)) {
+            var prev = CritterPose.noise(0f, 8, scale)
+            var lo = 9f; var hi = -9f; var fast = 0f
+            var t = 1f / 60f
+            while (t < 2100f) {
+                val v = CritterPose.noise(t, 8, scale)
+                lo = minOf(lo, v); hi = maxOf(hi, v)
+                fast = maxOf(fast, abs(v - prev) * 60f)
+                prev = v
+                t += 1f / 60f
+            }
+            assertTrue("scale $scale: $lo..$hi", lo >= -1f && hi <= 1f && hi > 0.5f && lo < -0.5f)
+            assertTrue("scale $scale changes $fast a second", fast <= 2f / scale + 1e-3f)
+        }
+        for (t in listOf(0.3f, 47.1f, 1000.7f)) {
+            assertEquals(CritterPose.noise(t, 17, 8f), CritterPose.noise(t + 4096f, 17, 8f), 1e-4f)
+        }
+    }
+
+    @Test
+    fun `breaths are uneven and never deeper than the steady one`() {
+        for (k in listOf(171f, 256f, 300f)) {
+            var deepest = 0f
+            val ups = ArrayList<Float>()
+            var prev = CritterPose.breathWave(1000f, k, 10)
+            var t = 1000f + 0.02f
+            while (t < 2800f) {
+                val v = CritterPose.breathWave(t, k, 10)
+                deepest = maxOf(deepest, abs(v))
+                if (prev < 0f && v >= 0f) ups.add(t)
+                prev = v
+                t += 0.02f
+            }
+            assertTrue("never deeper: $deepest", deepest <= 1f + 1e-4f)
+            val per = ups.zipWithNext { a, b -> b - a }
+            val mean = per.average().toFloat()
+            val worst = per.maxOf { abs(it / mean - 1f) }
+            assertTrue("k=$k: breaths differ by up to ${100 * worst} percent", worst in 0.08f..0.22f)
+        }
+    }
+
+    @Test
+    fun `with the owner not using Jarvis about one idle happening in four is left, and attention 1 changes nothing`() {
+        val faces = mapOf<String, (Float, CritterPose.Opts?) -> Boolean>(
+            "redpanda" to { t, o -> CritterPose.busy(FaceState.IDLE, t, null, o) },
+            "pygmyowl" to { t, o -> OwlPose.busy(FaceState.IDLE, t, null, o) },
+            "seaotter" to { t, o -> OtterPose.busy(FaceState.IDLE, t, null, o) },
+            "monkey" to { t, o -> MonkeyPose.busy(FaceState.IDLE, t, null, o) },
+            "robot" to { t, o -> RobotPose.busy(FaceState.IDLE, t, null, o) },
+        )
+        for ((sp, busy) in faces) {
+            var all = 0; var few = 0; var was = false; var wasFew = false
+            var t = 1000f
+            while (t < 1000f + 3600f) {
+                val b = busy(t, null); val f = busy(t, CritterPose.Opts(attention = 0f))
+                assertEquals("$sp: attention 1 is today's", b, busy(t, CritterPose.Opts(attention = 1f)))
+                if (b && !was) all++
+                if (f && !wasFew) few++
+                if (f) assertTrue("$sp: a thinned happening at $t that was not there", b)
+                was = b; wasFew = f
+                t += 0.05f
+            }
+            val share = few.toFloat() / all
+            assertTrue("$sp: $few of $all left", all > 120 && share in 0.15f..0.35f)
+        }
+    }
+
+    @Test
+    fun `each idle happening is a little different and the slower ones still end inside their slot`() {
+        val sizes = HashSet<String>()
+        for (n in 0 until 256) {
+            val h = CritterPose.happeningV(n * 16f + 9f, 16f, 0.5f, 5.5f, 16, 1.0f, 1, 1f)
+            if (h[0] < 0f) continue
+            assertTrue("size ${h[3]}", h[3] in 0.75f - 1e-6f..1f + 1e-6f)
+            val ratio = (9f - (h[2] - n * 16f)) / h[1]
+            assertTrue("length $ratio", ratio in 0.8f - 1e-4f..1.25f + 1e-4f)
+            sizes.add("%.3f".format(h[3]))
+        }
+        assertTrue("the slots do not vary: ${sizes.size}", sizes.size > 100)
+    }
+
+    @Test
+    fun `the owl's thinking head rolls half as far and moves far less than the 87 percent it did`() {
+        var roll = 0f; var moving = 0; var n = 0
+        var prev: FloatArray? = null
+        var t = 1000f
+        while (t < 1600f) {
+            val p = OwlPose.stateTargets(FaceState.THINKING, t, 0f, CritterPose.Look(), 99f)
+            roll = maxOf(roll, abs(p[2]))
+            prev?.let {
+                val v = Math.sqrt(((p[0] - it[0]) * (p[0] - it[0]) + (p[1] - it[1]) * (p[1] - it[1]) + (p[2] - it[2]) * (p[2] - it[2])).toDouble()) / 0.05 * 180 / Math.PI
+                if (v > 3.0) moving++
+                n++
+            }
+            prev = p
+            t += 0.05f
+        }
+        assertTrue("rolls $roll rad", roll <= 0.13f + 1e-5f)
+        assertTrue("moves ${100 * moving / n} percent of the time", moving.toFloat() / n < 0.45f)
+    }
 }
