@@ -481,6 +481,10 @@ class ChatSession(
         // from the assistant gesture, or a Watch-with-me picture): it rides
         // with THIS question only, in memory, to the PC - never in Live,
         // never in the history (ScreenLook, docs/JARVIS-API.md section 62).
+        // "Watch with me" on this phone: while it runs, the picture for THIS
+        // question is taken now (or the reason there is none is said) - never
+        // before, never streamed (ScreenWatch). Not in Live.
+        if (!live) ScreenWatch.beforeQuestion()
         val look = if (live) null else ScreenLook.forQuestion()
         val screen = look?.let { ScreenLook.attach(it) }
         val sentPicture = picture ?: look?.picture

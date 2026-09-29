@@ -81,13 +81,15 @@ object ScreenNever {
 
     // The words on the Security screen (LookPlate), fixed here so they can be
     // held by a test and are the same wherever they are shown.
-    const val SETTING_TITLE = "Let the assistant gesture read this screen"
+    const val SETTING_TITLE = "Let Jarvis read this phone's screen"
     const val SETTING_DETAIL =
         "Off by default. When on, pressing and holding Home (or your phone's assistant " +
             "gesture) lets Jarvis read the WORDS on the screen in front, for your next " +
-            "question. No picture is taken, nothing is saved, and the words go only to " +
-            "your PC, over your private link. This works only when Jarvis is set as your " +
-            "phone's assistant app. Turning it on asks for your fingerprint or PIN."
+            "question - this works only when Jarvis is set as your phone's assistant app. " +
+            "It also lets you start \"Watch this phone with me\" on Home, where Jarvis " +
+            "takes one picture only when you ask a question. Nothing is saved, and the " +
+            "words or picture go only to your PC, over your private link. Turning it on " +
+            "asks for your fingerprint or PIN."
     const val LIST_TITLE = "Never look at these apps"
     const val LIST_DETAIL =
         "Jarvis never looks at itself, at a password manager, or at an app that looks like " +

@@ -3296,6 +3296,8 @@ object JarvisRuntime {
         // A held look at this phone's screen goes too, before the PC is asked
         // (the owner's decision of 2026-09-28: nothing saved, and Stop means stop).
         com.jarvis.client.net.ScreenLook.drop()
+        // ...and this phone's own Watch with me, if it is running.
+        com.jarvis.client.net.ScreenWatch.requestStop()
         val result = api.stopEverything()
         // A PC that could not be reached: the plain words and their button
         // (Try again, or Check the connection settings), like every failure.

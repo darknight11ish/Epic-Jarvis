@@ -288,6 +288,52 @@ class MainActivity : FragmentActivity() {
     ) { permissionTick.intValue += 1 }
 
     /**
+     * Android's own screen-sharing question for "Watch with me" on this phone
+     * (the owner's decision of 2026-09-28): asked EVERY time, by Android, never
+     * by Jarvis. Only a yes starts [ScreenWatchService]; anything else says so
+     * and starts nothing.
+     */
+    private val screenShare = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult(),
+    ) { result ->
+        permissionTick.intValue += 1
+        val data = result.data
+        if (result.resultCode == RESULT_OK && data != null) {
+            com.jarvis.client.service.ScreenWatchService.start(this, result.resultCode, data)
+        } else {
+            JarvisRuntime.setNotice("Screen sharing was not allowed, so Jarvis is not watching.")
+        }
+    }
+
+    /**
+     * "Watch this phone with me": the owner's own tap. Asks Android's question
+     * only when the Security switch is on and Usage access is on (without it
+     * Jarvis cannot tell which app is in front, so it would look at nothing);
+     * otherwise says which one is missing. No card, like Focus: the sign is
+     * the safeguard.
+     */
+    private fun startPhoneWatch() {
+        if (!JarvisRuntime.settings.security.value.screenRead) {
+            JarvisRuntime.setNotice(com.jarvis.client.net.ScreenWatch.NEEDS_READ_ON)
+            return
+        }
+        if (!com.jarvis.client.service.ScreenWatchService.usageAccessGranted(this)) {
+            JarvisRuntime.setNotice(com.jarvis.client.net.ScreenWatch.NEEDS_USAGE)
+            return
+        }
+        if (com.jarvis.client.net.ScreenWatch.state.value.on) return
+        val manager = getSystemService(android.media.projection.MediaProjectionManager::class.java) ?: return
+        runCatching { screenShare.launch(manager.createScreenCaptureIntent()) }
+            .onFailure { JarvisRuntime.setNotice("Android would not ask to share the screen, so Jarvis is not watching.") }
+    }
+
+    /** Android's own Usage access screen, where the owner turns Jarvis's switch on. */
+    private fun openUsageAccess() {
+        runCatching { startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
+            .onFailure { runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) } }
+    }
+
+    /**
      * A photo to send with the next question, made small enough for the PC,
      * or null. In memory only - never saved, never in a Bundle (a rotation
      * drops it; the owner picks it again). See [ChatPicture].
@@ -1035,6 +1081,19 @@ class MainActivity : FragmentActivity() {
         // The PC's "Watch with me", said on this phone too. "Watching ended"
         // is not shown here (endedAgo is past its display time): it is a
         // notice for the screen being watched, and the sign just goes away.
+        // ...and this phone's own Watch session: its sign counts its minutes
+        // down, so it is re-read every 20 seconds while it is on.
+        val phoneWatch by com.jarvis.client.net.ScreenWatch.state.collectAsState()
+        val phoneWatchTick by produceState(0L, phoneWatch.on) {
+            if (!phoneWatch.on) return@produceState
+            while (true) {
+                value = System.nanoTime()
+                delay(20_000)
+            }
+        }
+        val phoneWatchSign = remember(phoneWatch, phoneWatchTick) {
+            com.jarvis.client.net.ScreenWatch.sign(s = phoneWatch)
+        }
         val screenWatch by JarvisRuntime.screenWatch.collectAsState()
         val watchSign = remember(screenWatch, link) {
             com.jarvis.client.net.ScreenRules.sign(
@@ -2552,6 +2611,11 @@ class MainActivity : FragmentActivity() {
                             sharedLine = sharedHeld?.let { Provenance.sharedLine(it) },
                             lookLine = lookLine,
                             watchSign = watchSign,
+                            phoneWatchOffered = security.screenRead,
+                            phoneWatchSign = phoneWatchSign,
+                            usageAccess = remember(tick) {
+                                com.jarvis.client.service.ScreenWatchService.usageAccessGranted(this@MainActivity)
+                            },
                             pictureBusy = pictureBusy.value,
                             photoFinding = photoFinding.value,
                             noteTargets = noteTargets,
@@ -2595,6 +2659,9 @@ class MainActivity : FragmentActivity() {
                                 onDropShared = { sharedHeld = null },
                                 onForgetLook = { com.jarvis.client.net.ScreenLook.drop() },
                                 onStopWatching = { JarvisRuntime.stopScreenWatch() },
+                                onStartPhoneWatch = { startPhoneWatch() },
+                                onStopPhoneWatch = { com.jarvis.client.net.ScreenWatch.requestStop() },
+                                onOpenUsageAccess = { openUsageAccess() },
                                 onSend = {
                                     val text = draft
                                     val pic = picture.value

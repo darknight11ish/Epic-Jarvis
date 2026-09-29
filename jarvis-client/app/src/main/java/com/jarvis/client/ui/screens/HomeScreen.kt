@@ -452,6 +452,15 @@ data class HomeState(
      * from the screen. See [com.jarvis.client.net.ScreenRules.sign].
      */
     val watchSign: com.jarvis.client.net.ScreenRules.Sign? = null,
+    /**
+     * "Watch this phone with me" is offered: the Security switch "Let Jarvis read
+     * this phone's screen" is on. Off, Home shows nothing about it.
+     */
+    val phoneWatchOffered: Boolean = false,
+    /** The sign while THIS phone's screen is being watched, or null. See [com.jarvis.client.net.ScreenWatch.sign]. */
+    val phoneWatchSign: com.jarvis.client.net.ScreenRules.Sign? = null,
+    /** Android's Usage access is on for Jarvis (what "Watch this phone" needs). */
+    val usageAccess: Boolean = false,
     /** True while a picked photo is being made small enough to send. */
     val pictureBusy: Boolean = false,
     /**
@@ -654,6 +663,12 @@ data class HomeActions(
     val onForgetLook: () -> Unit = {},
     /** End the PC's "Watch with me". Never held on a stale link, never a card. */
     val onStopWatching: suspend () -> Unit = {},
+    /** The owner's tap on "Watch this phone with me": Android asks its own question next. */
+    val onStartPhoneWatch: () -> Unit = {},
+    /** Ends Watch on this phone. Never held on a stale link, never a card. */
+    val onStopPhoneWatch: suspend () -> Unit = {},
+    /** Opens Android's Usage access screen. */
+    val onOpenUsageAccess: () -> Unit = {},
     /** Open the release page in the browser. Downloads nothing itself. */
     val onOpenUpdate: () -> Unit = {},
     /**
@@ -1150,7 +1165,13 @@ private fun ConversationList(
         // "Jarvis is watching" (owner, 2026-09-28): the PC's Watch with me,
         // said here too, with Stop. Stop is never held on a stale link.
         if (state.watchSign != null) {
-            item(key = "pc-watching") { PcWatchingPlate(state.watchSign, actions) }
+            item(key = "pc-watching") { PcWatchingPlate(state.watchSign, actions.onStopWatching) }
+        }
+        // ...and the same for THIS phone's screen ("Watch this phone with me").
+        if (state.phoneWatchSign != null) {
+            item(key = "phone-watching") { PcWatchingPlate(state.phoneWatchSign, actions.onStopPhoneWatch) }
+        } else if (state.phoneWatchOffered) {
+            item(key = "phone-watch-start") { PhoneWatchStartPlate(state, actions) }
         }
         // AUTONOMY-PROPOSALS.md §3d. Shown only while the server itself
         // reports a task running or paused - never while merely thinking
@@ -2062,7 +2083,7 @@ private fun LockdownPlate() {
  * phone is refused by the PC itself.
  */
 @Composable
-private fun PcWatchingPlate(sign: com.jarvis.client.net.ScreenRules.Sign, actions: HomeActions) {
+private fun PcWatchingPlate(sign: com.jarvis.client.net.ScreenRules.Sign, onStop: suspend () -> Unit) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
@@ -2086,11 +2107,49 @@ private fun PcWatchingPlate(sign: com.jarvis.client.net.ScreenRules.Sign, action
                     if (!busy) {
                         busy = true
                         scope.launch {
-                            actions.onStopWatching()
+                            onStop()
                             busy = false
                         }
                     }
                 },
+            )
+        }
+    }
+}
+
+/**
+ * "Watch this phone with me" - the start of a Watch session on THIS phone
+ * (the owner's decision of 2026-09-28, docs/SCREEN-DESIGN.md section 4). Shown
+ * only while the Security switch "Let Jarvis read this phone's screen" is on.
+ * The owner's own tap; Android asks its own question next, every time. It needs
+ * Android's Usage access (so Jarvis can tell which app is in front); without
+ * it, this says so and offers the Android screen where it is turned on. No card:
+ * the sign is the safeguard. The words are [com.jarvis.client.net.ScreenWatch]'s.
+ */
+@Composable
+private fun PhoneWatchStartPlate(state: HomeState, actions: HomeActions) {
+    val chrome = LocalChrome.current
+    Plate {
+        Kicker(com.jarvis.client.net.ScreenWatch.START_LABEL, color = chrome.textMid)
+        Gap(6)
+        Text(
+            com.jarvis.client.net.ScreenWatch.HOW,
+            style = MaterialTheme.typography.bodySmall,
+            color = chrome.textMid,
+        )
+        if (!state.usageAccess) {
+            Gap(6)
+            Text(
+                com.jarvis.client.net.ScreenWatch.NEEDS_USAGE,
+                style = MaterialTheme.typography.bodySmall,
+                color = chrome.warnInk,
+            )
+            Quiet(com.jarvis.client.net.ScreenWatch.OPEN_USAGE, onClick = actions.onOpenUsageAccess)
+        } else {
+            Quiet(
+                com.jarvis.client.net.ScreenWatch.START_LABEL,
+                enabled = state.link == LinkState.CONNECTED,
+                onClick = actions.onStartPhoneWatch,
             )
         }
     }
