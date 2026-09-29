@@ -51,6 +51,25 @@ object AnimalNow {
     /** When a focus session ended, waiting for Jarvis to be idle again; 0: none. */
     @Volatile var focusEndDue: Long = 0L
 
+    /**
+     * When the owner last used Jarvis ([System.nanoTime]) - talked to it,
+     * typed, was given an answer or asked something (the face showed
+     * listening, thinking, speaking or waiting on you). It starts at the
+     * app's start, so the first [ATTENTION_S] seconds are as they always
+     * were. While it is older than that, the idle happenings drop to about
+     * one in four (the pose's `attention`; docs/CRITTERS.md "Fewer small moves
+     * when Jarvis is not being used"). The desktop's LAST_ACTIVE.
+     */
+    @Volatile var activeAt: Long = System.nanoTime()
+    const val ATTENTION_S = 300f
+    /** Seconds the pose's attention takes to ease fully on or off. */
+    const val ATTENTION_EASE_S = 2f
+    /** Whether a face showing [state] is the owner using Jarvis. */
+    fun used(state: FaceState): Boolean =
+        state == FaceState.LISTENING || state == FaceState.THINKING || state == FaceState.SPEAKING || state == FaceState.APPROVAL
+    /** Whether the animal should behave as it is being used: used lately, or a finger on it. */
+    fun attentionWanted(now: Long, touching: Boolean): Boolean = touching || (now - activeAt) / 1e9f < ATTENTION_S
+
     /** The closest two nods, and two glows, may come (the pose's own lengths). */
     const val ACK_NOD_GAP_S = 1.2f
     const val ACK_GLOW_GAP_S = 1.8f
@@ -201,6 +220,13 @@ class AnimalFeed {
 
     private var heard: CritterPose.PauseRec? = null
     private var phrase: CritterPose.PauseRec? = null
+    // Jarvis's phrase ends known IN ADVANCE (the clip was read before it played): the latest one handed to the pose.
+    private var aheadRec: CritterPose.AheadRec? = null
+    /** The clip that is playing has a track: the pose is handed its phrase ends ahead of time, not the finder's. */
+    var lookahead: Boolean = false
+        private set
+    // How much the owner is using Jarvis, eased (the pose's `attention`): starts where it is.
+    private var attW = if (AnimalNow.attentionWanted(System.nanoTime(), false)) 1f else 0f
     /**
      * Gestures follow the phrase ends in this speaking stretch: decided the
      * first time a real voice is heard in it, off when it ends.
@@ -230,9 +256,11 @@ class AnimalFeed {
      * one full switch per [easeS] seconds, and being stroked (in over
      * [PET_IN_S], out over [PET_OUT_S]).
      */
-    fun stepWeights(dt: Float, easeS: Float = 1f) {
+    fun stepWeights(dt: Float, easeS: Float = 1f, now: Long = System.nanoTime()) {
         val d = max(0f, dt)
         clock += d
+        attW = if (AnimalNow.attentionWanted(now, petDown)) min(1f, attW + d / AnimalNow.ATTENTION_EASE_S)
+               else max(0f, attW - d / AnimalNow.ATTENTION_EASE_S)
         val k = d / easeS
         // Started before the stored switches were read: take them at once.
         val snap = !switchesRead && AnimalNow.reads > 0
@@ -271,7 +299,8 @@ class AnimalFeed {
      * frame. Off again when the speaking stretch ends. A typed or quiet answer
      * keeps the gestures' own timing. The desktop's faces.html, the same rule.
      */
-    fun onState(next: FaceState, voiced: Boolean, gesture: () -> Boolean = { false }) {
+    fun onState(next: FaceState, voiced: Boolean, now: Long = System.nanoTime(), gesture: () -> Boolean = { false }) {
+        if (AnimalNow.used(next)) AnimalNow.activeAt = now
         if (next != lastState) {
             lastState = next
             phraseOn = false
@@ -283,6 +312,7 @@ class AnimalFeed {
         phraseOn = true
         // A new answer's phrase ends: nothing from an earlier one carries over.
         phrase = phrase?.let { CritterPose.PauseRec(n = it.n) }
+        aheadRec = aheadRec?.let { CritterPose.AheadRec(it.n, null) }
     }
 
     /**
@@ -291,14 +321,28 @@ class AnimalFeed {
      * in Jarvis's real voice ([voice], null when none plays) while speaking;
      * and the focus stretch, handed on once Jarvis is idle again.
      */
-    fun stepFrame(dt: Float, state: FaceState, mic: Float, voice: Float?, now: Long = System.nanoTime()) {
+    fun stepFrame(dt: Float, state: FaceState, mic: Float, voice: Float?, ahead: Float = -1f, now: Long = System.nanoTime()) {
         fun age(r: CritterPose.PauseRec?) = r?.let { CritterPose.PauseRec(0f, 0f, min(CritterPose.NEVER, it.ago + dt), it.n) }
         heard = if (state == FaceState.LISTENING) {
             CritterPose.pauseStep(heard, dt, mic, CritterPose.Pause.NOD_QUIET, CritterPose.Pause.NOD_GAP)
         } else {
             age(heard)
         }
-        phrase = if (state == FaceState.SPEAKING && phraseOn) {
+        // Jarvis's phrase ends. [ahead] is what Speaker.mouthNow writes into the fifth
+        // place: below 0, the clip has no track (the phone's own voice, or nothing
+        // playing) and the finder listens to the level; otherwise the seconds until
+        // the clip's next phrase end (NO_END when none is left), which is handed to
+        // the pose ahead of time so the gesture peaks ON it (CritterPose.aheadStep).
+        // The desktop's faces.html, the same rule.
+        val pn = max(phrase?.n ?: 0, aheadRec?.n ?: 0)
+        phrase = phrase?.let { if (it.n != pn) it.copy(n = pn) else it }
+        aheadRec = aheadRec?.let { if (it.n != pn) it.copy(n = pn) else it }
+        lookahead = state == FaceState.SPEAKING && phraseOn && ahead >= 0f
+        aheadRec = CritterPose.aheadStep(
+            aheadRec ?: if (pn > 0) CritterPose.AheadRec(pn, null) else null, dt,
+            if (lookahead && ahead < NO_END / 2f) ahead else null,
+        )
+        phrase = if (state == FaceState.SPEAKING && phraseOn && !lookahead) {
             CritterPose.pauseStep(phrase, dt, voice ?: 0f, CritterPose.Pause.PHRASE_QUIET, CritterPose.Pause.PHRASE_GAP)
         } else {
             age(phrase)
@@ -395,6 +439,9 @@ class AnimalFeed {
         fun e(r: Float) = r * r * (3f - 2f * r)
         val ph = phrase
         val hd = heard
+        // An end handed over ahead of time is kept until its gesture has finished, also once the clip is over.
+        val ar = aheadRec
+        val useAhead = phraseOn && ar?.due != null && ar.due > -PHRASE_KEEP_S
         return CritterPose.Opts(
             calm = calm, serious = serious, still = still,
             variety = 1f,
@@ -403,8 +450,10 @@ class AnimalFeed {
             pet = e(petW), petX = petXs, petDir = petDirS,
             hello = hello, goodbye = goodbye,
             heard = hd?.ago ?: CritterPose.NEVER, heardN = hd?.n ?: -1,
-            phraseEnd = if (phraseOn) ph?.ago ?: CritterPose.NEVER else CritterPose.NEVER,
-            phraseN = if (phraseOn) ph?.n ?: 0 else -1,
+            phraseEnd = if (phraseOn && !useAhead) ph?.ago ?: CritterPose.NEVER else CritterPose.NEVER,
+            phraseN = if (!phraseOn) -1 else if (useAhead) ar!!.n else ph?.n ?: 0,
+            phraseDue = if (useAhead) ar!!.due!! else Float.NaN,
+            attention = e(attW),
             ackNod = AnimalNow.since(AnimalNow.factAt, now),
             ackGlow = AnimalNow.since(AnimalNow.glowAt, now),
             focusEnd = if (focusEndAt >= 0.0) (clock - focusEndAt).toFloat() else CritterPose.NEVER,
@@ -416,5 +465,9 @@ class AnimalFeed {
         const val PET_HOLD_S = 0.5f
         const val PET_IN_S = 0.3f
         const val PET_OUT_S = 1f
+        /** `Speaker.mouthNow`'s fifth number when a clip has a track but no phrase end left in it. */
+        const val NO_END = 1e9f
+        /** How long an end handed to the pose ahead of time stays in its opts (the desktop's PHRASE_KEEP_S). */
+        const val PHRASE_KEEP_S = 2f
     }
 }

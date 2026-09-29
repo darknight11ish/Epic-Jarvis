@@ -166,14 +166,14 @@
    * A breath at clock t, -1..1 like the sine it replaces, but uneven: the
    * phase is the steady one (k cycles a LOOP) plus a slow wander, so the
    * breath's rate drifts by at most BREATH_VAR either way (each breath's
-   * length varies by about that much) and its depth by a tenth. `seed` is
+   * length varies by about that much) and its depth by up to a tenth (never deeper than the steady breath was). `seed` is
    * the face's own.
    */
   const BREATH_VAR = 0.20, BREATH_SPAN = 16;
   function breathWave(t, k, seed) {
     const w0 = TAU * k / LOOP;   // radians a second at the steady rate
     const ph = phaseOf(t, k) + BREATH_VAR * (BREATH_SPAN / 2) * w0 * noise(t, seed, BREATH_SPAN);
-    return Math.sin(ph) * (1 + 0.10 * noise(t, seed + 1, 32));
+    return Math.sin(ph) * (0.95 + 0.05 * noise(t, seed + 1, 32));
   }
 
   /** 0 at both ends, 1 in the middle, with no sudden start or stop (x in 0..1). */

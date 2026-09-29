@@ -181,7 +181,7 @@ object CritterPose {
     internal fun breathWave(t: Float, k: Float, seed: Int): Float {
         val w0 = TAU * k / LOOP
         val ph = phaseOf(t, k) + BREATH_VAR * (BREATH_SPAN / 2f) * w0 * noise(t, seed, BREATH_SPAN)
-        return sin(ph) * (1f + 0.10f * noise(t, seed + 1, 32f))
+        return sin(ph) * (0.95f + 0.05f * noise(t, seed + 1, 32f))
     }
     /** 0 at both ends, 1 in the middle, easing in and out (x in 0..1). */
     internal fun bump(x: Float): Float {

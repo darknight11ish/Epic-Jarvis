@@ -65,6 +65,49 @@ object LipSync {
         val n: Int get() = level.size
     }
 
+    /**
+     * Where the phrases end, worked out before they are heard - the desktop's
+     * `JarvisLipSync.phraseEnds` (see its note). The talking gestures land on
+     * the end of one of Jarvis's phrases, and the whole clip is read before it
+     * plays, so from its own loudness ([Track.level]) the same rules as the
+     * live finder (`CritterPose.pauseStep`) can find the ends ahead of time: a
+     * stretch of [PhraseRule.QUIET] seconds under [PhraseRule.OFF] after at
+     * least [PhraseRule.TALK_MIN] seconds over [PhraseRule.ON], and never
+     * closer than [PhraseRule.GAP] to the one before. Returns the seconds
+     * (into the clip, on the clock [sample] reads) where each phrase's sound
+     * STOPS - the start of that quiet stretch - plus the clip's own end when
+     * its sound runs right up to it. Counted in whole frames.
+     */
+    object PhraseRule {
+        const val ON = 0.10f
+        const val OFF = 0.05f
+        const val TALK_MIN = 0.6f
+        const val QUIET = 0.05f
+        const val GAP = 2.0f
+    }
+    fun phraseEnds(track: Track?): FloatArray {
+        if (track == null || track.n <= 0 || track.fps <= 0) return FloatArray(0)
+        val fps = track.fps
+        val quietN = Math.round(PhraseRule.QUIET * fps)
+        val talkN = Math.round(PhraseRule.TALK_MIN * fps)
+        val gapN = Math.round(PhraseRule.GAP * fps)
+        val out = ArrayList<Float>()
+        var talk = 0
+        var quiet = 0
+        var last = -1_000_000_000
+        for (i in 0 until track.n) {
+            val lv = track.level[i]
+            if (lv >= PhraseRule.ON) { talk++; quiet = 0 } else if (lv <= PhraseRule.OFF) quiet++
+            if (quiet >= quietN && talk > 0) {
+                if (talk >= talkN && i - last >= gapN) { out.add((i - quietN + 1).toFloat() / fps); last = i }
+                talk = 0
+            }
+        }
+        // Sound right up to the clip's last frame: the clip's end is a phrase end.
+        if (talk >= talkN && track.n - last >= gapN) out.add(track.n.toFloat() / fps)
+        return out.toFloatArray()
+    }
+
     /** 16-bit mono PCM, as [Speaker] plays it. */
     fun analyse(pcm: ShortArray, sampleRate: Int): Track =
         analyse(FloatArray(pcm.size) { pcm[it] / 32768f }, sampleRate)
