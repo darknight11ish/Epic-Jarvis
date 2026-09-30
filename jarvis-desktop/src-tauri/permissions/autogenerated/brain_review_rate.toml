@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-review-rate"
+description = "Enables the brain_review_rate command without any pre-configured scope."
+commands.allow = ["brain_review_rate"]
+
+[[permission]]
+identifier = "deny-brain-review-rate"
+description = "Denies the brain_review_rate command without any pre-configured scope."
+commands.deny = ["brain_review_rate"]

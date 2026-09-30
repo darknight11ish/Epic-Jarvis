@@ -520,7 +520,7 @@ this exact block.
 
 Built and tested on the backend: `backend/jarvis_spending.py`, `backend/jarvis_money_parse.py`
 (shipped whole), `backend/spending.patch` (one install block), the `my_spending` tool in
-`backend/jarvis_agent.py`, `backend/test_spending.py` (468 checks, totals worked out by
+`backend/jarvis_agent.py`, `backend/test_spending.py` (471 checks, totals worked out by
 hand in `backend/fixtures/spending/expected.json`). **The reference for every shape and every
 word is one generated file, made by the real code:**
 
