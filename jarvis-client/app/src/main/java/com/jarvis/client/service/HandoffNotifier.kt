@@ -41,7 +41,7 @@ import com.jarvis.client.net.Handoff
  */
 object HandoffNotifier {
     private const val TAG = "HandoffNotifier"
-    const val NOTIFICATION_ID = 0x3202
+    const val NOTIFICATION_ID = NotificationIds.HANDOFF
     const val CHANNEL_ID = "jarvis_needs_you"
 
     private fun allowed(context: Context): Boolean =
@@ -71,6 +71,10 @@ object HandoffNotifier {
             NOTIFICATION_ID,
             Intent(context, MainActivity::class.java)
                 .setAction(MainActivity.ACTION_OPEN_HANDOFF)
+                .putExtra(
+                    com.jarvis.client.InternalLaunch.EXTRA_PROOF,
+                    com.jarvis.client.InternalLaunch.token(context),
+                )
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )

@@ -1,6 +1,8 @@
 package com.jarvis.client.ui.screens
 
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -14,6 +16,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Manner
@@ -129,11 +132,23 @@ internal fun MannerSection(canAct: Boolean) {
                     Gap(8)
                     Text(v.spoken, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                     Gap(12)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    // One switch with its words: the row takes the taps and TalkBack
+                    // reads the title with its on/off state.
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .toggleable(
+                                value = v.humor,
+                                enabled = canAct && !humorBusy,
+                                role = Role.Switch,
+                                onValueChange = { toggleHumor(it) },
+                            ),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Text(v.humorTitle, style = MaterialTheme.typography.titleSmall,
                             color = chrome.textHi, modifier = Modifier.weight(1f))
                         Switch(checked = v.humor, enabled = canAct && !humorBusy,
-                            onCheckedChange = { toggleHumor(it) })
+                            onCheckedChange = null)
                     }
                     Text(v.humorDetail, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
                 }

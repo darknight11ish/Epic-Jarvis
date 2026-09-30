@@ -11,6 +11,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.ProvidableCompositionLocal
@@ -29,6 +30,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -310,6 +314,18 @@ object JarvisType {
 }
 
 /**
+ * True when the phone's "Remove animations" (animator duration scale 0) is on.
+ * The unreadable case is "not reduced", as before.
+ */
+private fun readReducedMotion(context: android.content.Context): Boolean = runCatching {
+    Settings.Global.getFloat(
+        context.contentResolver,
+        Settings.Global.ANIMATOR_DURATION_SCALE,
+        1f,
+    ) == 0f
+}.getOrDefault(false)
+
+/**
  * Wraps the app once.
  *
  * Every parameter after [idleColor] is an Appearance choice that changes only
@@ -344,14 +360,16 @@ fun JarvisTheme(
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val reduced = remember(context) {
-        runCatching {
-            Settings.Global.getFloat(
-                context.contentResolver,
-                Settings.Global.ANIMATOR_DURATION_SCALE,
-                1f,
-            ) == 0f
-        }.getOrDefault(false)
+    // Read again whenever the app comes back to the front, so turning "Remove
+    // animations" on or off in Android's settings takes effect without a restart.
+    var reduced by remember(context) { mutableStateOf(readReducedMotion(context)) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, context) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) reduced = readReducedMotion(context)
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     // The theme crossfade. `AppearanceStore` and MainActivity both describe

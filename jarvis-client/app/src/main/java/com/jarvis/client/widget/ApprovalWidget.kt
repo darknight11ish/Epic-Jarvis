@@ -99,6 +99,14 @@ class ApprovalWidget : GlanceAppWidget() {
         val live = ready && !JarvisRuntime.stale.value &&
             JarvisRuntime.link.value == LinkState.CONNECTED
         val extra = (pending.size - 1).coerceAtLeast(0)
+        // The home screen is public: under App lock (or hidden lists) only a
+        // short title shows and the buttons open the locked app.
+        val security = if (ready) JarvisRuntime.settings.security.value else null
+        val hidden = ApprovalWidgetRules.hidden(
+            settingsKnown = security != null,
+            appLock = security?.appLock == true,
+            privateLists = security?.privateLists == true,
+        )
 
         provideContent {
             Box(
@@ -122,7 +130,7 @@ class ApprovalWidget : GlanceAppWidget() {
                         "Approvals pending — desktop unreachable",
                         "Tap to open Jarvis and reconnect",
                     )
-                    else -> ActiveApproval(pending.first(), extra)
+                    else -> ActiveApproval(pending.first(), extra, hidden)
                 }
             }
         }
@@ -167,7 +175,7 @@ class ApprovalWidget : GlanceAppWidget() {
     }
 
     @Composable
-    private fun ActiveApproval(item: PendingItem, extra: Int) {
+    private fun ActiveApproval(item: PendingItem, extra: Int, hidden: Boolean) {
         Column(modifier = GlanceModifier.fillMaxSize()) {
             Row(
                 modifier = GlanceModifier.fillMaxWidth().clickable(actionStartActivity<MainActivity>()),
@@ -197,12 +205,16 @@ class ApprovalWidget : GlanceAppWidget() {
                 // sentence, quoted - and this widget was putting it on the
                 // home screen in full while the notification refused to.
                 // The notice is the desktop's own wording for the same item.
-                val headline = item.notice?.title?.takeIf { it.isNotBlank() } ?: item.title
+                val headline = if (hidden) {
+                    ApprovalWidgetRules.HIDDEN_TITLE
+                } else {
+                    item.notice?.title?.takeIf { it.isNotBlank() } ?: item.title
+                }
                 // Never `item.summary` as the fallback: it carries the
                 // readable part of `detail` now (decodePendingRows), and the
                 // home screen is as public as a lock screen. The title is
                 // built from the action name alone, so it is safe here.
-                val detail = item.notice?.body?.takeIf { it.isNotBlank() } ?: item.risk.why
+                val detail = if (hidden) "" else item.notice?.body?.takeIf { it.isNotBlank() } ?: item.risk.why
                 Text(text = headline, maxLines = 1, style = TextStyle(
                     color = Palette.TextHi, fontSize = 14.sp, fontWeight = FontWeight.Bold,
                 ))
@@ -237,13 +249,19 @@ class ApprovalWidget : GlanceAppWidget() {
                 // the drawer and a one-tap Deny on the home screen. Two
                 // surfaces disagreeing about whether an item is safe to
                 // refuse unread is the disagreement mattering most.
-                if (item.notice?.denyOk != false) {
+                val denyOk = item.notice?.denyOk != false
+                if (ApprovalWidgetRules.showsDeny(hidden, denyOk)) {
                     PillButton(
                         label = "Deny",
                         tint = Palette.StatusBad,
-                        onClick = actionRunCallback<DenyActionCallback>(
-                            actionParametersOf(DenyActionCallback.PARAM_ID to item.id),
-                        ),
+                        // Under App lock Deny opens the locked app instead of acting.
+                        onClick = if (ApprovalWidgetRules.denyActsDirectly(hidden, denyOk)) {
+                            actionRunCallback<DenyActionCallback>(
+                                actionParametersOf(DenyActionCallback.PARAM_ID to item.id),
+                            )
+                        } else {
+                            actionStartActivity<MainActivity>()
+                        },
                         modifier = GlanceModifier.defaultWeight(),
                     )
                     Spacer(GlanceModifier.width(8.dp))

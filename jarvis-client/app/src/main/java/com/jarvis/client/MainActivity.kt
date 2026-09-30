@@ -600,16 +600,32 @@ class MainActivity : FragmentActivity() {
      * start Live - the owner's own tap - once the app is unlocked.
      */
     private fun readLiveIntent(intent: Intent?, fresh: Boolean = true) {
-        when (intent?.action) {
-            ACTION_OPEN_LIVE -> openLiveRequested.value = true
-            ACTION_START_LIVE -> if (fresh) startLiveRequested.value = "start" else openLiveRequested.value = true
-            ACTION_RESUME_LIVE -> if (fresh) startLiveRequested.value = "resume" else openLiveRequested.value = true
+        // MainActivity is exported, so any app can send these actions. START
+        // and RESUME need this app's own proof (InternalLaunch); without it
+        // they only open the Live screen, where the owner presses Start.
+        val what = InternalLaunch.decide(
+            intent?.action,
+            intent?.getStringExtra(InternalLaunch.EXTRA_PROOF),
+            InternalLaunch.token(this),
+            fresh,
+        )
+        when (what) {
+            InternalLaunch.Launch.OPEN_LIVE_SCREEN -> openLiveRequested.value = true
+            InternalLaunch.Launch.START_LIVE -> startLiveRequested.value = "start"
+            InternalLaunch.Launch.RESUME_LIVE -> startLiveRequested.value = "resume"
+            else -> Unit
         }
     }
 
-    /** The "a website needs you" alert: the Solve it here screen (behind the app lock, as ever). */
+    /** The "a website needs you" alert: the Solve it here screen (behind the app lock, as ever). Needs this app's own proof. */
     private fun readHandoffIntent(intent: Intent?) {
-        if (intent?.action != ACTION_OPEN_HANDOFF) return
+        val what = InternalLaunch.decide(
+            intent?.action,
+            intent?.getStringExtra(InternalLaunch.EXTRA_PROOF),
+            InternalLaunch.token(this),
+            true,
+        )
+        if (what != InternalLaunch.Launch.OPEN_HANDOFF) return
         openHandoffRequested.value = true
     }
 
