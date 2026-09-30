@@ -1690,10 +1690,7 @@
           <p class="note" id="spd-layouts-empty" hidden></p>
           <div class="row">
             <label for="spd-file">Bank file</label>
-            <input id="spd-file" type="text" list="spd-file-known" spellcheck="false"
-                   autocomplete="off" maxlength="1024"
-                   placeholder="A file in a folder Jarvis may look in" />
-            <datalist id="spd-file-known"></datalist>
+            <select id="spd-file"></select>
           </div>
           <p class="note" id="spd-file-note"></p>
 
@@ -1707,6 +1704,15 @@
                  aria-label="The first rows of the file"></div>
             <div id="spd-form"></div>
             <p class="note" id="spd-sign-sentence" role="status"></p>
+            <!-- What these choices would count, before Save (the PC counts the
+                 file's rows). A choice that does not fit the file shows why and
+                 keeps Save off until the owner ticks the box. -->
+            <p class="note" id="spd-counts" role="status"></p>
+            <p class="note" id="spd-warnings" role="status" hidden></p>
+            <label class="toggle" id="spd-accept-wrap" hidden>
+              <input type="checkbox" id="spd-accept" />
+              <span id="spd-accept-text"></span>
+            </label>
             <div class="row">
               <button class="btn small" id="spd-save" type="button" disabled>Save these columns</button>
               <button class="btn small" id="spd-cancel" type="button">Cancel</button>

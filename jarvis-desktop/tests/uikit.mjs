@@ -2726,11 +2726,25 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             if (cmd === "get_spending") return JSON.parse(JSON.stringify(sp.view));
             if (cmd === "spending_profile_read") {
-              const pr = sp.proposals[args.file];
+              // `again` (audit 2026-09-30): the fresh proposal with the saved
+              // choices in it; `againProposals` holds those, by file.
+              const pr = (args.again && sp.againProposals && sp.againProposals[args.file]) || sp.proposals[args.file];
               if (!pr) throw new Error("That file is not in a folder Jarvis may look in.");
               return JSON.parse(JSON.stringify(pr));
             }
             if (cmd === "spending_profile_save") {
+              if (args.choices && args.choices.preview === true) {
+                // "What would these choices count?" - a read; saves nothing.
+                sp.previews.push(JSON.parse(JSON.stringify(args.choices)));
+                return JSON.parse(JSON.stringify(sp.previewAnswer || { ok: true, ready: true,
+                  counts: { out: 8, in: 2, rows: 10, unread: 0 },
+                  line: "With these choices, 8 rows count as money out and 2 as money in.",
+                  problems: [], warnings: [] }));
+              }
+              if (sp.misfitOnSave && args.choices.accept_warnings !== true) {
+                sp.refused += 1;
+                throw new Error("These choices do not fit this file: the plus and minus signs look the wrong way round. If that is right, save them anyway; if not, change the choices.");
+              }
               sp.saved.push(JSON.parse(JSON.stringify(args.choices)));
               return { ok: true, fingerprint: "f1", rows_read: 7, rows_skipped: 1, view: sp.view };
             }
@@ -2994,7 +3008,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__quiz = quiz ? JSON.parse(JSON.stringify({ calls: [], quiz: null, ...quiz })) : null;
   window.__spending = spending ? JSON.parse(JSON.stringify({
     calls: [], tables: {}, hidden: false, proposals: {}, suggestions: [], fails: null,
-    saved: [], deleted: [], categoriesSaved: [], resets: 0, ...spending })) : null;
+    saved: [], deleted: [], categoriesSaved: [], resets: 0, previews: [], againProposals: {},
+    previewAnswer: null, misfitOnSave: false, refused: 0, ...spending })) : null;
   // Review decks (brain/decks.rs). `null` - a PC without decks. Scenario
   // `decks: {decks: [{id, name, paused, cards: [{id, front, back, passage,
   // kind, level, due, new}]}], available, why, newPerDay, refuse: {cmd: code}}`.

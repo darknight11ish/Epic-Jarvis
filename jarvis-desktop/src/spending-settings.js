@@ -26,10 +26,12 @@
 import { announce, currentLink, linkWords, onLink, onQueue } from "./jarvis-link.js";
 import {
   BOX,
+  canPress,
   canSave,
   categoriesBody,
   columnOptions,
   DECIMALS,
+  fileForAgain,
   formFor,
   MAX_CATEGORIES,
   MAX_WORDS,
@@ -39,6 +41,9 @@ import {
   ORDER_CHOICES,
   ORDER_OWN,
   parseWords,
+  pickerOptions,
+  previewBody,
+  previewState,
   saveBody,
   savedLine,
   SIGN_CHOICES,
@@ -63,8 +68,12 @@ const el = {
   layouts: $("spd-layouts"),
   layoutsEmpty: $("spd-layouts-empty"),
   file: $("spd-file"),
-  fileKnown: $("spd-file-known"),
   fileNote: $("spd-file-note"),
+  counts: $("spd-counts"),
+  warnings: $("spd-warnings"),
+  acceptWrap: $("spd-accept-wrap"),
+  accept: $("spd-accept"),
+  acceptText: $("spd-accept-text"),
   check: $("spd-check"),
   checkTitle: $("spd-check-title"),
   checkHidden: $("spd-check-hidden"),
@@ -104,9 +113,15 @@ let proposal = null;
 let form = null;
 /** The suggestions read from the PC: `{name, category, ticked}`. */
 let found = [];
-/** Files whose layout was saved in this window (the PC lists no path for a
- *  file that has one), offered in the Bank file box. In memory only. */
-const knownFiles = [];
+/** The bank file picked in the picker (a path the PC listed itself). */
+let pickedFile = "";
+/** The PC's last answer to "what would these choices count?" and whether the
+ *  owner ticked "save it anyway". Counts only; never a row. */
+let previewNow = { line: "", warnings: [], problems: [] };
+let previewSeq = 0;
+let previewTimer = null;
+/** The layout whose "Forget this layout" is waiting for "are you sure?". */
+let forgetAsk = "";
 let busy = false;
 
 function node(tag, className, text) {
@@ -145,15 +160,22 @@ function invoke(command, args) {
 /* ── The lists ───────────────────────────────────────────────────────── */
 
 function cleanFile() {
-  return el.file.value.trim();
+  return pickedFile;
 }
 
-function paintFileKnown() {
-  el.fileKnown.replaceChildren(...knownFiles.map((f) => {
-    const o = node("option");
-    o.value = f;
-    return o;
+/** The Bank file picker: the files the PC found in the folders Jarvis may
+ *  look in (paths never typed by hand). */
+function paintPicker() {
+  const options = pickerOptions(view);
+  const none = node("option", "", BOX.chooseFile);
+  none.value = "";
+  el.file.replaceChildren(none, ...options.map((o) => {
+    const opt = node("option", "", o.label);
+    opt.value = o.value;
+    return opt;
   }));
+  if (!options.some((o) => o.value === pickedFile)) pickedFile = "";
+  el.file.value = pickedFile;
 }
 
 function paint() {
@@ -195,16 +217,32 @@ function paint() {
     li.append(node("span", "sc-gpu-role", (p.columns || []).join(", ")));
     if (p.sign_sentence) li.append(node("span", "sc-gpu-role", p.sign_sentence));
     if (p.saved) li.append(node("span", "sc-gpu-role", p.saved));
-    if (canEdit) {
+    if (canEdit && forgetAsk === p.id) {
+      // The only thing that deletes a layout asks first.
+      li.append(node("span", "sc-gpu-role", BOX.forgetSure));
+      const yes = node("button", "btn small", BOX.forgetYes);
+      yes.type = "button";
+      yes.disabled = busy;
+      yes.addEventListener("click", () => forgetLayout(p.id));
+      const no = node("button", "btn small", BOX.forgetNo);
+      no.type = "button";
+      no.addEventListener("click", () => { forgetAsk = ""; paint(); });
+      li.append(yes, no);
+    } else if (canEdit) {
+      // "Check the columns again" uses THIS row's file (a file found in the
+      // folders whose header has this layout), never whatever is picked, and
+      // never deletes the layout: the same box opens with the saved choices.
+      const file = fileForAgain(view, p.id, cleanFile());
       const again = node("button", "btn small", BOX.again);
       again.type = "button";
-      again.disabled = busy || !cleanFile();
-      again.addEventListener("click", () => openCheck(cleanFile(), { again: true }));
+      again.disabled = busy || !file;
+      again.addEventListener("click", () => openCheck(file, { again: true }));
       const forget = node("button", "btn small", BOX.forget);
       forget.type = "button";
       forget.disabled = busy;
-      forget.addEventListener("click", () => forgetLayout(p.id));
+      forget.addEventListener("click", () => { forgetAsk = p.id; paint(); });
       li.append(again, forget);
+      if (!file) li.append(node("span", "sc-gpu-role", BOX.noFileForLayout));
     }
     return li;
   }));
@@ -214,8 +252,8 @@ function paint() {
   el.file.disabled = !canEdit;
   el.fileNote.hidden = !canEdit;
   el.fileNote.textContent =
-    "Used by \"" + BOX.again + "\" and \"" + BOX.suggest + "\": the path of a bank file in a folder Jarvis may look in.";
-  paintFileKnown();
+    "Used by \"" + BOX.suggest + "\": a bank file in a folder Jarvis may look in.";
+  paintPicker();
 
   el.catTitle.textContent = BOX.categories;
   el.catNote.hidden = !view.categories_are_starter;
@@ -332,9 +370,16 @@ async function act(command, args, target, working) {
 function closeCheck() {
   proposal = null;
   form = null;
+  previewSeq += 1;
+  if (previewTimer) clearTimeout(previewTimer);
+  previewNow = { line: "", warnings: [], problems: [] };
   el.check.hidden = true;
   el.form.replaceChildren();
   el.previewWrap.replaceChildren();
+  el.counts.textContent = "";
+  el.warnings.hidden = true;
+  el.acceptWrap.hidden = true;
+  el.accept.checked = false;
   say(el.checkStatus, "");
 }
 
@@ -474,10 +519,48 @@ function renderForm() {
  *  the sign choice follows the choice. */
 function refreshForm() {
   if (!form) return;
-  el.save.disabled = busy || !canSave(form);
+  el.save.disabled = busy || !canPress(form, previewNow, el.accept.checked);
   const sign = signOf(form.mode, form.sign1);
   const sentences = (proposal && (proposal.sign_sentences || (proposal.sentences && { [sign]: proposal.sentences.sign }))) || {};
   el.signSentence.textContent = sign && sentences[sign] ? sentences[sign] : "";
+  schedulePreview();
+}
+
+/** Show what the choices would count, from the PC (it reads the file), a
+ *  moment after the owner stops choosing. A failed or missing answer just
+ *  shows nothing: the PC checks again when Save is pressed. */
+function schedulePreview() {
+  if (previewTimer) clearTimeout(previewTimer);
+  const body = form && previewBody(form);
+  if (!body) {
+    previewSeq += 1;
+    paintPreview({ line: "", warnings: [], problems: [] });
+    return;
+  }
+  previewTimer = setTimeout(async () => {
+    const mine = ++previewSeq;
+    el.counts.textContent = BOX.checking;
+    let state = { line: "", warnings: [], problems: [] };
+    try {
+      state = previewState(await invoke("spending_profile_save", { choices: body }));
+    } catch (error) {
+      state = { line: "", warnings: [], problems: [] };
+    }
+    if (mine !== previewSeq || !form) return;
+    paintPreview(state);
+  }, 350);
+}
+
+function paintPreview(state) {
+  previewNow = state;
+  el.counts.textContent = state.line;
+  const bad = state.problems.length > 0;
+  el.warnings.hidden = !bad;
+  el.warnings.textContent = bad ? BOX.misfitPrefix + state.warnings.join("; ") + "." : "";
+  el.acceptWrap.hidden = !bad;
+  if (!bad) el.accept.checked = false;
+  el.acceptText.textContent = BOX.acceptTick;
+  if (form) el.save.disabled = busy || !canPress(form, previewNow, el.accept.checked);
 }
 
 function showProposal(p, file) {
@@ -498,8 +581,8 @@ function showProposal(p, file) {
   el.checkTitle.focus();
 }
 
-async function readProposal(file) {
-  return invoke("spending_profile_read", { file });
+async function readProposal(file, again = false) {
+  return invoke("spending_profile_read", { file, again });
 }
 
 async function openCheck(file, { again = false } = {}) {
@@ -511,21 +594,19 @@ async function openCheck(file, { again = false } = {}) {
   busy = true;
   paint();
   try {
-    let out = await readProposal(file);
-    if (out && out.known === true) {
-      // A layout is already saved for this file. Checking again means
-      // forgetting it first - only after the owner asked for exactly that.
-      if (!again) {
-        say(el.fileNote, "This file already has a saved layout. Use \"" + BOX.again + "\" to choose its columns again.", "ok");
-        busy = false;
-        paint();
-        return;
-      }
-      if (!live()) throw new Error(STALE);
-      await invoke("spending_profile_delete", { id: out.fingerprint });
-      out = await readProposal(file);
+    // "Check the columns again" asks the PC for a fresh reading of the file
+    // with the saved choices filled in. NOTHING is deleted: Save writes over
+    // the same layout, Cancel changes nothing, and "Forget this layout" is the
+    // only thing that deletes (after "are you sure?").
+    const out = await readProposal(file, again);
+    if (out && out.known === true && !again) {
+      say(el.fileNote, "This file already has a saved layout. Use \"" + BOX.again + "\" on its row to choose its columns again.", "ok");
+      busy = false;
+      paint();
+      return;
     }
     showProposal(out, file);
+    if (out && typeof out.misfit === "string" && out.misfit) say(el.checkStatus, out.misfit, "bad");
   } catch (error) {
     el.check.hidden = false;
     say(el.checkStatus, problemWords(error), "bad");
@@ -536,12 +617,21 @@ async function openCheck(file, { again = false } = {}) {
 }
 
 async function saveColumns() {
-  const body = form && saveBody(form);
+  const body = form && saveBody(form, { accept: el.accept.checked });
   if (!body) return;
   const out = await act("spending_profile_save", { choices: body }, el.checkStatus, "Saving…");
-  if (!out) return;
+  if (!out) {
+    // The PC refused because the choices do not fit the file: show the box
+    // to tick, so the owner can still decide to keep them.
+    if (/does not fit|do not fit/i.test(el.checkStatus.textContent || "")) {
+      previewNow = { ...previewNow, problems: previewNow.problems.length ? previewNow.problems : ["misfit"] };
+      el.acceptWrap.hidden = false;
+      el.acceptText.textContent = BOX.acceptTick;
+      refreshForm();
+    }
+    return;
+  }
   const said = savedLine(out);
-  if (!knownFiles.includes(body.file)) knownFiles.push(body.file);
   closeCheck();
   say(el.fileNote, said, "ok");
   announce(said);
@@ -550,6 +640,7 @@ async function saveColumns() {
 }
 
 async function forgetLayout(id) {
+  forgetAsk = "";
   const out = await act("spending_profile_delete", { id }, el.fileNote, "Forgetting…");
   if (!out) return;
   announce(BOX.forget);
@@ -652,7 +743,8 @@ async function addRules() {
 if (el.section) {
   el.save.addEventListener("click", saveColumns);
   el.cancel.addEventListener("click", closeCheck);
-  el.file.addEventListener("input", () => paint());
+  el.file.addEventListener("change", () => { pickedFile = el.file.value; paint(); });
+  el.accept.addEventListener("change", () => refreshForm());
   el.catAdd.addEventListener("click", () => {
     cats.push({ category: "", words: [] });
     paint();

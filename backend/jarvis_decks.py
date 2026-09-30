@@ -829,8 +829,8 @@ class Decks:
 
     def rate(self, cid, rating, deck=None) -> dict:
         """`deck` is the scope the app is reviewing ("" or None: all decks, else a
-        deck id). If it is not one this card belongs to, the card's own deck's
-        run counts it."""
+        deck id). If it is missing, or not one this card belongs to, the newest run
+        the card belongs to counts it."""
         if rating not in RATINGS:
             raise DeckError("bad_rating")
         with self._lock:

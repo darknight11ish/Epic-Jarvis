@@ -540,6 +540,47 @@ mod tests {
     }
 
     #[test]
+    fn a_preview_is_sent_without_confirm_and_a_save_carries_the_new_keys() {
+        let sent = serde_json::json!({
+            "file": "C:\\bank\\a.csv", "header_row": 0,
+            "columns": {"date": 0, "description": 1, "amount": 2},
+            "sign": "negative_out", "date_order": "ymd", "decimal": ".",
+            "currency": "", "label": "", "answered": ["sign"], "date_serial": false,
+            "accept_warnings": true, "preview": true, "token": "x"
+        });
+        let body = profile_body(&sent).unwrap();
+        let obj = body.as_object().unwrap();
+        assert_eq!(obj["preview"], true);
+        assert!(!obj.contains_key("confirm") && !obj.contains_key("token"));
+        assert_eq!(obj["answered"], serde_json::json!(["sign"]));
+        let mut save = sent.clone();
+        save.as_object_mut().unwrap().remove("preview");
+        let saved = profile_body(&save).unwrap();
+        let obj = saved.as_object().unwrap();
+        assert_eq!(obj["confirm"], true);
+        assert!(!obj.contains_key("preview"));
+        assert_eq!(obj["accept_warnings"], true);
+        assert_eq!(obj["date_serial"], false);
+    }
+
+    #[test]
+    fn a_real_preview_and_a_refused_save_read_through_with_their_words() {
+        let doc = cases();
+        let got = change_answer(200, &doc["preview_counts"].to_string()).unwrap();
+        assert_eq!(got, doc["preview_counts"]);
+        assert!(got["line"]
+            .as_str()
+            .unwrap()
+            .contains("rows count as money out"));
+        let refused = doc["save_misfit_refused"].to_string();
+        let said = change_answer(400, &refused).unwrap_err();
+        assert_eq!(said, doc["save_misfit_refused"]["message"]);
+        let again = change_answer(200, &doc["proposal_again"].to_string()).unwrap();
+        assert_eq!(again["again"], true);
+        assert!(again["questions"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
     fn categories_are_sent_as_names_and_words_only() {
         let doc = cases();
         let list = doc["view_pc_nothing_saved"]["categories"].clone();
