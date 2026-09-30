@@ -53,3 +53,15 @@ Verdicts: "Referee" = a propose-only "looks done - tick it?" card switch on the 
 app-builder milestone C and reuse the existing Pictures model; ComfyUI/badges wait for the "making
 pictures" plan (badges for ticked steps only, never streaks); the skill tree is already the
 step-locks item; X6 is optional later if the plain rows are not enough.
+
+## Added 2026-09-30 (later)
+
+| # | Item | Design doc | JARVIS-API § |
+|---|---|---|---|
+| 9 | Topic controls for Jarvis's brain: per-topic mode (Learn and use / Use but don't learn / Learn but don't use / Off), starter topics plus own | TOPIC-CONTROLS-DESIGN | 107 |
+| 10 | "Looks done? Tick it?" second-card switch (propose-only, off by default) | BUILD-QUEUE (this note) | - |
+
+Owner's answers on topic controls (2026-09-30): an unsure fact for a "don't learn" topic **asks
+with a card** (save under Unsorted, or skip); turning **Health or Money back on raises one card**.
+The other questions in TOPIC-CONTROLS-DESIGN use the recommended answer (off-topic facts hidden
+with "Show them"; turning a normal topic on is instant; a pinned fact in an Off topic: the topic wins).
