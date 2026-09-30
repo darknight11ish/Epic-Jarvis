@@ -500,7 +500,8 @@ def t_third_card_approval_card():
 
 def t_third_card_lane_independent():
     with G.World(SMI_THREE, installed=("qwen3:8b", "qwen3:14b", "qwen2.5vl:7b")) as w:
-        w.switches(master=True, long_context=True, vision=True, third_feature="vision")
+        w.switches(master=True, long_context=True, vision=True, third_feature="vision",
+                   third_card=U_2080TI_2)
         st = SC.status()
         check("both lanes are running: the second (long_context) and the third (vision)",
               st["lane"]["state"] == "running" and st["third"]["lane"]["state"] == "running",
@@ -536,7 +537,8 @@ def t_third_card_lane_independent():
     # not start at all - starting it would hold the second card open for
     # nothing (2026-09-28's fix to _wanted()).
     with G.World(SMI_THREE) as w:
-        w.switches(master=True, long_context=True, third_feature="long_context")
+        w.switches(master=True, long_context=True, third_feature="long_context",
+                   third_card=U_2080TI_2)
         st = SC.status()
         check("moved entirely to the third card: the second lane stays off, in words",
               st["lane"]["state"] == "off" and "moved to the third card" in st["lane"]["why"],
@@ -1658,6 +1660,373 @@ def t_the_toml():
     check("and no switch lives in it (the switches are in second-card.json)",
           not re.search(r"^\s*(master|long_context|vision|learning|browser_control|wiki)\s*=",
                         toml[toml.index("\n[second_card]\n"):].split("\n[", 2)[1], re.M))
+
+
+# ------------------------------------------- 8 GB and bigger extra cards --
+#
+# 2026-09-30, the owner: "make sure if the second and/or 3rd GPUs are only 8 GB
+# VRAM each that they are able to be utilized fully" (and 16 / 24 GB cards may
+# come). Every number is CALCULATED, not measured - no extra card is installed.
+
+U_8A = "GPU-8a8a8a8a-1111-4111-8111-aaaaaaaaaaa1"
+U_8B = "GPU-8b8b8b8b-2222-4222-8222-bbbbbbbbbbb2"
+U_10 = "GPU-10101010-3333-4333-8333-ccccccccccc3"
+U_12 = "GPU-12121212-4444-4444-8444-ddddddddddd4"
+U_16 = "GPU-16161616-5555-4555-8555-eeeeeeeeeee5"
+U_24 = "GPU-24242424-6666-4666-8666-fffffffffff6"
+
+
+def smi(*cards):
+    """nvidia-smi's real CSV for these (name, MiB, uuid, display) cards, the
+    first being the everyday card (a monitor on it)."""
+    lines = []
+    for i, (name, mib, uid, *rest) in enumerate(cards):
+        disp = "Enabled" if (i == 0 or (rest and rest[0])) else "Disabled"
+        lines.append(f"{i}, {uid}, {name}, {mib}, {mib - 300}, 7.5, {disp}\n")
+    return "".join(lines)
+
+
+PRIM = ("NVIDIA GeForce RTX 2080 SUPER", 8192, G.U_2080S)
+
+
+def t_small_card_floor_edges():
+    def det_for(mib):
+        with G.World(smi(PRIM, ("NVIDIA GeForce RTX 2060", mib, U_8A))):
+            return SC.detect(fresh=True)
+    check("8,192 MiB (a card sold as 8 GB) is capable", det_for(8192)["capable"] is True)
+    check("8,188 MiB (a driver that reports a few MiB less) is capable",
+          det_for(8188)["capable"] is True)
+    check("7,680 MiB, the floor itself, is capable", det_for(7680)["capable"] is True)
+    d = det_for(7679)
+    check("7,679 MiB is not, in words that now say 8 GB",
+          d["capable"] is False and "at least 8 GB" in d["why"], d["why"])
+    d = det_for(6144)
+    check("a 6 GB card (6,144 MiB) is still refused, and says why",
+          d["capable"] is False and "6 GB" in d["why"] and "at least 8 GB" in d["why"], d["why"])
+    check("the old wording 'at least 10 GB' is gone",
+          "at least 10 GB" not in d["why"])
+    with G.World(smi(PRIM, ("Old", 8192, U_8A))) as w:
+        w.smi = f"0, {G.U_2080S}, NVIDIA GeForce RTX 2080 SUPER, 8192, 6000, 7.5, Enabled\n" \
+                f"1, {U_8A}, GTX 1080, 8192, 8000, 6.1, Disabled\n"
+        d = SC.detect(fresh=True)
+    check("an 8 GB card below Turing is still refused", d["capable"] is False
+          and "older than Turing" in d["why"], d["why"])
+    with G.World(smi(PRIM, ("NVIDIA GeForce RTX 2060", 8192, ""))) as w:
+        d = SC.detect(fresh=True)
+    check("an 8 GB card with no id is still refused (work is only pointed at an id)",
+          d["capable"] is False and "id" in d["why"], d["why"])
+
+
+def t_small_card_arithmetic():
+    kv16 = 2 * 36 * 8 * 128 * 1.0625 * 16384 / 2 ** 30
+    kv8 = 2 * 36 * 8 * 128 * 1.0625 * 8192 / 2 ** 30
+    check("the 8B cache is 78,336 bytes a token: 1.20 GiB at 16K, 0.60 at 8K",
+          2 * 36 * 8 * 128 * 1.0625 == 78336 and round(kv16, 2) == 1.20 and round(kv8, 2) == 0.60)
+    check("need @16K = 4.67 + 1.20 + 0.30 + 0.33 = 6.50; @8K = 5.90",
+          SC._small_8b_need(16384) == 6.50 and SC._small_8b_need(8192) == 5.90,
+          (SC._small_8b_need(16384), SC._small_8b_need(8192)))
+    check("room: 8,192 MiB no monitor 6.65, with monitor 6.15; 7,680 no monitor 6.15",
+          SC._room_gib(8192, False) == 6.65 and SC._room_gib(8192, True) == 6.15
+          and SC._room_gib(7680, False) == 6.15)
+    check("the picture model @8K needs 5.59 + 0.23 + 0.63 = 6.45 (16K would be 6.68)",
+          SC._vision_gib(8192) == 6.45 and SC._vision_gib(16384) == 6.68,
+          (SC._vision_gib(8192), SC._vision_gib(16384)))
+
+    class Card:
+        def __init__(self, mib, mon=False):
+            self.total_mb, self.display_active, self.name = mib, mon, "X"
+    check("8,192 MiB, no monitor: the 8B at 16,384 (6.50, fits 6.65)",
+          SC._small_8b_plan(8192, False) == ("qwen3:8b", 16384, 6.50))
+    check("8,188 MiB, no monitor: still 16,384 (7.996 - 1.35 = 6.65 after rounding)",
+          SC._small_8b_plan(8188, False) == ("qwen3:8b", 16384, 6.50))
+    check("8,192 MiB WITH a monitor on it: 8,192 tokens (5.90 fits 6.15), not 16K",
+          SC._small_8b_plan(8192, True) == ("qwen3:8b", 8192, 5.90))
+    check("7,680 MiB no monitor: 8,192 tokens (16K needs 6.50 > 6.15)",
+          SC._small_8b_plan(7680, False) == ("qwen3:8b", 8192, 5.90))
+    check("7,680 MiB with a monitor: nothing fits (5.65 < 5.90)",
+          SC._small_8b_plan(7680, True) == (None, None, None))
+    check("pictures: fit at 8,192 with no monitor, not with one",
+          SC._small_vision_plan(8192, False) == ("qwen2.5vl:7b", 8192, 6.45)
+          and SC._small_vision_plan(8192, True) == (None, None, None))
+    check("from 10,240 MiB up nothing changed: the 12 GB card still gets LONG_BIG",
+          SC._long_context_plan(12288) == SC.LONG_BIG and SC._long_context_plan(10240) == SC.LONG_SMALL
+          and SC.LONG_BIG == ("qwen3:8b", 32768, 7.69))
+    check("no refusal at all for a 10 GB or bigger card, for any of the five",
+          all(SC._small_card_refusal(f, Card(m)) is None
+              for f in SC.FEATURE_IDS for m in (10240, 12288, 16376, 24564)))
+
+
+def t_8gb_second_card_features():
+    with G.World(smi(PRIM, ("NVIDIA GeForce RTX 2060 SUPER", 8192, U_8A)),
+                 installed=("qwen3:8b", "qwen2.5vl:7b")) as w:
+        det = SC.detect(fresh=True)
+        check("8 + 8: capable, says which features it can take and which stay off",
+              det["capable"] is True and "some of the extra-card features" in det["why"]
+              and "Learning in the background" in det["why"]
+              and "Longer conversations" in det["why"] and "stay off" in det["why"], det["why"])
+        plans = {f: SC._feature_model(f, det) for f in SC.FEATURE_IDS}
+        check("learning and the wiki: qwen3:8b at 16,384 (6.50 GiB)",
+              plans["learning"] == ("qwen3:8b", 16384, 6.50)
+              and plans["wiki"] == ("qwen3:8b", 16384, 6.50), plans)
+        check("pictures: qwen2.5vl:7b at 8,192 (6.45 GiB, a guess)",
+              plans["vision"] == ("qwen2.5vl:7b", 8192, 6.45), plans["vision"])
+        check("'Longer conversations' and 'Browser control' have NO plan on an 8 GB card",
+              plans["long_context"] == (None, None, None)
+              and plans["browser_control"] == (None, None, None))
+        for f, words in (("long_context", "holds no more conversation than your main card"),
+                         ("browser_control", "Browser control needs room")):
+            code, out = SC.request_change(f, True)
+            check(f"turning on {f} is refused before any card, in words",
+                  code == 503 and words in out["error"], out)
+        rows = {r["id"]: r for r in SC.status()["features"]}
+        check("the 'Longer conversations' row says why, in plain words, and is not offered",
+              "16,384 tokens" in rows["long_context"]["why"]
+              and "cannot be turned on with this card" in rows["long_context"]["why"]
+              and rows["long_context"]["model"] is None, rows["long_context"]["why"])
+        # The features that ARE offered: one card each.
+        seen = []
+        gate = lambda a, d, p: seen.append((a, d, p)) or Verdict(True, "ask", "approved")
+        SC.request_change("master", True, gate=gate)
+        code, out = SC.request_change("learning", True, gate=gate)
+        check("Learning: one card, action second_card_enable, names 8 GB, the model, the "
+              "16,384 tokens and says it is calculated, not measured",
+              code == 200 and seen[-1][0] == SC.ACTION
+              and "8 GB" in seen[-1][2] and "qwen3:8b" in seen[-1][2] and "16,384" in seen[-1][2]
+              and "calculated from the model's size, not measured" in seen[-1][2], seen[-1][2])
+        st = SC.status()
+        check("the lane is running, started with 16,384 tokens of room",
+              st["lane"]["state"] == "running"
+              and w.started[-1].kwargs["env"]["OLLAMA_CONTEXT_LENGTH"] == "16384", st["lane"])
+        lane = SC.lane_for("learning")
+        check("lane_for('learning') is a real lane at 16,384 on the second card",
+              lane is not None and lane.num_ctx == 16384 and lane.model == "qwen3:8b", lane)
+        check("lane_for('long_context') stays None even if a stale switch says on",
+              (w.switches(master=True, long_context=True, learning=True) or True)
+              and SC.lane_for("long_context") is None)
+        check("and the row for it is not 'active'",
+              not next(r for r in SC.status()["features"] if r["id"] == "long_context")["active"])
+        w.switches(master=True, browser_control=True, long_context=True)
+        check("browser_control on top of a stale long_context is still not offered",
+              SC.lane_for("browser_control") is None)
+        w.switches(master=True, vision=True)
+        v = SC.lane_for("vision")
+        check("Pictures: a lane at 8,192 on an 8 GB card with no monitor",
+              v is not None and v.num_ctx == 8192 and v.model == "qwen2.5vl:7b", v)
+
+
+def t_8gb_card_with_a_monitor():
+    with G.World(smi(PRIM, ("NVIDIA GeForce RTX 2060 SUPER", 8192, U_8A, True)),
+                 installed=("qwen3:8b", "qwen2.5vl:7b")) as w:
+        det = SC.detect(fresh=True)
+        check("a monitor on the 8 GB card: learning drops to 8,192 tokens (5.90)",
+              SC._feature_model("learning", det) == ("qwen3:8b", 8192, 5.90))
+        check("and Pictures is refused, in words that say plug the monitors into the main card",
+              SC._feature_model("vision", det) == (None, None, None)
+              and "plug the monitors into the main card" in SC._unsupported("vision", det),
+              SC._unsupported("vision", det))
+        w.switches(master=True, learning=True)
+        SC.status()
+        check("the lane starts at 8,192",
+              w.started and w.started[-1].kwargs["env"]["OLLAMA_CONTEXT_LENGTH"] == "8192")
+
+
+def t_bigger_cards_by_band():
+    for name, mib, uid, gb in (("RTX 4060 Ti 16GB", 16376, U_16, "16 GB"),
+                               ("RTX 3090", 24564, U_24, "24 GB"),
+                               ("RTX 2060 12GB", 12288, U_12, "12 GB"),
+                               ("RTX 2080 Ti", 11264, U_10, "11 GB")):
+        with G.World(smi(PRIM, (name, mib, uid))) as w:
+            det = SC.detect(fresh=True)
+            check(f"{mib} MiB reads as {gb} and is capable",
+                  det["capable"] is True and f"({gb})" in det["why"], det["why"])
+            check(f"{mib} MiB: the full plan, unchanged - qwen3:8b at 32K, 7.69 GiB",
+                  SC._feature_model("long_context", det) == ("qwen3:8b", 32768, 7.69)
+                  and SC._feature_model("browser_control", det) == ("qwen3:8b", 32768, 7.69))
+            check(f"{mib} MiB: Pictures at 32K (7.15 GiB), nothing refused",
+                  SC._feature_model("vision", det) == ("qwen2.5vl:7b", 32768, 7.15)
+                  and all(SC._unsupported(f, det) is None for f in SC.FEATURE_IDS))
+    check("16 GB and 24 GB: room 14.64 and 22.64 GiB, so the 8B plan leaves lots spare",
+          SC._room_gib(16376, False) == 14.64 and SC._room_gib(24564, False) == 22.64)
+    check("qwen3:14b @ 32K needs 11.71 GiB (fits both, NOT switched on: owner decision)",
+          round(8.42 + 2 * 40 * 8 * 128 * 1.0625 * 32768 / 2 ** 30 + 0.30 + 0.33, 2) == 11.71)
+    # "One bigger model on both cards" with these sizes.
+    for mib, uid, note in ((16376, U_16, True), (24564, U_24, True), (12288, U_12, False)):
+        with G.World(smi(PRIM, ("Card", mib, uid))) as w:
+            det = SC.detect(fresh=True)
+            ok, why = SC._combined_capable(det)
+            text = SC._describe_combined(det)
+            check(f"combined with an 8 GB main card and {mib} MiB: allowed "
+                  f"({8192 + mib} MiB together is over the 18,432 floor)", ok is True, why)
+            check(f"combined card: alone-has-room note {'present' if note else 'absent'}",
+                  ("alone has room for qwen3:14b" in text) is note, text)
+    with G.World(smi(PRIM, ("Card", 8192, U_8A))) as w:
+        ok, why = SC._combined_capable(SC.detect(fresh=True))
+        check("combined with 8 + 8 GB: refused (16 GB together is under 18 GB)",
+              ok is False and "not the 18 GB" in why, why)
+    with G.World(smi(PRIM, ("Card", 10240, U_10))) as w:
+        ok, why = SC._combined_capable(SC.detect(fresh=True))
+        check("combined with 8 + 10 GB: exactly the floor, allowed", ok is True, why)
+
+
+def t_mixed_extra_cards():
+    E8 = ("NVIDIA GeForce RTX 2060 SUPER", 8192, U_8A)
+    E8b = ("NVIDIA GeForce RTX 2070", 8192, U_8B)
+    # 8 + 8 + 8: second = lower index, third = the other 8 GB card.
+    with G.World(smi(PRIM, E8, E8b), installed=("qwen3:8b", "qwen2.5vl:7b")) as w:
+        det = SC.detect(fresh=True)
+        check("8+8+8: second is the first 8 GB card, third the other",
+              det["second"]["uuid"] == U_8A and det["_third"].uuid == U_8B)
+        w.switches(master=True, learning=True, wiki=True)
+        st = SC.status()
+        t = st["third"]
+        check("the third 8 GB card: capable, 'Longer conversations' and 'Browser control' are "
+              "not assignable, learning and wiki are",
+              t["capable"] is True and t["assignable"] == ["learning", "wiki"]
+              and set(t["unavailable"]) == {"long_context", "browser_control"}, t)
+        code, out = SC.request_change("third", assign="long_context")
+        check("assigning 'Longer conversations' to an 8 GB third card: refused in words",
+              code == 400 or code == 503, (code, out))
+        w.switches(master=True, learning=True, wiki=True, long_context=True)
+        code, out = SC.request_change("third", assign="long_context")
+        check("even with its switch stale-on: 503, 'holds no more conversation'",
+              code == 503 and "holds no more conversation" in out["error"], out)
+        seen = []
+        gate = lambda a, d, p: seen.append((a, d, p)) or Verdict(True, "ask", "approved")
+        code, out = SC.request_change("third", assign="wiki", gate=gate)
+        sw = SC._read_switches()
+        check("assigning the wiki to the third 8 GB card: one card naming it, saved WITH the "
+              "card's id", code == 200 and sw["third_feature"] == "wiki"
+              and sw["third_card"] == U_8B and "calculated" in seen[-1][2]
+              and "one more copy of Ollama" in seen[-1][2] and "fourth" not in seen[-1][2],
+              (sw, seen[-1][2]))
+        st = SC.status()
+        check("second lane (learning) and third lane (wiki) both run, on two ports",
+              st["lane"]["state"] == "running" and st["third"]["lane"]["state"] == "running"
+              and st["third"]["model"] == "qwen3:8b" and st["third"]["context"] == 16384,
+              (st["lane"], st["third"]))
+    # 8 primary + 12 + 8: second is the 12 GB card, third the 8 GB one.
+    with G.World(smi(PRIM, ("RTX 2060 12GB", 12288, U_12), E8),
+                 installed=("qwen3:8b", "qwen2.5vl:7b")) as w:
+        det = SC.detect(fresh=True)
+        check("8 + 12 + 8: second is the 12 GB, third the 8 GB",
+              det["second"]["uuid"] == U_12 and det["_third"].uuid == U_8A)
+        check("the second (12 GB) still gets everything: nothing refused",
+              all(SC._unsupported(f, det) is None for f in SC.FEATURE_IDS))
+        w.switches(master=True, long_context=True, browser_control=True, learning=True)
+        code, out = SC.request_change("third", assign="browser_control")
+        check("Browser control cannot move to the 8 GB third card (its own reason)",
+              code == 503 and "Browser control needs room" in out["error"], out)
+        code, out = SC.request_change("third", assign="learning",
+                                      gate=lambda a, d, p: Verdict(True, "ask", "approved"))
+        check("Learning can", code == 200 and SC._read_switches()["third_feature"] == "learning")
+        st = SC.status()
+        check("12 GB second runs long_context at 32K, 8 GB third runs learning at 16K",
+              st["third"]["context"] == 16384
+              and SC.lane_for("long_context").num_ctx == 32768
+              and SC.lane_for("learning").num_ctx == 16384)
+    # 8 primary + 10 + 8.
+    with G.World(smi(PRIM, ("RTX 3080 10GB", 10240, U_10), E8),
+                 installed=("qwen3:8b",)) as w:
+        det = SC.detect(fresh=True)
+        check("8 + 10 + 8: second is the 10 GB (full plan), third the 8 GB (small plan)",
+              det["second"]["uuid"] == U_10 and det["_third"].uuid == U_8A
+              and SC._feature_model("long_context", det) == ("qwen3:8b", 32768, 7.69)
+              and SC._feature_model("learning", det, card=det["_third"])
+              == ("qwen3:8b", 16384, 6.50))
+
+
+def t_third_card_identity():
+    E8 = ("NVIDIA GeForce RTX 2060 SUPER", 8192, U_8A)
+    E8b = ("NVIDIA GeForce RTX 2070", 8192, U_8B)
+    E8c = ("NVIDIA GeForce RTX 2070 SUPER", 8192, "GPU-8c8c8c8c-7777-4777-8777-ggggggggggg7")
+    with G.World(smi(PRIM, E8, E8b), installed=("qwen3:8b",)) as w:
+        w.switches(master=True, learning=True, wiki=True, third_feature="wiki", third_card=U_8B)
+        st = SC.status()
+        check("the same card still in the third slot: the choice is acted on, the lane starts",
+              st["third"]["assigned"] == "wiki" and st["third"]["lane"]["state"] == "running"
+              and len(w.started) == 2, st["third"])
+        check("its uuid survives a status() round trip (state file keeps third_card)",
+              SC._read_switches()["third_card"] == U_8B)
+        # The card in the third slot changes (the old one is pulled, another added).
+        w.smi = smi(PRIM, E8, E8c)
+        w.started.clear()
+        SC._reset_for_tests()
+        CP._cache.update(at=-1e9, cards=None, fields="")
+        st = SC.status()
+        third = st["third"]
+        check("a DIFFERENT card in the third slot: nothing is assigned to it, in words",
+              third["capable"] is True and third["assigned"] is None
+              and "different graphics card" in third["why"] and "approve" in third["why"],
+              third["why"])
+        check("...and no lane was started on the card the owner did not approve",
+              third["lane"]["state"] == "off"
+              and not any("GPU-8c8c" in p.kwargs["env"].get("CUDA_VISIBLE_DEVICES", "")
+                          for p in w.started), [p.kwargs["env"] for p in w.started])
+        check("the choice is KEPT in the file (only acted on again when re-approved)",
+              SC._read_switches()["third_feature"] == "wiki"
+              and SC._read_switches()["third_card"] == U_8B)
+        check("lane_for('wiki') falls back to the second card, not the unapproved one",
+              (SC.lane_for("wiki") or SC.Lane("", "", 0, "")).url == "http://127.0.0.1:11435")
+        # Asking for the same feature again is NOT 'already on the third card'.
+        code, out = SC.request_change("third", assign="wiki", spawn=lambda fn: None)
+        check("asking again for the same feature raises a card (not 'already on')",
+              code == 200 and out["pending"] is True, out)
+        # Approved: the new card's id is stored.
+        SC.request_change("third", assign=None)
+        code, out = SC.request_change("third", assign="wiki",
+                                      gate=lambda a, d, p: Verdict(True, "ask", "approved"))
+        check("approved for the new card: its id is stored and the lane runs there",
+              SC._read_switches()["third_card"] == E8c[2]
+              and SC.status()["third"]["assigned"] == "wiki")
+        # The card in the slot changes WHILE the approval card waits.
+        SC.request_change("third", assign=None)
+        w.smi = smi(PRIM, E8, E8b)
+        CP._cache.update(at=-1e9, cards=None, fields="")
+
+        def swap_then_yes(a, d, p):
+            w.smi = smi(PRIM, E8, E8c)
+            CP._cache.update(at=-1e9, cards=None, fields="")
+            return Verdict(True, "ask", "approved")
+        SC.request_change("third", assign="learning", gate=swap_then_yes)
+        check("the slot changed while the card waited: refused, nothing saved",
+              SC._read_switches()["third_feature"] is None
+              and SC._LAST["third"]["outcome"] == "refused"
+              and "third slot changed" in SC._LAST["third"]["reason"], SC._LAST.get("third"))
+    # A file from before the card id was kept: ask again (the safe way).
+    with G.World(smi(PRIM, E8, E8b), installed=("qwen3:8b",)) as w:
+        w.switches(master=True, learning=True, wiki=True, third_feature="wiki")   # no third_card
+        st = SC.status()
+        check("a legacy file (no card id) is NOT acted on for whichever card is third now",
+              st["third"]["assigned"] is None and st["third"]["lane"]["state"] == "off"
+              and "before Jarvis kept track" in st["third"]["why"]
+              and "approve the move again" in st["third"]["why"], st["third"]["why"])
+        check("the legacy choice is kept, and the feature keeps working on the second card",
+              SC._read_switches()["third_feature"] == "wiki"
+              and SC._read_switches()["third_card"] is None
+              and SC.lane_for("wiki") is not None)
+        check("the id is compared case-blind",
+              (w.switches(master=True, wiki=True, third_feature="wiki", third_card=U_8B.upper())
+               or True) and SC.status()["third"]["assigned"] == "wiki")
+    # Unassigning clears the id.
+    with G.World(smi(PRIM, E8, E8b)) as w:
+        w.switches(master=True, wiki=True, third_feature="wiki", third_card=U_8B)
+        SC.request_change("third", assign=None)
+        raw = json.loads((w.dir / "second-card.json").read_text(encoding="utf-8"))
+        check("unassigning clears both the feature and the card id",
+              raw["third_feature"] is None and raw["third_card"] is None, raw)
+
+
+def t_wording_for_extra_cards():
+    with G.World(SMI_THREE) as w:
+        w.switches(master=True, long_context=True)
+        seen = []
+        SC.request_change("third", assign="long_context",
+                          gate=lambda a, d, p: seen.append(p) or Verdict(True, "ask", "approved"))
+        check("the third card's card does not say 'fourth copy'",
+              seen and "fourth" not in seen[0] and "one more copy of Ollama" in seen[0], seen)
+    src = (BACKEND / "jarvis_second_card.py").read_text(encoding="utf-8")
+    check("no user-facing '10 GB' floor sentence is left in the not-capable reason",
+          "need at least 10 GB" not in src)
 
 
 def t_the_fixture():
