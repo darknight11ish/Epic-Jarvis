@@ -35,7 +35,11 @@ import {
   AGAIN_EMPTY,
   AGAIN_HEADING,
   ANSWER_LABEL,
+  againLine,
   answerCount,
+  CLOSE_LABEL,
+  HIDDEN_WORDS,
+  KIND_LABELS,
   countsLine,
   ERROR_WORDS,
   errorWords,
@@ -129,11 +133,30 @@ await check("the limits: 200-20000 for the text, 1-2000 for an answer", async ()
   assert.equal(textCount("x".repeat(200)).ok, true);
   assert.equal(textCount("x".repeat(20000)).ok, true);
   assert.equal(textCount("x".repeat(20001)).ok, false);
+  // the PC checks the TRIMMED length, so the count and the verdict do too
+  assert.equal(textCount(" ".repeat(250)).ok, false, "250 spaces were accepted");
+  assert.equal(textCount(" ".repeat(250)).n, 0);
+  assert.equal(textCount("  " + "x".repeat(199) + "  ").ok, false);
+  assert.equal(textCount("  " + "x".repeat(200) + "  ").ok, true);
+  assert.equal(textCount("").note, "0 / 20,000 characters · at least 200 needed");
   assert.match(textCount("x".repeat(20001)).note, /too long/);
   assert.equal(answerCount("").ok, false);
   assert.equal(answerCount("   ").ok, false);
   assert.equal(answerCount("a").ok, true);
   assert.equal(answerCount("a".repeat(2001)).ok, false);
+});
+
+await check("the words both apps share beyond the first list", async () => {
+  assert.deepEqual(KIND_LABELS, { recall: "Remember", explain: "Explain why", apply: "Apply" });
+  assert.equal(CLOSE_LABEL, "Close");
+  assert.equal(HIDDEN_WORDS, "(hidden)");
+  const q = { questions: [{ n: 1, prompt: "Why?" }, { n: 3, prompt: "" }] };
+  assert.equal(againLine(1, q), "1. Why?");
+  assert.equal(againLine(3, q), "3. (hidden)");
+  assert.equal(againLine(2, q), "2. (hidden)");
+  assert.equal(againLine(2, null), "2. (hidden)");
+  assert.equal(countsLine({ counts: { got_it: 2, partly: 1, not_yet: 0 } }), "2 Got it · 1 Partly · 0 Not yet");
+  assert.equal(progressLine({ questions: [{ n: 1, mark: {} }, { n: 2, mark: null }] }), "Question 2 of 2 · 1 answered");
 });
 
 /* ── The Brain window ─────────────────────────────────────────────────── */
@@ -255,7 +278,24 @@ await check("Next question, then Finish shows \"Look at these again\" with the q
   assert.match(progress, /Not yet/);
   assert.match(text, new RegExp(AGAIN_HEADING));
   assert.match(text, /1 Got it · 0 Partly · 1 Not yet/);
-  assert.match(text, /Question 2/);
+  assert.match(text, /2\. Question text number 2\?/, "the summary does not list the question's words");
+  assert.match(text, /^Close$/m);
+});
+
+await check("a skipped question is listed under \"Look at these again\" but not counted", async () => {
+  const page = await workTab({ quiz: { questions: 3, levels: ["got_it"] } });
+  await start(page);
+  await page.locator("#quiz-run textarea").fill("right");
+  await page.locator("#quiz-run").getByRole("button", { name: ANSWER_LABEL }).click();
+  await page.waitForTimeout(300);
+  await page.locator("#quiz-run").getByRole("button", { name: FINISH_LABEL }).click();
+  await page.waitForTimeout(300);
+  const text = await page.locator("#quiz-run").innerText();
+  await page.close();
+  assert.match(text, /1 Got it · 0 Partly · 0 Not yet/);
+  assert.match(text, /2\. Question text number 2\?/);
+  assert.match(text, /3\. Question text number 3\?/);
+  assert.doesNotMatch(text, /1\. Question text/);
 });
 
 await check("a finished quiz with everything right says there is nothing to look at again", async () => {
@@ -359,6 +399,8 @@ await check("the words are hidden with the private lists and come back after Sho
   await page.close();
   assert.doesNotMatch(hidden, /Question text number/);
   assert.match(hidden, /Hidden until Windows Hello confirms it is you\./);
+  assert.match(hidden, new RegExp(FINISH_LABEL), "Finish is gone while the lists are hidden");
+  assert.match(hidden, new RegExp(STOP_LABEL));
   assert.match(shown, /Question text number 1\?/);
 });
 

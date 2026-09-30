@@ -152,7 +152,9 @@ import {
   AGAIN_EMPTY as QUIZ_AGAIN_EMPTY,
   AGAIN_HEADING as QUIZ_AGAIN_HEADING,
   ANSWER_LABEL as QUIZ_ANSWER_LABEL,
+  againLine as quizAgainLine,
   ANSWER_PLACEHOLDER as QUIZ_ANSWER_PLACEHOLDER,
+  CLOSE_LABEL as QUIZ_CLOSE,
   answerCount as quizAnswerCount,
   CHECKING as QUIZ_CHECKING,
   countsLine as quizCountsLine,
@@ -6863,7 +6865,7 @@ if (dom.goalsNewAdd) {
    shows the "Show" prompt instead.
    ========================================================================== */
 
-const qz = { quiz: null, summary: null, shown: null, busy: "", error: "" };
+const qz = { quiz: null, summary: null, shown: null, busy: "", error: "", last: null };
 
 function quizReset() {
   qz.quiz = null;
@@ -6871,6 +6873,7 @@ function quizReset() {
   qz.shown = null;
   qz.busy = "";
   qz.error = "";
+  qz.last = null;
 }
 
 /** Puts words to a refusal or a thrown error; a quiz the PC no longer holds
@@ -6958,9 +6961,13 @@ async function checkAnswer(question, box) {
 }
 
 async function finishQuiz() {
+  const questions = qz.quiz;
   const out = await quizCall("brain_quiz_finish", { id: qz.quiz.id }, "");
   if (!out) return;
   qz.summary = readSummary(out.summary);
+  // The PC has forgotten the quiz by now; the words shown in the summary are
+  // the ones this window already held (empty while the lists are hidden).
+  qz.last = questions;
   qz.quiz = null;
   qz.shown = null;
   paintQuiz();
@@ -7014,11 +7021,13 @@ function paintQuiz() {
     block.append(el("h3", "subhead", QUIZ_AGAIN_HEADING));
     block.append(el("p", "note", quizCountsLine(s)));
     if (s.again.length) {
-      block.append(el("p", "", s.again.map((n) => `Question ${n}`).join(", ")));
+      const list = el("div", "quiz-again");
+      for (const n of s.again) list.append(el("p", "", quizAgainLine(n, qz.last)));
+      block.append(list);
     } else {
       block.append(el("p", "empty", QUIZ_AGAIN_EMPTY));
     }
-    block.append(button("Close", () => {
+    block.append(button(QUIZ_CLOSE, () => {
       quizReset();
       paintQuiz();
     }));
@@ -7068,7 +7077,8 @@ function paintQuiz() {
       }
     }
     const foot = el("div", "goal-actions");
-    if (!q.hidden) foot.append(button(QUIZ_FINISH, finishQuiz, { live: true }));
+    // Finish and Stop reveal nothing (numbers only), so both stay while hidden.
+    foot.append(button(QUIZ_FINISH, finishQuiz, { live: true }));
     foot.append(button(QUIZ_STOP, stopQuiz, { live: true, danger: true }));
     block.append(foot);
     parts.push(block);

@@ -1742,7 +1742,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               const counts = { got_it: 0, partly: 0, not_yet: 0 };
               const again = [];
               for (const x of z.quiz.questions) {
-                if (!x.mark) continue;
+                if (!x.mark) { again.push(x.n); continue; } // skipped: looked at again, not counted
                 counts[x.mark.level] += 1;
                 if (x.mark.level !== "got_it") again.push(x.n);
               }

@@ -142,7 +142,7 @@ internal fun QuizSection(
                     if (current != null) {
                         QuestionView(
                             q = current,
-                            total = total,
+                            progress = if (privateHidden) "" else Quiz.progressLine(quiz),
                             verified = quiz.graderVerified,
                             hidden = privateHidden,
                             answer = draft,
@@ -238,18 +238,27 @@ internal fun QuizSection(
                     if (!privateHidden) {
                         TextInput(
                             value = pasted,
-                            onValueChange = { pasted = it.take(Quiz.MAX_TEXT) },
+                            // Never cut silently: an over-long paste keeps its words, shows
+                            // its real count and the too-long message, and Write questions waits.
+                            onValueChange = { pasted = it },
                             placeholder = Quiz.PASTE_HINT,
                             singleLine = false,
                             maxLines = 8,
                         )
-                        val n = pasted.trim().length
+                        val n = Quiz.textLength(pasted)
+                        val tooLong = n > Quiz.MAX_TEXT
                         Text(
-                            "$n / ${Quiz.MAX_TEXT} characters" +
-                                if (n in 1 until Quiz.MIN_TEXT) " - at least ${Quiz.MIN_TEXT} are needed" else "",
+                            Quiz.textNote(pasted),
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (n in 1 until Quiz.MIN_TEXT) chrome.warnInk else chrome.textLo,
+                            color = if (tooLong || n in 1 until Quiz.MIN_TEXT) chrome.warnInk else chrome.textLo,
+                            modifier = Modifier.liveStatus(),
                         )
+                        if (tooLong) {
+                            Text(
+                                Quiz.messageFor(Quiz.E_TEXT_LONG).orEmpty(),
+                                style = MaterialTheme.typography.labelSmall, color = chrome.warnInk,
+                            )
+                        }
                         Text(Quiz.OUTSIDE_TEXT, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                         Quiet(
                             if (busy) Quiz.STARTING else Quiz.START,
@@ -290,7 +299,7 @@ internal fun QuizSection(
 @Composable
 private fun QuestionView(
     q: Quiz.Question,
-    total: Int,
+    progress: String,
     verified: Boolean,
     hidden: Boolean,
     answer: String,
@@ -303,10 +312,12 @@ private fun QuestionView(
 ) {
     val chrome = LocalChrome.current
     Column(Modifier.fillMaxWidth()) {
-        Text(
-            Quiz.position(q.n, total) + Quiz.kindWords(q.kind).takeIf { it.isNotEmpty() }?.let { " · $it" }.orEmpty(),
-            style = MaterialTheme.typography.labelSmall, color = chrome.textLo,
-        )
+        if (progress.isNotEmpty()) {
+            Text(progress, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+        Quiz.kindWords(q.kind).takeIf { it.isNotEmpty() }?.let {
+            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        }
         Text(
             if (hidden) Quiz.HIDDEN_TEXT else q.prompt,
             style = MaterialTheme.typography.bodyMedium, color = chrome.textHi,
@@ -323,7 +334,7 @@ private fun QuestionView(
                     maxLines = 6,
                 )
                 Text(
-                    "${answer.trim().length} / ${Quiz.MAX_ANSWER}",
+                    Quiz.answerNote(answer),
                     style = MaterialTheme.typography.labelSmall, color = chrome.textLo,
                 )
                 Quiet(
@@ -376,7 +387,7 @@ private fun SummaryView(
     Column(Modifier.fillMaxWidth()) {
         Text(Quiz.SUMMARY_TITLE, style = MaterialTheme.typography.titleSmall, color = chrome.textHi)
         Text(
-            "${Quiz.GOT_IT}: ${summary.gotIt} · ${Quiz.PARTLY}: ${summary.partly} · ${Quiz.NOT_YET}: ${summary.notYet}",
+            Quiz.countsLine(summary),
             style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
             modifier = Modifier.liveStatus(),
         )
@@ -385,15 +396,14 @@ private fun SummaryView(
             Text(Quiz.SUMMARY_EMPTY, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
         } else {
             summary.again.forEach { n ->
-                val q = questions.firstOrNull { it.n == n }
                 Text(
-                    "$n. " + if (hidden || q == null) Quiz.HIDDEN_TEXT else q.prompt,
+                    Quiz.againLine(n, questions, hidden),
                     style = MaterialTheme.typography.bodySmall, color = chrome.textHi,
                 )
             }
         }
         Gap(4)
         Text(Quiz.OUTSIDE_TEXT, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
-        Quiet("Done", onClick = onDone)
+        Quiet(Quiz.CLOSE, onClick = onDone)
     }
 }

@@ -4775,7 +4775,7 @@ object JarvisRuntime {
         if (!com.jarvis.client.net.Quiz.validCount(count)) {
             return false to (com.jarvis.client.net.Quiz.messageFor(com.jarvis.client.net.Quiz.E_BAD_COUNT) ?: "")
         }
-        val out = when (val r = api.quizCall(com.jarvis.client.net.Quiz.PATH,
+        val out = when (val r = api.quizCall("/api/quiz",
             com.jarvis.client.net.Quiz.startBody(text, count))) {
             is ApiResult.Ok -> com.jarvis.client.net.Quiz.startedSaid(r.value)
             is ApiResult.Failed -> return false to ("Not started. " + describe(r.error))
@@ -4796,7 +4796,7 @@ object JarvisRuntime {
     suspend fun refreshQuiz(): String? {
         val id = _quiz.value?.id ?: return null
         if (!com.jarvis.client.net.Quiz.validId(id)) return null
-        return when (val r = api.quizCall("${com.jarvis.client.net.Quiz.PATH}/$id", null)) {
+        return when (val r = api.quizCall("/api/quiz/$id", null)) {
             is ApiResult.Ok -> {
                 val out = com.jarvis.client.net.Quiz.readSaid(r.value)
                 val q = out.value
@@ -4833,7 +4833,7 @@ object JarvisRuntime {
                 else com.jarvis.client.net.Quiz.E_ANSWER_LONG,
             ) ?: "")
         }
-        val out = when (val r = api.quizCall("${com.jarvis.client.net.Quiz.PATH}/$id/answer",
+        val out = when (val r = api.quizCall("/api/quiz/$id/answer",
             com.jarvis.client.net.Quiz.answerBody(n, answer))) {
             is ApiResult.Ok -> com.jarvis.client.net.Quiz.answeredSaid(r.value)
             is ApiResult.Failed -> return null to ("Not checked. " + describe(r.error))
@@ -4858,7 +4858,7 @@ object JarvisRuntime {
         if (id == null || !com.jarvis.client.net.Quiz.validId(id)) {
             return null to (com.jarvis.client.net.Quiz.messageFor(com.jarvis.client.net.Quiz.E_NOT_FOUND) ?: "")
         }
-        val out = when (val r = api.quizCall("${com.jarvis.client.net.Quiz.PATH}/$id/finish",
+        val out = when (val r = api.quizCall("/api/quiz/$id/finish",
             com.jarvis.client.net.Quiz.EMPTY_BODY)) {
             is ApiResult.Ok -> com.jarvis.client.net.Quiz.finishedSaid(r.value)
             is ApiResult.Failed -> return null to ("Not finished. " + describe(r.error))
@@ -4883,7 +4883,7 @@ object JarvisRuntime {
             _quiz.value = null
             return true to "Stopped. Nothing was kept."
         }
-        val out = when (val r = api.quizCall("${com.jarvis.client.net.Quiz.PATH}/$id/stop",
+        val out = when (val r = api.quizCall("/api/quiz/$id/stop",
             com.jarvis.client.net.Quiz.EMPTY_BODY)) {
             is ApiResult.Ok -> com.jarvis.client.net.Quiz.stoppedSaid(r.value)
             is ApiResult.Failed -> return false to ("Not stopped. " + describe(r.error))

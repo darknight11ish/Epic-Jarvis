@@ -1687,6 +1687,19 @@ the owner taps the chat; it never guesses). **No automatic tagging**, and no
 tree index or clustering of past chats (ChatIndex, BERTopic and the others were
 checked and turned down).
 
+Decided 2026-09-30, the owner ticked every item in `docs/BUILD-QUEUE-2026-09-30.md`
+and said any rule can be changed if worth it: **spending summaries from bank
+CSV/Excel files** (bank connections such as Plaid stay refused; numbers by code,
+screen only), **review decks with py-fsrs and typed Spanish practice** as quiz
+modes, **goal step locks, a forecast range and step completion dates**, a
+**retirement what-if calculator** ("not financial advice"), **overnight suggested
+tags on cards only** (off by default; this reverses the earlier "no automatic
+tagging" answer to "no tagging without a tap"), an **activity heatmap and
+owner-defined balance chart** (no streaks, no wilting), a **Galaxy facts panel**
+and a manual **"new section here"** marker. Also decided: the tldraw canvas,
+React Flow, Datasette, Evidence, BERTopic and the other chat-clustering repos
+stay refused; the Galaxy is not swapped for a library.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

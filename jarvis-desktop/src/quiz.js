@@ -23,11 +23,14 @@ export const START_LABEL = "Write questions";
 export const ANSWER_LABEL = "Check my answer";
 export const FINISH_LABEL = "Finish";
 export const STOP_LABEL = "Stop and forget this quiz";
+export const CLOSE_LABEL = "Close";
 export const AGAIN_HEADING = "Look at these again";
 export const AGAIN_EMPTY = "Nothing to look at again.";
 export const OUTSIDE_LINE =
   "This text is treated as outside text: Jarvis never learns facts from it.";
 export const GUESS_LABEL = "Jarvis's guess";
+/** Shown in place of a question's words while the private lists are hidden (both apps). */
+export const HIDDEN_WORDS = "(hidden)";
 
 /** Extra words of the desktop's own (not in the shared list). */
 export const NEXT_LABEL = "Next question";
@@ -153,12 +156,19 @@ export function progressLine(quiz) {
 
 /** The live count under the paste box, and whether it can be sent. */
 export function textCount(value) {
-  const n = String(value || "").length;
+  // The PC checks the length AFTER trimming, so the count is of the trimmed text.
+  const n = String(value || "").trim().length;
   const ok = n >= LIMITS.textMin && n <= LIMITS.textMax;
   let note = `${n.toLocaleString("en-US")} / ${LIMITS.textMax.toLocaleString("en-US")} characters`;
   if (n < LIMITS.textMin) note += ` · at least ${LIMITS.textMin} needed`;
   else if (n > LIMITS.textMax) note += " · too long";
   return { n, ok, note };
+}
+
+/** One line of the "Look at these again" list: "3. The question's words". */
+export function againLine(n, quiz) {
+  const q = quiz ? quiz.questions.find((x) => x.n === n) : null;
+  return `${n}. ${q && q.prompt ? q.prompt : HIDDEN_WORDS}`;
 }
 
 /** The live count under the answer box, and whether it can be sent. */

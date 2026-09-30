@@ -45,6 +45,8 @@ object Quiz {
     const val GUESS = "Jarvis's guess"
     const val FINISH = "Finish"
     const val STOP = "Stop and forget this quiz"
+    const val CLOSE = "Close"
+    const val HIDDEN_TEXT = "(hidden)"
     const val SUMMARY_TITLE = "Look at these again"
     const val SUMMARY_EMPTY = "Nothing to look at again."
     const val OUTSIDE_TEXT = "This text is treated as outside text: Jarvis never learns facts from it."
@@ -56,9 +58,9 @@ object Quiz {
     const val ANSWER_HINT = "Type your answer"
     const val PASSAGE_LABEL = "From the text"
     const val NEXT = "Next question"
-    const val HIDDEN_TEXT = "(hidden)"
-    const val MISSING = "Your PC's Jarvis does not have quizzes yet - run apply-patches.ps1 on the PC."
-    const val TOO_OLD = "Not done. Your PC's Jarvis does not have quizzes yet - run apply-patches.ps1 on the PC."
+    // Word for word the desktop's line (src/quiz.js QUIZ_MISSING).
+    const val MISSING = "Your PC's Jarvis does not have Quiz yet - run apply-patches.ps1 on the PC."
+    const val TOO_OLD = MISSING
     const val UNREADABLE = "Your PC sent something this phone could not read."
 
     const val MIN_TEXT = 200
@@ -288,12 +290,54 @@ object Quiz {
     fun kindWords(kind: String): String = when (kind) {
         "recall" -> "Remember"
         "explain" -> "Explain why"
-        "apply" -> "Apply it"
+        "apply" -> "Apply"
         else -> ""
     }
 
-    /** "Question 2 of 5". */
-    fun position(n: Int, total: Int): String = "Question $n of $total"
+    /**
+     * "Question 2 of 5 · 1 answered", or "All 5 answered" when nothing is left.
+     * Word for word the desktop's progress line (src/quiz.js progressLine).
+     */
+    fun progressLine(q: Session?): String {
+        if (q == null || q.questions.isEmpty()) return ""
+        val total = q.questions.size
+        val next = next(q) ?: return "All $total answered"
+        val done = q.questions.count { it.mark != null }
+        return "Question ${next.n} of $total · $done answered"
+    }
+
+    /** "2 Got it · 1 Partly · 0 Not yet": counts in words, never a percentage. */
+    fun countsLine(s: Summary): String = "${s.gotIt} $GOT_IT · ${s.partly} $PARTLY · ${s.notYet} $NOT_YET"
+
+    /**
+     * One line of "Look at these again": "3. The question's words". A skipped
+     * question is listed like any other; a question the phone no longer has
+     * the words of (hidden) shows [HIDDEN_TEXT].
+     */
+    fun againLine(n: Int, questions: List<Question>, hidden: Boolean): String {
+        val prompt = questions.firstOrNull { it.n == n }?.prompt
+        return "$n. " + if (hidden || prompt.isNullOrEmpty()) HIDDEN_TEXT else prompt
+    }
+
+    /** The length the PC checks: the text after trimming. Never cut short here. */
+    fun textLength(text: String): Int = text.trim().length
+
+    /**
+     * The count line under the paste box, word for word the desktop's
+     * (src/quiz.js textCount): "0 / 20,000 characters · at least 200 needed",
+     * or "... · too long" over the limit.
+     */
+    fun textNote(text: String): String {
+        val n = textLength(text)
+        val us = java.util.Locale.US
+        var note = String.format(us, "%,d / %,d characters", n, MAX_TEXT)
+        if (n < MIN_TEXT) note += " · at least $MIN_TEXT needed"
+        else if (n > MAX_TEXT) note += " · too long"
+        return note
+    }
+
+    /** The count line under the answer box ("12 / 2000 characters"), the desktop's words. */
+    fun answerNote(answer: String): String = "${answer.length} / $MAX_ANSWER characters"
 
     /**
      * The words beside a mark: "Got it", plus " - Jarvis's guess" while the
