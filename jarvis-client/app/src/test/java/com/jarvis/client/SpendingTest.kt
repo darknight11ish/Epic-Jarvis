@@ -154,7 +154,7 @@ class SpendingTest {
             ),
             b.also.map { it.cells },
         )
-        assertEquals("From: a_signed.csv", Spending.sourcesLine(t))
+        assertEquals("From: a_signed.csv (layout: " + word("SAVED_LAYOUT") + ")", Spending.sourcesLine(t))
     }
 
     @Test
@@ -229,33 +229,19 @@ class SpendingTest {
         return JsonObject(mapOf("table" to JsonObject(edit(t))))
     }
 
+    private val jp = kotlinx.serialization.json.JsonPrimitive(1)
+    private fun text(v: String) = kotlinx.serialization.json.JsonPrimitive(v)
+
     @Test
-    fun `unknown extra fields are ignored and missing text fields read as empty`() {
-        val extra = withTable { it + ("future_field" to kotlinx.serialization.json.JsonPrimitive("x")) }
+    fun `unknown extra fields are ignored`() {
+        val extra = withTable { it + ("future_field" to text("x")) }
         assertNotNull(Spending.parseTable(extra))
-        val bare = withTable { it - "sources" - "caveats" - "period" - "words" - "private" }
-        val t = requireNotNull(Spending.parseTable(bare))
-        assertEquals(emptyList<String>(), t.sources)
-        assertEquals(emptyList<String>(), t.caveats)
-        assertEquals("", t.period)
-        // A missing `align` is left, not right.
-        val noAlign = JsonObject(
-            mapOf(
-                "table" to JsonObject(
-                    tables["by_category"]!!.jsonObject + ("columns" to JsonArray(
-                        listOf(JsonObject(mapOf("key" to kotlinx.serialization.json.JsonPrimitive("a"),
-                            "label" to kotlinx.serialization.json.JsonPrimitive("A")))),
-                    )) + ("sections" to JsonArray(emptyList())),
-                ),
-            ),
-        )
-        assertEquals(false, Spending.parseTable(noAlign)!!.columns.single().rightAligned)
     }
 
     @Test
     fun `a table the app cannot draw faithfully is not drawn`() {
         assertNull(Spending.parseTable(JsonObject(emptyMap())))
-        assertNull(Spending.parseTable(withTable { it + ("kind" to kotlinx.serialization.json.JsonPrimitive("retirement")) }))
+        assertNull(Spending.parseTable(withTable { it + ("kind" to text("retirement")) }))
         assertNull(Spending.parseTable(withTable { it + ("version" to kotlinx.serialization.json.JsonPrimitive(2)) }))
         assertNull(Spending.parseTable(withTable { it + ("columns" to JsonArray(emptyList())) }))
         // A row with a cell missing would put money in the wrong column.
@@ -269,6 +255,86 @@ class SpendingTest {
             JsonObject(o + ("rows" to JsonArray(rows)))
         }
         assertNull(Spending.parseTable(withTable { it + ("sections" to JsonArray(bad)) }))
+    }
+
+    /** The desktop's `readTable` is strict; so is the phone (audit 2026-09-30). */
+    @Test
+    fun `the parser is as strict as the desktop's - version, lengths, non-text cells`() {
+        assertNotNull(Spending.parseTable(withTable { it }))
+        // the version must be the NUMBER 1: absent, the text "1", null and 1.5 are not read
+        assertNull(Spending.parseTable(withTable { it - "version" }))
+        assertNull(Spending.parseTable(withTable { it + ("version" to text("1")) }))
+        assertNull(Spending.parseTable(withTable { it + ("version" to kotlinx.serialization.json.JsonNull) }))
+        // text fields must be text
+        for (key in listOf("title", "period", "kind")) {
+            assertNull(key, Spending.parseTable(withTable { it - key }))
+            assertNull(key, Spending.parseTable(withTable { it + (key to jp) }))
+        }
+        for (key in listOf("sources", "caveats", "columns", "sections")) {
+            assertNull(key, Spending.parseTable(withTable { it - key }))
+        }
+        assertNull(Spending.parseTable(withTable { it + ("sources" to JsonArray(listOf(jp))) }))
+        assertNull(Spending.parseTable(withTable { it + ("caveats" to JsonArray(listOf(text("ok"), jp))) }))
+        assertNull(Spending.parseTable(withTable { it + ("sources" to text("a.csv")) }))
+        // every column: text key and label, align left or right
+        val col = { patch: (Map<String, kotlinx.serialization.json.JsonElement>) -> Map<String, kotlinx.serialization.json.JsonElement> ->
+            val cols = tables["by_category"]!!.jsonObject["columns"]!!.jsonArray.mapIndexed { i, c ->
+                if (i == 0) JsonObject(patch(c.jsonObject)) else c
+            }
+            withTable { it + ("columns" to JsonArray(cols)) }
+        }
+        assertNotNull(Spending.parseTable(col { it }))
+        assertNull(Spending.parseTable(col { it - "align" }))
+        assertNull(Spending.parseTable(col { it + ("align" to text("center")) }))
+        assertNull(Spending.parseTable(col { it - "key" }))
+        assertNull(Spending.parseTable(col { it + ("label" to jp) }))
+        // a column that is not an object is not skipped
+        assertNull(Spending.parseTable(withTable {
+            it + ("columns" to JsonArray(it["columns"]!!.jsonArray + text("x")))
+        }))
+        // sections: an element that is not an object is not skipped; heading, currency, the three lists
+        assertNull(Spending.parseTable(withTable {
+            it + ("sections" to JsonArray(it["sections"]!!.jsonArray + text("x")))
+        }))
+        val section = { patch: (Map<String, kotlinx.serialization.json.JsonElement>) -> Map<String, kotlinx.serialization.json.JsonElement> ->
+            val secs = tables["by_category"]!!.jsonObject["sections"]!!.jsonArray.map { JsonObject(patch(it.jsonObject)) }
+            withTable { it + ("sections" to JsonArray(secs)) }
+        }
+        for (key in listOf("heading", "currency", "rows", "totals", "also")) {
+            assertNull(key, Spending.parseTable(section { it - key }))
+        }
+        assertNull(Spending.parseTable(section { it + ("heading" to jp) }))
+        assertNull(Spending.parseTable(section { it + ("rows" to text("x")) }))
+        // rows: an object with a text kind and text cells, one per column
+        val firstRow = { patch: (Map<String, kotlinx.serialization.json.JsonElement>) -> Map<String, kotlinx.serialization.json.JsonElement> ->
+            section {
+                val rows = it["rows"]!!.jsonArray.mapIndexed { i, r -> if (i == 0) JsonObject(patch(r.jsonObject)) else r }
+                it + ("rows" to JsonArray(rows))
+            }
+        }
+        assertNotNull(Spending.parseTable(firstRow { it }))
+        assertNull(Spending.parseTable(firstRow { it - "kind" }))
+        assertNull(Spending.parseTable(firstRow { it - "cells" }))
+        assertNull(Spending.parseTable(firstRow { it + ("cells" to text("x")) }))
+        // a wrong-length row, in the rows, and too many cells as well as too few
+        assertNull(Spending.parseTable(firstRow {
+            it + ("cells" to JsonArray(it["cells"]!!.jsonArray + text("extra")))
+        }))
+        // a number or null in a cell is not text: it is not coerced into a figure
+        assertNull(Spending.parseTable(firstRow {
+            val cells = it["cells"]!!.jsonArray.toMutableList()
+            cells[1] = kotlinx.serialization.json.JsonPrimitive(70.4)
+            it + ("cells" to JsonArray(cells))
+        }))
+        assertNull(Spending.parseTable(firstRow {
+            val cells = it["cells"]!!.jsonArray.toMutableList()
+            cells[1] = kotlinx.serialization.json.JsonNull
+            it + ("cells" to JsonArray(cells))
+        }))
+        // a row that is not an object is not skipped
+        assertNull(Spending.parseTable(section {
+            it + ("rows" to JsonArray(it["rows"]!!.jsonArray + text("x")))
+        }))
     }
 
     // ----------------------------------------------------- ids and paths ---
@@ -354,7 +420,7 @@ class SpendingTest {
 
         val one = Spending.parseView(doc["view_phone_one_layout"]!!.jsonObject)!!
         val l = one.layouts.single()
-        assertEquals("a_signed.csv", l.label)
+        assertEquals(word("SAVED_LAYOUT"), l.label)
         assertEquals(listOf("Date", "Description", "Amount", "Balance"), l.columns)
         assertEquals(doc["sign_sentences"]!!.jsonObject["negative_out"]!!.jsonPrimitive.content, l.signSentence)
     }

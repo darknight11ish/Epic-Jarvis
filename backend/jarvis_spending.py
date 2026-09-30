@@ -27,10 +27,12 @@ HOW A QUESTION IS ANSWERED
      owner listed (jarvis_documents.allowed_path - the same rule my_files
      uses), reads it (CSV in this process; Excel in a child program, no
      secrets in its environment, macros refused) and finds the header row.
-  2. The header's fingerprint (a hash of the lower-cased column names, never
-     file content) is looked up in spending-profiles.json. A layout Jarvis has
-     not seen is NOT guessed at: the tool says so, and the owner confirms the
-     columns once, on the PC ("Check these columns").
+  2. The layout key (a hash of the lower-cased column names AND the kind of
+     file, csv or xlsx; never file content) is looked up in spending-profiles.json.
+     A layout Jarvis has not seen is NOT guessed at: the tool says so, and the
+     owner confirms the columns once, on the PC ("Check these columns"). A layout
+     that is found is then CHECKED against the file (fit_problems): one that does
+     not fit is treated like an unseen one, and the tool says which was tried.
   3. Rows become (date, cents, cleaned description, currency). Money is whole
      cents in an int, parsed with Decimal; a total that is a cent out is a bug.
   4. Descriptions are cleaned: control characters gone, account and card

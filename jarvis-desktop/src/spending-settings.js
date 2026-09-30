@@ -613,6 +613,9 @@ async function openCheck(file, { again = false } = {}) {
   } finally {
     busy = false;
   }
+  // The form was built while busy (Save off); a settled file has nothing left
+  // to choose, so nothing else would turn Save on.
+  if (form) refreshForm();
   await load({ keepCats: true });
 }
 

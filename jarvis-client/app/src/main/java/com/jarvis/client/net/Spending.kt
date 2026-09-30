@@ -137,53 +137,72 @@ object Spending {
 
     /**
      * `GET /api/chat/table` -> the table, or null when it is not one this app
-     * knows how to draw: no `table`, another `kind`, a `version` other than
-     * 1, no columns, or a row whose cells do not match the columns (drawing
-     * money in the wrong column is worse than drawing nothing). Unknown
-     * extra fields are ignored; missing text fields read as empty.
+     * knows how to draw. STRICT, exactly like the desktop's `readTable`
+     * (audit 2026-09-30): `kind` "spending" and `version` the number 1 (no
+     * version, "1" or 2 is not read); `title` and `period` text; `sources` and
+     * `caveats` lists of text; at least one column, each with a text `key` and
+     * `label` and an `align` of "left" or "right"; every section a
+     * JSON object with text `heading` and `currency` and the three lists
+     * `rows`, `totals` and `also`; every row an object with a text `kind` and
+     * a `cells` list of TEXT (a number or null in a cell is not text) with
+     * exactly one cell per column. Anything else is null: money drawn in the
+     * wrong column, or a figure this app had to guess at, is worse than
+     * nothing. Unknown extra fields are ignored.
      */
     fun parseTable(body: JsonObject): Table? {
         val t = body["table"] as? JsonObject ?: return null
-        if (t.text("kind") != "spending") return null
-        val version = (t["version"] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.intOrNull
-        if (version != null && version != 1) return null
+        if (t.strictText("kind") != "spending") return null
+        val v = t["version"] as? JsonPrimitive ?: return null
+        if (v is JsonNull || v.isString || v.intOrNull != 1) return null
+        val title = t.strictText("title") ?: return null
+        val period = t.strictText("period") ?: return null
+        val sources = strictStrings(t["sources"]) ?: return null
+        val caveats = strictStrings(t["caveats"]) ?: return null
 
-        val cols = (t["columns"] as? JsonArray)?.mapNotNull { e ->
-            val o = e as? JsonObject ?: return@mapNotNull null
-            Column(
-                key = o.text("key"),
-                label = o.text("label"),
-                rightAligned = o.text("align") == "right",
-            )
-        }.orEmpty()
-        if (cols.isEmpty()) return null
+        val colArray = t["columns"] as? JsonArray ?: return null
+        if (colArray.isEmpty()) return null
+        val cols = mutableListOf<Column>()
+        for (e in colArray) {
+            val o = e as? JsonObject ?: return null
+            val key = o.strictText("key") ?: return null
+            val label = o.strictText("label") ?: return null
+            val align = o.strictText("align") ?: return null
+            if (align != "left" && align != "right") return null
+            cols += Column(key = key, label = label, rightAligned = align == "right")
+        }
 
+        val sectionArray = t["sections"] as? JsonArray ?: return null
         val blocks = mutableListOf<Block>()
-        for (s in (t["sections"] as? JsonArray).orEmpty()) {
-            val o = s as? JsonObject ?: continue
+        for (s in sectionArray) {
+            val o = s as? JsonObject ?: return null
+            val heading = o.strictText("heading") ?: return null
+            val currency = o.strictText("currency") ?: return null
             val rows = lines(o["rows"], cols.size) ?: return null
             val totals = lines(o["totals"], cols.size) ?: return null
             val also = lines(o["also"], cols.size) ?: return null
-            blocks += Block(o.text("heading"), o.text("currency"), rows, totals, also)
+            blocks += Block(heading, currency, rows, totals, also)
         }
         return Table(
-            title = t.text("title"),
-            period = t.text("period"),
-            sources = strings(t["sources"]),
+            title = title,
+            period = period,
+            sources = sources,
             columns = cols,
             blocks = blocks,
-            caveats = strings(t["caveats"]),
+            caveats = caveats,
         )
     }
 
-    /** Null when any row has the wrong number of cells. */
+    /** Null when the list is missing, a row is not an object with text `kind`, its cells
+     *  are not all text, or it has the wrong number of cells. */
     private fun lines(e: JsonElement?, columns: Int): List<Line>? {
+        val list = e as? JsonArray ?: return null
         val out = mutableListOf<Line>()
-        for (x in (e as? JsonArray).orEmpty()) {
-            val o = x as? JsonObject ?: continue
-            val cells = (o["cells"] as? JsonArray)?.map { it.cell() } ?: return null
+        for (x in list) {
+            val o = x as? JsonObject ?: return null
+            val kind = o.strictText("kind") ?: return null
+            val cells = strictStrings(o["cells"]) ?: return null
             if (cells.size != columns) return null
-            out += Line(o.text("kind"), cells)
+            out += Line(kind, cells)
         }
         return out
     }
@@ -281,6 +300,22 @@ object Spending {
 
     private fun JsonElement?.cell(): String =
         (this as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content.orEmpty()
+
+    /** A string that IS a JSON string (a number, a boolean, null or a missing key is not text). */
+    private fun JsonObject.strictText(key: String): String? =
+        (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull && it.isString }?.content
+
+    /** A list whose every element is a JSON string, else null. */
+    private fun strictStrings(e: JsonElement?): List<String>? {
+        val list = e as? JsonArray ?: return null
+        val out = mutableListOf<String>()
+        for (x in list) {
+            val p = x as? JsonPrimitive ?: return null
+            if (p is JsonNull || !p.isString) return null
+            out += p.content
+        }
+        return out
+    }
 
     private fun strings(e: JsonElement?): List<String> =
         (e as? JsonArray)?.mapNotNull { x ->

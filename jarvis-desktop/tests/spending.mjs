@@ -38,15 +38,21 @@ import { fileURLToPath } from "node:url";
 import {
   BOX,
   buildTable,
+  canPress,
   canSave,
   categoriesBody,
   columnOptions,
+  fileForAgain,
+  filesForLayout,
   formFor,
   mergeSuggestions,
   modeOfSign,
   moved,
   mountSpendingTable,
   parseWords,
+  pickerOptions,
+  previewBody,
+  previewState,
   readTable,
   rowSummary,
   saveBody,
@@ -372,8 +378,12 @@ await check("a settled file is ready to save; an unsettled question starts with 
   assert.deepEqual(body, {
     file: "C:\\bank\\a.csv", header_row: 0,
     columns: { date: 0, description: 1, amount: 2 },
-    sign: "negative_out", date_order: "ymd", decimal: ".", currency: "", label: "a_signed.csv",
+    sign: "negative_out", date_order: "ymd", decimal: ".", currency: "", label: "",
+    answered: [], date_serial: false,
   });
+  assert.equal(formFor(SETTLED, "x").label, "", "the name starts empty - never the file name");
+  assert.equal("accept_warnings" in body, false);
+  assert.equal(saveBody(ok, { accept: true }).accept_warnings, true);
   const f = formFor(UNSETTLED, "C:\\bank\\h.csv");
   assert.deepEqual(UNSETTLED.questions, ["date_order"]);
   assert.equal(f.dateOrder, null);
@@ -461,6 +471,9 @@ await check("the three ways amounts are written send the contract's columns and 
   assert.equal(saveBody({ ...one, sign1: null }), null, "a single amount column needs its sign rule");
   assert.equal(saveBody({ ...one, currency: "TOOLONG" }), null);
   assert.equal(saveBody({ ...one, label: "x".repeat(61) }), null);
+  assert.deepEqual(saveBody({ ...one, questions: ["sign", "decimal"] }).answered, ["sign", "decimal"],
+    "the questions the box asked go back as `answered`");
+  assert.equal(saveBody({ ...one, dateSerial: true }).date_serial, true);
   assert.equal(modeOfSign("drcr"), "drcr");
   assert.equal(modeOfSign("negative_out"), "one");
   assert.equal(modeOfSign(null), null);
@@ -545,6 +558,53 @@ await check("CONTROL: the commands are registered, and each surface holds only i
   }
 });
 
+await check("the counts before Save: a preview body, the PC's line, and a warning gates Save behind a tick", () => {
+  const f = formFor(SETTLED, "C:\\bank\\a.csv");
+  const pb = previewBody(f);
+  assert.equal(pb.preview, true);
+  assert.equal(pb.file, "C:\\bank\\a.csv");
+  assert.equal(previewBody({ ...f, dateColumn: null }), null, "no preview while a choice is missing");
+  const ok = previewState(CASES.preview_counts);
+  assert.equal(ok.line, "With these choices, 8 rows count as money out and 2 as money in.");
+  assert.deepEqual(ok.problems, []);
+  assert.equal(canPress(f, ok, false), true);
+  const bad = previewState({ ready: true, line: "With these choices, 0 rows count as money out and 8 as money in.",
+    problems: ["sign"], warnings: ["the plus and minus signs look the wrong way round"] });
+  assert.equal(canPress(f, bad, false), false, "a choice that does not fit needs the tick");
+  assert.equal(canPress(f, bad, true), true);
+  assert.equal(canPress({ ...f, dateColumn: null }, ok, true), false);
+  assert.deepEqual(previewState({ ready: false }), { line: "", warnings: [], problems: [] });
+  assert.deepEqual(previewState(null), { line: "", warnings: [], problems: [] });
+  assert.equal(CASES.save_misfit_refused.status, 400);
+  assert.deepEqual(CASES.save_misfit_refused.problems, ["sign"]);
+});
+
+await check("Check the columns again: the saved choices come back filled in and nothing needs asking", () => {
+  const a = CASES.proposal_again;
+  assert.equal(a.again, true);
+  assert.deepEqual(a.questions, []);
+  const f = formFor(a, "C:\\Users\\owner\\Bank\\a_signed.csv");
+  assert.equal(canSave(f), true, "prefilled, so Save works without re-answering");
+  assert.equal(f.dateColumn, 0);
+  assert.equal(f.amountColumn, 2);
+  assert.equal(f.sign1, "negative_out");
+  assert.equal(saveBody(f).header_row, 0);
+});
+
+await check("the file picker lists what the PC found; a layout row uses ITS file", () => {
+  const view = CASES.view_pc_one_layout;
+  const opts = pickerOptions(view);
+  assert.deepEqual(opts.map((o) => o.label), ["a_signed.csv", "b_debit_credit.csv (columns not checked yet)", "h_ambiguous.csv"]);
+  assert.ok(opts.every((o) => o.value.startsWith("C:\\Users\\owner\\Bank\\")));
+  const id = view.profiles[0].id;
+  assert.deepEqual(filesForLayout(view, id), ["C:\\Users\\owner\\Bank\\a_signed.csv"]);
+  assert.equal(fileForAgain(view, id, ""), "C:\\Users\\owner\\Bank\\a_signed.csv");
+  assert.equal(fileForAgain(view, id, "C:\\Users\\owner\\Bank\\h_ambiguous.csv"),
+    "C:\\Users\\owner\\Bank\\a_signed.csv", "a picked file of another layout is not used");
+  assert.equal(fileForAgain(view, "0000", ""), null, "no file for a layout: no button");
+  assert.deepEqual(pickerOptions(CASES.view_phone_one_layout), [], "the phone's view has no files");
+});
+
 await check("CONTROL: Rust asks the PC nothing while hidden, checks the id, holds writes, logs nothing", () => {
   const fn = RS.slice(RS.indexOf("pub async fn chat_table("));
   const body = fn.slice(0, fn.indexOf("\n}\n"));
@@ -564,6 +624,8 @@ await check("CONTROL: Rust asks the PC nothing while hidden, checks the id, hold
   assert.ok(!/token/i.test(code.replace(/\/\/[^\n]*/g, "").replace(/never logged[^\n]*/g, "")) ||
     !/format!\([^)]*token/i.test(code), "the token is never formatted into a string");
   // Literal routes, so tools/check_parity.py sees them.
+  assert.ok(RS.includes('("again", "1")'), "again=1 is sent as a query, not a delete");
+  assert.ok(RS.includes("preview") && RS.includes('"accept_warnings"'), "preview and accept_warnings are known keys");
   for (const r of ["/api/chat/table", "/api/spending", "/api/spending/profile",
     "/api/spending/profile/delete", "/api/spending/categories", "/api/spending/suggest"]) {
     assert.ok(RS.includes(`"${r}"`), r);
@@ -773,6 +835,98 @@ if (K) {
     assert.equal(sent.date_order, "dmy");
     assert.equal(sent.sign, "negative_out");
     await page.waitForFunction(() => document.getElementById("spd-check").hidden);
+    await page.close();
+  });
+
+  const layoutView = () => JSON.parse(JSON.stringify(CASES.view_pc_one_layout));
+  const AGAIN_FILE = "C:\\Users\\owner\\Bank\\a_signed.csv";
+
+  await check("browser: the Bank file is a picker over the files the PC found, not a text box", async () => {
+    const page = await openSettings({ view: layoutView() });
+    await page.waitForFunction(() => document.querySelectorAll("#spd-file option").length > 1);
+    const got = await page.evaluate(() => ({
+      tag: document.getElementById("spd-file").tagName,
+      options: [...document.querySelectorAll("#spd-file option")].map((o) => o.textContent),
+    }));
+    assert.equal(got.tag, "SELECT");
+    assert.deepEqual(got.options, [BOX.chooseFile, "a_signed.csv", "b_debit_credit.csv (columns not checked yet)", "h_ambiguous.csv"]);
+    assert.equal(await page.locator("#spd-suggest").isDisabled(), true, "nothing chosen yet");
+    await page.locator("#spd-file").selectOption(AGAIN_FILE);
+    await page.waitForFunction(() => !document.getElementById("spd-suggest").disabled);
+    await page.close();
+  });
+
+  await check("browser: Check the columns again never deletes; it opens the box with the saved choices; Cancel changes nothing", async () => {
+    const page = await openSettings({ view: layoutView(), proposals: {}, againProposals: { [AGAIN_FILE]: CASES.proposal_again } });
+    await page.waitForFunction(() => document.querySelectorAll("#spd-layouts li").length === 1);
+    // The picker is empty: the button uses THIS row's file, not the box.
+    const btn = page.locator("#spd-layouts li button", { hasText: BOX.again });
+    assert.equal(await btn.isDisabled(), false, "the row knows its own file");
+    await btn.click();
+    await page.waitForFunction(() => !document.getElementById("spd-check").hidden);
+    const calls = await page.evaluate(() => window.__spending.calls.map((c) => ({ cmd: c.cmd, args: c.args })));
+    const read = calls.find((c) => c.cmd === "spending_profile_read");
+    assert.equal(read.args.file, AGAIN_FILE);
+    assert.equal(read.args.again, true);
+    assert.equal(calls.some((c) => c.cmd === "spending_profile_delete"), false, "nothing was deleted to check again");
+    assert.equal(await page.locator("#spd-save").isDisabled(), false, "prefilled with the saved choices");
+    await page.waitForFunction(() => document.getElementById("spd-counts").textContent.includes("8 rows count as money out"));
+    await page.locator("#spd-cancel").click();
+    await page.waitForFunction(() => document.getElementById("spd-check").hidden);
+    const after = await page.evaluate(() => ({
+      deleted: window.__spending.deleted.length, saved: window.__spending.saved.length,
+      layouts: document.querySelectorAll("#spd-layouts li").length }));
+    assert.deepEqual(after, { deleted: 0, saved: 0, layouts: 1 });
+    await page.close();
+  });
+
+  await check("browser: a layout with no file found cannot be checked again, and says so", async () => {
+    const v = layoutView();
+    v.bank_files = v.bank_files.map((f) => ({ ...f, layout_id: null }));
+    const page = await openSettings({ view: v });
+    await page.waitForFunction(() => document.querySelectorAll("#spd-layouts li").length === 1);
+    assert.equal(await page.locator("#spd-layouts li button", { hasText: BOX.again }).isDisabled(), true);
+    assert.match(await page.locator("#spd-layouts li").textContent(), /No bank file with this layout was found/);
+    await page.close();
+  });
+
+  await check("browser: Forget this layout asks 'are you sure?' first; only the yes deletes", async () => {
+    const page = await openSettings({ view: layoutView() });
+    await page.waitForFunction(() => document.querySelectorAll("#spd-layouts li").length === 1);
+    await page.locator("#spd-layouts li button", { hasText: BOX.forget }).click();
+    assert.match(await page.locator("#spd-layouts li").textContent(), /Forget this layout\?/);
+    assert.equal(await page.evaluate(() => window.__spending.deleted.length), 0, "nothing deleted before the yes");
+    await page.locator("#spd-layouts li button", { hasText: BOX.forgetNo }).click();
+    assert.equal(await page.evaluate(() => window.__spending.deleted.length), 0);
+    await page.locator("#spd-layouts li button", { hasText: BOX.forget }).click();
+    await page.locator("#spd-layouts li button", { hasText: BOX.forgetYes }).click();
+    await page.waitForFunction(() => window.__spending.deleted.length === 1);
+    assert.equal(await page.evaluate(() => window.__spending.deleted[0]), CASES.view_pc_one_layout.profiles[0].id);
+    await page.close();
+  });
+
+  await check("browser: the counts show before Save, and a misfit keeps Save off until the tick", async () => {
+    const v = layoutView();
+    v.waiting = [{ name: "a_signed.csv", path: AGAIN_FILE }];
+    const bad = { ok: true, ready: true, counts: { out: 0, in: 8, rows: 8, unread: 0 },
+      line: "With these choices, 0 rows count as money out and 8 as money in.", problems: ["sign"],
+      warnings: ["the plus and minus signs look the wrong way round - 0 rows would count as money spent and 8 as money coming in"] };
+    const page = await openSettings({ view: v, proposals: { [AGAIN_FILE]: CASES.proposal_again },
+      previewAnswer: bad, misfitOnSave: true });
+    await page.waitForFunction(() => document.querySelectorAll("#spd-waiting button").length === 1);
+    await page.locator("#spd-waiting button").click();
+    await page.waitForFunction(() => document.getElementById("spd-counts").textContent.includes("0 rows count as money out"));
+    assert.equal(await page.locator("#spd-accept-wrap").isHidden(), false);
+    assert.match(await page.locator("#spd-warnings").textContent(), /This does not look right/);
+    assert.equal(await page.locator("#spd-save").isDisabled(), true, "Save stays off until the owner ticks");
+    await page.locator("#spd-accept").check();
+    await page.waitForFunction(() => !document.getElementById("spd-save").disabled);
+    await page.locator("#spd-save").click();
+    await page.waitForFunction(() => window.__spending.saved.length === 1);
+    const sent = await page.evaluate(() => window.__spending.saved[0]);
+    assert.equal(sent.accept_warnings, true);
+    assert.deepEqual(sent.answered, []);
+    assert.equal(sent.label, "");
     await page.close();
   });
 

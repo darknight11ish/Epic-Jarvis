@@ -15814,6 +15814,14 @@ written with the layout's decimal mark and a whole number in a date column of a 
 shop's name between a pending and a posted export can make one row count twice (said on
 every multi-file table). Real bank files were not read; the layouts are invented.
 
+**Hiding (audit 2026-09-30).** Each different description is hidden ON ITS OWN, never joined
+with its neighbours (jarvis_secrets joins lines end to end in a second pass, which let an email
+at the end of one row swallow the first word of the next, and the wrong answer was cached); the
+cache is emptied when the hiding rules change. The auditor's "a real key is left after an email
+line" cases used strings that are not key shapes (an OpenAI-style key needs its `T3BlbkFJ`
+marker; an `AKIA...EXAMPLE` key is allowlisted as a documentation example): a real-shaped GitHub,
+AWS or IBAN string after an email line is hidden, and `test_spending.py` pins it.
+
 **What the one sentence may quote (audit 2026-09-30).** Only a money figure of the table:
 the Total spent figure, or the figure on the row (category, month, refunds, income,
 transfers) whose name the words NEAREST to the figure contain. Row counts and the numbers
