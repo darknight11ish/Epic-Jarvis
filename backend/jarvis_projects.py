@@ -102,6 +102,11 @@ from typing import Callable, Optional
 from urllib.parse import parse_qs, urlsplit
 
 try:
+    import jarvis_forecast as _forecast
+except Exception:  # pragma: no cover - shipped beside it on the PC
+    _forecast = None  # type: ignore
+
+try:
     import jarvis_framework as fw
 except Exception:  # pragma: no cover - shipped beside it on the PC
     fw = None  # type: ignore
@@ -608,7 +613,20 @@ class Projects:
             v["points"] = [{"id": p["id"], "at": p["at"], "value": p["value"]}
                            for p in reversed(pts)]
             v["points_shown"] = len(pts)
+            if _forecast is not None:
+                v["forecast"] = self._forecast(c, b)
         return v
+
+    def _forecast(self, c, b) -> dict:
+        """"About N to M weeks" (jarvis_forecast.py, JARVIS-API section 101).
+        Read from the benchmark's own recent numbers - never from the
+        `points` count a chart asked for - so every reader gets the same
+        answer. The benchmark's own `keep_on_screen` covers it: a health or
+        money benchmark's range is for its screen only."""
+        rows = c.execute("SELECT value, at FROM results WHERE bench = ? "
+                         "ORDER BY at DESC, logged DESC LIMIT 200", (b["id"],)).fetchall()
+        return _forecast.forecast([(r["at"], r["value"]) for r in rows], b["target"],
+                                  b["better"], self.clock())
 
     def _view(self, c, r, *, full: bool = False) -> dict:
         folder = r["folder"]
