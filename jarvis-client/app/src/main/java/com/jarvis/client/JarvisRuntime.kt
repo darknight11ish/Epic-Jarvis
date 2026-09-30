@@ -5378,7 +5378,7 @@ object JarvisRuntime {
                 if (quiz != null) {
                     adoptQuiz(quiz)
                 } else {
-                    pollQuiz()
+                    refreshQuiz()
                 }
                 return QuizCloudPoll(true, out.said)
             }
