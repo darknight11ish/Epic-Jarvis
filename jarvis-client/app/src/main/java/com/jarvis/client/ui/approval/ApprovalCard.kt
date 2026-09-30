@@ -447,6 +447,14 @@ fun ApprovalCard(
             }
         }
 
+        // The picture of a web form Jarvis filled in (FormReview). Only a
+        // "submit this form" card has one; nothing else changes - the decision
+        // path below is untouched, and the picture never approves anything.
+        item.formPicture?.let { pictureId ->
+            Spacer(Modifier.height(10.dp))
+            FormPicture(pictureId)
+        }
+
         if (why != null) {
             Spacer(Modifier.height(10.dp))
             // Announced, politely, when it appears or changes. This is the

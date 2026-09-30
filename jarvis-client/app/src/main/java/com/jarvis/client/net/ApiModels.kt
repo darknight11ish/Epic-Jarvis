@@ -414,6 +414,13 @@ data class PendingItem(
      * cannot bring its own. Empty for anything not read from the PC's list.
      */
     @SerialName("sign_text") val signText: String = "",
+    /**
+     * The id of the picture of a filled-in web form that rides on a "submit
+     * this form" card (`detail.picture`, FormReview), worked out from the RAW
+     * wire `detail` by [normalisePendingRow], which always overwrites this
+     * key. Null for every other card - which then looks exactly as before.
+     */
+    @SerialName("form_picture") val formPicture: String? = null,
 ) {
     /**
      * Whether approving needs an option named alongside it.

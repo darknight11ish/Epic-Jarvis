@@ -495,6 +495,10 @@ fn main() {
             // are hidden. The tidy itself is an ordinary approval card.
             "inbox_tidy_read",
             "inbox_tidy_undo",
+            // The picture of a filled-in web form, shown on the "Jarvis wants
+            // to submit this form" card in the Jarvis bar (docs/FORM-REVIEW-
+            // DESIGN.md, 2026-09-30). A read; nothing when App lock is on.
+            "form_review_picture",
             // Focus sessions (backend/focus.patch): read one, start one
             // (Brain only, held on a stale link), and ONE thing to it -
             // pause, resume, +10 minutes, stop, and the widget's Lock on
