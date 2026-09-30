@@ -1132,6 +1132,46 @@ class JarvisApi(
     suspend fun spending(): ApiResult<JsonObject> = probe(Spending.VIEW_PATH)
 
     /**
+     * `GET /api/retirement/defaults` - the Retirement what-if form: fields,
+     * limits, units, the made-up default figures and the PC's words
+     * ([Retirement.parseDefaults]). Any device may read it. A read.
+     */
+    suspend fun retirementDefaults(): ApiResult<JsonObject> = probe("/api/retirement/defaults")
+
+    /** A run can take up to 30 seconds on the PC (its own cap), so this waits a little longer. */
+    private val retirementClient: OkHttpClient by lazy {
+        client.newBuilder()
+            .readTimeout(40, TimeUnit.SECONDS)
+            .callTimeout(45, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /**
+     * `POST /api/retirement/run` - the typed boxes ([Retirement.requestBody])
+     * in, the status and JSON body back whole ([Retirement.Reply]) because the
+     * PC's error code and its own message say what to show. `X-Jarvis-Client:
+     * hud` and the token ride along like on every request ([authed]); the
+     * body is the owner's money and is never logged or kept.
+     */
+    suspend fun retirementRun(json: String): ApiResult<Retirement.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url("/api/retirement/run") ?: return@withContext ApiResult.Failed(noAddress())
+            val req = Request.Builder().url(target)
+                .post(json.toRequestBody("application/json".toMediaType())).authed().build()
+            runCatching {
+                retirementClient.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Retirement.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `POST /api/memory/profile`: pin or unpin ONE fact (the owner's
      * decision, 2026-09-24). The status and body come back whole
      * ([MemoryProfile.Reply]), like [eraseFact]: a 404 that says "no such

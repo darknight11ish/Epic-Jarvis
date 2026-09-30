@@ -305,9 +305,9 @@ object Retirement {
             title = o.text("title") ?: TITLE,
             state = o.text("state") ?: "",
             reason = o.text("reason"),
-            share = (o["share"] as? JsonObject)?.let(::parseShare),
-            lower = (bands?.get("lower") as? JsonObject)?.let(::parseBand),
-            higher = (bands?.get("higher") as? JsonObject)?.let(::parseBand),
+            share = (o["share"] as? JsonObject)?.let { parseShare(it) },
+            lower = (bands?.get("lower") as? JsonObject)?.let { parseBand(it) },
+            higher = (bands?.get("higher") as? JsonObject)?.let { parseBand(it) },
             endBalance = eb?.let {
                 EndBalance(it.int("age"), ebText?.text("p10"), ebText?.text("p50"), ebText?.text("p90"))
             },
@@ -404,7 +404,7 @@ object Retirement {
             200 -> {
                 val result = (body?.get("result") as? JsonObject)
                     ?: body?.takeIf { it.containsKey("summary") }
-                val parsed = result?.let(::parseResult)
+                val parsed = result?.let { parseResult(it) }
                 if (parsed != null) Outcome.Done(parsed) else Outcome.Problem(UNREADABLE)
             }
             400 -> {
@@ -417,7 +417,7 @@ object Retirement {
             }
             429 -> Outcome.Problem(body?.text("message") ?: words.busy, busy = true)
             503 -> if (body?.text("error") == "too_slow") {
-                Outcome.Problem(body.text("message") ?: words.tooSlow)
+                Outcome.Problem(body?.text("message") ?: words.tooSlow)
             } else {
                 Outcome.Missing
             }

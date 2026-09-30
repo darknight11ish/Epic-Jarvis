@@ -41,6 +41,7 @@ import {
   EMPTY_GOALS,
   GOALS_DETAIL,
   GOALS_MISSING,
+  GOAL_WORDS,
   GOALS_TITLE,
   NEW_GOAL_LABEL,
   NEW_GOAL_PLACEHOLDER,
@@ -519,32 +520,55 @@ await check("Remove takes the step out of the others' lists and says so before s
   assert.deepEqual(call.plan.map((s) => [s.id, s.needs]), [["s2", []], ["s3", ["s2"]]]);
 });
 
-await check("'Follows a number' lists the life benchmarks with a target, and the pick is saved", async () => {
+await check("'Follows a number' lists life AND coding number benchmarks with a target, and the pick is saved", async () => {
   const page = await draftTab(goalOf(GC.created, "draft"));
-  await page.evaluate(({ list, life }) => {
+  await page.evaluate(({ list, life, coding }) => {
     const core = window.__TAURI__.core;
     const inner = core.invoke;
     core.invoke = async (cmd, args) => {
       if (cmd === "projects_read" && !args.project) return list;
       if (cmd === "projects_read" && args.project === life.project.id) return life;
+      if (cmd === "projects_read" && args.project === coding.project.id) return coding;
       return inner(cmd, args);
     };
     window.__emit("security-changed", {});
-  }, { list: CASES.cases.list_two, life: CASES.cases.life });
+  }, { list: CASES.cases.list_two, life: CASES.cases.life, coding: CASES.cases.coding });
   await page.waitForTimeout(1200);
+  const codingName = CASES.cases.coding.project.name;
   const select = page.locator("#goals-list .goal-measure-select").nth(2);
   const options = await select.locator("option").allInnerTexts();
   const target = options.find((o) => /Long run/.test(o));
+  const startup = options.find((o) => o === `${codingName} - Startup`);
+  const hint = await page.locator("#goals-list .goal-lock-editor").nth(2).innerText();
   await select.selectOption({ label: target });
   await page.getByRole("button", { name: "Accept" }).click();
   await page.waitForTimeout(500);
   const call = await sentPlan(page);
   await page.close();
-  assert.equal(options[0], "None");
+  assert.equal(options[0], GOAL_WORDS.follows_none);
+  assert.equal(options[0], "No number");
   assert.ok(target, `no Long run in ${options}`);
-  assert.ok(options.every((o) => o === "None" || o.startsWith("Half marathon - ")));
+  assert.ok(startup, `no coding number benchmark in ${options}`);
+  assert.equal(options.some((o) => /tests$/.test(o)), false, "a command benchmark is not offered");
+  assert.ok(options.every((o) => o === "No number" || o.startsWith("Half marathon - ")
+    || o.startsWith(`${codingName} - `)));
+  assert.ok(hint.includes(GOAL_WORDS.follows_under), "the 'You still tick it yourself' line shows");
   assert.equal(call.plan[2].measure.project, CASES.cases.life.project.id);
   assert.match(call.plan[2].measure.bench, /^[0-9a-f]{32}$/);
+});
+
+await check("the editor says what 'Do these first' does, and 'Follows a number' says when there is nothing", async () => {
+  const page = await draftTab(goalOf(GC.created, "draft"));
+  const needs = await page.locator("#goals-list .goal-needs").nth(0).innerText();
+  const editor = await page.locator("#goals-list .goal-lock-editor").nth(0).innerText();
+  await page.close();
+  assert.ok(needs.includes(GOAL_WORDS.needs_under));
+  assert.ok(editor.includes(GOAL_WORDS.follows_empty), "no benchmark with a target: the empty line shows");
+  const single = { ...goalOf(GC.created, "draft"), plan: [goalOf(GC.created, "draft").plan[0]] };
+  const p2 = await draftTab(single);
+  const lone = await p2.locator("#goals-list .goal-needs").nth(0).innerText();
+  await p2.close();
+  assert.ok(lone.includes(GOAL_WORDS.needs_none));
 });
 
 await check("a refused save shows the PC's sentence as sent and the draft stays a draft", async () => {
