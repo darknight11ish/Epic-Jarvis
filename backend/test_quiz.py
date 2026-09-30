@@ -471,10 +471,87 @@ def t_no_disk_no_learner():
     check("importing it pulled in no learner, memory, history or gate module",
           not [n for n in _AFTER_IMPORT if any(w in n for w in
                ("learn", "memory", "history", "gate", "extract", "facts", "agent"))], sorted(_AFTER_IMPORT))
+    # The one allowed sibling: jarvis_wellbeing, for its pure crisis check and
+    # help wording only (owner, 2026-09-30).
+    import ast
+    tree = ast.parse(src)
+    mods = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            mods |= {a.name for a in node.names}
+        elif isinstance(node, ast.ImportFrom):
+            mods.add(node.module or "")
+    jarvis_mods = sorted(mm for mm in mods if mm.startswith("jarvis_"))
+    check("the only jarvis_ module it imports besides jarvis_local_http is jarvis_wellbeing",
+          set(jarvis_mods) == {"jarvis_local_http", "jarvis_wellbeing"}, jarvis_mods)
+    used = sorted({n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)
+                   and isinstance(n.value, ast.Name) and n.value.id == "jarvis_wellbeing"})
+    check("it calls only crisis() and reply() from jarvis_wellbeing", used == ["crisis", "reply"], used)
     import re as _re
     check("no write call in the module", not any(w in src for w in
           (".write_text(", ".write(", "mkdir", "shutil", "sqlite", ".dump("))
           and not _re.search(r"(?<![\w.])open\(", src))
+
+
+# ---------------------------------------------------------------- crisis check
+
+def t_crisis_answers():
+    import jarvis_wellbeing as W
+    m, c = fresh()
+    qid = new_quiz()[1]["quiz"]["id"]
+    calls_before = len(m.calls)
+    state_before = dict(W._SERIOUS)
+    phrases = ["I want to kill myself", "I've been thinking about suicide.",
+               "honestly i WANT TO DIE", "I feel hopeless", "I do not want to be here anymore",
+               "I don\u2019t want to be here anymore", "  i keep hurting myself  ",
+               "Chlorophyll absorbs light. Also I want to end my life."]
+    for ph in phrases:
+        check(f"the shared checker says crisis: {ph[:30]!r}", W.crisis(ph) is True)
+        code, out = Q.handle_post(f"/api/quiz/{qid}/answer", {"n": 1, "answer": ph})
+        check(f"crisis answer -> 200 crisis:true with the chat's exact help wording ({ph[:20]!r})",
+              code == 200 and out.get("ok") is True and out.get("crisis") is True
+              and out.get("message") == W.reply() and "mark" not in out)
+        check("... the quiz is returned, question 1 unanswered, nothing answered",
+              out["quiz"]["questions"][0]["mark"] is None and out["quiz"]["answered"] == 0)
+        check("... the answer text is nowhere in the reply", ph.strip() not in json.dumps(out))
+    check("no model call was made for any crisis answer", len(m.calls) == calls_before)
+    check("the help message names 988 and 911", "988" in W.reply() and "911" in W.reply())
+    check("no wellbeing state (serious window) was touched",
+          dict(W._SERIOUS) == state_before and W.serious_now() is False)
+    # nothing kept: the session holds no trace of the answer
+    import gc
+    dump = repr([vars(o) for o in gc.get_objects() if type(o).__name__ == "_Quiz"])
+    check("the quiz session holds none of the crisis words", "kill myself" not in dump
+          and "want to die" not in dump)
+    # the question can still be answered afterwards
+    code, out = Q.handle_post(f"/api/quiz/{qid}/answer", {"n": 1, "answer": "Chlorophyll."})
+    check("afterwards the same question can be answered and marked normally",
+          code == 200 and out["mark"]["level"] == "got_it" and "crisis" not in out
+          and out["quiz"]["answered"] == 1 and len(m.calls) == calls_before + 1)
+    code, out = Q.handle_post(f"/api/quiz/{qid}/finish", {})
+    check("a crisis answer leaves no mark: the summary counts only the marked one",
+          out["summary"]["counts"] == {"got_it": 1, "partly": 0, "not_yet": 0})
+
+
+def t_crisis_near_misses_follow_the_shared_checker():
+    import jarvis_wellbeing as W
+    m, c = fresh()
+    qid = new_quiz()[1]["quiz"]["id"]
+    for ph in ["This deadline is killing me", "the character wanted to end it all in the novel",
+               "Chlorophyll absorbs sunlight", "kill the process", "I am dying to know"]:
+        expect = W.crisis(ph)
+        code, out = Q.handle_post(f"/api/quiz/{qid}/answer", {"n": 2, "answer": ph})
+        got = out.get("crisis") is True
+        check(f"{ph[:40]!r}: the quiz agrees with the shared checker ({expect})", got == expect)
+        if expect:
+            check("... unanswered, so the next try is allowed", out["quiz"]["questions"][1]["mark"] is None)
+        else:
+            check("... a non-crisis answer is marked", out["mark"]["level"] == "got_it")
+            Q.stop(qid)
+            qid = new_quiz()[1]["quiz"]["id"]
+    # crisis words in the pasted text at start are NOT checked (only answers are)
+    code, out = new_quiz(text=TEXT + " He said he wanted to kill himself in the story, I want to die.")
+    check("a crisis phrase in the pasted text does not stop the quiz", code == 200 and out["ok"])
 
 
 # ---------------------------------------------------------------- grader_verified

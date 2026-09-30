@@ -97,6 +97,32 @@ export function isRefusal(answer) {
   return Boolean(answer && typeof answer === "object" && answer.ok === false);
 }
 
+/**
+ * A crisis answer (JARVIS-API 98.4): the PC did not mark it and sends
+ * `{ok:true, crisis:true, message}` instead. The message is the PC's own
+ * words (the chat's help wording) - never written in this app. Returns the
+ * message, or "" when the answer is not a crisis one (or has no words).
+ */
+export function readCrisis(answer) {
+  return answer && typeof answer === "object" && answer.crisis === true
+    && typeof answer.message === "string" ? answer.message.trim() : "";
+}
+
+/** True for a crisis answer, even one that came without usable words. */
+export function isCrisis(answer) {
+  return Boolean(answer && typeof answer === "object" && answer.crisis === true);
+}
+
+/**
+ * The PC's help message as paragraphs of runs, so it can be drawn with
+ * textContent only: `**bold**` becomes a bold run, a blank line a new
+ * paragraph. Returns `[[{text, bold}, ...], ...]`.
+ */
+export function crisisParagraphs(message) {
+  return String(message || "").split(/\n{2,}/).map((p) => p.trim()).filter(Boolean).map((p) =>
+    p.split("**").map((t, i) => ({ text: t, bold: i % 2 === 1 })).filter((r) => r.text));
+}
+
 /** `{level, comment, passage}`, or null when it is not a real mark. */
 export function readMark(m) {
   if (!m || typeof m !== "object" || !LEVELS.includes(m.level)) return null;

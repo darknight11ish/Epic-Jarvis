@@ -112,7 +112,29 @@
     "game_temporary": "This looks like a game or role-play, so it's a temporary chat: nothing is kept or learned.",
     "project_chats_later": "Saved for later: Jarvis does not read this in chats yet.",
     "erase_chat_named": "Also delete the chat it came from: \"{title}\" ({when})?",
-    "erased_no_chat": "Erased. No chat was on record for this fact, so no chat was deleted."
+    "erased_no_chat": "Erased. No chat was on record for this fact, so no chat was deleted.",
+    "tag_untagged": "Untagged",
+    "tag_all": "All",
+    "tag_editor_title": "Tags",
+    "tag_add": "Add a tag",
+    "tag_rename": "Rename",
+    "tag_delete": "Delete this tag",
+    "tag_move_to": "Move to",
+    "tag_none": "No tag",
+    "tag_section": "{name} ({count})",
+    "tag_section_sr": "{name}, {count} chats, {state}",
+    "tag_delete_confirm": "Delete the tag {name}? Its {count} chats become untagged.",
+    "tag_banner": "Tap the chat to file it under {name}.",
+    "tag_errors": {
+      "bad_name": "A tag name needs 1 to 24 letters or numbers.",
+      "name_taken": "You already have a tag with that name.",
+      "too_many_tags": "You can have up to 12 tags. Delete one to make room.",
+      "bad_colour": "That colour is not one of the eight.",
+      "bad_icon": "That icon is not on the list.",
+      "tag_not_found": "That tag is gone. Reload History to see your tags.",
+      "not_found": "That chat is gone - it may have been deleted.",
+      "bad_request": "That request was not understood."
+    }
   },
   "kinds": [
     "chat",
@@ -720,6 +742,154 @@
     {
       "n": 12,
       "expect": "12 messages"
+    }
+  ],
+  "tag_limits": {
+    "max_tags": 12,
+    "name_max": 24,
+    "colours": 8
+  },
+  "tag_icons": [
+    "briefcase",
+    "book",
+    "home",
+    "folder",
+    "lightbulb",
+    "star",
+    "flag",
+    "wrench",
+    "leaf",
+    "music"
+  ],
+  "tag_palette": [
+    {
+      "slot": 0,
+      "name": "blue",
+      "light": "#1d4ed8",
+      "dark": "#93b4ff"
+    },
+    {
+      "slot": 1,
+      "name": "green",
+      "light": "#146c36",
+      "dark": "#86e0a6"
+    },
+    {
+      "slot": 2,
+      "name": "amber",
+      "light": "#8a5300",
+      "dark": "#f5c26b"
+    },
+    {
+      "slot": 3,
+      "name": "violet",
+      "light": "#6d28d9",
+      "dark": "#c4a8ff"
+    },
+    {
+      "slot": 4,
+      "name": "teal",
+      "light": "#0f766e",
+      "dark": "#7adfd3"
+    },
+    {
+      "slot": 5,
+      "name": "rose",
+      "light": "#be123c",
+      "dark": "#ff9ab5"
+    },
+    {
+      "slot": 6,
+      "name": "slate",
+      "light": "#475569",
+      "dark": "#b6c2d1"
+    },
+    {
+      "slot": 7,
+      "name": "orange",
+      "light": "#b43a00",
+      "dark": "#ffb385"
+    }
+  ],
+  "tag_tint": {
+    "light": 0.12,
+    "dark": 0.16
+  },
+  "tag_starters": [
+    {
+      "id": 1,
+      "name": "Work",
+      "colour": 0,
+      "icon": "briefcase",
+      "order": 0
+    },
+    {
+      "id": 2,
+      "name": "Learning",
+      "colour": 1,
+      "icon": "book",
+      "order": 1
+    },
+    {
+      "id": 3,
+      "name": "Personal",
+      "colour": 2,
+      "icon": "home",
+      "order": 2
+    },
+    {
+      "id": 4,
+      "name": "Projects",
+      "colour": 3,
+      "icon": "folder",
+      "order": 3
+    },
+    {
+      "id": 5,
+      "name": "Ideas",
+      "colour": 4,
+      "icon": "lightbulb",
+      "order": 4
+    }
+  ],
+  "tag_error_codes": [
+    "bad_name",
+    "name_taken",
+    "too_many_tags",
+    "bad_colour",
+    "bad_icon",
+    "tag_not_found",
+    "not_found",
+    "bad_request"
+  ],
+  "tag_section_cases": [
+    {
+      "name": "Work",
+      "count": 12,
+      "expanded": false,
+      "header": "Work (12)",
+      "sr": "Work, 12 chats, collapsed"
+    },
+    {
+      "name": "Learning",
+      "count": 1,
+      "expanded": true,
+      "header": "Learning (1)",
+      "sr": "Learning, 1 chats, expanded"
+    },
+    {
+      "name": "Untagged",
+      "count": 0,
+      "expanded": false,
+      "header": "Untagged (0)",
+      "sr": "Untagged, 0 chats, collapsed"
+    }
+  ],
+  "tag_delete_cases": [
+    {
+      "name": "Work",
+      "count": 3,
+      "expect": "Delete the tag Work? Its 3 chats become untagged."
     }
   ]
 }

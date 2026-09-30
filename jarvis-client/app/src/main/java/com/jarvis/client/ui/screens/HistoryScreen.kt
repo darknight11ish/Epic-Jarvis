@@ -41,8 +41,11 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
+import com.jarvis.client.data.HistoryViewPrefs
+import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.ChatLog
+import com.jarvis.client.net.ChatTags
 import com.jarvis.client.platform.PrivateClipboard
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Kicker
@@ -113,17 +116,41 @@ fun HistoryScreen(
     onContinue: suspend (String) -> String? = { null },
     /** "Forget a time frame…": the Brain's plate. */
     onOpenForgetRange: () -> Unit = {},
+    /**
+     * "Label my chat about the boiler as Home": open with [ChatTags.FileUnder]'s
+     * search filled in and a banner; a tap on a chat files it (nothing is
+     * filed before that). Null for a normal visit.
+     */
+    fileUnder: ChatTags.FileUnder? = null,
+    /** The banner was used or cancelled: MainActivity forgets the request. */
+    onFileUnderDone: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var reads by remember { mutableIntStateOf(0) }
+    // Only the tag lists are read again (a chat was filed or moved).
+    var tagReads by remember { mutableIntStateOf(0) }
     // The list keeps its place when a conversation is opened and closed again
     // (the second chat audit, phone C8: Back used to land at the top).
     val mainList = rememberLazyListState()
     // "Show": one kind of conversation, or "" for every kind (the owner's
     // decision, 2026-09-28: History can be filtered to Live sessions only).
     var kind by rememberSaveable { mutableStateOf("") }
+    // Chat tags (docs/CHAT-TAGS-DESIGN.md section 10). The PC keeps them; this
+    // screen reads them when it opens and holds them only while it is open.
+    // The chip: "" is All, else a tag id. Folded sections are the one thing
+    // kept on the phone - flags only (HistoryViewPrefs), never a name.
+    var tagFilter by rememberSaveable { mutableStateOf("") }
+    var tagView by remember { mutableStateOf<ChatTags.View?>(null) }
+    var tagsOld by remember { mutableStateOf(false) }
+    var editorOpen by rememberSaveable { mutableStateOf(false) }
+    val viewPrefs = remember { HistoryViewPrefs(context) }
+    var closed by remember { mutableStateOf(viewPrefs.closed()) }
+    // The row whose "Move to" list is open.
+    var moveFor by remember { mutableStateOf<String?>(null) }
+    var filing by remember(fileUnder) { mutableStateOf(fileUnder) }
     // "History settings", folded until opened: the list comes first.
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var status by remember { mutableStateOf<ChatLog.Status?>(null) }
@@ -145,7 +172,7 @@ fun HistoryScreen(
     // the AI. One letter, or a PC without the search: the loaded list, by
     // title. `remember`, not `rememberSaveable`: the words searched for are
     // not put in the saved screen state either.
-    var search by remember { mutableStateOf("") }
+    var search by remember { mutableStateOf(fileUnder?.query.orEmpty()) }
     var found by remember { mutableStateOf<ChatLog.Search?>(null) }
     var searching by remember { mutableStateOf(false) }
     var searchError by remember { mutableStateOf<String?>(null) }
@@ -182,6 +209,43 @@ fun HistoryScreen(
         }
     }
 
+    // The tags, read with the list. Nothing is asked and no name is held
+    // while the private lists are hidden (tag names hide with titles).
+    LaunchedEffect(reads, tagReads, privateHidden) {
+        if (privateHidden) {
+            tagView = null
+            return@LaunchedEffect
+        }
+        when (val r = JarvisRuntime.historyTags()) {
+            null -> Unit
+            is ApiResult.Ok -> {
+                val v = ChatTags.view(r.value)
+                if (v == null) {
+                    tagView = null
+                    tagsOld = true
+                } else {
+                    tagView = v
+                    tagsOld = false
+                    // A tag deleted elsewhere: its chip goes back to All.
+                    if (tagFilter.isNotEmpty() && v.tags.none { it.id.toString() == tagFilter }) tagFilter = ""
+                }
+            }
+            is ApiResult.Failed -> if (r.error == ApiError.NotFound) {
+                tagView = null
+                tagsOld = true
+            }
+        }
+    }
+    // A request to file an older chat: search filled in, no filter in the way.
+    LaunchedEffect(fileUnder) {
+        val f = fileUnder ?: return@LaunchedEffect
+        search = f.query
+        kind = ""
+        tagFilter = ""
+        openId = null
+        editorOpen = false
+    }
+
     val queue by JarvisRuntime.pending.collectAsState()
     val cardInQueue = ChatLog.cardWaiting(queue.map { it.action })
     // The ON card leaving the queue (approved, denied or expired) reads the
@@ -195,8 +259,8 @@ fun HistoryScreen(
             reads += 1
         }
     }
-    LaunchedEffect(reads, kind) {
-        when (val r = JarvisRuntime.history(kind = kind.ifEmpty { null })) {
+    LaunchedEffect(reads, kind, tagFilter) {
+        when (val r = JarvisRuntime.history(kind = kind.ifEmpty { null }, tag = tagFilter.ifEmpty { null })) {
             is ApiResult.Ok -> {
                 val page = ChatLog.page(r.value)
                 status = page.status
@@ -210,15 +274,41 @@ fun HistoryScreen(
 
     // Back closes an open conversation first, then leaves History.
     val open = openId
-    BackHandler(enabled = open != null) { openId = null }
+    BackHandler(enabled = open != null || editorOpen) {
+        if (open != null) openId = null else editorOpen = false
+    }
+
+    // Files ONE chat (or unfiles it with a null tag). The row is updated here
+    // at once; the tag counts are read again. Held on a stale link by the runtime.
+    fun fileChat(id: String, tagId: Int?, fromBanner: Boolean) {
+        scope.launch {
+            val w = JarvisRuntime.fileChat(id, tagId)
+            if (w.ok) {
+                rows = rows?.map { if (it.id == id) it.copy(tagId = tagId) else it }
+                found = found?.let { f ->
+                    f.copy(found = f.found.map { h -> if (h.row.id == id) h.copy(row = h.row.copy(tagId = tagId)) else h })
+                }
+                moveFor = null
+                val name = tagView?.tags?.firstOrNull { it.id == tagId }?.name
+                listSaid = if (name != null) "Filed under $name." else "Tag removed."
+                tagReads += 1
+                if (fromBanner) {
+                    filing = null
+                    onFileUnderDone()
+                }
+            } else {
+                listSaid = w.said
+            }
+        }
+    }
 
     Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding()) {
         TopBar(
-            if (open == null) "History" else "Conversation",
-            onBack = { if (openId != null) openId = null else onBack() },
+            if (open != null) "Conversation" else if (editorOpen) ChatTags.EDITOR_TITLE else "History",
+            onBack = { if (openId != null) openId = null else if (editorOpen) editorOpen = false else onBack() },
             subtitle = "Chat history, kept on your PC",
         ) {
-            if (open == null) Quiet("Refresh", onClick = { reads += 1 })
+            if (open == null && !editorOpen) Quiet("Refresh", onClick = { reads += 1 })
         }
 
         if (open != null) {
@@ -238,6 +328,24 @@ fun HistoryScreen(
                         listSaid = sentence
                         openId = null
                     },
+                )
+            }
+            return@Column
+        }
+
+        // The "Tags" editor takes the place of the list, like an opened chat.
+        if (editorOpen) {
+            if (privateHidden) {
+                Column(Modifier.fillMaxWidth().weight(1f).padding(16.dp)) {
+                    HiddenSection(ChatTags.EDITOR_TITLE, busy = showPrivateBusy, onShow = onShowPrivate)
+                }
+            } else {
+                TagsEditor(
+                    view = tagView,
+                    oldPc = tagsOld,
+                    // Deleting a tag untags its chats, so the list is read again too.
+                    onChanged = { reads += 1 },
+                    modifier = Modifier.weight(1f),
                 )
             }
             return@Column

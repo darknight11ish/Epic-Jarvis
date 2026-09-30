@@ -451,7 +451,7 @@ def _tag_err(code: str, message: str) -> dict:
     return {"ok": False, "error": code, "message": message}
 
 
-_TAG_MESSAGES = {
+TAG_MESSAGES = {
     "bad_name": "A tag name needs 1 to 24 letters or numbers.",
     "name_taken": "You already have a tag with that name.",
     "too_many_tags": "You can have up to 12 tags. Delete one to make room.",
@@ -464,7 +464,7 @@ _TAG_MESSAGES = {
 
 
 def _tag_fail(code: str, message: str = "") -> dict:
-    return _tag_err(code, message or _TAG_MESSAGES.get(code, ""))
+    return _tag_err(code, message or TAG_MESSAGES.get(code, ""))
 
 
 def _clean_tag_name(v):

@@ -309,6 +309,10 @@ like `goals.patch`; then run `python3 tools/build_patch_history.py` after `git f
 `ui/screens/QuizPlate.kt`, `QuizTest.kt`. One builder owns each group; builders do
 not edit each other's files, and do not run `git commit`.
 
+### Crisis answers (owner, 2026-09-30: "Check every quiz answer now")
+
+An answer that the chat's English crisis check flags gets no mark: the answer response carries `crisis: true` and `message`, and both apps show that message (the backend's text - `jarvis_wellbeing.reply()` - never a copy in an app) calmly in place of a mark, keep the question open for another answer, and keep no copy of the typed words. English only; a Spanish list is a later, separately tested step. See JARVIS-API 98.4.
+
 ### Shared words added by the builders (audit fixes, 2026-09-30)
 
 Both apps say these word for word too (desktop `src/quiz.js`, phone `net/Quiz.kt`):

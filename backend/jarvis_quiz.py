@@ -19,6 +19,10 @@ THE RULES IT KEEPS (each one has a test in test_quiz.py)
   * It never imports or calls the learner, memory, chat history or the gate.
     A grade is never a fact about the owner; the text is outside text and
     nothing is learned from it. No streak, no letter grade, no exact number.
+  * Crisis check on every answer (owner, 2026-09-30): jarvis_wellbeing.crisis()
+    - the chat's own pure English check - runs before any model call. A crisis
+    answer gets the chat's help wording, no mark, nothing stored, no counter;
+    the question stays open. That one module is the only sibling it may use.
   * The pasted text and the owner's answer are DATA. Both go to the model
     inside a block whose fence has a random word in it (so the text cannot
     close the block), under a system message that says they cannot give
@@ -380,6 +384,23 @@ def show(qid: str) -> dict:
         return _view(s)
 
 
+def _is_crisis(text: str) -> bool:
+    """jarvis_wellbeing.crisis(): a pure text check (no counter, no file, no
+    log, no crisis-turn id). Same as the chat: a missing module changes
+    nothing. English only."""
+    try:
+        import jarvis_wellbeing
+        return bool(jarvis_wellbeing.crisis(text))
+    except Exception:
+        return False
+
+
+def _help_message() -> str:
+    """The chat's own help wording (jarvis_wellbeing.REPLY, via reply())."""
+    import jarvis_wellbeing
+    return jarvis_wellbeing.reply()
+
+
 def answer(qid: str, body: dict) -> dict:
     with _LOCK:
         s = _get(qid)
@@ -395,6 +416,13 @@ def answer(qid: str, body: dict) -> dict:
         if len(text) > ANSWER_MAX:
             raise QuizError("answer_too_long")
         passage, prompt = q["passage"], q["prompt"]
+    # The crisis check (owner, 2026-09-30: "check every quiz answer now"):
+    # the SAME English check the normal chat uses, BEFORE any model call and
+    # before anything is stored. A crisis answer gets the chat's own help
+    # wording, no model call, no mark, and its text is dropped here - the
+    # question stays unanswered and can be answered again.
+    if _is_crisis(text):
+        return {"crisis": True, "message": _help_message(), "quiz": show(qid)}
     # The model is asked outside the sessions lock; the question is re-checked after.
     level, comment = grade_answer(passage, prompt, text.strip())
     with _LOCK:
@@ -465,6 +493,9 @@ def handle_post(route: str, body):
         qid, action = r
         if action == "answer":
             out = answer(qid, body)
+            if out.get("crisis"):
+                return 200, {"ok": True, "crisis": True, "message": out["message"],
+                             "quiz": out["quiz"]}
             return 200, {"ok": True, "mark": out["mark"], "quiz": out["quiz"]}
         if action == "finish":
             return 200, {"ok": True, "summary": finish(qid)}

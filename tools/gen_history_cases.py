@@ -157,7 +157,48 @@ WORDS = {
     "project_chats_later": "Saved for later: Jarvis does not read this in chats yet.",
     "erase_chat_named": "Also delete the chat it came from: \"{title}\" ({when})?",
     "erased_no_chat": "Erased. No chat was on record for this fact, so no chat was deleted.",
+    # -- chat tags and sections (the owner, 2026-09-30; JARVIS-API section 99) --
+    "tag_untagged": "Untagged",
+    "tag_all": "All",
+    "tag_editor_title": "Tags",
+    "tag_add": "Add a tag",
+    "tag_rename": "Rename",
+    "tag_delete": "Delete this tag",
+    "tag_move_to": "Move to",
+    "tag_none": "No tag",
+    "tag_section": "{name} ({count})",
+    "tag_section_sr": "{name}, {count} chats, {state}",
+    "tag_delete_confirm": "Delete the tag {name}? Its {count} chats become untagged.",
+    "tag_banner": "Tap the chat to file it under {name}.",
+    "tag_errors": dict(H.TAG_MESSAGES),
 }
+
+# The eight colour slots (contrast 4.5:1 or better against both themes, checked
+# by backend/test_chat_tags.py) and the icon names each app draws with its own
+# icon set. The header tint is the ink at 12% (light) or 16% (dark).
+TAG_PALETTE = [
+    {"slot": 0, "name": "blue", "light": "#1d4ed8", "dark": "#93b4ff"},
+    {"slot": 1, "name": "green", "light": "#146c36", "dark": "#86e0a6"},
+    {"slot": 2, "name": "amber", "light": "#8a5300", "dark": "#f5c26b"},
+    {"slot": 3, "name": "violet", "light": "#6d28d9", "dark": "#c4a8ff"},
+    {"slot": 4, "name": "teal", "light": "#0f766e", "dark": "#7adfd3"},
+    {"slot": 5, "name": "rose", "light": "#be123c", "dark": "#ff9ab5"},
+    {"slot": 6, "name": "slate", "light": "#475569", "dark": "#b6c2d1"},
+    {"slot": 7, "name": "orange", "light": "#b43a00", "dark": "#ffb385"},
+]
+TAG_TINT = {"light": 0.12, "dark": 0.16}
+
+
+def tag_section_line(name: str, count: int) -> str:
+    return WORDS["tag_section"].format(name=name, count=count)
+
+
+def tag_section_sr(name: str, count: int, expanded: bool) -> str:
+    return WORDS["tag_section_sr"].format(name=name, count=count,
+                                          state="expanded" if expanded else "collapsed")
+
+
+TAG_CASES = [("Work", 12, False), ("Learning", 1, True), ("Untagged", 0, False)]
 
 # ----------------------------------------------------------------- rules --
 
@@ -392,6 +433,19 @@ def build() -> dict:
         "thread_keeps_cases": [{"crisis": c, "expect": keeps_in_thread(c)} for c in (False, True)],
         "plain_cases": [{"in": s, "out": plain_answer(s)} for s in PLAIN_CASES],
         "messages_cases": [{"n": n, "expect": messages_words(n)} for n in (1, 2, 12)],
+        "tag_limits": {"max_tags": H.TAG_MAX, "name_max": H.TAG_NAME_MAX,
+                       "colours": H.TAG_COLOURS},
+        "tag_icons": list(H.TAG_ICONS),
+        "tag_palette": TAG_PALETTE,
+        "tag_tint": TAG_TINT,
+        "tag_starters": [{"id": i + 1, "name": n, "colour": c, "icon": ic, "order": i}
+                         for i, (n, c, ic) in enumerate(H.TAG_STARTERS)],
+        "tag_error_codes": list(H.TAG_MESSAGES),
+        "tag_section_cases": [{"name": n, "count": c, "expanded": e,
+                               "header": tag_section_line(n, c),
+                               "sr": tag_section_sr(n, c, e)} for n, c, e in TAG_CASES],
+        "tag_delete_cases": [{"name": "Work", "count": 3,
+                              "expect": WORDS["tag_delete_confirm"].format(name="Work", count=3)}],
     }
 
 

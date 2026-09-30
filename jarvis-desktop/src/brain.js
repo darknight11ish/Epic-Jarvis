@@ -50,7 +50,7 @@ import { CANNOT_CHAT, canChat } from "./model-chat.js";
 import { readAtMs as projectsReadAt, showProjects } from "./projects-panel.js";
 import { tellChatsGone } from "./chat-history.js";
 // Brain -> History -> "Forget a time frame": its own module too.
-import { openForgetRange, showForgetRange, takeAnyPlace } from "./forget-range-panel.js";
+import { openForgetRange, showForgetRange, takeAnyPlace, takePlaceExtras } from "./forget-range-panel.js";
 import { BRAIN_PLACE_KEY, HISTORY_CHANGED, HISTORY_PLACE, PLACE as FORGET_RANGE_PLACE } from "./forget-range.js";
 import {
   actionsOf as focusActionsOf,
@@ -158,9 +158,11 @@ import {
   answerCount as quizAnswerCount,
   CHECKING as QUIZ_CHECKING,
   countsLine as quizCountsLine,
+  crisisParagraphs as quizCrisisParagraphs,
   errorWords as quizErrorWords,
   FINISH_LABEL as QUIZ_FINISH,
   GUESS_LABEL as QUIZ_GUESS,
+  isCrisis as quizIsCrisis,
   isRefusal,
   KIND_LABELS as QUIZ_KIND_LABELS,
   LIMITS as QUIZ_LIMITS,
@@ -168,6 +170,7 @@ import {
   nextQuestion as quizNextQuestion,
   NEXT_LABEL as QUIZ_NEXT,
   progressLine as quizProgressLine,
+  readCrisis as quizReadCrisis,
   readQuiz,
   readSummary,
   SOURCE_LABEL as QUIZ_SOURCE,
@@ -298,6 +301,45 @@ import {
   whenLine,
   whenWords,
 } from "./history-view.js";
+import {
+  ADD_TAG,
+  ALL as TAG_ALL,
+  bannerText as tagBannerText,
+  BANNER_CANCEL,
+  colourName,
+  COLOURS as TAG_COLOURS,
+  deleteConfirm as tagDeleteConfirm,
+  DELETE_TAG,
+  errorWords as tagErrorWords,
+  filedWords,
+  groupRows,
+  headerText as tagHeaderText,
+  iconNode,
+  ICONS as TAG_ICONS,
+  isOpen as sectionIsOpen,
+  MAX_TAGS,
+  MOVE_DOWN,
+  MOVE_PLACEHOLDER,
+  MOVE_TO,
+  MOVE_UP,
+  NAME_LABEL,
+  NAME_MAX,
+  NO_TAG,
+  NO_TAG_CHATS,
+  NOT_LOADED_LINE,
+  readFilePlace,
+  readOpenFlags,
+  readTags,
+  RENAME as TAG_RENAME,
+  saveOpenFlag,
+  sectionSpeech,
+  tagById,
+  TAG_CHIPS_LABEL,
+  TAGS_EDITOR_NOTE,
+  TAGS_TITLE,
+  UNFILED_WORDS,
+  UNTAGGED,
+} from "./history-tags.js";
 import {
   addPage as addAutoPage,
   AUTO_MISSING,
@@ -3004,6 +3046,17 @@ const chats = {
   /** "Show": one kind of conversation, or "" for every kind (the chat
    *  audit, 2026-09-28 - "History can be filtered to Live sessions only"). */
   kind: "",
+  /** Chat tags (docs/CHAT-TAGS-DESIGN.md): the tag chip chosen ("" is All,
+   *  "none" is Untagged, else a tag id as digits), the PC's tags
+   *  (readTags), which sections are open on this device, the Tags editor,
+   *  and an older chat being found to file (`filing`, from "label my chat
+   *  about the boiler as Home"; `filingPending` waits for the names). */
+  tag: "",
+  tags: null,
+  sectionFlags: readOpenFlags(),
+  editor: { open: false, error: "", drafts: { add: { name: "", colour: 0, icon: "folder" }, names: {} } },
+  filing: null,
+  filingPending: null,
   /** The conversation open below its row, and its transcript. */
   openId: null,
   open: null,
@@ -3046,9 +3099,28 @@ async function loadHistory() {
   chats.loading = true;
   try {
     const kind = chats.kind;
-    const v = readHistory(await invoke("brain_history_list",
-      { before: null, limit: HISTORY_PAGE, kind: kind || null }));
-    if (kind !== chats.kind) return;       // the filter changed while this read ran
+    const tag = chats.tag;
+    // The chats and the tags are two reads; an older PC (or app build) with
+    // no tags leaves the list flat, exactly as before.
+    const [listRead, tagsRead] = await Promise.allSettled([
+      invoke("brain_history_list",
+        { before: null, limit: HISTORY_PAGE, kind: kind || null, tag: tag || null }),
+      invoke("brain_history_tags"),
+    ]);
+    if (listRead.status === "rejected") throw listRead.reason;
+    const v = readHistory(listRead.value);
+    if (kind !== chats.kind || tag !== chats.tag) return;   // the filter changed while this read ran
+    chats.tags = readTags(tagsRead.status === "fulfilled" ? tagsRead.value : { available: false });
+    if (chats.tag && chats.tag !== "none" && chats.tags.available && !chats.tags.hidden
+        && !tagById(chats.tags, Number(chats.tag))) {
+      // The tag was deleted elsewhere: back to every chat, read again.
+      chats.tag = "";
+      chats.rows = [];
+      chats.more = false;
+      chats.tags = null;
+      setTimeout(loadHistory, 0);
+      return;
+    }
     chats.view = v;
     chats.readOkAt = Date.now();
     paintFreshness();
@@ -3084,7 +3156,7 @@ async function loadOlderHistory() {
   chats.older = true;
   try {
     const v = readHistory(await invoke("brain_history_list",
-      { before, limit: HISTORY_PAGE, kind: chats.kind || null }));
+      { before, limit: HISTORY_PAGE, kind: chats.kind || null, tag: chats.tag || null }));
     chats.rows = addPage(chats.rows, v.conversations);
     chats.more = v.conversations.length >= HISTORY_PAGE;
   } catch (error) {
@@ -6865,7 +6937,7 @@ if (dom.goalsNewAdd) {
    shows the "Show" prompt instead.
    ========================================================================== */
 
-const qz = { quiz: null, summary: null, shown: null, busy: "", error: "", last: null };
+const qz = { quiz: null, summary: null, shown: null, busy: "", error: "", last: null, crisis: "" };
 
 function quizReset() {
   qz.quiz = null;
@@ -6874,6 +6946,7 @@ function quizReset() {
   qz.busy = "";
   qz.error = "";
   qz.last = null;
+  qz.crisis = "";
 }
 
 /** Puts words to a refusal or a thrown error; a quiz the PC no longer holds
@@ -6899,6 +6972,7 @@ async function quizCall(cmd, args, busyWords) {
   }
   qz.busy = busyWords;
   qz.error = "";
+  qz.crisis = "";
   paintQuiz();
   try {
     const out = await invoke(cmd, args);
@@ -6952,6 +7026,18 @@ async function checkAnswer(question, box) {
   const value = box.value;
   const out = await quizCall("brain_quiz_answer", { id: qz.quiz.id, n: question.n, answer: value }, QUIZ_CHECKING);
   if (!out) return;
+  if (quizIsCrisis(out)) {
+    // A crisis answer is not marked (JARVIS-API 98.4): show the PC's own help
+    // words calmly, keep the question open, and let go of what was typed.
+    box.value = "";
+    qz.crisis = quizReadCrisis(out);
+    if (!qz.crisis) qz.error = "Jarvis answered, but not with words this app can read.";
+    const open = readQuiz(out.quiz);
+    if (open) qz.quiz = open;
+    qz.shown = null;
+    paintQuiz();
+    return;
+  }
   const quiz = readQuiz(out.quiz);
   if (quiz) {
     qz.quiz = quiz;
@@ -7014,6 +7100,21 @@ function paintQuiz() {
   const parts = [];
   if (qz.busy) parts.push(el("p", "note", qz.busy));
   if (qz.error) parts.push(el("p", "empty failed", qz.error));
+  if (qz.crisis) {
+    // The PC's help words, shown calmly in place of a mark: no colour, no
+    // mark label, no "Jarvis's guess". Text only; kept until the next action.
+    const calm = el("div", "quiz-crisis");
+    calm.setAttribute("role", "status");
+    for (const para of quizCrisisParagraphs(qz.crisis)) {
+      const p = el("p", "");
+      for (const run of para) {
+        if (run.bold) p.append(el("strong", "", run.text));
+        else p.append(document.createTextNode(run.text));
+      }
+      calm.append(p);
+    }
+    parts.push(calm);
+  }
   const q = qz.quiz;
   if (qz.summary) {
     const s = qz.summary;

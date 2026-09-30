@@ -81,6 +81,12 @@ fn backend_refusal_body(body: &str) -> Option<serde_json::Value> {
     Some(v)
 }
 
+/// A crisis answer: `{"ok": true, "crisis": true, "message": "<words>", ...}`.
+fn is_crisis(v: &serde_json::Value) -> bool {
+    v.get("crisis").and_then(|c| c.as_bool()) == Some(true)
+        && v.get("message").is_some_and(|m| m.as_str().is_some_and(|s| !s.is_empty()))
+}
+
 /// The reading of any of the five answers. `need` is the field a success
 /// must carry (`quiz`, or `summary` for finish, or none for stop). A refusal
 /// the backend classified comes back as `Ok` with `ok: false` intact; the
@@ -93,7 +99,12 @@ pub(crate) fn quiz_answer(
     if (200..300).contains(&status) {
         return parsed(body)
             .filter(|v| v.get("ok").and_then(|o| o.as_bool()) == Some(true))
-            .filter(|v| need.is_none_or(|k| v.get(k).is_some_and(|x| !x.is_null())))
+            .filter(|v| {
+                // A crisis answer (JARVIS-API 98.4) has no mark: it carries the
+                // PC's help words instead, and passes through as it is.
+                (need == Some("mark") && is_crisis(v))
+                    || need.is_none_or(|k| v.get(k).is_some_and(|x| !x.is_null()))
+            })
             .ok_or_else(|| UNREADABLE.to_string());
     }
     if let Some(refusal) = backend_refusal_body(body) {
@@ -359,6 +370,28 @@ mod tests {
         assert_eq!(hidden["quiz"]["questions"][0]["mark"]["level"], "got_it");
         assert_eq!(hidden["quiz"]["questions"][1]["n"], 2);
         assert!(hidden["quiz"]["questions"][1]["mark"].is_null());
+    }
+
+    #[test]
+    fn a_crisis_answer_passes_through_and_its_help_words_are_never_hidden() {
+        let body = r#"{"ok": true, "crisis": true, "message": "Call **988** any time.",
+            "quiz": {"id": "abc", "title": "Bread", "grader_verified": false, "answered": 0,
+            "questions": [{"n": 1, "kind": "recall", "prompt": "What is yeast?", "mark": null}]}}"#;
+        let a = quiz_answer(200, body, Some("mark")).unwrap();
+        assert_eq!(a["crisis"], true);
+        let hidden = redact_answer(a);
+        assert_eq!(hidden["message"], "Call **988** any time.");
+        assert_eq!(hidden["crisis"], true);
+        assert_eq!(hidden["quiz"]["questions"][0]["prompt"], "");
+        assert!(hidden["quiz"]["questions"][0]["mark"].is_null());
+        // A crisis flag with no words is not readable; an ordinary answer with
+        // no mark still is not either.
+        let bare = r#"{"ok": true, "crisis": true, "quiz": {}}"#;
+        assert_eq!(quiz_answer(200, bare, Some("mark")).unwrap_err(), UNREADABLE);
+        let plain = r#"{"ok": true, "quiz": {}}"#;
+        assert_eq!(quiz_answer(200, plain, Some("mark")).unwrap_err(), UNREADABLE);
+        // The crisis pass-through applies to the answer route only.
+        assert_eq!(quiz_answer(200, body, Some("summary")).unwrap_err(), UNREADABLE);
     }
 
     #[test]

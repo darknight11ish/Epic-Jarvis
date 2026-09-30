@@ -1347,6 +1347,14 @@ body {
   border-top: var(--stroke-hair) solid var(--border);
 }
 
+.quiz-crisis {
+  padding: 0.75rem 1rem;
+  margin: 0.5rem 0;
+  border-left: 3px solid var(--border, currentColor);
+  border-radius: 6px;
+  background: var(--surface-2, transparent);
+}
+
 .quiz-passage {
   margin: 6px 0 0;
   padding-left: 10px;
@@ -1784,6 +1792,200 @@ body {
 .history-more {
   padding-top: 8px;
 }
+
+/* ---- Chat tags and sections (history-tags.js; docs/CHAT-TAGS-DESIGN.md) --
+   Eight colour slots (theme.css --tag-0..7, light and dark variants, tint
+   16% dark / 12% Daylight). Colour is never the only clue: an icon, the
+   name and a count are always beside it. */
+
+[data-colour="0"] { --tag-ink: var(--tag-0); }
+[data-colour="1"] { --tag-ink: var(--tag-1); }
+[data-colour="2"] { --tag-ink: var(--tag-2); }
+[data-colour="3"] { --tag-ink: var(--tag-3); }
+[data-colour="4"] { --tag-ink: var(--tag-4); }
+[data-colour="5"] { --tag-ink: var(--tag-5); }
+[data-colour="6"] { --tag-ink: var(--tag-6); }
+[data-colour="7"] { --tag-ink: var(--tag-7); }
+
+.history-tagbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.tag-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: var(--text-xs);
+  color: var(--tag-ink, var(--text));
+  background: transparent;
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-radius: var(--radius-chip);
+  cursor: pointer;
+}
+
+.tag-chip[aria-pressed="true"] {
+  font-weight: 700;
+  border-color: var(--tag-ink, var(--text));
+  background: color-mix(in srgb, var(--tag-ink, var(--text)) var(--tag-tint), transparent);
+}
+
+.tag-chip[aria-pressed="true"]::before {
+  content: "\2713";
+}
+
+.tag-chip:disabled {
+  cursor: default;
+}
+
+.tag-icon {
+  flex: none;
+}
+
+.tag-chip-count {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.history-section {
+  margin: 8px 0;
+}
+
+.history-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-align: left;
+  color: var(--tag-ink, var(--text));
+  background: color-mix(in srgb, var(--tag-ink, var(--text)) var(--tag-tint), transparent);
+  border: var(--stroke-hair) solid color-mix(in srgb, var(--tag-ink, var(--text)) 35%, transparent);
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.history-section-name {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* The chevron is a drawn corner; the words say open or closed too. */
+.history-section-chevron {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+
+.history-section-head[aria-expanded="true"] .history-section-chevron {
+  transform: rotate(45deg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .history-section-chevron {
+    transition: transform 0.15s ease;
+  }
+}
+
+.history-section-body[hidden] {
+  display: none;
+}
+
+.history-section-body {
+  padding-top: 4px;
+}
+
+.history-tagpill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  margin-top: 3px;
+  padding: 0 8px;
+  font-size: var(--text-2xs);
+  color: var(--tag-ink, var(--text-muted));
+  background: color-mix(in srgb, var(--tag-ink, var(--text-muted)) var(--tag-tint), transparent);
+  border: var(--stroke-hair) solid color-mix(in srgb, var(--tag-ink, var(--text-muted)) 40%, transparent);
+  border-radius: var(--radius-chip);
+}
+
+.history-move {
+  font-size: var(--text-xs);
+  max-width: 140px;
+}
+
+.history-file-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 8px 0;
+  padding: 8px 10px;
+  color: var(--tag-ink, var(--text));
+  background: color-mix(in srgb, var(--tag-ink, var(--text)) var(--tag-tint), transparent);
+  border: var(--stroke-hair) solid var(--tag-ink, var(--border-strong));
+  border-radius: var(--radius-control);
+}
+
+.history-file-banner p {
+  margin: 0;
+  flex: 1;
+}
+
+.row-item[data-filing="true"] {
+  cursor: pointer;
+}
+
+.tag-editor {
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-radius: var(--radius-control);
+  padding: 8px 10px;
+}
+
+.tag-editor h3 {
+  margin: 0 0 4px;
+  font-size: var(--text-sm);
+}
+
+.tag-editor-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.tag-editor-row .field {
+  min-width: 0;
+  width: 150px;
+}
+
+.tag-editor-row select.field {
+  width: auto;
+}
+
+.tag-editor-error {
+  margin: 4px 0 0;
+}
+
 
 /* ---- Automatic learning (auto-learn.js): the History switch's look ----- */
 
