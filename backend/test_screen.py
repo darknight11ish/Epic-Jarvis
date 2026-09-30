@@ -877,6 +877,27 @@ def t_a_never_look_list_that_could_not_be_read_is_read_again():
           w.never.broken is False and out.get("ok") is True, out)
 
 
+def t_the_look_mark_hunk_matches_the_real_file():
+    """screen.patch's chat-route hunk must be CONTIGUOUS text of the file the patches
+    before it leave. The _stack stand-in silently 'materialises' a pre-image that is
+    not there, so a hunk with a line cut out of its middle (2026-09-30: the
+    `messages = _chat_client_fields_off(messages)` line) passed every test and then
+    failed on the owner's real jarvis_hud.py. This checks the pre-image is really
+    in the file the earlier patches build."""
+    import _stack
+    order = [n for n in _stack.order()
+             if n not in ("screen.patch", "screen-picture.patch", "browser-engine.patch")]
+    text, _log = _stack.stand_in("jarvis_hud.py", patches=order)
+    patch = (HERE / "screen.patch").read_text(encoding="utf-8")
+    i = patch.index("drop_remote_look_marks")
+    start = patch.rfind("\n@@ ", 0, i) + 1
+    end = patch.find("\n@@ ", i)
+    hunk = patch[start:end if end != -1 else len(patch)]
+    pre = [l[1:] for l in hunk.split("\n")[1:] if l.startswith(" ")]
+    check("the look-mark hunk's context is real, contiguous text of the file before it",
+          text is not None and len(pre) >= 3 and "\n".join(pre) in text, pre)
+
+
 def t_a_failed_phone_read_drops_the_screen_parts():
     msgs = [{"role": "user", "content": [{"type": "text", "text": "hi"},
                                          {"type": "screen_text", "text": "secret words"}]}]

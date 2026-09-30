@@ -309,18 +309,30 @@ def t_nights_that_do_nothing():
     switch(True)
     bo = backoff()
     bo.note_conversation()
-    out = T.run_night(now=time.time(), store=st, ask=lambda p: "{}")
+    # After the tidy hour on today's date, whatever the real clock says: with the real
+    # time these two checks failed whenever the suite ran before 02:00 (CI, 2026-09-30).
+    lt = time.localtime()
+    after_hour = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 12, 0, 0, 0, 0, -1))
+    out = T.run_night(now=after_hour, store=st, ask=lambda p: "{}")
     check("the owner is chatting: held back, nothing raised", out["why"] == "conversation"
           and not cards(st), out)
     backoff("standby")
-    out = T.run_night(now=time.time(), store=st, ask=lambda p: "{}")
+    out = T.run_night(now=after_hour, store=st, ask=lambda p: "{}")
     check("Standby: held back, nothing raised", out["why"] == "quiet" and not cards(st), out)
     switch(False)
 
 
+def noon_today() -> float:
+    """Today at 12:00 local time. The tidy is once a day from its hour (02:00) on, so a test
+    that calls it twice a minute apart and takes the real clock fails when it starts at
+    01:59 (CI, 2026-09-30): the second call lands after 02:00 and counts as a new day."""
+    lt = time.localtime()
+    return time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday, 12, 0, 0, 0, 0, -1))
+
+
 def t_still_true_cards():
     st = store()
-    now = time.time()
+    now = noon_today()
     ids = seed_until(st, now, 7)
     hist = at(now - 10 * DAY, lambda: st.add("Owner lived in Leeds until 2024", source="t"))
     ahead = st.add("Owner's lease ends in December 2099", source="t")

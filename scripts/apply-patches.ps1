@@ -48,6 +48,15 @@
 .PARAMETER SkipTests
   Apply, but do not run the test suites afterwards.
 
+.PARAMETER FixLineEndings
+  Your backend's own .py files (the ones the patches change) have Windows
+  line endings (CRLF), and the patches are written with LF, so nearly every
+  patch reports "not onto the files as they are". With this switch, each such
+  file is first copied into _jarvis-backup-<date>-endings inside the backend
+  folder, then rewritten with LF endings - nothing else about it changes, and
+  Python reads both. Without the switch nothing of yours is rewritten and the
+  script only says which files are affected and the command to run.
+
 .PARAMETER SkipPackages
   Do not run pip. The packages in backend/requirements.txt are then yours to
   install; the features that need them stay off until you do.
@@ -74,7 +83,8 @@ param(
     [switch] $Revert,
     [switch] $SkipTests,
     [switch] $SkipMissing,
-    [switch] $SkipPackages
+    [switch] $SkipPackages,
+    [switch] $FixLineEndings
 )
 
 $ErrorActionPreference = 'Stop'
@@ -1447,6 +1457,56 @@ if (Test-Path -LiteralPath $probe) {
         Say "          not a wrong patch. Say so and it gets handled properly." Yellow
     } else {
         Say "Endings : LF, which is what the patches expect"
+    }
+}
+
+# --- backend files with Windows line endings (CRLF) ------------------------------
+#
+# The patches are LF. A backend .py file that has CRLF lines can take none of
+# their hunks: git compares context byte for byte, so the run said "will not
+# apply" for nearly every patch (seen 2026-09-30: jarvis_hud.py had 3375 CRLF
+# lines of 3375, and the script's own warning above was the whole answer).
+# Rewriting someone's source is not done silently: it needs -FixLineEndings,
+# and every file it changes is copied to _jarvis-backup-<date>-endings first.
+$endTargets = @{}
+foreach ($pname in $PATCHES) {
+    $pf = Join-Path $PatchSrc (Split-Path -Leaf $pname)
+    if (-not (Test-Path -LiteralPath $pf)) { continue }
+    foreach ($pl in [IO.File]::ReadAllLines($pf)) {
+        if ($pl.StartsWith('+++ b/')) { $endTargets[$pl.Substring(6).Trim()] = $true }
+    }
+}
+$crlfFiles = @()
+foreach ($tname in ($endTargets.Keys | Sort-Object)) {
+    $tp = Join-Path $BackendPath $tname
+    if (-not (Test-Path -LiteralPath $tp)) { continue }
+    $tb = [IO.File]::ReadAllBytes($tp)
+    $tc = 0
+    for ($ti = 1; $ti -lt $tb.Length; $ti++) {
+        if ($tb[$ti] -eq 10 -and $tb[$ti - 1] -eq 13) { $tc++ }
+    }
+    if ($tc -gt 0) { $crlfFiles += [pscustomobject]@{ Name = $tname; Path = $tp; Count = $tc } }
+}
+if ($crlfFiles.Count -gt 0) {
+    if ($FixLineEndings) {
+        $endBackup = Join-Path $BackendPath "_jarvis-backup-$Stamp-endings"
+        New-Item -ItemType Directory -Force -Path $endBackup | Out-Null
+        Say "Endings : -FixLineEndings: $($crlfFiles.Count) backend file(s) have CRLF. Each is copied to" Yellow
+        Say "          $endBackup" Yellow
+        Say "          first, then rewritten with LF (nothing else about it changes)." Yellow
+        foreach ($cf in $crlfFiles) {
+            Copy-Item -LiteralPath $cf.Path -Destination (Join-Path $endBackup $cf.Name) -Force
+            $tmpLf = $cf.Path + ".lf-tmp"
+            $changed = Copy-AsLf -Src $cf.Path -Dest $tmpLf
+            Move-Item -LiteralPath $tmpLf -Destination $cf.Path -Force
+            Say "          $($cf.Name): $changed line(s) now LF"
+        }
+    } else {
+        Say "Endings : $($crlfFiles.Count) backend file(s) the patches change have Windows line endings:" Yellow
+        foreach ($cf in $crlfFiles) { Say "          $($cf.Name) ($($cf.Count) CRLF lines)" Yellow }
+        Say "          That is why patches say 'not onto the files as they are'. To fix it, run" Yellow
+        Say "          this same command again with  -FixLineEndings  on the end: each file is" Yellow
+        Say "          copied to a backup folder first, then only its line endings change." Yellow
     }
 }
 Say ""

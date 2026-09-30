@@ -74,6 +74,7 @@ projects.patch	projects/ef32847.patch	ef3284730bcbc4a1f9ddd20a2e57fe37c1c92888	2
 schedule.patch	schedule/344c940.patch	344c94087a901ed8751c3ef580ead344fc9da9fb	2026-09-27T05:04:58+00:00	Open or adjust any setting by voice or chat
 schedule.patch	schedule/a90e8dc.patch	a90e8dc5323269d0ed88a81271d22ad1b6acf97e	2026-09-25T04:14:33+00:00	Standby schedule (backend): standby on a timetable, every model unloaded, warm-up on waking
 schedule.patch	schedule/97885fd.patch	97885fd9027e5f7c6a3d163fd5133cf634a0562a	2026-09-25T02:17:12+00:00	Timers, alarms, reminders, a to-do list and one scheduler (backend)
+screen.patch	screen/9c1e58e.patch	9c1e58ed6ce0cab77eb806fa8a4c31c8fed034fc	2026-09-29T22:13:56+00:00	screen.patch: anchor the look-mark hunk without the _chat_client_fields_off line (rules-first-relay's invariant)
 screen.patch	screen/33624ed.patch	33624ed1e8d93ca6d8c6d86f2d4a3cd2f72dd515	2026-09-29T21:37:50+00:00	A screen look mark counts only from this PC
 screen.patch	screen/60fb952.patch	60fb952ce230c251b6f11253a7a76f38e71443b1	2026-09-29T09:21:00+00:00	screen.patch: one file header with three hunks, and its history recorded
 screen.patch	screen/5f4ff23.patch	5f4ff2359a78bd4d91ce02020f14a55a50a34569	2026-09-29T09:18:58+00:00	Merge studio-screen into the research branch: Look at this and Watch with me
