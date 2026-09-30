@@ -565,6 +565,10 @@ mod tests {
     fn the_input_limits_count_characters_like_the_pc() {
         assert_eq!(chars("ñandú"), 5);
         assert_eq!(chars(&"¿".repeat(60)), 60);
-        assert!(NAME_MAX == 60 && FRONT_MAX == 500 && BACK_MAX == 2000 && NEW_PER_DAY_MAX == 20);
+        const {
+            assert!(
+                NAME_MAX == 60 && FRONT_MAX == 500 && BACK_MAX == 2000 && NEW_PER_DAY_MAX == 20
+            );
+        }
     }
 }
