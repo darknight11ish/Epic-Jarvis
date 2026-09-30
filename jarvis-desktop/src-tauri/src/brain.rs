@@ -43,6 +43,7 @@ pub mod decks;
 pub mod fact_history;
 pub mod focus;
 pub mod forget_range;
+pub mod form_review;
 pub mod goals;
 pub mod history;
 pub mod history_import;

@@ -203,6 +203,11 @@ private fun BigModelBody(
             Text(status.unverified, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         }
 
+        if (!canAct) {
+            Gap(8)
+            Text(BigModel.STALE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        }
+
         Gap(10)
         Text(
             "Turning a switch on raises an approval card on your PC and phone. Nothing " +

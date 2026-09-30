@@ -216,4 +216,21 @@ class ScreenWatchTest {
         assertTrue("waited about the limit, not a minute: $tookMs ms", tookMs < ScreenWatch.GRAB_TIMEOUT_MS + 2_000)
         Unit
     }
+
+    @Test
+    fun `a link that is down or stale is not healthy and Watch gives up after ten seconds`() {
+        assertTrue(ScreenWatch.linkHealthy(connected = true, stale = false))
+        assertFalse(ScreenWatch.linkHealthy(connected = false, stale = false))
+        assertFalse(ScreenWatch.linkHealthy(connected = true, stale = true))
+        assertFalse(ScreenWatch.linkHealthy(connected = false, stale = true))
+        assertEquals(10_000L, ScreenWatch.LINK_LOST_MS)
+        assertTrue(ScreenWatch.ENDED_LINK.startsWith("Stopped watching"))
+    }
+
+    @Test
+    fun `the words say plainly that password boxes cannot be seen`() {
+        assertTrue(ScreenWatch.HOW.contains("password box"))
+        assertTrue(ScreenWatch.NOTIFICATION_TEXT.contains("password boxes"))
+        assertTrue(ScreenWatch.NOTIFICATION_TEXT.contains("cannot pause"))
+    }
 }

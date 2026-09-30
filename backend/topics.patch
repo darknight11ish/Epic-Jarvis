@@ -1,17 +1,17 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -170,6 +170,7 @@
-     "tidy_inbox",  # jarvis_inbox_tidy.py / jarvis_agent.py acts only on tier "ask": ONE card per tidy, listing every email (inbox-tidy.patch)
-     "screen_picture_enable",  # jarvis_screen_picture.py acts only on tier "ask": ONE card to turn on slow picture reading (screen-picture.patch)
+@@ -172,6 +172,7 @@
      "obscura_enable",  # jarvis_browser_engine.py acts only on tier "ask": ONE card to turn on the headless browser, Obscura (browser-engine.patch)
+     "browser_form_submit",  # jarvis_form_review.py / jarvis_agent.py acts only on tier "ask": ONE card, before the click that sends a filled-in form, showing the site, every word typed and a picture of the page (form-review.patch)
+     "web_search_enable",  # jarvis_search.py acts only on tier "ask": ONE card to turn web search back on after the owner switched it off (web-search-switch.patch)
 +    "topic_loosen",  # jarvis_topics.py acts only on tier "ask": ONE card to turn a private topic back on (topics.patch)
  })
  
  
-@@ -834,6 +835,13 @@
-     # the internet, and every page, click and box it fills is still its own
-     # plan card first. Stealth is on. Turning it off is instant and stops it.
-     "obscura_enable": ("yes", "outbound", "lets Jarvis choose a browser with no window (Obscura, a program on this PC that Jarvis starts and stops) for plain web reading; the pages are on the internet and it looks like an ordinary Chrome, but every page, click and box it fills is still its own card first, it never types a password or solves a captcha and stops at a captcha or sign-in page it recognises, it cannot open your own network, and turning it off is instant"),
+@@ -852,6 +853,13 @@
+     # a search still follows every rule it had (its own card when private things
+     # could slip in, never a password or key), so this is a setting on this PC.
+     "web_search_enable": ("yes", "local", "lets Jarvis search the web again, with the search you chose; the change itself sends nothing, every search keeps the rules it already had, and you can turn web search off again at any time, at once"),
 +    # topics.patch (jarvis_topics.py, JARVIS-API section 107; the owner's decision of
 +    # 2026-09-30). ONE card when a private topic (Health, Money, or one the owner marked
 +    # private) is turned back on for learning or for answers, when its private mark is

@@ -456,14 +456,140 @@ def _prepare_browser_control(args: dict):
     return p, B.describe(p)
 
 
-def _run_browser_control(args: dict, plan_obj, *, announce=None, checkpoint=None) -> dict:
+def _hosts_of_browser_result(result) -> set:
+    """The host names a browser_control result touched: each step's page and
+    each navigate target. Host names only - never a path or a query."""
+    from urllib.parse import urlparse
+    hosts: set = set()
+    if not isinstance(result, dict):
+        return hosts
+    for key in ("done", "not_run"):
+        for st in result.get(key) or []:
+            if not isinstance(st, dict):
+                continue
+            urls = [st.get("url")]
+            if st.get("action") == "navigate":
+                urls.append(st.get("value"))
+            for u in urls:
+                try:
+                    h = (urlparse(str(u or "")).hostname or "").lower()
+                except Exception:
+                    h = ""
+                if h:
+                    hosts.add(h)
+    return hosts
+
+
+def _run_browser_control(args: dict, plan_obj, *, announce=None, checkpoint=None,
+                         checker=None, watch=None, out=None) -> dict:
     if plan_obj is None:
         return {"ok": False, "error": "browser control is not available here"}
     if isinstance(plan_obj, _NoBrowser):
         return {"ok": False, "error": plan_obj.problem}
     import jarvis_browser_control as B
-    return B.run(plan_obj, announce=announce, checkpoint=checkpoint,
-                 approved=True)
+    review = snapshot = fingerprint = None
+    if any(getattr(st, "final", False) for st in getattr(plan_obj, "steps", [])):
+        # Earlier in this turn Jarvis read only THIS form's own site, or the
+        # form is refused: a different site's words could end up in the form.
+        earlier = getattr(watch, "browser_hosts", None) or set()
+        if earlier and not earlier <= set(B._plan_hosts(plan_obj)):
+            return {"ok": False, "submitted": False, "error": FORM_REVIEW_OTHER_SITE}
+        # A plan that ends in the click that sends a form: the SECOND card
+        # (browser_form_submit) is raised from inside the run, after the fields
+        # are filled and before that click (jarvis_form_review.py). Anything
+        # missing here - the gate wiring, the module - leaves `review` None,
+        # and run() then stops before the click: nothing is sent.
+        try:
+            import jarvis_form_review as FR
+            if checker is not None:
+                review = FR.make_review(
+                    checker, tier_of=_tier_of,
+                    cannot_ask=(lambda: CARD_LIMIT_ERROR.format(
+                                    n=_card_limit(watch, "browser_control"))
+                                if watch is not None
+                                and watch.cards >= _card_limit(watch, "browser_control")
+                                else ""),
+                    set_status=(out.set_status if out is not None else None),
+                    card_answered=(out.card_answered if out is not None else None),
+                    card_shown=(_count_card(watch) if watch is not None else None))
+                # The Submit card also lists what earlier calls this turn did
+                # on the same site (every page's words, in one place).
+                earlier = list(getattr(watch, "form_steps", []) or []) if watch is not None else []
+                if earlier:
+                    base_review = review
+                    review = (lambda info, _b=base_review, _e=earlier:
+                              _b(dict(info, earlier=FR.earlier_for_site(_e, info.get("site")))))
+                if getattr(plan_obj, "engine", "visible") == "visible":
+                    snapshot, fingerprint = FR.capture, FR.fingerprint
+        except Exception:
+            review = snapshot = fingerprint = None
+    result = B.run(plan_obj, announce=announce, checkpoint=checkpoint,
+                   approved=True, review=review, snapshot=snapshot,
+                   fingerprint=fingerprint)
+    if watch is not None and isinstance(result, dict):
+        # Remember what this call did, for the Submit card of a later page.
+        try:
+            import jarvis_form_review as FR
+            watch.form_steps = FR.remember_steps(watch.form_steps, result)
+        except Exception:
+            pass
+    return result
+
+
+def _count_card(watch: "_TurnWatch"):
+    """A `card_shown` hook: counts a card that really reached a person toward
+    this turn's card limit, like every other card."""
+    def count(verdict) -> None:
+        if _a_card_was_shown(verdict):
+            watch.cards += 1
+            watch.cards_browser += 1
+    return count
+
+
+#: "Fill it in, show me, then send it" (jarvis_form_review.py, the owner's
+#: decision of 2026-09-30): a browser plan may mark ONE final click. It is
+#: refused outright - before the page is even read - on a turn that read
+#: outside text, where the message was pasted or shared, or where the app
+#: added text of its own: the values the form would send could be someone
+#: else's words, which is what send_email refuses for too. And only a model
+#: on this PC may write them (rule 1), the same check.
+FORM_REVIEW_OUTSIDE = ("refused: this plan ends in a click that sends a form, and Jarvis read "
+                       "outside text in this conversation (or your newest message was pasted "
+                       "or added by the app), so the words it would type could be someone "
+                       "else's. Nothing was opened and nobody was asked. Ask for it again in "
+                       "a new message you type yourself.")
+FORM_REVIEW_NOT_LOCAL = ("refused: a form may only be filled in by the model on this PC (rule "
+                         "1), and this turn's model is not on this PC. Nothing was opened and "
+                         "nobody was asked.")
+FORM_REVIEW_OTHER_SITE = ("refused: Jarvis read a different website earlier in this turn, so the "
+                          "words this form would send could have come from it. Nothing was "
+                          "sent and nobody was asked. Ask for the form again in a new message "
+                          "you type yourself.")
+FORM_REVIEW_IN_PLAN = ("a form that ends in a final click cannot be a step of a plan - ask for "
+                       "the form on its own instead.")
+
+
+def _has_final_request(args) -> bool:
+    """True when a browser_control call asks for a final (form-sending) click."""
+    reqs = args.get("requests") if isinstance(args, dict) else None
+    return any(isinstance(r, dict) and r.get("final") for r in (reqs or []))
+
+
+def _form_review_refusal(args: dict, watch: "_TurnWatch") -> str:
+    """Why this browser call may not end in a form-sending click, or ""."""
+    if not _has_final_request(args):
+        return ""
+    # The form page Jarvis itself opened is not "outside text" for this rule
+    # (the owner, 2026-09-30): opening a form and filling it are two calls in
+    # one turn. Any OTHER tool's read still blocks it, and so does a read of a
+    # different website (FORM_REVIEW_OTHER_SITE, checked once the plan is made).
+    other_reads = any(n != "browser_control" for n in watch.read)
+    if watch.tainted or other_reads or watch.provenance or watch.app_context:
+        return FORM_REVIEW_OUTSIDE
+    lane = getattr(watch, "lane", None)
+    if not isinstance(lane, dict) or local_model_refusal(lane.get("url"), lane.get("model")):
+        return FORM_REVIEW_NOT_LOCAL
+    return ""
 
 
 #: The headless browser (jarvis_browser_engine.py; JARVIS-API 97.3): rule 1 for what
@@ -1188,6 +1314,8 @@ def _plan_step_dispatch(tools: dict, names: list, checker, watch: "_TurnWatch",
         checked_args, problem = check_call(step.tool, step.args, names, tools)
         if problem is not None:
             return refuse(problem)
+        if step.tool == "browser_control" and _has_final_request(checked_args):
+            return refuse(FORM_REVIEW_IN_PLAN)
         if (step.tool == FILES_TOOL
                 and str(checked_args.get("action") or "").strip().lower() == "read"):
             if watch.file_parts >= FILES_PARTS_PER_TURN:
@@ -1417,16 +1545,15 @@ TOOLS: dict = {
         "Drive one browser tab by naming page elements (role and accessible "
         "name). A missing or ambiguous element is reported, not guessed. "
         "read_new: a chat's new messages; read_page: the main text in "
-        "pieces. Stops if the page leaves the allowed sites, asks a "
-        "question, opens a tab or downloads.",
+        "pieces. Stops if the page leaves the allowed sites or opens a tab. "
+        "A form: fill it, end with one click marked final.",
         {"type": "object", "properties": {
             "goal": {"type": "string"},
             "session": {"type": "string"},
             "mode": {"type": "string", "enum": ["auto", "headless", "visible"],
-                "description": "headless: no window, reading only. visible: sign-in, "
-                    "checkout"},
+                "description": "headless: no window, reading only. visible: sign-in"},
             "allowed_domains": {"type": "array", "items": {"type": "string"},
-                "description": "hostnames allowed (default: the plan's sites)"},
+                "description": "allowed hostnames (default: the plan's)"},
             "requests": {"type": "array", "items": {"type": "object", "properties": {
                 "action": {"type": "string",
                     "enum": ["navigate", "click", "type", "select", "read", "read_new",
@@ -1434,20 +1561,23 @@ TOOLS: dict = {
                 "role": {"type": "string", "description": "e.g. button, textbox; "
                     "read_new: the list's"},
                 "name": {"type": "string", "description": "accessible name"},
-                "within": {"type": "string", "description": "the section, dialog or row it "
-                    "is in, when two elements match"},
+                "within": {"type": "string", "description": "its section or row, if "
+                    "two match"},
                 "value": {"type": "string", "description": "navigate: URL. type/select: "
                     "text (saved secret: <secret>name</secret>). read_new: highest index "
                     "seen. read_page: offset (\"0\")"},
                 "why": {"type": "string"},
                 "irreversible": {"type": "boolean"},
                 "leaves_machine": {"type": "boolean",
-                    "description": "true for nearly every browser step"},
+                    "description": "true for nearly every step"},
+                "final": {"type": "boolean",
+                    "description": "the last click, which sends a form"},
             }}}},
          "required": ["goal", "session", "requests"]},
         _prepare_browser_control,
-        lambda args, state, **kw: _run_browser_control(args, state, announce=kw.get("announce"),
-                                                checkpoint=kw.get("checkpoint")),
+        lambda args, state, **kw: _run_browser_control(
+            args, state, announce=kw.get("announce"), checkpoint=kw.get("checkpoint"),
+            checker=kw.get("checker"), watch=kw.get("watch"), out=kw.get("out")),
         needs_announce=True,
         # New action name, same reason control_phone is: no existing
         # jarvis_gate tier fits a browser step - see browser-control-wiring
@@ -2544,6 +2674,26 @@ def _a_person_said_yes(verdict) -> bool:
 #: it counts once here; locks, alarms, doors and covers still take a card
 #: each. The owner confirmed five, 2026-09-25.
 CARDS_PER_TURN = 5
+
+#: A form of several pages needs one plan card per page and the Submit card
+#: (owner, 2026-09-30): while only ONE website's form is being filled, and no
+#: card has been raised for anything else, the limit is this instead of
+#: CARDS_PER_TURN. Every card is still its own yes; everything else keeps 5.
+FORM_CARDS_PER_TURN = 8
+
+
+def _card_limit(watch, name: str = "") -> int:
+    """How many cards this turn may still use for `name`: FORM_CARDS_PER_TURN
+    for browser_control while only one site is involved and nothing else has
+    asked, CARDS_PER_TURN for everything else."""
+    if name != "browser_control" or watch is None:
+        return CARDS_PER_TURN
+    if watch.cards - getattr(watch, "cards_browser", 0) > 0:
+        return CARDS_PER_TURN          # a card for something other than the form
+    if len(getattr(watch, "browser_hosts", ()) or ()) > 1:
+        return CARDS_PER_TURN          # more than one website this turn
+    return FORM_CARDS_PER_TURN
+
 
 CARD_LIMIT_ERROR = ("refused: this answer has already asked the owner for approval "
                     "{n} times, the most one answer may ask. Nobody was asked and "
@@ -3730,6 +3880,11 @@ class _TurnWatch:
         self.noted = False           # OUTSIDE_NOTE added to the turn
         self.reasked = False         # a round was asked again (Ollama)
         self.cards = 0               # approval cards this turn (CARDS_PER_TURN)
+        self.cards_browser = 0       # ...of which browser_control's own (_card_limit)
+        # What earlier browser_control calls this turn DID on the form's site:
+        # words typed, things chosen, clicks - listed on the Submit card so the
+        # owner sees every page's words in one place (jarvis_form_review.py).
+        self.form_steps: list = []
         self.file_parts = 0          # document parts read this turn (FILES_PARTS_PER_TURN)
         # A spending table (jarvis_spending.py): the block the apps draw, taken
         # out of my_spending's result before the model read anything, and the
@@ -3752,6 +3907,9 @@ class _TurnWatch:
         self.retirement_result = None
         self.retirement_done = False
         self.secrets: list = []      # KINDS of password or key read, never values
+        # The websites (host names) browser_control read this turn, for the
+        # form-review rule "only the form's own site" (FORM_REVIEW_OTHER_SITE).
+        self.browser_hosts: set = set()
         # "Where this came from" (I42, jarvis_sources.py): each reading
         # tool's own result, by reference only - a note's ref, a wiki page's
         # path, a web result's url, a file's path. Built in took_in(), from
@@ -3877,6 +4035,8 @@ class _TurnWatch:
             result = {k: v for k, v in result.items() if k != "_retirement_result"}
         if name not in _NOT_READING:
             self.read[name] = self.read.get(name, 0) + 1
+            if name == "browser_control":
+                self.browser_hosts |= _hosts_of_browser_result(result)
             pieces = _strings_in(result, [])
             self.outside.append("\n".join(pieces)[:_MAX_SCAN_CHARS])
             # Each field on its own - a sender's address in one field and
@@ -4144,6 +4304,17 @@ def _headless_offered() -> bool:
         return False
 
 
+def _web_search_switched_off() -> bool:
+    """True when the owner switched web search off (jarvis_search.settings()).
+    Not readable or not installed: False - the settings-file list and every
+    search's own plan() still decide, and a plan refuses when the switch is off."""
+    try:
+        import jarvis_search as WS
+        return WS.settings().get("enabled", True) is not True
+    except Exception:
+        return False
+
+
 def offered_tools(enabled_tools) -> list:
     """The tool names a turn actually offers the model: the ones in
     `enabled_tools` that are real tools here, in TOOLS order. `None` means
@@ -4156,6 +4327,15 @@ def offered_tools(enabled_tools) -> list:
     if enabled_tools is None:
         return list(TOOLS)
     wanted = set(enabled_tools)
+    if "email_read" in wanted:
+        # An older build saved the email row's gate-action name here instead of the
+        # tool's own name (jarvis_asks_first.LEGACY_TOOL_NAMES): read it as the tool.
+        wanted.add("email_check")
+    if "web_search" in wanted and _web_search_switched_off():
+        # The owner's own on/off switch for web search (Settings, Web search):
+        # read from its file every turn, so off means the AI model is not even
+        # offered the tool - not merely refused when it tries.
+        wanted.discard("web_search")
     if ("browser_control" in wanted and _second_card_lane("browser_control") is None
             and not _headless_offered()):
         # Browser control needs BOTH: its name in `[tools].enabled`, and the
@@ -7138,6 +7318,16 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
             say_step("tool_refused", name)
             return
+    if name == "browser_control":
+        # A plan that ends in a form-sending click is refused before the page
+        # is read when outside text shaped the turn - see FORM_REVIEW_*.
+        why = _form_review_refusal(args, watch)
+        if why:
+            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                          "content": _tool_content({"ok": False, "error": why})})
+            steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+            say_step("tool_refused", name)
+            return
     if name == FILES_TOOL and str(args.get("action") or "").strip().lower() == "read":
         # Refused before the gate: what fits in the model's working memory
         # (FILES_PARTS_PER_TURN). The model is told plainly, once per call.
@@ -7296,16 +7486,16 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
         say_step("tool_refused", name)
         return
-    if watch.cards >= CARDS_PER_TURN and not lights_ok and _would_ask(name, action_name):
+    if watch.cards >= _card_limit(watch, name) and not lights_ok and _would_ask(name, action_name):
         # Refused BEFORE a card is raised - see CARDS_PER_TURN.
         convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                       "content": _tool_content(
-                          {"ok": False, "error": CARD_LIMIT_ERROR.format(n=CARDS_PER_TURN)})})
+                          {"ok": False, "error": CARD_LIMIT_ERROR.format(n=_card_limit(watch, name))})})
         steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
         say_step("tool_refused", name)
         if "(card limit)" not in watch.told and tell_owner is not None:
             watch.told.add("(card limit)")
-            tell_owner(CARD_LIMIT_LINE.format(n=CARDS_PER_TURN))
+            tell_owner(CARD_LIMIT_LINE.format(n=_card_limit(watch, name)))
         return
     if lights_ok:
         # No card: the owner's own setting, for exactly this set of named
@@ -7322,6 +7512,8 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         out.set_status("thinking")
         if _a_card_was_shown(verdict):
             watch.cards += 1
+            if name == "browser_control":
+                watch.cards_browser += 1
     # What the GATE said, never what the model said: the outcome is read off
     # the verdict (gate-outcome.patch), and a verdict without one is recorded
     # as "unknown" rather than guessed at.
@@ -7401,6 +7593,13 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             # anything (jarvis_mcp.Bridge.run: a person's yes, for this
             # action, used once).
             kwargs["verdict"] = verdict
+        if name == "browser_control":
+            # The second card of a plan that ends in a form-sending click is
+            # raised from INSIDE its run (jarvis_form_review.make_review), so
+            # this one tool gets the gate wiring too. Nothing else does.
+            kwargs["checker"] = checker
+            kwargs["watch"] = watch
+            kwargs["out"] = out
         if name == "propose_plan":
             # The extra context this ONE tool's execute() needs to dispatch
             # each of its own steps through the exact same per-tool

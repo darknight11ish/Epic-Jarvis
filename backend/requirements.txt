@@ -15,6 +15,7 @@
 # the bottom.
 
 numpy                                  # voice: reading and checking recorded audio (jarvis_speech.py, rebuilt jarvis_voice.py)
+pillow                                 # form review: scaling the one picture of a filled-in web form down to fit (jarvis_form_review.py, 2026-09-30). HPND licence. Already installed by several packages below (it is in requirements.lock); named here because Jarvis now needs it itself. Without it, a very tall page gets no picture and the card says so in words.
 sherpa-onnx>=1.12.26                   # voice: speech-to-text on the PC, the better "is it your voice" check, and the custom voices (jarvis_speech.py, rebuilt jarvis_voice.py, jarvis_voices.py). 1.12.26 is the oldest on PyPI with Pocket TTS, the bake-off's candidate voice (checked: its library names OfflineTtsPocketModelConfig and reference_audio); tested with 1.13.8.
 sherpa-onnx-core                       # sherpa-onnx's own native library. sherpa-onnx installs it anyway on Windows and Linux; it is named here because not every sherpa-onnx download says so, and the hash-locked list (requirements.lock) must hold it.
 espeakng-loader                        # voice: the animals' mouths timed by Jarvis's own voice (jarvis_mouth.py) - the espeak-ng library and its data, used to work out the speech sounds exactly as the voice does. espeak-ng is GPL-3 (fine for this personal, non-commercial build; THIRD-PARTY-NOTICES.txt); espeakng-loader itself is MIT. Without it the apps work the mouth out from the sound, as before.

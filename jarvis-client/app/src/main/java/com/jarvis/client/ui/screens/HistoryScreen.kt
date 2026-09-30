@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -37,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -1244,13 +1246,25 @@ private fun Conversation(
                                 color = chrome.textMid,
                             )
                             facts.forEach { fact ->
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                // One checkbox with its words: the row takes the taps and
+                                // TalkBack reads the fact with its state.
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .toggleable(
+                                            value = fact.id in ticked,
+                                            enabled = !busy,
+                                            role = Role.Checkbox,
+                                            onValueChange = { on ->
+                                                ticked = if (on) ticked + fact.id else ticked - fact.id
+                                            },
+                                        ),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
                                     Checkbox(
                                         checked = fact.id in ticked,
                                         enabled = !busy,
-                                        onCheckedChange = { on ->
-                                            ticked = if (on) ticked + fact.id else ticked - fact.id
-                                        },
+                                        onCheckedChange = null,
                                     )
                                     Text(fact.text, style = MaterialTheme.typography.bodySmall,
                                         color = chrome.textHi)

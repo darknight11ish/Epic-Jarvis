@@ -1,8 +1,8 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -171,5 +171,6 @@
-     "screen_picture_enable",  # jarvis_screen_picture.py acts only on tier "ask": ONE card to turn on slow picture reading (screen-picture.patch)
-     "obscura_enable",  # jarvis_browser_engine.py acts only on tier "ask": ONE card to turn on the headless browser, Obscura (browser-engine.patch)
+@@ -173,5 +173,6 @@
+     "browser_form_submit",  # jarvis_form_review.py / jarvis_agent.py acts only on tier "ask": ONE card, before the click that sends a filled-in form, showing the site, every word typed and a picture of the page (form-review.patch)
+     "web_search_enable",  # jarvis_search.py acts only on tier "ask": ONE card to turn web search back on after the owner switched it off (web-search-switch.patch)
      "topic_loosen",  # jarvis_topics.py acts only on tier "ask": ONE card to turn a private topic back on (topics.patch)
 +    "referee_tick",  # jarvis_referee.py acts only on tier "ask": ONE card per goal step whose number reached its target; only the owner's tap ticks it (referee.patch)
  })

@@ -68,8 +68,8 @@ internal fun FloatingAvatarSection(
             }
             Gap(8)
             Text(
-                "Either way, it only works while \"Listen on this phone\" is on (Checks - " +
-                    "the wake-word switch above the desktop's own). With that off there is " +
+                "Either way, it only works while \"Listen on this phone\" is on (Settings, " +
+                    "Voice - the wake-word switch below the desktop's own). With that off there is " +
                     "nothing for the avatar to hear, and it says so plainly rather than " +
                     "sitting there looking like it is listening.",
                 style = MaterialTheme.typography.bodySmall,

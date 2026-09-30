@@ -21,7 +21,18 @@ command-line tool, installed with the driver). A second card counts only if:
 - it is **Turing or newer** (the RTX 20 series, or GTX 16, or later). Older
   cards cannot use the compact memory format everything here is sized for.
   A Tesla P100 in particular is a poor fit - MODEL-TOPOLOGY.md explains why.
-- it has **10 GB or more** of memory.
+- it has **8 GB or more** of memory (added 2026-09-30; before, 10 GB). A card
+  sold as 8 GB reports 8,192 MiB, and some drivers a few MiB less, so the
+  line is drawn at 7,680 MiB. A 6 GB card is still refused.
+
+What a card can do depends on its size (all of these numbers are worked
+out on paper - no extra card is installed yet, so **none is measured**):
+
+| Card | What it runs |
+|---|---|
+| **8 GB** | Learning in the background and the Wiki builder (the 8B model with room for 16,384 tokens, or 8,192 if a monitor is plugged into the card), and Pictures (8,192 tokens) **only when no monitor is plugged into it**. **Not** Longer conversations or Browser control: an 8 GB card holds no more conversation than your main card's 16,384, so they would not help. What it is good for is taking that work **off** the main card, so chat is never slowed by it. About 6.5 GB of its 8 GB is used, so it is tight: if answers get slow, the model may not fully fit. |
+| **10, 11, 12 GB** | Everything, exactly as before (the 8B model with room for 32,768 tokens). |
+| **16 GB and 24 GB** | The same as a 12 GB card. The 8B model's own length is 32,768 tokens, and going past it is not something Jarvis has tested. A bigger model (Qwen 3 14B, about 11.7 GB with 32,768 tokens) would fit, but it is **not switched on**: it would change which model writes your answers, and Jarvis's tool and learning tests were measured on the 8B. That is your call, later. The extra memory stays free until then. |
 
 The card that runs everyday chat (the "main" card) is: the one named in
 `[compute] primary_gpu` in `jarvis-framework.toml`, if you set it; else the
@@ -117,10 +128,23 @@ yourself, any time.
 
 If your PC has a THIRD card - besides the everyday one and the second one
 above - and it is capable (the same rule as the second card: Turing or
-newer, 10 GB or more), Jarvis finds it and shows it, but it does nothing on
+newer, 8 GB or more), Jarvis finds it and shows it, but it does nothing on
 its own. That is on purpose: which of the five switches above runs on which
 physical card is a real decision, and Jarvis never makes it for you by
 guessing "the biggest card wins" or any other default.
+
+**The card must be the one you approved (2026-09-30).** Jarvis picks the
+third card afresh each time it looks (most memory first, then the lowest
+number), so swapping, moving or adding a card can put a different one in
+the third place. When you approve a move, Jarvis saves the card's own id
+with it, and the move only counts while that same card is in the third
+place. If it is not, nothing runs on the new card, the app says so in
+words, your choice is kept, and the feature keeps working on the second
+card until you approve the move again. A choice saved before this was
+added has no card id, so it asks again once (the safe way). The third
+card also only offers the switches its own size can run: an 8 GB third
+card offers Learning and the Wiki builder (and Pictures without a
+monitor), never Longer conversations or Browser control.
 
 **Move a switch there.** Once one of the five switches above is already
 on, Settings → "Second graphics card" (desktop) or Brain (phone) shows a

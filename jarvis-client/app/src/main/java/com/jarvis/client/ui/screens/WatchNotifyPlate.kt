@@ -119,6 +119,9 @@ internal fun WatchNotifySwitch(canAct: Boolean, refresh: Int) {
         style = MaterialTheme.typography.bodySmall,
         color = if (cardWaiting) chrome.warnInk else chrome.textMid,
     )
+    if (WatchNotify.showStale(enabled, canAct, cardWaiting)) {
+        Text(WatchNotify.STALE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    }
     readError?.let {
         Text("Couldn't read this switch: $it", style = MaterialTheme.typography.labelSmall,
             color = chrome.warnInk)

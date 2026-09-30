@@ -853,7 +853,7 @@ class WakeWordService : Service() {
     companion object {
         private const val TAG = "JarvisWakeWord"
         const val CHANNEL_ID = "jarvis_wake"
-        private const val NOTIFICATION_ID = 0x4A57
+        private const val NOTIFICATION_ID = NotificationIds.WAKE_WORD
         const val ACTION_STOP = "com.jarvis.client.STOP_WAKE_WORD"
         private const val ASSET_DIR = "wakeword"
         /** Smart Turn's model: `assets/turn/`. */

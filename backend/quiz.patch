@@ -1,9 +1,9 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -3525,6 +3525,20 @@
+@@ -3539,6 +3539,20 @@
      except Exception as exc:
-         print(f"  browser    NOT ON ({type(exc).__name__}) - the headless browser setting is off")
-         print("             until jarvis_browser_engine.py is back: run apply-patches.ps1 again")
+         print(f"  form       NOT ON ({type(exc).__name__}) - the picture on a form's second card is off")
+         print("             until jarvis_form_review.py is back: run apply-patches.ps1 again")
 +    # quiz.patch ("Quiz me on a text", the owner's decision of 2026-09-30;
 +    # docs/STUDY-FROM-TEXT-DESIGN.md sections 3 and 11, JARVIS-API section
 +    # 98): POST /api/quiz, GET /api/quiz/<id>, POST /api/quiz/<id>/answer|

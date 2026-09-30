@@ -1289,6 +1289,15 @@
         <p class="state" id="ws-state" role="status">Checking web search…</p>
 
         <div id="ws-body" hidden>
+          <label class="toggle">
+            <input id="ws-enabled" type="checkbox" />
+            <span>
+              <span id="ws-enabled-label">Web search</span>
+              <span class="toggle-detail" id="ws-enabled-detail"></span>
+            </span>
+          </label>
+          <p class="sc-line" id="ws-enabled-status" role="status"></p>
+
           <fieldset class="theme-list" id="ws-provider-list">
             <legend class="label">Search with</legend>
             <div id="ws-providers"></div>
@@ -1499,7 +1508,11 @@
           fast on your main card. Everything here is off until you turn it
           on. Turning something on shows you an approval card first;
           turning something off happens at once. Nothing here sends anything
-          off this computer.
+          off this computer. A card with 8 GB can take some of these
+          (learning, the wiki, and pictures when no monitor is plugged into
+          it) but not longer conversations or browser control: it holds no
+          more conversation than your main card, so they would not help.
+          These sizes are worked out on paper, not measured yet.
         </p>
 
         <p class="state" id="sc-state" role="status">Checking your graphics cards…</p>
@@ -1547,7 +1560,7 @@
             itself. Ollama splits the model by how much memory is free on
             each card, not by how fast each card is, so it runs at roughly
             the slower card's pace. Real speed is not measured yet: the
-            second card is not installed.
+            extra card is not installed yet.
           </p>
           <div class="sc-switches" id="sc-combined"></div>
           <div class="row">

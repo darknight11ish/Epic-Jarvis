@@ -948,7 +948,12 @@ def _purge(token: str) -> None:
 
 def _expire(now: float) -> None:
     with _LOCK:
-        live = [u for u in _STATE["undo"] if u["until"] > now]
+        # `until` is wall-clock (shown to the apps); `mono_until` is the same ten
+        # minutes on the monotonic clock, so a clock set back while the Undo is
+        # open cannot stretch it (time audit, 2026-09-30).
+        mono = time.monotonic()
+        live = [u for u in _STATE["undo"]
+                if u["until"] > now and (u.get("mono_until") is None or mono < u["mono_until"])]
         gone = len(live) != len(_STATE["undo"])
         _STATE["undo"] = live
     if gone:
@@ -1151,7 +1156,8 @@ def run(p: Plan, *, approved: bool = False, connect: Optional[Callable] = None,
             if done:
                 token = uuid.uuid4().hex
                 at = _now() if now is None else now
-                rec = {"token": token, "until": at + UNDO_SECONDS, "action": p.action,
+                rec = {"token": token, "until": at + UNDO_SECONDS,
+                       "mono_until": time.monotonic() + UNDO_SECONDS, "action": p.action,
                        "items": done, "mailbox": p.mailbox, "uidvalidity": p.uidvalidity,
                        "dst": dst, "gmail": gmail, "user": p.user, "host": p.host,
                        "port": p.port}

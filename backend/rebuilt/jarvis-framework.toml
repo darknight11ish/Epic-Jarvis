@@ -285,6 +285,10 @@ search_the_web            = "ask"
 # Turning "Ask before every web search" OFF is one card (turning it on is
 # immediate). Must stay "ask": anything else and the setting stays on.
 stop_asking_before_every_web_search       = "ask"
+# Turning web search back ON, after the owner switched it off in Settings, Web
+# search, is one card (turning it off is immediate). Must stay "ask": anything
+# else and the switch stays off.
+web_search_enable                         = "ask"
 
 # --- Power: turning the assistant down, at two depths --------------------
 # Putting Jarvis into quiet/standby, or waking it, is the safe direction
@@ -364,6 +368,14 @@ screen_picture_enable = "ask"
 # downloaded by a line the owner pastes themselves, never by Jarvis. Must stay
 # "ask": anything else and the switch refuses to turn on at all.
 obscura_enable = "ask"
+
+# --- "Fill in the form, show me, then send it" (2026-09-30) ---------------
+# A browser plan whose last click is marked final (the click that sends a
+# form): Jarvis fills the fields, stops, and raises THIS card - the site,
+# every word typed and a picture of the page - before that click. One card
+# per form; never "always allow"; decided by tapping only. Must stay "ask":
+# anything else and the form is not sent at all (jarvis_form_review.py).
+browser_form_submit = "ask"
 
 # --- The wiki builder (Brain window or phone: "Add to wiki") -------------
 # Adding one document from <your vault>/Jarvis Wiki/Sources writes pages in

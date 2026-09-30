@@ -401,6 +401,10 @@ class Clock:
     hh: int
     mm: int
     mer: Optional[str]      # "am", "pm", "24" (unambiguous), or None (a bare 1-12)
+    #: "12" said with nothing to say which 12 (a bare "12", or "12 at night"): it
+    #: is read as MIDNIGHT (owner, 2026-09-30) and the reply says the time back
+    #: as "12:00 midnight", so a wrong guess is caught at once.
+    said12: bool = False
 
 
 def parse_clock(s: str) -> Optional[Clock]:
@@ -411,6 +415,7 @@ def parse_clock(s: str) -> Optional[Clock]:
     if s == "midnight":
         return Clock(0, 0, "24")
     mer = None
+    night_word = False
     m = re.fullmatch(r"(.+?)" + _MER, s)
     body = s
     if m:
@@ -419,8 +424,10 @@ def parse_clock(s: str) -> Optional[Clock]:
             mer = m.group(2)
         elif m.group(3):
             mer = "am" if m.group(3) == "morning" else "pm"
+            night_word = m.group(3) == "evening"
         elif s.endswith("at night"):
             mer = "pm"
+            night_word = True
     body = re.sub(r"\s*o'?\s?clock$", "", body).strip()
     hh = mm = None
     lead_zero = False
@@ -467,10 +474,13 @@ def parse_clock(s: str) -> Optional[Clock]:
     if mer in ("am", "pm"):
         if hh == 0 or hh > 12:
             return None
+        if hh == 12 and mer == "pm" and night_word:
+            # "12 at night" and "12 in the evening" are midnight, not noon.
+            return Clock(12, mm, "am", said12=True)
         return Clock(hh, mm, mer)
     if hh == 0 or hh > 12 or lead_zero:
         return Clock(hh, mm, "24")
-    return Clock(hh, mm, None)
+    return Clock(hh, mm, None, said12=(hh == 12))
 
 
 def _hour24(c: Clock, part: Optional[str]) -> list:
@@ -481,6 +491,8 @@ def _hour24(c: Clock, part: Optional[str]) -> list:
         return [c.hh % 12]
     if c.mer == "pm":
         return [c.hh % 12 + 12]
+    if part in ("evening", "night", "tonight") and c.hh == 12:
+        return [0]                  # 12 in the evening / at night / tonight: midnight
     if part in ("afternoon", "evening", "night", "tonight"):
         return [c.hh % 12 + 12]
     if part == "morning":
@@ -507,6 +519,7 @@ class When:
     rule: Optional[dict] = None
     passed: bool = False        # a time today that has already gone
     default_time: bool = False  # no clock was said; a default was chosen
+    said12: bool = False        # a "12" with no am/pm: the reply says which 12 was set
 
 
 #: Times used when a day is said with no time ("remind me tomorrow to ...").
@@ -627,12 +640,15 @@ def _resolve(c: Clock, day, part, now: float, kind: str) -> When:
             t = S.next_at(h, c.mm, now)
             if best is None or t < best:
                 best = t
-        return When(at=best)
+        return When(at=best, said12=c.said12)
     ymd = _ymd(day, now)
     if ymd is None:
         return None
     y, mo, d = ymd
     n = 1 if ymd != _day_of(now, 0) else 0      # another day than today
+    if c.hh == 12 and c.mer is None and part in ("evening", "night", "tonight"):
+        # "tonight at 12": the midnight that ENDS tonight, i.e. the next day's 00:00.
+        y, mo, d = S._add_days(y, mo, d, 1)
     hours = _hour24(c, part)
     if c.mer is None and part is None and n > 0 and len(hours) == 2:
         # A bare hour on another day. An alarm is for waking up: the morning.
@@ -644,8 +660,8 @@ def _resolve(c: Clock, day, part, now: float, kind: str) -> When:
     ts = sorted(S.wall_to_epoch(y, mo, d, h, c.mm) for h in hours)
     future = [t for t in ts if t > now]
     if not future:
-        return When(at=ts[-1], passed=True)
-    return When(at=future[0])
+        return When(at=ts[-1], passed=True, said12=c.said12)
+    return When(at=future[0], said12=c.said12)
 
 
 def parse_when(s: str, now: float, kind: str) -> Optional[When]:
@@ -672,7 +688,7 @@ def parse_when(s: str, now: float, kind: str) -> Optional[When]:
         if c is None:
             return None
         h = _hour24(c, m.group(1))[0]
-        return When(rule={"every": "day", "at": f"{h:02d}:{c.mm:02d}"})
+        return When(rule={"every": "day", "at": f"{h:02d}:{c.mm:02d}"}, said12=c.said12)
     m = re.fullmatch(r"(?:every\s+weekday|on\s+weekdays|weekdays|every\s+work\s*day)"
                      r"(?:\s+morning)?\s+at\s+(.+)", s)
     if m:
@@ -680,7 +696,7 @@ def parse_when(s: str, now: float, kind: str) -> Optional[When]:
         if c is None:
             return None
         h = _hour24(c, "morning" if "morning" in s else None)[0]
-        return When(rule={"every": "weekday", "at": f"{h:02d}:{c.mm:02d}"})
+        return When(rule={"every": "weekday", "at": f"{h:02d}:{c.mm:02d}"}, said12=c.said12)
     m = re.fullmatch(r"(?:every|on)\s+((?:" + _WD + r")s?(?:(?:\s*,\s*|\s+and\s+)(?:" + _WD
                      + r")s?)*)(?:\s+(morning|afternoon|evening))?\s+at\s+(.+)", s)
     if m and (s.startswith("every") or re.search(r"(?:" + _WD + r")s\b", m.group(1))):
@@ -690,7 +706,8 @@ def parse_when(s: str, now: float, kind: str) -> Optional[When]:
         if c is None or not days:
             return None
         h = _hour24(c, m.group(2))[0]
-        return When(rule={"every": "week", "at": f"{h:02d}:{c.mm:02d}", "days": days})
+        return When(rule={"every": "week", "at": f"{h:02d}:{c.mm:02d}", "days": days},
+                    said12=c.said12)
     if s.startswith("every ") or s.startswith("each "):
         return None
     # --- once ---------------------------------------------------------------
@@ -4061,7 +4078,29 @@ def _alarm_words(a: dict, now: float) -> str:
     return S.when_words(a["due"], now)
 
 
+def _twelve_note(hour: Optional[int], minute: int) -> str:
+    """When the owner said a "12" with no am/pm (or "12 at night"), the time is
+    said back as "12:00 midnight" or "12:00 noon", with how to get the other."""
+    if hour not in (0, 12):
+        return ""
+    word, other = ("midnight", "12 noon") if hour == 0 else ("noon", "midnight")
+    return f" That is 12:{minute:02d} {word}. If you meant the other, say \"{other}\"."
+
+
 def _set_at(kind: str, w: When, text: str, sched, now: float, n: str) -> Result:
+    r = _set_at_plain(kind, w, text, sched, now, n)
+    if w.said12 and r.ids:
+        if w.rule is not None:
+            hh, _, mm = str(w.rule.get("at") or "").partition(":")
+            note = _twelve_note(int(hh) if hh.isdigit() else None, int(mm) if mm.isdigit() else 0)
+        else:
+            lt = time.localtime(w.at)
+            note = _twelve_note(lt.tm_hour, lt.tm_min)
+        r.reply += note
+    return r
+
+
+def _set_at_plain(kind: str, w: When, text: str, sched, now: float, n: str) -> Result:
     import jarvis_schedule as S
     noun = "Alarm" if kind == "alarm" else "Reminder"
     if w.rule is not None:

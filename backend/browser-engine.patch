@@ -11,7 +11,7 @@
 @@ -825,6 +826,15 @@
      # nothing leaves this PC; the model itself is downloaded by the owner's own
      # pasted line, never by this card. Turning it off again is instant.
-     "screen_picture_enable": ("yes", "local", "lets \"Look at this\" and \"Watch with me\" also look at the picture of your screen, slowly, using a small model in a separate copy of Ollama that runs on this PC's processor (never the graphics card) and only this PC can reach (127.0.0.1); secrets in the picture are blacked out first, nothing is saved or sent anywhere, the model is downloaded by you, not by this card, and turning it off again is instant"),
+     "screen_picture_enable": ("yes", "local", "lets \"Look at this\" and \"Watch with me\" also look at the picture of your screen, slowly, using a small model in a separate copy of Ollama that runs on this PC's processor - or, when you have turned on Pictures on an extra graphics card and it is running, that card's picture model is used instead - and only this PC can reach (127.0.0.1); secrets in the picture are blacked out first, nothing is saved or sent anywhere, the model is downloaded by you, not by this card, and turning it off again is instant"),
 +    # browser-engine.patch (jarvis_browser_engine.py, jarvis_obscura.py; the
 +    # owner's decision of 2026-09-29). ONE card to let Jarvis choose a
 +    # headless browser - Obscura, a program with no window, started by Jarvis

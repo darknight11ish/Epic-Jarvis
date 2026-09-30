@@ -728,6 +728,362 @@ def t_restore_never_writes_outside_its_own_folders():
           and applied["settings_files"] == 1 and applied["notes_files"] == 1, applied)
 
 
+# ======================================================== 8. the 2026-09-30 audit
+
+
+def _fake_backup(folder: Path, name: str, size: int = None, age_s: float = 0) -> Path:
+    """A file that looks like a backup by name and size (not openable)."""
+    f = folder / name
+    f.write_bytes(b"x" * (size if size is not None else B.MIN_FILE_BYTES + 50))
+    t = time.time() - age_s
+    os.utime(f, (t, t))
+    return f
+
+
+def t_retention_never_deletes_the_file_just_written():
+    conf, backups = fresh_conf()
+    make_memory_db(conf)
+    future = []
+    for i in range(B.KEEP + 1):              # 6 files named for the year 2099
+        future.append(_fake_backup(backups, f"jarvis-backup-2099010{i + 1}-000000{B.FILE_SUFFIX}",
+                                   age_s=86400 * (i + 1)).name)
+    out = B.backup_now(str(backups))
+    left = sorted(os.listdir(backups))
+    check("the backup just written is still there, whatever its name's rank",
+          out["name"] in left, left)
+    check("... and only KEEP files are kept", len(left) == B.KEEP, left)
+    rows = B.list_backups(backups)
+    check("a name dated in the future is ranked by the file's real modified time: the new "
+          "backup is the newest", rows[0]["name"] == out["name"], rows[:2])
+    check("... and the future-named files are dated in the past, not 2099",
+          all(r["at"] < time.time() + 1 for r in rows), rows)
+    older = [r["name"] for r in rows[1:]]
+    check("... the kept future-named files are the ones with the newest real times",
+          older == future[:B.KEEP - 1], older)
+
+
+def t_a_same_second_backup_sorts_newer_and_survives():
+    conf, backups = fresh_conf()
+    a = "jarvis-backup-20260101-120000" + B.FILE_SUFFIX
+    b = "jarvis-backup-20260101-120000-2" + B.FILE_SUFFIX
+    _fake_backup(backups, a)
+    _fake_backup(backups, b)
+    rows = B.list_backups(backups, now=1_800_000_000)
+    check("the '-2' file (made second) is listed newer than the first", rows[0]["name"] == b, rows)
+    for i in range(B.KEEP + 2):
+        _fake_backup(backups, f"jarvis-backup-2026020{i + 1}-000000{B.FILE_SUFFIX}")
+    B._retain(backups, keep_name=b)
+    check("retention never deletes the file it was told just came in", (backups / b).is_file(),
+          sorted(os.listdir(backups)))
+
+
+def t_a_truncated_backup_file_is_not_one_of_the_kept():
+    conf, backups = fresh_conf()
+    make_memory_db(conf)
+    for i in range(B.KEEP):
+        _fake_backup(backups, f"jarvis-backup-2026010{i + 1}-000000{B.FILE_SUFFIX}")
+    cut = _fake_backup(backups, "jarvis-backup-20260301-000000" + B.FILE_SUFFIX, size=10)
+    out = B.backup_now(str(backups))
+    good = [r for r in B.list_backups(backups) if r["complete"]]
+    check("a copy that was cut short does not push a real backup out of the kept",
+          len(good) == B.KEEP and any(r["name"] == out["name"] for r in good),
+          sorted(os.listdir(backups)))
+    check("... it is listed, marked incomplete, and left alone", cut.is_file()
+          and [r for r in B.list_backups(backups) if r["name"] == cut.name][0]["complete"] is False)
+    real = B.backup_now(str(backups), code="AAAAA-BBBBB-CCCCC-DDDDD")
+    blob = (backups / real["name"]).read_bytes()
+    try:
+        B.decrypt_blob(blob[:B.MIN_FILE_BYTES - 5], "AAAAA-BBBBB-CCCCC-DDDDD")
+        ok = False
+    except B.WrongCode as exc:
+        ok = "damaged" in str(exc) and "cut short" in str(exc)
+    check("a backup cut short is called damaged, not 'wrong code'", ok)
+    try:
+        B.decrypt_blob(blob[:len(blob) // 2], "AAAAA-BBBBB-CCCCC-DDDDD")
+        ok = False
+    except B.WrongCode as exc:
+        ok = "damaged" in str(exc)
+    check("... also when it is cut in the middle (the message names both causes)", ok)
+
+
+def _plant(conf: Path) -> None:
+    make_memory_db(conf, rows=("original fact",))
+    (conf / "a.json").write_text('{"v": "original"}', encoding="utf-8")
+    (conf / "notes").mkdir(exist_ok=True)
+    (conf / "notes" / "x.txt").write_text("original note", encoding="utf-8")
+
+
+def _change(conf: Path) -> None:
+    make_memory_db(conf, rows=("changed fact",))
+    (conf / "a.json").write_text('{"v": "changed"}', encoding="utf-8")
+    (conf / "notes" / "x.txt").write_text("changed note", encoding="utf-8")
+
+
+def _snapshot_state(conf: Path) -> tuple:
+    return (read_facts(conf), (conf / "a.json").read_text(encoding="utf-8"),
+            (conf / "notes" / "x.txt").read_text(encoding="utf-8"))
+
+
+def _leftovers(conf: Path) -> list:
+    return sorted(str(p.relative_to(conf)) for p in conf.rglob("*")
+                  if p.is_file() and (p.name.endswith(".tmp") or p.name.endswith(".old")))
+
+
+def t_a_restore_that_fails_part_way_puts_everything_back():
+    conf, backups = fresh_conf()
+    _plant(conf)
+    zip_bytes, _m = B.build_archive()
+    _change(conf)
+    before = _snapshot_state(conf)
+    real_replace = os.replace
+
+    def failing(src, dst, *a, **k):
+        if Path(dst).name == "x.txt" and ".old" not in Path(src).name:
+            raise PermissionError("locked")           # the LAST file to be swapped
+        return real_replace(src, dst, *a, **k)
+    os.replace = failing
+    try:
+        try:
+            B._apply_restore(zip_bytes)
+            err = None
+        except B.RestoreError as exc:
+            err = exc
+    finally:
+        os.replace = real_replace
+    check("a restore that fails on one file raises a RestoreError", err is not None)
+    check("... every file already replaced was put back: the state is exactly as before",
+          _snapshot_state(conf) == before, _snapshot_state(conf))
+    check("... it says nothing was changed (true here)", err is not None and err.state == "unchanged")
+    check("... and no temp or 'old' copies are left behind", _leftovers(conf) == [], _leftovers(conf))
+
+    # putting back fails too: it must say so, not claim "not changed"
+    def failing_both(src, dst, *a, **k):
+        if Path(dst).name in ("x.txt", "memory.db", "a.json") and Path(src).name.endswith(".old"):
+            raise PermissionError("locked")
+        return failing(src, dst, *a, **k)
+    os.replace = failing_both
+    try:
+        try:
+            B._apply_restore(zip_bytes)
+            err = None
+        except B.RestoreError as exc:
+            err = exc
+    finally:
+        os.replace = real_replace
+    check("if putting back fails too, the error says 'partial'", err is not None
+          and err.state == "partial", getattr(err, "state", None))
+    _change(conf)
+    B._save_settings({"folder": str(backups)})
+
+    def boom_partial(z):
+        raise B.RestoreError("x", "partial")
+    out = B.backup_now(str(backups))
+    B.request_restore({"name": out["name"], "code": out["recovery_code"]}, here=True,
+                      gate=approve, tier_of=tier_ask, spawn=sync_spawn, apply_fn=boom_partial,
+                      armed=lambda: True)
+    res = B.take_restore_result()
+    check("a partial failure is told plainly and points at the safety backup",
+          res["outcome"] == "failed" and "part-way" in res["message"]
+          and "not changed" not in res["message"].replace("was not changed - the", "")
+          and (res.get("safety_backup") or {}).get("recovery_code"), res)
+
+    def boom_clean(z):
+        raise B.RestoreError("x", "unchanged")
+    B.request_restore({"name": out["name"], "code": out["recovery_code"]}, here=True,
+                      gate=approve, tier_of=tier_ask, spawn=sync_spawn, apply_fn=boom_clean,
+                      armed=lambda: True)
+    res = B.take_restore_result()
+    check("a clean failure says everything was put back", res["outcome"] == "failed"
+          and "put back" in res["message"], res)
+
+    def no_safety():
+        raise OSError("disk")
+    B.request_restore({"name": out["name"], "code": out["recovery_code"]}, here=True,
+                      gate=approve, tier_of=tier_ask, spawn=sync_spawn, safety_fn=no_safety,
+                      armed=lambda: True)
+    res = B.take_restore_result()
+    check("if the safety backup cannot be made it says THAT, not 'the safety backup is still "
+          "there'", res["outcome"] == "failed" and "safety backup could not be made" in res["message"]
+          and "still there" not in res["message"], res)
+
+
+def t_restore_removes_stale_wal_and_shm_beside_a_restored_database():
+    conf, backups = fresh_conf()
+    _plant(conf)
+    zip_bytes, _m = B.build_archive()
+    _change(conf)
+    (conf / "memory.db-wal").write_bytes(b"old wal")
+    (conf / "memory.db-shm").write_bytes(b"old shm")
+    B._apply_restore(zip_bytes)
+    check("the old -wal and -shm files (they belong to the OLD database) are gone",
+          not (conf / "memory.db-wal").exists() and not (conf / "memory.db-shm").exists())
+    check("... and the database is the backup's", read_facts(conf) == ["original fact"])
+    check("... with nothing left over", _leftovers(conf) == [], _leftovers(conf))
+    # and a failed restore gives them back
+    _change(conf)
+    (conf / "memory.db-wal").write_bytes(b"old wal")
+    real_replace = os.replace
+
+    def failing(src, dst, *a, **k):
+        if Path(dst).name == "x.txt" and not Path(src).name.endswith(".old"):
+            raise PermissionError("locked")
+        return real_replace(src, dst, *a, **k)
+    os.replace = failing
+    try:
+        try:
+            B._apply_restore(zip_bytes)
+        except B.RestoreError:
+            pass
+    finally:
+        os.replace = real_replace
+    check("a restore that fails gives the old -wal back too (no data lost)",
+          (conf / "memory.db-wal").exists() and (conf / "memory.db-wal").read_bytes() == b"old wal")
+
+
+def t_a_full_disk_leaves_nothing_half_written():
+    conf, backups = fresh_conf()
+    _plant(conf)
+    real_write = Path.write_bytes
+
+    def half_write(self, data):
+        real_write(self, data[: len(data) // 2])
+        raise OSError(28, "No space left on device")
+    Path.write_bytes = half_write
+    try:
+        try:
+            B.backup_now(str(backups))
+            raised = False
+        except OSError:
+            raised = True
+    finally:
+        Path.write_bytes = real_write
+    check("a full disk while writing a backup raises", raised)
+    check("... and no half-written file (nor a temp one) is left in the backup folder",
+          os.listdir(backups) == [], os.listdir(backups))
+    B._save_settings({"folder": str(backups)})
+    Path.write_bytes = half_write
+    try:
+        code, resp = B.request_backup_now({}, here=True)
+    finally:
+        Path.write_bytes = real_write
+    check("the route says so in words", code == 500 and "could not write" in resp["error"], resp)
+    check("... and the folder is still empty", os.listdir(backups) == [])
+    # the restore's staging step fails first: nothing real is touched
+    zip_bytes, _m = B.build_archive()
+    _change(conf)
+    before = _snapshot_state(conf)
+    Path.write_bytes = half_write
+    try:
+        try:
+            B._apply_restore(zip_bytes)
+            err = None
+        except B.RestoreError as exc:
+            err = exc
+    finally:
+        Path.write_bytes = real_write
+    check("a full disk while a restore stages its files changes nothing real",
+          err is not None and err.state == "unchanged" and _snapshot_state(conf) == before
+          and _leftovers(conf) == [], (err, _leftovers(conf)))
+
+
+def t_a_chat_history_key_that_cannot_be_put_back_is_said_not_swallowed():
+    conf, backups = fresh_conf()
+    _plant(conf)
+    import jarvis_chat_log
+    import jarvis_token_store as ts
+    real_ck, real_ws = jarvis_chat_log.CredentialKey, ts.WindowsStore
+    jarvis_chat_log.CredentialKey = lambda: (lambda: b"\x02" * 32)
+
+    class BrokenStore:
+        def __init__(self, *a, **k):
+            pass
+
+        def write(self, v):
+            raise OSError("Credential Manager is not reachable")
+    try:
+        B._save_settings({"folder": str(backups)})
+        out = B.backup_now(str(backups))
+        _change(conf)
+        ts.WindowsStore = BrokenStore
+        B.request_restore({"name": out["name"], "code": out["recovery_code"]}, here=True,
+                          gate=approve, tier_of=tier_ask, spawn=sync_spawn, armed=lambda: True)
+    finally:
+        jarvis_chat_log.CredentialKey, ts.WindowsStore = real_ck, real_ws
+    res = B.take_restore_result()
+    check("the files are restored", read_facts(conf) == ["original fact"], res)
+    check("... and the failure to put the chat key back is a plain WARNING, not silence",
+          res["outcome"] == "restored" and res["warning"] and "WARNING" in res["message"]
+          and "chat history" in res["warning"], res)
+
+
+def t_the_restore_card_says_what_it_really_does():
+    text = B.restore_card("jarvis-backup-x.jbak", {"created_at": time.time()})
+    check("it no longer promises 'never deletes anything you have added since'",
+          "never deletes" not in text)
+    check("... it says it replaces with that day's copies, and what is lost",
+          "REPLACES your memory and chat files" in text and "that day's copies" in text
+          and "since is lost" in text, text)
+
+
+def t_delete_older_backups_is_one_card_this_pc_only():
+    conf, backups = fresh_conf()
+    _plant(conf)
+    B._save_settings({"folder": str(backups)})
+    for i in range(3):
+        _fake_backup(backups, f"jarvis-backup-2026010{i + 1}-000000{B.FILE_SUFFIX}")
+    code, resp = B.request_delete_older({}, here=False)
+    check("from another device: refused", code == 403)
+    B._save_settings({"folder": None})
+    code, resp = B.request_delete_older({}, here=True)
+    check("with no folder: 409", code == 409)
+    B._save_settings({"folder": str(backups)})
+    seen = {}
+
+    def spy_deny(action, detail, prompt):
+        seen.update(action=action, prompt=prompt)
+        return Verdict(False, "denied")
+    code, resp = B.request_delete_older({}, here=True, gate=spy_deny, tier_of=tier_ask,
+                                        spawn=sync_spawn)
+    check("it raises ONE card on the folder card's own action, and says how many go",
+          code == 202 and seen["action"] == B.CARD_ACTION and "delete 3 older" in seen["prompt"]
+          and "cannot be undone" in seen["prompt"], (code, seen))
+    check("a denied card deletes nothing", len(os.listdir(backups)) == 3
+          and B.take_delete_older_result()["outcome"] == "denied")
+    code, resp = B.request_delete_older({}, here=True, gate=approve, tier_of=tier_ask,
+                                        spawn=sync_spawn)
+    res = B.take_delete_older_result()
+    left = os.listdir(backups)
+    check("approved: one fresh backup is made and every older one is deleted",
+          res["outcome"] == "deleted" and res["deleted"] == 3 and len(left) == 1
+          and res["fresh_backup"]["name"] == left[0], (res, left))
+    check("... the fresh backup's recovery code was handed out (once)",
+          bool(res["fresh_backup"].get("recovery_code")))
+    check("... and is gone on the second read",
+          "recovery_code" not in (B.take_delete_older_result() or {}).get("fresh_backup", {}))
+    blob = (backups / left[0]).read_bytes()
+    check("... and the fresh backup really opens with that code",
+          B.decrypt_blob(blob, res["fresh_backup"].get("recovery_code") or "x") is not None
+          if res["fresh_backup"].get("recovery_code") else True)
+
+    def gate_tier_auto(action, detail, prompt):
+        return Verdict(True, "approved", tier="auto")
+    _fake_backup(backups, "jarvis-backup-20260105-000000" + B.FILE_SUFFIX)
+    B.request_delete_older({}, here=True, gate=gate_tier_auto, tier_of=tier_ask, spawn=sync_spawn)
+    check("a gate that did not really ask a person deletes nothing",
+          B.take_delete_older_result()["outcome"] == "refused" and len(os.listdir(backups)) == 2)
+
+    def broken(folder):
+        raise OSError("disk")
+    B.request_delete_older({}, here=True, gate=approve, tier_of=tier_ask, spawn=sync_spawn,
+                           do=broken)
+    check("if the fresh backup cannot be made, NOTHING is deleted",
+          B.take_delete_older_result()["outcome"] == "failed" and len(os.listdir(backups)) == 2)
+    code, out = B.handle_post(B.DELETE_ROUTE, {}, peer="1.2.3.4", local="9.9.9.9")
+    check("the route is wired and refuses another device", code == 403, (code, out))
+    check("the route is in the installed wrapper's list", "DELETE_ROUTE" in
+          __import__("inspect").getsource(B.install))
+
+
 def t_the_routes():
     conf, backups = fresh_conf()
 

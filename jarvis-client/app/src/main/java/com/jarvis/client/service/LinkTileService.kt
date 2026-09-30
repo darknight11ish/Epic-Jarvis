@@ -9,6 +9,7 @@ import com.jarvis.client.Activity
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.LinkState
 import com.jarvis.client.MainActivity
+import com.jarvis.client.data.QuickTiles
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
@@ -95,6 +96,12 @@ class LinkTileService : TileService() {
         // most of the time, so reading it here meant the tile believed it was
         // never muted: every tap sent mute, and it could never unmute.
         val muted = JarvisRuntime.attention.value.muted
+        // App lock on and the phone locked: Android's own unlock first, like
+        // every other tile (QuickTileService). Dismissed, nothing is done.
+        if (QuickTiles.muteNeedsUnlock(JarvisRuntime.settings.security.value.appLock, isLocked)) {
+            unlockAndRun { scope.launch { JarvisRuntime.setMuted(!JarvisRuntime.attention.value.muted) } }
+            return
+        }
         scope.launch { JarvisRuntime.setMuted(!muted) }
     }
 

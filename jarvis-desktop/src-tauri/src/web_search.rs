@@ -95,16 +95,20 @@ pub(crate) fn change_answer(status: u16, body: &str) -> Result<serde_json::Value
     Err(backend_refusal(status, body))
 }
 
-/// The body of ONE change. Exactly one of the three; a provider must be one
+/// The body of ONE change. Exactly one of the four; a provider must be one
 /// of the five; an address is text of a sane length (the PC decides whether
-/// it is the owner's own network).
+/// it is the owner's own network); `enabled` is the web search on/off switch
+/// (off at once, on through ONE approval card).
 pub(crate) fn setting_body(
     provider: Option<&str>,
     searxng_url: Option<&str>,
     ask_every_time: Option<bool>,
+    enabled: Option<bool>,
 ) -> Result<serde_json::Value, String> {
-    let given =
-        provider.is_some() as u8 + searxng_url.is_some() as u8 + ask_every_time.is_some() as u8;
+    let given = provider.is_some() as u8
+        + searxng_url.is_some() as u8
+        + ask_every_time.is_some() as u8
+        + enabled.is_some() as u8;
     if given != 1 {
         return Err("Change one setting at a time.".to_string());
     }
@@ -120,6 +124,9 @@ pub(crate) fn setting_body(
             return Err("That address is too long.".to_string());
         }
         return Ok(serde_json::json!({ "searxng_url": u }));
+    }
+    if let Some(on) = enabled {
+        return Ok(serde_json::json!({ "enabled": on }));
     }
     Ok(serde_json::json!({ "ask_every_time": ask_every_time.unwrap_or(true) }))
 }
@@ -166,16 +173,23 @@ pub async fn get_web_search(app: AppHandle) -> Result<serde_json::Value, String>
     read(&app).await
 }
 
-/// ONE change. Turning "Ask before every web search" off raises an approval
-/// card on the PC; nothing else asks. Held on a stale link.
+/// ONE change. Turning "Ask before every web search" off, or web search back
+/// on, raises an approval card on the PC; nothing else asks. Held on a stale
+/// link.
 #[tauri::command]
 pub async fn set_web_search(
     app: AppHandle,
     provider: Option<String>,
     searxng_url: Option<String>,
     ask_every_time: Option<bool>,
+    enabled: Option<bool>,
 ) -> Result<serde_json::Value, String> {
-    let body = setting_body(provider.as_deref(), searxng_url.as_deref(), ask_every_time)?;
+    let body = setting_body(
+        provider.as_deref(),
+        searxng_url.as_deref(),
+        ask_every_time,
+        enabled,
+    )?;
     if stale(&app) {
         return Err(STALE.to_string());
     }
@@ -308,24 +322,33 @@ mod tests {
     #[test]
     fn exactly_one_change_per_request() {
         assert_eq!(
-            setting_body(Some("exa"), None, None).unwrap(),
+            setting_body(Some("exa"), None, None, None).unwrap(),
             serde_json::json!({"provider": "exa"})
         );
         assert_eq!(
-            setting_body(None, Some(" http://127.0.0.1:8888 "), None).unwrap(),
+            setting_body(None, Some(" http://127.0.0.1:8888 "), None, None).unwrap(),
             serde_json::json!({"searxng_url": "http://127.0.0.1:8888"})
         );
         assert_eq!(
-            setting_body(None, None, Some(false)).unwrap(),
+            setting_body(None, None, Some(false), None).unwrap(),
             serde_json::json!({"ask_every_time": false})
         );
-        assert!(setting_body(None, None, None).is_err());
-        assert!(setting_body(Some("exa"), None, Some(true)).is_err());
+        assert!(setting_body(None, None, None, None).is_err());
+        assert!(setting_body(Some("exa"), None, Some(true), None).is_err());
         assert_eq!(
-            setting_body(Some("brave"), None, None).unwrap(),
+            setting_body(Some("brave"), None, None, None).unwrap(),
             serde_json::json!({"provider": "brave"})
         );
-        assert!(setting_body(Some("whoogle"), None, None).is_err());
-        assert!(setting_body(None, Some(&"x".repeat(201)), None).is_err());
+        assert!(setting_body(Some("whoogle"), None, None, None).is_err());
+        assert_eq!(
+            setting_body(None, None, None, Some(false)).unwrap(),
+            serde_json::json!({"enabled": false})
+        );
+        assert_eq!(
+            setting_body(None, None, None, Some(true)).unwrap(),
+            serde_json::json!({"enabled": true})
+        );
+        assert!(setting_body(None, None, Some(true), Some(true)).is_err());
+        assert!(setting_body(None, Some(&"x".repeat(201)), None, None).is_err());
     }
 }

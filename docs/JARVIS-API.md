@@ -1851,6 +1851,8 @@ null, "assignable": [feature ids currently on and eligible to be moved],
 style `"combined"` already uses, so both apps' UI code can reuse the exact
 same rendering pattern.
 
+**Card sizes and the third card's identity (added 2026-09-30; calculated, not measured - no extra card is installed).** *Sizes.* The capability floor is now 7,680 MiB as nvidia-smi reports it (`MIN_TOTAL_MB`), so an 8 GB second or third card is used; `detected.why` then names the switches that card can take. An 8 GB card runs `learning` and `wiki` (qwen3:8b at 16,384 tokens, or 8,192 when a monitor is plugged into it) and `vision` (qwen2.5vl:7b at 8,192, only with no monitor on it). It does NOT run `long_context` or `browser_control`: it holds no more than the main card's 16,384 tokens, so they would not help. Turning one of those on returns **503** `"<name>" cannot be turned on: ...` (the same shape a preset's unsupported feature already has), the row's `why` says so and its `model` is `null`. 10 GB and up (10/11/12/16/24 GB) is unchanged: qwen3:8b at 32,768. *The third card's answer* gains two additive keys: `unavailable` (`{feature id: why}` for a switch that card cannot run) and `assignable` now leaves those out; assigning one returns **503** with the same words. *Identity.* `second-card.json` gains `third_card`, the id of the card the owner approved `third_feature` for. `third.assigned` is that feature only while the card in the third slot has that id; otherwise it is `null`, `third.why` says the choice is kept and must be approved again, and no lane starts on the other card. A file with `third_feature` but no `third_card` (written before this) is read the same way - asked again once, never "whichever card is third now". The card raised for a move now refuses (and saves nothing) if the third slot's card changed while it waited. Not fixed here, and reported: the second card's own lane has the same weakness - the master switch's approval names the card but is not bound to its id.
+
 *The lane process.* A third, literal `_LaneProcess` (`_THIRD_LANE`) -
 mirroring `_LANE` and `_COMBINED_LANE`, not a new dict-keyed structure.
 Considered and explained in `jarvis_second_card.py`'s own module docstring
@@ -4652,6 +4654,10 @@ A `job`:
  "card": "Waiting for your yes on the approval card." (waiting),
  "fired_at", "late": bool, "missed": "missed at 07:00",
  "went_off_at": "07:00",          when it last went off, by the PC's clock (21.9)
+ "age_s": 45.0,                   seconds since it went off, by the PC's clock, never below 0
+                                  (added 2026-09-30): an app that shows "went off 3 minutes
+                                  ago" needs no clock of its own - the phone's and the PC's
+                                  can disagree. Only on a job that has gone off.
  "list": "shopping",              a to-do item's named list; "" is the to-do list (21.9)
  "snoozed": true,                 a snoozed copy of something that went off (21.9)
  "lock_screen": "Jarvis: a reminder is due.",   the kind's words, never the job's
@@ -4777,6 +4783,16 @@ What it understands:
 | "Cancel that" (21.9) | "cancel that", "never mind", "undo", "delete that reminder", "no, cancel that alarm" |
 | Morning briefing | "brief me now", "brief me every weekday at 7", "stop my briefing" - section 22.5 |
 | "What did I miss?" (22.9) | "what did I miss", "did I miss anything", "catch me up", "what's new" |
+
+**"12" (owner, 2026-09-30: "read it as midnight and always say the time
+back").** "12 at night", "12 in the evening" and "tonight at 12" are
+**midnight** (00:00 - the one that ends the day), never noon. A bare "12" (or
+"12:30") with nothing to say which, and any repeat like "every day at 12", is
+also read as the clock reads it - midnight for a repeat, the next 12 for a
+one-off - and the reply says which it set: "... That is 12:00 midnight. If you
+meant the other, say "12 noon"." (or "... 12:00 noon. If you meant the other,
+say "midnight"."). "12pm", "12 noon", "noon", "12am" and "midnight" are
+unambiguous and get no extra words.
 
 "cancel all timers", "clear my to-do list" and the like are answered
 "Jarvis does not clear everything at once" and change nothing. Two timers
@@ -5524,7 +5540,7 @@ Every route needs the pairing token and passes the origin check.
 | Route | Body | Answers | Notes |
 |---|---|---|---|
 | `GET /api/search` | - | 200 view (below); 503 `{"available": false, "error": <exception name>}` without `jarvis_search.py` | A read. |
-| `POST /api/search/settings` | exactly ONE of `{"provider": id}`, `{"searxng_url": address}` (`""` = the default), `{"ask_every_time": bool}` | 200 `{"ok": true, "said", ...view}`; **202** `{"ok": true, "waiting": true, "said"}` for `ask_every_time: false` (ONE card); 400 `{"ok": false, "error"}` (two fields, an unknown provider, an address outside the owner's networks); 503 when `stop_asking_before_every_web_search` is not tier `ask` | Held on a stale link in both apps. There is **no field and no route for a key**. |
+| `POST /api/search/settings` | exactly ONE of `{"provider": id}`, `{"searxng_url": address}` (`""` = the default), `{"ask_every_time": bool}`, `{"enabled": bool}` (the on/off switch, 23.6) | 200 `{"ok": true, "said", ...view}`; **202** `{"ok": true, "waiting": true, "said"}` for `ask_every_time: false` (ONE card, `stop_asking_before_every_web_search`) and for `enabled: true` after it was switched off (ONE card, `web_search_enable`); 400 `{"ok": false, "error"}` (two fields, an unknown provider, an address outside the owner's networks); 503 when `stop_asking_before_every_web_search` is not tier `ask` | Held on a stale link in both apps. There is **no field and no route for a key**. |
 | `POST /api/search/test` | `{}` | 200 `{"ok", "state", "said", "provider", "offer"?, "results"?: n}` | ONE search for the fixed word `wikipedia` through the chosen provider; no card (fixed words, the owner pressed the button). A real search: one Tavily credit, or a little of Exa's free credit. Held on a stale link in both apps. |
 
 The view:
@@ -5535,7 +5551,8 @@ The view:
  "providers": [{"id", "label", "why", "needs_key", "key_saved": bool | null,
                 "key_where", "needs_docker", "ready", "state", "said"}],
  "left_out": [{"id": "whoogle", "label", "why"}],
- "searxng_url", "searxng_default", "ask_every_time", "ask_every_time_label",
+ "searxng_url", "searxng_default", "enabled", "enabled_label", "enabled_detail",
+ "enable_waiting", "enable_last", "ask_every_time", "ask_every_time_label",
  "ask_every_time_detail", "key_entry", "test_query": "wikipedia",
  "waiting": bool, "last": {"outcome", "why", "at", "message"} | null}
 ```
@@ -5669,6 +5686,43 @@ says only `key_saved: true|false`.
   `memory_search`); an earlier turn's recalled facts are not tracked, so a
   later search in the same conversation that has read nothing else runs
   without a card.
+
+
+### 23.6 The on/off switch (added 2026-09-30, the settings audit)
+
+Web search ships **on** (the owner, 2026-09-25) but had no way to be switched
+off short of editing `jarvis-framework.toml` by hand. Both apps' Settings, Web
+search now open with a switch, "Web search":
+
+- **Off is instant**, from either app, never a card (it only narrows what
+  Jarvis does): `{"enabled": false}` writes `"enabled": false` into
+  `web-search.json`, and withdraws a waiting "turn it back on" card.
+- **Back on is ONE approval card**, gate action **`web_search_enable`**
+  (tier `ask`, must stay `ask`; `web-search-switch.patch` adds its `_RISK`
+  line and its place in the "a no is not a standing rule" list, and the
+  shipped toml its `ask` line). The change itself sends nothing; every search
+  keeps the rules it had. The card can be decided on the PC or the phone, like
+  `stop_asking_before_every_web_search`. Until a person says yes the switch
+  stays off, and both apps show it off (never "on before the card").
+- **Read at use time, not just shown.** `jarvis_search.plan()` refuses with
+  state `turned_off` and the plain sentence "Web search is switched off ... Turn
+  it on in Settings, Web search (a card asks you first)"; `run()` re-checks, so a
+  plan made while on is stopped if it was switched off before it ran; and
+  `jarvis_agent.offered_tools()` does not offer `web_search` to the AI model at
+  all while it is off. Every path that searches (the chat tool, "tell me when",
+  the tests' direct calls) goes through `plan()`.
+- A `web-search.json` whose `enabled` is not true/false fails **closed** (off).
+- The second door: "turn off web search" / "turn on web search"
+  (`jarvis_settings_registry` BoolSetting `web_search`, calling
+  `jarvis_search.request_enabled`), by voice or chat.
+- The reach list ("What Jarvis can reach", section 24) says "Off: you switched web
+  search off. Turn it back on in Settings, Web search (a card asks you first)"
+  or, when `web_search` is missing from the settings file's tool list, says so
+  in plain words.
+- Held on a stale link in both apps, with the reason shown: the desktop greys
+  the switch with the "Waiting for the link to catch up" title (as the other
+  controls there); the phone's plate already ended with "Not connected to the
+  desktop, so changes ... wait until the link is back."
 
 ## 24. What Jarvis can reach (added 2026-09-25)
 
@@ -8157,6 +8211,7 @@ the phone) - see `docs/ARCHITECTURE.md` section 8.
 | Route | Body | Answers | Notes |
 |---|---|---|---|
 | `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** for a tool off the four; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. |
+| (both) | **The row id is the GATE ACTION's name, not the tool's.** The four rows are `calendar_read`, `email_read`, `notes_search`, `home_read`; the tool the model is offered for the second is **`email_check`** (`jarvis_agent.TOOLS`). Until 2026-09-30 the switch wrote `"email_read"` into `[tools].enabled`, which offered nothing (the page said On, "What Jarvis can reach" said Off, and the tool was not there). Now `jarvis_asks_first.TOOL_NAME` maps each row to its tool, the file gets the tool's name, an old `"email_read"` entry is read as `email_check` (and removed when the switch is turned off), and `test_settings_switches.py` proves it end to end for all four rows | |
 | `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app (Rust still refuses it on the phone - no screen calls it there), never held: it only narrows what the model may be offered. |
 
 Its state rides on `GET /api/asks_first` (§32.2), which now also carries:
@@ -8424,6 +8479,7 @@ words too (`"Erase the words" cannot reach into an older backup ...`).
 | `POST /api/backup/folder` `{"path"}` | Sets where backups are written. This PC only. **202** while ONE approval card waits (action `change_own_config`, the same action "Folders Jarvis may look in" uses to add a folder, and refused the same places - `jarvis_documents.check_folder`, imported not copied). |
 | `POST /api/backup/now` `{}` | Makes one backup into the folder already set. This PC only, **no card** - the folder was already approved. **409** with no folder set. 200 `{"ok", "name", "at", "counts", "recovery_code"}` - the code shown once. |
 | `POST /api/backup/restore/preview` `{"name", "code"}` | Decrypts to read the backup's own `manifest.json` - counts and its date, never any other content. Changes nothing. **400** `{"wrong_code": true}` for a code that does not open it. This PC only. |
+| `POST /api/backup/delete-older` `{}` | **"Delete older backups now"**, offered by both apps after an "Erase the words" (2026-09-30): erased words can still be readable in a backup made before the erase. This PC only (**403** otherwise). **202** while ONE approval card waits (action `change_own_config`, the folder card's own; the card says how many files go and that it cannot be undone). Approved: one FRESH backup is made first (a new recovery code, returned once in `last_delete_older.fresh_backup`), then every other backup file in the folder is deleted; if the fresh one cannot be made, nothing is deleted. **409** with no folder or no backups. The outcome is in `GET /api/backup` as `last_delete_older` (`outcome` `deleted`\|`denied`\|`timed_out`\|`withdrawn`\|`refused`\|`failed`, `deleted`, `message`, `fresh_backup`) and `pending_delete_older_card`. |
 | `POST /api/backup/restore` `{"name", "code"}` | **202** while ONE approval card waits, action **`restore_backup`** - in `jarvis_owner_check.PC_ONLY_ACTIONS`, so it ALWAYS needs Windows Hello and is ALWAYS refused from any device but this PC, whatever the gate's own risk table says (the same mechanism `loosen_what_asks_first` and `enable_reading_tool` use). On approval: Jarvis backs up the CURRENT state first, automatically, with a FRESH one-time recovery code (returned in the outcome exactly once), so the restore itself can be undone - then writes the backup's files back. Restore only adds and overwrites; it never deletes a file that is not in the backup. |
 
 `[autonomy.tiers]` carries `restore_backup = "ask"` (must stay `ask`, like
@@ -8434,10 +8490,32 @@ has its plain-words title; "What asks first" (§32) lists it under
 ### 45.4 Retention
 
 The newest 5 backup files in the folder are kept; making a new one
-deletes the rest. Chosen, not measured: a card is shown for each restore
+deletes the rest - **never the one just written**, whatever its name says. A
+name is trusted for its date, except one dated more than 5 minutes in the
+future (the PC's clock was wrong): that file is dated by its real modified time
+instead. A same-second `-2` file counts as newer than the first. A file too
+small to be a backup (a copy or sync that was cut short) is listed with
+`"complete": false`, is not counted among the kept, and is not deleted. Chosen, not measured: a card is shown for each restore
 either way, so keeping more costs disk, not safety, and a synced folder
 should not grow without bound. Two backups made in the same second get
 distinct names (`-2`, `-3`, ...) rather than overwrite each other.
+
+### 45.4a Restore is all-or-nothing, as far as files allow (2026-09-30)
+
+Every file is first written beside its place as a hidden temp file (a full disk
+fails here, before anything real is touched); then each real file is copied
+aside and replaced in one step, and a restored database's old `-wal` and `-shm`
+files are moved aside too (they belong to the OLD database); on any failure
+everything already replaced is put back and every temp file removed. The
+outcome words are true: "failed" says everything was put back;
+"failed_partial" says putting back failed too and points to the safety backup;
+a safety backup that could not be made says nothing was restored. A chat-history
+key that cannot be put back in Credential Manager is a plain `warning` on the
+restored outcome, not silence. The restore card says it "REPLACES your memory
+and chat files, settings and notes with that day's copies" - what was added
+or changed since is lost unless it is in the safety backup. Nothing can pause
+the programs that hold these files open (there is no such hook), so restart
+Jarvis afterwards, as the outcome says.
 
 ### 45.5 Desktop and phone
 
@@ -9635,6 +9713,27 @@ smoothed over: "appearance" on the phone is `SECTIONS`' `"appearance-card"`
 maps the wire id to that item's position, so the mismatch in NAME never
 becomes a mismatch in behaviour.
 
+**The phone's Settings screen (2026-09-30, the settings audit)** opens with a
+"Jump to:" list of every section (`ui/SettingsJump.kt`, held to the screen's
+real rows by `SettingsJumpTest`), which moved every row down by one in
+`SETTINGS_ITEM_INDEX`. The "hey Jarvis" switches (turn it on or off, Listen on
+this phone, interrupting, "One moment", the "I heard you" sound) moved from
+Platform checks to **Settings, Voice**, matching the desktop's `#voice`;
+Checks keeps a status card with a "Settings, Voice" button. Picture mode has a
+button to the Security screen's "Looking at your screen" switch, which the
+Security screen scrolls to.
+
+**Added 2026-09-30 (the settings audit):** `SECTIONS` was missing two real
+cards - `devices` (both apps: the desktop's `<section id="devices">`, the
+phone's `item(key = "devices")`) and `crash-notes` (the desktop's "Hang and
+crash notes", inside More options; **desktop only**, and `OpenPlace.PC_ONLY`
+says so on the phone, whose only crash screen appears after a crash) - plus
+the phone's `quick-tiles` row (phone only). `screen-look` also answers "open
+look at this" and "open watch with me". A new test
+(`t_every_real_settings_card_is_listed`) holds it the other way round too:
+every desktop card and every phone Settings row is in `SECTIONS` or one of a
+few named spacers, so a card can no longer be added without a name.
+
 The answer is `"Opening <name> in Settings."`; `X-Jarvis-Route` carries
 `"open_settings": "<section id>"` alongside the usual `"quick"` field -
 additive only, so an app that does not read this key is unaffected, same as
@@ -9709,7 +9808,7 @@ at - "turn off my calendar" and "turn on the special mode" are not real
 settings and go to the model, same as "ask, don't guess"
 (`docs/CUTTING-EDGE-2026-09-26-round2-tools.md`'s principle, reused here).
 
-Eleven settings are covered - the ones that already sit behind a single
+Twelve settings are covered (web search on/off joined 2026-09-30, 23.6) - the ones that already sit behind a single
 proven `handle_*`/`request_*` entry point this file can call exactly as
 the REST route does, never a copy of its logic:
 
@@ -10384,9 +10483,10 @@ screen is learned, and nothing on it can start a look.
     {"state": "off"|"watching"|"paused"|"ended", "on": bool,
      "paused": <a reason above> | null, "pause_words": <its words> | null,
      "left_s": int | null, "ending_soon": bool,
-     "ended": "owner"|"time"|"locked"|"slept"|"stop_all" | null,
+     "ended": "owner"|"time"|"locked"|"slept"|"stop_all"|"no_heartbeat" | null,
      "ended_words": "you stopped it"|"the time was up"|"Windows locked"|
-                    "the PC slept"|"Stop everything" | null,
+                    "the PC slept"|"Stop everything"|
+                    "the Jarvis window stopped answering" | null,
      "look_held": bool, "look_left_s": int | null, "built": bool}
 
 **Never an app name, a site, a window title or a word from the screen.**
@@ -10496,6 +10596,17 @@ Both wrap the server's `Handler` after its own origin and token checks.
     it runs on, and only when it is asked from that PC."
   - `stop` and `drop` - accepted from **anywhere**, because they only make
     Jarvis look less. The phone's "Stop watching" on Home is `stop`.
+  - **`heartbeat`** (added 2026-09-30; **this PC only**, like `start`) - "the
+    window that shows the sign is still here". A Watch started with
+    `{"do": "start", "from": "desktop", "minutes"?}` ends itself, in `tick()`
+    and by the MONOTONIC clock (a clock change cannot end or stretch it), when
+    **45 seconds** (`HEARTBEAT_LOST_S`) pass with no heartbeat: `ended` is
+    `"no_heartbeat"` and `ended_words` "the Jarvis window stopped answering" - so
+    Jarvis never goes on watching with nobody showing the "Jarvis is watching"
+    sign. The desktop app pings about every 10-15 seconds while its Watch is on.
+    The answer is the flat status plus `watching` (false: the session is over,
+    so the app drops its sign). A Watch started without `from: "desktop"` has no
+    heartbeat client and is never ended for silence.
   - The answer is the same flat status, plus the verb's own fields: `ok`,
     `note` (the "Looked at: ..." line, never a word from the screen), `said`
     (the plain reason for a refusal), `why` (the pause reason of a refused
@@ -10656,10 +10767,16 @@ characters, so a cut can never leave half of one), and hides them:
   program not used) and Presidio's card
   (must pass the card check digit - a made-up number that fails it is left
   alone), crypto wallet (its own check digits), IBAN (mod 97), email and IP
-  patterns (MIT; the regular expressions only, no package, no spaCy), and two
-  of Jarvis's own (a value after "Password:" / "PIN:" / "secret", which is
-  often shorter than gitleaks's broad rule wants, and a private key that is
-  cut off before its end line). gitleaks's keyword pre-filter is NOT used
+  patterns (MIT; the regular expressions only, no package, no spaCy), and
+  Jarvis's own: a value after "Password:" / "PIN:" / "secret" (also
+  `DB_PASSWORD=...`, `API_SECRET_KEY=...`, German "Passwort:", and "password
+  hunter2" with no colon or a label on the line above - the value must hold a
+  digit then, so "password reset" is left alone), a code before or after its
+  label ("482913 is your verification code", "Your code is 482913", "PIN 4821",
+  "CVV: 123"), a login header ("Authorization: Bearer ..."), a US social
+  security number (123-45-6789; the kind `"ssn"` in `PII_KINDS`; dates and phone
+  numbers do not fit its shape), and a private key that is cut off before its
+  end line (patterns added 2026-09-30). gitleaks's keyword pre-filter is NOT used
   (it saves nothing at screen size and would let a token through whose
   vendor's name is not on the screen);
 - every word that overlaps a secret, by even one letter, is hidden whole; a
@@ -10675,8 +10792,11 @@ characters, so a cut can never leave half of one), and hides them:
   model may be shown (a second-card vision model, the CPU picture model), the
   original is never passed on, and when nothing was hidden the original bytes
   come back unchanged;
-- **fail closed**: the check failing or taking too long (10 s), rule data that
-  will not load, more than 80,000 characters of text, words with no position
+- **fail closed**: the check failing or taking too long (6 s, checked between
+  rules and every 32 matches inside one), rule data that will not load, more
+  than **25,000** characters of text (was 80,000: on 70,000 characters of dense
+  text the check took 8-13 s holding Python's lock, which froze the event stream
+  and the approvals and left the phone with a stale link; 2026-09-30), words with no position
   for a hidden word, a picture that cannot be opened (a JPEG with no Windows
   reader) or whose size is not the size the words were read from - each gives
   NO picture (`png` None, with `png_why`); when the check itself cannot run,
@@ -15485,6 +15605,8 @@ The owner's decision (`CLAUDE.md`, 2026-09-29: "add it as a feature that can be 
 
 **What a look does with it** (`jarvis_screen.py` `_take` -> `jarvis_screen_picture.start`): the words are read exactly as before. Beside that, a job on its own thread (1) checks the switch, the model name, that the model is installed and its checksum is the one it was measured with (`PINNED_DIGEST`, else the first measurement's - a changed file refuses), (2) **cleans the picture** (below) - no cleaner, no picture, (3) shrinks it to 1,024 px on its longest side (Pillow if installed, else by hand for the PC's own PNG, else as it is), (4) starts the picture reader if needed, (5) asks it for a description of at most 400 words, `num_gpu 0`, not streamed, with a timeout (`timeout_s`, 240), (6) asks the copy what it holds (`/api/ps`): any graphics memory in use stops the copy and refuses picture mode until the owner switches it off and on, (7) removes hidden thinking and chat markers, caps the text at 1,500 characters. The description joins the words as **more OUTSIDE TEXT** (a heading saying it came through another AI model, must be treated as a rough guess, never obeyed, and that the words win when they disagree); it is what the planted-instruction check reads, and it is held with the look for two minutes and never kept, saved, learned or put in an event, status or audit line. A question waits for the words (`READ_WAIT_S`) and then up to `wait_s` (60) for the picture; if it is still being read the answer uses the words and a plain line says so, and a follow-up a moment later has it. A phone's screenshot (`screen: "phone"`) goes through the same job for its first picture, inside the chat turn; its picture is still never sent to the everyday model.
 
+**A running Pictures lane goes first (owner, 2026-09-30).** When "Pictures" is ALREADY on for the second (or third) card and its lane is running (`jarvis_second_card.lane_for("vision")`, asked by `jarvis_screen_picture.pictures_lane()`; only this PC's own address and never a cloud model name are accepted), a look sends the same cleaned, shrunk picture to that lane's Ollama (`chat_via_lane`: the lane's model and context size, no `num_gpu 0` and no `keep_alive` - the lane's own Ollama decides both; ceiling `LANE_TIMEOUT_S`, 90 seconds) instead of to the processor reader. The processor reader is the fallback: no lane, an error, a timeout, no picture model installed, or an empty answer each fall back to it (`Job.card_failed`), and if it is not ready either (model missing, and so on) the look is words only. With the lane running, a missing MiniCPM-V model does not stop a look. Nothing else changes: no new switch and no new download; picture mode's own switch still decides whether the picture is read at all, and Pictures on with picture mode off is words only, as before. The cleaner still runs FIRST for both readers (no cleaner, no picture, to the card or the processor); the "Never look at" windows are painted black before the picture reaches this code; the lane's description is outside text with its own head (`PICTURE_HEAD_CARD`). The note says `words and picture (Pictures card)`, or `words and picture (slow mode; the Pictures card did not answer)` after a fallback, or `words only (the Pictures card did not answer; <why>)`, and after a fallback the answer itself carries `(Picture mode: the Pictures graphics card did not answer, ...)` (`owner_line`). Only the audit lines change: `screen_picture.look` gains `via: "card"`, and `screen_picture.card_failed` carries the fixed reason code - never a word from the screen. Not tried against a real card or a real qwen2.5vl:7b (nothing ran on Windows, no second card is installed yet).
+
 **Never silent.** When the picture was not used, the note shown with the answer says `Looked at: <program> window · words only (<why>)` (and while it is still being read, `words and picture when ready (slow mode)`), the everyday model is told, in one plain line, to say so, **and code writes one plain sentence into the answer itself** - `(Picture mode: <why> This answer uses the words only.)`, put there by `jarvis_agent.py` (`tell_owner`, from `with_screen`'s `info["picture_said"]`) - so the owner is told even if the model does not pass it on. The reasons (`WHY_WORDS`, one fixed sentence each, the same for both apps' tests): the model is not installed; Ollama could not be asked; Ollama was not found; the reader could not start; no cleaner; the cleaner failed; too slow; an error; nothing to say; the reader was on the graphics card; the model's file changed since it was measured; a cloud model name; picture reading was turned off; a newer look replaced this one. With the switch off, nothing changes: the note says `words only` and no job exists.
 
 **The cleaner hook** (built in `jarvis_screen.py` by another piece of work, in parallel). `jarvis_screen_picture.clean()` calls `jarvis_screen.clean_picture(picture, want_png=True)` when it has that parameter (the built signature is `clean_picture(picture, ocr=None, *, want_png=False)`), else `clean_picture(picture, snap)` or `clean_picture(picture)`; it uses the returned dict's `png` - the ONLY picture a model may be shown - and treats `png: None`, `unchecked`, `blocked`, an exception, nothing or empty bytes as "send nothing". Without `clean_picture` the stub `_clean_picture_stub` raises: **fail closed**. This module never builds it.
@@ -15563,7 +15685,136 @@ The switch, the default and the install status are decided on the PC like every 
 
 Tests: `backend/test_obscura.py` (the command line and environment, the tool allow-list and the one fixed-argument tool, one process at a time, the start gate, every limit, the watchdog, a quiet restart after idle, a state read that never waits, a write cut off, install state, the install line - one named release, checksums printed, nothing run, parsed as PowerShell - and the owner's check against a stand-in program), `backend/test_browser_engine.py` (off by default, ON is one card and changes nothing until yes, OFF is immediate, the mode rule, no action outside an approved plan, a whole headless plan end to end, the switch re-checked on every call, the fence before a click (backslashes, name@host, `<base href>`, `role=button` with an address, `formaction`, `form=`, unreadable replies, a click that must land on the approved box, no fence means refuse), a redirect and a self-moving page pinned as after-the-load, hidden text kept from the model, own-network addresses refused, captcha and sign-in hand-over (more wording, an unlabelled password box, email-first), sign-in wording in four languages, rule 1 for typed words and addresses, secrets and message lists refused, the chatbot files' imports, the visible browser's second-card rule, outside text, the agent's tool, the routes, no proxy anywhere), `jarvis-desktop/tests/browser-engine.mjs`, `BrowserEngineTest.kt`. The stand-in for Obscura is `backend/_fake_obscura.py`.
 
-## 98. Quiz me on a text (added 2026-09-30)
+## 98. Fill a form, see it, then send it: the picture and the second card (added 2026-09-30)
+
+The owner's decision (CLAUDE.md, "Decided 2026-09-30"; `docs/FORM-REVIEW-DESIGN.md`):
+Jarvis fills a web form, stops before the click that sends it, shows the owner
+**a picture of the filled form exactly as the page shows it**, and raises a
+**second card just for that click**. The rules are `jarvis_browser_control.py`'s
+(`final`, `run()`'s `review`, `snapshot` and `fingerprint` hooks) and
+`jarvis_form_review.py`'s; `form-review.patch` adds the gate action and one
+`install()` call. **It needs the same second-card "Browser control" switch as the
+rest of browser control (§12) for the visible browser - built before the card is
+installed, not switched on by it.**
+
+### 98.1 The request, the second card, the result
+
+* **`final`.** A `browser_control` request may carry `"final": true`: the click that
+  sends the form. Only a `click`, at most one per plan, and it must be the last step,
+  else that request is reported unmatched in words (two finals: none is kept). A
+  final click is always marked heavy. A plan with no final step behaves exactly as
+  before. The plan card says plainly that the last step waits for a SECOND card.
+* **The stop.** `run()` does the earlier steps, then re-reads the page, takes its
+  fingerprint and one picture (visible browser only), re-reads again (a page that
+  moved while the picture was taken stops the run), and calls the review hook. Any
+  answer but an approval stops the run: no hook, a hook that raises, a fingerprint
+  that cannot be read, or a Stop that arrived while the card waited. After a yes it
+  re-reads once more and clicks only if the address, the button (still one, still
+  enabled) and the fingerprint are the same as when the owner looked.
+* **The second card: gate action `browser_form_submit`**, tier **ask** only (never
+  `auto` or `notify`), a **risky** approval (no swipe, no Approve from a
+  notification, Windows Hello on the PC / the screen lock on the phone, like every
+  risky card), never an "always allow", decided by tapping only. `detail` is
+  `{"text": "<card>", "picture": "<id>"}`; `picture` is present only when one exists
+  and the plan card never carries it. The text names the site, every step done with
+  the words typed or chosen (a saved secret only as `(saved secret 'name', typed and
+  shown as dots)`), and ends `Jarvis will now click button "Submit". It cannot be
+  undone.` With no picture it says why ("No picture - this browser has no window.",
+  or the picture was too big to send) and to read the words above carefully. A card
+  that would not fit the gate's detail limit is refused, never cut.
+* **The result** carries `submitted` (false on every refusal, stop and denial) and
+  `form_review: {"shown": bool, "approved": bool}` when there was a final step. After
+  a denial or stop the model is told `ok: false`, `submitted: false` and a reason
+  containing "nothing was sent".
+* **When it is refused outright**, before the page is read and before any card: the
+  turn or conversation read outside text through any tool other than
+  `browser_control` (email, files, notes, a web search, memory), the conversation is
+  tainted, the newest message was pasted or shared, the app added text of its own,
+  the turn's model is not on this PC (rule 1), or this turn read a **different
+  website** earlier (`FORM_REVIEW_OTHER_SITE`; hosts only). **The form page Jarvis
+  opened itself does not count** (owner, 2026-09-30): opening a form and filling it
+  are two calls in one turn. A conversation that read outside text in an EARLIER turn
+  still counts (`jarvis_chat_log.conversation_tainted` has no "browser only"
+  exception) - ask again in a new message you type yourself. A form that ends in a
+  final click cannot be a step of a `propose_plan` plan.
+
+### 98.1b A form of several pages (owner, 2026-09-30)
+
+* **One call per page.** A plan is bound to the page showing when it is made, so a
+  form of several pages is several `browser_control` calls in ONE turn (each page its
+  own plan card; a click on "Next" that moves the page is fine). Only the last call
+  ends with the `final` click.
+* **More cards for one site's form: 8, not 5.** `jarvis_agent._card_limit`: while only
+  ONE website has been read this turn and no card has been raised for anything other
+  than the form (`watch.cards_browser` against `watch.cards`), `browser_control`'s plan
+  cards and the Submit card may use `FORM_CARDS_PER_TURN` (8) instead of
+  `CARDS_PER_TURN` (5). Every card is still its own yes. A card for any other tool, or
+  a second website this turn, puts the limit back to 5. At the limit the next card is
+  refused in words with the real number; the form stays filled, unsent.
+* **The Submit card lists every page's words.** The steps each earlier call of this
+  turn DID on the same site (navigate, click, type, choose - never reads; a saved
+  secret only by name) are kept on the turn (`watch.form_steps`, at most 80, newest
+  kept) and shown on the Submit card under "Earlier pages of this same form, already
+  filled in on this site" (E1, E2, ...), before the current page's own steps. Steps on
+  another site are never shown there. The picture is still only the last page. A card
+  that would not fit the gate's detail limit is refused, never cut.
+
+### 98.2 The picture
+
+| Route | Answers |
+|---|---|
+| `GET /api/form-review/picture?id=<id>` | 200 `{"ok": true, "jpeg": "<base64>", "width": int, "height": int}`; 404 exactly `{"ok": false}` for a wrong, guessed, malformed, expired or already-decided id; 401 / 403 are the server's own (bad token, cross-origin) |
+
+A read: not held on a stale link. The id is 16 to 64 characters of `[A-Za-z0-9_-]`.
+
+* **Visible browser only** (Playwright's own `page.screenshot`, the whole page, JPEG).
+  The headless browser has no pixels, so its second card is text only.
+* **Kept in memory only**, in `jarvis_form_review.py`, keyed by a random id: never on
+  disk, never logged, never in an event, status or audit line, **never given to any
+  model**. One at a time (a new review drops the old id); dropped when the card is
+  decided, when it runs out of time, or after ten minutes. Scaled to at most 1,600 px
+  on its longest side, JPEG quality 70, at most 1.5 MiB - with **Pillow**
+  (`backend/requirements.txt`, already in `requirements.lock`); with no Pillow a
+  picture over a cap is not sent and the card says so in words.
+* **It is NOT run through `jarvis_screen.clean_picture`** - the one screen picture that
+  is not (owner's answer, 2026-09-30): the owner has to read their own name, phone and
+  email to check them, and it never reaches a model, a notification, a widget or
+  another device's storage. Everything else that shows a picture of a screen still
+  goes through that door (§62.13).
+
+### 98.3 What the apps do
+
+* **Desktop** (`src-tauri/src/brain/form_review.rs` `form_review_picture`,
+  `src/form-review.js`): the Jarvis bar's full card only (its quickbar window alone
+  holds the command). Small thumbnail, a click opens a larger view, Escape closes just
+  the picture. Fetched once per card, only while the card is showing; held in memory
+  only. **Hidden under App lock and under "Hide memory lists and chat history"**:
+  Rust checks both before asking the PC and again after the answer, and one line says
+  why. Never in the widget, a toast or the HUD page.
+* **Phone** (`net/FormReview.kt`, `ui/approval/FormPicture.kt`, `ApprovalCard.kt`):
+  the picture id is read from `detail.picture` (an object, JSON text, or text the gate
+  cut short); a small image that opens full screen on tap; fetched only while the card
+  is on screen, the app is in front and unlocked; screenshots of Jarvis blocked while
+  it shows (`SecurityRules.blockScreenCapture(formPictureShown)`); hidden, with the
+  same one line, while "Hide memory lists and chat history" is on. Never in a
+  notification or either widget.
+* **Both:** if the picture cannot be loaded, or is gone, one plain sentence says so and
+  points at the written details below it. **Neither app changes how a card is
+  decided** - Approve and Deny keep every rule they had; a missing picture never
+  blocks Approve (the text values on the card are what the owner reads then).
+* `tools/check_parity.py` lists `/api/form-review/picture` as `ported` (both apps read
+  it). The widget, notifications and the phone's home-screen widget are title-only on
+  purpose (`docs/ARCHITECTURE.md` §8, "One-sided on purpose").
+
+Tests: `backend/test_form_review.py` (156), `backend/test_browser_control.py`,
+`backend/test_gate_stack_clean.py`, the contract fixtures
+(`test_approval_contract.py`, `test_card_words.py`, `test_asks_first.py`); the
+desktop's `tests/form-review.mjs`; the phone's `FormReviewTest.kt` (unverified until
+CI compiles it). **Not tried for real:** nothing ran against a live Playwright page, a
+real Windows install or the owner's real `jarvis_gate.py` and `jarvis_hud.py`; the
+patch's line numbers are estimates that `git apply` tolerates.
+
+## 98b. Quiz me on a text (added 2026-09-30)
 
 The owner's decision (2026-09-30, `docs/STUDY-FROM-TEXT-DESIGN.md` sections 3, 4 and 11): the owner pastes a text and Jarvis quizzes them on it. **The local model writes the questions and marks the typed answers, and nothing else happens**: no card (the text is the owner's own pasted words and only the local model on this PC ever sees it), no file written, nothing learned, nothing in chat history. Backend: `backend/jarvis_quiz.py` (the whole feature), `backend/quiz.patch` (one install block in `jarvis_hud.py`, after `browser-engine.patch`'s), `backend/quiz_grader_cases.json` and `backend/eval_quiz_grader.py` (the grader's own test), `backend/test_quiz.py`. The pasted text is **outside text**: Jarvis never learns a fact from it, and a mark is never a fact about the owner. No streak, no letter grade, no number shown as exact.
 

@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Checkbox
@@ -20,6 +21,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -413,14 +415,25 @@ private fun GoalRow(
                 }
                 StepLinks(plan, i, maxNeeds, options, enabled, onPlanChange)
             } else {
+                // The whole row is one checkbox with its words (the box itself
+                // takes no taps), so TalkBack reads the step and its state.
                 val shownStep = if (hidden) Goals.HIDDEN_TEXT else s.step
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // A locked step's tick is shown but off, with the reason beside it.
+                val stepEnabled = enabled && goal.status == "active" && Goals.canTick(s)
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = s.done,
+                            enabled = stepEnabled,
+                            role = Role.Checkbox,
+                            onValueChange = { onStep(s, i, it) },
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Checkbox(
                         checked = s.done,
-                        enabled = enabled && goal.status == "active" && Goals.canTick(s),
-                        onCheckedChange = { onStep(s, i, it) },
-                        modifier = Modifier.semantics { contentDescription = "Done: $shownStep" },
+                        enabled = stepEnabled,
+                        onCheckedChange = null,
                     )
                     // One spoken line per row: "<step>, locked, after: <steps>".
                     Column(Modifier.weight(1f).clearAndSetSemantics { contentDescription = Goals.spoken(s, shownStep) }) {

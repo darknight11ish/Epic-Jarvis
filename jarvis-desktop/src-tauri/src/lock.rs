@@ -73,11 +73,51 @@ pub const STORE_KEY: &str = "security";
 pub fn current(app: &AppHandle) -> Security {
     use tauri_plugin_store::StoreExt;
 
-    app.store(SETTINGS_STORE)
-        .ok()
-        .and_then(|store| store.get(STORE_KEY))
-        .map(parse_stored)
-        .unwrap_or_default()
+    let read = app
+        .store(SETTINGS_STORE)
+        .map(|store| store.get(STORE_KEY))
+        .map_err(|e| e.to_string());
+    let last = *LAST_KNOWN.lock().unwrap_or_else(|p| p.into_inner());
+    let (security, fell_back) = resolve_read(read.as_ref().map_err(|_| ()), last);
+    if fell_back {
+        // Plainly, once: the settings file could not be opened, so the last
+        // state this run read is being kept - a lock does not quietly read
+        // as OFF because a file was locked by another program for a moment.
+        if !WARNED_UNREADABLE.swap(true, Ordering::SeqCst) {
+            let why = read.err().unwrap_or_default();
+            crate::crash_notes::record(
+                "lock",
+                "settings-unreadable",
+                &format!(
+                    "the settings file could not be opened ({why}), so App lock kept its last known state"
+                ),
+            );
+        }
+    } else {
+        WARNED_UNREADABLE.store(false, Ordering::SeqCst);
+        *LAST_KNOWN.lock().unwrap_or_else(|p| p.into_inner()) = Some(security);
+    }
+    security
+}
+
+/// What this run last read successfully. See [`current`].
+static LAST_KNOWN: Mutex<Option<Security>> = Mutex::new(None);
+/// So the "could not be read" note is written once per outage, not per call.
+static WARNED_UNREADABLE: AtomicBool = AtomicBool::new(false);
+
+/// The decision inside [`current`], pure so it can be tested: a store that
+/// could not be read keeps the last known state (defaults only if nothing was
+/// ever read); a store that read fine is trusted, a missing key meaning the
+/// defaults. Returns the settings and whether it fell back.
+fn resolve_read(
+    read: Result<&Option<serde_json::Value>, ()>,
+    last: Option<Security>,
+) -> (Security, bool) {
+    match read {
+        Ok(Some(value)) => (parse_stored(value.clone()), false),
+        Ok(None) => (Security::default(), false),
+        Err(()) => (last.unwrap_or_default(), true),
+    }
 }
 
 fn save(app: &AppHandle, security: &Security) -> Result<(), String> {
@@ -774,4 +814,39 @@ pub async fn set_security_settings(
     state.touch(Instant::now());
     crate::emit_all(&app, crate::events::SECURITY_CHANGED, settings);
     Ok(settings)
+}
+
+#[cfg(test)]
+mod read_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn locked() -> Security {
+        Security {
+            app_lock: true,
+            ..Security::default()
+        }
+    }
+
+    #[test]
+    fn an_unreadable_store_keeps_the_last_known_lock() {
+        let (s, fell_back) = resolve_read(Err(()), Some(locked()));
+        assert!(s.app_lock && fell_back);
+    }
+
+    #[test]
+    fn an_unreadable_store_with_nothing_known_is_the_defaults() {
+        let (s, fell_back) = resolve_read(Err(()), None);
+        assert_eq!(s, Security::default());
+        assert!(fell_back);
+    }
+
+    #[test]
+    fn a_readable_store_is_trusted() {
+        let v = Some(json!({ "appLock": false }));
+        let (s, fell_back) = resolve_read(Ok(&v), Some(locked()));
+        assert!(!s.app_lock && !fell_back);
+        let (s, _) = resolve_read(Ok(&None), Some(locked()));
+        assert_eq!(s, Security::default());
+    }
 }

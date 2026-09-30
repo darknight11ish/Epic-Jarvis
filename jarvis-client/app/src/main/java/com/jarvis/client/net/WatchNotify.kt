@@ -71,6 +71,17 @@ object WatchNotify {
     fun waitingLine(): String =
         "Waiting for your approval to let notifications show on a watch. ${Approvals.WHERE}"
 
+    /**
+     * Why the switch is greyed while the link is stale (settings audit 2026-09-30:
+     * it used to grey with no reason). Same style as every other panel's line.
+     */
+    const val STALE =
+        "Not connected to the desktop, so turning this on waits until the link is back."
+
+    /** Show [STALE]? Only while turning it ON is what is held (turning off still works). */
+    fun showStale(enabled: Boolean?, canAct: Boolean, cardWaiting: Boolean): Boolean =
+        !canAct && !cardWaiting && enabled == false
+
     /** The line under the switch when it is neither waiting nor busy. */
     fun stateLine(on: Boolean?): String = when (on) {
         true -> "Every notification may also show on a paired, compatible smartwatch - " +

@@ -1707,6 +1707,143 @@ the 2026-09-30 batch, to be merged once its checks pass: see docs/BUILD-QUEUE-20
 session's own branch only. This overrides the earlier plans in this file to open
 "one pull request" per batch: those wait until the owner says so.
 
+Decided 2026-09-30, the owner's answers on filling in forms and booking
+appointments (`docs/FORM-REVIEW-DESIGN.md`; Gemini's browser-use, LaVague,
+OmniParser, UI-TARS, Midscene, Stagehand, Agent-S and steel-browser suggestions
+were checked and none is added - `jarvis_browser_control.py` already does the
+job, one permission model, named elements only):
+- **Fill a form, show me, then a separate Submit card.** Jarvis fills the
+  fields, stops before the one click marked `final`, shows the owner **a
+  picture of the filled form exactly as the page shows it** (nothing blacked
+  out - the owner must read their own name, phone and email to check them),
+  and raises a **second card just for the Submit click**
+  (`browser_form_submit`, tier ask, risky). The picture goes only to the
+  owner's own PC and phone: kept in memory only, never on disk, never to any
+  model, never in a log, event, notification or widget. This is the one screen
+  picture shown without `jarvis_screen.clean_picture`, because it never
+  reaches a model. Visible browser only; the headless one has no pixels, so
+  its Submit card is text only and says so.
+- **The picture is also hidden under App lock AND under "Hide memory lists and
+  chat history"**, on both apps (owner, 2026-09-30); a plain line says why.
+- **Built before the second card is installed** (owner: "build it now"); the
+  form driver itself still needs the 2060 and its "Browser control" switch.
+  **No pull request to `main` until the owner asks.** Built 2026-09-30
+  (JARVIS-API §98, `backend/jarvis_form_review.py`, `form-review.patch`); not
+  tried against a real browser or the owner's real gate.
+- **The form page Jarvis opened itself does not count as "outside text" for
+  the Submit click** (owner, 2026-09-30, "ignore the form page itself"). Email,
+  files, notes, web searches, memories and **a different website read earlier
+  in the same turn** still refuse it, as does a model that is not on this PC.
+  Known limit, said plainly: an earlier TURN of the same conversation that
+  used any tool still taints the conversation, so a form must be opened and
+  filled in one turn (the normal flow).
+- **A form of several pages** (owner, 2026-09-30): one `browser_control` call
+  per page, all in one turn; **up to 8 cards in a turn (instead of 5) while ONE
+  website's form is being filled** and nothing else has asked - a card for any
+  other tool or a second website puts it back to 5 (a loosening of the
+  2026-09-25 limit, for the form only, confirmed by the owner); and **the
+  Submit card lists every page's typed words** (JARVIS-API §98.1b), the
+  picture staying the last page.
+- **Pillow is a named requirement** (owner, 2026-09-30) so a very tall form
+  still gets a picture; it was already in `requirements.lock`.
+- **Model advice stays as it is** (owner, 2026-09-30, "improve what exists"):
+  Jarvis already offers the bigger model when it struggles or is corrected
+  twice; better signals are added to that, only after the 2060 is measured. No
+  llm-checker, llmfit, hf-mem, RouteLLM or UncommonRoute; never a second
+  router, and no "delete models" action without its own card.
+- **A numbered-boxes screen-parsing fallback** (the OmniParser idea) is only
+  a possible later spec, for pages the accessibility tree cannot read; it
+  waits for the 12 GB card, a measurement of how often reading a page fails,
+  and the owner's decision on mouse control.
+
+Decided and built 2026-09-30, the owner's answers after the multi-GPU, settings,
+notification, card, quick-access and coverage audits (one pull request):
+- **Extra graphics cards of 8 GB now work** (floor 7,680 MiB reported, was 10
+  GB). An 8 GB second or third card runs Learning, the Wiki builder and (no
+  monitor on it) Pictures - work moved OFF the main card - but not "Longer
+  conversations" or "Browser control", because an 8 GB card holds no more than
+  the main card's 16,384 tokens. 10-12 GB behaviour is unchanged; 16 and 24 GB
+  cards get the same qwen3:8b at 32K plan (the 14B would fit but stays off until
+  it passes the tool tests). **All sizes are calculated, not measured; no extra
+  card is installed.** The third card's approval is now tied to the card's id: a
+  different card in that slot, or an old file with no id, counts as unassigned
+  and asks again. Known, not fixed: the second card's master switch is not tied
+  to a card id.
+- **"Look at this" and "Watch with me" use the Pictures graphics-card lane first**
+  when Pictures is on and its lane runs; the slow processor picture mode is the
+  fallback. Picture mode's own switch still decides whether a picture is read at
+  all (owner may revisit). The picture is still cleaned first.
+- **Settings fixes:** the email switch wrote a name the tool list ignored
+  (`email_read` vs `email_check`) - fixed for all four reading switches. **Web
+  search has an on/off switch in both apps** (off instant; back on is one card,
+  `web_search_enable`, via `web-search-switch.patch`, which goes AFTER
+  `form-review.patch` because both anchor on the gate's last lines). Phone
+  voice switches moved to Settings > Voice; Settings has a jump list; greyed
+  panels say why.
+- **Screen safety:** the secret scan is capped at 25,000 characters and 6 s and
+  fails closed; more patterns (`DB_PASSWORD=`, Bearer, US SSN, code-before-label,
+  `Passwort:`); a Watch started from the desktop ends after 45 s without a
+  heartbeat; a look racing Stop is discarded; an unreadable program name is
+  painted black; phone Watch ends after 10 s of a lost link and says it cannot
+  see password boxes.
+- **Phone hardening:** Live and the handoff screen start only from Jarvis's own
+  tiles and notifications (an app-private secret); the approval widget and the
+  Mute tile obey App lock; stream start is single-file; every notification id
+  is in one place; three unlabeled switches and checkboxes are readable by
+  TalkBack.
+- **Desktop hardening:** App lock reads each field on its own so one bad value
+  cannot switch it off; `backend.log` is capped at 4 MB while running; approval
+  toasts are withdrawn when the card is decided anywhere; failure toasts use
+  plain words and obey App lock; the focus ring is a solid outline with a High
+  Contrast fallback. `'unsafe-inline'` stays in the CSP (12 inline scripts) and
+  a test pins the count.
+- **Backups:** retention never deletes the file just written and ranks by real
+  file time; a restore is all-or-nothing with rollback; the restore card says it
+  replaces the memory and chat files; `POST /api/backup/delete-older` (one card)
+  is built on the backend - **the apps' "Delete older backups now" button after
+  an Erase is queued** (owner, 2026-09-30).
+- **Time:** the PC sends `age_s` for a fired job; "12 at night" is midnight and a
+  bare 12 is said back; timers survive a clock set back; DST "last week" and a
+  leap-day range no longer crash.
+- **Update script:** `-FixLineEndings` rehearses on a converted copy and converts
+  the real files only afterwards; the end is a green, yellow or red summary with
+  an exit code; a half-patched backend gets a one-line restore; a running Jarvis
+  stops the run (`-Force` overrides). Not run on real PowerShell 5.1.
+- **Owner decisions recorded, not yet built (queue, in this order):** (1) a
+  notification settings screen in both apps (per kind: on/off, style, Test
+  button, quiet hours that never silence urgent alerts or approvals); urgent
+  alerts break through Do Not Disturb / Focus Assist where the system allows,
+  with a note, and a late urgent alert follows the silent "Missed" rule; reminders
+  and briefings get their own phone channel; (2) tap-to-talk on the phone; (3)
+  quick access: "current task with Stop" and "approvals waiting" as widget
+  sources, "graphics memory per card" and "tokens per second" as fixed widget
+  sources (marked not measured), edit a saved widget, per-widget transparency,
+  accent, high contrast and a live preview, and "Pin to home screen" for any
+  Brain section or chat; (4) card experience: after any approve one line says
+  which Undo exists; past approvals show one non-sensitive summary line; setup
+  cards in plain words; pinned Approve/Deny on long phone cards; a quiet
+  reminder when a routine card has under 60 s left; (5) a suggestion line in
+  Brain > Model for a 16-32 GB first card ("your card can hold the 14B at 32K"),
+  and a 16 GB or larger first card counts as capable for Pictures, Wiki and
+  Browser without a preset (each still off until approved); (6) per-model
+  thinking levels - Off, Quick, Deep or Auto, set separately for the everyday
+  model and each lane's model, only levels the model supports, default Off,
+  voice answers stay fast, no card to change; (7) multi-model work: failover to
+  the main card when a lane fails, a checker (bigger model reviews tool plans and
+  code only) and local compare, each off by default and measured first, plus a
+  per-lane measured log; (8) test hardening (a per-patch "reads original text"
+  ratchet, skips no longer count as passes); (9) "Restore to before" for an app
+  merge (with the app builder, after the 12 GB card); (10) a stale-area check
+  after every big merge.
+- **Rejected this session (ideas only):** Xinference, LocalAI, GPUStack, Triton,
+  a llama-server supervisor, screenpipe (stays rejected), Outlines, STORM, MCP
+  filesystem/git servers, Zebar, yasb, tauri-plugin-decorum, json-to-compose
+  and a free-form widget renderer, and Skill-Anything / QuizScribe / deepeval for
+  learning. The owner asked not to work on educational features for now (a
+  note-quiz feature stays queued behind everything else).
+- **The Undo shelf, Activity list and 10-minute Undo windows are separate today**;
+  the Activity list keeps only the title, decision, time and device.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
@@ -1879,6 +2016,9 @@ the next version, and every version goes on GitHub.
 
 ## Where everything is written down
 
+- `docs/HANDOFF-2026-09-30.md` — **start here in a new conversation**: where things
+  stand after PR #39, the owner's decisions, the whole queue in order, every known
+  unfixed finding, and how the work has been run.
 - `docs/ARCHITECTURE.md` — **read first.** The invariants, the one permission
   model every feature must use, memory, events, and what does not exist yet.
 - `docs/MODEL-TOPOLOGY.md` — what runs on the graphics card and why.

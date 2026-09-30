@@ -106,7 +106,12 @@ def at(y, mo, d, h=12, mi=0) -> float:
     return datetime(y, mo, d, h, mi).timestamp()
 
 
-#: Monday 28 September 2026, 15:30, in UTC.
+#: Monday 28 September 2026, 15:30, in UTC. The zone is set HERE, not left to the
+#: machine: the frames ("last week", "yesterday") are the PC's local days, so
+#: the same test gave different answers on a PC in another zone (2026-09-30).
+os.environ["TZ"] = "UTC"
+if hasattr(time, "tzset"):
+    time.tzset()
 NOW = at(2026, 9, 28, 15, 30)
 FR._now = lambda: NOW
 
@@ -546,6 +551,24 @@ def t_approved_then_undo():
     check("... and the status says it was put back", FR.status(NOW + 130)["last"]["outcome"] == "undone")
 
 
+def t_the_undo_window_cannot_be_stretched_by_setting_the_clock_back():
+    w = _world_with_things()
+    w.ask(_body(w, facts=[w.a, w.b]))
+    w.approve()
+    check("CONTROL: the Undo is open", FR.status(NOW)["undo"] is not None)
+    real = time.monotonic
+    time.monotonic = lambda: real() + 700            # ten real minutes have passed ...
+    try:
+        st = FR.status(NOW - 3600)                   # ... and the PC's clock was set back an hour
+        code, out = FR.undo(now=NOW - 3600, mem=w.mem, chats=w.log)
+    finally:
+        time.monotonic = real
+    check("on the wall clock alone it would still look open; the monotonic clock ends it",
+          st["undo"] is None, st["undo"])
+    check("... and Undo says the ten minutes are up", code == 409
+          and "10 minutes are up" in out["error"], (code, out))
+
+
 def t_undo_edge_cases():
     w = _world_with_things()
     w.ask(_body(w, facts=[w.a, w.b]))
@@ -653,6 +676,23 @@ def t_phrases():
               "yes", "approve", "approve it", "yes forget them", "forget about the dentist",
               "delete my messages from John", "clear my history"):
         check(f"not ours: {s!r}", FR.parse_phrase(Q.normalise(s), NOW) is None)
+
+
+def t_a_leap_day_range_asks_instead_of_crashing():
+    leap_now = at(2028, 6, 1, 12, 0)
+    for s in ("delete my chats from 29 february to 15 january",
+              "forget what you learned from 29 february to 10 january"):
+        try:
+            got = FR.parse_phrase(Q.normalise(s), leap_now)
+            crashed = None
+        except Exception as exc:                # noqa: BLE001 - the bug was a ValueError
+            got, crashed = None, exc
+        check(f"{s!r}: no crash", crashed is None, repr(crashed))
+        check(f"{s!r}: a plain question to ask again, not a guess",
+              bool(got) and "ask" in got and "Say the two dates with their years" in got["ask"], got)
+    got = FR.parse_phrase(Q.normalise("delete my chats from 29 february to 3 march"), leap_now)
+    check("CONTROL: a leap-day range that IS in order still works",
+          bool(got) and "frame" in got and got["frame"].frm == "2028-02-29", got)
 
 
 def t_quick_never_removes():

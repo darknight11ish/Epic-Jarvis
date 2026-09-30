@@ -587,6 +587,91 @@ def t_times_are_read_right():
               at(text))
 
 
+def t_twelve_at_night_is_midnight_and_a_bare_twelve_is_said_back():
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 10, 0)             # Friday 10:00
+    w = World(now, name="twelve")
+
+    def when(text, kind="alarm"):
+        return Q.parse_when(Q.normalise(text), now, kind)
+    for text in ("12 at night", "12 in the evening", "12:00 at night", "tonight at 12"):
+        got = when(text)
+        check(f"{text!r} is midnight (00:00 on Saturday), never noon",
+              got is not None and got.at is not None and wall(got.at) == (2026, 9, 26, 0, 0),
+              wall(got.at) if got and got.at else got)
+    check("'12pm' is still noon and is not flagged", wall(when("12pm").at) == (2026, 9, 25, 12, 0)
+          and when("12pm").said12 is False)
+    check("'12am' is still midnight and is not flagged", wall(when("12am").at) == (2026, 9, 26, 0, 0)
+          and when("12am").said12 is False)
+    check("'noon' and 'midnight' are not flagged", when("noon").said12 is False
+          and when("midnight").said12 is False)
+    check("'12 in the afternoon' is noon", wall(when("12 in the afternoon").at) == (2026, 9, 25, 12, 0))
+    check("a bare '12' is flagged", when("12").said12 is True)
+    check("... and so is '12:30'", when("12:30").said12 is True)
+    check("... but '7' is not", when("7").said12 is False)
+    r = Q.answer("set an alarm for 12 at night", sched=w.s, now=now)
+    check("the reply says the time back: 12:00 midnight, and how to get noon",
+          r.reply.endswith('That is 12:00 midnight. If you meant the other, say "12 noon".')
+          and "00:00" in r.reply, r.reply)
+    r = Q.answer("set an alarm for 12", sched=w.s, now=now)
+    check("a bare 12 (10:00 now): the next one is noon, and the reply says so",
+          "12:00 noon" in r.reply and 'say "midnight"' in r.reply, r.reply)
+    r = Q.answer("set an alarm for 12pm", sched=w.s, now=now)
+    check("an explicit 12pm needs no extra words", "That is" not in r.reply, r.reply)
+    got = when("every day at 12")
+    check("'every day at 12' is midnight (00:00) and flagged so the reply says it",
+          got.rule == {"every": "day", "at": "00:00"} and got.said12 is True, got.rule)
+    got = when("every night at 12")
+    check("'every night at 12' is midnight too", got.rule["at"] == "00:00")
+    got = when("every weekday at 12")
+    check("'every weekday at 12' is flagged", got.said12 is True and got.rule["at"] == "00:00")
+    r = Q.answer("remind me every day at 12 to stretch", sched=w.s, now=now)
+    check("a repeating reminder says '12:00 midnight' back",
+          "12:00 midnight" in r.reply, r.reply)
+    r = Q.answer("remind me every day at 12 noon to stretch", sched=w.s, now=now)
+    check("... but '12 noon' is 12:00 and says nothing extra", "That is" not in r.reply
+          and "at 12:00" in r.reply, r.reply)
+
+
+def t_a_fired_job_says_how_long_ago_by_the_pcs_own_clock():
+    use_tz("Europe/London")
+    w = World(local(2026, 9, 25, 12, 0), name="age")
+    j = w.s.add_timer(60, "tea")
+    check("a job that has not gone off has no age", "age_s" not in w.s.job(j["id"]))
+    w.clock.t += 60
+    w.s.tick()
+    w.clock.t += 45
+    v = w.s.job(j["id"])
+    check("once it went off, the view says how long ago, in seconds, by the PC's clock",
+          v.get("age_s") == 45.0, v)
+    check("... and it is the same in the list", any(x.get("age_s") == 45.0
+                                                    for x in w.s.listed() + [v]))
+    w.clock.t -= 3600
+    check("... and never negative, even if the clock was set back",
+          w.s.job(j["id"])["age_s"] == 0.0)
+
+
+def t_a_clock_set_back_keeps_a_timers_time_left_but_not_a_reminders_time():
+    use_tz("Europe/London")
+    w = World(local(2026, 9, 25, 12, 0), name="back")
+    t = w.s.add_timer(600, "pasta")
+    r = w.s.add_at("reminder", local(2026, 9, 25, 13, 0), "call")
+    w.clock.t += 100
+    w.s.tick()
+    check("CONTROL: 100 s in, the timer has 500 s left", w.s.job(t["id"])["left"] == 500)
+    w.clock.t -= 3600                           # the PC's clock is set back an hour
+    w.s.tick()
+    check("after the clock went back an hour the timer STILL has 500 s left",
+          abs(w.s.job(t["id"])["left"] - 500) < 1, w.s.job(t["id"])["left"])
+    check("... a reminder is a time on the clock and stays where it was",
+          w.s.job(r["id"])["due"] == local(2026, 9, 25, 13, 0))
+    w.clock.t += 499
+    check("the timer does not go off early", w.s.tick() == [])
+    w.clock.t += 2
+    check("... and goes off when its own 500 s are over (not an hour later)",
+          w.s.tick() == [t["id"]])
+
+
 def t_acting_and_the_replies():
     use_tz("Europe/London")
     now = local(2026, 9, 25, 12, 0)

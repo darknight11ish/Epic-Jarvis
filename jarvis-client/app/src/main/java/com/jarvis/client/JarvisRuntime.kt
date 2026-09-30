@@ -611,14 +611,16 @@ object JarvisRuntime {
      */
     private var faceCutSince = 0L
 
-    private var streamJob: Job? = null
-    private var watchdog: Job? = null
-    private var faceJob: Job? = null
+    // Written under the lock in startStream/stopStream (two threads - the
+    // network callback and the UI - can call them at once) and read from others.
+    @Volatile private var streamJob: Job? = null
+    @Volatile private var watchdog: Job? = null
+    @Volatile private var faceJob: Job? = null
     private var widgetJob: Job? = null
     private var boardJob: Job? = null
 
     /** The forced restart in flight, so two taps on Reconnect do not stack. */
-    private var restartJob: Job? = null
+    @Volatile private var restartJob: Job? = null
 
     @Volatile private var lastFrameAt = 0L
 
@@ -991,6 +993,10 @@ object JarvisRuntime {
      *   must leave it false: the early return when a stream is already
      *   running is what stops the retry paths stacking connections.
      */
+    // @Synchronized: the check of streamJob and its later assignment must be one
+    // step, or two concurrent callers could each open a stream. It never waits
+    // for anything (it only launches), so holding the lock is brief.
+    @Synchronized
     fun startStream(force: Boolean = false) {
         if (!started) return
         val running = streamJob
@@ -1017,8 +1023,10 @@ object JarvisRuntime {
                 running.cancelAndJoin()
                 // Released before re-entering, or the guard below would see a
                 // restart in flight and refuse to start the replacement.
-                restartJob = null
-                startStream()
+                synchronized(JarvisRuntime) {
+                    restartJob = null
+                    startStream()
+                }
             }
             return
         }
@@ -1228,6 +1236,7 @@ object JarvisRuntime {
 
     fun noteVpn(up: Boolean?) { _vpnUp.value = up }
 
+    @Synchronized
     fun stopStream() {
         networkReconnect?.cancel(); networkReconnect = null
         restartJob?.cancel(); restartJob = null
@@ -2183,9 +2192,9 @@ object JarvisRuntime {
 
     /**
      * ONE web search setting, with [body] from [com.jarvis.client.net.WebSearch]'s
-     * providerBody / addressBody / askBody. Held on a stale link ([actionBlocker],
-     * rule 4). Turning "Ask before every web search" off raises a card on the PC,
-     * which this phone's approvals show too.
+     * providerBody / addressBody / askBody / enabledBody. Held on a stale link
+     * ([actionBlocker], rule 4). Turning "Ask before every web search" off, or web
+     * search back on, raises a card on the PC, which this phone's approvals show too.
      */
     suspend fun setWebSearch(body: String?): String {
         actionBlocker()?.let { return it }
@@ -6823,6 +6832,21 @@ object JarvisRuntime {
             is ApiResult.Failed -> null to describe(r.error)
         }
     }
+
+    /**
+     * The picture of a filled-in web form for a "submit this form" card
+     * (FormReview). A read: never held. Kept by the card that asked only.
+     */
+    suspend fun formPicture(id: String): com.jarvis.client.net.FormReview.Answer =
+        when (val r = api.formPicture(id)) {
+            is ApiResult.Ok -> com.jarvis.client.net.FormReview.answer(r.value.code, r.value.body)
+            is ApiResult.Failed ->
+                if (r.error is ApiError.NotFound) {
+                    com.jarvis.client.net.FormReview.Answer.Gone
+                } else {
+                    com.jarvis.client.net.FormReview.Answer.Failed(com.jarvis.client.net.FormReview.COULD_NOT_LOAD)
+                }
+        }
 
     /** One picture of that window, kept by the screen that asked only. A read: never held. */
     suspend fun handoffFrame(h: String): com.jarvis.client.net.Handoff.Answer =

@@ -133,7 +133,7 @@ fn append(path: &Path, line: &str) {
 /// numbered series nobody will ever read the sixth of.
 fn rotate_if_large(path: &Path) {
     let too_big = std::fs::metadata(path)
-        .map(|m| m.len() > MAX_BYTES)
+        .map(|m| over_cap(m.len()))
         .unwrap_or(false);
     if !too_big {
         return;
@@ -144,6 +144,45 @@ fn rotate_if_large(path: &Path) {
     // on the target, and the correct response is to keep writing to the file
     // that is already too big rather than to stop logging.
     let _ = std::fs::rename(path, PathBuf::from(previous));
+}
+
+/// True when a log of `len` bytes is past the cap. The one decision both the
+/// start-up rotation and the running trim use, so a test can pin it.
+fn over_cap(len: u64) -> bool {
+    len > MAX_BYTES
+}
+
+/// Keep `backend.log` under the cap WHILE the backend is running.
+///
+/// The start-up rotation ([`rotate_if_large`]) cannot help a long session: it
+/// runs once, before the child starts. And a rename is the wrong tool once the
+/// child holds the file - Rust opens files with delete-sharing on Windows, so
+/// the rename succeeds, but the child's open handle follows the file to its new
+/// name and keeps growing `backend.log.1` without limit.
+///
+/// So this copies the file to `backend.log.1` (replacing the old one) and then
+/// empties the original in place. The child's handle is in append mode, so its
+/// next write simply lands at the new, short end. Lines the child writes in the
+/// instant between the copy and the emptying are lost - accepted, since a log
+/// that never stops growing is the worse failure. Called from the watchdog's
+/// tick; errors are ignored (a file that cannot be trimmed is left alone).
+pub fn trim_backend_log() {
+    let Some(dir) = dir() else { return };
+    let path = dir.join("backend.log");
+    let big = std::fs::metadata(&path)
+        .map(|m| over_cap(m.len()))
+        .unwrap_or(false);
+    if !big {
+        return;
+    }
+    let mut previous = path.as_os_str().to_os_string();
+    previous.push(".1");
+    if std::fs::copy(&path, PathBuf::from(previous)).is_err() {
+        return;
+    }
+    if let Ok(f) = OpenOptions::new().write(true).open(&path) {
+        let _ = f.set_len(0);
+    }
 }
 
 /// `2026-09-15 14:03:21` in UTC, computed without a date crate.
@@ -209,6 +248,13 @@ mod tests {
         assert_eq!(at(4_000_000_000), "2096-10-02 07:06:40");
     }
 
+    #[test]
+    fn the_cap_is_four_mebibytes_and_exact() {
+        assert!(!over_cap(0));
+        assert!(!over_cap(4 * 1024 * 1024));
+        assert!(over_cap(4 * 1024 * 1024 + 1));
+    }
+
     /// A no-op logger must not panic when `init` was never called. Several
     /// call sites run before it, and every test in this crate runs without it.
     #[test]
@@ -216,5 +262,6 @@ mod tests {
         log("a line with nowhere to go");
         backend_sinks();
         mark_backend("and another");
+        trim_backend_log();
     }
 }

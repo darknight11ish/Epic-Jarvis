@@ -84,6 +84,7 @@ TITLES = {
     # jarvis_quiz_cloud.py (2026-09-30): ONE card per "grade this better" request
     "quiz_cloud_grade": "send a quiz to a cloud AI service to be graded better",
     "stop_asking_before_every_web_search": "stop asking before every web search",
+    "web_search_enable": "turn web search back on",
     # --- notes
     "read_joplin_note": "read a note in Joplin",
     "create_joplin_note": "add a note in Joplin",
@@ -118,6 +119,7 @@ TITLES = {
     "second_card_third_assign": "move a second-card feature onto a third graphics card",
     "screen_picture_enable": "let it read pictures of your screen (slow, uses your main chip)",
     "obscura_enable": "read web pages with a browser that has no window (Obscura)",
+    "browser_form_submit": "send a form you were shown on a website",
     "big_model_enable": "start the big model for background jobs",
     # --- its own settings and code
     "change_own_config": "change one of its settings",

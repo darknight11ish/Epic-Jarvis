@@ -189,6 +189,17 @@ except Exception:
     jarvis_live = None  # type: ignore
 
 
+def _left_s(p: dict) -> float:
+    """Seconds left of a waiting card's time, by the MONOTONIC clock: a clock
+    that is set or synced while a card waits must not shorten or stretch it
+    (time audit, 2026-09-30). `since` (wall clock) stays for display; a record
+    made before this change has no `since_m` and falls back to it."""
+    m = p.get("since_m")
+    if isinstance(m, (int, float)) and not isinstance(m, bool):
+        return p["timeout"] - (time.monotonic() - m)
+    return p["since"] + p["timeout"] - time.time()
+
+
 def _cfg(key: str, default=None):
     """Read `[voice]`. Same section jarvis_voice reads - its own docstring
     says the two modules "must not disagree about where it lives"."""
@@ -851,7 +862,7 @@ def set_wake_enabled(enabled: bool, *, gate: Optional[Callable] = None,
 
     with _WAKE_LOCK:
         if _WAKE_PENDING is not None and not _WAKE_PENDING.get("withdrawn"):
-            left = max(0, int(_WAKE_PENDING["since"] + _WAKE_PENDING["timeout"] - time.time()))
+            left = max(0, int(_left_s(_WAKE_PENDING)))
             return {"ok": False, "enabled": False, "pending": True, "expires_in": left,
                     "error": ("a card to turn on the wake word is already waiting - "
                               "approve or deny that one")}
@@ -873,7 +884,7 @@ def set_wake_enabled(enabled: bool, *, gate: Optional[Callable] = None,
         if _WAKE_PENDING is not None and not _WAKE_PENDING.get("withdrawn"):
             return {"ok": False, "enabled": False, "pending": True,
                     "error": "a card to turn on the wake word is already waiting"}
-        _WAKE_PENDING = {"id": pid, "since": time.time(), "timeout": _wake_timeout(),
+        _WAKE_PENDING = {"id": pid, "since": time.time(), "since_m": time.monotonic(), "timeout": _wake_timeout(),
                          "withdrawn": False}
     _audit("voice.wake_word.asked", {})
 
@@ -900,7 +911,7 @@ def wake_state() -> dict:
         p = _WAKE_PENDING if (_WAKE_PENDING and not _WAKE_PENDING.get("withdrawn")) else None
         out = {"enabled": _wake_enabled(), "pending": p is not None}
         if p is not None:
-            out["expires_in"] = max(0, int(p["since"] + p["timeout"] - time.time()))
+            out["expires_in"] = max(0, int(_left_s(p)))
         if _WAKE_LAST is not None:
             out["last"] = {k: _WAKE_LAST[k] for k in ("outcome", "at", "reason")
                            if k in _WAKE_LAST}

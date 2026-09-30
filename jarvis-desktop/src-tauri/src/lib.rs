@@ -418,7 +418,13 @@ fn ingest_clipboard(app: &AppHandle) {
             commands::notify(app, "Jarvis", "The clipboard holds no text to ingest.");
         }
         Err(err) => {
-            commands::notify(app, "Jarvis", &format!("Clipboard unavailable: {err}"));
+            commands::notify_failed(
+                app,
+                "Jarvis",
+                "The clipboard could not be read.",
+                &err.to_string(),
+                commands::Details::Log,
+            );
         }
     }
 }
@@ -577,7 +583,13 @@ fn build_hud_window(app: &AppHandle) -> Result<(), String> {
              — this window is built in Rust because it needs an initialisation script."
         );
         eprintln!("[jarvis] {message}");
-        commands::notify(app, "Jarvis — HUD misconfigured", &message);
+        commands::notify_failed(
+            app,
+            "Jarvis — HUD misconfigured",
+            "The HUD window could not start.",
+            &message,
+            commands::Details::Log,
+        );
         return Err(message);
     }
 
@@ -951,6 +963,7 @@ pub fn run() {
             brain::forget_range::forget_range_write,
             brain::inbox_tidy::inbox_tidy_read,
             brain::inbox_tidy::inbox_tidy_undo,
+            brain::form_review::form_review_picture,
             brain::brain_model,
             attention::mark_digest_seen,
             attention::set_attention_muted,
@@ -1362,7 +1375,14 @@ pub fn run() {
                         }
                         Err(err) => {
                             eprintln!("[jarvis] backend supervision: {err}");
-                            commands::notify(&supervisor, "Jarvis — backend", &err);
+                            crate::crash_notes::record("backend", "start", &err);
+                            commands::notify_failed(
+                                &supervisor,
+                                "Jarvis — backend",
+                                "The backend could not be started.",
+                                &err,
+                                commands::Details::CrashNotes,
+                            );
                         }
                     }
                 });

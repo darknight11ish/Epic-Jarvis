@@ -275,6 +275,7 @@ def t_both_apps_say_the_same_words():
     words.update({"whoogle": WS.LEFT_OUT[0]["why"],
                   "default why": WS.DEFAULT_WHY,
                   "ask label": WS.ASK_EVERY_TIME_LABEL, "ask detail": WS.ASK_EVERY_TIME_DETAIL,
+                  "enabled label": WS.ENABLED_LABEL, "enabled detail": WS.ENABLED_DETAIL,
                   "key entry": WS.KEY_ENTRY})
     for name, text in words.items():
         js, kt = _literal_forms(text)
@@ -737,7 +738,7 @@ def t_settings_and_the_card_to_ask_less():
     s = WS.settings()
     check("no file: SearXNG on this PC, asking only when private things could slip in",
           s == {"provider": "searxng", "searxng_url": "http://127.0.0.1:8888",
-                "ask_every_time": False, "why": ""}, s)
+                "ask_every_time": False, "enabled": True, "why": ""}, s)
     WS.settings_path().parent.mkdir(parents=True, exist_ok=True)
     WS.settings_path().write_text("{nope", encoding="utf-8")
     s = WS.settings()

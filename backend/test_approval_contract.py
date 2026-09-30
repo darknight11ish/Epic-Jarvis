@@ -170,6 +170,20 @@ PLAN = ("Jarvis would like to do this in the window \"Outlook - Compose\": send 
         "  1. click \"Send\" (id: btnSend)\n     why: the draft is ready\n\n"
         "If you say no: nothing in this window changes; the goal is not attempted")
 
+def _form_card() -> str:
+    import jarvis_form_review as FR
+    return FR.card_text(
+        {"site": "clinic.example",
+         "steps": [{"action": "type", "role": "textbox", "name": "Name", "within": "",
+                    "value": "Alex Kim"},
+                   {"action": "type", "role": "textbox", "name": "Phone", "within": "",
+                    "value": "555 0100"}],
+         "final": {"role": "button", "name": "Submit", "within": ""}},
+        has_picture=True)
+
+
+FORM_CARD = _form_card()
+
 #: Every stored-row shape the backend's own tests and patches use.
 BASE_ROWS = [
     # test_extraction_wiring.py: detail as a JSON STRING, raised None.
@@ -196,6 +210,13 @@ BASE_ROWS = [
     {"id": "t5", "action": "web_research", "tier": "ask", "created": "yesterday",
      "detail": {"text": "Search GitHub for: \"offline speech to text android\""},
      "prompt": "tool github_search {}", "raised": None},
+    # jarvis_form_review.py (2026-09-30): the SECOND card of a browser plan that
+    # ends in a form-sending click - detail is {"text": the card, "picture": the
+    # id of the picture held for it} (GET /api/form-review/picture?id=). Built
+    # with the real card_text, so the fixture says what the producer says.
+    {"id": "f6", "action": "browser_form_submit", "tier": "ask", "created": NOW - 20,
+     "detail": {"text": FORM_CARD, "picture": "Zm9ybS1yZXZpZXctMDAwMQ"},
+     "prompt": "submit a form on clinic.example", "raised": None},
     # No id at all: a client must skip it and SAY so, not fail the list.
     {"action": "send_email", "tier": "ask", "created": NOW, "detail": "{}", "raised": None},
 ]

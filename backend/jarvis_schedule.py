@@ -920,6 +920,10 @@ class Scheduler:
         self.last_card: dict = {}      # job id -> outcome, for the list
         self.errors = 0
         self.fired = 0
+        # The clock reading at the last tick, in memory only: a reading EARLIER
+        # than it means the PC's clock was set back (a time sync, a manual
+        # change), and running timers are moved back with it (see `tick`).
+        self._last_tick_now: Optional[float] = None
         # "Cancel that" (jarvis_quick.py): conversation id -> what the fast
         # path last set there. In memory only - a restart forgets it.
         self._recent: dict = {}
@@ -1538,6 +1542,14 @@ class Scheduler:
         now = self.now() if now is None else now
         went = []
         with self._lock, self._db() as c:
+            last, self._last_tick_now = self._last_tick_now, now
+            if last is not None and now < last:
+                # The clock went BACKWARDS between two ticks. A timer is a
+                # length of time ("10 minutes"), not a time on the clock: it must
+                # keep the time it had left, not wait an extra hour. Only timers
+                # - an alarm or a reminder is a time on the clock, and stays.
+                c.execute("UPDATE jobs SET due = due - ? WHERE kind = 'timer' "
+                          "AND state = 'active' AND due IS NOT NULL", (last - now,))
             rows = c.execute("SELECT * FROM jobs WHERE state = 'active' AND due IS NOT NULL "
                              "AND due <= ? ORDER BY due", (now,)).fetchall()
             for row in rows:
@@ -1738,6 +1750,10 @@ class Scheduler:
         if row["fired_at"] is not None and row["state"] in ("fired", "active") and (
                 kind != "todo" or row["fired_due"] is not None):
             v["fired_at"] = row["fired_at"]
+            # How long ago it went off, by the PC's own clock: an app that
+            # only has to show "went off 3 minutes ago" needs no clock of its
+            # own (the phone's and the PC's can disagree).
+            v["age_s"] = max(0.0, now - float(row["fired_at"]))
             v["late"] = bool(row["late"])
             v["went_off_at"] = clock(float(row["fired_at"]))
             if row["late"] and row["fired_due"] is not None and not (k is not None and k.silent):

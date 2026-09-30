@@ -215,6 +215,17 @@ class BadInput(ValueError):
 _popen = subprocess.Popen
 
 
+def _left_s(p: dict) -> float:
+    """Seconds left of a waiting card's time, by the MONOTONIC clock: a clock
+    that is set or synced while a card waits must not shorten or stretch it
+    (time audit, 2026-09-30). `since` (wall clock) stays for display; a record
+    made before this change has no `since_m` and falls back to it."""
+    m = p.get("since_m")
+    if isinstance(m, (int, float)) and not isinstance(m, bool):
+        return p["timeout"] - (time.monotonic() - m)
+    return p["since"] + p["timeout"] - time.time()
+
+
 def _mono() -> float:
     return time.monotonic()
 
@@ -2474,7 +2485,8 @@ def worker_env(uuid: str, base: Optional[dict] = None) -> dict:
     env.update({
         "CUDA_VISIBLE_DEVICES": uuid, "CUDA_DEVICE_ORDER": "PCI_BUS_ID",
         "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1", "HF_DATASETS_OFFLINE": "1",
-        "HF_HUB_DISABLE_TELEMETRY": "1", "PYTHONUNBUFFERED": "1",
+        "HF_HUB_DISABLE_TELEMETRY": "1", "DO_NOT_TRACK": "1",
+        "ANONYMIZED_TELEMETRY": "False", "PYTHONUNBUFFERED": "1",
         "PYTHONIOENCODING": "utf-8",
     })
     return env
@@ -3026,7 +3038,7 @@ def status() -> dict:
     pending = None
     if p:
         pending = {"kind": p["kind"], "voice": p["voice"], "name": p["name"],
-                   "expires_in": max(0, int(p["since"] + p["timeout"] - time.time()))}
+                   "expires_in": max(0, int(_left_s(p)))}
     return {
         "available": True,
         "active": st["active"],
@@ -3237,7 +3249,7 @@ def create(body, *, gate: Optional[Callable] = None, tier_of: Optional[Callable]
                          "error": "a voice card is already waiting - approve or deny it first"}
         _PENDING.update(id=pid, kind="create", voice=vid, name=name, samples=samples,
                         transcript=transcript, seconds=seconds, check=chk,
-                        since=time.time(), timeout=_timeout())
+                        since=time.time(), since_m=time.monotonic(), timeout=_timeout())
     _audit("voices.asked", {"kind": "create", "seconds": seconds})
 
     def work():
@@ -3353,7 +3365,7 @@ def switch(body, *, gate: Optional[Callable] = None, tier_of: Optional[Callable]
             return 409, {"ok": False, "pending": True,
                          "error": "a voice card is already waiting - approve or deny it first"}
         _PENDING.update(id=pid, kind="switch", voice=vid, name=v.name, check=chk,
-                        current=current, since=time.time(), timeout=_timeout(),
+                        current=current, since=time.time(), since_m=time.monotonic(), timeout=_timeout(),
                         withdrawn=False)
     _audit("voices.asked", {"kind": "switch"})
 
@@ -3505,7 +3517,7 @@ def set_better(body, *, gate: Optional[Callable] = None, tier_of: Optional[Calla
             return 409, {"ok": False, "pending": True,
                          "error": "a card to turn on the better voice is already waiting"}
         _BPENDING.clear()
-        _BPENDING.update(id=pid, since=time.time(), withdrawn=False)
+        _BPENDING.update(id=pid, since=time.time(), since_m=time.monotonic(), withdrawn=False)
     _audit("voices.better.asked", {})
 
     def work():

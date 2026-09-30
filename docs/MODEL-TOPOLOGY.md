@@ -503,7 +503,7 @@ family, fast memory. The 14B at 12K would fit with little room and gives
 less context than the main card's 8B at 16K, so it is not offered.
 
 **Built, and switched off** (2026-09-24): `backend/jarvis_second_card.py`
-gives every capable second card (10 GB and up, the 2060 12 GB and a 2080 Ti
+gives every capable second card of 10 GB and up (the 2060 12 GB and a 2080 Ti
 included) the same lane, Qwen 3 8B at 32K (`LONG_BIG` and `LONG_SMALL`,
 which are now the same). It starts the second Ollama on that card, and does
 nothing until the owner turns a switch on through an approval card. A
@@ -511,6 +511,30 @@ conversation moves to that lane only when the lane has more room than the
 everyday model (`jarvis_agent.py`). It leaves
 `OLLAMA_FLASH_ATTENTION` unset on that second Ollama too, for the reason in
 "Setup" above. The owner's guide is [SECOND-CARD.md](SECOND-CARD.md).
+
+**An 8 GB extra card (2026-09-30, calculated, not measured).** The floor is
+now 7,680 MiB reported, so a second or third 8 GB card is used. The room
+is the same sum as above - total, minus 0.60 GiB the desktop takes (1.10 with
+a monitor on the card), minus the 0.75 GiB gap:
+
+```
+8,192 MiB card, no monitor   8.00 - 0.60 - 0.75 = 6.65 GiB room
+8,192 MiB card, monitor      8.00 - 1.10 - 0.75 = 6.15 GiB room
+Qwen 3 8B q8_0 KV @ 16K   4.67 + 1.20 + 0.30 + 0.33 = 6.50 GiB  fits no-monitor, 0.15 spare
+Qwen 3 8B q8_0 KV @  8K   4.67 + 0.60 + 0.30 + 0.33 = 5.90 GiB  fits with a monitor, 0.25 spare
+Qwen2.5-VL 7B      @  8K   5.59 + 0.23 + 0.63        = 6.45 GiB  fits no-monitor, 0.20 spare (5.59 is a guess)
+```
+
+16K is as far as an 8 GB card goes and it equals the main card's 16,384, so
+"Longer conversations" (whose whole point is more room than the main card)
+is **not offered** on an 8 GB card, and neither is "Browser control", which
+needs it. Learning, the Wiki builder and Pictures are offered: they move work
+OFF the main card. Pictures is refused when a monitor is on the card (6.45 >
+6.15). Two 8 GB cards run two of these at the same time (second and third
+lane). 16 GB (room 14.64) and 24 GB (room 22.64) get the same qwen3:8b at
+32K plan as a 12 GB card; qwen3:14b at 32K (8.42 + 2.66 + 0.30 + 0.33 = 11.71
+GiB) would fit them but is not switched on (see docs/SECOND-CARD.md).
+Nothing here is measured: the extra card is not installed yet.
 
 **Before and after installing:**
 

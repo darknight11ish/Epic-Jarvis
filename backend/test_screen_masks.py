@@ -172,7 +172,8 @@ def t_masks():
     check("a non-browser with that word in its title is left alone", got == [])
     got = W.mask_rects([win(8, "", (100, 100, 300, 300), "")], capture_rect=CAP, never=never,
                        front_hwnd=1, address_of=address)
-    check("a window whose program cannot be told is left alone (nothing to compare)", got == [])
+    check("a window whose program cannot be told is painted (fail closed: it cannot be compared)",
+          len(got) == 1, got)
     # 7. owner's own entry
     never.add("program", "MyBank.exe")
     got = W.mask_rects([win(10, "MyBank.exe", (10, 10, 100, 100), "")], capture_rect=CAP, never=never,
@@ -373,8 +374,26 @@ def t_walk():
           src.index("if pw:") < src.index("ValuePattern"))
 
 
+def t_unknown_program_fails_closed():
+    never = never_list()
+    unknown = {"hwnd": 9, "exe": "", "title": "Something", "rect": (100, 100, 300, 300), "opaque": True}
+    got = W.mask_rects([unknown], capture_rect=CAP, never=never, front_hwnd=1)
+    check("a visible window whose program cannot be named is painted black when the list is non-empty",
+          got != [] and covers(got, 200, 200), got)
+    check("must_hide says so directly", W.must_hide(unknown, never) is True)
+    broken = never_list()
+    broken.broken = True
+    check("... and when the list itself cannot be read", W.must_hide(unknown, broken) is True)
+    empty = never_list()
+    empty.entries = lambda: []
+    check("CONTROL: with nothing on the list there is nothing to hide", W.must_hide(unknown, empty) is False)
+    off = dict(unknown, rect=(2000, 2000, 2100, 2100))
+    check("CONTROL: an off-screen unknown window is not painted",
+          W.mask_rects([off], capture_rect=CAP, never=never, front_hwnd=1) == [])
+
+
 def main():
-    for fn in (t_subtract, t_masks, t_browsers, t_pieces, t_take, t_walk):
+    for fn in (t_unknown_program_fails_closed, t_subtract, t_masks, t_browsers, t_pieces, t_take, t_walk):
         try:
             fn()
         except Exception:

@@ -420,6 +420,13 @@ data class PendingItem(
      * [normalisePendingRow]; null on every other card.
      */
     @SerialName("summary_hidden") val summaryHidden: String? = null,
+    /**
+     * The id of the picture of a filled-in web form that rides on a "submit
+     * this form" card (`detail.picture`, FormReview), worked out from the RAW
+     * wire `detail` by [normalisePendingRow], which always overwrites this
+     * key. Null for every other card - which then looks exactly as before.
+     */
+    @SerialName("form_picture") val formPicture: String? = null,
 ) {
     /**
      * The text under the card's title. A tag-suggestion card carries a chat's

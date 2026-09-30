@@ -109,6 +109,9 @@ private fun WikiBody(
             color = chrome.warnInk,
         )
     }
+    if (!canAct) {
+        Text(Wiki.STALE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    }
     if (!v.folderOk) {
         Gap(8)
         Text(v.folderWhy, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)

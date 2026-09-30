@@ -350,6 +350,11 @@ SHIPPED = (
     # routes (browser-engine.patch adds the gate lines and the install block)
     "jarvis_obscura.py",
     "jarvis_browser_engine.py",
+    # "Fill in the form, show me, then send it" (2026-09-30): the second card
+    # of a browser plan's final click, and the picture that rides on it,
+    # held in memory only (form-review.patch adds the gate lines and the
+    # install block)
+    "jarvis_form_review.py",
     # "Ask several and compare": several of the conversations above, ONE
     # card, ONE summary. No patch of its own: jarvis_chatbot.py loads it and
     # chatbot-routes.patch already installs the routes that reach it.

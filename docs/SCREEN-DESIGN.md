@@ -11,8 +11,25 @@ is blacked out (no cleaner, no picture). What it says joins the words as more
 outside text; it is never saved or learned. It is slow, its tag, size and speed
 are unverified until the owner measures them (`py -3 jarvis_screen_picture.py
 --measure`), and if it is missing, slow or fails, Jarvis says so and uses the
-words only. The camera and Live pictures, and the two-card picture lane, are
-unchanged: they wait for the 12 GB card.
+words only. The camera and Live pictures wait for the 12 GB card.
+
+**A running Pictures lane goes first (owner, 2026-09-30, after a multi-GPU
+audit).** When the owner has ALREADY turned on "Pictures" for the second (or
+third) graphics card and that lane is running
+(`jarvis_second_card.lane_for("vision")`, qwen2.5vl:7b), a look's picture goes
+to that lane's own Ollama on 127.0.0.1 - fast - instead of the slow processor
+reader, which stays the fallback (lane not running, error, timeout, no picture
+model, empty answer: Jarvis says so in plain words and uses the processor
+reader, or the words only if that is not ready either). The picture is the SAME
+cleaned, shrunk one: secrets are blacked out first, the "Never look at" windows
+are painted black before that, nothing runs without the cleaner. No new switch
+and no new download: picture mode's own switch still decides whether a look's
+picture is read at all; Pictures on with picture mode off changes nothing
+(words only), and the picture-mode card now says a running Pictures card will
+be used. What the lane says is outside text, never saved or learned. The chat
+router is untouched on purpose: `jarvis_agent.choose_lane` still keeps a phone
+screenshot away from the "vision" lane, because a raw picture must never reach
+any model before `clean_picture` has run.
 
 Status: **built 2026-09-29 on the backend, the desktop and the phone**
 (`docs/JARVIS-API.md` sections 62 and 96 say what and how; section 62.12

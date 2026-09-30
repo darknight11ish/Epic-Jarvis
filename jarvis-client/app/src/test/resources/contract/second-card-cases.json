@@ -210,6 +210,7 @@
         "model": null,
         "model_installed": null,
         "pending": false,
+        "unavailable": {},
         "why": "No capable third graphics card is plugged in right now."
       }
     },
@@ -424,6 +425,7 @@
         "model": null,
         "model_installed": null,
         "pending": false,
+        "unavailable": {},
         "why": "No capable third graphics card is plugged in right now."
       }
     },
@@ -622,6 +624,7 @@
         "model": null,
         "model_installed": null,
         "pending": false,
+        "unavailable": {},
         "why": "No capable third graphics card is plugged in right now."
       }
     },
@@ -834,6 +837,7 @@
         "model": null,
         "model_installed": null,
         "pending": false,
+        "unavailable": {},
         "why": "No capable third graphics card is plugged in right now."
       }
     },
@@ -1040,6 +1044,7 @@
         "model": null,
         "model_installed": null,
         "pending": false,
+        "unavailable": {},
         "why": "No capable third graphics card is plugged in right now."
       }
     },
@@ -1235,6 +1240,7 @@
         "model": null,
         "model_installed": null,
         "pending": false,
+        "unavailable": {},
         "why": "No capable third graphics card is plugged in right now."
       }
     },
@@ -1430,6 +1436,7 @@
         "model": null,
         "model_installed": null,
         "pending": false,
+        "unavailable": {},
         "why": "No capable third graphics card is plugged in right now."
       }
     },
@@ -1644,6 +1651,7 @@
         "model": null,
         "model_installed": null,
         "pending": false,
+        "unavailable": {},
         "why": "No capable third graphics card is plugged in right now."
       }
     }

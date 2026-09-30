@@ -1125,6 +1125,15 @@ permissions = [
   "allow-spending-suggest",
 ]
 
+# The picture of a filled-in web form on the "Jarvis wants to submit this form"
+# card (docs/FORM-REVIEW-DESIGN.md, 2026-09-30). One read, for the Jarvis bar's
+# full card only - never the widget or a notification. Answers nothing while
+# App lock is on, never logs the picture, cannot approve or change anything.
+[[set]]
+identifier = "form-review"
+description = "Read the picture of a filled-in web form for a waiting submit card. Read-only; nothing while App lock is on."
+permissions = ["allow-form-review-picture"]
+
 # Focus sessions (backend/focus.patch; the owner's decision of 2026-09-25): a
 # timer plus Quiet, drifts named out loud on this PC, counts only. Reading it
 # is a read. ONE thing per call to the running session - pause, resume, +10

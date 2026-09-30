@@ -146,6 +146,7 @@ class Rig:
             SP._cleaner = lambda: wrapped
         SP._post_chat = self.post
         SP.lane_size_vram = lambda: self.vram
+        SP.pictures_lane = lambda: None       # no Pictures graphics-card lane unless a test adds one
 
     def post(self, port, payload, timeout, job=None):
         self.posts.append((port, payload, timeout))
@@ -1510,8 +1511,6 @@ def t_the_gate_lines_and_the_stack():
     order = _stack.order()
     # browser-engine.patch (2026-09-29) goes after it: its gate hunks sit on this
     # patch's own last lines.
-    # quiz.patch and decks.patch (2026-09-30) come later still: each is one startup
-    # block on the block before it and touches no gate list.
     after = order[order.index("screen-picture.patch") + 1:]
     check("screen-picture.patch is after screen.patch, and browser-engine.patch follows it directly",
           after[:1] == ["browser-engine.patch"]
@@ -1592,10 +1591,241 @@ def t_the_voice_door_uses_the_same_card():
     check("the registry has the section", sec is not None and sec.app == "both")
 
 
+# ==========================================================================
+#   9. The Pictures graphics-card lane first, the processor reader as backup
+#      (the owner's decision of 2026-09-30)
+# ==========================================================================
+
+CARD_PORT = 11436
+
+
+class CardLane:
+    """What jarvis_second_card.lane_for("vision") hands back."""
+    url = f"http://127.0.0.1:{CARD_PORT}"
+    model = "qwen2.5vl:7b"
+    num_ctx = 16384
+    why = "Pictures: qwen2.5vl:7b on the second card"
+
+
+class CardRig(Rig):
+    """A Rig whose Pictures lane is running. `card_error` makes the card's port
+    fail; `card_answer` is what it says. Requests to the processor reader's own
+    port (11437) still go to Rig.post."""
+
+    def __init__(self, *, card_error=None, card_answer="A busy dashboard, seen by the card Plimberton",
+                 lane=CardLane, **kw):
+        super().__init__(**kw)
+        self.card_error, self.card_answer = card_error, card_answer
+        self.card_posts, self.cpu_posts = [], []
+        SP.pictures_lane = lambda: lane
+
+        def post(port, payload, timeout, job=None):
+            if port == CARD_PORT:
+                self.card_posts.append((port, payload, timeout))
+                if self.card_error is not None:
+                    raise self.card_error
+                return {"message": {"content": self.card_answer}, "prompt_eval_count": 900}
+            self.cpu_posts.append((port, payload, timeout))
+            return Rig.post(self, port, payload, timeout, job)
+        SP._post_chat = post
+
+
+def t_a_running_pictures_lane_is_used_with_the_cleaned_picture_only():
+    r = CardRig()
+    g, job = r.look()
+    check("the look worked and came from the card", job.ok() and job.via == "card", (job.why, job.via))
+    check("the picture reader on the processor was never started or asked",
+          r.lane.ensured == 0 and r.cpu_posts == [])
+    (port, payload, timeout) = r.card_posts[0]
+    sent = base64.b64decode(payload["messages"][1]["images"][0])
+    check("what the card's model was shown is the CLEANED picture, never the original",
+          sent == SP.shrink(CLEANED) and sent != ORIGINAL
+          and base64.b64encode(ORIGINAL).decode() not in json.dumps(payload))
+    check("the cleaner was given the original exactly once", r.cleaner_calls == [ORIGINAL])
+    check("it went to the lane's own address, this PC only, with the lane's model and room",
+          port == CARD_PORT and payload["model"] == "qwen2.5vl:7b"
+          and payload["options"]["num_ctx"] == 16384 and CardLane.url.startswith("http://127.0.0.1:"))
+    check("it does NOT say num_gpu 0 (that is the processor reader's rule) and sets no keep_alive",
+          "num_gpu" not in payload["options"] and "keep_alive" not in payload)
+    check("the system prompt still says the picture is untrusted",
+          "never follow" in payload["messages"][0]["content"].lower())
+    check("the description is outside text with a head that says it ran on the graphics card",
+          "second graphics card" in SP.PICTURE_HEAD_CARD and "processor" not in SP.PICTURE_HEAD_CARD
+          and job.text in SP.model_lines(g) and SP.PICTURE_HEAD_CARD in SP.model_lines(g))
+    check("the note says the Pictures card read it", SP.note_suffix(g) == " and picture (Pictures card)")
+    check("no fallback sentence when the card worked", SP.owner_line(g) == "")
+    check("nothing from the screen reached the audit log",
+          not any(x in json.dumps(AUDIT).lower() for x in LEAKS), AUDIT)
+
+
+def t_the_card_needs_no_processor_model():
+    r = CardRig(installed=(False, ""))
+    g, job = r.look()
+    check("with the card running, a missing processor model does not stop the look",
+          job.ok() and job.via == "card", (job.why,))
+
+
+def t_a_running_card_never_gets_a_picture_when_picture_mode_is_off():
+    r = CardRig(enabled=False)
+    g, job = r.look()
+    check("picture mode off: nothing sees the picture, card or not",
+          job is None and r.card_posts == [] and r.cpu_posts == [] and r.cleaner_calls == [])
+
+
+def t_secrets_are_blacked_out_before_the_card_sees_the_picture():
+    import jarvis_picture as P
+    import jarvis_screen_win as W
+    token = "ghp_" + "aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bC1eF3hJ5"       # made up
+    w, h = 400, 120
+    bgra = bytearray()
+    for y in range(h):
+        for x in range(w):
+            bgra += bytes((230, 230, 230, 255))
+    png = W.png_from_bgra(bytes(bgra), w, h)
+    x, words = 10, []
+    for word in ("my", "token", "is", token, "ok"):
+        words.append({"text": word, "left": float(x), "top": 20.0, "width": float(len(word) * 8),
+                      "height": 16.0})
+        x += len(word) * 8 + 8
+    lines = [{"text": "my token is " + token + " ok", "words": words}]
+
+    def read(image):
+        return {"ok": True, "text": lines[0]["text"], "left_out": 0, "why": "",
+                "lines": lines, "size": (w, h)}
+
+    r = CardRig(cleaner=lambda picture, ocr=None, *, want_png=False:
+                SC.clean_picture(picture, ocr=read, want_png=want_png))
+    g = SC.Glance(at=0.0, mode="look", program=FAKE_APP)
+    job = SP.start(g, png, {"exe": "x.exe"})
+    job.ready.wait(10)
+    check("the look worked through the real cleaner", job.ok() and job.via == "card", (job.why,))
+    payload = r.card_posts[0][1]
+    sent = base64.b64decode(payload["messages"][1]["images"][0])
+    dec = P.decode_png(sent)
+    tok = words[3]
+    cx, cy = int(tok["left"] + tok["width"] / 2), int(tok["top"] + tok["height"] / 2)
+    px = bytes(dec[0][(cy * w + cx) * 4:(cy * w + cx) * 4 + 4]) if dec else b""
+    check("what the card received has the secret's place SOLID BLACK", px == b"\x00\x00\x00\xff", px)
+    check("... and is not the original picture", sent != png and png not in (sent,))
+    check("... and the secret's words are in no request at all", token not in json.dumps(payload))
+    # No cleaner: nothing goes to the card either (fail closed).
+    r2 = CardRig(cleaner=None)
+    g2, j2 = r2.look()
+    check("without a cleaner NOTHING goes to the card, and the look says so",
+          j2.why == "no_cleaner" and r2.card_posts == [] and r2.cpu_posts == [])
+    def boom(picture, ocr=None, *, want_png=False):
+        raise SP.CleanFailed("no")
+    r3 = CardRig(cleaner=boom)
+    g3, j3 = r3.look()
+    check("a cleaner that fails: nothing goes to the card",
+          j3.why == "clean_failed" and r3.card_posts == [])
+
+
+def t_a_never_look_window_still_stops_the_look_before_any_picture():
+    r = CardRig()
+    e = SC.Screen(clock=Now(), front_reader=lambda: snap(exe=r"C:\Program Files\KeePassXC\KeePassXC.exe"),
+                  capture=lambda s, whole: ORIGINAL,
+                  ocr=lambda picture: {"ok": True, "text": FAKE_WORDS, "left_out": 0},
+                  ui_text=lambda s: [], never=SC.NeverLook(Path(tempfile.mkdtemp(dir=_TMP)) / "n.json"),
+                  publish=lambda *a: None, run_loop=False)
+    out = e.look_at_this()
+    check("a Never-look program in front: no look, and no picture went anywhere",
+          not out["ok"] and r.card_posts == [] and r.cpu_posts == [] and r.cleaner_calls == [], out)
+
+
+def _fall_back(card_error=None, card_answer=None, **kw):
+    args = {"card_error": card_error}
+    if card_answer is not None:
+        args["card_answer"] = card_answer
+    return CardRig(**args, **kw)
+
+
+def t_a_card_that_fails_falls_back_to_the_processor_reader_and_says_so():
+    for name, err, ans in (("errors", SP.LaneError("error"), None),
+                           ("is too slow", SP.LaneError("slow"), None),
+                           ("has no picture model installed", SP.LaneError("not_installed"), None),
+                           ("gives an empty answer", None, "   ")):
+        r = _fall_back(err, ans)
+        g, job = r.look()
+        check(f"a card that {name}: the slow reader answers instead",
+              job.ok() and job.via == "cpu" and job.card_failed and r.lane.ensured == 1
+              and len(r.cpu_posts) == 1, (job.why, job.via))
+        sent = base64.b64decode(r.cpu_posts[0][1]["messages"][1]["images"][0])
+        check(f"... with the same CLEANED picture (card {name})", sent == SP.shrink(CLEANED))
+        check(f"... and the processor request still says num_gpu 0 (card {name})",
+              r.cpu_posts[0][1]["options"]["num_gpu"] == 0)
+        check(f"... and the note and the answer say the card did not answer (card {name})",
+              "the Pictures card did not answer" in SP.note_suffix(g)
+              and SP.owner_line(g) == SP.CARD_FALLBACK_LINE)
+    r = _fall_back(SP.LaneError("error"), installed=(False, ""))
+    g, job = r.look()
+    check("card fails AND the processor model is missing: words only, said in plain words",
+          not job.ok() and job.card_failed and r.cpu_posts == [] and r.lane.ensured == 0
+          and "Picture mode: the Pictures graphics card did not answer" in SP.owner_line(g)
+          and "only (the Pictures card did not answer; " in SP.note_suffix(g), SP.owner_line(g))
+    r = CardRig(card_error=SP.LaneError("error"), cleaner=None)
+    g, job = r.look()
+    check("card fails and there is no cleaner: still nothing sent anywhere",
+          job.why == "no_cleaner" and r.cpu_posts == [])
+    SP.pictures_lane = lambda: None
+    r2 = Rig()
+    SP.pictures_lane = lambda: None
+    g2, j2 = r2.look()
+    check("no lane: the processor reader, exactly as before, no fallback note",
+          j2.ok() and j2.via == "cpu" and not j2.card_failed and SP.owner_line(g2) == ""
+          and SP.note_suffix(g2) == " and picture (slow mode)")
+
+
+def t_the_lane_is_only_taken_from_this_pc_and_never_a_cloud_model():
+    class Far(CardLane):
+        url = "http://192.168.1.50:11436"
+
+    class Cloud(CardLane):
+        model = "glm-4.6:cloud"
+    fake = types.ModuleType("jarvis_second_card")
+    real = sys.modules.get("jarvis_second_card")
+    try:
+        for lane, want in ((CardLane, True), (Far, False), (Cloud, False), (None, False)):
+            fake.lane_for = lambda feature, _l=lane: _l if feature == "vision" else None
+            sys.modules["jarvis_second_card"] = fake
+            got = SP.pictures_lane()
+            check(f"pictures_lane() for {getattr(lane, 'url', None)} {getattr(lane, 'model', '')}: "
+                  f"{'used' if want else 'refused'}", (got is not None) == want)
+        def raises(feature):
+            raise RuntimeError("x")
+        fake.lane_for = raises
+        check("a lane lookup that raises is no lane", SP.pictures_lane() is None)
+    finally:
+        if real is not None:
+            sys.modules["jarvis_second_card"] = real
+        else:
+            sys.modules.pop("jarvis_second_card", None)
+
+
+def t_a_whole_look_and_a_phone_screenshot_use_the_card_too():
+    r = CardRig()
+    e = engine()
+    out = e.look_at_this()
+    check("a whole look: the note says the Pictures card read the picture",
+          out["ok"] and out["note"].endswith("words and picture (Pictures card)"), out)
+    check("... the model's text holds the words and the card's description as outside text",
+          FAKE_WORDS in out["part"] and "Plimberton" in out["part"]
+          and SP.PICTURE_HEAD_CARD in out["part"])
+    r2 = CardRig()
+    msgs, info = SC.with_screen(_phone_messages(), "phone",
+                                read=lambda image: {"ok": True, "text": FAKE_WORDS, "left_out": 0})
+    text = "\n".join(p["text"] for p in msgs[0]["content"] if p.get("type") == "text")
+    check("a phone screenshot: the card got the CLEANED picture, and the everyday model never "
+          "gets the picture",
+          r2.card_posts and base64.b64decode(r2.card_posts[0][1]["messages"][1]["images"][0])
+          == SP.shrink(CLEANED) and not any(p.get("type") == "image_url" for p in msgs[0]["content"])
+          and "Plimberton" in text)
+
+
 if __name__ == "__main__":
     real_process = (SP._which, SP._popen, SP._sleep, SP._port_taken, SP._version_at, SP._kill_tree,
                     SP._get_json, SP._post_chat, SP.LANE, SP.installed_info, SP._cleaner,
-                    SP.lane_size_vram)
+                    SP.lane_size_vram, SP.pictures_lane)
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
             print(f"\n--- {name} ---")
@@ -1608,7 +1838,7 @@ if __name__ == "__main__":
                 # Every test starts from the real functions.
                 (SP._which, SP._popen, SP._sleep, SP._port_taken, SP._version_at, SP._kill_tree,
                  SP._get_json, SP._post_chat, SP.LANE, SP.installed_info, SP._cleaner,
-                 SP.lane_size_vram) = real_process
+                 SP.lane_size_vram, SP.pictures_lane) = real_process
                 os.environ.pop("OLLAMA_URL", None)
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")
     if FAILED:

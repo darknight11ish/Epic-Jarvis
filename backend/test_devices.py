@@ -418,24 +418,12 @@ def t_the_hunk_comes_before_every_token_ok():
     # browser-engine.patch goes after those (2026-09-29): its gate hunks sit on
     # screen-picture.patch's own last lines and leave devices.patch's alone; its
     # startup block is anchored on screen.patch's own.
-    # quiz.patch and decks.patch go last (2026-09-30): each is one startup block
-    # anchored on the block before it (browser-engine.patch's, then quiz.patch's)
-    # and touches no gate list. spending.patch goes after decks.patch (2026-09-30)
-    # on the same terms, then retirement.patch and progress.patch, and
-    # topics.patch (its gate lines sit on browser-engine.patch's own last
-    # lines and leave devices.patch's alone), and referee.patch last of all
-    # (2026-09-30: its gate lines sit on topics.patch's own last lines), then
-    # tag-suggest.patch, youtube.patch and quiz-cloud.patch (2026-09-30: each adds
-    # gate lines and one startup block after the one before it; none touches
-    # devices.patch's).
     check("devices.patch is in apply-patches.ps1's list, and only "
-          "apps-in-projects.patch (which builds on its lines), inbox-tidy.patch, "
-          "screen.patch, screen-picture.patch, browser-engine.patch, quiz.patch, decks.patch, "
-          "spending.patch, retirement.patch, progress.patch, topics.patch, referee.patch, "
-          "tag-suggest.patch, youtube.patch and quiz-cloud.patch (which leave them alone) come after it",
+          "patches that leave its lines alone come after it",
           after_it is not None
           and set(after_it) <= {"apps-in-projects.patch", "inbox-tidy.patch", "screen.patch",
-                                "screen-picture.patch", "browser-engine.patch", "quiz.patch",
+                                "screen-picture.patch", "browser-engine.patch",
+                                "form-review.patch", "web-search-switch.patch", "quiz.patch",
                                 "decks.patch", "spending.patch", "retirement.patch",
                                 "progress.patch", "topics.patch", "referee.patch",
                                 "tag-suggest.patch", "youtube.patch", "quiz-cloud.patch"}

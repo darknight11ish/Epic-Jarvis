@@ -1,0 +1,23 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -171,6 +171,7 @@
+     "screen_picture_enable",  # jarvis_screen_picture.py acts only on tier "ask": ONE card to turn on slow picture reading (screen-picture.patch)
+     "obscura_enable",  # jarvis_browser_engine.py acts only on tier "ask": ONE card to turn on the headless browser, Obscura (browser-engine.patch)
+     "browser_form_submit",  # jarvis_form_review.py / jarvis_agent.py acts only on tier "ask": ONE card, before the click that sends a filled-in form, showing the site, every word typed and a picture of the page (form-review.patch)
++    "web_search_enable",  # jarvis_search.py acts only on tier "ask": ONE card to turn web search back on after the owner switched it off (web-search-switch.patch)
+ })
+ 
+ 
+@@ -845,6 +846,12 @@
+     # it looks. What is typed goes to the site named on the card, and once
+     # sent it cannot be taken back, so a risky approval.
+     "browser_form_submit": ("no", "outbound", "sends the form you were shown to the website named on the card, with every word typed into it; Jarvis clicks only after you approve this card and only if the page is still exactly as it looked in the picture, and once sent it cannot be taken back; the picture goes to your own devices only and is not saved"),
++    # web-search-switch.patch (jarvis_search.py; the settings audit of 2026-09-30).
++    # Web search ships ON. The owner may switch it off at any time (instant, no
++    # card); turning it back ON is this one card. The change itself sends nothing:
++    # a search still follows every rule it had (its own card when private things
++    # could slip in, never a password or key), so this is a setting on this PC.
++    "web_search_enable": ("yes", "local", "lets Jarvis search the web again, with the search you chose; the change itself sends nothing, every search keeps the rules it already had, and you can turn web search off again at any time, at once"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",

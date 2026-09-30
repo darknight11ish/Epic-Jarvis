@@ -1765,7 +1765,11 @@ function scModelLine(feature, capable) {
   // say about one: on a capable PC a null model means "none", not "not chosen
   // yet". Only a PC without a capable card gets the "chosen once..." line.
   if (feature.model_free === true) return "";
-  if (!model) return capable === true ? "" : "The model is chosen once a capable second card is found.";
+  if (!model) {
+    return capable === true
+      ? "No model is chosen for this on your graphics cards right now (the switch's line above says why)."
+      : "The model is chosen once a capable second card is found.";
+  }
   if (feature.model_installed === true) return `Model: ${model}, installed.`;
   if (feature.model_installed === false) {
     return `Model: ${model}, not installed yet. To install it, open the Brain window, go to ` +
@@ -2177,7 +2181,7 @@ function scPaint(status) {
   sc.blocked.hidden = detected.capable === true;
   sc.blocked.textContent = detected.capable === true ? ""
     : `Nothing here can be turned on until Jarvis finds a capable second graphics card ` +
-      `(an RTX 20 series or newer, with 10 GB or more): ${scClause(detected.why)} ` +
+      `(an RTX 20 series or newer, with 8 GB or more): ${scClause(detected.why)} ` +
       "The switches are shown so you can see what is coming.";
 
   const names = {

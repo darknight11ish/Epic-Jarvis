@@ -1089,7 +1089,7 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
     let seeded = state
         .seeded
         .swap(true, std::sync::atomic::Ordering::Relaxed);
-    let arrived: Vec<serde_json::Value> = {
+    let (arrived, left): (Vec<serde_json::Value>, Vec<String>) = {
         let mut slot = state
             .pending
             .lock()
@@ -1101,9 +1101,19 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
             .filter(|item| approval_id(item).is_some_and(|id| !known.contains(&id)))
             .cloned()
             .collect();
+        let left = ids_that_left(&slot, &items);
         *slot = items.clone();
-        fresh
+        (fresh, left)
     };
+    // A card that is no longer waiting - decided anywhere (this PC, the
+    // phone, a toast), timed out or cancelled - must not leave its toast
+    // sitting in the Action Centre with a Deny button that can only fail.
+    #[cfg(windows)]
+    for id in &left {
+        crate::winrt_toast::remove_approval(id);
+    }
+    #[cfg(not(windows))]
+    let _ = left;
     publish_link(app, |link| link.approvals = items.len());
     state
         .queue_read
@@ -1126,7 +1136,9 @@ async fn refresh_pending(app: &AppHandle, base: &str) -> bool {
     // without the risk line, the `raised` block or the source in front of you.
     // Read once for this batch: while App lock is on, a toast says the
     // card's title only (`toast_words`).
-    let app_lock = seeded && !arrived.is_empty() && crate::lock::current(app).app_lock;
+    // Also while the Brain's private lists are hidden (`toast_privacy_on`):
+    // a card's own body can quote the owner's words.
+    let app_lock = seeded && !arrived.is_empty() && crate::commands::toast_privacy_on(app);
     for item in arrived.iter().filter(|_| seeded) {
         // `notice` is built server-side by jarvis_gate.notice_for, from the
         // action name and the risk table — it never reads `detail`, `prompt`
@@ -1233,6 +1245,20 @@ pub(crate) fn rebroadcast_pending(app: &AppHandle) {
         crate::events::APPROVALS_CHANGED,
         serde_json::json!({ "count": items.len(), "items": items, "available": true }),
     );
+}
+
+/// The ids that were in the previous queue and are not in the new one: the
+/// cards that left, for any reason. Pure, so it is tested.
+pub(crate) fn ids_that_left(
+    previous: &[serde_json::Value],
+    current: &[serde_json::Value],
+) -> Vec<String> {
+    let now: std::collections::HashSet<String> = current.iter().filter_map(approval_id).collect();
+    previous
+        .iter()
+        .filter_map(approval_id)
+        .filter(|id| !now.contains(id))
+        .collect()
 }
 
 /// What a card's toast says: the notice's title and body, built by the PC
@@ -1534,6 +1560,24 @@ mod tests {
             ("Jarvis wants to send an email".to_string(), String::new())
         );
         assert_eq!(toast_words(&row, false).1, "There is no unsend.");
+    }
+
+    #[test]
+    fn a_card_that_leaves_the_queue_has_its_toast_withdrawn() {
+        let row = |id: &str| serde_json::json!({ "id": id });
+        let before = vec![row("a"), row("b"), serde_json::json!({ "id": 7 })];
+        // b was decided, 7 timed out: both leave; a stays.
+        assert_eq!(
+            ids_that_left(&before, &[row("a"), row("c")]),
+            vec!["b".to_string(), "7".to_string()]
+        );
+        // Nothing left, or a queue that only grew: nothing to withdraw.
+        assert!(ids_that_left(&before, &before).is_empty());
+        assert!(ids_that_left(&[], &[row("a")]).is_empty());
+        // The whole queue emptied: every toast goes.
+        assert_eq!(ids_that_left(&[row("a"), row("b")], &[]).len(), 2);
+        // A row with no id was never toasted, so it is never withdrawn.
+        assert!(ids_that_left(&[serde_json::json!({})], &[]).is_empty());
     }
 
     /// The default must be stale: before the first hello nothing is known, and

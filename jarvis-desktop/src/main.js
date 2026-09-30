@@ -223,6 +223,7 @@ import { READING as PHOTO_READING, mountProposal } from "./photo-reminder.js";
 import { mountInboxTidy } from "./inbox-tidy.js";
 // "Spending summaries" (2026-09-30): the table a spending answer announced.
 import { mountSpendingTable, tableIdFromBody, tableIdFromLine } from "./spending.js";
+import { mountFormReview } from "./form-review.js";
 // What a `step` event means, in words - shared with Brain's Live tab
 // (item 10, UI-AUDIT-2026-09-26.md).
 import { stepText } from "./step-words.js";
@@ -417,6 +418,7 @@ const dom = {
   photoProposal: $("photo-proposal"),
   inboxTidy: $("inbox-tidy"),
   spendingTable: $("spending-table"),
+  approvalPicture: $("approval-picture"),
   clipboardChip: $("attachment-clipboard"),
   clipboardMeta: $("clipboard-meta"),
   clipboardRemove: $("clipboard-remove"),
@@ -764,6 +766,20 @@ if (dom.spendingTable) {
   });
   window.addEventListener("focus", () => spendingView.recheck());
 }
+
+/**
+ * The picture of a filled-in web form on a "submit this form" card
+ * (form-review.js; docs/FORM-REVIEW-DESIGN.md). Only this bar's full card
+ * shows it - never the widget, a toast or the HUD page. Held in memory only
+ * and dropped with the card.
+ */
+const formReview = dom.approvalPicture
+  ? mountFormReview(dom.approvalPicture, {
+    invoke: (command, args) => invokeStrict(command, args),
+    onChange: () => syncWindowHeight(),
+    announce,
+  })
+  : null;
 
 /** Tools that ran (`step` events) and drops of the event stream, for the
  *  private-answer rule - fed below, where this window subscribes to the
@@ -2096,6 +2112,7 @@ function refreshApproval(approval) {
     dom.approvalPreview.innerHTML = renderMarkdown(approvalPreview(approval));
     decorateDiff(dom.approvalPreview);
   }
+  if (formReview) formReview.show(approval);
   renderOptions(approval);
   // ONLY on a different card. The old comment here said this was "safe
   // unconditionally" and it was not: the queue subscription calls
@@ -2526,6 +2543,7 @@ function closeApproval() {
   // DIFFERENT id arrives, which is the only time it should go.
   dom.approval.hidden = true;
   dom.approvalPreview.innerHTML = "";
+  if (formReview) formReview.clear();
   dom.approvalOptions.replaceChildren();
   dom.approvalOptions.hidden = true;
   dom.approvalApprove.hidden = false;

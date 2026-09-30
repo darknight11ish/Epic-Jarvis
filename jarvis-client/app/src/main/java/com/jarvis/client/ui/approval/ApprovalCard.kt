@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.AsksFirst
 import com.jarvis.client.net.CardWords
+import com.jarvis.client.net.FormReview
 import com.jarvis.client.net.PendingItem
 import com.jarvis.client.ui.parts.Affirm
 import com.jarvis.client.ui.parts.Meter
@@ -112,6 +113,11 @@ fun ApprovalCard(
      * card's help line stops offering the gesture. Buttons are unchanged.
      */
     swipeAllowed: Boolean = true,
+    /**
+     * "Hide memory lists and chat history" is on: a "submit this form" card
+     * shows a line instead of the form's picture, and never asks for it.
+     */
+    pictureHidden: Boolean = false,
     modifier: Modifier = Modifier,
     /**
      * The "Nothing runs until you decide." line under the buttons.
@@ -448,6 +454,22 @@ fun ApprovalCard(
                     color = chrome.textMid,
                     modifier = Modifier.padding(top = 2.dp),
                 )
+            }
+        }
+
+        // The picture of a web form Jarvis filled in (FormReview). Only a
+        // "submit this form" card has one; nothing else changes - the decision
+        // path below is untouched, and the picture never approves anything.
+        item.formPicture?.let { pictureId ->
+            Spacer(Modifier.height(10.dp))
+            if (pictureHidden) {
+                Text(
+                    FormReview.HIDDEN_BY_SETTING,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = chrome.textHi,
+                )
+            } else {
+                FormPicture(pictureId)
             }
         }
 

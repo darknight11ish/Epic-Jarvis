@@ -33,8 +33,12 @@ import com.jarvis.client.data.WakeResume
 object WakeResumeNotifier {
     private const val TAG = "JarvisWakeResume"
 
-    /** Its own id: below ApprovalNotifier's range and apart from ScheduleNotifier's. */
-    private const val NOTIFICATION_ID = 0x3200
+    /**
+     * Its own id, distinct from every other ([NotificationIds] holds them all and
+     * NotificationIdsTest checks none repeats). It used to share 0x3200 with the
+     * chatbot line, so cancelling one removed the other.
+     */
+    private const val NOTIFICATION_ID = NotificationIds.WAKE_RESUME
 
     fun post(context: Context, action: String?) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=

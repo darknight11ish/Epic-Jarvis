@@ -147,6 +147,7 @@ from __future__ import annotations
 
 import base64
 import calendar
+import shutil
 import io
 import json
 import os
@@ -194,6 +195,10 @@ RESTORE_ACTION = "restore_backup"
 #: card is shown per restore either way, so more costs disk, not safety; a
 #: synced folder should not grow without bound. See the module docstring.
 KEEP = 5
+#: A file name dated more than this far ahead of the PC's clock cannot be
+#: trusted (the clock was wrong when it was made, or the name was edited): it is
+#: ranked by the file's own modified time instead (see `list_backups`).
+FUTURE_SLACK_S = 300
 
 FILE_SUFFIX = ".jbak"
 MAGIC = b"JBAK1"
@@ -207,6 +212,7 @@ ARGON_ITERATIONS = 3
 KEY_LEN = 32
 SALT_LEN = 16
 NONCE_LEN = 12
+TAG_LEN = 16                       # AES-GCM's check bytes at the end
 _HEADER_STRUCT = struct.Struct(">B I I")   # lanes, memory_kib, iterations
 
 #: No 0/O, 1/I/L: nothing that can be misread out loud or by eye.
@@ -413,6 +419,9 @@ def decrypt_blob(blob: bytes, code: str) -> bytes:
     salt = header[len(MAGIC) + _HEADER_STRUCT.size: len(MAGIC) + _HEADER_STRUCT.size + SALT_LEN]
     nonce = header[len(MAGIC) + _HEADER_STRUCT.size + SALT_LEN:head_len]
     ciphertext = bytes(blob[head_len:])
+    if len(ciphertext) < TAG_LEN:
+        raise WrongCode("that backup file is damaged - it is cut short (a copy or a sync "
+                        "that did not finish?)")
     try:
         kdf = Argon2id(salt=salt, length=KEY_LEN, iterations=iterations,
                        lanes=lanes, memory_cost=memory_kib)
@@ -420,7 +429,8 @@ def decrypt_blob(blob: bytes, code: str) -> bytes:
         aes = AESGCM(key)
         return aes.decrypt(nonce, ciphertext, header)
     except InvalidTag:
-        raise WrongCode("that recovery code does not open this backup") from None
+        raise WrongCode("that recovery code does not open this backup (or the file is "
+                        "damaged, for instance a copy that did not finish)") from None
     except (ValueError, TypeError) as exc:
         raise WrongCode(f"that backup file is damaged ({type(exc).__name__})") from None
 
@@ -608,14 +618,34 @@ def _stamp_of(name: str) -> Optional[str]:
     return body
 
 
-def list_backups(folder) -> list:
-    """[{"name", "at", "size"}], newest first. `at` is read from the file's
-    own name (UTC), which sorting by name already matches; a file that does
-    not parse is skipped, never guessed at from mtime (a copy or a sync
-    program can change that)."""
+#: Smallest a real backup can be: the header, then at least the check bytes.
+MIN_FILE_BYTES = len(MAGIC) + _HEADER_STRUCT.size + SALT_LEN + NONCE_LEN + TAG_LEN
+
+
+def _suffix_of(name: str) -> int:
+    """The "-N" a same-second backup carries (1 when it has none)."""
+    body = name[:-len(FILE_SUFFIX)] if name.endswith(FILE_SUFFIX) else name
+    parts = body.split("-")
+    if len(parts) == 5 and parts[-1].isdigit():
+        return int(parts[-1])
+    return 1
+
+
+def list_backups(folder, *, now: Optional[float] = None) -> list:
+    """[{"name", "at", "size", "complete"}], newest first. `at` is read from
+    the file's own name (UTC) - a copy or a sync program can change a file's
+    modified time, so the name is trusted - EXCEPT a name dated in the future
+    (more than FUTURE_SLACK_S ahead of `now`: the PC's clock was wrong, or the
+    name was edited): that one is dated by the file's real modified time
+    instead, so it can neither sit at the top for ever nor push the newest
+    real backup out. Same second: the "-N" number breaks the tie, so a
+    same-second backup is newer than the one it did not overwrite.
+    `complete` is False for a file too small to be a backup at all (a copy
+    that was cut short): it is listed but never counts as one of the kept."""
     p = Path(folder)
     if not p.is_dir():
         return []
+    now = time.time() if now is None else now
     out = []
     for f in p.iterdir():
         if not f.is_file():
@@ -628,17 +658,26 @@ def list_backups(folder) -> list:
         except ValueError:
             continue
         try:
-            size = f.stat().st_size
+            st = f.stat()
+            size, mtime = st.st_size, st.st_mtime
         except OSError:
-            size = 0
-        out.append({"name": f.name, "at": at, "size": size})
-    out.sort(key=lambda r: r["name"], reverse=True)
+            size, mtime = 0, None
+        if at > now + FUTURE_SLACK_S and mtime is not None:
+            at = min(at, mtime)
+        out.append({"name": f.name, "at": at, "size": size, "complete": size >= MIN_FILE_BYTES})
+    out.sort(key=lambda r: (r["at"], _suffix_of(r["name"]), r["name"]), reverse=True)
     return out
 
 
-def _retain(folder) -> None:
-    rows = list_backups(folder)
-    for row in rows[KEEP:]:
+def _retain(folder, keep_name: Optional[str] = None) -> None:
+    """Keeps the newest KEEP complete backups and deletes the rest. The file
+    just written (`keep_name`) is NEVER deleted, whatever its rank, and counts
+    as one of the KEEP. A file that is too small to be a backup is not counted
+    and not deleted (it may be a sync still in progress)."""
+    rows = [r for r in list_backups(folder) if r["complete"]]
+    others = [r for r in rows if r["name"] != keep_name]
+    room = KEEP - (1 if keep_name and any(r["name"] == keep_name for r in rows) else 0)
+    for row in others[max(room, 0):]:
         try:
             (Path(folder) / row["name"]).unlink()
         except OSError:
@@ -666,9 +705,18 @@ def backup_now(folder, *, code: Optional[str] = None) -> dict:
         name = base[:-len(FILE_SUFFIX)] + f"-{n}" + FILE_SUFFIX
         dest = Path(real) / name
     tmp = Path(real) / f".{name}.{uuid.uuid4().hex[:8]}.tmp"
-    tmp.write_bytes(blob)
-    os.replace(tmp, dest)
-    _retain(real)
+    try:
+        tmp.write_bytes(blob)
+        os.replace(tmp, dest)
+    except BaseException:
+        # A full disk (or a folder that went away) must not leave a half-written
+        # hidden file behind in the owner's backup folder.
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
+    _retain(real, keep_name=name)
     return {"name": name, "at": at, "counts": manifest, "recovery_code": made_code,
             "size": dest.stat().st_size}
 
@@ -871,6 +919,176 @@ def request_list(*, peer=None, local=None, here: Optional[bool] = None) -> tuple
 
 
 # ---------------------------------------------------------------------------
+#   "Delete older backups now" - offered after an "Erase the words"
+# ---------------------------------------------------------------------------
+# The owner's choice (2026-09-30 audit): erased words can still be readable in
+# a backup made before the erase, until it ages out. After an Erase the apps
+# offer a button that makes ONE fresh backup (so the newest one is from after
+# the erase) and deletes every other backup file. It is a real deletion, so it
+# asks: ONE card (change_own_config, the folder card's own action), this PC
+# only, listing exactly how many files go. The fresh backup's recovery code is
+# shown once, like any other.
+
+_D_LOCK = threading.Lock()
+_D_STATE: dict = {"pending": {}, "withdrawn": set(), "last": {}, "latest": {}}
+_D_SWITCH = threading.Lock()
+DELETE_ROUTE = "/api/backup/delete-older"
+
+DELETE_LAST_WORDS = {
+    "deleted": "Done. Jarvis made one fresh backup and deleted the older ones. Write down the "
+               "new backup's recovery code now - it is shown once.",
+    "denied": "You said no, so no backup was deleted.",
+    "timed_out": "Nobody answered the card in time, so no backup was deleted.",
+    "withdrawn": "You changed your mind before the card was answered, so nothing changed.",
+    "refused": "The card could not be answered, so no backup was deleted.",
+    "failed": "It was approved, but the fresh backup could not be made, so NO backup was "
+              "deleted.",
+}
+
+
+def delete_older_card(names: list) -> str:
+    return "\n".join([
+        "Delete your older backups?",
+        "",
+        f"Jarvis will make one fresh, locked backup now, then delete {len(names)} older "
+        f"backup file{'s' if len(names) != 1 else ''} from your backup folder.",
+        "",
+        "Why: words you erased can still be readable in a backup made before you erased "
+        "them. The fresh one is made after, so it does not have them.",
+        "",
+        "This cannot be undone: a deleted backup is gone, and so is anything only it held. "
+        "The fresh backup gets a NEW recovery code, shown once; the old codes then open "
+        "nothing.",
+        "",
+        "If you did not just do this, say no.",
+        "",
+        "If you say no: nothing changes.",
+    ])
+
+
+def _delete_finish(pid: str, outcome: str, why: str = "", *, fresh=None, deleted: int = 0) -> None:
+    with _D_LOCK:
+        if _D_STATE["pending"].get("id") == pid:
+            _D_STATE["pending"].clear()
+        _D_STATE["withdrawn"].discard(pid)
+        if _D_STATE["latest"].get("id") not in (None, pid):
+            return
+        _D_STATE["last"].clear()
+        _D_STATE["last"].update(outcome=outcome, why=why, at=time.time(), deleted=deleted,
+                                message=DELETE_LAST_WORDS.get(outcome, ""), fresh_backup=fresh)
+    _audit("backup.delete_older.card", {"outcome": outcome, "deleted": deleted})
+
+
+def take_delete_older_result() -> Optional[dict]:
+    """The last "Delete older backups" outcome, the fresh backup's one-time
+    recovery code included - read ONCE, like `take_restore_result`."""
+    with _D_LOCK:
+        last = dict(_D_STATE["last"])
+        if last:
+            fresh = last.get("fresh_backup")
+            if isinstance(fresh, dict) and "recovery_code" in fresh:
+                _D_STATE["last"]["fresh_backup"] = {k: v for k, v in fresh.items()
+                                                    if k != "recovery_code"}
+    return last or None
+
+
+def _delete_older_now(folder: str) -> dict:
+    """One fresh backup, then every other backup file in the folder deleted
+    (only ones shaped like ours). If the fresh one cannot be made, nothing is
+    deleted. {"fresh": backup_now's answer, "deleted": n}."""
+    fresh = backup_now(folder)
+    deleted = 0
+    for row in list_backups(folder):
+        if row["name"] == fresh["name"]:
+            continue
+        try:
+            (Path(folder) / row["name"]).unlink()
+            deleted += 1
+        except OSError:
+            pass
+    return {"fresh": fresh, "deleted": deleted}
+
+
+def _decide_delete(pid: str, names: list, folder: str, gate: Callable, tier_of: Callable,
+                   do: Callable[[str], dict]) -> None:
+    text = delete_older_card(names)
+    detail = {"text": text, "what": f"delete {len(names)} older backup file(s) after making "
+                                    "a fresh one", "setting": "older backups", "to": folder,
+              "leaves_this_pc": False}
+    try:
+        v = gate(CARD_ACTION, detail, text)
+    except Exception as exc:
+        return _delete_finish(pid, "refused", f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    outcome = getattr(v, "outcome", None)
+    if vtier != "ask" or tier_of(CARD_ACTION) != "ask":
+        return _delete_finish(pid, "refused", f"the gate answered at tier {vtier!r}, which is "
+                                              f"not a person saying yes")
+    if not _person_said_yes(v):
+        if outcome in ("denied", "timed_out"):
+            return _delete_finish(pid, outcome)
+        return _delete_finish(pid, "refused", str(getattr(v, "reason", "refused"))[:200])
+    with _D_SWITCH:
+        with _D_LOCK:
+            withdrawn = pid in _D_STATE["withdrawn"]
+        if withdrawn:
+            return _delete_finish(pid, "withdrawn")
+        try:
+            done = do(folder)
+        except Exception as exc:
+            return _delete_finish(pid, "failed", type(exc).__name__)
+    fresh = done["fresh"]
+    _record_backup_outcome(True, name=fresh["name"], at=fresh["at"], counts=fresh["counts"])
+    _audit("backup.older_deleted", {"deleted": done["deleted"]})
+    _delete_finish(pid, "deleted", deleted=done["deleted"],
+                   fresh={"name": fresh["name"], "at": fresh["at"],
+                          "recovery_code": fresh["recovery_code"]})
+
+
+def request_delete_older(body=None, *, peer=None, local=None, here: Optional[bool] = None,
+                         gate: Optional[Callable] = None, tier_of: Optional[Callable] = None,
+                         spawn: Optional[Callable] = None,
+                         do: Optional[Callable[[str], dict]] = None) -> tuple:
+    """POST /api/backup/delete-older {}. PC only. 202 and ONE card (the same
+    `change_own_config` action the folder card uses). 409 when there is nothing
+    older to delete."""
+    gate = gate or _gate
+    tier_of = tier_of or _tier
+    spawn = spawn or _spawn
+    do = do or _delete_older_now
+    is_here = bool(here) if here is not None else _from_this_pc(peer, local)
+    if not is_here:
+        return 403, {"ok": False, "error": PC_ONLY, "pc_only": True}
+    st = _load_settings()
+    if not st["folder"]:
+        return 409, {"ok": False, "error": NO_FOLDER}
+    names = [r["name"] for r in list_backups(st["folder"])]
+    if not names:
+        return 409, {"ok": False, "error": "There are no backups in the folder to delete."}
+    t = tier_of(CARD_ACTION)
+    if t != "ask":
+        return 503, {"ok": False, "error": (
+            f"{CARD_ACTION} is tier {t!r} in jarvis-framework.toml; deleting backups needs a "
+            f"person to say yes, so it must be 'ask'")}
+    with _D_LOCK:
+        if _D_STATE["pending"]:
+            return 409, {"ok": False, "error": "A card to delete older backups is already "
+                                               "waiting - answer it first."}
+        pid = uuid.uuid4().hex
+        _D_STATE["pending"].update(id=pid, since=time.time())
+        _D_STATE["latest"]["id"] = pid
+    try:
+        spawn(lambda: _decide_delete(pid, names, st["folder"], gate, tier_of, do))
+    except Exception:
+        with _D_LOCK:
+            _D_STATE["pending"].clear()
+        return 503, {"ok": False, "error": "could not raise the approval card"}
+    return 202, {"ok": True, "waiting": True, "count": len(names),
+                 "message": "Waiting for your approval. Nothing is deleted unless you approve "
+                            "the card."}
+
+
+# ---------------------------------------------------------------------------
 #   Restore preview - counts and a date only, never content
 # ---------------------------------------------------------------------------
 
@@ -935,9 +1153,23 @@ RESTORE_LAST_WORDS = {
     "withdrawn": "You changed your mind before the card was answered, so nothing was "
                 "restored.",
     "refused": "The card could not be answered, so nothing was restored.",
-    "failed": "It was approved, but the restore itself failed, so your data was not "
-              "changed - the safety backup made just before it is still there.",
+    "failed": "It was approved, but the restore itself failed. Everything it had already "
+              "changed was put back, so your data is as it was - the safety backup made just "
+              "before it is still there.",
+    "failed_before": "It was approved, but the safety backup could not be made first, so "
+                     "nothing was restored and your data was not changed.",
+    "failed_partial": "It was approved, but the restore failed part-way AND putting things "
+                      "back did not fully work, so some of your files may now be the backup's "
+                      "and some may be as they were. Do not carry on as normal: your data as "
+                      "it was just before the restore is in the safety backup (its recovery "
+                      "code is shown once in this panel) - restore that one to get back to "
+                      "where you were.",
 }
+#: Added to "restored" when one thing could not be put back.
+KEY_WARNING = ("WARNING: the key that opens your restored chat history could not be put back "
+               "in Windows Credential Manager, so restored chats may not open. Restore again "
+               "after Windows Credential Manager works, or keep the chat-history key from "
+               "the PC the backup came from.")
 
 
 def restore_card(name: str, manifest: dict) -> str:
@@ -949,9 +1181,10 @@ def restore_card(name: str, manifest: dict) -> str:
         f"Backup: {name}",
         f"Made: {when_text}",
         "",
-        "This REPLACES your memory, chat history, review decks, settings and notes with what was saved "
-        "then. It only adds and overwrites - it never deletes anything you have added "
-        "since.",
+        "This REPLACES your memory and chat files, review decks, settings and notes with that day's "
+        "copies. Anything you added or changed in them since is lost - unless it is in the "
+        "safety backup Jarvis makes first. Only files the backup does not have at all are "
+        "left as they are.",
         "",
         "Before doing this, Jarvis will back up your CURRENT data first, with a fresh "
         "recovery code shown once, so this restore itself can be undone.",
@@ -964,7 +1197,8 @@ def restore_card(name: str, manifest: dict) -> str:
     ])
 
 
-def _restore_finish(pid: str, outcome: str, *, why: str = "", safety=None) -> None:
+def _restore_finish(pid: str, outcome: str, *, why: str = "", safety=None,
+                    message: Optional[str] = None, warning: str = "") -> None:
     with _R_LOCK:
         if _R_STATE["pending"].get("id") == pid:
             _R_STATE["pending"].clear()
@@ -973,8 +1207,9 @@ def _restore_finish(pid: str, outcome: str, *, why: str = "", safety=None) -> No
             return
         _R_STATE["last"].clear()
         _R_STATE["last"].update(outcome=outcome, why=why, at=time.time(),
-                                message=RESTORE_LAST_WORDS.get(outcome, ""),
-                                safety_backup=safety)
+                                message=(message if message is not None
+                                         else RESTORE_LAST_WORDS.get(outcome, "")),
+                                safety_backup=safety, warning=warning)
     _audit("backup.restore.card", {"outcome": outcome})
 
 
@@ -1013,16 +1248,43 @@ def _inside(root: Path, rel: str, *, flat: bool = False) -> Optional[Path]:
     return root.joinpath(*parts)
 
 
+class RestoreError(Exception):
+    """A restore that stopped. `state`: "unchanged" (nothing had been replaced
+    yet, or everything replaced was put back) or "partial" (putting back failed
+    too - some files may be the backup's and some the old ones)."""
+
+    def __init__(self, message: str, state: str = "unchanged"):
+        super().__init__(message)
+        self.state = state
+
+
 def _apply_restore(zip_bytes: bytes) -> dict:
-    """Writes the archive's files back. Additive/overwrite only - nothing
-    present now but absent from the backup is deleted. Returns a short
-    summary for the audit log (counts only). A name that would land
-    outside its own folder is skipped and counted (`_inside`)."""
+    """Writes the archive's files back. Only adds and overwrites: a file that
+    is present now but absent from the backup is left alone. Returns a short
+    summary for the audit log (counts only). A name that would land outside
+    its own folder is skipped and counted (`_inside`).
+
+    All-or-nothing, as far as a plain file system allows (2026-09-30 audit):
+      1. every file is read from the archive and written beside its place as a
+         hidden temp file first - a bad or full disk fails here, before
+         anything real is touched;
+      2. each real file is copied aside, then replaced in one step
+         (os.replace); a database's leftover -wal/-shm files (which belong to
+         the OLD database and would corrupt the restored one) are moved aside
+         too;
+      3. on ANY failure everything already replaced is put back and every temp
+         file removed (RestoreError.state says whether that worked).
+    Nothing here can pause the programs that have these files open: the
+    backend has no hook for that, so a restore should be followed by a restart
+    (the restore message says so)."""
     conf = _config_dir()
     conf.mkdir(parents=True, exist_ok=True)
     applied = {"databases": 0, "settings_files": 0, "notes_files": 0, "voice_files": 0,
-              "framework_toml": False, "chat_history_key": False, "study_decks_key": False,
-              "skipped": 0}
+               "framework_toml": False, "chat_history_key": False, "study_decks_key": False,
+               "skipped": 0, "chat_history_key_failed": False, "study_decks_key_failed": False}
+    plan: list = []              # (dest, data, is_database)
+    key_data = None
+    study_key_data = None
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         for info in zf.infolist():
             name = info.filename
@@ -1042,39 +1304,98 @@ def _apply_restore(zip_bytes: bytes) -> dict:
                 continue
             data = zf.read(info)
             if where is not None:
-                dest = where[1]
+                plan.append((where[1], data, where[0] == "databases"))
                 applied[where[0]] += 1
             elif name == "jarvis-framework.toml":
                 toml_dest = _toml_source()
-                dest = toml_dest if toml_dest is not None else (conf / name)
+                plan.append((toml_dest if toml_dest is not None else (conf / name), data, False))
                 applied["framework_toml"] = True
             elif name == "secrets/chat-history-key.b64":
-                try:
-                    import jarvis_token_store as ts
-                    import jarvis_chat_log
-                    ts.WindowsStore(target=jarvis_chat_log.KEY_TARGET).write(
-                        data.decode("ascii"))
-                    applied["chat_history_key"] = True
-                except Exception:
-                    pass
-                continue
+                key_data = data
             elif name == "secrets/study-decks-key.b64":
-                try:
-                    import jarvis_token_store as ts
-                    import jarvis_decks
-                    ts.WindowsStore(target=jarvis_decks.KEY_TARGET).write(data.decode("ascii"))
-                    applied["study_decks_key"] = True
-                    jarvis_decks.forget_key()   # the running store must reopen with this key
-                except Exception:
-                    pass
-                continue
-            else:
-                continue
+                study_key_data = data
+    tag = uuid.uuid4().hex[:8]
+    staged: list = []            # (dest, temp, is_database)
+    swapped: list = []           # (dest, copy of the old file or None)
+    aside: list = []             # (path, where it was moved to) - wal/shm
+    try:
+        for dest, data, is_db in plan:
             dest.parent.mkdir(parents=True, exist_ok=True)
-            tmp = dest.parent / f".{dest.name}.{uuid.uuid4().hex[:8]}.tmp"
+            tmp = dest.parent / f".{dest.name}.{tag}.tmp"
+            staged.append((dest, tmp, is_db))       # listed first: cleaned up even if half-written
             tmp.write_bytes(data)
+    except BaseException as exc:
+        _remove_all([t for _d, t, _i in staged])
+        raise RestoreError(f"could not prepare the files ({type(exc).__name__})") from exc
+    try:
+        for dest, tmp, is_db in staged:
+            old = None
+            if dest.exists():
+                old = dest.parent / f".{dest.name}.{tag}.old"
+                shutil.copyfile(dest, old)
+            swapped.append((dest, old))
             os.replace(tmp, dest)
+            if is_db:
+                for suffix in ("-wal", "-shm"):
+                    side = dest.parent / (dest.name + suffix)
+                    if side.exists():
+                        moved = dest.parent / f".{side.name}.{tag}.old"
+                        shutil.copyfile(side, moved)
+                        aside.append((side, moved))
+                        side.unlink()
+    except BaseException as exc:
+        problems = _put_back(swapped, aside)
+        _remove_all([t for _d, t, _i in staged])
+        raise RestoreError(f"could not replace a file ({type(exc).__name__})",
+                           "partial" if problems else "unchanged") from exc
+    _remove_all([old for _d, old in swapped if old] + [m for _p, m in aside])
+    if key_data is not None:
+        try:
+            import jarvis_token_store as ts
+            import jarvis_chat_log
+            ts.WindowsStore(target=jarvis_chat_log.KEY_TARGET).write(key_data.decode("ascii"))
+            applied["chat_history_key"] = True
+        except Exception:
+            # Not swallowed: the files ARE restored, but chats written with the
+            # backup's key will not open without it. The outcome says so.
+            applied["chat_history_key_failed"] = True
+    if study_key_data is not None:
+        try:
+            import jarvis_token_store as ts
+            import jarvis_decks
+            ts.WindowsStore(target=jarvis_decks.KEY_TARGET).write(study_key_data.decode("ascii"))
+            applied["study_decks_key"] = True
+            jarvis_decks.forget_key()   # the running store must reopen with this key
+        except Exception:
+            applied["study_decks_key_failed"] = True
     return applied
+
+
+def _remove_all(paths) -> None:
+    for pth in paths:
+        try:
+            Path(pth).unlink()
+        except OSError:
+            pass
+
+
+def _put_back(swapped: list, aside: list) -> list:
+    """Undoes a half-finished swap. Returns what could NOT be put back."""
+    problems = []
+    for dest, old in reversed(swapped):
+        try:
+            if old is not None:
+                os.replace(old, dest)
+            elif Path(dest).exists():
+                Path(dest).unlink()
+        except OSError as exc:
+            problems.append((str(dest), type(exc).__name__))
+    for side, moved in aside:
+        try:
+            os.replace(moved, side)
+        except OSError as exc:
+            problems.append((str(side), type(exc).__name__))
+    return problems
 
 
 def _decide_restore(pid: str, name: str, code: str, manifest: dict, zip_bytes: bytes,
@@ -1108,17 +1429,24 @@ def _decide_restore(pid: str, name: str, code: str, manifest: dict, zip_bytes: b
             safety = safety_fn()
         except Exception as exc:
             return _restore_finish(pid, "failed", why=f"the safety backup failed "
-                                                       f"({type(exc).__name__})")
+                                                       f"({type(exc).__name__})",
+                                   message=RESTORE_LAST_WORDS["failed_before"])
+        safety_out = {"name": safety["name"], "at": safety["at"],
+                      "recovery_code": safety["recovery_code"]}
         try:
             applied = apply_fn(zip_bytes)
         except Exception as exc:
-            return _restore_finish(pid, "failed", why=type(exc).__name__,
-                                   safety={"name": safety["name"], "at": safety["at"],
-                                           "recovery_code": safety["recovery_code"]})
+            # "Your data was not changed" is only said when that is true.
+            partial = getattr(exc, "state", "unchanged") == "partial"
+            return _restore_finish(
+                pid, "failed", why=type(exc).__name__, safety=safety_out,
+                message=RESTORE_LAST_WORDS["failed_partial" if partial else "failed"])
     _audit("backup.restored", {"applied": applied})
-    _restore_finish(pid, "restored",
-                    safety={"name": safety["name"], "at": safety["at"],
-                            "recovery_code": safety["recovery_code"]})
+    key_failed = bool(isinstance(applied, dict) and applied.get("chat_history_key_failed"))
+    _restore_finish(pid, "restored", safety=safety_out,
+                    warning=KEY_WARNING if key_failed else "",
+                    message=RESTORE_LAST_WORDS["restored"] + (" " + KEY_WARNING if key_failed
+                                                              else ""))
 
 
 def request_restore(body, *, peer=None, local=None, here: Optional[bool] = None,
@@ -1213,7 +1541,11 @@ def view(*, here: bool = False) -> dict:
     # above, never from inside it (that would deadlock: _R_LOCK is a plain
     # Lock, not reentrant).
     last_restore = take_restore_result()
+    with _D_LOCK:
+        delete_pending = dict(_D_STATE["pending"]) if _D_STATE["pending"] else None
+    last_delete = take_delete_older_result()
     return {"available": True, "folder": st["folder"], "keep": KEEP,
+           "pending_delete_older_card": delete_pending, "last_delete_older": last_delete,
            "last_backup": last_backup, "pending_folder_card": pending,
            "last_folder_card": last_folder_card, "pending_restore_card": restore_pending,
            "last_restore": last_restore, "erase_limit": ERASE_LIMIT}
@@ -1258,6 +1590,8 @@ def handle_post(route: str, body, *, peer=None, local=None) -> tuple:
         return preview_restore(body, peer=peer, local=local, here=here)
     if route == RESTORE_ROUTE:
         return request_restore(body, peer=peer, local=local, here=here)
+    if route == DELETE_ROUTE:
+        return request_delete_older(body, peer=peer, local=local, here=here)
     return 404, {"ok": False, "error": "not found"}
 
 
@@ -1302,7 +1636,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 
     def do_POST(self):
         route = urlsplit(str(getattr(self, "path", "") or "")).path.rstrip("/")
-        if route not in (FOLDER_ROUTE, NOW_ROUTE, PREVIEW_ROUTE, RESTORE_ROUTE):
+        if route not in (FOLDER_ROUTE, NOW_ROUTE, PREVIEW_ROUTE, RESTORE_ROUTE, DELETE_ROUTE):
             return post0(self)
         if not _allowed(self):
             return None
@@ -1334,6 +1668,8 @@ def _reset_for_tests() -> None:
         _R_STATE.update(pending={}, withdrawn=set(), last={}, latest={})
     with _B_LOCK:
         _B_STATE["last"] = {}
+    with _D_LOCK:
+        _D_STATE.update(pending={}, withdrawn=set(), last={}, latest={})
 
 
 if __name__ == "__main__":

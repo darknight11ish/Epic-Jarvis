@@ -271,6 +271,34 @@ LOOSEN_ACTION = "loosen_what_asks_first"
 #: the others.
 TOOLS_SWITCHABLE = ("calendar_read", "email_read", "notes_search", "home_read")
 
+#: TOOLS_SWITCHABLE holds the four rows' GATE ACTION names (what the pages and
+#: the approval card call them). [tools].enabled holds the model's TOOL names,
+#: and for one row the two differ: the gate action "email_read" is the tool
+#: "email_check" (jarvis_agent.TOOLS). Writing the action name into
+#: [tools].enabled switched nothing on (found 2026-09-30 by the settings
+#: audit). This maps each row to the tool name the model is really offered.
+TOOL_NAME = {"calendar_read": "calendar_read", "email_read": "email_check",
+             "notes_search": "notes_search", "home_read": "home_read"}
+#: Names an older build saved into [tools].enabled by mistake. Read as the real
+#: tool, so an owner who switched email on before the fix keeps what they chose.
+LEGACY_TOOL_NAMES = {"email_read": "email_check"}
+#: The real tool names of the four rows.
+SWITCHABLE_TOOL_NAMES = tuple(TOOL_NAME[a] for a in TOOLS_SWITCHABLE)
+
+
+def real_tool(name: str) -> str:
+    """The tool name behind a row id (or a legacy saved name)."""
+    return TOOL_NAME.get(name) or LEGACY_TOOL_NAMES.get(name) or name
+
+
+def normalise_enabled(names) -> set:
+    """[tools].enabled as a set, with legacy saved names read as the real tool."""
+    out = set(names or [])
+    for old, new in LEGACY_TOOL_NAMES.items():
+        if old in out:
+            out.add(new)
+    return out
+
 #: The approval card for offering one of them. jarvis_owner_check.
 #: PC_ONLY_ACTIONS holds the same name.
 ENABLE_TOOL_ACTION = "enable_reading_tool"
@@ -286,7 +314,7 @@ HARD_LIMITS = frozenset({
     "control_browser", "home_control", "post_to_external_service", "open_public_tunnel",
     "search_the_web", "web_research", "research_authenticated",
     "write_notes_after_outside_text", "change_own_config", "modify_own_code",
-    LOOSEN_ACTION, "stop_asking_before_every_web_search", "learning_enable",
+    LOOSEN_ACTION, "stop_asking_before_every_web_search", "web_search_enable", "learning_enable",
     "learning_auto_enable", "learning_sensitive_enable", "history_enable",
     "second_card_enable", "second_card_browser_enable", "second_card_combined_enable",
     "second_card_third_assign", "screen_picture_enable", "obscura_enable",
@@ -296,7 +324,7 @@ HARD_LIMITS = frozenset({
     "agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool",
     "watch_notifications_enable", ENABLE_TOOL_ACTION, "restore_backup", "check_tool_updates",
     "app_merge_change",
-    "run_plan", "phone_notifications_read", "topic_loosen", "referee_tick",
+    "run_plan", "phone_notifications_read", "browser_form_submit", "topic_loosen", "referee_tick",
     "chat_tags_suggest_on", "chat_tag_suggest",
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
     "register_approval_key",
@@ -309,14 +337,14 @@ HARD_LIMITS = frozenset({
 MUST_ASK = frozenset({
     "send_email", "tidy_inbox", "run_shell_on_host", "control_computer", "control_phone", "control_browser",
     "home_control", "web_research", "research_authenticated", "write_notes_after_outside_text",
-    "search_the_web", "stop_asking_before_every_web_search", "schedule_repeat",
+    "search_the_web", "stop_asking_before_every_web_search", "web_search_enable", "schedule_repeat",
     "models_create", "second_card_enable", "second_card_browser_enable",
     "second_card_combined_enable", "second_card_third_assign", "screen_picture_enable",
     "obscura_enable", "big_model_enable", "learning_enable", "learning_auto_enable", "learning_sensitive_enable", "history_enable",
     "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
     "restore_backup", "check_tool_updates", "run_plan", "phone_notifications_read",
-    "topic_loosen", "referee_tick", "chat_tags_suggest_on", "chat_tag_suggest",
+    "browser_form_submit", "topic_loosen", "referee_tick", "chat_tags_suggest_on", "chat_tag_suggest",
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
     "register_approval_key", "app_merge_change",
     "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
@@ -342,8 +370,9 @@ GROUPS = (
                   "fixed:app_tasks"]),
     ("Email and calendar", ["draft_email", "send_email", "tidy_inbox", "edit_calendar_event",
                             "delete_calendar_event"]),
-    ("The internet", ["search_the_web", "web_research", "research_authenticated",
-                      "control_browser", "obscura_enable", "post_to_external_service",
+    ("The internet", ["search_the_web", "web_search_enable", "web_research", "research_authenticated",
+                      "control_browser", "browser_form_submit", "obscura_enable",
+                      "post_to_external_service",
                       "open_public_tunnel",
                       "news_read", "page_read", "github_read", "chatbot_session",
                       "support_chat", "support_offer", "youtube_captions_read", "quiz_cloud_grade",
@@ -1026,12 +1055,13 @@ TOOL_ENABLE_LAST_WORDS = {
 def tools_enabled_set() -> set:
     try:
         cfg = fw.load_framework() if fw is not None else {}
-        return set((cfg.get("tools") or {}).get("enabled") or [])
+        return normalise_enabled((cfg.get("tools") or {}).get("enabled") or [])
     except Exception:
         return set()
 
 
 def tool_enable_card(tool: str) -> str:
+    real = real_tool(tool)
     phrase = _title(tool)
     phrase = phrase[:1].lower() + phrase[1:]
     return "\n".join([
@@ -1039,7 +1069,7 @@ def tool_enable_card(tool: str) -> str:
         "",
         f"From now on the AI model may use this tool when it decides to - it can {phrase}. "
         f"This changes one line of your settings file on this PC (jarvis-framework.toml): "
-        f"\"{tool}\" is added to [tools].enabled. Nothing else in it changes.",
+        f"\"{real}\" is added to [tools].enabled. Nothing else in it changes.",
         "",
         "This is separate from whether it asks you first: that is set above, in \"Ask me "
         "first\", and is unchanged by this card.",
@@ -1130,6 +1160,8 @@ def set_tools_enabled(tool: str, on: bool, *, path: Optional[Path] = None) -> di
     """Add or remove ONE tool from [tools].enabled, atomically - the same
     write discipline as set_tier (parse, change, parse again and compare,
     write to a temporary file, move into place). Raises TierFileError."""
+    legacy = tool if tool in LEGACY_TOOL_NAMES else None
+    tool = real_tool(tool)
     p = path or _toml_path()
     if p is None or not Path(p).is_file():
         raise TierFileError("Jarvis could not find your settings file "
@@ -1147,6 +1179,11 @@ def set_tools_enabled(tool: str, on: bool, *, path: Optional[Path] = None) -> di
         except UnicodeDecodeError:
             raise TierFileError(TOOLS_HAND_EDIT)
         new = rewrite_tools(text, tool, on)
+        # An older build wrote the row's action name ("email_read") instead of
+        # the tool's name. Whatever the owner does now, that stale entry goes.
+        for old, real in LEGACY_TOOL_NAMES.items():
+            if real == tool:
+                new = rewrite_tools(new, old, False)
         if new == text:
             _reload()
             return {"ok": True, "changed": False}
@@ -1220,7 +1257,7 @@ def _tools_decide(pid: str, tool: str, gate: Callable, tier_of: Callable,
         if withdrawn:
             return _tools_finish(pid, tool, "withdrawn")
         try:
-            write(tool, True)
+            write(real_tool(tool), True)
         except TierFileError as exc:
             return _tools_finish(pid, tool, "failed", str(exc))
         except Exception as exc:
@@ -1249,7 +1286,7 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
     tool, enabled = body["tool"], body["enabled"]
     if tool not in TOOLS_SWITCHABLE:
         return 403, {"ok": False, "error": TOOLS_NOT_ON_LIST}
-    now_on = tool in tools_enabled_set()
+    now_on = real_tool(tool) in tools_enabled_set()
     if not enabled:
         # OFF: at once, never a card - it only narrows what the model may do.
         with _T_SWITCH:
@@ -1262,7 +1299,7 @@ def request_tool_enable(body, *, peer=None, local=None, gate: Optional[Callable]
                 return 200, {"ok": True, "changed": False, "tools": tools_status(here=True),
                              "message": "The AI model is already not offered this tool."}
             try:
-                write(tool, False)
+                write(real_tool(tool), False)
             except TierFileError as exc:
                 return 409, {"ok": False, "error": str(exc) + "."}
             except Exception as exc:
@@ -1314,7 +1351,7 @@ def tools_status(*, here: bool = False) -> dict:
     for tool in TOOLS_SWITCHABLE:
         waiting = bool(pending) and pending.get("tool") == tool
         last = dict(last_all) if last_all.get("tool") == tool else None
-        items.append({"id": tool, "title": _title(tool), "on": tool in enabled,
+        items.append({"id": tool, "title": _title(tool), "on": real_tool(tool) in enabled,
                       "waiting": waiting, "last": last})
     return {"label": TOOLS_LABEL, "detail": TOOLS_DETAIL, "can_enable": bool(here),
             "items": items}

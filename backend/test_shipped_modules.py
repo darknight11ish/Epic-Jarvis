@@ -96,6 +96,9 @@ THIRD_PARTY = {
 # Packages in requirements.txt that no shipped module imports BY NAME,
 # because the standard library loads them itself. Each says who uses it.
 INDIRECT = {
+    "pillow": "jarvis_form_review.py (scales the one picture of a filled-in form) and "
+              "jarvis_screen_picture.py load it by name with importlib, inside a try, so "
+              "the import check above cannot see it (PIL.Image)",
     "tzdata": "the standard library's zoneinfo reads it on Windows, which has no "
               "time-zone data of its own (jarvis_calendar.py's event times)",
     "sherpa-onnx-core": "sherpa-onnx loads it (its native library); named so the "

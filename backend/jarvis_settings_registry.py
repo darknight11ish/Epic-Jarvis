@@ -53,7 +53,7 @@ from this file, so a new section needs a phone decision too. Said plainly here r
 claimed as a feature: a per-app wording would need the backend to read
 `X-Jarvis-Client` for this, which it does not do today.
 
-ADJUSTABLE covers eleven settings behind a SINGLE existing boolean or
+ADJUSTABLE covers a dozen settings behind a SINGLE existing boolean or
 choice function, picked because each already has a proven `handle_*`/
 `request_*` entry point this file can call exactly as the REST route does:
   * web_search_provider  - jarvis_search.use()            (already a quick
@@ -66,6 +66,8 @@ choice function, picked because each already has a proven `handle_*`/
   * learn_sensitive_topics- jarvis_auto_learn.handle_post()
   * lights_without_card   - jarvis_asks_first.handle_lights()
   * ask_before_every_search - jarvis_search.request_ask_every_time()
+  * web_search            - jarvis_search.request_enabled() (2026-09-30): OFF at once,
+                            ON is one card (web_search_enable)
   * smartwatch_notifications - jarvis_watch_notify.request()
   * phone_notifications   - jarvis_phone_notifications.request() (2026-09-28)
   * screen_picture        - jarvis_screen_picture.request() (2026-09-29): ON is one card
@@ -155,6 +157,9 @@ class Section:
 #: nearest equivalent so one spoken phrase works on both apps.
 SECTIONS: tuple = (
     Section("connection", ("connection", "the connection settings", "where jarvis is running")),
+    # Paired devices (docs/PAIRING-DESIGN.md section 7.2): a card on both apps
+    # (settings.html id="devices"; the phone's item(key = "devices")).
+    Section("devices", ("devices", "paired devices", "my devices", "my paired devices")),
     Section("faq", ("the faq", "frequently asked questions", "help")),
     Section("appearance-card", ("appearance", "the theme", "how jarvis looks", "the face")),
     # "Animal options" (2026-09-28): every animal-face option in one place.
@@ -187,16 +192,24 @@ SECTIONS: tuple = (
     Section("reach", ("what jarvis can reach", "what jarvis can access")),
     Section("email-sending", ("sending email", "email sending settings")),
     Section("about", ("about jarvis", "about")),
+    # "Hang and crash notes": inside "More options" on the desktop (its own
+    # <section id="crash-notes">). The phone has no such list - its own
+    # crash screen only appears after a crash - so OpenPlace.PC_ONLY says so.
+    Section("crash-notes", ("crash notes", "hang and crash notes", "the crash notes"),
+            app="desktop"),
     Section("backend-supports", ("what this backend supports", "backend capabilities"),
             app="desktop"),
     Section("watch-notify", ("smartwatch notifications", "watch notifications"),
+            app="phone"),
+    # The phone's Quick Settings tiles (SettingsScreen.kt item "quick-tiles").
+    Section("quick-tiles", ("quick tiles", "quick settings tiles", "the quick tiles"),
             app="phone"),
     Section("phone-notify", ("phone notifications", "reading phone notifications",
                             "notifications on my phone"), app="phone"),
     # "Look at this and Watch with me" (2026-09-29: its own card on the
     # desktop, holding the Never look at list and picture mode; on the phone
     # its own Settings row for picture mode).
-    Section("screen-look", ("look at this and watch with me", "looking at my screen",
+    Section("screen-look", ("look at this and watch with me", "look at this", "watch with me", "looking at my screen",
                             "watch with me settings", "the screen settings")),
     # The headless browser, Obscura (2026-09-29): its own card on the desktop
     # and its own Settings row on the phone - the switch, which browser Jarvis
@@ -310,6 +323,19 @@ def set_ask_every_search(on: bool, *, peer=None, local=None) -> Outcome:
     except Exception:
         return _missing("web search")
     code, out = WS.request_ask_every_time(bool(on))
+    return _say(code, out)
+
+
+# --- web search on/off (jarvis_search.py, 2026-09-30) ----------------------
+
+def set_web_search(on: bool, *, peer=None, local=None) -> Outcome:
+    """OFF at once; ON raises the one approval card (web_search_enable) - the
+    same jarvis_search.request_enabled the Settings switch calls."""
+    try:
+        import jarvis_search as WS
+    except Exception:
+        return _missing("web search")
+    code, out = WS.request_enabled(bool(on))
     return _say(code, out)
 
 
@@ -551,6 +577,10 @@ BOOL_SETTINGS: tuple = (
                ("asking before every web search", "ask before every search",
                 "asking before every search"),
                "web-search", set_ask_every_search),
+    BoolSetting("web_search",
+               ("web search", "searching the web", "the web search", "web searching",
+                "searching the internet"),
+               "web-search", set_web_search),
     BoolSetting("smartwatch_notifications",
                ("smartwatch notifications", "watch notifications",
                 "notifications on my watch"),

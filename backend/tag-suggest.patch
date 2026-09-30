@@ -1,7 +1,7 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -172,5 +172,7 @@
-     "obscura_enable",  # jarvis_browser_engine.py acts only on tier "ask": ONE card to turn on the headless browser, Obscura (browser-engine.patch)
+@@ -174,5 +174,7 @@
+     "web_search_enable",  # jarvis_search.py acts only on tier "ask": ONE card to turn web search back on after the owner switched it off (web-search-switch.patch)
      "topic_loosen",  # jarvis_topics.py acts only on tier "ask": ONE card to turn a private topic back on (topics.patch)
      "referee_tick",  # jarvis_referee.py acts only on tier "ask": ONE card per goal step whose number reached its target; only the owner's tap ticks it (referee.patch)
 +    "chat_tags_suggest_on",  # jarvis_tag_suggest.py acts only on tier "ask": ONE card to let the local model read a few old chats at night to suggest tags (tag-suggest.patch)
