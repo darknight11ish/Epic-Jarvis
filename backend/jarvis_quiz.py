@@ -129,6 +129,7 @@ CLASSES = {
                            "or split it in parts."),
     "bad_count": (400, "Ask for between 1 and 10 questions."),
     "nothing_to_keep": (400, "Tick at least one question to keep."),
+    "bad_request": (400, "That request was not understood. Nothing was kept."),
     "bad_mode": (400, "The quiz mode is either text or Spanish practice."),
     "bad_level": (400, "Pick a level from A1 to C2."),
     "bad_exercise": (400, "Pick translate, fill the blank, finish the sentence, or mixed."),
@@ -140,7 +141,7 @@ CLASSES = {
     "answer_empty": (400, "Type an answer first."),
     "answer_too_long": (400, "That answer is too long. Keep it under 2,000 characters."),
     "model_unavailable": (503, "The model on this PC did not answer in a way Jarvis could use. "
-                               "Nothing was lost - try again."),
+                               "Nothing was changed - try again."),
 }
 
 
@@ -298,11 +299,14 @@ def _fence(name: str, text: str, word: str) -> str:
 
 
 def _norm(s: str) -> str:
-    return re.sub(r"\s+", " ", s).strip().casefold()
+    # NFC first: pasted text may spell an accented letter as a letter plus a
+    # separate accent mark (NFD); the model's copy of it is usually one glyph.
+    return re.sub(r"\s+", " ", unicodedata.normalize("NFC", s)).strip().casefold()
 
 
 def _clean_line(s, limit: int) -> str:
-    return re.sub(r"\s+", " ", s).strip()[:limit] if isinstance(s, str) else ""
+    return (re.sub(r"\s+", " ", unicodedata.normalize("NFC", s)).strip()[:limit]
+            if isinstance(s, str) else "")
 
 
 def write_questions(text: str, count: int) -> list:
@@ -476,10 +480,31 @@ def mark_blank(answer: str, expected: str, accepted=()) -> tuple:
     return "not_yet", f"Not this time. The word is `{expected}`."
 
 
+def _window(sentence: str, limit: int) -> str:
+    """`sentence` cut to at most `limit` characters around its first blank, on
+    word edges, so a long sentence never loses the blank to the length limit."""
+    if len(sentence) <= limit:
+        return sentence
+    at = sentence.find(BLANK)
+    if at < 0:
+        return sentence[:limit]
+    room = limit - len(BLANK)
+    start = max(0, min(at - room // 2, len(sentence) - limit))
+    end = min(len(sentence), start + limit)
+    if start > 0:
+        nxt = sentence.find(" ", start)
+        start = nxt + 1 if 0 <= nxt < at else start
+    if end < len(sentence):
+        prv = sentence.rfind(" ", at + len(BLANK), end)
+        end = prv if prv > 0 else end
+    return sentence[start:end].strip()
+
+
 def _cut_blank(passage: str, word: str):
     """(sentence with the word hidden, the word as the sentence spells it), or
     None if the word is not a whole word of the sentence. Every copy of that
     word is hidden, so the sentence does not give the answer away."""
+    passage = unicodedata.normalize("NFC", passage)
     w = _clean_line(word, WORD_MAX)
     spans = [(m.start(), m.end(), m.group()) for m in _WORD_RX.finditer(passage)]
     hit = [x for x in spans if x[2] == w] or [x for x in spans if x[2].casefold() == w.casefold()]
@@ -543,6 +568,7 @@ def write_spanish(text, level: str, exercise: str, topic: str, count: int) -> li
             if cut is None:
                 continue
             prompt, key = cut
+            prompt = _window(prompt, PROMPT_MAX)
             if haystack is None and isinstance(it.get("accepted"), list):
                 for a in it["accepted"]:
                     a = _clean_line(a, WORD_MAX)
@@ -820,8 +846,11 @@ def _keep_cards(s: _Quiz, keep) -> tuple:
                       "kind": q["kind"], "level": s.level or "",
                       "key_source": (s.key_source or "") if s.mode == "spanish" else ""})
     deck, new_deck = keep.get("deck"), keep.get("new_deck")
-    spec = {"deck": deck if isinstance(deck, str) else None,
-            "new_deck": new_deck if isinstance(new_deck, str) else None}
+    if (deck is not None and not isinstance(deck, str)) \
+            or (new_deck is not None and not isinstance(new_deck, str)):
+        raise QuizError("bad_request")
+    spec = {"deck": deck,
+            "new_deck": new_deck}
     return spec, cards
 
 
@@ -1003,7 +1032,7 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     do_POST._jarvis_quiz = True
     handler_cls.do_GET = do_GET
     handler_cls.do_POST = do_POST
-    return "  quiz       Quiz me on a text (in memory only, nothing saved)"
+    return "  quiz       Quiz me on a text (in memory only; only Keep saves, into a deck)"
 
 
 def _reset_for_tests() -> None:
