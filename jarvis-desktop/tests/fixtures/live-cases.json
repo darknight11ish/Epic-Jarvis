@@ -197,7 +197,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_on": {
@@ -264,7 +264,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_24_min": {
@@ -331,7 +331,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_card": {
@@ -398,7 +398,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_hint": {
@@ -465,7 +465,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_other_voices": {
@@ -532,7 +532,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_voice_trouble": {
@@ -599,7 +599,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_muted": {
@@ -666,7 +666,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_call": {
@@ -733,7 +733,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_quiet_warn": {
@@ -800,7 +800,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_before_warn": {
@@ -867,7 +867,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_ending_soon": {
@@ -934,7 +934,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_time_up": {
@@ -1001,7 +1001,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_fresh": {
@@ -1068,7 +1068,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_quiet": {
@@ -1135,7 +1135,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_quiet_long_ago": {
@@ -1202,7 +1202,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "desktop_on": {
@@ -1269,7 +1269,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "desktop_4_min": {
@@ -1336,7 +1336,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "desktop_mic_in_use": {
@@ -1403,7 +1403,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "desktop_stopped": {
@@ -1470,7 +1470,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "desktop_stopped_long_ago": {
@@ -1537,7 +1537,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "desktop_cards_unknown": {
@@ -1604,7 +1604,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_app_lock": {
@@ -1671,7 +1671,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_before_crisis": {
@@ -1738,7 +1738,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_crisis_near_end": {
@@ -1805,7 +1805,7 @@
       "end_on": "app_lock",
       "camera": {
         "ready": false,
-        "why": "The camera needs the second graphics card (the 12 GB one) and a passed photo test on this PC. Until then it stays off."
+        "why": "The camera needs an extra graphics card with its Pictures switch on and a passed photo test on this PC. Until then it stays off."
       }
     },
     "phone_camera_ready": {

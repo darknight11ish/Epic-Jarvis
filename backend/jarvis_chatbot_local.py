@@ -30,11 +30,12 @@ TWO VERSIONS, THE SAME CHECK THE CORE USES (jarvis_chatbot.choose_tier)
   * Both graphics cards (the core's full version: [chatbot] full_version on
     AND the second card's "Longer conversations" lane running): the other
     AI runs in the second card's Ollama - the lane jarvis_second_card
-    starts, pinned to the 12 GB card. That lane holds one model at a time
+    starts, pinned to that card (12 GB in the owner's plan; a 10 GB or 8 GB
+    card is handled too - see lane_max_bytes). That lane holds one model at a time
     (OLLAMA_MAX_LOADED_MODELS=1), so when the chosen model is not the
     lane's own model, the card swaps between the two every message (a few
-    seconds each; the card says so). A model bigger than LANE_MAX_BYTES on
-    disk is refused: it would not fit the 12 GB card with room for its
+    seconds each; the card says so). A model bigger than lane_max_bytes() on
+    disk is refused: it would not fit that card with room for its
     conversation.
   * One graphics card (the limited version): the 8 GB card has no room for
     a second model beside the everyday one (docs/MODEL-TOPOLOGY.md: at 16K
@@ -85,8 +86,16 @@ MODEL_KEY = "local_model"
 LOCAL_NUM_CTX = 8192
 #: The biggest model file allowed on the 12 GB card (about 9 GiB of weights,
 #: leaving room for its conversation and the runtime: MODEL-TOPOLOGY's
-#: "Qwen 3 14B Q4_K_M ... 8.42 GiB" is the largest it lists as fitting).
+#: "Qwen 3 14B Q4_K_M ... 8.42 GiB" is the largest it lists as fitting). This
+#: is only the answer when the card's real memory cannot be read: the limit is
+#: normally worked out from the card itself (lane_max_bytes below), because a
+#: 10 GB or 8 GB card cannot hold 9 GiB of weights.
 LANE_MAX_BYTES = 9 * 1024 ** 3
+#: What is kept free on the card for the conversation and the runtime: the
+#: 12 GB card's own 9 GiB limit is exactly 12 GiB minus this.
+LANE_HEADROOM_BYTES = 3 * 1024 ** 3
+#: Never allow less than this, whatever the card says.
+LANE_MIN_BYTES = 1024 ** 3
 #: The longest wait for one answer, once the request is made. Inside the
 #: driver's own reply timeout (jarvis_chatbot.REPLY_TIMEOUT), which does not
 #: count the time spent first waiting for the owner's own chat
@@ -205,6 +214,34 @@ class Place:
             words, swaps
 
 
+def _lane_card_mb() -> Optional[int]:
+    """Memory (MB) of the SMALLEST capable card the second-card lanes can sit
+    on (the second card, and a third if there is one), so a model that would
+    not fit either is never let through. None when it cannot be read. Only asks
+    jarvis_second_card.detect() and extra_lanes() - it starts and wakes
+    nothing. Replaced in tests."""
+    try:
+        import jarvis_second_card as S
+        det = S.detect()
+        rows = [det.get("second")] + list(S.extra_lanes(det) or [])
+        mbs = [int(r["total_mb"]) for r in rows
+               if isinstance(r, dict) and isinstance(r.get("total_mb"), (int, float))
+               and not isinstance(r.get("total_mb"), bool) and r["total_mb"] > 0]
+        return min(mbs) if mbs else None
+    except Exception:
+        return None
+
+
+def lane_max_bytes() -> int:
+    """The biggest model file allowed on the lane's card: the card's real memory
+    minus LANE_HEADROOM_BYTES (a 12 GB card: 9 GiB, as before; 10 GB: about 7;
+    8 GB: about 5). LANE_MAX_BYTES when the memory cannot be read."""
+    mb = _lane_card_mb()
+    if not mb:
+        return LANE_MAX_BYTES
+    return max(LANE_MIN_BYTES, int(mb) * 1024 ** 2 - LANE_HEADROOM_BYTES)
+
+
 def placement(model: str) -> tuple:
     """(Place or None, problem). The core's own version check decides."""
     if not model:
@@ -223,7 +260,7 @@ def placement(model: str) -> tuple:
     if tid == CB.TWO_CARDS:
         same = _same(model, lane_model)
         num_ctx = int(getattr(t, "num_ctx", 0) or LOCAL_NUM_CTX) if same else LOCAL_NUM_CTX
-        words = (f"{model}, on your second graphics card"
+        words = (f"{model}, on the graphics card that runs Jarvis's longer conversations"
                  + ("" if same else f" (that card holds one model at a time, so it swaps "
                                     f"between {model} and Jarvis's own {lane_model} every "
                                     f"message, a few seconds each)"))
@@ -251,7 +288,7 @@ def ready() -> str:
         # may run there; the factory decides for real when the conversation
         # opens, and stops in plain words before anything is sent if the
         # lane is not running and the model is not the everyday one.
-        _register(f"{model}, on your second graphics card while its lane is running "
+        _register(f"{model}, on the extra graphics card while its lane is running "
                   f"(if it is not, only Jarvis's everyday model can be used, and a "
                   f"conversation with another one stops before anything is sent)")
         return ""
@@ -405,8 +442,8 @@ class LocalChatbot(CB.Adapter):
             raise LocalUnavailable(f"\"{self.model}\" is not on this PC (Ollama does not list "
                                    f"it). Jarvis never downloads a model for this - choose one "
                                    f"that `ollama list` shows.", "not_installed")
-        if self.place.tier == CB.TWO_CARDS and models.get(name, 0) > LANE_MAX_BYTES:
-            raise LocalUnavailable(f"\"{self.model}\" is too big for the second graphics card "
+        if self.place.tier == CB.TWO_CARDS and models.get(name, 0) > lane_max_bytes():
+            raise LocalUnavailable(f"\"{self.model}\" is too big for the extra graphics card "
                                    f"with room for a conversation. Choose a smaller model.",
                                    "too_big")
         self._opened = True

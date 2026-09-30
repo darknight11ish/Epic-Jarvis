@@ -16,11 +16,11 @@
 +    # 2026-09-29: "add it as a feature that can be enabled or disabled"). ONE
 +    # card to let "Look at this" and "Watch with me" also look at the PICTURE
 +    # of the screen, slowly, with a small model that runs on the processor
-+    # (never the graphics card) in its own copy of Ollama that only this PC can
++    # (never the graphics card; a running Pictures card lane goes first, 2026-09-30) in its own copy of Ollama that only this PC can
 +    # reach. The picture is blacked out for secrets first and is never saved;
 +    # nothing leaves this PC; the model itself is downloaded by the owner's own
 +    # pasted line, never by this card. Turning it off again is instant.
-+    "screen_picture_enable": ("yes", "local", "lets \"Look at this\" and \"Watch with me\" also look at the picture of your screen, slowly, using a small model in a separate copy of Ollama that runs on this PC's processor (never the graphics card) and only this PC can reach (127.0.0.1); secrets in the picture are blacked out first, nothing is saved or sent anywhere, the model is downloaded by you, not by this card, and turning it off again is instant"),
++    "screen_picture_enable": ("yes", "local", "lets \"Look at this\" and \"Watch with me\" also look at the picture of your screen, slowly, using a small model in a separate copy of Ollama that runs on this PC's processor - or, when you have turned on Pictures on an extra graphics card and it is running, that card's picture model is used instead - and only this PC can reach (127.0.0.1); secrets in the picture are blacked out first, nothing is saved or sent anywhere, the model is downloaded by you, not by this card, and turning it off again is instant"),
  }
  
  _UNKNOWN_RISK = ("no", "outbound",
