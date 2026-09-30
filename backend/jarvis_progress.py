@@ -35,6 +35,11 @@ shades a day for a sensitive number WITHOUT naming it")
     chatbot text, notification or spoken answer. test_progress.py fails if
     any other module starts importing it.
 
+ONLY ACCEPTED GOALS COUNT. A draft's or a stopped goal's ticked steps are not on
+the heatmap, and a goal that is stopped (or still a draft) is not on the balance
+chart or in its picker (owner, 2026-09-30). A step saved done in a draft is dated
+when the goal is accepted (jarvis_goals.accept).
+
 WHAT IS KEPT: one small table, `balance_axes`, in projects.db (kind, ids and
 the owner's label - no numbers). Choosing the axes is the owner's own display
 choice, like sorting a list: no approval card. The audit log gets counts only.

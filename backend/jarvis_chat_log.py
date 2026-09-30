@@ -1231,11 +1231,12 @@ class ChatLog:
         return "money:" + cid
 
     # -- the money-sensitive mark -------------------------------------------
-    def note_money(self, cid) -> None:
+    def note_money(self, cid, *, keep: bool = False) -> None:
         """This conversation added up the owner's bank spending: from now on a
         web search asks first and a chatbot is not started from it. Marked in
-        memory at once (a temporary chat, history off) and in `meta` when the
-        history file exists, so a restart, Continue and a fork keep it."""
+        memory at once (a temporary chat, history off). With `keep`, also in
+        `meta`, so a restart, Continue and a fork keep it (record_turn passes
+        it once the turn is written)."""
         if not (isinstance(cid, str) and _CID.fullmatch(cid)):
             return
         with self._lock:
@@ -1243,9 +1244,9 @@ class ChatLog:
             self._money[cid] = True
             while len(self._money) > 2000:
                 self._money.popitem(last=False)
+        if not keep:
+            return
         try:
-            if not self.db_path.exists():
-                return
             with self._lock, closing(self._connect()) as c:
                 with c:
                     c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
@@ -1469,8 +1470,11 @@ class ChatLog:
         # is a Live session in History.
         kind = "live" if any(isinstance(m, dict) and m.get("live") is True for m in live) \
             else "chat"
-        return self._write_turn(aead, cid, rows, device, lane, read_outside, answer_kept,
-                                answer, at, now, kind=kind, crisis=crisis)
+        written = self._write_turn(aead, cid, rows, device, lane, read_outside, answer_kept,
+                                   answer, at, now, kind=kind, crisis=crisis)
+        if turn and turn.get("money") is True:
+            self.note_money(cid, keep=True)
+        return written
 
     def _live_rows(self, live) -> list:
         """[(words, provenance, voice check facts or None)] for the live

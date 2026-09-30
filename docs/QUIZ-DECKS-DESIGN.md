@@ -136,8 +136,11 @@ topic. So:
   asking "are you sure?", each gone at once. Say so in the app: older **backups**
   may still hold a copy (same sentence as the memory page). Forget a time frame
   (`docs/JARVIS-API.md` section 64) does **not** cover decks; the docs say so.
-- **Backup and export: later, not now.** Whether decks go into the owner's locked
-  backup file is the owner's call when the backup is next touched. A Markdown
+- **Backup: decided (owner, 2026-09-30, after the decks audit): the decks JOIN the
+  locked backup**, under the same recovery code, with their own key carried inside
+  the encrypted archive the way the chat-history key is (`jarvis_backup.py`,
+  JARVIS-API section 45.1). "Copies in older backups stay until they age out."
+  stays true and stays in the delete question. **Export: later, not now.** A Markdown
   export in `Q:` / `A:` / `C:` lines (repeater's format; `C:` is a cloze card) or
   an Anki file would put sealed words in plain text, so it is a **named exception**
   like the support-chat export: desktop only, the owner's tap, Windows "Save as",
@@ -327,7 +330,7 @@ fields. Errors keep the `{ok, error, message}` shape.
 | `POST /api/decks/settings` | `{new_per_day: 0-20}` | `{ok}` |
 | `GET /api/review?deck=<id>` | deck optional (all) | `{ready, new_left, card:{id,front,kind}\|null}` |
 | `POST /api/review/reveal` | `{card}` | `{back:{answer,passage}}` |
-| `POST /api/review/rate` | `{card, rating:"again"\|"hard"\|"good"\|"easy"}` | `{ok, ready, next}` |
+| `POST /api/review/rate` | `{card, rating:"again"\|"hard"\|"good"\|"easy", deck?}` (the scope being reviewed: `""` = every deck) | `{ok, ready, next}` |
 
 Deleting a deck or card, and editing, are immediate on the owner's confirm (no
 approval card; they only reduce or fix the owner's own words). Errors add
@@ -477,7 +480,7 @@ Today it would be marked as a wrong answer, with no help message, in any languag
   worth copying.
 - That Windows' `secure_delete` and `VACUUM` remove the words from the file's free
   pages in practice (the test reads the bytes).
-- Whether decks should join the locked backup, and how the later export reads.
+- How the later export reads. (Decks joined the locked backup on 2026-09-30.)
 - Everything about Android and Windows behaviour: nothing was built or run.
 
 ## Slice contract (frozen)
@@ -629,7 +632,7 @@ GET /api/review[?deck=<id>] ->
  "card": {"id": "c...", "front": "What absorbs sunlight?", "kind": "recall", "level": null, "deck": "d...", "new": true},
  "run": {"done": 0, "limit": 20}}
 POST /api/review/reveal {"card": id} -> {"ok": true, "back": {"answer": "...", "passage": "..."}, "key_label": str|null}
-POST /api/review/rate {"card": id, "rating": "again"|"hard"|"good"|"easy"} ->
+POST /api/review/rate {"card": id, "rating": "again"|"hard"|"good"|"easy", "deck"?: id|""} ->
 {"ok": true, "ready": 2, "new_left": 1, "next": CardView|null, "state": "card", "line": "2 cards ready",
  "run": {"done": 1, "limit": 20}, "comes_back": "2026-10-03"}
 POST /api/review/more {"deck"?: id} -> the same object as GET /api/review
@@ -698,8 +701,8 @@ are 'ported' and turn green once both apps call each route; **it is red until th
 
 ### C7. Not in this slice
 
-A Markdown or Anki export (would be a named unencrypted exception, desktop only, later); putting decks
-into the locked backup (the owner's call when the backup is next touched); a Spanish crisis-phrase list
+A Markdown or Anki export (would be a named unencrypted exception, desktop only, later); (decks are in the
+locked backup since 2026-09-30); a Spanish crisis-phrase list
 (needs the owner's go-ahead, separately tested); `quiz_spanish_cases.json` and a Spanish
 `grader_verified` (nothing has measured the model's Spanish); cloud "grade this better"; spoken Spanish;
 YouTube captions; notifications for cards (the owner's question 3, default "never"); a model suggesting a

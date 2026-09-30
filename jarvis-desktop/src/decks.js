@@ -5,7 +5,7 @@
  *
  * The owner keeps questions from a quiz in a deck and is asked them again on a
  * schedule the PC works out. This module holds the shared words (word for word
- * as the phone uses them, held to tests/fixtures/decks-words.json), the reading
+ * as the phone uses them, held to tests/fixtures/decks-cases.json), the reading
  * of what the PC sends, the Keep screen's choices and the review session's
  * states. brain.js draws them.
  *

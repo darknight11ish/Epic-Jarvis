@@ -1546,6 +1546,58 @@ reads from on its own. Three things about it are invariants:
   2026-09-26 rule: a chat turn that can ask Jarvis to search its own past
   conversations, or anything that hands past chat words to the model.
 
+### Money-sensitive conversations — a mark, not a taint
+
+Once `my_spending` has been called in a conversation (bank spending added up from a
+file the owner dropped in a folder, JARVIS-API section 100), **the conversation is
+marked money-sensitive** (the owner's answer, 2026-09-30). It is the standing limit made
+to hold across turns: money is never sent to a web search or a chatbot. The mark is kept
+by `jarvis_chat_log` in its `meta` table (`money:<conversation id>`, no words), so it
+survives a restart, "Continue this chat" and a fork (which copies it), and is set in
+memory for a temporary chat. While it is set, a web search **asks first** (its card says the
+conversation looked at bank spending) and `POST /api/chatbot/start` with that
+`conversation_id` is refused. It is deliberately **not** the outside-text taint: every
+other tool works as before, and `my_spending` is still left out of `tools_ran`, so the
+memory-writing rules that read `tools_ran` do not change. Inside the turn itself the
+model's words are held until code has checked them (with a table: the sentence rule; with
+none: no amount of money may pass; JARVIS-API 100.5). Open: spending should also stop when
+the Money topic is Off - the topic-controls work has no helper for that yet.
+
+### Review decks — a third sealed store, kept apart from memory and from chat history
+
+`study.db` (`jarvis_decks.py`, `decks.patch`, 2026-09-30, docs/JARVIS-API.md
+§102, docs/QUIZ-DECKS-DESIGN.md) holds **the owner's own words on this PC**:
+questions the owner chose to **Keep** from a finished quiz (the question, the
+owner's answer in their own words, and the passage it came from, which may be
+copied from anything the owner pasted). It is not memory and not chat history:
+nothing in it is recalled into a chat, read by the learner, searched, sent to a
+model or a cloud lane, and no model tool or voice command makes a deck or a
+card - only an app's tap does. The invariants:
+
+- **Sealed or not kept.** Deck names, fronts, backs and passages are
+  AES-256-GCM (the chat-history scheme) under a key of their own in Credential
+  Manager (`Jarvis Backend/study decks key`); deleting that key never touches
+  chat history. No key, no `cryptography`, no `fsrs` (the schedule maths,
+  py-fsrs 6.3.2, pinned) or a key that does not open the file: nothing is kept
+  and the apps say why. Only ids, the card kind, the level tag, the paused flag
+  and py-fsrs's numbers are plain, so "N cards ready" needs no key.
+- **Spanish practice** is a mode of the quiz (`mode: "spanish"`), typed only
+  (a client must not do speech-to-text). Fill-the-blank is cut and marked by code;
+  translations and sentence endings are marked by the local model; a key the
+  model wrote is labelled. Its crisis check is English only and every Spanish
+  page and the Keep sheet say so.
+- **Reviewing calls no model**: the owner rates each card. No streak, points or
+  guilt words anywhere.
+- **Backups (owner, 2026-09-30).** `study.db` is in the locked backup, under the
+  same recovery code, and so is its key, carried the way the chat-history key
+  is (JARVIS-API §45.1). A deleted card or deck is
+  gone from the file at once (`secure_delete`, then `VACUUM`) but not from older
+  backups, and the delete question says so: "Copies in older backups stay until
+  they age out." "Forget a time frame" does not cover decks.
+- **No approval card**: every write is the owner's own tap on the owner's own
+  words on this PC; the apps hold every write on a stale link (rule 4) and hide
+  the words under "Hide memory lists and chat history".
+
 ---
 
 ## 6. Events — one bus

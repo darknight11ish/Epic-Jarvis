@@ -55,6 +55,8 @@ WORD_NAMES = (
     "ROW_TRANSFERS_OUT", "ROW_TRANSFERS_IN", "CAV_ONCE", "CAV_ONCE_ONE", "CAV_SKIPPED",
     "CAV_SKIPPED_ONE", "CAV_UNCAT", "CAV_UNCAT_ONE", "CAV_CURRENCIES", "CAV_HIDDEN",
     "CAV_PENDING", "CAV_REFUNDS", "CAV_TRANSFERS", "CAV_FILES", "CAV_DATES", "STREAM_MARK",
+    "CAV_SHEETS", "CAV_ACCOUNTS", "COUNTS_LINE", "COUNTS_UNREAD", "EMPTY_SKIPPED",
+    "EMPTY_SKIPPED_ONE", "EMPTY_RANGE", "SAVED_LAYOUT", "NO_TABLE_LINE", "SLOW_FIRST_TIME",
 )
 
 
@@ -122,12 +124,12 @@ def cases() -> dict:
     out = {"words": {n: getattr(SP, n) for n in WORD_NAMES},
            "sign_sentences": dict(SP.SIGN_SENTENCES),
            "errors": {k: SP.ERRORS[k] for k in ("needs_setup", "no_header", "unchecked", "too_big",
-                                                "empty_period", "pc_only")},
+                                                "empty_period", "pc_only", "misfit", "misfit_save", "unanswered")},
            "tables": example_tables()}
     _fresh()
     d = _work("Views", "a_signed.csv", "b_debit_credit.csv", "h_ambiguous.csv")
     _listed(d)
-    out["view_pc_nothing_saved"] = SP.view(here=True)
+    out["view_pc_nothing_saved"] = _relative(SP.view(here=True), str(d))
     out["view_phone_nothing_saved"] = SP.view(here=False)
     got = SP.read_rows(str(d / "h_ambiguous.csv"), roots=[str(d)])
     out["proposal_date_order_unsettled"] = _relative(SP.propose_layout(got["rows"], name="h_ambiguous.csv"))
@@ -138,6 +140,23 @@ def cases() -> dict:
     out["proposal_signed_amount"] = _relative(prop)
     out["view_pc_one_layout"] = _relative(SP.view(here=True), str(d))
     out["view_phone_one_layout"] = SP.view(here=False)
+    # "Check the columns again": a fresh proposal with the saved choices filled
+    # in, the counts, and nothing deleted; a save that does not fit is refused
+    # with the counts; the preview counts before saving.
+    real_from = SP._from_this_pc
+    SP._from_this_pc = lambda p, l: True
+    try:
+        f = str(d / "a_signed.csv")
+        _code, again = SP.handle_get(SP.PROFILE_ROUTE, {"file": [f], "again": ["1"]}, "127.0.0.1", "127.0.0.1")
+        out["proposal_again"] = _relative(again, str(d))
+        body = dict(again["guess"], file=f, preview=True)
+        _code, pv = SP.handle_post(SP.PROFILE_ROUTE, body, "127.0.0.1", "127.0.0.1")
+        out["preview_counts"] = pv
+        wrong = dict(again["guess"], file=f, confirm=True, answered=[], sign="positive_out")
+        code, refused = SP.handle_post(SP.PROFILE_ROUTE, wrong, "127.0.0.1", "127.0.0.1")
+        out["save_misfit_refused"] = dict(refused, status=code)
+    finally:
+        SP._from_this_pc = real_from
     _fresh()
     return out
 

@@ -802,8 +802,10 @@ key for key, word for word): `heat_title` "Activity", `heat_under`, `heat_undate
 `{date}` `{n}` `{items}` are filled in by the PC: the apps show `words`,
 `summary`, `value_words`, the day `words` and the refusal sentence **as sent**,
 and never build them. No streak, "in a row", "longest", "missed", percentage,
-average or "score" word may appear in an app's own strings either
-(`FORBIDDEN_WORDS` in `jarvis_progress.py` is the list).
+average or points word may appear in an app's own strings either, and no
+"score" used as a rating (the one sentence that says there is none - "No
+overall score." - is the PC's own; `FORBIDDEN_WORDS` in `jarvis_progress.py` is
+the list a test checks).
 
 ### 3. Heatmap geometry and colour
 
@@ -815,13 +817,13 @@ average or "score" word may appear in an app's own strings either
   a px in the fixture's units.
 - Fill: level 0 has **no fill**, only a 1 px outline in the border-strong token
   over the panel surface: neutral, never red, never a cross. Levels 1 to 4 lay the
-  accent over the surface at `shading.alpha` = 0.22, 0.42, 0.66, 0.92 (the
-  generator asserts neighbouring steps differ by at least 0.20 so the ladder holds
-  in every theme). Desktop: `rgb(var(--accent-rgb) / <alpha>)` on `var(--surface-2)`,
+  accent over the surface at `shading.alpha` = 0.40, 0.58, 0.79, 1.0 (changed from
+  0.22 / 0.42 / 0.66 / 0.92 by the audit, section 9 below: the old Daylight levels
+  were too close to tell apart). Desktop: `rgb(var(--accent-rgb) / <alpha>)` on `var(--surface-2)`,
   outline `var(--border-strong)`. Phone: `LocalAccent.current.copy(alpha = ...)` on
   `chrome.surface2`, outline `chrome.hairlineStrong`. These are existing tokens, so
   both themes (light and dark) keep the app's own accent contrast; level 4 is
-  the accent itself. No new colour is added and **no red anywhere**.
+  the accent itself (alpha 1). No new colour is added and **no red anywhere**.
 - A small legend under the grid: five swatches only, no words but the level
   wording from the tooltip. (No "less" or "more" label is required.)
 - Tooltip/hover and long-press/tap on a cell: the day's `words`. The line under
@@ -902,3 +904,63 @@ A floating widget; a per-day list of what was done (the grid shows counts only,
 by design); editing a goal's plan; any streak, goal-slipping alert or "weekly
 score"; a radar for a single project's coding tests (a coding benchmark can be
 an area only if it is a logged number with a target).
+
+### 9. Audit amendments (2026-09-30; the owner took the recommended answers)
+
+Where these differ from sections 1 to 8 above, these win.
+
+- **Goals on the chart and the map.** Only an ACTIVE (accepted) goal counts. A
+  draft's or a stopped goal's ticked steps are NOT on the heatmap, and a STOPPED
+  goal leaves the balance chart like a draft does: it is dropped from the stored
+  chart (`Goals.stop` asks the projects store to drop it at once; every read
+  closes the gap too), it is not offered in `choices`, and a save naming it is
+  refused ("One of those goals is gone, stopped or not accepted yet."). One rule
+  (`jarvis_progress._pickable_goal`) serves the picker and the save.
+- **`done_at` of a step saved done in a draft** is the time the goal is ACCEPTED
+  (`jarvis_goals.accept` re-dates every done step), not the draft's creation time.
+  So a pasted or suggested draft shades nothing while it is a draft, and its
+  done steps shade the day the owner takes the plan on.
+- **The 60-row cut** of `choices` never hides an area on the chart (picked areas
+  are always listed, in their place; a picked number that lost its target too).
+- **No read-then-write race.** The read that drops deleted things and the save
+  both work under the projects store's own lock; the goals are read before the
+  lock is taken (the goals store takes the projects lock, never the other way
+  round).
+- **Order.** The chart keeps its order. Saving sends the areas already on it in
+  that order, then the newly ticked ones in the order ticked; an area unticked and
+  ticked again goes to the end. Both apps (`pickBody` with `at`/`tick`; the
+  phone's `Progress.toggled`).
+- **Hidden lists: one rule for both apps.** Both routes are read as before. With
+  "Hide memory lists and chat history" on (or App lock locked on the PC), an
+  answer with `keep_on_screen: true` is drawn as ONLY `hidden_words` and a Show
+  button; there is NO picker under hidden lists on either app (so a private
+  picker row never needs a "(hidden)" name), and a save is refused on both. The
+  PC's Rust adds `lists_hidden: true` to every answer while the lists are hidden.
+  Show on the PC is the Windows Hello gate for "Hide memory lists"; it cannot lift
+  App lock, so when the picture is still hidden afterwards the line says "Still
+  hidden. If Jarvis is locked, unlock it first, then press Show." The phone's
+  Show is the fingerprint or PIN the other Brain sections use.
+- **Colours.** The ladder is 0.40 / 0.58 / 0.79 / 1.0 over the panel surface, and
+  is held to measured contrast (`shading.require`): level 1 at least 1.5:1 over
+  the surface, each neighbouring pair at least 1.25:1, the top level at least
+  4.5:1, in every desktop theme (the generator reads `theme.css` and refuses a
+  ladder that fails; the fixture records the numbers; `tests/progress.mjs`
+  measures the real computed colours). The phone's accent is the owner's choice
+  (always at least 4.5:1 on the card, not on the darker surface under the grid),
+  so `ProgressTest` measures every accent in the palette in every phone theme: at
+  least 1.5:1 for level 1, 1.25:1 between neighbours, 3.9:1 for the top level.
+- **Same words on both apps** (added to `words`, the fixture's list): "Chart
+  saved." / "Chart cleared." after a save (the phone said nothing), "Could not
+  read the Progress pictures: <why>." for a failed read, "Refresh" (the desktop
+  gets a Refresh button too, after the pictures), "Show", and the still-hidden
+  line above.
+- **Phone radar labels** stay inside the picture's box: a label column is 84 dp
+  wide where there is room and 56 dp at 3 and 9 o'clock, wrapping a long value
+  (e.g. "1234567.5 of 2000000 kg") to up to 4 lines there and 2 above and below
+  (`Progress.labelBox`, `linesNeeded`, tested for 3 to 8 areas). The old 84 dp
+  columns ran 28 dp past the 300 dp box.
+- **Phone day access.** Tapping the grid reads the day (`Progress.cellAt`). Each
+  week's TalkBack strip still reads the week, and now offers that week's days as
+  custom actions (choosing one shows the day's words under the grid). The strips
+  are not touch targets and stay 17 dp wide; making them 48 dp would cover their
+  neighbours, so the 48 dp requirement is met by the whole-grid tap.

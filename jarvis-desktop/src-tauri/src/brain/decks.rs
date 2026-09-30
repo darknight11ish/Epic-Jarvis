@@ -444,7 +444,7 @@ pub async fn brain_review_more(
 mod tests {
     use super::*;
 
-    const FIXTURE: &str = include_str!("../../../tests/fixtures/decks-words.json");
+    const FIXTURE: &str = include_str!("../../../tests/fixtures/decks-cases.json");
 
     fn sample(name: &str) -> String {
         let all: serde_json::Value = serde_json::from_str(FIXTURE).unwrap();

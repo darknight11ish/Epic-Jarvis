@@ -23,7 +23,9 @@ deleting this key never touches chat history. No key, no `cryptography`, or a
 key that does not open the file: nothing is kept and the error says why - there
 is no plain-text path. In plain columns only: ids, the card's kind, the Spanish
 level tag, the paused flag, the day it was made, and py-fsrs's numbers. So the
-"N cards ready" line needs no key. No review log is kept (py-fsrs makes one per
+"N cards ready" line needs no key. The file is in the locked backup (owner,
+2026-09-30): jarvis_backup.py carries this key beside it, and a restore calls
+forget_key() so the running store reopens. No review log is kept (py-fsrs makes one per
 rating; only its optimizer reads them). PRAGMA secure_delete is on, and a
 deleted card or deck is followed by a VACUUM.
 

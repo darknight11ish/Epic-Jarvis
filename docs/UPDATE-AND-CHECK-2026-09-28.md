@@ -311,6 +311,41 @@ happen, write down which line and what you saw instead.
   Jarvis read an email in the same chat: it refuses and tells you to type the
   numbers in a new message.
 
+- [ ] **Spending summaries** (chat, and PC: Settings → Spending). Spending is a
+  settings-file tool, not a switch in the PC app: add `"my_spending"` to
+  `[tools].enabled` in `jarvis-framework.toml` (the `[tools]` section, beside
+  `my_files`), run `apply-patches.ps1` once (it installs `openpyxl 3.1.5`, which Excel
+  files need), restart Jarvis, and make sure a folder is listed under "Folders Jarvis may
+  look in". Drop a bank export (CSV or Excel) in it and ask "how much did I spend on food
+  last month?". The first time, Jarvis says the columns must be checked on the PC:
+  Settings → Spending → pick the file → **Check these columns**. The box now says how
+  many rows count as money out and as money in **before** you save; if that looks wrong
+  the box warns you. **Check the columns again** never deletes the layout: it opens the
+  same box with your saved choices and Save writes over it. Ask a second question in the
+  same chat and then a web search: the search asks first ("Jarvis looked at your bank
+  spending earlier in this conversation"). Jarvis's one sentence only ever uses the totals
+  and the rows it names; if it cannot make a table it shows a plain sentence and no
+  figures.
+
+- [ ] **Progress: the activity map and the balance chart** (PC: Brain →
+  Projects, at the top; phone: Brain → Projects, "Progress"). **First run
+  `apply-patches.ps1` again** (Round 1's step 1): this round changed
+  `jarvis_projects.py` and `jarvis_goals.py` as well as the new
+  `jarvis_progress.py`, and the script copies them all in. Then: (1) tick a
+  goal's step and log a number on a benchmark - today's square gets darker; the
+  five shades are clearly different from each other in every theme (try
+  Daylight); a quiet day is just an outline. (2) In **Choose what to show**, pick
+  3 to 8 numbers or goals and press **Save the chart**: both apps say **Chart
+  saved.**; the chart keeps the order it had and a newly ticked area goes last.
+  (3) Stop a goal that is on the chart: it leaves the chart, and steps you had
+  ticked in it leave the map. (4) Turn on "Hide memory lists and chat history"
+  with a health or money number on the chart: each picture shows only the
+  "Hidden while memory lists and chat history are hidden." line and a **Show**
+  button, there is no **Choose what to show** button, and nothing can be saved.
+  On the PC with App lock on, Show says to unlock Jarvis first. (5) Phone: pick an
+  area whose value is long ("1234567.5 of 2000000 kg") - its label wraps and stays
+  inside the picture. Nothing here is read aloud or sent anywhere.
+
 ### Measurements only your PC can make
 
 1. **Memory tests with the real model** (they decide the entity layer; the

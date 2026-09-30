@@ -31,7 +31,17 @@
   "CAV_TRANSFERS": "Transfers between your own accounts are left out of spending.",
   "CAV_FILES": "Added up from {n} files.",
   "CAV_DATES": "{n} rows had a date that did not fit the saved date order and were left out. If that looks wrong, check the columns again on the PC.",
-  "STREAM_MARK": ": jarvis-table "
+  "STREAM_MARK": ": jarvis-table ",
+  "CAV_SHEETS": "This Excel file has {n} visible sheets. Only the first one, \"{name}\", was read.",
+  "CAV_ACCOUNTS": "These files use different saved layouts, so they are treated as different accounts and their rows are never matched with each other.",
+  "COUNTS_LINE": "With these choices, {out} rows count as money out and {inn} as money in.",
+  "COUNTS_UNREAD": "{n} rows could not be read.",
+  "EMPTY_SKIPPED": " {n} rows in the file were left out because they had no date or amount Jarvis could read. If that looks wrong, check the columns again on the PC (Settings, Spending).",
+  "EMPTY_SKIPPED_ONE": " 1 row in the file was left out because it had no date or amount Jarvis could read. If that looks wrong, check the columns again on the PC (Settings, Spending).",
+  "EMPTY_RANGE": " The rows in this file run from {first} to {last}.",
+  "SAVED_LAYOUT": "Saved layout",
+  "NO_TABLE_LINE": "Jarvis could not add up your spending this time, so it has no figures to give. Ask again once the bank file is set up.",
+  "SLOW_FIRST_TIME": "A big bank file can take up to a minute the first time, while account and card numbers are hidden."
  },
  "sign_sentences": {
   "negative_out": "Rows like 'SHOP -45.10' will be counted as money spent.",
@@ -45,7 +55,10 @@
   "unchecked": "Jarvis could not check this file for account and card numbers, so it showed nothing.",
   "too_big": "This file is too big. Export a shorter period (at most 5 MB or 50,000 rows).",
   "empty_period": "No spending was found in that period.",
-  "pc_only": "Set up on the PC: Settings, Spending. The columns of a new bank file are checked there, once."
+  "pc_only": "Set up on the PC: Settings, Spending. The columns of a new bank file are checked there, once.",
+  "misfit": "Jarvis tried the saved layout \"{layout}\" on this file, but it does not fit it: {why}. Nothing was added up. Open Jarvis on the PC and check the columns again (Settings, Spending).",
+  "misfit_save": "These choices do not fit this file: {why}. If that is right, save them anyway; if not, change the choices.",
+  "unanswered": "Choose an answer for every question the box asks before saving."
  },
  "tables": {
   "by_category": {
@@ -908,7 +921,7 @@
   "bank_files": [
    {
     "name": "a_signed.csv",
-    "path": "/tmp/jarvis-spending-cases-2k_7r5fu/home/Views/a_signed.csv",
+    "path": "C:\\Users\\owner\\Bank\\a_signed.csv",
     "kind": "csv",
     "layout_id": null,
     "checked": true,
@@ -916,7 +929,7 @@
    },
    {
     "name": "b_debit_credit.csv",
-    "path": "/tmp/jarvis-spending-cases-2k_7r5fu/home/Views/b_debit_credit.csv",
+    "path": "C:\\Users\\owner\\Bank\\b_debit_credit.csv",
     "kind": "csv",
     "layout_id": null,
     "checked": true,
@@ -924,7 +937,7 @@
    },
    {
     "name": "h_ambiguous.csv",
-    "path": "/tmp/jarvis-spending-cases-2k_7r5fu/home/Views/h_ambiguous.csv",
+    "path": "C:\\Users\\owner\\Bank\\h_ambiguous.csv",
     "kind": "csv",
     "layout_id": null,
     "checked": true,
@@ -1872,5 +1885,161 @@
   },
   "needs_setup": "Open Jarvis on the PC to check the columns of this bank file (Settings, Spending). It takes a minute and is remembered.",
   "table_hidden": "Spending table hidden"
+ },
+ "proposal_again": {
+  "ok": true,
+  "known": false,
+  "fingerprint": "c26d88dbb7e6cfb3",
+  "header_row": 0,
+  "header": [
+   "Date",
+   "Description",
+   "Amount",
+   "Balance"
+  ],
+  "header_index": [
+   0,
+   1,
+   2,
+   3
+  ],
+  "hidden_columns": 0,
+  "hidden_note": "",
+  "preview": [
+   [
+    "2026-03-01",
+    "TESCO STORES 4411",
+    "-45.10",
+    "954.90"
+   ],
+   [
+    "2026-03-02",
+    "STARBUCKS COFFEE",
+    "-3.50",
+    "951.40"
+   ],
+   [
+    "2026-03-02",
+    "STARBUCKS COFFEE",
+    "-3.50",
+    "947.90"
+   ],
+   [
+    "2026-03-03",
+    "UBER TRIP",
+    "-12.25",
+    "935.65"
+   ],
+   [
+    "2026-03-05",
+    "SALARY ACME LTD",
+    "2000.00",
+    "2935.65"
+   ]
+  ],
+  "guess": {
+   "header_row": 0,
+   "columns": {
+    "date": 0,
+    "description": 1,
+    "amount": 2,
+    "debit": null,
+    "credit": null,
+    "drcr": null,
+    "currency": null
+   },
+   "sign": "negative_out",
+   "date_order": "ymd",
+   "decimal": ".",
+   "currency": "",
+   "label": "",
+   "date_serial": false
+  },
+  "questions": [],
+  "warnings": [],
+  "sentences": {
+   "sign": "Rows like 'SHOP -45.10' will be counted as money spent."
+  },
+  "sign_sentences": {
+   "negative_out": "Rows like 'SHOP -45.10' will be counted as money spent.",
+   "positive_out": "Rows like 'SHOP 45.10' will be counted as money spent, and a minus sign as money coming in.",
+   "debit_credit": "Amounts in the Debit column will be counted as money spent, and the Credit column as money in.",
+   "drcr": "Rows marked Dr will be counted as money spent, and rows marked Cr as money in."
+  },
+  "ready": true,
+  "counts": {
+   "out": 8,
+   "in": 2,
+   "rows": 10,
+   "unread": 0
+  },
+  "line": "With these choices, 8 rows count as money out and 2 as money in.",
+  "problems": [],
+  "again": true,
+  "saved_choices": {
+   "header_row": 0,
+   "columns": {
+    "date": 0,
+    "description": 1,
+    "amount": 2,
+    "debit": null,
+    "credit": null,
+    "drcr": null,
+    "currency": null
+   },
+   "sign": "negative_out",
+   "date_order": "ymd",
+   "decimal": ".",
+   "currency": "",
+   "label": "",
+   "date_serial": false
+  },
+  "fresh_guess": {
+   "header_row": 0,
+   "columns": {
+    "date": 0,
+    "description": 1,
+    "amount": 2,
+    "debit": null,
+    "credit": null,
+    "drcr": null,
+    "currency": null
+   },
+   "sign": "negative_out",
+   "date_order": "ymd",
+   "decimal": ".",
+   "currency": "",
+   "label": "",
+   "date_serial": false
+  }
+ },
+ "preview_counts": {
+  "ok": true,
+  "ready": true,
+  "counts": {
+   "out": 8,
+   "in": 2,
+   "rows": 10,
+   "unread": 0
+  },
+  "line": "With these choices, 8 rows count as money out and 2 as money in.",
+  "problems": [],
+  "warnings": []
+ },
+ "save_misfit_refused": {
+  "ok": false,
+  "error": "misfit_confirm",
+  "message": "These choices do not fit this file: the plus and minus signs look the wrong way round - 2 rows would count as money spent and 8 as money coming in. If that is right, save them anyway; if not, change the choices.",
+  "problems": [
+   "sign"
+  ],
+  "counts": {
+   "out": 2,
+   "in": 8,
+   "rows": 10,
+   "unread": 0
+  },
+  "line": "With these choices, 2 rows count as money out and 8 as money in.",
+  "status": 400
  }
 }

@@ -1297,6 +1297,634 @@ def t_the_words_are_plain_and_complete():
         w in SP.DETAIL for w in ("never read aloud", "never remembered", "never sent")))
 
 
+# ============================================================ 10. the audit of 2026-09-30
+
+CSV_HDR = "Date,Description,Amount\n"
+
+
+def t_hiding_never_depends_on_the_neighbours():
+    """Audit finding 1: descriptions used to be joined with newlines into one
+    text, whose second pass glues lines, and the wrong answer was cached."""
+    fresh()
+    rows = ["PAYMENT TO john@example.com", "STARBUCKS", "TESCO", "PAYPAL *SPOTIFY 402-935-7733",
+            "ZELLE TO JOHN SMITH jsmith@bank.com", "VENMO alice@example.co.uk", "COSTA COFFEE",
+            "SENT 10.0.0.1", "SHELL 1234 LONDON", "AMAZON MKTPLACE 1234567890123"]
+    alone = []
+    for r in rows:
+        SP._reset_for_tests()
+        alone.append(SP.hide_one(r))
+    for order in (list(range(len(rows))), list(reversed(range(len(rows)))), [3, 0, 7, 1, 9, 2, 5, 4, 8, 6]):
+        SP._reset_for_tests()
+        got = SP.hide_many([rows[i] for i in order])
+        check(f"hide_many in order {order[:4]}... equals each text hidden alone",
+              got == [alone[i] for i in order], (got, [alone[i] for i in order]))
+    check("an email at the end of one row leaves the next row's first word alone",
+          SP.hide_many(["PAYMENT TO john@example.com", "STARBUCKS"])[1] == "STARBUCKS")
+    check("... the email itself is hidden", "john@example.com" not in alone[0] and SP.HIDDEN in alone[0])
+    for i in (3, 4, 5):
+        check(f"a PayPal/Zelle/Venmo style row keeps its shop words: {rows[i][:12]}",
+              alone[i].split()[0] == rows[i].split()[0] and SP.HIDDEN in alone[i], alone[i])
+    # the same categories, in both orders, end to end
+    for name, order in (("email_first.csv", (0, 1, 2)), ("email_last.csv", (2, 1, 0))):
+        lines = ["2026-03-01,PAYMENT TO john@example.com,-20.00", "2026-03-02,STARBUCKS,-3.00",
+                 "2026-03-03,TESCO,-4.00"]
+        d = folder("Order-" + name[:5], text={name: CSV_HDR + "\n".join(lines[i] for i in order) + "\n"})
+        listed(d)
+        setup(d / name)
+        SP._reset_for_tests()
+        res = summary(d / name)
+        cats = {r["cells"][0]: r["cells"][1] for r in res["_table"]["sections"][0]["rows"]}
+        check(f"{name}: STARBUCKS is Eating out and TESCO is Food, whatever the order",
+              cats.get("Eating out") == "3.00" and cats.get("Food and groceries") == "4.00"
+              and cats.get("Uncategorised") == "20.00", cats)
+    # real key shapes after an email line (the auditor's t6/t7)
+    key = "ghp_" + "a1B2c3D4e5" * 4
+    got = SP.hide_many(["alice@example.com", "SHOP " + key + " END", "AKIAIOSFODNN7ABCDEFG",
+                        "IBAN GB29NWBK60161331926819 x"])
+    check("a real-shaped key after an email line is hidden", key not in got[1] and SP.HIDDEN in got[1], got)
+    check("an AWS-shaped key and an IBAN are hidden", "AKIAIOSFODNN7ABCDEFG" not in got[2]
+          and "GB29NWBK60161331926819" not in got[3], got)
+    # the cache is emptied when the rules change
+    SP.hide_one("STARBUCKS")
+    check("something is cached", len(SP._H_CACHE) > 0)
+    real_rev = SP._HIDE_REV
+    SP._HIDE_REV = real_rev + "-new"
+    try:
+        SP.hide_one("TESCO")
+        check("a change of the hiding rules empties the cache first", len(SP._H_CACHE) == 1, len(SP._H_CACHE))
+    finally:
+        SP._HIDE_REV = real_rev
+    fresh()
+
+
+def _two_layout_files(name_a, text_a, name_b, text_b, **over):
+    d = folder("Fit-" + name_a[:4], text={name_a: text_a, name_b: text_b})
+    listed(d)
+    setup(d / name_a, label="Main account", **over)
+    return d
+
+
+def t_a_layout_that_does_not_fit_the_file_is_not_trusted():
+    """Audit finding 2: a saved layout was found by the header alone."""
+    fresh()
+    bank = CSV_HDR + "".join(f"2026-03-{i:02d},SHOP{i},-{i}.00\n" for i in range(1, 9)) \
+        + "2026-03-20,SALARY,900.00\n"
+    card = CSV_HDR + "".join(f"2026-04-{i:02d},SHOP{i},{i}.00\n" for i in range(1, 9)) \
+        + "2026-04-20,PAYMENT THANK YOU,-500.00\n"
+    # every purchase positive and no minus: a negative-out layout finds no money out
+    allpos = CSV_HDR + "".join(f"2026-04-{i:02d},SHOP{i},{i}.00\n" for i in range(1, 9))
+    d = _two_layout_files("bank.csv", bank, "allpos.csv", allpos, sign="negative_out")
+    res = summary(d / "allpos.csv")
+    check("a negative-out layout on a file with no negative amounts is refused, not 'no spending'",
+          res["ok"] is False and res.get("code") == "misfit" and "Main account" in res["error"]
+          and "does not fit" in res["error"] and "No spending was found" not in res["error"], res)
+    check("... it says which layout was tried and where to fix it", "Settings, Spending" in res["error"])
+    check("... and the file waits for the PC's box", any(w["path"].endswith("allpos.csv")
+                                                        for w in SP.view(here=True)["waiting"]))
+    check("the list of files says the layout is NOT saved for it",
+          [f["layout_saved"] for f in SP.list_files([str(d)])["files"] if f["name"] == "allpos.csv"] == [False])
+    # sign reading the wrong way: a card file read with the bank's layout
+    res = summary(d / "bank.csv")
+    check("the file the layout was made from still works", res["ok"] is True and dictify(res)["total"][0] == "36.00", res)
+    # wrong decimal mark
+    eu = CSV_HDR + "".join(f"2026-03-{i:02d},SHOP{i},\"-{i},50\"\n" for i in range(1, 9))
+    (d / "eu.csv").write_text(eu, encoding="utf-8")
+    res = summary(d / "eu.csv")
+    check("amounts written with a comma under a dot layout: refused", res["ok"] is False
+          and res.get("code") == "misfit", res)
+    # wrong date order
+    mdy = CSV_HDR + "".join(f"03/{13 + i:02d}/2026,SHOP{i},-{i}.00\n" for i in range(1, 9))
+    ymd_layout = CSV_HDR + "".join(f"2026-03-{i:02d},SHOP{i},-{i}.00\n" for i in range(1, 9))
+    d2 = _two_layout_files("iso.csv", ymd_layout, "us.csv", mdy)
+    res = summary(d2 / "us.csv")
+    check("US dates under a year-first layout: refused, not an empty total", res["ok"] is False
+          and res.get("code") == "misfit" and "date" in res["error"], res)
+    # more than a fifth unread
+    junk = CSV_HDR + "".join(f"2026-03-{i:02d},SHOP{i},-{i}.00\n" for i in range(1, 5)) \
+        + "".join(f"2026-03-{i:02d},X,n/a\n" for i in range(5, 12))
+    (d2 / "junk.csv").write_text(junk, encoding="utf-8")
+    res = summary(d2 / "junk.csv")
+    check("more than a fifth of the amounts unread: refused", res["ok"] is False and res.get("code") == "misfit", res)
+    # a few footer rows are not a wrong layout
+    ok = ymd_layout + "Total,,-36.00\nClosing balance,,1.00\nOpening,,x\n"
+    (d2 / "footers.csv").write_text(ok, encoding="utf-8")
+    check("footer rows with words for dates do not condemn a layout", summary(d2 / "footers.csv").get("ok") is True)
+    # the kind of file is part of the key
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    for r in [["Date", "Description", "Amount"], ["2026-03-01", "SHOP1", -1.5], ["2026-03-02", "SHOP2", -2.5]]:
+        ws.append(r)
+    wb.save(d2 / "same_header.xlsx")
+    res = summary(d2 / "same_header.xlsx")
+    check("a CSV layout is not applied to an Excel file with the same header",
+          res["ok"] is False and res.get("code") == "needs_setup", res)
+    # 'Using layout X' in the sources line
+    res = summary(d2 / "iso.csv")
+    check("the card's sources line says which layout was used",
+          res["_table"]["sources"] == ["iso.csv (layout: Main account)"], res["_table"]["sources"])
+    d3 = folder("Named", text={"n.csv": ymd_layout})
+    listed(d3)
+    setup(d3 / "n.csv", label="Main account")
+    check("... with the owner's name for it", summary(d3 / "n.csv")["_table"]["sources"]
+          == ["n.csv (layout: Main account)"])
+    # an empty period says what was left out and why
+    d4 = folder("Empty", "f_tricky.csv")
+    listed(d4)
+    setup(d4 / "f_tricky.csv")
+    res = summary(d4 / "f_tricky.csv", period="2020")
+    check("an empty period says how many rows were left out and why",
+          res["ok"] is False and res["code"] == "empty_period" and "2 rows in the file were left out" in res["error"]
+          and "could read" in res["error"], res)
+    check("... and the dates the file does hold", "2026-08-03 to 2026-08-07" in res["error"], res["error"])
+    fresh()
+
+
+def t_confirm_enforces_the_questions_and_shows_the_counts():
+    fresh()
+    text = CSV_HDR + "".join(f"2026-03-{i:02d},SHOP{i},{i}.00\n" for i in range(1, 9))
+    d = folder("Counts", text={"pos.csv": text, "amb.csv": CSV_HDR + "03/04/2026,A,-1.00\n05/04/2026,B,-2.00\n"})
+    listed(d)
+    got = SP.read_rows(str(d / "pos.csv"), roots=[str(d)])
+    prop = SP.propose_layout(got["rows"], name="pos.csv")
+    check("the proposal for a file whose sign is unsettled asks about the sign",
+          "sign" in prop["questions"], prop["questions"])
+    check("... and a guess with no label (it is not the file name)", prop["guess"]["label"] == "")
+    body = dict(prop["guess"], sign="negative_out", confirm=True, answered=list(prop["questions"]))
+    pv = SP.preview_counts(got["rows"], body)
+    check("the preview counts rows as money out and in before Save",
+          pv["ready"] and pv["counts"]["out"] == 0 and pv["counts"]["in"] == 8 and "0 rows count as money out" in pv["line"]
+          and "8 as money in" in pv["line"] and "sign" in pv["problems"], pv)
+    try:
+        SP.confirm(body, rows=got["rows"], name="pos.csv", real=got["real"])
+        err = None
+    except SP.SpendingError as exc:
+        err = exc
+    check("saving a layout that does not fit is refused, with the counts",
+          err is not None and err.code == "misfit_confirm" and err.extra["counts"]["in"] == 8
+          and "sign" in err.extra["problems"], err and err.code)
+    body2 = dict(prop["guess"], sign="positive_out", confirm=True, answered=list(prop["questions"]))
+    fp, prof, norm = SP.confirm(body2, rows=got["rows"], name="pos.csv", real=got["real"])
+    check("the right sign saves", prof["sign"] == "positive_out" and prof["accepted"] == [])
+    # every question answered
+    got2 = SP.read_rows(str(d / "amb.csv"), roots=[str(d)])
+    prop2 = SP.propose_layout(got2["rows"], name="amb.csv")
+    b = dict(prop2["guess"], date_order="dmy", confirm=True)
+    try:
+        SP.confirm(b, rows=got2["rows"])
+        code = ""
+    except SP.SpendingError as exc:
+        code = exc.code
+    check("an unanswered question (even with a value filled in) is refused", code == "unanswered", code)
+    b["answered"] = ["date_order"]
+    check("... answered, it saves", SP.confirm(b, rows=got2["rows"])[1]["date_order"] == "dmy")
+    # accepting the warning is remembered with the layout
+    fresh()
+    d = folder("Accept", text={"pos.csv": text})
+    listed(d)
+    got = SP.read_rows(str(d / "pos.csv"), roots=[str(d)])
+    prop = SP.propose_layout(got["rows"])
+    b = dict(prop["guess"], sign="negative_out", confirm=True, accept_warnings=True,
+             answered=list(prop["questions"]))
+    fp, prof, _n = SP.confirm(b, rows=got["rows"], real=got["real"])
+    check("a warning the owner accepted is saved with the layout", prof["accepted"] == ["sign"], prof)
+    check("... and is not raised again for the file it was accepted on", summary(d / "pos.csv").get("ok") is True)
+    fresh()
+
+
+def t_excel_numbers_dates_and_sheets():
+    """Audit finding 3."""
+    import datetime as dt
+    import openpyxl
+    fresh()
+    d = folder("Xl", text={})
+    listed(d)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    for r in [["Date", "Description", "Amount"], ["2026-03-01", "TESCO", -12.5], ["2026-03-02", "COSTA", -3.1],
+              ["2026-03-03", "SHELL", -7]]:
+        ws.append(r)
+    x = d / "nums.xlsx"
+    wb.save(x)
+    for mark in (".", ","):
+        fresh()
+        listed(d)
+        setup(x, decimal=mark, sign="negative_out", date_order="ymd")
+        res = summary(x)
+        check(f"Excel numbers are read the same under a '{mark}' layout (12.5 is twelve and a half)",
+              res.get("ok") is True and dictify(res)["total"][0] == "22.60", res.get("error") or dictify(res))
+    # hidden sheets
+    fresh()
+    listed(d)
+    wb = openpyxl.Workbook()
+    decoy = wb.active
+    decoy.title = "Decoy"
+    decoy.append(["Date", "Description", "Amount"])
+    decoy.append(["2026-01-01", "DECOY SHOP", -999])
+    decoy.sheet_state = "hidden"
+    real = wb.create_sheet("Real")
+    for r in [["Date", "Description", "Amount"], ["2026-03-01", "TESCO", -4], ["2026-03-02", "COSTA", -6]]:
+        real.append(r)
+    other = wb.create_sheet("Other")
+    other.append(["Date", "Description", "Amount"])
+    other.append(["2026-03-03", "SECOND", -1000])
+    h = d / "hidden.xlsx"
+    wb.save(h)
+    got = SP.read_rows(str(h), roots=[str(d)])
+    check("the first VISIBLE sheet is read, not the hidden one", got["ok"] and got["rows"][1][1] == "TESCO", got.get("rows"))
+    check("... and the reader says two sheets were visible", got["note"] == {"sheets": 2, "sheet": "Real"}, got.get("note"))
+    setup(h)
+    res = summary(h)
+    check("the caveat names the sheet that was read and how many were visible",
+          any("2 visible sheets" in c and '"Real"' in c for c in res["_table"]["caveats"]), res["_table"]["caveats"])
+    check("... the hidden sheet's decoy is nowhere", "DECOY" not in json.dumps(res) and dictify(res)["total"][0] == "10.00")
+    # date serials
+    fresh()
+    listed(d)
+    base = dt.date(2026, 3, 1)
+    serial = lambda day: (day - dt.date(1899, 12, 30)).days
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.append(["Date", "Description", "Amount"])
+    for i, (shop, amt) in enumerate([("TESCO", -4), ("COSTA", -6), ("SHELL", -10)]):
+        ws.append([serial(base + dt.timedelta(days=i)), shop, amt])
+    sx = d / "serials.xlsx"
+    wb.save(sx)
+    got = SP.read_rows(str(sx), roots=[str(d)])
+    prop = SP.propose_layout(got["rows"], name="serials.xlsx", kind=got["kind"])
+    check("a column of date serials is recognised: its own order, no question",
+          prop["guess"]["date_serial"] is True and prop["guess"]["date_order"] == "ymd"
+          and "date_order" not in prop["questions"], prop["questions"])
+    setup(sx)
+    res = summary(sx, period="2026-03")
+    check("date serials are read as dates when the layout says so", res.get("ok") is True
+          and dictify(res)["total"][0] == "20.00", res.get("error"))
+    check("... and the layout keeps the flag", next(iter(SP.load_profiles().values()))["date_serial"] is True)
+    check("a plain whole number below the serial range is not a date", SP.serial_date("120") is None
+          and SP.serial_date("45719") == dt.date(1899, 12, 30) + dt.timedelta(days=45719))
+    fresh()
+
+
+def t_the_layout_name_is_hidden_and_not_the_file_name():
+    """Audit finding 4."""
+    fresh()
+    d = folder("Label", text={"statement-12345678-9012.csv": CSV_HDR + "2026-03-01,COSTA,-1.00\n"})
+    listed(d)
+    f = d / "statement-12345678-9012.csv"
+    prop = setup(f)
+    check("the proposal does not default the name to the file name", prop["guess"]["label"] == "", prop["guess"])
+    prof = next(iter(SP.load_profiles().values()))
+    check("... so the saved name is empty and shows as 'Saved layout'",
+          prof["label"] == "" and SP.view(here=False)["profiles"][0]["label"] == SP.SAVED_LAYOUT)
+    got = SP.read_rows(str(f), roots=[str(d)])
+    b = dict(prop["guess"], label="Acct 4929 1234 5678 9010 sort 20-00-00", confirm=True,
+             answered=list(prop["questions"]))
+    SP.confirm(b, rows=got["rows"], real=got["real"], kind=got["kind"])
+    label = SP.view(here=False)["profiles"][0]["label"]
+    check("a typed name with an account number is hidden before it is kept or sent to the phone",
+          "4929" not in label and "9010" not in label and SP.HIDDEN in label, label)
+    raw = (CONF / "spending-profiles.json").read_text(encoding="utf-8")
+    check("... and the file on disk holds the hidden name", "4929" not in raw and "9010" not in raw)
+    # an older build saved it plain: scrubbed on load
+    doc = json.loads(raw)
+    key = next(iter(doc["profiles"]))
+    doc["profiles"][key]["label"] = "statement-12345678-9012 (jsmith@example.com)"
+    (CONF / "spending-profiles.json").write_text(json.dumps(doc), encoding="utf-8")
+    SP._reset_for_tests()
+    seen = json.dumps(SP.view(here=False)) + json.dumps(SP.load_profiles())
+    check("a label saved in plain by an older build is scrubbed when it is loaded",
+          "12345678" not in seen and "jsmith@example.com" not in seen, seen[:300])
+    fresh()
+
+
+SENTENCE_TABLE = {
+    "title": "Spending by category, March 2026", "period": "March 2026",
+    "columns": [{"key": "category", "label": "Category"}, {"key": "spent", "label": "Spent"},
+                {"key": "rows", "label": "Rows"}],
+    "sections": [{"heading": "GBP", "rows": [
+        {"kind": "category", "cells": ["Food and groceries", "70.40", "2"]},
+        {"kind": "category", "cells": ["Eating out", "1,234.50", "5"]}],
+        "totals": [{"kind": "total", "cells": ["Total spent", "1,304.90", "7"]}],
+        "also": [{"kind": "refunds", "cells": ["Refunds", "5.10", "1"]}]}],
+    "caveats": ["3 rows were left out."]}
+
+#: (sentence, kept?) - the auditor's variants, and the rule they test.
+SENTENCE_CASES = [
+    ("You spent 70.40 on food in March.", True),
+    ("You spent 70.4 on food.", True),
+    ("You spent £70.40 on food and £1,234.50 eating out.", True),
+    ("You spent 1234.50 eating out.", True),
+    ("You spent 1.234,50 eating out.", True),
+    ("You spent 1,304.90 on food.", False),                  # the total pinned on a category
+    ("You spent 7 on food.", False),                          # a row count as money
+    ("You spent seventy pounds forty on food.", False),
+    ("You spent about seventy quid on food.", False),
+    ("You spent around a thousand on eating out.", False),
+    ("You spent 5% of your money on food.", False),
+    ("You spent 70 40 on food.", False),
+    ("You spent 70.40 on food on 5 March.", False),
+    ("You spent 70.40 on food and 2026 is a year.", True),     # a bare year of the period
+    ("You spent ７０.４０ on food.", True),                      # full-width digits, same figure
+    ("Food was 70.40. Eating out was 1,234.50. Total 1,304.90.", False),   # three sentences
+    ("Food was 70.40. Total 1,304.90.", True),
+    ("You spent 70.40 on food, see https://evil.example/?d=70.40", False),
+    ("You spent 70.40 on food; visit evil dot com", True),
+    ("You spent 3 on food", False),
+    ("Your food spending of 70.40 is 5.4% of 1,304.90", False),
+    ("In total you spent 1,304.90 in March 2026.", True),
+    ("Altogether 1,304.90, of which 70.40 was food.", True),
+    ("On food, you spent 1,304.90.", False),
+    ("You spent 1,304.90 on food and eating out combined.", False),
+    ("You spent 1,304.90.", True),
+    ("You spent 1,304.90 in all.", True),
+    ("That is half of your spending.", False),
+    ("You spent double on eating out.", False),
+    ("You spent 1.3k.", False),
+    ("You spent a hundred pounds.", False),
+    ("You spent 5.10 on refunds.", True),
+    ("You spent 1,304.90 across 7 rows.", False),
+    ("3 rows were left out.", False),
+    ("Food was the biggest spend.", True),
+    ("Nearly ninety.", False),
+    ("Food was one of two categories.", True),
+    ("You spent 1,234.50 on food and 70.40 eating out.", False),           # figures swapped
+    ("You spent 70.40 on food and 1,234.50 eating out.", True),
+    ("Roughly 70 on food.", False),
+]
+
+
+def t_the_sentence_rule_holds_for_the_auditors_variants():
+    """Audit finding 5: only the Total, or the row the clause names."""
+    check("there are at least 36 variants", len(SENTENCE_CASES) >= 36, len(SENTENCE_CASES))
+    for sentence, kept in SENTENCE_CASES:
+        got = SP.checked_sentence(sentence, SENTENCE_TABLE)
+        check(f"{'kept' if kept else 'dropped'}: {sentence[:56]}",
+              (got != SP.DROPPED_LINE) == kept, got)
+    check("the rule is stated where the code is", "THE RULE for what the one sentence may quote" in Path(
+        SP.__file__).read_text(encoding="utf-8"))
+
+
+def t_words_with_no_table_never_carry_an_amount():
+    """Audit finding 5, second half: a spending question that made no table."""
+    fresh()
+    C = SP.checked_plain
+    msg = SP.NEEDS_SETUP_ON_PC
+    check("figures with a currency symbol: the tool's own sentence instead", C("You spent £412.50 on food.", msg) == msg)
+    check("a number with cents: replaced", C("About 412.50 went on food.", msg) == msg)
+    check("a thousands figure: replaced", C("You spent 1,200 last month.", msg) == msg)
+    check("a long number: replaced", C("That is 4500 in total.", msg) == msg)
+    check("an amount in words: replaced", C("You spent seventy pounds forty.", msg) == msg)
+    check("a plain sentence with no amount is kept", C("Please check the columns on the PC.", msg)
+          == "Please check the columns on the PC.")
+    check("a year and a small count are not money", C("I looked at 2 files from 2026.", msg) == "I looked at 2 files from 2026.")
+    check("nothing from the model: the tool's sentence", C("", msg) == msg and C(None, msg) == msg)
+    check("... and with no sentence at all: the standing line", C("", "") == SP.NO_TABLE_LINE)
+    check("a spoken turn never gets the model's words", C("Fine.", msg, spoken=True) == msg)
+    check("a figure the owner wrote themselves is theirs to repeat",
+          C("Noted, £50 on lunch.", msg, allowed_from="I spent £50 on lunch today") == "Noted, £50 on lunch.")
+    check("a link or a table is replaced", C("See http://x.example", msg) == msg and C("| a | b |", msg) == msg)
+    check("the question detector", SP.looks_like_spending_question("how much did I spend on food last month?")
+          and SP.looks_like_spending_question("what did I pay for on my bank statement")
+          and not SP.looks_like_spending_question("what is the weather"))
+    # end to end: needs setup, the model invents a figure
+    d = folder("NoTable", "a_signed.csv")
+    listed(d)
+    msgs = [{"role": "user", "content": "how much did I spend on food last month?", "provenance": "typed"}]
+    stream, out, calls = turn(msgs, [call(action="summary", path=str(d / "a_signed.csv")),
+                                     say("You spent £412.50 on food last month.")])
+    check("a file with no layout and a made-up figure: the owner reads the tool's sentence",
+          words(stream) == SP.NEEDS_SETUP_ON_PC and "412.50" not in stream.decode() and "412.50" not in out["answer"],
+          words(stream))
+    check("... the turn is marked money-sensitive", out["money"] is True)
+    stream, out, _c = turn(msgs, [call(action="summary", path=str(d / "a_signed.csv")),
+                                  say("Please check the columns on the PC first.")])
+    check("harmless words are kept", words(stream) == "Please check the columns on the PC first.", words(stream))
+    # a refusal (outside text) is checked the same way
+    tainted = [{"role": "user", "content": "how much did I spend", "provenance": "pasted"}]
+    stream, out, _c = turn(tainted, [call(action="summary", path=str(d / "a_signed.csv")),
+                                     say("You spent 300.00 on food.")])
+    check("a refused call: the invented figure is replaced by a plain line",
+          words(stream) == AG.SPENDING_REFUSED_LINE and "300.00" not in stream.decode(), words(stream))
+    # words BEFORE the tool call are held on a spending question
+    setup(d / "a_signed.csv")
+    pre = {"choices": [{"message": {"role": "assistant", "content": "You probably spent £400 on food.",
+                                    "tool_calls": [{"id": "c1", "function": {
+                                        "name": "my_spending", "arguments": json.dumps(
+                                            {"action": "summary", "path": str(d / "a_signed.csv"),
+                                             "period": "2026-03"})}}]}}]}
+    stream, out, _c = turn(msgs, [pre, say("You spent 89.24 in March 2026.")])
+    check("a figure written before the tool call never streams", "£400" not in stream.decode()
+          and "400" not in words(stream), words(stream))
+    check("... the table and its checked sentence still come", marker(stream) != ""
+          and words(stream) == "You spent 89.24 in March 2026.", words(stream))
+    benign = {"choices": [{"message": {"role": "assistant", "content": "Let me look at your file.",
+                                       "tool_calls": pre["choices"][0]["message"]["tool_calls"]}}]}
+    stream, out, _c = turn(msgs, [benign, say("You spent 89.24 in March 2026.")])
+    check("words before the tool call with no amount are shown", words(stream).startswith("Let me look at your file."),
+          words(stream))
+    # the model never uses the tool and makes a figure up
+    stream, out, _c = turn(msgs, [say("You spent about £250 on food last month.")])
+    check("a spending question answered from nowhere: the invented amount is replaced",
+          "250" not in words(stream) and words(stream) == SP.NO_TABLE_LINE, words(stream))
+    plain = [{"role": "user", "content": "what is the capital of France?", "provenance": "typed"}]
+    stream, out, _c = turn(plain, [say("Paris, which has about 2,100,000 people.")])
+    check("any other question streams as before", words(stream) == "Paris, which has about 2,100,000 people."
+          and out["money"] is False, words(stream))
+    fresh()
+
+
+def t_a_conversation_that_added_up_spending_is_money_sensitive():
+    """Audit finding 6."""
+    import jarvis_chat_log as H
+    fresh()
+    tmp = Path(tempfile.mkdtemp(prefix="jarvis-spending-log-"))
+    key = bytes(range(32))
+    mk = lambda: H.ChatLog(tmp / "chat-history.db", tmp / "chat-history.json", lambda: key)
+    log = mk()
+    if H.AESGCM is None:
+        check("SKIP - the cryptography package is not installed", True)
+        return
+    cid = "conv-money-0001"
+
+    def record(log_, cid_, text, **turn_):
+        m = {"role": "user", "content": text, "provenance": "typed"}
+        t = {"answer": "ok", "finish_reason": "stop"}
+        t.update(turn_)
+        return log_.record_turn({"conversation_id": cid_, "device": "desktop", "messages": [m]},
+                                lane="qwen3:8b", turn=t)
+    check("a fresh conversation is not marked", log.conversation_money(cid) is False)
+    record(log, cid, "how much did I spend on food?", money=True, tools_ran=[])
+    check("after a turn that added up spending it is marked", log.conversation_money(cid) is True)
+    check("... and it is NOT tainted (other tools work as before)", log.conversation_tainted(cid) is False)
+    check("a restart keeps the mark", mk().conversation_money(cid) is True)
+    ok, out = 0, None
+    record(log, cid, "and last month?")
+    check("a later turn without the tool does not clear it", mk().conversation_money(cid) is True)
+    code, forked = log.fork(cid, 1)
+    check("a fork of it is marked too", code == 200 and mk().conversation_money(forked["id"]) is True, (code, forked))
+    check("an unrelated conversation is not marked", mk().conversation_money("conv-other-0002") is False)
+    temp = "conv-temp-0003"
+    log.record_turn({"conversation_id": temp, "device": "desktop", "temporary": True, "messages": [
+        {"role": "user", "content": "spending?", "provenance": "typed"}]}, lane="x",
+        turn={"answer": "ok", "finish_reason": "stop", "money": True})
+    check("a temporary chat is marked for this run (nothing is kept)", log.conversation_money(temp) is True)
+    log.delete(cid) if hasattr(log, "delete") else None
+    # the web search asks, the chatbot is refused
+    real = H._log
+    H._log = lambda: log
+    try:
+        record(log, "conv-web-0004", "how much did I spend", money=True)
+        msgs = [{"role": "user", "content": "search the web for cheap flights", "provenance": "typed"}]
+        watch = AG._TurnWatch(msgs, request={"conversation_id": "conv-web-0004"}, tainted=False)
+        check("the watch knows the conversation is money-sensitive", watch.money is True)
+        lines = AG.web_search_card_lines(watch, False, "cheap flights")
+        check("a web search in that conversation asks, and says why", AG.WEB_SEARCH_MONEY in lines, lines)
+        clean = AG._TurnWatch(msgs, request={"conversation_id": "conv-clean-0005"}, tainted=False)
+        check("a search in any other conversation is unchanged", AG.web_search_card_lines(clean, False, "cheap flights") == [])
+        import jarvis_chatbot_routes as CR
+        code, body = CR._start({"conversation_id": "conv-web-0004", "chatbot": "gemini", "goal": "find flights"},
+                               None, False)
+        check("a chatbot is not started from it", code == 409 and body["error"] == CR.MONEY_CHAT_REFUSED, (code, body))
+    finally:
+        H._log = real
+    # in the same turn
+    d = folder("MoneyTurn", "a_signed.csv")
+    listed(d)
+    setup(d / "a_signed.csv")
+    m = [{"role": "user", "content": "how much did I spend in March?", "provenance": "typed"}]
+    stream, out, _c = turn(m, [call(action="summary", path=str(d / "a_signed.csv"), period="2026-03"),
+                               say("You spent 89.24 in March 2026.")])
+    check("a turn that used my_spending reports money=True, and still not as outside text",
+          out["money"] is True and out["tools_ran"] == [], (out["money"], out["tools_ran"]))
+    w = AG._TurnWatch(m, tainted=False)
+    w.spending_asked = True
+    check("a web search later in the SAME turn asks too", AG.WEB_SEARCH_MONEY in AG.web_search_card_lines(w, False, "x"))
+    shutil.rmtree(tmp, ignore_errors=True)
+    fresh()
+
+
+def t_listing_and_waiting_do_not_read_files_again():
+    """Audit finding 7."""
+    import openpyxl
+    fresh()
+    d = folder("Perf", text={f"w{i}.csv": "Date,Description,Amount\n" + "2026-03-01,A,-1\n" * 50 for i in range(3)})
+    listed(d)
+    wb = openpyxl.Workbook()
+    wb.active.append(["Date", "Description", "Amount"])
+    wb.active.append(["2026-03-01", "A", -1])
+    wb.save(d / "wait.xlsx")
+    for n in ("w0.csv", "w1.csv", "wait.xlsx"):
+        summary(d / n)                                  # each has no layout: they wait
+    check("three files wait", len(SP.view(here=True)["waiting"]) == 3)
+    reads, spawned = [], []
+    real_read, real_run = SP.read_rows, subprocess.run
+    SP.read_rows = lambda *a, **k: (reads.append(a), real_read(*a, **k))[1]
+    subprocess.run = lambda *a, **k: (spawned.append(a), real_run(*a, **k))[1]
+    try:
+        for _ in range(5):
+            v = SP.view(here=True)
+    finally:
+        SP.read_rows, subprocess.run = real_read, real_run
+    check("GET /api/spending five times reads no file and starts no program", not reads and not spawned,
+          (len(reads), len(spawned)))
+    check("... the waiting files are still listed", len(v["waiting"]) == 3)
+    check("... and the PC's picker lists the files found", {f["name"] for f in v["bank_files"]}
+          >= {"w0.csv", "w1.csv", "wait.xlsx"}, [f["name"] for f in v["bank_files"]])
+    check("... each with its path (this PC only)", all("path" in f for f in v["bank_files"])
+          and "bank_files" not in SP.view(here=False))
+    # the waiting list is bounded
+    for i in range(15):
+        SP._note_waiting(str(d / f"ghost{i}.csv"))
+    check("at most ten files wait", len(SP._WAITING) <= 10, len(SP._WAITING))
+    # a changed or vanished file leaves the list; a saved layout for its header too
+    fresh()
+    listed(d)
+    summary(d / "w0.csv")
+    setup(d / "w1.csv")
+    check("once a layout with the file's header is saved, the file stops waiting (no read)",
+          SP.view(here=True)["waiting"] == [])
+    check("the tool's status text warns that a big file can take up to a minute",
+          "up to a minute the first time" in SP.describe({"action": "summary", "path": "x"}))
+    fresh()
+
+
+def t_files_from_different_accounts_are_never_matched():
+    """Audit finding 8."""
+    fresh()
+    rows = "2026-03-05,COSTA,-3.50\n2026-03-06,TESCO,-10.00\n"
+    d = folder("Accounts", text={"current.csv": "Date,Description,Amount\n" + rows,
+                                 "card.csv": "Date,Details,Amount\n" + rows})
+    listed(d)
+    setup(d / "current.csv", label="Current account")
+    setup(d / "card.csv", label="Card")
+    res = SP.run_tool({"action": "summary", "all": True}, roots=[str(d)])
+    check("identical rows in two different accounts are both counted", res["ok"] is True
+          and dictify(res)["total"] == ["27.00", 4], res.get("error") or dictify(res))
+    check("... and the caveat says they were never matched", SP.CAV_ACCOUNTS in res["_table"]["caveats"]
+          and not any("counted once" in c for c in res["_table"]["caveats"]), res["_table"]["caveats"])
+    res = SP.run_tool({"action": "summary", "all": True}, roots=[str(d)])
+    two = SP.combine([[SP.Txn(__import__("datetime").date(2026, 3, 5), -350, "COSTA", "")]] * 2, ["a", "a"])
+    check("the same account in two exports is still counted once", two[1] == 1 and len(two[0]) == 1, two)
+    three = SP.combine([[SP.Txn(__import__("datetime").date(2026, 3, 5), -350, "COSTA", "")]] * 2, ["a", "b"])
+    check("different tags never dedupe", three[1] == 0 and len(three[0]) == 2, three)
+    fresh()
+
+
+def t_the_settings_card_never_deletes_a_layout_to_check_it_again():
+    """Audit finding 10 (backend side): 'again' and the file picker."""
+    fresh()
+    text = CSV_HDR + "".join(f"2026-03-{i:02d},SHOP{i},-{i}.00\n" for i in range(1, 9))
+    d = folder("Again", text={"a.csv": text})
+    listed(d)
+    setup(d / "a.csv", label="Main account", currency="GBP")
+    before = json.loads((CONF / "spending-profiles.json").read_text(encoding="utf-8"))
+    pc = dict(peer="127.0.0.1", local="127.0.0.1")
+    real_from = SP._from_this_pc
+    SP._from_this_pc = lambda p, l: p == "127.0.0.1"
+    try:
+        code, out = SP.handle_get(SP.PROFILE_ROUTE, {"file": [str(d / "a.csv")]}, **pc)
+        check("a file with a fitting layout is 'known'", code == 200 and out["known"] is True, out)
+        code, out = SP.handle_get(SP.PROFILE_ROUTE, {"file": [str(d / "a.csv")], "again": ["1"]}, **pc)
+        check("again=1 returns a fresh proposal, not 'known'", code == 200 and out["known"] is False
+              and out["again"] is True and out["header"], out.get("known"))
+        check("... with the saved choices filled in and nothing left to ask",
+              out["guess"]["label"] == "Main account" and out["guess"]["currency"] == "GBP"
+              and out["guess"]["sign"] == "negative_out" and out["questions"] == []
+              and out["saved_choices"]["label"] == "Main account", out["guess"])
+        check("... and the counts for the saved choices", out["counts"]["out"] == 8 and "8 rows count as money out" in out["line"])
+        after = json.loads((CONF / "spending-profiles.json").read_text(encoding="utf-8"))
+        check("NOTHING was deleted or changed by asking again", after == before)
+        body = dict(out["guess"], file=str(d / "a.csv"), confirm=True, label="Renamed", answered=[])
+        code, saved = SP.handle_post(SP.PROFILE_ROUTE, body, **pc)
+        check("Save overwrites the same key", code == 200 and list(SP.load_profiles()) == list(before["profiles"])
+              and SP.load_profiles()[saved["fingerprint"]]["label"] == "Renamed", saved)
+        code, pv = SP.handle_post(SP.PROFILE_ROUTE, dict(body, preview=True, confirm=False), **pc)
+        check("preview: true counts without saving", code == 200 and pv["ready"] is True and pv["counts"]["out"] == 8)
+        code, pv = SP.handle_post(SP.PROFILE_ROUTE, {"file": str(d / "a.csv"), "preview": True, "header_row": 0}, **pc)
+        check("... and says 'not ready' while a choice is missing", code == 200 and pv["ready"] is False)
+        code, err = SP.handle_post(SP.PROFILE_ROUTE, dict(body, sign="positive_out"), **pc)
+        check("a save that does not fit answers 400 with the counts and the problems",
+              code == 400 and err["error"] == "misfit_confirm" and err["problems"] == ["sign"]
+              and err["counts"]["in"] == 8 and err["line"], err)
+        code, ok = SP.handle_post(SP.PROFILE_ROUTE, dict(body, sign="positive_out", accept_warnings=True), **pc)
+        check("... and saves when the owner accepts it", code == 200 and ok["ok"] is True)
+        code, ok = SP.handle_post(SP.PROFILE_ROUTE, dict(body, answered=None, sign="negative_out"), **pc)
+        # a saved layout that no longer fits the file: proposed again, with the reason, not deleted
+        code, out = SP.handle_get(SP.PROFILE_ROUTE, {"file": [str(d / "a.csv")]}, **pc)
+        check("only the phone/other devices are refused", SP.handle_get(SP.PROFILE_ROUTE, {"file": [str(d / "a.csv")]},
+                                                                   peer="100.64.0.7", local="100.64.0.1")[0] == 403)
+        code, files = SP.handle_get(SP.PATH, {}, **pc)
+        check("the PC's view lists bank files for the picker", any(f["name"] == "a.csv" for f in files["bank_files"]))
+        check("... and each knows the saved layout its header has",
+              [f["layout_id"] for f in files["bank_files"] if f["name"] == "a.csv"] == list(SP.load_profiles()))
+        code, files = SP.handle_get(SP.PATH, {}, peer="100.64.0.7", local="100.64.0.1")
+        check("the phone's view has no bank files and no paths", "bank_files" not in files
+              and all("path" not in w for w in files["waiting"]))
+    finally:
+        SP._from_this_pc = real_from
+    fresh()
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):

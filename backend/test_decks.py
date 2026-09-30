@@ -1200,6 +1200,34 @@ def t_long_blank_sentences_and_decomposed_text():
 
 
 
+def t_wording_and_the_shared_fixture():
+    import subprocess
+    r = subprocess.run([sys.executable, str(HERE.parent / "tools" / "gen_decks_cases.py"), "--check"],
+                       capture_output=True, text=True)
+    check("tools/gen_decks_cases.py --check: both apps' decks-cases.json are current "
+          "(python3 tools/gen_decks_cases.py)", r.returncode == 0, r.stdout + r.stderr)
+    msg = Q.CLASSES["model_unavailable"][1]
+    check("the model-unavailable sentence says 'Nothing was changed' and not 'lost'",
+          "Nothing was changed" in msg and "lost" not in msg.lower(), msg)
+    check("no file of either app or a test still says 'Nothing was lost'",
+          not [f for f in (list((HERE.parent / "jarvis-desktop" / "src").glob("quiz.js"))
+                           + list((HERE.parent / "jarvis-desktop" / "tests").glob("quiz.mjs"))
+                           + list((HERE.parent / "jarvis-client" / "app" / "src").rglob("Quiz*.kt")))
+               if "Nothing was lost" in f.read_text(encoding="utf-8")])
+
+    class Handler:
+        def do_GET(self):
+            pass
+
+        def do_POST(self):
+            pass
+    banner = Q.install(Handler, origin_ok=lambda h: True, token_ok=lambda h: True, read_body=lambda h: b"{}")
+    check("the quiz's startup banner no longer says 'nothing saved' (Keep saves into a deck)",
+          "nothing saved" not in banner.lower() and "Keep" in banner, banner)
+    Q._reset_for_tests()
+
+
+
 def main() -> int:
     try:
         for name, fn in list(globals().items()):

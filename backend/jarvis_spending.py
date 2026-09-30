@@ -182,6 +182,8 @@ ERRORS = {
                "{why}. Nothing was added up. Open Jarvis on the PC and check the columns again "
                "(Settings, Spending)."),
     "unanswered": "Choose an answer for every question the box asks before saving.",
+    "misfit_save": ("These choices do not fit this file: {why}. If that is right, save them "
+                    "anyway; if not, change the choices."),
 }
 
 #: Why a saved layout does not fit a file (fit_problems), in plain words.
@@ -1011,7 +1013,8 @@ def confirm(body: dict, *, rows: list, name: str = "", real: str = "", kind: str
     if problems:
         if body.get("accept_warnings") is not True:
             c = counts_of(sc.stats)
-            raise SpendingError("misfit_confirm", misfit_message(problems, profile, sc.stats),
+            raise SpendingError("misfit_confirm",
+                                misfit_message(problems, profile, sc.stats, saving=True),
                                 extra={"problems": problems, "counts": c,
                                        "line": COUNTS_LINE.format(out=c["out"], inn=c["in"])})
         profile = dict(profile, accepted=sorted(problems))
@@ -1205,8 +1208,10 @@ def fit_problems(stats: dict, profile: dict, *, ignore_accepted: bool = True) ->
     return found
 
 
-def misfit_message(problems: list, profile: dict, stats: dict) -> str:
+def misfit_message(problems: list, profile: dict, stats: dict, *, saving: bool = False) -> str:
     why = "; ".join(FIT_WHY[p].format(out=stats["out"], inn=stats["in"]) for p in problems)
+    if saving:
+        return ERRORS["misfit_save"].format(why=why)
     return ERRORS["misfit"].format(layout=label_of(profile), why=why)
 
 

@@ -694,7 +694,7 @@ mod tests {
     #[test]
     fn a_hidden_spanish_mark_loses_its_key_word_but_keeps_the_fixed_label() {
         let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../tests/fixtures/decks-words.json")).unwrap();
+            serde_json::from_str(include_str!("../../../tests/fixtures/decks-cases.json")).unwrap();
         let a = quiz_answer(
             200,
             &fixture["samples"]["spanish_quiz"].to_string(),
@@ -716,7 +716,7 @@ mod tests {
     #[test]
     fn a_finish_that_kept_questions_is_read_with_its_count_and_a_crisis_one_passes() {
         let fixture: serde_json::Value =
-            serde_json::from_str(include_str!("../../../tests/fixtures/decks-words.json")).unwrap();
+            serde_json::from_str(include_str!("../../../tests/fixtures/decks-cases.json")).unwrap();
         let ok = quiz_answer(
             200,
             &fixture["samples"]["keep_ok"].to_string(),

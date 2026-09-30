@@ -288,7 +288,7 @@ has passed on this PC; while false, every app shows "Jarvis's guess" beside a ma
 **Errors** (`{"ok": false, "error": <code>, "message": <plain words>}`): `text_too_short`,
 `text_too_long`, `bad_count`, `too_many_quizzes`, `not_found`, `bad_question`,
 `already_answered`, `answer_empty`, `answer_too_long`, `model_unavailable`
-(plain message: the local model did not answer; nothing was changed).
+(plain message, word for word in both apps: `The model on this PC did not answer. Nothing was changed - try again in a moment.`). A Keep (JARVIS-API section 102) is the one thing that saves anything from a quiz, so the intro says "unless you choose Keep"; a Spanish quiz's Keep sheet shows the Spanish crisis notice too.
 On a stale link the apps hold the buttons, like Goals (rule 4).
 
 **Shared words** (both apps, word for word):

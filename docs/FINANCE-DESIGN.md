@@ -512,7 +512,8 @@ file limit; "Keep these numbers" for the calculator off (form starts empty).
 ## Slice contract (frozen)
 
 Written 2026-09-30, when part A (spending summaries, queue item 2, JARVIS-API section 100)
-was built on the backend. **Two other builders (the desktop, the phone) build against this
+was built on the backend. **Amended 2026-09-30 after the audit** (the changes are marked
+"(audit)" below; the fixture file was regenerated, so the apps' tests follow it). **Two other builders (the desktop, the phone) build against this
 section.** Do not change a field name, a value or a word below on either app's side; if
 something here is wrong, say so and the backend changes first. Part B (the retirement
 what-if, section 103) is not frozen; it will reuse the `sections` shape but not necessarily
@@ -577,7 +578,7 @@ Neither app writes a word or a figure of its own for the table; it draws what th
  "kind": "spending", "version": 1,
  "title":  "Spending by category, March 2026",
  "period": "March 2026",                       // or "2026-03-01 to 2026-04-02" when no period was asked
- "sources": ["bank-march.csv"],                 // file names, digits hidden; at most 6
+ "sources": ["bank-march.csv (layout: Main account)"],   // file name + the saved layout used (audit); digits hidden; at most 6
  "columns": [{"key": "category", "label": "Category", "align": "left"},
              {"key": "spent",    "label": "Spent",    "align": "right"},
              {"key": "rows",     "label": "Rows",     "align": "right"}],
@@ -611,7 +612,8 @@ Rules for drawing it:
   the table sideways and the desktop lets it scroll inside the chat bubble.
 - `title` (strong), then `period` (muted), then the table, then `caveats` as a short muted
   list under it (each already a full sentence; do not join or reword them), then `sources`
-  as one muted line ("From: a.csv, b.csv"). No streaks, no praise, no warnings, no colour
+  as one muted line ("From: a.csv (layout: Main account), b.csv (layout: Card)"; the
+  "(layout: ...)" text is already in each string - a layout with no name is "Saved layout"). No streaks, no praise, no warnings, no colour
   meaning good or bad.
 - `private: true` means: not in any copy-to-clipboard/share path, not in notifications, not
   in the widget or the tray, not in a screenshot when the app is locked/hidden (see 1.3).
@@ -622,10 +624,13 @@ Rules for drawing it:
 
 `TITLE` "Spending", `DETAIL`, `PC_ONLY`, `NEEDS_SETUP_ON_PC`, `EMPTY_PROFILES`,
 `STARTER_NOTE`, `HIDDEN_COLUMNS_NOTE`, `TABLE_HIDDEN`, `TABLE_GONE`, `SPOKEN_LINE`,
-`NO_SENTENCE_LINE`, `DROPPED_LINE`, the row labels `ROW_TOTAL`, `ROW_UNCATEGORISED`,
+`NO_SENTENCE_LINE`, `DROPPED_LINE`, `NO_TABLE_LINE`, `SAVED_LAYOUT`, `SLOW_FIRST_TIME`
+(audit), the row labels `ROW_TOTAL`, `ROW_UNCATEGORISED`,
 `ROW_REFUNDS`, `ROW_INCOME`, `ROW_TRANSFERS_OUT`, `ROW_TRANSFERS_IN`, and the caveats
 `CAV_*` (already filled in the table; listed so a test can check the app never re-words
-them). The sign sentences are `sign_sentences` (negative_out, positive_out, debit_credit,
+them; `CAV_SHEETS` and `CAV_ACCOUNTS` are new), and the box's `COUNTS_LINE`,
+`COUNTS_UNREAD` (audit) and the empty-period pieces `EMPTY_SKIPPED`, `EMPTY_SKIPPED_ONE`,
+`EMPTY_RANGE`. The sign sentences are `sign_sentences` (negative_out, positive_out, debit_credit,
 drcr). Error texts the backend returns as `message` are in `errors`. **The app shows
 `message`/the words as given.** Words only the desktop uses (the column-check box) are in
 section 5 below. Phone words: `TITLE`, `DETAIL`, `PC_ONLY` ("Set up on the PC: Settings,
@@ -637,7 +642,10 @@ Spending. The columns of a new bank file are checked there, once."), `EMPTY_PROF
 `{"available", "title", "detail", "can_edit", "pc_only", "profiles": [{"id", "label",
 "columns", "sign", "sign_sentence", "saved"}], "empty_profiles", "categories": [{"category",
 "words": [..]}], "categories_are_starter", "starter_note", "waiting": [{"name", "path"?}],
-"sign_sentences", "needs_setup", "table_hidden"}`.
+"sign_sentences", "needs_setup", "table_hidden"}`. **On the PC only (audit)** it also carries
+`"bank_files": [{"name", "path", "kind": "csv"|"xlsx", "layout_id": <a profiles[].id or
+null>, "checked": bool, "waiting": bool}]` - the bank-looking files in the listed folders,
+for the file picker below (no other device gets it).
 
 - `can_edit` is true only for a request from this PC. `waiting[].path` is present only on the
   PC (a bank file whose columns are not checked yet, kept in memory; it leaves the list once a
@@ -657,7 +665,9 @@ Routes (full request and answer shapes: JARVIS-API section 100.4; every write is
 | route | use |
 |---|---|
 | `GET /api/spending/profile?file=<path>` | the proposal for a waiting file (or `known: true` with its saved profile) |
-| `POST /api/spending/profile` | save the confirmed columns (`confirm: true` required) |
+| `GET /api/spending/profile?file=<path>&again=1` | (audit) "Check the columns again": a fresh proposal with the saved choices filled in (`again: true`, `saved_choices`, `questions: []`, `counts`, `line`); a saved layout that no longer fits comes back the same way with `misfit`. **Nothing is deleted.** |
+| `POST /api/spending/profile` | save the confirmed columns (`confirm: true` required; (audit) `answered` = the questions the box asked, `accept_warnings` only after the owner ticked "save it anyway") |
+| `POST /api/spending/profile` with `preview: true` | (audit) what the choices would count before saving: `{ready, counts: {out, in, rows, unread}, line, problems, warnings}` |
 | `POST /api/spending/profile/delete` `{id}` | forget a saved layout |
 | `POST /api/spending/categories` `{categories}` / `{reset: true}` | save or reset the category words |
 | `POST /api/spending/suggest` `{file}` | proposals for shop names no rule catches (nothing saved) |
@@ -678,6 +688,13 @@ Routes (full request and answer shapes: JARVIS-API section 100.4; every write is
    **Decimal mark** ("." or ","); **Currency** (free text, at most 6 characters, optional);
    **Name** (free text, at most 60). Dropdown values are ORIGINAL column numbers
    (`header_index`), never positions in `header`.
+3a. **(audit) Under the choices, show `line`** ("With these choices, 8 rows count as money out
+   and 2 as money in.") from the answer of `preview: true` (ask again after each change, a
+   moment after the owner stops). When `warnings` is not empty show them, and keep Save
+   disabled until the owner ticks "This does not look right, but save it anyway"; then send
+   `accept_warnings: true`. A save the PC refuses as `misfit_confirm` shows its `message` and
+   the same tick box. Also send `answered` (the `questions` names the box showed) and
+   `date_serial` (from `guess`) with every save. **Name** starts empty - never the file name.
 4. Every field named in `questions` starts with no choice and **Save is disabled until each
    has one** (this is the "never guess" rule: `date_order`, `decimal`, `sign`,
    `date_column`, `description_column`, `amount_column`, `header_row`). When `header_row` is
@@ -691,6 +708,13 @@ Routes (full request and answer shapes: JARVIS-API section 100.4; every write is
    `GET /api/spending`. 400 -> show `message` verbatim.
 7. Words for this box (desktop only): dialog title "Check these columns"; button "Save these
    columns"; "Cancel"; a saved layout's button "Forget this layout"; "Check the columns again".
+   **(audit) "Check the columns again" never deletes anything first**: it calls
+   `GET .../profile?file=<that layout's file>&again=1`, opens this same dialog with the saved
+   choices in it, Save writes over the same layout, Cancel changes nothing. The file is the
+   one the layout row belongs to (a `bank_files` entry whose `layout_id` is that row's `id`),
+   not whatever is in a box. **"Forget this layout" is the only thing that deletes**, and it
+   asks "are you sure?" first. **(audit) The free-text "Bank file" box is a picker over
+   `bank_files`** (shown by `name`; the value is `path`).
 
 Categories editor (same Settings block): one row per category (name, then its words as
 comma-separated text or chips); reorder (first match wins - say so in one line); add and remove
@@ -705,6 +729,18 @@ model on its own. Desktop-only words: "Categories", "Suggest categories", "Add t
 
 ### 6. What the backend does and does not do (so neither app duplicates it)
 
+- **(audit) A saved layout is checked against the file before it is trusted** (JARVIS-API
+  100.4): one that does not fit leaves the file "waiting" and the tool says which layout was
+  tried and why; the layout key holds the kind of file (csv/xlsx); Excel numbers, hidden
+  sheets and date serials are read as described there; the layout's name is hidden and never
+  defaults to the file name; files from different layouts are never matched against each other.
+- **(audit) The one sentence's rule**: it may quote only the Total spent figure, or the figure
+  on the row whose name is nearest to it; never a row count, a caveat number, a percentage, a
+  fraction or a rounded/spelled-out amount. When `my_spending` was called and made no table,
+  the model's words are shown only if they carry no amount of money; else the tool's own
+  plain sentence is. Both apps show whatever the stream carries, as before.
+- **(audit) The conversation becomes money-sensitive** once the tool was called: a later web
+  search asks first and a chatbot is not started from it (docs/ARCHITECTURE.md section 5).
 - Refuses a bank file after outside text, on a pasted or shared message, and for a second table
   in one answer (the model is told; the app sees nothing special).
 - Holds the model's words until code has checked them, so the sentence in the stream is final:
