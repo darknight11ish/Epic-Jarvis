@@ -341,7 +341,14 @@ def t_migration_of_an_old_file():
     log = new_log()
     turn(log, "conv-m-000001", "an older chat")
     with closing(sqlite3.connect(log.db_path)) as c:
-        c.execute("ALTER TABLE conversations DROP COLUMN tag_id")
+        try:
+            c.execute("ALTER TABLE conversations DROP COLUMN tag_id")
+        except sqlite3.OperationalError:
+            cols = [r[1] for r in c.execute("PRAGMA table_info(conversations)") if r[1] != "tag_id"]
+            col_list = ", ".join(cols)
+            c.execute(f"CREATE TABLE conversations_old AS SELECT {col_list} FROM conversations")
+            c.execute("DROP TABLE conversations")
+            c.execute("ALTER TABLE conversations_old RENAME TO conversations")
         c.commit()
     fresh = H.ChatLog(log.db_path, log.settings_path, lambda: KEY)
     rows = fresh.list()["conversations"]
