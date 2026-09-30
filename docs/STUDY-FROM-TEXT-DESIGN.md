@@ -280,6 +280,7 @@ Send `X-Jarvis-Client: hud`. The phone does no speech-to-text: answers are typed
 The source passage is NOT in `Question` until it is answered.
 `Mark` = `{"level": "got_it"|"partly"|"not_yet", "comment": str, "passage": str}`.
 `Summary` = `{"counts": {"got_it": int, "partly": int, "not_yet": int}, "again": [n, ...]}`.
+`counts` are the answered questions only; `again` lists, in question order, every answered question not marked `got_it` AND every question left unanswered (owner, 2026-09-30).
 Limits: `text` 200-20000 characters, `answer` 1-2000, `count` 1-10, 3 open quizzes.
 `grader_verified` is `false` until the grader test set (`backend/quiz_grader_cases.json`)
 has passed on this PC; while false, every app shows "Jarvis's guess" beside a mark.
@@ -307,6 +308,21 @@ like `goals.patch`; then run `python3 tools/build_patch_history.py` after `git f
 `src-tauri/src/brain/quiz.rs`, `tests/quiz.mjs`. Phone: `net/Quiz.kt`,
 `ui/screens/QuizPlate.kt`, `QuizTest.kt`. One builder owns each group; builders do
 not edit each other's files, and do not run `git commit`.
+
+### Shared words added by the builders (audit fixes, 2026-09-30)
+
+Both apps say these word for word too (desktop `src/quiz.js`, phone `net/Quiz.kt`):
+
+- Kind labels: `Remember` / `Explain why` / `Apply`
+- Progress line: `Question 2 of 5 · 1 answered`, or `All 5 answered` when nothing is left
+- Paste count line: `0 / 20,000 characters · at least 200 needed` (the count is of the trimmed text, as the PC checks it; `· too long` past 20,000, and the paste is never cut short)
+- Answer count line: `12 / 2000 characters`
+- Summary counts line: `2 Got it · 1 Partly · 0 Not yet` (no percentage, no grade)
+- Summary list: one line per question to look at again, `3. <the question's words>` (skipped questions included, no extra label); `(hidden)` in place of the words while the private lists are hidden
+- Close button after the summary: `Close`
+- A PC without the feature: `Your PC's Jarvis does not have Quiz yet - run apply-patches.ps1 on the PC.`
+- Placeholders and small labels: `Paste the text here`, `Type your answer`, `From the text`, `Next question`
+- While the private lists are hidden, `Finish` and `Stop and forget this quiz` stay available in both apps (they show only numbers); questions, answers, comments and passages are hidden.
 
 ## 12. Third Gemini list, checked (2026-09-30)
 

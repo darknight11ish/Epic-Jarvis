@@ -301,9 +301,9 @@ object Quiz {
     fun progressLine(q: Session?): String {
         if (q == null || q.questions.isEmpty()) return ""
         val total = q.questions.size
-        val next = next(q) ?: return "All $total answered"
+        val upNext = next(q) ?: return "All $total answered"
         val done = q.questions.count { it.mark != null }
-        return "Question ${next.n} of $total · $done answered"
+        return "Question ${upNext.n} of $total · $done answered"
     }
 
     /** "2 Got it · 1 Partly · 0 Not yet": counts in words, never a percentage. */

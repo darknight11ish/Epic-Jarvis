@@ -138,7 +138,6 @@ internal fun QuizSection(
                 quiz != null -> {
                     val reviewN = reviewing
                     val current = if (reviewN != null) quiz.questions.firstOrNull { it.n == reviewN } else Quiz.next(quiz)
-                    val total = quiz.questions.size
                     if (current != null) {
                         QuestionView(
                             q = current,
@@ -251,7 +250,6 @@ internal fun QuizSection(
                             Quiz.textNote(pasted),
                             style = MaterialTheme.typography.labelSmall,
                             color = if (tooLong || n in 1 until Quiz.MIN_TEXT) chrome.warnInk else chrome.textLo,
-                            modifier = Modifier.liveStatus(),
                         )
                         if (tooLong) {
                             Text(

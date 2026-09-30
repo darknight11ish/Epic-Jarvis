@@ -251,6 +251,50 @@ class QuizTest {
     }
 
     @Test
+    fun theWordsMatchTheDesktopsWordForWord() {
+        assertEquals("Remember", Quiz.kindWords("recall"))
+        assertEquals("Explain why", Quiz.kindWords("explain"))
+        assertEquals("Apply", Quiz.kindWords("apply"))
+        assertEquals("Close", Quiz.CLOSE)
+        assertEquals("(hidden)", Quiz.HIDDEN_TEXT)
+        assertEquals("Your PC's Jarvis does not have Quiz yet - run apply-patches.ps1 on the PC.", Quiz.MISSING)
+        assertEquals(Quiz.MISSING, Quiz.TOO_OLD)
+        val q = Quiz.parseQuiz(obj(quizJson))!!
+        assertEquals("Question 2 of 2 · 1 answered", Quiz.progressLine(q))
+        val done = q.copy(questions = q.questions.map { it.copy(mark = Quiz.Mark("partly", "", "")) })
+        assertEquals("All 2 answered", Quiz.progressLine(done))
+        assertEquals("", Quiz.progressLine(null))
+        assertEquals("2 Got it · 1 Partly · 0 Not yet", Quiz.countsLine(Quiz.Summary(2, 1, 0, emptyList())))
+    }
+
+    @Test
+    fun theSummaryListsThePromptsIncludingSkippedOnes() {
+        val q = Quiz.parseQuiz(obj(quizJson))!!
+        // Question 2 was never answered: the PC lists it under "again" all the same.
+        assertEquals("2. Why do bees dance?", Quiz.againLine(2, q.questions, hidden = false))
+        assertEquals("2. (hidden)", Quiz.againLine(2, q.questions, hidden = true))
+        assertEquals("9. (hidden)", Quiz.againLine(9, q.questions, hidden = false))
+        val s = Quiz.parseSummary(obj("""{"ok":true,"summary":{"counts":{"got_it":1,"partly":0,"not_yet":0},"again":[3,2,2]}}"""))!!
+        assertEquals(listOf(2, 3), s.again)
+    }
+
+    @Test
+    fun thePasteCountIsOfTheTrimmedTextAndNeverCutShort() {
+        assertEquals("0 / 20,000 characters · at least 200 needed", Quiz.textNote(""))
+        // 250 spaces are 0 characters to the PC.
+        assertEquals(0, Quiz.textLength(" ".repeat(250)))
+        assertFalse(Quiz.validText(" ".repeat(250)))
+        assertEquals("250 / 20,000 characters", Quiz.textNote("x".repeat(250)))
+        // Over the limit: the real count and "too long" show, and Write questions stays off.
+        val long = "x".repeat(Quiz.MAX_TEXT + 5)
+        assertEquals("20,005 / 20,000 characters · too long", Quiz.textNote(long))
+        assertFalse(Quiz.validText(long))
+        assertEquals(Quiz.MAX_TEXT + 5, Quiz.textLength(long))
+        assertTrue(Quiz.messageFor(Quiz.E_TEXT_LONG)!!.contains("too long"))
+        assertEquals("12 / 2000 characters", Quiz.answerNote("x".repeat(12)))
+    }
+
+    @Test
     fun theBoolHelpersAreImportedAndUsed() {
         // Keeps the kotlinx helpers this file relies on honest.
         assertTrue(obj("""{"a":true}""")["a"]!!.jsonPrimitive.boolean)
