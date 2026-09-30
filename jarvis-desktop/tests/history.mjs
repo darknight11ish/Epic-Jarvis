@@ -134,7 +134,7 @@ await check("the contract's list and conversation are read as the PC sends them"
   assert.equal(v.keepDays, 0);
   assert.deepEqual(v.conversations[0], { id: "c0nv-phone-0001", title: "Dentist on Tuesday",
     started: NOW - 3600, updated: NOW - 3300, turns: 6, device: "phone", hasVoice: true, tainted: false,
-    kind: "chat", project: null });
+    kind: "chat", project: null, tagId: null });
   const c = readConversation(CONV);
   assert.equal(c.turns.length, 2);
   assert.equal(c.turns[0].provenance, "typed");

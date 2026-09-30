@@ -4212,9 +4212,8 @@ function tagEditorNode(tv) {
     down.setAttribute("aria-label", `${MOVE_DOWN}: ${t.name}`);
     const del = button(DELETE_TAG, async () => {
       if (!window.confirm(tagDeleteConfirm(t.name, t.count))) return;
-      if (await editTags({ op: "delete", id: t.id })) {
-        if (chats.tag === String(t.id)) setTagChip(String(t.id));
-      }
+      // If its chip was chosen, the re-read finds the tag gone and shows All.
+      await editTags({ op: "delete", id: t.id });
     }, { danger: true, live: true, title: `${DELETE_TAG}: ${t.name}` });
     del.setAttribute("aria-label", `${DELETE_TAG}: ${t.name}`);
     const renameBtn = button(TAG_RENAME, rename, { live: true, title: `${TAG_RENAME}: ${t.name}` });

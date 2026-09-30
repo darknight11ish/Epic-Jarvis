@@ -3554,6 +3554,10 @@ else is ignored, and the answer's `kind` says which was used (null: all). `has_v
 `voice` or `voice_unverified`. When the history cannot be opened the list is
 empty and `why_not` says why.
 
+Since 2026-09-30 every row also carries `"tag_id": int | null` (the chat's
+one tag, section 99) and `&tag=<id>` or `&tag=none` filters to one tag or to
+the untagged chats; a nonsense value is ignored, like `kind`.
+
 `GET /api/history/conversation?id=<id>`
 
 ```json
@@ -15584,3 +15588,47 @@ Every typed answer goes through the SAME English crisis check the normal chat us
 On a `crisis` answer both apps show the backend's `message` calmly in place of a mark (no red, no "Not yet", no "Jarvis's guess" label), keep the quiz open and that question's answer box available, and do not keep the typed text afterwards. Shared words (word for word in both apps) are in `docs/STUDY-FROM-TEXT-DESIGN.md` section 11. That includes its subsection "Shared words added by the builders" (kind labels, the progress, paste-count and summary-counts lines, `Close`, `(hidden)`, and the "does not have Quiz yet" line). The pasted text's length is counted after trimming in both apps, and the phone shows an over-long paste's real count and the too-long message instead of cutting it. `Finish` and `Stop` stay available in both apps while the private lists are hidden. Desktop: Brain, "Quiz me on a text" (`src-tauri/src/brain/quiz.rs`, `src/quiz.js`). Phone: Brain, "Quiz me on a text" (`net/Quiz.kt`, `ui/screens/QuizPlate.kt`). `tools/check_parity.py` lists all five routes as `ported`.
 
 Tests: `backend/test_quiz.py` (limits and every error code, the passage hidden until answered, the 3-quiz cap and the 60-minute expiry, malformed model replies, injection strings in the text and the answer, no disk write and no learner import, the local-only model call, `grader_verified` from every kind of results file, the cases file and the eval script against stand-in graders, the routes through `install()`, and the patch on the stack of earlier patches).
+
+## 99. Chat tags and sections in History (added 2026-09-30)
+
+The owner's decision (2026-09-30, `docs/CHAT-TAGS-DESIGN.md`): History can be organised into tagged sections (educational, work and so on). **One tag per chat.** A starter set that can be renamed, deleted and added to. **No card anywhere** (it is the owner's own organisation and nothing leaves the PC), and **Jarvis never tags on its own**: only when asked. Built in `backend/jarvis_chat_log.py` (the tags), `backend/jarvis_quick.py` (asking), through `chat-history.patch`'s route lists (no new module: the routes sit beside `/api/history/delete` and `/settings`, and share their token and origin checks).
+
+### 99.1 Tags and colours
+
+`Tag` = `{"id": int, "name": str, "colour": 0-7, "icon": str, "order": int}`. At most **12** tags. A name is trimmed, 1-24 printable characters, unique ignoring case. Ids are never reused after a delete. **Starter tags**, written the first time the list is read (with the key): 1 Work (colour 0 blue, `briefcase`), 2 Learning (1 green, `book`), 3 Personal (2 amber, `home`), 4 Projects (3 violet, `folder`), 5 Ideas (4 teal, `lightbulb`). Icons (each app draws them with its own icon set; no emoji): `briefcase book home folder lightbulb star flag wrench leaf music`.
+
+Eight colour slots (0 blue, 1 green, 2 amber, 3 violet, 4 teal, 5 rose, 6 slate, 7 orange), each with a light and a dark ink; the header tint is the ink at 12% (light) or 16% (dark). The ink on its own tint is 4.5:1 or better in both themes (`backend/test_chat_tags.py` computes it). **The palette, icon list, starters, limits and every word below are in the shared fixture** `history-cases.json` (`tools/gen_history_cases.py`; keys `tag_palette`, `tag_tint`, `tag_icons`, `tag_starters`, `tag_limits`, `tag_error_codes`, `tag_section_cases`, `tag_delete_cases`, and `words.tag_*`), which both apps' tests read. A colour is never the only clue: the icon, name and count always show.
+
+### 99.2 Routes
+
+| route | body | answer |
+|---|---|---|
+| `GET /api/history/tags` | - | `{"ok": true, "tags": [Tag + "count"], "untagged": int}`. Without the key: `tags: []` and a `why_not` sentence (the chats still list, untagged). |
+| `POST /api/history/tags` | `{"op": "add", "name", "colour"?, "icon"?}` | `{"ok": true, "tag": Tag, "tags": [...], "untagged": int}` (a new tag's colour defaults to the next slot, icon to `star`) |
+| | `{"op": "rename", "id", "name"}` / `{"op": "style", "id", "colour"?, "icon"?}` (at least one) / `{"op": "move", "id", "before": id \| null}` (`null`: last) / `{"op": "delete", "id"}` | same answer (`tag` is `null` after a delete). **Delete makes its chats untagged**; the apps ask "Delete the tag {name}? Its {count} chats become untagged." first. |
+| `POST /api/history/tag` | `{"id": chat_id, "tag_id": int \| null}` (exactly those two keys) | `{"ok": true, "id", "tag_id"}` |
+| `GET /api/history` | `&tag=<id>` or `&tag=none` | rows gain `"tag_id": int \| null`, as does `GET /api/history/conversation` and each search row |
+
+Errors are `{"ok": false, "error": <code>, "message": <one plain sentence>}`: `bad_name` (400), `name_taken` (409), `too_many_tags` (409), `bad_colour` (400), `bad_icon` (400), `tag_not_found` (404), `not_found` (404, the chat), `bad_request` (400; a body of the wrong shape). **While chat history is off, or its key cannot be used, a write is refused with `503`, error `bad_request` and a message saying why** (nothing is kept without the key; reading the tags still works while history is off). Every write is held on a stale link by the apps (rule 4). `H.TAG_MESSAGES` holds the sentences; the fixture carries them as `words.tag_errors`.
+
+### 99.3 Storage
+
+* **Names are sealed.** The registry `{"next_id", "tags": [...]}` is one AES-GCM value in `meta` under the key `tags`, with the additional data `meta|tags` (so it cannot be swapped in as a title). The database file holds no tag name, colour or icon in plain text (tested by reading the raw bytes).
+* **A chat holds only an opaque number**: the new plain column `conversations.tag_id INTEGER`, added in place by `_migrate` like `kind` (every existing chat stays untagged). The existing `project` column is untouched (Projects owns it).
+* **Every row-copy path carries it**: the list, search, `get`, `brief`, "Forget a time frame"'s `overlapping`, `take_out` and `put_back`, so Undo keeps a chat's tag. A tag deleted while a chat was held comes back untagged; a chat continued while held gets its old tag back only if the owner has not filed it elsewhere meanwhile.
+* Tag names never enter memory, facts, the learner, a search index or a log line.
+
+### 99.4 Asking Jarvis (no model, no card)
+
+`jarvis_quick.py`, only from the owner's newest typed or spoken words, never after a share, a paste or app-added context, and **never in a conversation that has read outside text** (it answers "I do not file a chat after it has read outside text..." and files nothing). Whole sentences only.
+
+* Current chat: "label this chat Work", "file this under Learning", "tag this as Ideas", "remove the tag from this chat" (also "untag this chat"). It acts on the request's `conversation_id` at once and answers `Done, filed under Work. You can change it in History.` A temporary chat, a chat with nothing kept yet, and history being off are each answered in words. The answer is `gate: "private"` (a tag name is the owner's word): shown, not read aloud.
+* Unknown name: `I do not have a tag called Garage. Your tags are: Work, Learning. Make new ones in History.` Tags are never made by voice.
+* **Older chat** ("label my chat about the boiler as Home"): Jarvis never guesses. The reply is `Tap the chat you mean in History and I will file it under Home.` and `X-Jarvis-Route` gains **`open_brain: "history"`, `file_under: <tag id>`, `history_q: "<search words>"`**. The apps open History with the search prefilled and the banner `Tap the chat to file it under {name}.`; tapping a row files it (`POST /api/history/tag`) and clears the banner; Cancel clears it. Nothing is filed until the owner taps. The matching is the on-screen search of section 71, so no chat text is handed to the model.
+* "Label this chat Work." is in the "what can I say" list (`jarvis_sayable.SENTENCES`, section 41; the apps' hardcoded lists must carry it word for word).
+
+### 99.5 Shared words (word for word in both apps)
+
+`Untagged`, `All`, `Tags` (editor title), `Add a tag`, `Rename`, `Delete this tag`, `Move to`, `No tag`; section header `{name} ({count})` with the screen-reader form `{name}, {count} chats, collapsed|expanded`; delete confirm `Delete the tag {name}? Its {count} chats become untagged.`; banner `Tap the chat to file it under {name}.`. Under "Hide memory lists and chat history" the apps hide tag names with the titles (sections show only a count).
+
+Tests: `backend/test_chat_tags.py` (the registry, every limit and error code, sealing checked in the raw file, the filter including a page cut inside one second, Undo of Forget-a-time-frame keeping tags, an old file migrated, no key and history off, the routes, contrast of the palette, the phrases with injection-style texts and near misses, both apps' fixture copies), with `test_chat_log.py` and `test_chat_kinds.py` updated for the new column and route lists.
