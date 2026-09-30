@@ -236,11 +236,25 @@ def default_call(system: str, user: str, schema: dict, num_predict: int):
     return content
 
 
+#: The model that answered THIS thread's last `_ask` ("" for the everyday
+#: model). Read straight after a call by the caller that made it; never shared
+#: between threads, so two quizzes asking at once cannot mislabel each other.
+_TLS = threading.local()
+
+
+def _last_model() -> str:
+    return str(getattr(_TLS, "model", "") or "")
+
+
 def _ask(system: str, user: str, schema: dict, num_predict: int) -> dict:
     """One model call, parsed. Anything wrong is a QuizError('model_unavailable')."""
     call = _STATE["call"] or default_call
+    _TLS.model = ""
     try:
         out = call(system, user, schema, num_predict)
+        # A reply may carry the model that wrote it (`.model`, see
+        # jarvis_second_card.StudyReply); a plain reply came from the everyday model.
+        _TLS.model = str(getattr(out, "model", "") or "")
         if isinstance(out, (str, bytes)):
             out = json.loads(out)
     except Exception:
@@ -351,7 +365,7 @@ def grade_answer(passage: str, question: str, answer: str) -> tuple:
 
 # ---- whether the grader has been measured ----------------------------------
 
-def grader_verified() -> bool:
+def grader_verified(model: Optional[str] = None) -> bool:
     """True only if quiz_grader_results.json shows the grader separates right
     from wrong on at least 12 cases, 80% or better, with no injection winning.
     No file, an unreadable file or any missing number is false.
@@ -364,9 +378,12 @@ def grader_verified() -> bool:
     try:
         d = json.loads(RESULTS_PATH.read_text(encoding="utf-8"))
         other = ""
-        probe = getattr(_STATE["call"], "active_model", None)
-        if callable(probe):
-            other = str(probe() or "")
+        if model is not None:
+            other = str(model or "")        # the model that answered THIS quiz's call
+        else:
+            probe = getattr(_STATE["call"], "active_model", None)
+            if callable(probe):
+                other = str(probe() or "")
         if other and d.get("model") != other:
             return False
         total, correct = d["total"], d["correct"]
@@ -633,6 +650,7 @@ class _Quiz:
         self.mode = mode
         self.level = level              # "A1".."C2" in Spanish mode, else None
         self.key_source = key_source    # "text" | "model" in Spanish mode, else None
+        self.model = ""                 # the model that last wrote or marked here ("" = everyday)
 
 
 def _purge(now: float) -> None:
@@ -645,7 +663,7 @@ def _view(s: _Quiz) -> dict:
          # Nothing has measured the model's marking of Spanish yet, so a Spanish
          # quiz is never called verified (a code-marked blank shows no guess label
          # anyway: its mark says marked_by "code").
-         "grader_verified": grader_verified() and s.mode == "text",
+         "grader_verified": grader_verified(s.model) and s.mode == "text",
          "questions": [{"n": i + 1, "kind": q["kind"], "prompt": q["prompt"],
                         "mark": dict(q["mark"]) if q["mark"] else None}
                        for i, q in enumerate(s.questions)],
@@ -687,12 +705,14 @@ def _register(make, title: str, **fields) -> dict:
         if open_count() >= MAX_OPEN:
             raise QuizError("too_many_quizzes")
         questions = make()
+        made_by = _last_model()
         with _LOCK:
             now = _CLOCK["now"]()
             _purge(now)
             if len(_SESSIONS) >= MAX_OPEN:
                 raise QuizError("too_many_quizzes")
             s = _Quiz(title, questions, now, **fields)
+            s.model = made_by
             _SESSIONS[s.id] = s
             return _view(s)
 
@@ -795,6 +815,7 @@ def answer(qid: str, body: dict) -> dict:
         return {"crisis": True, "message": _help_message(), "quiz": show(qid)}
     # The model is asked outside the sessions lock; the question is re-checked after.
     marked_by = "model"
+    _TLS.model = ""
     if spanish and kind == "blank":
         level, comment = mark_blank(text, expected, accepted)
         marked_by = "code"
@@ -802,6 +823,7 @@ def answer(qid: str, body: dict) -> dict:
         level, comment = grade_spanish(kind, prompt, passage, text.strip())
     else:
         level, comment = grade_answer(passage, prompt, text.strip())
+    marked_on = _last_model()
     with _LOCK:
         s = _get(qid)
         q = s.questions[n - 1]
@@ -812,6 +834,8 @@ def answer(qid: str, body: dict) -> dict:
                      "expected": expected if spanish else None,
                      "key_label": KEY_LABEL if spanish and key_source == "model" else None}
         s.last_used = _CLOCK["now"]()
+        if marked_by == "model":
+            s.model = marked_on
         return {"mark": dict(q["mark"]), "quiz": _view(s)}
 
 

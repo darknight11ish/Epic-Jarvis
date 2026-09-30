@@ -3576,20 +3576,22 @@ function reviewNode(v) {
 
 /* ---- "Show them": an Off topic's facts, read-only ------------------------ */
 
-async function loadShown(id) {
+async function loadShown(id, more = false) {
   const s = tp.shown[id];
   if (!s) return;
   s.loading = true;
   s.error = "";
   paintTopics();
   try {
-    const out = await invoke("brain_topics_hidden", { id });
+    // "Show more" asks for the page after the last one shown (`next`).
+    const after = more && s.next !== null && Number.isInteger(Number(s.next)) ? Number(s.next) : null;
+    const out = await invoke("brain_topics_hidden", after ? { id, after } : { id });
     const got = Topics.readFacts(out);
     if (!tp.shown[id]) return;
     if (got && got.listsHidden) {
       delete tp.shown[id];
     } else if (got) {
-      s.facts = got.facts;
+      s.facts = after ? s.facts.concat(got.facts.filter((f) => !s.facts.some((o) => o.id === f.id))) : got.facts;
       s.next = got.next;
     } else {
       s.error = Topics.isRefusal(out) ? Topics.refusalWords(out) : Topics.WORDS.missing;
@@ -3652,6 +3654,12 @@ function shownNode(id) {
     list.append(item);
   }
   box.append(list);
+  if (s.next !== null && s.next !== undefined) {
+    const more = button(Topics.APP_WORDS.show_more, () => loadShown(id, true), { live: true });
+    more.dataset.fkey = `show-more-${id}`;
+    if (s.loading) more.disabled = true;
+    box.append(more);
+  }
   return box;
 }
 
@@ -3903,13 +3911,18 @@ function topicsHiddenNode(n) {
   return line;
 }
 
-/** The name of the topic a fact sits in, for "Paused: Work is off". */
-function topicNameOfFact(id) {
-  const rows = (state.data.memory_facts && state.data.memory_facts.facts) || [];
-  const found = rows.find((r) => r && Number(r.id) === Number(id))
-    || autoL.rows.find((r) => r && Number(r.id) === Number(id));
-  const t = found ? Topics.topicById(tp.view, found.topic) : null;
-  return t ? Topics.displayName(tp.view, t) : "this topic";
+/** The line on a pinned fact whose topic may not be used: names the topic the
+ *  PC said (`f.topic`) and says whether it is Off or "Learn, but don't use". */
+function pinPausedFor(f) {
+  let t = f && Number.isInteger(f.topic) ? Topics.topicById(tp.view, f.topic) : null;
+  if (!t && f) {
+    // An older PC sends no topic id: fall back to the fact in a list.
+    const rows = (state.data.memory_facts && state.data.memory_facts.facts) || [];
+    const found = rows.find((r) => r && Number(r.id) === Number(f.id))
+      || autoL.rows.find((r) => r && Number(r.id) === Number(f.id));
+    t = found ? Topics.topicById(tp.view, found.topic) : null;
+  }
+  return Topics.pinPausedLine(t ? Topics.displayName(tp.view, t) : "this topic", t ? t.mode : "off");
 }
 
 /* ==========================================================================
@@ -6449,7 +6462,7 @@ function paintProfile() {
       meta: [
         f.added ? `pinned ${ago(f.added)}` : "",
         // Topic controls: a pin in a topic that may not be used is not read.
-        f.paused ? Topics.pinPausedLine(topicNameOfFact(f.id)) : "",
+        f.paused ? pinPausedFor(f) : "",
       ],
       actions: past ? [] : [
         button(UNPIN_LABEL, () => setPinned(f, false), { live: true, title: UNPIN_TITLE }),

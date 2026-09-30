@@ -227,6 +227,9 @@ object Topics {
     const val FILE_UNDER = "File under..."
     const val NEXT_BATCH = "Next batch"
     const val NOTHING_TO_CHECK = "Nothing to check."
+    /** "Show them" on a topic with no facts: the desktop's words. */
+    const val NO_FACTS = "Nothing is filed under this topic."
+    const val SHOW_MORE = "Show more"
     const val HIDDEN_FROM_ANSWERS = "Hidden from answers"
     const val NAME_PLACEHOLDER = "Topic name"
     const val READING = "Reading\u2026"

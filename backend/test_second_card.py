@@ -1963,7 +1963,7 @@ def t_wire_study_into_the_quiz():
                     res.write_text(json.dumps(dict(base, model="qwen3:8b")), encoding="utf-8")
                     check("a result measured on qwen3:8b: verified while it is the lane answering",
                           JQ.grader_verified() is True)
-                    SC._STUDY["model"] = ""
+                    SC._STUDY.model = ""
                     res.write_text(json.dumps(dict(base, model="jarvis-primary")), encoding="utf-8")
                     check("... and the everyday model's own result counts again when it answers",
                           JQ.grader_verified() is True)

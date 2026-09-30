@@ -181,14 +181,21 @@ internal fun TopicsSection(
         }
     }
 
-    suspend fun readShown(id: Int) {
-        when (val r = JarvisRuntime.topicsRead(Topics.hiddenPath(id))) {
+    /** [after] is the cursor of "Show more": the next page is added under what is shown. */
+    suspend fun readShown(id: Int, after: String? = null) {
+        when (val r = JarvisRuntime.topicsRead(Topics.hiddenPath(id, after))) {
             is ApiResult.Ok -> {
                 val got = Topics.hidden(r.value.body)
+                val have = shown
                 if (got == null) {
                     shownError = Topics.READ_ODD
                 } else {
-                    shown = got
+                    shown = if (after != null && have != null) {
+                        val seen = have.facts.mapTo(HashSet()) { it.id }
+                        got.copy(facts = have.facts + got.facts.filterNot { it.id in seen })
+                    } else {
+                        got
+                    }
                     shownError = null
                 }
             }
@@ -603,7 +610,7 @@ internal fun TopicsSection(
                                         color = if (shownError != null) chrome.warnInk else chrome.textLo,
                                     )
                                     got.facts.isEmpty() -> Text(
-                                        Topics.NOTHING_TO_CHECK,
+                                        Topics.NO_FACTS,
                                         style = MaterialTheme.typography.bodySmall,
                                         color = chrome.textMid,
                                     )
@@ -669,6 +676,17 @@ internal fun TopicsSection(
                                             }
                                         }
                                     }
+                                }
+                            }
+
+                            if (showId == t.id && !privateHidden) {
+                                val more = shown?.next
+                                if (more != null) {
+                                    Quiet(
+                                        Topics.SHOW_MORE,
+                                        enabled = canAct && !busy,
+                                        onClick = { scope.launch { readShown(t.id, more) } },
+                                    )
                                 }
                             }
 

@@ -130,6 +130,7 @@ export const APP_WORDS = Object.freeze({
   hidden_from_answers: "Hidden from answers",
   nothing_to_check: "Nothing to check.",
   next_ten: "Show the next ten",
+  show_more: "Show more",
   file_under: "File under…",
   file_under_label: "File this fact under",
   change: "Change",

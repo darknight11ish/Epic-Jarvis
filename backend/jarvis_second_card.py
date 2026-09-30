@@ -2311,11 +2311,19 @@ def learning_llm(llm: Callable[[str], Optional[str]]) -> Callable[[str], Optiona
 # not answer: the quiz's own default call runs, exactly as it did before this
 # existed. Loopback only; nothing about the text or the answer is kept here.
 
-#: The model that answered the quiz's LAST call on the second card ("" when the
-#: last call ran the everyday way). jarvis_quiz.grader_verified() reads it
-#: through `call.active_model`, so "Jarvis's guess" stays on the marks until the
-#: grader test has been run on THIS model too.
-_STUDY: dict = {"model": ""}
+class StudyReply(str):
+    """The lane's reply text, carrying the model that wrote it (`.model`; ""
+    for an everyday-model reply, which is a plain str). The quiz reads it off
+    the reply of ITS OWN call, so two quizzes asking at once cannot label each
+    other's marks: "Jarvis's guess" stays on the marks until the grader test
+    has been run on THIS model too."""
+    model: str = ""
+
+
+#: Only for `call.active_model()` (the eval script and the quiz's fallback
+#: probe): the model of the LAST call made on THIS thread. Never shared
+#: between threads, so concurrent calls cannot mislabel each other.
+_STUDY = threading.local()
 
 
 def _study_chat(lane: Lane, system: str, user: str, schema: dict,
@@ -2362,14 +2370,16 @@ def study_call(fallback: Optional[Callable] = None) -> Callable:
         if lane is not None:
             out = _study_chat(lane, system, user, schema, num_predict)
             if out is not None:
-                _STUDY["model"] = lane.model
-                return out
-        _STUDY["model"] = ""
+                _STUDY.model = lane.model
+                reply = StudyReply(out)
+                reply.model = lane.model
+                return reply
+        _STUDY.model = ""
         if fallback is None:
             raise RuntimeError("the second card did not answer and there is no other model call")
         return fallback(system, user, schema, num_predict)
 
-    call.active_model = lambda: _STUDY["model"]      # type: ignore[attr-defined]
+    call.active_model = lambda: getattr(_STUDY, "model", "")      # type: ignore[attr-defined]
     return call
 
 
@@ -3753,7 +3763,7 @@ def _reset_for_tests() -> None:
         _SUGGEST_FP.clear()
     _TAGS.clear()
     _LEARN.update(failed_at=-1e9, short=False)
-    _STUDY.update(model="")
+    _STUDY.model = ""
     wake()
     try:
         _LANE.stop("reset")
