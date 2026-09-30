@@ -17,8 +17,9 @@ class SettingsJumpTest {
 
     /** The screen's `item(key = "...")` rows, in the order they are drawn. */
     private fun rows(file: String): List<String> =
-        Regex("item\\(key\\s*=\\s*([\"\\w.-]+)").findAll(repoFile(dir + file).readText())
-            .map { it.groupValues[1].trim('"') }.toList()
+        // Quoted keys only: a comment that says `item(key = ...)` is not a row.
+        Regex("item\\(key\\s*=\\s*\"([\\w.-]+)\"").findAll(repoFile(dir + file).readText())
+            .map { it.groupValues[1] }.toList()
 
     @Test
     fun `every Settings section is in the jump list, in screen order`() {

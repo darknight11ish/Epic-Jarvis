@@ -24,7 +24,8 @@ class NotificationIdsTest {
     fun `every id constant is in the list`() {
         // The object's own constants, read by reflection, must all be in ALL.
         val declared = NotificationIds::class.java.declaredFields
-            .filter { it.type == Int::class.javaPrimitiveType && java.lang.reflect.Modifier.isStatic(it.modifiers) }
+            // `$stable` is the Compose compiler's own field, not an id.
+            .filter { it.type == Int::class.javaPrimitiveType && java.lang.reflect.Modifier.isStatic(it.modifiers) && !it.name.startsWith("$") }
             .map { it.name }
             .toSet()
         val listed = NotificationIds.ALL.map { it.first }.toSet()
