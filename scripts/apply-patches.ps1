@@ -915,6 +915,15 @@ $PATCHES = @(
     # their own. Needs jarvis_decks.py copied in (and the py-fsrs package from requirements.txt);
     # without it, or on any error, the banner says so and the routes are simply not there.
     'decks.patch'
+    # "Spending summaries" (the owner's decision of 2026-09-30; docs/FINANCE-DESIGN.md part A, JARVIS-API
+    # section 100): GET /api/spending, GET/POST /api/spending/profile, POST /api/spending/profile/delete,
+    # /categories and /suggest (this PC only) and GET /api/chat/table?id=<id>. ONE hunk in jarvis_hud.py,
+    # an install block right after decks.patch's own (the last one before `_loopback_companion`), so it goes
+    # last, like every new patch. No card and no gate line: the my_spending tool is decided under file_read's
+    # action, and it reads a file in a folder the owner already listed. Needs jarvis_spending.py and
+    # jarvis_money_parse.py copied in; without them, or on any error, the banner says so and the routes are
+    # simply not there.
+    'spending.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1136,6 +1145,9 @@ $SHIPPED = @(
     'eval_quiz_grader.py'        # run by hand on the PC: checks the quiz's marking against the real local model and writes quiz_grader_results.json beside jarvis_quiz.py (quiz_grader_cases.json is copied in step 3b)
     # --- "Review decks" (2026-09-30, decks.patch) ---
     'jarvis_decks.py'            # decks.patch: kept quiz questions studied again on a spaced schedule (py-fsrs), sealed in study.db under their own key; the owner rates each card, no model is called; the one quiet `review` scheduler kind
+    # --- "Spending summaries" (2026-09-30, spending.patch) ---
+    'jarvis_spending.py'         # spending.patch: totals from a bank CSV/Excel export the owner dropped in a listed folder (the my_spending tool), a table shown on screen only, the layout box (PC only) and the categories; every number from code, the model's one sentence checked against the table
+    'jarvis_money_parse.py'      # money, dates and bank-file headers read exactly (Decimal, whole cents); shared by jarvis_spending.py and the retirement what-if to come
 )
 
 # The settings file. Installed only where none exists; never overwritten.

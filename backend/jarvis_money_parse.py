@@ -93,6 +93,8 @@ def _strip(text) -> tuple:
     # A symbol between the sign and the digits ("-£45" was handled; "£-45"
     # leaves "-45" here).
     if t.startswith("-"):
+        if negative:
+            return "", False, ""         # "--5" or "(-5)": not a number
         negative, t = True, t[1:].strip()
     return t, negative, direction
 

@@ -323,6 +323,22 @@ CLASSIFICATION = {
     "/api/quiz/{id}/answer": ("ported", "Mark one typed answer against that question's passage only (Got it / Partly / Not yet plus one sentence); no card. Desktop: brain/quiz.rs. Phone: net/Quiz.kt."),
     "/api/quiz/{id}/finish": ("ported", "End the quiz with the short \"look at these again\" summary; the quiz is forgotten. Desktop: brain/quiz.rs. Phone: net/Quiz.kt."),
     "/api/quiz/{id}/stop": ("ported", "Stop and forget the quiz at once, no summary. Desktop: brain/quiz.rs. Phone: net/Quiz.kt."),
+    # Review decks and typed Spanish practice (the owner's decision of
+    # 2026-09-30; JARVIS-API.md section 102; backend jarvis_decks.py,
+    # decks.patch; docs/QUIZ-DECKS-DESIGN.md). Both apps: "My study decks"
+    # beside the quiz in Brain (desktop brain/decks.rs, phone net/Decks.kt and
+    # ui/screens/DecksPlate.kt). The optional `keep` body of
+    # /api/quiz/{id}/finish is a field, not a route. The one desktop-only
+    # item, the later unencrypted export (a file dialog), is not built.
+    "/api/decks": ("ported", "The deck list (name, cards, ready, paused), the day's counts and the plain \"N cards ready\" line (GET); a new empty deck (POST). No card: the owner's own tap saves the owner's own words, sealed on the PC. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    "/api/decks/settings": ("ported", "New cards a day, 0 to 20 (default 5). A setting the owner changes; no card. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    "/api/decks/{id}/act": ("ported", "Rename, pause, resume or delete one deck; delete asks \"are you sure?\" in the app and is immediate. No card. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    "/api/decks/{id}/cards": ("ported", "One deck's cards (front, back, passage) for managing them; hidden by both apps under Hide memory lists and chat history. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    "/api/decks/{id}/cards/{cid}/act": ("ported", "Edit a card's front or back, or delete the card (\"are you sure?\" in the app). No card. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    "/api/review": ("ported", "The next card to review, the ready count and the run's progress (at most 20 at a time). Reviewing calls no model. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    "/api/review/reveal": ("ported", "Show a card's back (the answer and its source passage, with the label for a model-written key). A card can be rated only after this. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    "/api/review/rate": ("ported", "The owner's own rating (Didn't remember / Remembered, with effort / Remembered / Easy); py-fsrs works out when the card comes back. Held on a stale link. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    "/api/review/more": ("ported", "\"Do 10 more\": raises the current run's limit of 20 by 10. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
     # Projects (the owner's decision of 2026-09-28; backend/jarvis_projects.py,
     # projects.patch; JARVIS-API section 88). Both apps since build step 3:
     # desktop Brain -> Projects (brain/projects.rs projects_read /

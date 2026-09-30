@@ -1,6 +1,6 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -3624,6 +3624,20 @@
+@@ -3623,6 +3623,20 @@
      except Exception as exc:
          print(f"  decks      NOT ON ({type(exc).__name__}) - Review decks are off")
          print("             until jarvis_decks.py is back: run apply-patches.ps1 again")

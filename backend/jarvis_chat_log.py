@@ -519,6 +519,28 @@ def _tag_id(v):
     return v if isinstance(v, int) and not isinstance(v, bool) else None
 
 
+#: The `conversations` columns, in ONE place and in one order. Every path that
+#: copies a conversation row (get, brief, list, overlapping, take_out, and
+#: put_back's _put_one) reads or writes this list, so a new column is one edit
+#: here (plus the CREATE TABLE and _migrate) - it can no longer be dropped by
+#: one hand-written positional tuple that was missed (the chat tags audit,
+#: 2026-09-30; a test pins the list against the real table).
+CONV_COLS = ("id", "title", "started", "updated", "device", "kind", "project", "tag_id")
+
+
+def _conv_cols(alias: str = "", *, raw: bool = False) -> str:
+    """CONV_COLS as SQL. `kind` reads as 'chat' when empty, unless `raw`
+    (take_out holds a row exactly as it was)."""
+    a = alias + "." if alias else ""
+    return ", ".join(("COALESCE(%skind, 'chat')" % a) if (c == "kind" and not raw)
+                     else a + c for c in CONV_COLS)
+
+
+def _conv_named(row) -> dict:
+    """The first len(CONV_COLS) values of a row read with _conv_cols, by name."""
+    return dict(zip(CONV_COLS, row))
+
+
 def _row(cid, title, started, updated, turns, device, voice, outside, kind, project,
          tag_id=None) -> dict:
     """One History list row, as GET /api/history and the search send it.
@@ -1555,13 +1577,12 @@ class ChatLog:
             # Titles cannot be opened; say why rather than show blanks.
             out["why_not"] = out["why_not"] or str(exc)
             return out
-        sql = ("SELECT c.id, c.title, c.started, c.updated, c.device,"
+        sql = ("SELECT " + _conv_cols("c") + ","
                " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id),"
                " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id AND"
                "   t.provenance IN ('voice','voice_unverified')),"
                " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id AND"
-               "   t.read_outside=1),"
-               " COALESCE(c.kind, 'chat'), c.project, c.tag_id"
+               "   t.read_outside=1)"
                " FROM conversations c")
         # Paging by whole seconds (`updated` goes out as one, and comes back
         # as `before`). A page never splits a second: when its last row shares
@@ -1589,7 +1610,7 @@ class ChatLog:
             rows = c.execute(sql + clause + " ORDER BY c.updated DESC, c.id DESC LIMIT ?",
                              args + [limit]).fetchall()
             if len(rows) == limit:
-                sec = math.floor(rows[-1][3] or 0)
+                sec = math.floor(rows[-1][CONV_COLS.index("updated")] or 0)
                 have = {r[0] for r in rows}
                 extra = " AND COALESCE(c.kind, 'chat') = ?" if kind is not None else ""
                 if tag_sql:
@@ -1600,10 +1621,14 @@ class ChatLog:
                                  + ([kind] if kind is not None else [])
                                  + tag_args).fetchall()
                 rows += [r for r in rest if r[0] not in have]
-        for cid, title, started, updated, device, n, voice, outside, rkind, project, tid in rows:
+        nc = len(CONV_COLS)
+        for r in rows:
+            cv = _conv_named(r)
+            n, voice, outside = r[nc:nc + 3]
             out["conversations"].append(_row(
-                cid, self._title(aead, cid, title), started, updated, n, device,
-                bool(voice), bool(outside), rkind, project, tid))
+                cv["id"], self._title(aead, cv["id"], cv["title"]), cv["started"],
+                cv["updated"], n, cv["device"], bool(voice), bool(outside),
+                cv["kind"], cv["project"], cv["tag_id"]))
         return out
 
     def _title(self, aead, cid, blob) -> str:
@@ -1624,10 +1649,11 @@ class ChatLog:
         if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
             return None
         with self._lock, closing(self._connect()) as c:
-            conv = c.execute("SELECT title, COALESCE(kind, 'chat'), project, started, updated,"
-                             " tag_id FROM conversations WHERE id=?", (cid,)).fetchone()
-            if conv is None:
+            got = c.execute(f"SELECT {_conv_cols()} FROM conversations WHERE id=?",
+                            (cid,)).fetchone()
+            if got is None:
                 return None
+            conv = _conv_named(got)
             rows = c.execute("SELECT idx, at, role, provenance, read_outside, answer_kept,"
                              " text FROM turns WHERE conversation_id=? ORDER BY idx",
                              (cid,)).fetchall()
@@ -1650,13 +1676,14 @@ class ChatLog:
                 t.update(provenance=prov or "unknown", read_outside=bool(outside),
                          answer_kept=bool(kept))
             turns.append(t)
-        kind = conv[1] if conv[1] in KINDS else "chat"
-        title = self._title(aead, cid, conv[0])
+        kind = conv["kind"] if conv["kind"] in KINDS else "chat"
+        title = self._title(aead, cid, conv["title"])
         crisis = kind in CONTINUABLE and title == CRISIS_TITLE
         return {"id": cid, "title": title, "history": self._keeping(),
                 "tainted": any(bool(r[4]) for r in rows), "turns": turns,
-                "kind": kind, "project": conv[2] or None, "tag_id": _tag_id(conv[5]),
-                "started": int(conv[3] or 0), "updated": int(conv[4] or 0),
+                "kind": kind, "project": conv["project"] or None,
+                "tag_id": _tag_id(conv["tag_id"]),
+                "started": int(conv["started"] or 0), "updated": int(conv["updated"] or 0),
                 "continuable": kind in CONTINUABLE and not crisis,
                 "continue_why": (CRISIS_CONTINUE_WHY if crisis
                                  else "" if kind in CONTINUABLE else CONTINUE_WHY[kind])}
@@ -1720,8 +1747,7 @@ class ChatLog:
             return out
         with self._lock, closing(self._connect()) as c:
             convs = c.execute(
-                "SELECT c.id, c.title, c.started, c.updated, c.device,"
-                " COALESCE(c.kind, 'chat'), c.project, c.tag_id FROM conversations c"
+                "SELECT " + _conv_cols("c") + " FROM conversations c"
                 + (" WHERE COALESCE(c.kind, 'chat') = ?" if kind is not None else "")
                 + " ORDER BY c.updated DESC, c.id DESC LIMIT ?",
                 ([kind] if kind is not None else []) + [SEARCH_SCAN_MAX + 1]).fetchall()
@@ -1732,8 +1758,10 @@ class ChatLog:
         deadline = time.monotonic() + SEARCH_SECONDS
         found = []
         with closing(self._connect()) as c:
-            for n, (cid, title_blob, started, updated, device, rkind, project, tid) \
-                    in enumerate(convs):
+            for n, conv_row in enumerate(convs):
+                cv = _conv_named(conv_row)
+                cid, title_blob, started, updated = cv["id"], cv["title"], cv["started"], cv["updated"]
+                device, rkind, project, tid = cv["device"], cv["kind"], cv["project"], cv["tag_id"]
                 if time.monotonic() > deadline:
                     out["partial"] = True
                     break
@@ -1776,14 +1804,16 @@ class ChatLog:
         if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
             return None
         with self._lock, closing(self._connect()) as c:
-            row = c.execute("SELECT title, updated, COALESCE(kind, 'chat'), tag_id FROM conversations"
-                            " WHERE id=?", (cid,)).fetchone()
+            row = c.execute(f"SELECT {_conv_cols()} FROM conversations WHERE id=?",
+                            (cid,)).fetchone()
         if row is None:
             return None
+        cv = _conv_named(row)
         aead = self._cipher()
-        return {"id": cid, "title": self._title(aead, cid, row[0]),
-                "updated": int(row[1] or 0), "kind": row[2] if row[2] in KINDS else "chat",
-                "tag_id": _tag_id(row[3])}
+        return {"id": cid, "title": self._title(aead, cid, cv["title"]),
+                "updated": int(cv["updated"] or 0),
+                "kind": cv["kind"] if cv["kind"] in KINDS else "chat",
+                "tag_id": _tag_id(cv["tag_id"])}
 
     # -- chat tags (docs/CHAT-TAGS-DESIGN.md, JARVIS-API section 99) --------
     def _tag_cipher(self):
@@ -2073,8 +2103,7 @@ class ChatLog:
         with self._lock, closing(self._connect()) as c:
             # A conversation's own first and last message, from its turns
             # (`started`/`updated` are the same moments, kept on the row).
-            sql = ("SELECT c.id, c.title, c.started, c.updated, COALESCE(c.kind, 'chat'),"
-                   " c.tag_id,"
+            sql = ("SELECT " + _conv_cols("c") + ","
                    " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id),"
                    " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id"
                    "   AND t.at >= ? AND t.at < ?),"
@@ -2105,7 +2134,12 @@ class ChatLog:
         except Exception as exc:
             out["why_not"] = f"the chat history could not be opened ({type(exc).__name__})"
             return out
-        for cid, title, started, updated, kind, tid, n, inside, first, last in rows:
+        nc = len(CONV_COLS)
+        for r in rows:
+            cv = _conv_named(r)
+            cid, title, started, updated = cv["id"], cv["title"], cv["started"], cv["updated"]
+            kind, tid = cv["kind"], cv["tag_id"]
+            n, inside, first, last = r[nc:nc + 4]
             first = first if first is not None else started
             last = last if last is not None else updated
             out["items"].append({
@@ -2131,9 +2165,8 @@ class ChatLog:
                 for cid in cids:
                     if not (isinstance(cid, str) and _CID.fullmatch(cid)):
                         continue
-                    conv = c.execute("SELECT id, title, started, updated, device, kind,"
-                                     " project, tag_id FROM conversations WHERE id=?",
-                                     (cid,)).fetchone()
+                    conv = c.execute(f"SELECT {_conv_cols(raw=True)} FROM conversations"
+                                     " WHERE id=?", (cid,)).fetchone()
                     if conv is None:
                         continue
                     turns = c.execute(f"SELECT {self._TURN_COLS} FROM turns"
@@ -2182,9 +2215,10 @@ class ChatLog:
         marks = ",".join("?" * 11)
         now_conv = c.execute("SELECT updated FROM conversations WHERE id=?", (cid,)).fetchone()
         if now_conv is None:
-            conv = tuple(conv) + (None,) * (8 - len(conv))    # held before kind/tag existed
-            c.execute("INSERT INTO conversations (id, title, started, updated, device, kind,"
-                      " project, tag_id) VALUES (?,?,?,?,?,?,?,?)", conv[:8])
+            n = len(CONV_COLS)
+            conv = tuple(conv) + (None,) * (n - len(conv))    # held before kind/tag existed
+            c.execute("INSERT INTO conversations (%s) VALUES (%s)"
+                      % (", ".join(CONV_COLS), ",".join("?" * n)), conv[:n])
             for t in turns:
                 c.execute(f"INSERT INTO turns ({self._TURN_COLS}) VALUES ({marks})", t)
             return
@@ -2210,11 +2244,13 @@ class ChatLog:
             nxt += 1
         # The old title and first moment; the newer last moment stays.
         c.execute("UPDATE conversations SET title=?, started=? WHERE id=?",
-                  (conv[1], conv[2], cid))
+                  (conv[CONV_COLS.index("title")], conv[CONV_COLS.index("started")], cid))
         # The tag it had, unless the owner filed it somewhere since.
-        if len(conv) > 7 and conv[7] is not None:
+        held_tag = conv[CONV_COLS.index("tag_id")] if len(conv) > CONV_COLS.index("tag_id") \
+            else None
+        if held_tag is not None:
             c.execute("UPDATE conversations SET tag_id=? WHERE id=? AND tag_id IS NULL",
-                      (conv[7], cid))
+                      (held_tag, cid))
 
 
 # ------------------------------------------------------ the module's own log

@@ -1587,12 +1587,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             g.reads += 1;
             if (g.fails) throw new Error(g.fails);
             const out = JSON.parse(JSON.stringify({ available: true, goals: g.goals,
-              limits: { text: 300, steps: 7, goals: 20, by: 40 } }));
+              limits: { text: 300, steps: 7, goals: 20, by: 40, needs: 3 } }));
             const sec = window.__security;
             if (sec.hidden && !sec.revealed) {
               for (const gl of out.goals) {
                 gl.text = "";
-                gl.plan = gl.plan.map((s) => ({ ...s, step: "", by: "" }));
+                gl.plan = gl.plan.map((s) => ({ ...s, step: "", by: "", lock_words: "",
+                  reached_words: "", measure_name: "" }));
                 gl.hidden = true;
               }
               out.hidden = true;
@@ -1631,7 +1632,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               return { ok: false, error: "there are already 20 goals - stop tracking one before adding another" };
             }
             const plan = Array.isArray(args.plan) && args.plan.length
-              ? args.plan.map((s) => ({ step: String(s.step || ""), by: String(s.by || ""), done: Boolean(s.done) }))
+              ? args.plan.map((s) => ({ ...s, step: String(s.step || ""), by: String(s.by || ""), done: Boolean(s.done) }))
               : [{ step: text, by: "", done: false }];
             const goal = { id: "g" + g.goals.length.toString(16).padStart(10, "0"), text, plan,
               status: "draft", created: Date.now() / 1000, changed: Date.now() / 1000 };
@@ -1646,8 +1647,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (!goal) return { ok: false, error: "no such goal" };
             if (goal.status !== "draft") return { ok: false, error: "that goal is not waiting to be accepted" };
             const plan = Array.isArray(args.plan) && args.plan.length
-              ? args.plan.map((s) => ({ step: String(s.step || ""), by: String(s.by || ""), done: Boolean(s.done) }))
+              ? args.plan.map((s) => ({ ...s, step: String(s.step || ""), by: String(s.by || ""), done: Boolean(s.done) }))
               : goal.plan;
+            if (g.refuseAccept) throw g.refuseAccept;
             if (!plan.length) return { ok: false, error: "a plan needs at least one step" };
             if (plan.length > 7) {
               return { ok: false, error: "a plan can have at most 7 steps - keep the big ones and drop the rest" };
@@ -1670,11 +1672,19 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const g = window.__goals;
             const goal = g.goals.find((x) => x.id === args.id);
             if (!goal) return { ok: false, error: "no such goal" };
-            const i = args.index;
+            const i = args.stepId ? goal.plan.findIndex((s) => s.id === args.stepId) : args.index;
             if (typeof i !== "number" || i < 0 || i >= goal.plan.length) {
               return { ok: false, error: "that is not one of this goal's steps" };
             }
+            // A locked step is refused with the PC's own sentence (a 409 that
+            // Rust hands on as an error); nothing changes.
+            if (args.done && goal.plan[i].state === "locked") {
+              throw g.lockedError || "Do the earlier step first, or tick it if it is already done.";
+            }
             goal.plan[i].done = Boolean(args.done);
+            if (goal.plan[i].state === "done" || goal.plan[i].state === "open") {
+              goal.plan[i].state = args.done ? "done" : "open";
+            }
             goal.changed = Date.now() / 1000;
             return { ok: true, goal: { ...goal } };
           }

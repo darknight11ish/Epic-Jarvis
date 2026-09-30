@@ -373,6 +373,10 @@ SHIPPED = (
     # "Review decks" (2026-09-30; decks.patch): kept quiz questions, spaced
     # review with py-fsrs, sealed in study.db.
     "jarvis_decks.py",
+    # "Spending summaries" (2026-09-30; spending.patch): totals from a bank
+    # export, and the money/date reader it and the retirement what-if share.
+    "jarvis_spending.py",
+    "jarvis_money_parse.py",
 )
 
 

@@ -91,7 +91,8 @@ await check("reading GET /api/goals: ids, plans, limits, and an older PC", async
   assert.equal(v.available, true);
   assert.equal(v.goals.length, 2);
   assert.equal(v.goals[1].plan[0].done, true);
-  assert.deepEqual(v.limits, { text: 300, steps: 7, goals: 20, by: 40 });
+  assert.deepEqual(v.limits, { text: 300, steps: 7, goals: 20, by: 40, needs: 3 });
+  assert.equal(v.locks, false, "a PC that sends no needs limit has no locks");
   assert.equal(openCount(v), 2, "a stopped goal does not count as open");
   const withStopped = readGoals({ ok: true, goals: [DRAFT, ACTIVE, STOPPED] });
   assert.equal(openCount(withStopped), 2);
@@ -135,6 +136,8 @@ await check("statusLabel and the check-in lines", async () => {
   assert.equal(checkinJobFor(DRAFT, [CHECKIN_JOB], null), null, "a different goal's words never match");
 });
 
+const LIFE_ID = CASES.cases.life.project.id;
+
 /* ── The Brain window ─────────────────────────────────────────────────── */
 
 const { base, close } = await K.serve();
@@ -177,8 +180,8 @@ await check("a draft: editable step text, Add a step, and Accept sends the edite
   assert.equal(sent[0].cmd, "brain_goals_accept");
   assert.equal(sent[0].id, "g0000000001");
   assert.deepEqual(sent[0].plan, [
-    { step: "contact 3 installers", by: "", done: false },
-    { step: "pick one and book it", by: "", done: false },
+    { step: "contact 3 installers", by: "", done: false, needs: [], measure: null },
+    { id: "s1", step: "pick one and book it", by: "", done: false, needs: [], measure: null },
   ]);
 });
 
@@ -194,7 +197,7 @@ await check("Remove takes a step out of the draft before it is ever sent anywher
   const sent = await page.evaluate(() => window.__goalsCalls);
   await page.close();
   assert.equal(left, 1);
-  assert.deepEqual(sent[0].plan, [{ step: "two", by: "", done: false }]);
+  assert.deepEqual(sent[0].plan, [{ step: "two", by: "", done: false, needs: [], measure: null }]);
 });
 
 await check("accepting shows \"waiting for your yes\", the same words a reminder card uses", async () => {

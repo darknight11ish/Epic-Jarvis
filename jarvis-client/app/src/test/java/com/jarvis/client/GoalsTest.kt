@@ -3,6 +3,7 @@ package com.jarvis.client
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.Goals
 import com.jarvis.client.net.JarvisJson
+import com.jarvis.client.net.Projects
 import com.jarvis.client.net.Schedule
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.boolean
@@ -10,8 +11,10 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.JsonNull
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -283,6 +286,220 @@ class GoalsTest {
         ))!!
         assertEquals(emptyList<String>(), Schedule.actionsOf(activeJob))
         assertEquals("goal check-in", Schedule.tag("goal_checkin"))
+    }
+
+    // ---------------------------------------- step locks (section 101) ----
+
+    private val fixture: JsonObject = run {
+        val text = requireNotNull(javaClass.classLoader?.getResource("contract/projects-cases.json")) {
+            "contract/projects-cases.json is missing - run tools/gen_projects_cases.py"
+        }.readText()
+        obj(text)
+    }
+    private val goalCases get() = fixture["goal_cases"]!!.jsonObject
+
+    /** A case's answer: its `body`, or the case itself when it is a bare body. */
+    private fun answer(name: String): JsonObject {
+        val c = goalCases[name]!!.jsonObject
+        return (c["body"] as? JsonObject) ?: c
+    }
+
+    private fun refusal(name: String): Goals.Reply {
+        val c = goalCases[name]!!.jsonObject
+        return Goals.Reply(c["status"]!!.jsonPrimitive.int, c["body"]!!.jsonObject)
+    }
+
+    @Test
+    fun theLockWordsAreThePcsKeyForKey() {
+        val words = fixture["goal_words"]!!.jsonObject
+        assertEquals(words.keys, Goals.WORDS.keys)
+        for ((k, v) in words) assertEquals(k, v.jsonPrimitive.content, Goals.WORDS[k])
+        val limits = fixture["goal_limits"]!!.jsonObject
+        assertEquals(limits["needs"]!!.jsonPrimitive.int, Goals.MAX_NEEDS)
+        assertEquals(limits["steps"]!!.jsonPrimitive.int, Goals.MAX_STEPS)
+        assertEquals(limits["step_ids"]!!.jsonArray.map { it.jsonPrimitive.content }, Goals.STEP_IDS)
+        // The list read carries the same words and limits.
+        assertEquals(fixture["goal_words"], answer("list")["words"])
+        assertEquals(Goals.MAX_NEEDS, Goals.parse(answer("list"))!!.limits!!.needs)
+    }
+
+    @Test
+    fun aLockedStepIsReadAsSentAndItsTickIsOff() {
+        val plan = Goals.parseOne(answer("created"))!!.plan
+        val first = plan[0]
+        val second = plan[1]
+        assertEquals("s1", first.id)
+        assertEquals("open", first.state)
+        assertEquals("5k time", first.measureName)
+        assertNotNull(first.measure)
+        assertEquals("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", first.measure!!.bench)
+        assertTrue(second.locked)
+        assertFalse(second.met)
+        assertEquals(listOf("s1"), second.needs)
+        assertEquals(listOf("s1"), second.waitingOn)
+        assertEquals("after: \"Get the 5k under 30\"", second.lockWords)
+        // The tick is off for a locked step; an open one can be ticked.
+        assertFalse(Goals.canTick(second))
+        assertTrue(Goals.canTick(first))
+        // "<step>, locked, after: <steps>"
+        assertEquals("Enter the race, locked, after: \"Get the 5k under 30\"", Goals.spoken(second, second.step))
+        assertEquals("Get the 5k under 30", Goals.spoken(first, first.step))
+    }
+
+    @Test
+    fun reachedByNumberIsNotATickAndKeepsTheTickButton() {
+        val first = Goals.parseOne(answer("number_reached"))!!.plan[0]
+        assertEquals("met_by_number", first.state)
+        assertTrue(first.met)
+        assertFalse("reaching a target never ticks the step", first.done)
+        assertTrue(first.reached)
+        assertEquals("The number reached its target: 29.5 min (target 30 min).", first.reachedWords)
+        assertTrue(Goals.canTick(first))
+        assertTrue(Goals.spoken(first, first.step).endsWith(first.reachedWords))
+        val after = Goals.parseOne(answer("first_undone"))!!.plan
+        assertTrue(after[1].done)
+        assertEquals("done", after[1].state)
+        assertEquals(1790000120.0, after[1].doneAt!!, 1e-9)
+        assertEquals("open", after[2].state)
+    }
+
+    @Test
+    fun theRefusalsAreShownAsSent() {
+        // A tick on a locked step (a stale screen): the PC's sentence alone.
+        val tick = refusal("refuse_tick_locked")
+        val (ok, goal, said) = Goals.changedSaid(tick)
+        assertFalse(ok)
+        assertNull(goal)
+        assertEquals(tick.body!!["error"]!!.jsonPrimitive.content, said)
+        assertEquals("Do \"Get the 5k under 30\" first, or tick it if it is already done.", said)
+        // Saving a plan: the PC's sentence after "Not changed.", nothing altered.
+        for (name in listOf("refuse_cycle", "refuse_self", "refuse_too_many", "refuse_unknown")) {
+            val r = refusal(name)
+            val err = r.body!!["error"]!!.jsonPrimitive.content
+            assertEquals(name, "Not changed. $err", Goals.acceptedSaid(r).third)
+            assertEquals(name, "Not changed. $err", Goals.createdSaid(r).third)
+        }
+        assertTrue(Goals.acceptedSaid(refusal("refuse_cycle")).third.contains("in a circle"))
+    }
+
+    @Test
+    fun anOlderPcsPlainStepStillReadsWithDefaults() {
+        val plain = Goals.parseOne(obj(
+            """{"ok":true,"goal":{"id":"g0000000001","text":"x","future":1,
+                "plan":[{"step":"a","by":"","done":true,"surprise":{"x":1}}],"status":"active","created":1,"changed":2}}""",
+        ))!!.plan.single()
+        assertEquals(Goals.Step("a", "", true), plain)
+        assertFalse(plain.locked)
+        assertEquals("", plain.id)
+        // Junk in the new fields is dropped, not guessed.
+        val junk = Goals.parseOne(obj(
+            """{"ok":true,"goal":{"id":"g0000000001","text":"x","status":"draft","created":1,"changed":2,
+                "plan":[{"step":"a","by":"","done":false,"needs":["s2","../x",7],"measure":{"project":"no","bench":"no"},
+                         "state":"locked","waiting_on":"s2","done_at":"soon"}]}}""",
+        ))!!.plan.single()
+        assertEquals(listOf("s2"), junk.needs)
+        assertNull(junk.measure)
+        assertTrue(junk.waitingOn.isEmpty())
+        assertNull(junk.doneAt)
+        assertTrue(junk.locked)
+    }
+
+    @Test
+    fun aSavedPlanSendsOnlyTheStoredFields() {
+        val plan = Goals.parseOne(answer("created"))!!.plan
+        val sent = obj(Goals.acceptBody(plan))["plan"]!!.jsonArray
+        assertEquals(3, sent.size)
+        val stored = setOf("id", "step", "by", "done", "needs", "measure")
+        for (st in sent) assertEquals(stored, st.jsonObject.keys)
+        val second = sent[1].jsonObject
+        assertEquals("s2", second["id"]!!.jsonPrimitive.content)
+        assertEquals(listOf("s1"), second["needs"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals(JsonNull, second["measure"])
+        val measure = sent[0].jsonObject["measure"]!!.jsonObject
+        assertEquals("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", measure["project"]!!.jsonPrimitive.content)
+        // A new step has no id yet; done_at and the computed words are never sent.
+        val fresh = obj(Goals.createBody("x", listOf(Goals.Step("a", "", false))))["plan"]!!.jsonArray.single().jsonObject
+        assertFalse(fresh.containsKey("id"))
+        assertFalse(fresh.containsKey("done_at"))
+        assertFalse(fresh.containsKey("lock_words"))
+    }
+
+    @Test
+    fun theDraftEditorKeepsIdsAndStopsAtThreeNeeds() {
+        var plan = listOf(
+            Goals.Step("A", "", false, id = "s1"),
+            Goals.Step("B", "", false, id = "s2", needs = listOf("s1")),
+            Goals.Step("C", "", false, id = "s3", needs = listOf("s2", "s1")),
+        )
+        // A new step gets a free id.
+        assertEquals("s4", Goals.newStep(plan).id)
+        assertEquals("s1", Goals.newStep(plan.drop(1)).id)
+        // Picking: never itself, never a fourth.
+        assertEquals(plan, Goals.toggleNeed(plan, 0, "s1"))
+        plan = plan + Goals.newStep(plan) + Goals.newStep(plan + Goals.newStep(plan))
+        var d = plan.map { it }
+        d = Goals.toggleNeed(d, 2, "s4")
+        assertEquals(listOf("s2", "s1", "s4"), d[2].needs)
+        assertEquals("a fourth is not added", d, Goals.toggleNeed(d, 2, "s5"))
+        assertEquals(listOf("s2", "s1"), Goals.toggleNeed(d, 2, "s4")[2].needs)
+        // Deleting a step takes its id out of every other step's needs, and says so.
+        val (rest, touched) = Goals.removeStep(plan, 0)
+        assertTrue(touched)
+        assertTrue(rest.none { "s1" in it.needs })
+        assertEquals(listOf("s2"), rest.first { it.id == "s3" }.needs)
+        assertFalse(Goals.removeStep(plan, 3).second)
+        // A measure is set and cleared.
+        val m = Goals.Measure("a".repeat(32), "b".repeat(32))
+        assertEquals(m, Goals.setMeasure(plan, 0, m)[0].measure)
+        assertNull(Goals.setMeasure(Goals.setMeasure(plan, 0, m), 0, null)[0].measure)
+        assertEquals("Step 6", Goals.label(plan, 5))
+        assertEquals("A", Goals.label(plan, 0))
+    }
+
+    @Test
+    fun onlyBenchmarksWithATargetCanBeFollowed() {
+        fun bench(id: String, kind: String, target: Double?, better: String?) = Projects.Bench(
+            id = id, name = "b$id", kind = kind, unit = "min", better = better, target = target,
+            sensitive = false, keepOnScreen = false, keepOnScreenWords = "", markedByYou = false,
+            unmark = "", unmarkWaiting = false, unmarkLast = "", results = 0, latest = null, said = "",
+            targetReached = false, command = "", notRunnableWhy = "", points = null,
+        )
+        val p = "a".repeat(32)
+        val project = Projects.Project(
+            id = p, name = "Run", kind = "life", instructions = "", notes = emptyList(), folder = null,
+            shareable = false, shareableWaiting = false, shareableLast = "", workListTitle = null,
+            benchmarks = 3,
+            benchList = listOf(
+                bench("b".repeat(32), "number", 30.0, "lower"),
+                bench("c".repeat(32), "number", null, "lower"),
+                bench("d".repeat(32), "command", 30.0, "lower"),
+            ),
+            maxInstructions = 0,
+        )
+        val options = Goals.measureOptions(listOf(project))
+        assertEquals(1, options.size)
+        assertEquals("Run: b${"b".repeat(32)}", options.single().label)
+        assertEquals(Goals.Measure(p, "b".repeat(32)), options.single().measure)
+    }
+
+    @Test
+    fun hidingKeepsTheStateButNotTheWords() {
+        val v = Goals.parse(answer("list"))!!
+        val hidden = Goals.hide(v)
+        val plan = hidden.goals.single().plan
+        assertTrue(plan.all { it.lockWords.isEmpty() && it.step.isEmpty() })
+        assertEquals(v.goals.single().plan.map { it.state }, plan.map { it.state })
+        val secret = Goals.Step("x", "", false, state = "open", reached = true, reachedWords = "69 kg", measureName = "Weight", measureSensitive = true)
+        val g = Goals.Goal("g0000000001", "t", listOf(secret), "active", 1.0, 1.0)
+        val h = Goals.hide(Goals.View(listOf(g), null)).goals.single().plan.single()
+        assertEquals("", h.reachedWords)
+        assertEquals("", h.measureName)
+    }
+
+    @Test
+    fun theTickAnswerIsUntickedWhenTakenBack() {
+        val src = repoFile("jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt").readText()
+        assertTrue(src.contains("doneWord = if (done) \"Done.\" else \"Unticked.\""))
     }
 
     private fun repoFile(rel: String): File {

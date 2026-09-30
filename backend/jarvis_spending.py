@@ -103,6 +103,8 @@ PC_ONLY = "Set up on the PC: Settings, Spending. The columns of a new bank file 
 NEEDS_SETUP_ON_PC = ("Open Jarvis on the PC to check the columns of this bank file "
                      "(Settings, Spending). It takes a minute and is remembered.")
 EMPTY_PROFILES = "No bank layouts saved yet."
+HIDDEN_COLUMNS_NOTE = ("A column that looks like an account or card number is not shown, and "
+                       "cannot be used.")
 STARTER_NOTE = "These are starter categories. Change the words to suit the shops you use."
 
 TABLE_HIDDEN = "Spending table hidden"
@@ -697,7 +699,8 @@ def propose(rows: list, *, name: str = "") -> dict:
     if idx is None:
         preview_rows = rows[:8]
         return {"ok": True, "known": False, "header_row": None,
-                "questions": ["header_row"], "header": [], "hidden_columns": [],
+                "questions": ["header_row"], "header": [], "header_index": [],
+                "hidden_columns": 0, "hidden_note": "",
                 "preview": [_preview_row(r, set()) for r in preview_rows],
                 "guess": None, "sentences": {}, "warnings": [ERRORS["no_header"]]}
     header = rows[idx]
@@ -744,8 +747,10 @@ def propose(rows: list, *, name: str = "") -> dict:
              "decimal": decimal, "currency": _first_currency(body, cols_out),
              "label": _tidy(name)[:60]}
     return {"ok": True, "known": False, "fingerprint": fingerprint(header), "header_row": idx,
-            "header": [_hide_name(c) for c in header],
-            "hidden_columns": [_hide_name(header[i]) for i in sorted(private)],
+            "header": [_hide_name(c) for i, c in enumerate(header) if i not in private],
+            "header_index": [i for i in range(len(header)) if i not in private],
+            "hidden_columns": len(private),
+            "hidden_note": HIDDEN_COLUMNS_NOTE if private else "",
             "preview": [_preview_row(r, private) for r in body[:5]],
             "guess": guess, "questions": questions, "warnings": warnings,
             "sentences": {"sign": SIGN_SENTENCES.get(sign, "")},
@@ -773,7 +778,7 @@ def _first_currency(body: list, cols: dict) -> str:
     return ""
 
 
-def confirm(body: dict, *, rows: list, name: str = "") -> tuple:
+def confirm(body: dict, *, rows: list, name: str = "", real: str = "") -> tuple:
     """Check what the owner chose in the box against the file itself and save
     it. (fingerprint, profile). Refuses a choice the file does not support:
     it must read at least one row."""
@@ -787,7 +792,7 @@ def confirm(body: dict, *, rows: list, name: str = "") -> tuple:
              "date_order": body.get("date_order"), "decimal": body.get("decimal"),
              "header_row": idx, "currency": body.get("currency"),
              "label": body.get("label") or name,
-             "header": [_hide_name(c) for c in header],
+             "header": [("" if M.is_private_column(c) else _hide_name(c)) for c in header],
              "saved": _today().isoformat()}, ncols=max(len(header), 1))
     except (ValueError, TypeError):
         raise SpendingError("profile_bad")
@@ -799,6 +804,8 @@ def confirm(body: dict, *, rows: list, name: str = "") -> tuple:
         raise SpendingError("no_rows")
     fp = fingerprint(header)
     save_profile(fp, profile)
+    if real:
+        _clear_waiting(real)
     return fp, profile, got
 
 
@@ -1328,7 +1335,7 @@ _TABLES: "OrderedDict[str, dict]" = OrderedDict()
 _ID = re.compile(r"^[0-9a-f]{32}$")
 
 
-def keep_table(table: dict, *, clock: Callable[[], float] = time.time) -> str:
+def keep_table(table: dict, *, clock: Callable = time.time) -> str:
     tid = _secrets.token_hex(16)
     with _T_LOCK:
         _TABLES[tid] = {"table": table, "at": clock()}
@@ -1337,7 +1344,7 @@ def keep_table(table: dict, *, clock: Callable[[], float] = time.time) -> str:
     return tid
 
 
-def fetch_table(tid, *, clock: Callable[[], float] = time.time) -> Optional[dict]:
+def fetch_table(tid, *, clock: Callable = time.time) -> Optional[dict]:
     if not isinstance(tid, str) or not _ID.match(tid):
         return None
     with _T_LOCK:
@@ -1394,6 +1401,17 @@ def _note_waiting(real: str) -> None:
 def _clear_waiting(real: str) -> None:
     with _WAIT_LOCK:
         _WAITING.pop(real, None)
+
+
+def _prune_waiting(profiles: dict) -> None:
+    """A file waiting for its layout stops waiting once ANY saved layout fits it
+    (another file with the same header may have been confirmed)."""
+    with _WAIT_LOCK:
+        paths = list(_WAITING)
+    for real in paths:
+        got = read_rows(real)
+        if not got.get("ok") or locate(got["rows"], profiles)[2] is not None:
+            _clear_waiting(real)
 
 
 def _candidates(roots: list) -> list:
@@ -1619,6 +1637,7 @@ def view(*, here: bool = False) -> dict:
     """GET /api/spending."""
     profiles = load_profiles()
     rules, starter = load_rules()
+    _prune_waiting(profiles)
     with _WAIT_LOCK:
         waiting = list(_WAITING)
     shown = []
@@ -1688,8 +1707,7 @@ def handle_post(route: str, body, peer=None, local=None) -> tuple:
                 return 400, {"ok": False, "error": got["code"], "message": got["error"]}
             if body.get("confirm") is not True:
                 return 400, {"ok": False, "error": "profile_bad", "message": ERRORS["profile_bad"]}
-            fp, prof, norm = confirm(body, rows=got["rows"], name=got["name"])
-            _clear_waiting(got["real"])
+            fp, prof, norm = confirm(body, rows=got["rows"], name=got["name"], real=got["real"])
             _audit("spending_layout_saved", {"rows": len(norm.txns), "skipped": norm.skipped})
             return 200, {"ok": True, "fingerprint": fp, "rows_read": len(norm.txns),
                          "rows_skipped": norm.skipped, "view": view(here=True)}
