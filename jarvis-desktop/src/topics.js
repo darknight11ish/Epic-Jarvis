@@ -26,6 +26,8 @@ export const WORDS = Object.freeze({
   intro: "A topic is a folder for things Jarvis knows. Pick what Jarvis may do with each folder.",
   sorted_guess:
     "Jarvis sorted {n} of your {total} facts by guessing from the words. Check them so switching a topic off works as you expect.",
+  sorted_guess_one:
+    "Jarvis sorted 1 fact by guessing from the words. Check it so switching a topic off works as you expect.",
   check_button: "Check these ({n})",
   check_right: "These are right",
   check_held: "Held back: might be about {name}",
@@ -35,9 +37,11 @@ export const WORDS = Object.freeze({
   private_asks: "This will ask for your OK first.",
   unsorted_name: "Unsorted",
   kept_hidden: "{n} facts kept, hidden",
+  kept_hidden_one: "1 fact kept, hidden",
   show_them: "Show them",
   not_used_tag: "not used in answers",
   skipped: "{n} new things not saved this week",
+  skipped_one: "1 new thing not saved this week",
   left_out: "Left out {n} facts because of your topic settings",
   left_out_one: "Left out 1 fact because of your topic settings",
   preview_left_out: "{n} things Jarvis knows about {name} will be left out of answers.",
@@ -53,7 +57,9 @@ export const WORDS = Object.freeze({
     "Uses the model on this PC, never a cloud one, on up to 20 facts a night. It only suggests; you check.",
   confirm_delete: "Delete this topic? Its facts are kept; pick where they go.",
   screen_reader: "{name}, {n} facts, {mode}, button: change mode",
+  screen_reader_one: "{name}, 1 fact, {mode}, button: change mode",
   hidden_row: "Topic {index}, {n} facts, {mode}",
+  hidden_row_one: "Topic {index}, 1 fact, {mode}",
   moved_line: "Done: {name} is {mode}. You can change it in Brain.",
   pick_line: "Pick what Jarvis may do with {name}.",
   no_such_topic: "I do not have a topic called {name}.",
@@ -64,6 +70,7 @@ export const WORDS = Object.freeze({
   waiting: "Waiting for your approval.",
   sorting_now: "Jarvis is still sorting {n} of your facts.",
   pin_paused: "Paused: {name} is off",
+  pin_paused_learn: "Paused: {name} is set to Learn, but don't use",
   used_left_out: "A memory from a topic you have since switched off.",
   ask_save: "Save under Unsorted",
   ask_skip: "Skip it",
@@ -341,14 +348,14 @@ export function displayName(view, topic) {
 
 /** The row as a screen reader says it (contract C4). */
 export const screenReader = (name, n, modeId) =>
-  fill(WORDS.screen_reader, { name, n, mode: modeName(modeId) });
+  fill(Number(n) === 1 ? WORDS.screen_reader_one : WORDS.screen_reader, { name, n, mode: modeName(modeId) });
 
 /** What a topic is called while names are hidden: "Topic 1". */
 export const hiddenName = (index) => `Topic ${index}`;
 
 /** The row while names are hidden: "Topic 1, 41 facts, Use, but don't learn". */
 export const hiddenRow = (index, n, modeId) =>
-  fill(WORDS.hidden_row, { index, n, mode: modeName(modeId) });
+  fill(Number(n) === 1 ? WORDS.hidden_row_one : WORDS.hidden_row, { index, n, mode: modeName(modeId) });
 
 /** "{n} facts" - and "1 fact". */
 export const factCount = (n) => APP_WORDS.facts_word(Math.max(0, Number(n) || 0));
@@ -368,10 +375,13 @@ export function rowTags(topic) {
   if (topic.private) out.push({ kind: "private", text: WORDS.private_tag });
   if (topic.mode === "learn_only") out.push({ kind: "not-used", text: WORDS.not_used_tag });
   if (topic.mode === "off") {
-    out.push({ kind: "kept-hidden", text: fill(WORDS.kept_hidden, { n: topic.facts }) });
+    out.push({ kind: "kept-hidden", text: keptHiddenLine(topic.facts) });
   }
   if (topic.skippedWeek > 0) {
-    out.push({ kind: "skipped", text: fill(WORDS.skipped, { n: topic.skippedWeek }) });
+    out.push({
+      kind: "skipped",
+      text: topic.skippedWeek === 1 ? WORDS.skipped_one : fill(WORDS.skipped, { n: topic.skippedWeek }),
+    });
   }
   return out;
 }
@@ -383,6 +393,7 @@ export const sortingLine = (view) =>
 /** "Jarvis sorted N of your M facts by guessing..." - when any are unchecked. */
 export function sortedGuessLine(view) {
   if (!view || view.unchecked <= 0) return "";
+  if (view.unchecked === 1) return WORDS.sorted_guess_one;
   return fill(WORDS.sorted_guess, { n: view.unchecked, total: view.facts });
 }
 
@@ -563,6 +574,7 @@ export function leftOutLine(n) {
 /** "3 facts kept, hidden" for the lists' own note (`topics_hidden`), or "". */
 export function keptHiddenLine(n) {
   const count = Number.isInteger(n) && n > 0 ? n : 0;
+  if (count === 1) return WORDS.kept_hidden_one;
   return count ? fill(WORDS.kept_hidden, { n: count }) : "";
 }
 
@@ -573,9 +585,11 @@ export function factTag(view, topicId) {
   return t && t.mode === "learn_only" ? WORDS.not_used_tag : "";
 }
 
-/** A pinned fact whose topic may not be used: "Paused: Work is off", or "". */
-export function pinPausedLine(name) {
-  return fill(WORDS.pin_paused, { name: name || "" });
+/** A pinned fact whose topic may not be used: "Paused: Work is off" (Off) or
+ *  "Paused: Work is set to Learn, but don't use". `modeId` is the topic's mode. */
+export function pinPausedLine(name, modeId) {
+  const key = modeId === "learn_only" ? WORDS.pin_paused_learn : WORDS.pin_paused;
+  return fill(key, { name: name || "" });
 }
 
 /** The two buttons of a memory card that asks about a topic (`topic_ask`). */

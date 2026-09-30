@@ -532,6 +532,49 @@ def t_the_model_is_only_a_suggestion():
     check("a non-local model is refused", res["ran"] is False and res["why"], str(res))
 
 
+def t_model_pass_does_not_hold_the_memory_lock():
+    import threading
+    st = store()
+    for i in range(3):
+        st.add(f"Owner mentions widget number {i}", source="t")
+    started = threading.Event()
+
+    def slow(p):
+        started.set()
+        time.sleep(0.8)
+        return '{"topic": "Hobbies"}'
+    th = threading.Thread(target=lambda: T.model_pass(st, ask=slow, limit=3))
+    th.start()
+    started.wait(3)
+    t0 = time.time()
+    st.search("widget")
+    took = time.time() - t0
+    th.join()
+    check("a memory search is not blocked during a slow model call", took < 0.4, f"{took:.2f}s")
+    with T._db(st) as c:
+        n = c.execute("SELECT COUNT(*) FROM fact_topics WHERE how='model'").fetchone()[0]
+    check("... and the results were still written", n == 3, str(n))
+
+
+def t_delete_clears_the_topics_skip_counts():
+    with_cards("approved")
+    st = store()
+    code, out = T.op_add({"name": "Garden"}, st)
+    gid = out["id"]
+    with T._db(st) as c:
+        c.execute("INSERT INTO topic_skips (topic_id, day, n) VALUES (?,?,?)", (gid, T._day(), 4))
+    code, out = T.op_delete({"id": gid, "move_to": 1}, st)
+    with T._db(st) as c:
+        left = c.execute("SELECT COUNT(*) FROM topic_skips WHERE topic_id=?", (gid,)).fetchone()[0]
+    check("deleting a topic deletes its skip counts", code == 200 and left == 0, str(left))
+    code, out = T.op_add({"name": "Boats"}, st)
+    check("a new topic that reuses the id starts with no skip counts",
+          out["id"] == gid and T.view(st) is not None)
+    with T._db(st) as c:
+        left = c.execute("SELECT COUNT(*) FROM topic_skips WHERE topic_id=?", (gid,)).fetchone()[0]
+    check("... none inherited", left == 0)
+
+
 def t_injection_style_fact_text_does_nothing():
     st = store()
     ids = topic_ids(st)

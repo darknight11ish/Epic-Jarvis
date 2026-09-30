@@ -95,7 +95,14 @@ object MemoryProfile {
      * pin's topic may not be used in answers, so it is still listed but not
      * read with questions until the topic is back on.
      */
-    data class Fact(val id: Long, val text: String, val added: Double?, val paused: Boolean = false)
+    data class Fact(
+        val id: Long,
+        val text: String,
+        val added: Double?,
+        val paused: Boolean = false,
+        /** The id of the topic that pauses it (the PC's `topic`), or null when it did not say. */
+        val topic: Int? = null,
+    )
 
     data class Profile(val facts: List<Fact>, val chars: Int, val limit: Int) {
         val ids: Set<Long> get() = facts.mapTo(HashSet()) { it.id }
@@ -112,7 +119,8 @@ object MemoryProfile {
             val o = el as? JsonObject ?: return@mapNotNull null
             val id = o.number("id")?.longOrNull ?: return@mapNotNull null
             val text = o.text("text") ?: return@mapNotNull null
-            Fact(id, text, o.number("added")?.doubleOrNull?.takeIf { it.isFinite() }, o.flag("paused") == true)
+            Fact(id, text, o.number("added")?.doubleOrNull?.takeIf { it.isFinite() }, o.flag("paused") == true,
+                o.number("topic")?.longOrNull?.toInt())
         }
         val chars = body.number("chars")?.longOrNull?.toInt() ?: facts.sumOf { it.text.length }
         val limit = body.number("limit")?.longOrNull?.toInt() ?: DEFAULT_LIMIT

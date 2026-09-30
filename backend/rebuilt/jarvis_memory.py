@@ -2941,6 +2941,32 @@ class MemoryStore:
         with _LOCK, closing(self._connect()) as c:
             return topic_blocked(c, kind)
 
+    def topic_of_facts(self, ids) -> dict:
+        """{fact id: the topic id that keeps it out of answers} for the given
+        facts - the id of the topic (its own or its second choice) whose mode
+        may not be used, else its own topic; a fact nobody has filed is under
+        Unsorted. Never raises: {} on any failure."""
+        ids = [int(i) for i in ids]
+        if not ids:
+            return {}
+        try:
+            with _LOCK, closing(self._connect()) as c:
+                modes = {r[0]: r[1] for r in c.execute("SELECT id, mode FROM topics")}
+                out = {i: TOPIC_UNSORTED for i in ids}
+                m = ",".join("?" * len(ids))
+                for r in c.execute("SELECT fact_id, topic_id, alt_topic_id FROM fact_topics"
+                                   f" WHERE fact_id IN ({m})", ids):
+                    fid, own, alt = r[0], r[1], r[2]
+                    pick = own
+                    for t in (own, alt):
+                        if t is not None and modes.get(t, "off") not in ("both", "use_only"):
+                            pick = t
+                            break
+                    out[fid] = pick
+                return out
+        except sqlite3.Error:
+            return {}
+
     # ---- "Forget a time frame" (jarvis_forget_range.py, 2026-09-28) -------
 
     def saved_between(self, start: float, end: float, limit: int = 201) -> tuple:
@@ -4146,12 +4172,23 @@ def profile_view(st: Optional["MemoryStore"] = None) -> dict:
     except Exception:
         paused = frozenset()
     facts = []
-    for p in st.profile():
+    pins = st.profile()
+    homes = {}
+    if paused:
+        try:
+            homes = st.topic_of_facts([int(p["id"]) for p in pins if int(p["id"]) in paused])
+        except Exception:
+            homes = {}
+    for p in pins:
         row = {"id": int(p["id"]), "text": str(p["text"] or ""), "added": p["added"]}
         if int(p["id"]) in paused:
             # "paused: Work is off" (topic controls): still pinned, not read
-            # with questions until its topic may be used again.
+            # with questions until its topic may be used again. `topic` is
+            # the id of the topic that pauses it, so the apps can name it and
+            # say whether it is Off or "Learn, but don't use".
             row["paused"] = True
+            if homes.get(int(p["id"])) is not None:
+                row["topic"] = int(homes[int(p["id"])])
         facts.append(row)
     return {"facts": facts, "chars": sum(len(f["text"]) for f in facts),
             "limit": PROFILE_LIMIT}
@@ -4572,9 +4609,15 @@ def conversation_facts_view(conversation_id: str, st: Optional["MemoryStore"] = 
                 " WHERE erased_at IS NULL AND (valid_to IS NULL OR valid_to > ?)"
                 " AND meta LIKE ? ORDER BY created DESC, id DESC",
                 (now, f"%{conversation_id}%")).fetchall()
+            # Facts in an OFF topic are kept but hidden from the owner's lists
+            # (topic controls) - this list too. Never raises; blocks nothing
+            # on a store from before topics.
+            off_topic = topic_blocked(c, "visible")
         for r in rows:
             meta = _meta_dict(r["meta"])
             if meta.get("conversation_id") != conversation_id or meta.get("forgotten_at"):
+                continue
+            if int(r["id"]) in off_topic:
                 continue
             if len(out) >= CONVERSATION_FACTS_MAX:
                 more = True

@@ -76,6 +76,7 @@ object Topics {
         "title" to "Topics",
         "intro" to "A topic is a folder for things Jarvis knows. Pick what Jarvis may do with each folder.",
         "sorted_guess" to "Jarvis sorted {n} of your {total} facts by guessing from the words. Check them so switching a topic off works as you expect.",
+        "sorted_guess_one" to "Jarvis sorted 1 fact by guessing from the words. Check it so switching a topic off works as you expect.",
         "check_button" to "Check these ({n})",
         "check_right" to "These are right",
         "check_held" to "Held back: might be about {name}",
@@ -85,9 +86,11 @@ object Topics {
         "private_asks" to "This will ask for your OK first.",
         "unsorted_name" to "Unsorted",
         "kept_hidden" to "{n} facts kept, hidden",
+        "kept_hidden_one" to "1 fact kept, hidden",
         "show_them" to "Show them",
         "not_used_tag" to "not used in answers",
         "skipped" to "{n} new things not saved this week",
+        "skipped_one" to "1 new thing not saved this week",
         "left_out" to "Left out {n} facts because of your topic settings",
         "left_out_one" to "Left out 1 fact because of your topic settings",
         "preview_left_out" to "{n} things Jarvis knows about {name} will be left out of answers.",
@@ -101,7 +104,9 @@ object Topics {
         "model_help_note" to "Uses the model on this PC, never a cloud one, on up to 20 facts a night. It only suggests; you check.",
         "confirm_delete" to "Delete this topic? Its facts are kept; pick where they go.",
         "screen_reader" to "{name}, {n} facts, {mode}, button: change mode",
+        "screen_reader_one" to "{name}, 1 fact, {mode}, button: change mode",
         "hidden_row" to "Topic {index}, {n} facts, {mode}",
+        "hidden_row_one" to "Topic {index}, 1 fact, {mode}",
         "moved_line" to "Done: {name} is {mode}. You can change it in Brain.",
         "pick_line" to "Pick what Jarvis may do with {name}.",
         "no_such_topic" to "I do not have a topic called {name}.",
@@ -111,6 +116,7 @@ object Topics {
         "waiting" to "Waiting for your approval.",
         "sorting_now" to "Jarvis is still sorting {n} of your facts.",
         "pin_paused" to "Paused: {name} is off",
+        "pin_paused_learn" to "Paused: {name} is set to Learn, but don't use",
         "used_left_out" to "A memory from a topic you have since switched off.",
         "ask_save" to "Save under Unsorted",
         "ask_skip" to "Skip it",
@@ -574,15 +580,17 @@ object Topics {
     // -------------------------------------------------- rows and reading ---
 
     /** "41 facts" - the fixture's own wording (`{n} facts`). */
-    fun factsText(n: Int): String = "$n facts"
+    fun factsText(n: Int): String = if (n == 1) "1 fact" else "$n facts"
 
     /** TalkBack's line for a row's mode button: "Work, 41 facts, Use, but don't learn, button: change mode". */
     fun screenReader(name: String, facts: Int, modeId: String): String =
-        w("screen_reader", "name" to name, "n" to facts, "mode" to modeName(modeId))
+        if (facts == 1) w("screen_reader_one", "name" to name, "mode" to modeName(modeId))
+        else w("screen_reader", "name" to name, "n" to facts, "mode" to modeName(modeId))
 
     /** The row while the memory lists are hidden: "Topic 1, 41 facts, Use, but don't learn". */
     fun hiddenRow(index: Int, facts: Int, modeId: String): String =
-        w("hidden_row", "index" to index, "n" to facts, "mode" to modeName(modeId))
+        if (facts == 1) w("hidden_row_one", "index" to index, "mode" to modeName(modeId))
+        else w("hidden_row", "index" to index, "n" to facts, "mode" to modeName(modeId))
 
     /** A topic's 1-based position among the owner's own topics (Unsorted is none); 0 for an unknown id. */
     fun ownerIndex(view: View, id: Int): Int = view.own.indexOfFirst { it.id == id } + 1
@@ -600,8 +608,9 @@ object Topics {
         val out = ArrayList<String>()
         if (topic.isPrivate) out.add(w("private_tag"))
         if (topic.mode == "learn_only") out.add(w("not_used_tag"))
-        if (topic.isOff || topic.hidden) out.add(w("kept_hidden", "n" to topic.facts))
-        if (topic.skippedWeek > 0) out.add(w("skipped", "n" to topic.skippedWeek))
+        if (topic.isOff || topic.hidden) out.add(keptHiddenLine(topic.facts))
+        if (topic.skippedWeek == 1) out.add(w("skipped_one"))
+        else if (topic.skippedWeek > 1) out.add(w("skipped", "n" to topic.skippedWeek))
         return out
     }
 
@@ -611,7 +620,15 @@ object Topics {
 
     /** "Jarvis sorted N of your M facts by guessing..." and the button, or null when nothing needs checking. */
     fun guessLine(view: View): String? =
-        if (view.unchecked > 0) w("sorted_guess", "n" to view.unchecked, "total" to view.facts) else null
+        when {
+            view.unchecked == 1 -> w("sorted_guess_one")
+            view.unchecked > 1 -> w("sorted_guess", "n" to view.unchecked, "total" to view.facts)
+            else -> null
+        }
+
+    /** "3 facts kept, hidden" / "1 fact kept, hidden". */
+    fun keptHiddenLine(n: Int): String =
+        if (n == 1) w("kept_hidden_one") else w("kept_hidden", "n" to n)
 
     fun checkButton(view: View): String? =
         if (view.unchecked > 0) w("check_button", "n" to view.unchecked) else null
@@ -627,19 +644,23 @@ object Topics {
     }
 
     /** "Paused: Work is off" on a pin the PC marked `paused`. */
-    fun pinPausedLine(name: String): String = w("pin_paused", "name" to name)
+    fun pinPausedLine(name: String, modeId: String? = null): String =
+        w(if (modeId == "learn_only") "pin_paused_learn" else "pin_paused", "name" to name)
 
     /** Said on a paused pin when the phone cannot tell which topic it is (several are not used, or none could be read). */
     const val PIN_PAUSED_GENERIC = "Paused: its topic is not used in answers"
 
     /**
-     * The line on a pin the PC marked `paused`. The PC sends `paused: true` but not the
-     * topic, so the name is used only when exactly ONE topic is not used in answers;
-     * otherwise [PIN_PAUSED_GENERIC].
+     * The line on a pin the PC marked `paused`. The PC sends the pin's `topic` id, so the
+     * name (and whether it is Off or "Learn, but don't use") comes from that topic. An older
+     * PC sends no id: then the name is used only when exactly ONE topic is not used in
+     * answers; otherwise [PIN_PAUSED_GENERIC].
      */
-    fun pinPausedFor(view: View?): String {
+    fun pinPausedFor(view: View?, topicId: Int? = null): String {
+        val named = topicId?.let { view?.byId(it) }
+        if (named != null) return pinPausedLine(named.name, named.mode)
         val blocked = view?.topics.orEmpty().filter { t -> mode(t.mode)?.uses == false }
-        return if (blocked.size == 1) pinPausedLine(blocked.single().name) else PIN_PAUSED_GENERIC
+        return if (blocked.size == 1) pinPausedLine(blocked.single().name, blocked.single().mode) else PIN_PAUSED_GENERIC
     }
 
     /** The tag on a fact whose topic is "Learn, but don't use" (looked up by its `topic` id), else null. */

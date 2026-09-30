@@ -311,7 +311,7 @@ internal fun SavedAutomaticallySection(
             Gap(6)
             if (topicsHidden > 0) {
                 Text(
-                    com.jarvis.client.net.Topics.w("kept_hidden", "n" to topicsHidden),
+                    com.jarvis.client.net.Topics.keptHiddenLine(topicsHidden),
                     style = MaterialTheme.typography.labelSmall,
                     color = chrome.textMid,
                 )

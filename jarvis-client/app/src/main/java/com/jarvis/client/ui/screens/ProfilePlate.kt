@@ -145,7 +145,7 @@ internal fun AlwaysKeepInMindSection(
                         Text(fact.text, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
                         if (fact.paused) {
                             Text(
-                                com.jarvis.client.net.Topics.pinPausedFor(topicView),
+                                com.jarvis.client.net.Topics.pinPausedFor(topicView, fact.topic),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = chrome.warnInk,
                             )

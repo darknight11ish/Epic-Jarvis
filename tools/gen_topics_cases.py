@@ -72,11 +72,28 @@ def build() -> dict:
         "screen_reader_cases": [
             {"name": "Work", "facts": 41, "mode": "use_only",
              "expect": T.WORDS["screen_reader"].format(name="Work", n=41,
-                                                       mode=T.MODE_NAME["use_only"])}],
+                                                       mode=T.MODE_NAME["use_only"])},
+            {"name": "Work", "facts": 1, "mode": "use_only",
+             "expect": T.WORDS["screen_reader_one"].format(name="Work",
+                                                           mode=T.MODE_NAME["use_only"])}],
         "hidden_row_cases": [
             {"index": 1, "facts": 41, "mode": "use_only",
              "expect": T.WORDS["hidden_row"].format(index=1, n=41,
-                                                    mode=T.MODE_NAME["use_only"])}],
+                                                    mode=T.MODE_NAME["use_only"])},
+            {"index": 2, "facts": 1, "mode": "use_only",
+             "expect": T.WORDS["hidden_row_one"].format(index=2, mode=T.MODE_NAME["use_only"])}],
+        "count_cases": [
+            {"line": "kept_hidden", "n": 1, "expect": T.WORDS["kept_hidden_one"]},
+            {"line": "kept_hidden", "n": 5, "expect": T.WORDS["kept_hidden"].format(n=5)},
+            {"line": "skipped", "n": 1, "expect": T.WORDS["skipped_one"]},
+            {"line": "skipped", "n": 3, "expect": T.WORDS["skipped"].format(n=3)},
+            {"line": "sorted_guess", "n": 1, "total": 40, "expect": T.WORDS["sorted_guess_one"]},
+            {"line": "sorted_guess", "n": 3, "total": 40,
+             "expect": T.WORDS["sorted_guess"].format(n=3, total=40)}],
+        "pin_paused_cases": [
+            {"name": "Work", "mode": "off", "expect": T.WORDS["pin_paused"].format(name="Work")},
+            {"name": "Work", "mode": "learn_only",
+             "expect": T.WORDS["pin_paused_learn"].format(name="Work")}],
         "preview_cases": [
             {"name": "Work", "n": 12, "expect": T.WORDS["preview_left_out"].format(
                 n=12, name="Work")},

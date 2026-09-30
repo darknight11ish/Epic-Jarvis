@@ -164,6 +164,8 @@ WORDS = {
     "intro": "A topic is a folder for things Jarvis knows. Pick what Jarvis may do with each folder.",
     "sorted_guess": ("Jarvis sorted {n} of your {total} facts by guessing from the words. "
                      "Check them so switching a topic off works as you expect."),
+    "sorted_guess_one": ("Jarvis sorted 1 fact by guessing from the words. Check it so "
+                         "switching a topic off works as you expect."),
     "check_button": "Check these ({n})",
     "check_right": "These are right",
     "check_held": "Held back: might be about {name}",
@@ -173,9 +175,11 @@ WORDS = {
     "private_asks": "This will ask for your OK first.",
     "unsorted_name": "Unsorted",
     "kept_hidden": "{n} facts kept, hidden",
+    "kept_hidden_one": "1 fact kept, hidden",
     "show_them": "Show them",
     "not_used_tag": "not used in answers",
     "skipped": "{n} new things not saved this week",
+    "skipped_one": "1 new thing not saved this week",
     "left_out": "Left out {n} facts because of your topic settings",
     "left_out_one": "Left out 1 fact because of your topic settings",
     "preview_left_out": "{n} things Jarvis knows about {name} will be left out of answers.",
@@ -191,7 +195,9 @@ WORDS = {
                         "night. It only suggests; you check."),
     "confirm_delete": "Delete this topic? Its facts are kept; pick where they go.",
     "screen_reader": "{name}, {n} facts, {mode}, button: change mode",
+    "screen_reader_one": "{name}, 1 fact, {mode}, button: change mode",
     "hidden_row": "Topic {index}, {n} facts, {mode}",
+    "hidden_row_one": "Topic {index}, 1 fact, {mode}",
     "moved_line": "Done: {name} is {mode}. You can change it in Brain.",
     "pick_line": "Pick what Jarvis may do with {name}.",
     "no_such_topic": "I do not have a topic called {name}.",
@@ -202,6 +208,7 @@ WORDS = {
     "waiting": "Waiting for your approval.",
     "sorting_now": "Jarvis is still sorting {n} of your facts.",
     "pin_paused": "Paused: {name} is off",
+    "pin_paused_learn": "Paused: {name} is set to Learn, but don't use",
     "used_left_out": "A memory from a topic you have since switched off.",
     "ask_save": "Save under Unsorted",
     "ask_skip": "Skip it",
@@ -1345,6 +1352,7 @@ def op_delete(body, store=None, *, outside=False, gate=None, tier_of=None, spawn
             with _tx(c2):
                 _move_facts(c2, tid, did)
                 c2.execute("DELETE FROM topics WHERE id=?", (tid,))
+                c2.execute("DELETE FROM topic_skips WHERE topic_id=?", (tid,))
                 d = _starters(c2)
                 d = {k: v for k, v in d.items() if v != tid}
                 _meta_set(c2, "topic_starters", json.dumps(d))
@@ -1532,21 +1540,25 @@ def model_pass(store=None, ask: Optional[Callable] = None, limit: int = MODEL_PE
         except Exception as exc:
             out["why"] = f"no local model ({type(exc).__name__})"
             return out
+    # Read under the lock, then let go: a model call can take seconds and the
+    # memory lock must not be held while it runs (a search would wait).
     with _db(store) as c:
         ts = topics_of(c)
-        rows = c.execute(
+        rows = [(int(r["id"]), str(r["text"])) for r in c.execute(
             "SELECT f.id, f.text FROM facts f LEFT JOIN fact_topics ft ON ft.fact_id = f.id"
             f" WHERE {_current_where()} AND (ft.fact_id IS NULL OR (ft.topic_id = ? AND ft.how = 'rule'))"
-            " ORDER BY f.id DESC LIMIT ?", (_now(), UNSORTED, int(limit))).fetchall()
-        out["ran"] = True
-        for r in rows:
-            out["asked"] += 1
-            tid = suggest_with_model(str(r["text"]), ts, ask)
+            " ORDER BY f.id DESC LIMIT ?", (_now(), UNSORTED, int(limit))).fetchall()]
+    out["ran"] = True
+    for fid, text in rows:
+        out["asked"] += 1
+        tid = suggest_with_model(text, ts, ask)        # no lock held here
+        with _db(store) as c:                          # short lock per result
             if tid is None:
-                _write_row(c, int(r["id"]), UNSORTED, None, "model", True)   # asked; unsure
+                _write_row(c, fid, UNSORTED, None, "model", True)   # asked; unsure
             else:
-                _write_row(c, int(r["id"]), tid, None, "model", False)
+                _write_row(c, fid, tid, None, "model", False)
                 out["filed"] += 1
+    with _db(store) as c:
         _meta_set(c, "topics_model_day", _day())
     return out
 
