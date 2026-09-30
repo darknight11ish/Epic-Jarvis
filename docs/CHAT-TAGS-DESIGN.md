@@ -117,7 +117,20 @@ Phone: `net/ChatLog.kt`, `ui/screens/HistoryScreen.kt`, `JarvisRuntime.kt`,
 `tools/gen_history_cases.py` (tag words, palette, icon names), then regenerate;
 `tools/check_parity.py`; `docs/JARVIS-API.md`. The feature audit runs with it.
 
-## 8. Not decided / later
+## 8. Fork a chat (owner said yes, 2026-09-30; built after tags)
 
-Suggesting tags by the model (owner said no). A cross-chat question across old
+"Fork from here" on a message in History copies the first N turns into a NEW
+conversation (new id, title "Fork of ..."), in both apps. No tree, no new table.
+Rules: each turn is re-sealed under the new id (the seal is bound to id + index,
+as `take_out`/`put_back` already do); the fork keeps the source's tag unless
+changed; copies `read_outside`; never forks a crisis chat, or a support, chatbot or
+comparison record; does not carry a Forget/Erase "hush" floor; a test must show
+copied turns do not teach the learner the same facts twice. No card (the owner's
+own kept words, nothing leaves the PC); hidden under "Hide memory lists". Full
+branching (tldraw canvas, a node graph) stays closed: JARVIS-API §18.6 keeps it
+a proposal.
+
+## 9. Not decided / later
+
+Suggesting tags by the model (owner said no; a later, cards-only overnight opt-in could be asked again if many chats stay untagged). A manual "new section here" marker inside a long chat. A cross-chat question across old
 chats (waits on memory ideas 1-4). Tag-based auto-delete rules.
