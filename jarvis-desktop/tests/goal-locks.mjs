@@ -12,7 +12,8 @@
  *   never `done_at`);
  * - the draft editor gives a new step a free id, stops "Do these first" at
  *   three, and takes a deleted step out of the others' lists;
- * - "Follows a number" offers only the life benchmarks with a target.
+ * - "Follows a number" offers the number benchmarks with a target and a
+ *   direction, life and coding projects alike.
  *
  * The browser half (rows, pickers, the 409, Undo) is in tests/goals.mjs.
  */
@@ -24,7 +25,7 @@ import {
   DEFAULT_LIMITS,
   freeStepId,
   GOAL_WORDS,
-  lifeProjectIds,
+  benchProjectIds,
   measureChoices,
   needChoices,
   newStep,
@@ -162,17 +163,31 @@ await check("the editor: a new step takes a free id; Remove cleans the others; t
   assert.deepEqual(plan.find((s) => s.id === "s2").needs, []);
 });
 
-await check("Follows a number offers only the life benchmarks with a target and a direction", async () => {
-  assert.deepEqual(lifeProjectIds(CASES.cases.list_two), [LIFE_ID]);
+await check("Follows a number offers the life AND coding number benchmarks with a target and a direction", async () => {
+  const CODING_ID = CASES.cases.coding.project.id;
+  assert.deepEqual(benchProjectIds(CASES.cases.list_two), [LIFE_ID, CODING_ID]);
   const choices = measureChoices(CASES.cases.list_two, [CASES.cases.life, CASES.cases.coding]);
   const names = choices.map((c) => c.label).sort();
-  const expect = CASES.cases.life.project.benchmark_list
+  const expect = [CASES.cases.life, CASES.cases.coding].flatMap((c) => c.project.benchmark_list
     .filter((b) => b.kind === "number" && b.target !== null && b.target !== undefined && b.better)
-    .map((b) => `Half marathon - ${b.name}`).sort();
+    .map((b) => `${c.project.name} - ${b.name}`)).sort();
   assert.deepEqual(names, expect);
-  assert.ok(names.length >= 1);
+  assert.ok(names.some((n) => n.endsWith(" - Startup")), "a coding project's number benchmark is offered");
+  assert.ok(names.some((n) => n.startsWith("Half marathon - ")), "a life project's too");
+  assert.equal(names.some((n) => n.endsWith(" - tests")), false, "a command benchmark is never offered");
   assert.deepEqual(measureChoices({ ok: true, hidden: true }, [{ hidden: true }]), []);
   assert.deepEqual(measureChoices(null, null), []);
+  assert.deepEqual(benchProjectIds({ ok: true, hidden: true }), []);
+});
+
+await check("the shared wording: every screen sentence is in the contract, and the pieces read right", async () => {
+  for (const k of ["follows_none", "follows_under", "follows_empty", "needs_cleaned", "needs_limit",
+    "needs_none", "needs_under", "reached_tag", "ticked", "unticked"]) {
+    assert.ok(typeof CASES.goal_words[k] === "string" && CASES.goal_words[k].length > 0, k);
+  }
+  assert.equal(GOAL_WORDS.follows_none, "No number");
+  assert.equal(GOAL_WORDS.needs_limit, "At most {max} steps can come first.");
+  assert.equal(GOAL_WORDS.reached_tag, "number reached");
 });
 
 

@@ -1450,6 +1450,147 @@ body {
   padding-left: 18px;
 }
 
+/* Spanish practice and the Keep screen (quiz.js, decks.js): the mode chooser,
+   the level / exercise / topic choices, the accent row and the sheet of kept
+   questions. Tokens only; no motion. */
+.quiz-mode {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 4px 0 8px;
+}
+
+.quiz-mode-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.quiz-spanish-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 4px 0;
+}
+
+.quiz-lab {
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.quiz-topic {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.quiz-accents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 6px 0;
+}
+
+.quiz-accents .btn {
+  min-width: 2.2em;
+}
+
+.keep-row {
+  padding: 8px 0;
+  border-top: var(--stroke-hair) solid var(--border);
+}
+
+.keep-row label.keep-tick {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.keep-back {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font: inherit;
+  margin-top: 6px;
+}
+
+/* My study decks (decks.js): the deck rows, a deck's cards, the review. */
+.deck-row {
+  padding: 8px 0;
+  border-top: var(--stroke-hair) solid var(--border);
+}
+
+.deck-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.deck-cards {
+  margin: 6px 0 0 12px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+}
+
+.deck-card {
+  padding: 6px 0;
+  overflow-wrap: anywhere;
+}
+
+.deck-front {
+  font-weight: 600;
+  margin: 0;
+}
+
+.deck-back {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+}
+
+.deck-confirm {
+  margin: 6px 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--border-strong);
+  background: var(--surface-1);
+  border-radius: 6px;
+}
+
+.deck-per-day {
+  width: 5em;
+}
+
+.review-front {
+  font-weight: 600;
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
+  margin: 6px 0;
+  white-space: pre-wrap;
+}
+
+.review-back {
+  margin: 8px 0;
+  padding-top: 8px;
+  border-top: var(--stroke-hair) solid var(--border);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.review-typed {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font: inherit;
+}
+
+.review-ratings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
 /* Today cards (today.js): the words box, the time, and a day per box. */
 .today-form {
   flex-wrap: wrap;

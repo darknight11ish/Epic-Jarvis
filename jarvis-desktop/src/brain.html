@@ -708,6 +708,22 @@
               <p class="note" id="quiz-intro">Paste some text and Jarvis writes a few questions about it. Your answers are marked by the model on this PC. Nothing is saved or learned, and nothing leaves this PC.</p>
               <p class="note" id="quiz-outside">This text is treated as outside text: Jarvis never learns facts from it.</p>
               <form id="quiz-start-form" autocomplete="off">
+                <div class="quiz-mode" role="radiogroup" aria-label="Quiz mode" id="quiz-mode">
+                  <label class="quiz-mode-opt"><input type="radio" name="quiz-mode" value="text" checked> <span>Text</span></label>
+                  <label class="quiz-mode-opt"><input type="radio" name="quiz-mode" value="spanish"> <span>Spanish practice</span></label>
+                </div>
+                <div id="quiz-spanish" class="quiz-spanish" hidden>
+                  <p class="note" id="quiz-notice" hidden></p>
+                  <div class="quiz-spanish-row">
+                    <label class="quiz-lab" for="quiz-level">Level (roughly)</label>
+                    <select id="quiz-level" class="field"></select>
+                    <label class="quiz-lab" for="quiz-exercise">Exercise</label>
+                    <select id="quiz-exercise" class="field"></select>
+                  </div>
+                  <label class="quiz-lab" for="quiz-topic">Topic (optional)</label>
+                  <input id="quiz-topic" class="field quiz-topic" type="text" maxlength="60" aria-describedby="quiz-topic-count">
+                  <p class="note" id="quiz-topic-count" aria-live="polite">0 / 60</p>
+                </div>
                 <textarea id="quiz-text" class="field quiz-text" rows="6" spellcheck="true"
                           placeholder="Paste the text here" aria-label="The text to be quizzed on"
                           aria-describedby="quiz-text-count"></textarea>
@@ -717,6 +733,11 @@
                 </div>
               </form>
               <div id="quiz-run" aria-live="polite"></div>
+            </div>
+            <div class="card card-wide" id="decks-card">
+              <h2>My study decks</h2>
+              <p class="note" id="decks-intro"></p>
+              <div id="decks-body"></div>
             </div>
             <div class="card card-wide" id="briefing-card">
               <h2>Morning briefing</h2>

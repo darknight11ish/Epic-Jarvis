@@ -922,7 +922,21 @@
         "error": "name_taken",
         "message": "Something else."
       },
+      "expect": "Something else."
+    },
+    {
+      "answer": {
+        "error": "name_taken",
+        "message": "  "
+      },
       "expect": "You already have a tag with that name."
+    },
+    {
+      "answer": {
+        "error": "tag_not_found",
+        "message": "That tag went away."
+      },
+      "expect": "That tag went away."
     },
     {
       "answer": {
@@ -1408,6 +1422,30 @@
         "error": "not_found"
       },
       "expect": "That chat is not kept any more, so it was not forked."
+    },
+    {
+      "answer": {
+        "ok": false,
+        "error": "not_found",
+        "message": "A different sentence from the PC."
+      },
+      "expect": "A different sentence from the PC."
+    },
+    {
+      "answer": {
+        "ok": false,
+        "error": "bad_upto",
+        "message": "  "
+      },
+      "expect": "That message is not in this chat, so it was not forked."
+    },
+    {
+      "answer": {
+        "ok": false,
+        "error": "not_forkable",
+        "message": "  "
+      },
+      "expect": "This chat cannot be forked."
     },
     {
       "answer": {

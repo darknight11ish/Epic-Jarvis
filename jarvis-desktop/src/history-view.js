@@ -115,6 +115,39 @@ export function forkDoneWords(title) {
 }
 
 /**
+ * The History row for a chat just made by "Fork from here", built from the
+ * PC's answer (`{ id, title, turns, tag_id }`) so the new chat can be shown
+ * and opened at once, before the list is read again. `sourceRow` (the chat
+ * forked from, if its row is loaded) gives the device and the `started` time
+ * the fork keeps; `nowSeconds` is the fork's own `updated` (a fork counts as
+ * new - the PC stamps it with the moment of the fork). Kind is always "chat".
+ */
+export function forkedRow(made, sourceRow, nowSeconds) {
+  const m = made && typeof made === "object" ? made : {};
+  const src = sourceRow && typeof sourceRow === "object" ? sourceRow : {};
+  const now = Number.isFinite(nowSeconds) ? nowSeconds : null;
+  return {
+    id: text(m.id),
+    title: text(m.title).trim(),
+    started: num(src.started) ?? now,
+    updated: now,
+    turns: num(m.turns) ?? 0,
+    device: text(src.device),
+    hasVoice: false,
+    tainted: src.tainted === true,
+    kind: "chat",
+    project: text(src.project) || null,
+    tagId: Number.isInteger(m.tag_id) && m.tag_id > 0 ? m.tag_id : null,
+  };
+}
+
+/** The loaded rows with the forked chat's row first (no second copy). */
+export function withForkedRow(rows, row) {
+  const rest = (Array.isArray(rows) ? rows : []).filter((c) => c && c.id !== row.id);
+  return [row, ...rest];
+}
+
+/**
  * The one sentence for a refused fork. A known code (except `bad_request`,
  * whose PC sentence can say more, like "Chat history is off") has its fixed
  * sentence; then the PC's own message; then `bad_request`'s sentence; a
@@ -124,10 +157,9 @@ export function forkErrorWords(answer) {
   const a = answer && typeof answer === "object" ? answer : {};
   const code = typeof a.error === "string" ? a.error : "";
   const message = typeof a.message === "string" ? a.message.trim() : "";
-  if (code !== "bad_request" && Object.hasOwn(FORK_ERRORS, code)) return FORK_ERRORS[code];
   if (message) return message;
-  if (code === "bad_request") return FORK_ERRORS.bad_request;
-  return code === "not_forkable" ? FORK_NO : FORK_ERROR_FALLBACK;
+  if (code === "not_forkable") return FORK_NO;
+  return Object.hasOwn(FORK_ERRORS, code) ? FORK_ERRORS[code] : FORK_ERROR_FALLBACK;
 }
 
 export const COPY = "Copy";

@@ -221,6 +221,8 @@ import { aloudFor } from "./coming-up.js";
 import { READING as PHOTO_READING, mountProposal } from "./photo-reminder.js";
 // "Inbox tidy by voice" (2026-09-28): the Undo strip under the input.
 import { mountInboxTidy } from "./inbox-tidy.js";
+// "Spending summaries" (2026-09-30): the table a spending answer announced.
+import { mountSpendingTable, tableIdFromBody, tableIdFromLine } from "./spending.js";
 // What a `step` event means, in words - shared with Brain's Live tab
 // (item 10, UI-AUDIT-2026-09-26.md).
 import { stepText } from "./step-words.js";
@@ -408,6 +410,7 @@ const dom = {
   captureFindDate: $("capture-find-date"),
   photoProposal: $("photo-proposal"),
   inboxTidy: $("inbox-tidy"),
+  spendingTable: $("spending-table"),
   clipboardChip: $("attachment-clipboard"),
   clipboardMeta: $("clipboard-meta"),
   clipboardRemove: $("clipboard-remove"),
@@ -735,6 +738,27 @@ if (dom.inboxTidy) {
   window.addEventListener("focus", () => inboxTidyView.refresh());
 }
 
+/** The spending table under the newest answer (spending.js), mounted just
+ *  below. Declared BEFORE it is mounted, like the strip above. */
+let spendingView = null;
+
+/**
+ * "Spending summaries" (JARVIS-API.md section 100): the stream said
+ * `: jarvis-table <id>` before the answer's sentence, so this asks the PC for
+ * the table and draws it under the sentence. In memory only - never stored,
+ * never read aloud, no export. Under "Hide memory lists and chat history"
+ * and while App lock has locked Jarvis it shows "Spending table hidden" and
+ * the PC is not asked (Rust, spending.rs `chat_table`).
+ */
+if (dom.spendingTable) {
+  spendingView = mountSpendingTable(dom.spendingTable, {
+    invoke: (command, args) => invokeStrict(command, args),
+    announce,
+    onChange: () => syncWindowHeight(),
+  });
+  window.addEventListener("focus", () => spendingView.recheck());
+}
+
 /** Tools that ran (`step` events) and drops of the event stream, for the
  *  private-answer rule - fed below, where this window subscribes to the
  *  link (private-speech.js `createToolWatch`). */
@@ -987,6 +1011,7 @@ function closeCard({ wasTemporary = temporaryChat.on, quiet = false } = {}) {
   paintYouLine("");
   dom.answer.innerHTML = "";
   dom.answer.classList.remove("wellbeing-crisis");
+  if (spendingView) spendingView.clear();
   dom.cardStat.textContent = "";
   paintProblem(null, "");
   dom.cursor.hidden = true;
@@ -2822,6 +2847,10 @@ function consumeLine(rawLine) {
   if (line.startsWith(":")) {
     const status = /^:\s*jarvis-status\s+(\w+)/.exec(line);
     if (status) showWaitStatus(status[1]);
+    // `: jarvis-table <id>` (spending summaries): a table to fetch and draw
+    // under this answer. Not the answer's words, so never appended.
+    const tableId = tableIdFromLine(line);
+    if (tableId && spendingView) spendingView.arrived(tableId);
     return false;
   }
 
@@ -2847,6 +2876,10 @@ function consumeLine(rawLine) {
     appendDelta(line);
     return false;
   }
+
+  // A `stream: false` style body names its table as a top-level field.
+  const bodyTable = tableIdFromBody(chunk);
+  if (bodyTable && spendingView) spendingView.arrived(bodyTable);
 
   if (chunk.error) {
     // The PC's own failure (jarvis_agent's plain sentence, with a `code`):
@@ -3254,6 +3287,8 @@ async function send(promptText, provenance = "typed", { live: isLive = false, cl
   // any) says otherwise - the last answer's offer does not carry over.
   state.cloudOffer = null;
   paintCloudOffer();
+  // ...and the last answer's spending table goes too (it is not kept).
+  if (spendingView) spendingView.clear();
   spokenUpTo = 0;
   // "Stop" silences one turn, not every turn after it: a new question is
   // allowed to be answered out loud again. Cleared only past the guard
@@ -5006,6 +5041,9 @@ document.addEventListener("click", (event) => {
 listen("focus-input", () => {
   focusInput();
   refreshHealth();
+  // A spending table still on screen is asked for again: hidden if the PC
+  // has been locked meanwhile, drawn again once it is unlocked.
+  if (spendingView) spendingView.recheck();
   // Rust sizes the bar back to its short height every time it is shown; the
   // height this window last reported would then look current and nothing
   // would grow it again - a chat still in memory sat invisible under the
@@ -5018,6 +5056,8 @@ listen("focus-input", () => {
 
 // "Hide memory lists and chat history" came back on: the thread goes at once.
 listen("private-hidden", () => {
+  // The spending table goes at once, before anything else is decided.
+  if (spendingView) spendingView.hide();
   if (state.threadHidden) return;
   state.threadHidden = true;
   renderPreviousAnswer({ open: dom.previousAnswer.open });

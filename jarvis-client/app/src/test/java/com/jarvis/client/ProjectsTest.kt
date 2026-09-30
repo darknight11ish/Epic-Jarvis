@@ -339,7 +339,7 @@ class ProjectsTest {
     fun `a forecast with something missing draws nothing rather than guess`() {
         fun parse(text: String) = Projects.parseForecast(json.parseToJsonElement(text) as JsonObject)
         assertNull("no forecast", Projects.parseForecast(null))
-        assertNull("no words", parse("""{"state":"range","words":""}"""))
+        assertEquals("blank words keep the forecast", "", parse("""{"state":"range","words":""}""")!!.words)
         assertNull("no state", parse("""{"words":"About 6 weeks at this pace."}"""))
         val noBand = parse(
             """{"state":"range","words":"About 6 weeks at this pace.","future":[1,2],

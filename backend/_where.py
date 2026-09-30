@@ -377,6 +377,12 @@ SHIPPED = (
     # export, and the money/date reader it and the retirement what-if share.
     "jarvis_spending.py",
     "jarvis_money_parse.py",
+    # "Retirement what-if" (2026-09-30; retirement.patch): a simplified
+    # what-if from numbers the owner typed, answered only as ranges.
+    "jarvis_retirement.py",
+    # "Activity heatmap and balance chart" (2026-09-30; progress.patch): the
+    # heatmap and the owner's balance chart. Not reachable from any model.
+    "jarvis_progress.py",
 )
 
 

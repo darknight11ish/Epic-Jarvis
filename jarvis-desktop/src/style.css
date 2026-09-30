@@ -2588,6 +2588,118 @@ html[data-state="approval"] .pulse {
   display: none;
 }
 
+/* "Spending summaries" (spending.js): the table under a spending answer.
+   Theme tokens only. No colour says good or bad; "Uncategorised" is an
+   ordinary row. The wrapper scrolls sideways for the 13-column layout and can
+   be reached with the keyboard. */
+.spending-host {
+  margin: 0 16px 12px 18px;
+}
+
+.spending-host[hidden] {
+  display: none;
+}
+
+.spending-table,
+.spending-note {
+  padding: 8px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  background: var(--surface-sunken);
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
+.spending-note {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.spending-table p {
+  margin: 0;
+}
+
+.st-title {
+  font-weight: 600;
+}
+
+.st-period,
+.st-sources,
+.st-heading {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.st-heading {
+  margin-top: 8px;
+}
+
+.st-scroll {
+  overflow-x: auto;
+  margin-top: 6px;
+}
+
+.st-scroll:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.st-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+.st-caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.st-cell {
+  padding: 3px 8px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+
+thead .st-cell {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  border-bottom: 1px solid var(--hairline);
+}
+
+.st-left {
+  text-align: left;
+}
+
+.st-right {
+  text-align: right;
+}
+
+.st-totals .st-cell {
+  font-weight: 600;
+  border-top: 1px solid var(--hairline);
+}
+
+.st-also .st-cell {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.st-caveats {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.st-sources {
+  margin-top: 6px;
+}
+
 /* "Inbox tidy by voice" (inbox-tidy.js): ten minutes of Undo after a tidy.
    Counts and the PC's own words only - never a sender or a subject. */
 .inbox-tidy {

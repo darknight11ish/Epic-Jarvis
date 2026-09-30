@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-spending-categories-reset"
+description = "Enables the spending_categories_reset command without any pre-configured scope."
+commands.allow = ["spending_categories_reset"]
+
+[[permission]]
+identifier = "deny-spending-categories-reset"
+description = "Denies the spending_categories_reset command without any pre-configured scope."
+commands.deny = ["spending_categories_reset"]

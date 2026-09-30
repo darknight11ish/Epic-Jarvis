@@ -239,6 +239,9 @@ FORK_ERROR_CASES = [
     {"ok": False, "error": "not_forkable", "message": H.FORK_WHY_CRISIS},
     {"ok": False, "error": "not_forkable"},
     {"ok": False, "error": "not_found"},
+    {"ok": False, "error": "not_found", "message": "A different sentence from the PC."},
+    {"ok": False, "error": "bad_upto", "message": "  "},
+    {"ok": False, "error": "not_forkable", "message": "  "},
     {"ok": False, "error": "bad_request", "message": "Chat history is off. The chat was not forked."},
     {"ok": False, "error": "bad_request"},
     {},
@@ -260,24 +263,23 @@ def fork_error_words(answer: dict) -> str:
 
 
 def tag_error_words(answer: dict) -> str:
-    """The one sentence a refusal shows, identical in both apps: a code the
-    apps have a sentence for wins (bad_request is a catch-all, so it does
-    not); else the PC's own `message`; else bad_request's sentence for
-    bad_request; else the fallback."""
+    """The one sentence a refusal shows, identical in both apps and for both
+    tags and fork: the PC's own `message` wins when it is not empty; else the
+    fixed sentence for the code; else the fallback."""
     code = answer.get("error") if isinstance(answer.get("error"), str) else ""
     msg = answer.get("message").strip() if isinstance(answer.get("message"), str) else ""
-    if code in H.TAG_MESSAGES and code != "bad_request":
-        return H.TAG_MESSAGES[code]
     if msg:
         return msg
-    if code == "bad_request":
-        return H.TAG_MESSAGES["bad_request"]
+    if code in H.TAG_MESSAGES:
+        return H.TAG_MESSAGES[code]
     return WORDS["tag_error_fallback"]
 
 
 TAG_ERROR_CASES = [
     {"error": "name_taken"},
     {"error": "name_taken", "message": "Something else."},
+    {"error": "name_taken", "message": "  "},
+    {"error": "tag_not_found", "message": "That tag went away."},
     {"error": "bad_request", "message": "Chat history is off. Tags are not changed."},
     {"error": "bad_request", "message": "  "},
     {"error": "bad_request"},

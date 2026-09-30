@@ -827,7 +827,7 @@ def names_for_facts(facts) -> dict:
     checked."""
     try:
         import jarvis_memory
-        view = jarvis_memory.store().entities_view(limit=500)
+        view = jarvis_memory.store().entities_view(limit=500, topics="all")
         ents = view.get("entities") if isinstance(view, dict) else None
     except Exception:
         return {}

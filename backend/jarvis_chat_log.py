@@ -540,6 +540,9 @@ def _off_message(why: str, tail: str) -> str:
     return why[:1].upper() + why[1:].rstrip(".") + ". " + tail
 
 
+_INT64_MAX = 2 ** 63 - 1
+
+
 def _is_int(v) -> bool:
     return isinstance(v, int) and not isinstance(v, bool)
 
@@ -556,6 +559,12 @@ def _tag_id(v):
 #: here (plus the CREATE TABLE and _migrate) - it can no longer be dropped by
 #: one hand-written positional tuple that was missed (the chat tags audit,
 #: 2026-09-30; a test pins the list against the real table).
+#: A conversation's newest message time, else its `updated` (a fork's
+#: `updated` is the moment of the fork, not a message time: "Forget a time
+#: frame" lists by the messages themselves).
+_LAST_AT = ("COALESCE((SELECT MAX(at) FROM turns t2 WHERE t2.conversation_id=c.id),"
+            " c.updated)")
+
 CONV_COLS = ("id", "title", "started", "updated", "device", "kind", "project", "tag_id")
 
 
@@ -1282,19 +1291,30 @@ class ChatLog:
             out["tainted"] = since is not None and since <= out["seq"]
             return out
 
-    def live_turn_any(self, text) -> Optional[dict]:
+    def live_turn_any(self, text, skip_hushed: bool = False) -> Optional[dict]:
         """live_turn() for a message in ANY conversation: the newest entry
         with exactly these words, or None. For "said again" (jarvis_intake.
         note_said_again), whose caller - the learner - does not know which
-        conversation it is reading."""
+        conversation it is reading.
+
+        `skip_hushed`: leave out entries at or below their chat's hush floor
+        (messages put back from the record that a Forget/Erase, or a fork
+        point, says were already read - so a copy of a message in a fork
+        cannot make the same words count a second time). The newest entry
+        above every floor wins; the caller gets None if there is none."""
         if not isinstance(text, str) or not _norm(text):
             return None
         h = _hash(text)
         with self._lock:
             best = None
             for (cid, hh), entry in self._live.items():      # oldest first
-                if hh == h:
-                    best = (cid, entry)
+                if hh != h:
+                    continue
+                if skip_hushed:
+                    floor = self._hush_floor.get(cid)
+                    if floor and entry["seq"] <= floor["seq"]:
+                        continue
+                best = (cid, entry)
             if best is None:
                 return None
             cid, got = best
@@ -2069,27 +2089,34 @@ class ChatLog:
           id and its new place (AAD = id|idx); the title is sealed too. The
           copy keeps each turn's own time, provenance, device, lane, voice
           check, read_outside and answer_kept marks, and the chat keeps its
-          device, started/updated times, project and tag. The fork is kind
+          device, started time, project and tag. Its `updated` is the moment
+          of the fork (it counts as new: top of History, a full retention
+          window); the source's `started` stays. The fork is kind
           "chat" even when copied from a Live session (it is not a Live
           session, and a Live label would tell the History length line a lie).
         * Only chats the apps may Continue (CONTINUABLE) and that are not
           titled "A difficult moment"; anything else is `not_forkable`.
-        * The source's Forget/Erase hush is NOT copied. The fork gets its own,
-          set at the fork point: every user message copied was already read
-          by the learner in the source chat, so when "Continue this chat"
-          puts them back in the registry (_rehydrate) automatic learning
-          drops what they alone would teach again instead of proposing every
-          fact a second time. Messages said after the fork are learned as
-          usual. A message the source's learner never got to (learning off,
-          a fact waiting as a card there) is not learned in the fork either;
-          the source's card is still the place to decide it.
+        * The source's hush is not copied as it stands: the fork gets its own,
+          set at the fork point, and it keeps the source's `erased` flag (a
+          fact the owner Erased in the source is secure-deleted, not kept as
+          a rejected proposal, if a copied message would teach it again). Every
+          user message copied was already read by the learner in the source
+          chat, so when "Continue this chat" puts them back in the registry
+          (_rehydrate) automatic learning drops what they alone would teach
+          again instead of proposing every fact a second time. "Said again"
+          counts skip them too (live_turn_any(skip_hushed=True)), so a copy
+          never counts the same words twice, whatever time the record and
+          the live registry each hold. Messages said after the fork are
+          learned as usual. A message the source's learner never got to
+          (learning off, a fact waiting as a card there) is not learned in
+          the fork either; the source's card is still the place to decide it.
         * No card, and it works while recording is switched off: filing away
           words that are already kept records nothing new. Only the key
           matters - without it nothing is read or written (fail closed).
         Never touches the source chat."""
         if not (isinstance(cid, str) and _CID.fullmatch(cid)):
             return 400, _fork_fail("bad_request")
-        if not _is_int(upto) or upto < 0:
+        if not _is_int(upto) or upto < 0 or upto > _INT64_MAX:
             return 400, _fork_fail("bad_request")
         aead, why = self._tag_cipher()
         if aead is None:
@@ -2137,13 +2164,16 @@ class ChatLog:
             # The user messages at the tail whose answer is not copied.
             last_assistant = max((i for i, r in enumerate(rows)
                                   if r[ix["role"]] == "assistant"), default=-1)
+            fork_time = self._clock()
+            src_hush = self._hush_read(c, cid)
             with c:
                 c.execute(f"INSERT INTO conversations ({', '.join(CONV_COLS)}) VALUES "
                           f"({','.join('?' * len(CONV_COLS))})",
                           tuple(new if col == "id"
                                 else self._seal(aead, new_title.encode("utf-8"),
                                                 self._aad(new, "title")) if col == "title"
-                                else "chat" if col == "kind" else src[col]
+                                else "chat" if col == "kind"
+                                else fork_time if col == "updated" else src[col]
                                 for col in CONV_COLS))
                 marks = ",".join("?" * len(cols))
                 last_user = -1
@@ -2160,7 +2190,9 @@ class ChatLog:
                 if last_user >= 0:
                     c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
                               (self._hush_key(new),
-                               json.dumps({"upto": last_user, "erased": False}).encode("utf-8")))
+                               json.dumps({"upto": last_user,
+                                          "erased": bool(src_hush and src_hush["erased"])}
+                                         ).encode("utf-8")))
         return 200, {"ok": True, "id": new, "title": new_title, "turns": len(rows),
                      "tag_id": _tag_id(src["tag_id"])}
 
@@ -2254,9 +2286,9 @@ class ChatLog:
                    " (SELECT MIN(at) FROM turns t WHERE t.conversation_id=c.id),"
                    " (SELECT MAX(at) FROM turns t WHERE t.conversation_id=c.id)"
                    " FROM conversations c"
-                   " WHERE COALESCE(c.started, c.updated) < ? AND c.updated >= ?")
+                   " WHERE COALESCE(c.started, c.updated) < ? AND " + _LAST_AT + " >= ?")
             where = ("SELECT COUNT(*) FROM conversations c"
-                     " WHERE COALESCE(c.started, c.updated) < ? AND c.updated >= ?")
+                     " WHERE COALESCE(c.started, c.updated) < ? AND " + _LAST_AT + " >= ?")
             args = [float(start), float(end), float(end), float(start)]
             count_args = [float(end), float(start)]
             if ids is not None:
@@ -2449,9 +2481,9 @@ def live_upto(conversation_id) -> Optional[int]:
     return _log().live_upto(conversation_id)
 
 
-def live_turn_any(text) -> Optional[dict]:
+def live_turn_any(text, skip_hushed: bool = False) -> Optional[dict]:
     """live_turn() in any conversation: the newest entry for these words."""
-    return _log().live_turn_any(text)
+    return _log().live_turn_any(text, skip_hushed)
 
 
 def conversation_tainted(conversation_id, messages=None) -> bool:

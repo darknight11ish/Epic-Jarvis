@@ -464,7 +464,7 @@ CREATE TABLE IF NOT EXISTS results (
 );
 CREATE INDEX IF NOT EXISTS results_by_bench ON results (bench, at);
 CREATE INDEX IF NOT EXISTS results_by_at ON results (at);
--- The owner's balance chart (jarvis_progress.py, JARVIS-API section 105):
+-- The owner's balance chart (JARVIS-API section 105):
 -- 3 to 8 rows, in the order drawn. kind "bench" (ref = benchmark id) or
 -- "goal" (ref = goal id). `label` is the owner's own name for the spoke, or
 -- '' for the default. No numbers and no words of a benchmark live here.
@@ -1187,8 +1187,7 @@ class Projects:
                                     r["auto_cleared"])["sensitive"]}
                 for r in rows]
 
-
-    # ---- the progress side (jarvis_progress.py; JARVIS-API section 105) ---------------
+    # ---- the progress side (the heatmap and balance chart; JARVIS-API section 105) ----
     # Read-only for the heatmap and the balance chart, plus the owner's own
     # choice of axes. Nothing here is ever put in a chat answer or sent.
 
@@ -1269,7 +1268,7 @@ class Projects:
                  "label": r["label"]} for r in rows]
 
     def axes_write(self, axes: list) -> None:
-        """Replace the whole chart (already checked by jarvis_progress)."""
+        """Replace the whole chart (already checked by the caller)."""
         with self._lock, self._db() as c:
             c.execute("DELETE FROM balance_axes")
             for i, a in enumerate(axes):

@@ -107,6 +107,19 @@ class ChatSession(
      */
     val turnId: StateFlow<String?> = _turnId.asStateFlow()
 
+    private val _tableId = MutableStateFlow<String?>(null)
+
+    /**
+     * The id of the spending table that goes with the answer on screen, or
+     * null (docs/JARVIS-API.md section 100.2): read from the stream's
+     * `: jarvis-table <32 hex>` comment ([Spending.tableIdFromLine]), which
+     * comes right before the answer's sentence. An id and nothing else - the
+     * table itself is fetched by the screen that draws it, kept in that
+     * screen's memory only, and never written anywhere. Cleared with the
+     * answer, like [usedIds]: a newer question drops the old table for good.
+     */
+    val tableId: StateFlow<String?> = _tableId.asStateFlow()
+
     private val _waiting = MutableStateFlow<String?>(null)
 
     /**
@@ -490,6 +503,7 @@ class ChatSession(
         // The previous answer's id goes with the previous answer: a mark
         // tapped now must never land on the answer that is being replaced.
         _turnId.value = null
+        _tableId.value = null
         _waiting.value = null
         _answerNote.value = null
         _usedIds.value = emptyList()
@@ -806,6 +820,12 @@ class ChatSession(
                                 failed = true
                                 true
                             }
+                            is ChatChunkParser.Result.Table -> {
+                                // Only the id, and only for the call that is
+                                // still current (same guard as `failWith`).
+                                if (call === c) _tableId.value = result.id
+                                false
+                            }
                             ChatChunkParser.Result.Ignored -> false
                         }
                     }
@@ -964,6 +984,7 @@ class ChatSession(
         _reply.value = ""
         _question.value = null
         _turnId.value = null
+        _tableId.value = null
         _error.value = null
         _problem.value = null
         lastAsked = null

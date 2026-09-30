@@ -339,4 +339,237 @@ class QuizTest {
         assertTrue(obj("""{"a":true}""")["a"]!!.jsonPrimitive.boolean)
         assertTrue(obj("""{"a":{"b":1}}""")["a"]!!.jsonObject.isNotEmpty())
     }
+
+    // ---- Spanish practice and Keep (docs/QUIZ-DECKS-DESIGN.md, contract C2-C3, C5) ----
+
+    private val spanishJson = """{"ok":true,"quiz":{"id":"q-es1","title":"Plantas","grader_verified":false,
+        "mode":"spanish","level":"B1","key_source":"model","notice":"Jarvis cannot recognise a crisis message written in Spanish.",
+        "questions":[
+          {"n":1,"kind":"blank","prompt":"Ella _____ en casa.","mark":
+            {"level":"partly","comment":"Close.","passage":"Ella está en casa.","marked_by":"code",
+             "expected":"está","key_label":"Answer key written by the model"}},
+          {"n":2,"kind":"translate","prompt":"I am hungry.","mark":
+            {"level":"got_it","comment":"Yes.","passage":"Tengo hambre.","marked_by":"model","expected":"Tengo hambre."}},
+          {"n":3,"kind":"complete","prompt":"Me gusta ...","mark":null},
+          {"n":4,"kind":"recall","prompt":"Old kind","mark":null}
+        ],"answered":2,"more":1}}"""
+
+    @Test
+    fun aSpanishQuizIsReadWithItsModeLevelKeyAndNotice() {
+        val q = Quiz.parseQuiz(obj(spanishJson))!!
+        assertEquals("spanish", q.mode)
+        assertTrue(q.modeKnown)
+        assertEquals("B1", q.level)
+        assertEquals("model", q.keySource)
+        assertEquals("Jarvis cannot recognise a crisis message written in Spanish.", q.notice)
+        val blank = q.questions[0].mark!!
+        assertEquals("code", blank.markedBy)
+        assertEquals("está", blank.expected)
+        assertEquals("Answer key written by the model", blank.keyLabel)
+        assertEquals("model", q.questions[1].mark!!.markedBy)
+        assertNull(q.questions[1].mark!!.keyLabel)
+        assertEquals("Level B1 (roughly)", Quiz.levelLine(q.level!!))
+        assertEquals("Example sentence", Quiz.passageHeading(q))
+        assertEquals("From the text", Quiz.passageHeading(q.copy(keySource = "text")))
+    }
+
+    @Test
+    fun aReplyWithNoModeIsAnOlderPcAndATextQuiz() {
+        val q = Quiz.parseQuiz(obj(quizJson))!!
+        assertFalse(q.modeKnown)
+        assertEquals("text", q.mode)
+        assertNull(q.level)
+        assertNull(q.keySource)
+        assertNull(q.notice)
+        assertEquals(
+            "Your PC's Jarvis does not have Spanish practice yet - run apply-patches.ps1 on the PC.",
+            Quiz.OLD_PC,
+        )
+        // A notice on a text quiz is not shown; an unknown level or key source is dropped.
+        val odd = Quiz.parseQuiz(
+            obj("""{"quiz":{"id":"a1","mode":"text","level":"Z9","key_source":"web","notice":"x","questions":[]}}"""),
+        )!!
+        assertTrue(odd.modeKnown)
+        assertNull(odd.level)
+        assertNull(odd.keySource)
+        assertNull(odd.notice)
+    }
+
+    @Test
+    fun theGuessLabelShowsOnlyForAModelMarkOnAnUnverifiedGrader() {
+        val model = Quiz.Mark("partly", "c", "p", markedBy = "model")
+        val code = Quiz.Mark("partly", "c", "p", markedBy = "code")
+        assertEquals("Partly - Jarvis's guess", Quiz.markLine(model, verified = false))
+        assertEquals("Partly", Quiz.markLine(model, verified = true))
+        assertEquals("Partly", Quiz.markLine(code, verified = false))
+        // A missing marked_by fails toward showing the label.
+        val bare = Quiz.parseQuiz(
+            obj("""{"quiz":{"id":"a1","questions":[{"n":1,"prompt":"p","mark":{"level":"got_it"}}]}}"""),
+        )!!.questions[0].mark!!
+        assertEquals("model", bare.markedBy)
+        assertEquals("Got it - Jarvis's guess", Quiz.markLine(bare, verified = false))
+    }
+
+    @Test
+    fun theSpanishWordsAreTheContractsWordsForWord() {
+        assertEquals("Text", Quiz.MODE_TEXT_LABEL)
+        assertEquals("Spanish practice", Quiz.MODE_SPANISH_LABEL)
+        assertEquals("Level (roughly)", Quiz.LEVEL_HEADING)
+        assertEquals(listOf("A1", "A2", "B1", "B2", "C1", "C2"), Quiz.LEVELS)
+        assertEquals(
+            listOf("Translate", "Fill the blank", "Finish the sentence", "Mixed"),
+            Quiz.EXERCISES.map { it.second },
+        )
+        assertEquals(listOf("translate", "blank", "complete", "mixed"), Quiz.EXERCISES.map { it.first })
+        assertEquals("Topic (optional)", Quiz.TOPIC_LABEL)
+        assertEquals("Paste Spanish text (optional)", Quiz.SPANISH_HINT)
+        assertEquals("Answer: ", Quiz.ANSWER_PREFIX)
+        assertEquals(listOf("á", "é", "í", "ó", "ú", "ñ", "ü", "¿", "¡"), Quiz.ACCENTS)
+        assertEquals("Translate", Quiz.kindWords("translate"))
+        assertEquals("Fill the blank", Quiz.kindWords("blank"))
+        assertEquals("Finish the sentence", Quiz.kindWords("complete"))
+        assertEquals("Keep these questions", Quiz.KEEP_OPEN)
+        assertEquals("Keep and finish", Quiz.KEEP_DO)
+        assertEquals("Cancel", Quiz.CANCEL)
+        assertEquals("Type the answer in your own words", Quiz.KEEP_HINT)
+        assertEquals("Turn off Hide memory lists to keep questions", Quiz.KEEP_HIDDEN)
+        assertEquals("New deck", Quiz.NEW_DECK)
+        assertEquals("Deck name", Quiz.DECK_NAME)
+        assertEquals("Choose a deck", Quiz.CHOOSE_DECK)
+        assertEquals("Kept 3 questions", Quiz.keptLine(3))
+        assertEquals("Kept 1 question", Quiz.keptLine(1))
+    }
+
+    @Test
+    fun theSpanishStartBodyCarriesOnlyWhatWasChosen() {
+        val b = obj(Quiz.startSpanishBody("  ", "B1", "blank", "  food  ", 5))
+        assertEquals("spanish", b["mode"]!!.jsonPrimitive.content)
+        assertEquals("B1", b["level"]!!.jsonPrimitive.content)
+        assertEquals("blank", b["exercise"]!!.jsonPrimitive.content)
+        assertEquals("food", b["topic"]!!.jsonPrimitive.content)
+        assertEquals(5, b["count"]!!.jsonPrimitive.int)
+        // Blank text is not sent (the model writes the sentences).
+        assertFalse(b.containsKey("text"))
+        val withText = obj(Quiz.startSpanishBody(" Hola ", "A2", "mixed", "", 5))
+        assertEquals("Hola", withText["text"]!!.jsonPrimitive.content)
+        assertFalse(withText.containsKey("topic"))
+        // A topic is cut to 60; an unknown level or exercise is not sent.
+        val long = obj(Quiz.startSpanishBody("", "Z9", "nope", "x".repeat(80), 5))
+        assertEquals(60, long["topic"]!!.jsonPrimitive.content.length)
+        assertFalse(long.containsKey("level"))
+        assertFalse(long.containsKey("exercise"))
+        // Text mode is unchanged: no mode, level, exercise or topic.
+        val text = obj(Quiz.startBody("hello", 5))
+        assertEquals(setOf("text", "count"), text.keys)
+        assertTrue(Quiz.validSpanishText(""))
+        assertTrue(Quiz.validSpanishText("   "))
+        assertFalse(Quiz.validSpanishText("too short"))
+        assertTrue(Quiz.validSpanishText("x".repeat(200)))
+    }
+
+    @Test
+    fun anAccentGoesInAtTheCursorAndNeverPastTheLimit() {
+        assertEquals("ma" + "ñ" + "ana" to 3, Quiz.insertAt("maana", 2, 2, "ñ"))
+        // A selection is replaced; the cursor may be given either way round.
+        assertEquals("aéa" to 2, Quiz.insertAt("abca", 3, 1, "é"))
+        // Out-of-range cursors are clamped.
+        assertEquals("¿hola" to 1, Quiz.insertAt("hola", -5, -5, "¿"))
+        assertEquals("hola¡" to 5, Quiz.insertAt("hola", 99, 99, "¡"))
+        // At the limit nothing is cut silently: the button does nothing.
+        assertNull(Quiz.insertAt("x".repeat(Quiz.MAX_ANSWER), 3, 3, "á"))
+        assertEquals(Quiz.MAX_ANSWER, Quiz.insertAt("x".repeat(Quiz.MAX_ANSWER - 1), 3, 3, "á")!!.first.length)
+    }
+
+    @Test
+    fun theKeepBodyCarriesOnlyNumbersAndBacks() {
+        val cards = listOf(Quiz.KeepCard(2, "the back"), Quiz.KeepCard(3, ""))
+        val existing = obj(Quiz.keepBody("d1a2b3c4d5e6", null, cards)!!)["keep"]!!.jsonObject
+        assertEquals("d1a2b3c4d5e6", existing["deck"]!!.jsonPrimitive.content)
+        assertFalse(existing.containsKey("new_deck"))
+        val list = existing["cards"] as kotlinx.serialization.json.JsonArray
+        assertEquals(2, list.size)
+        // Only n and answer: an app cannot put other text on a card.
+        assertEquals(setOf("n", "answer"), list[0].jsonObject.keys)
+        assertEquals(2, list[0].jsonObject["n"]!!.jsonPrimitive.int)
+        assertEquals("the back", list[0].jsonObject["answer"]!!.jsonPrimitive.content)
+        assertEquals("", list[1].jsonObject["answer"]!!.jsonPrimitive.content)
+        // A new deck: deck is null and new_deck is the trimmed name.
+        val fresh = obj(Quiz.keepBody(null, "  Plants  ", cards)!!)["keep"]!!.jsonObject
+        assertTrue(fresh["deck"] is kotlinx.serialization.json.JsonNull)
+        assertEquals("Plants", fresh["new_deck"]!!.jsonPrimitive.content)
+        // Refused before sending: nothing ticked, a name of 0 or 61 characters, a back over 2,000,
+        // a repeated question, a deck id that is not safe in a URL.
+        assertNull(Quiz.keepBody(null, "Plants", emptyList()))
+        assertNull(Quiz.keepBody(null, "   ", cards))
+        assertNull(Quiz.keepBody(null, "x".repeat(61), cards))
+        assertNotNull(Quiz.keepBody(null, "x".repeat(60), cards))
+        assertNull(Quiz.keepBody(null, "Plants", listOf(Quiz.KeepCard(1, "x".repeat(2001)))))
+        assertNull(Quiz.keepBody(null, "Plants", listOf(Quiz.KeepCard(1, "a"), Quiz.KeepCard(1, "b"))))
+        assertNull(Quiz.keepBody("../x", null, cards))
+        assertEquals("Plants", Quiz.defaultDeckName("  Plants  "))
+        assertEquals(60, Quiz.defaultDeckName("y".repeat(90)).length)
+    }
+
+    @Test
+    fun aKeepSuccessSaysHowManyWereKept() {
+        val ok = Quiz.finishedKeepSaid(
+            Quiz.Reply(200, obj("""{"ok":true,"summary":{"counts":{"got_it":1,"partly":1,"not_yet":0},"again":[2]},"kept":2}""")),
+        )
+        assertTrue(ok.ok)
+        assertEquals(2, ok.value!!.kept)
+        assertEquals(1, ok.value!!.summary!!.gotIt)
+        assertNull(ok.value!!.crisis)
+        // A plain finish (no keep) has no count.
+        val plain = Quiz.finishedKeepSaid(
+            Quiz.Reply(200, obj("""{"ok":true,"summary":{"counts":{"got_it":0,"partly":0,"not_yet":0},"again":[]}}""")),
+        )
+        assertNull(plain.value!!.kept)
+        assertFalse(Quiz.finishedKeepSaid(Quiz.Reply(200, obj("""{"ok":true}"""))).ok)
+    }
+
+    @Test
+    fun aCrisisPhraseInABackKeepsNothingAndLeavesTheQuizOpen() {
+        val out = Quiz.finishedKeepSaid(
+            Quiz.Reply(
+                200,
+                obj(
+                    """{"ok":true,"crisis":true,"message":"Words from the PC.","quiz":
+                        {"id":"a1","questions":[{"n":1,"prompt":"q","mark":{"level":"got_it"}}]}}""",
+                ),
+            ),
+        )
+        assertTrue(out.ok)
+        assertEquals("Words from the PC.", out.value!!.crisis)
+        assertNull(out.value!!.summary)
+        assertNull(out.value!!.kept)
+        assertEquals("a1", out.value!!.quiz!!.id)
+        // The help words are the PC's: a crisis flag with none, or with no quiz, is unreadable.
+        assertFalse(Quiz.finishedKeepSaid(Quiz.Reply(200, obj("""{"ok":true,"crisis":true,"quiz":{"id":"a1","questions":[]}}"""))).ok)
+        assertFalse(Quiz.finishedKeepSaid(Quiz.Reply(200, obj("""{"ok":true,"crisis":true,"message":"x"}"""))).ok)
+    }
+
+    @Test
+    fun everyKeepRefusalShowsThePcsMessageAndKeepsItsCode() {
+        val codes = listOf(
+            400 to "nothing_to_keep", 400 to "bad_question", 400 to "answer_too_long", 400 to "answer_empty",
+            400 to "bad_deck_name", 404 to "deck_not_found", 409 to "duplicate_card", 409 to "too_many_decks",
+            409 to "deck_full", 503 to "deck_unavailable",
+        )
+        codes.forEach { (status, code) ->
+            val withMessage = Quiz.finishedKeepSaid(
+                Quiz.Reply(status, obj("""{"ok":false,"error":"$code","message":"the PC's own words"}""")),
+            )
+            assertFalse(code, withMessage.ok)
+            assertEquals(code, "The PC's own words", withMessage.said)
+            assertEquals(code, withMessage.code)
+            // No message of its own: this phone's plain words for the code, never the code itself.
+            val bare = Quiz.finishedKeepSaid(Quiz.Reply(status, obj("""{"ok":false,"error":"$code"}""")))
+            assertTrue(code, bare.said.isNotEmpty())
+            assertFalse(code, bare.said.contains("_"))
+            // A deck that is gone is not a quiz that is gone.
+            assertFalse(code, bare.gone)
+        }
+        // The quiz itself ending is.
+        assertTrue(Quiz.finishedKeepSaid(Quiz.Reply(404, obj("""{"ok":false,"error":"not_found","message":"x"}"""))).gone)
+    }
 }

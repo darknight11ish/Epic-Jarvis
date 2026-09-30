@@ -83,9 +83,8 @@ export function errorWords(answer) {
   const a = answer && typeof answer === "object" ? answer : {};
   const code = typeof a.error === "string" ? a.error : "";
   const message = typeof a.message === "string" ? a.message.trim() : "";
-  if (code !== "bad_request" && Object.hasOwn(TAG_ERRORS, code)) return TAG_ERRORS[code];
   if (message) return message;
-  return code === "bad_request" ? TAG_ERRORS.bad_request : TAG_ERROR_FALLBACK;
+  return Object.hasOwn(TAG_ERRORS, code) ? TAG_ERRORS[code] : TAG_ERROR_FALLBACK;
 }
 
 /** Characters that take room but show nothing. */

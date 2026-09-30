@@ -738,3 +738,181 @@ model on its own. Desktop-only words: "Categories", "Suggest categories", "Add t
 - Speed: hiding account numbers in descriptions is about 1 second per 1,000 distinct
   descriptions on this container (a 40,000-row file took about 36 seconds the first time; the
   hidden text is then remembered in memory). A period narrows it first.
+
+
+## Retirement contract (frozen)
+
+Written 2026-09-30, when part B (the retirement what-if, queue item 5, JARVIS-API section 103)
+was built on the backend. **Two other builders (the desktop, the phone) build against this
+section.** Do not change a field name, a value or a word below on either app's side; if
+something here is wrong, say so and the backend changes first. Where this differs from section 6
+above (the design), this section wins: it says what was built.
+
+Built and tested: `backend/jarvis_retirement.py` (shipped whole, plain Python, no numpy),
+`backend/retirement.patch` (one install block), `backend/test_retirement.py` (158 checks).
+Not built: the `retirement_whatif` chat tool (JARVIS-API 103.6: written and tested as
+`jarvis_retirement.tool_call`, not yet registered in `jarvis_agent.py`, so **the apps must not
+wait for it**: the form is the whole first slice), any app.
+
+### R1. Where it lives, and what the two apps build
+
+| piece | desktop builder | phone builder |
+|---|---|---|
+| Place | **Brain -> Work -> Retirement** (a card beside Goals; menu id `brain.work.retirement`) | **Brain -> Retirement** (a plate beside Goals; menu id `brain.retirement`) |
+| Menu group | `finance` (`group.finance`, MENU-VISIBILITY-DESIGN section 4). This is the first member of the group, so the group now exists in each app that has this card; the Spending settings card joins it later | same |
+| Form: `GET /api/retirement/defaults`, then `POST /api/retirement/run` | yes | yes (the phone sends the numbers to the PC and draws the reply; nothing is computed or stored on the phone) |
+| Draw the result and the "What I used" list | yes | yes |
+| Hidden states, never stored | yes (also: the app must be unlocked while App lock is on) | yes (screenshots already blocked; memory only, not in Room or DataStore) |
+| Words | copy from `GET /defaults` and from the result (never write a figure or a sentence of its own) | same |
+| `tools/check_parity.py` | both routes are `planned`; when both apps call them change both to `ported` | |
+| One-sided anywhere? | No. Not one-sided: the phone can do this (it is a form and an answer, not a catalogue, memory graph or deep config). | |
+
+### R2. `GET /api/retirement/defaults` (any paired device)
+
+```
+{"ok": true, "available": true, "title": "Retirement what-if", "detail": "<one plain paragraph>",
+ "fields": [{"key", "label", "unit", "kind": "age"|"money"|"percent", "min", "max",
+             "default": number|null, "required": bool, "placeholder": bool, "help"}],
+ "paths": 10000, "seed": 20260930, "max_years": 90, "disclaimer", "placeholder_note",
+ "todays_money", "band_points": 1.0,
+ "words": {"hidden": "Retirement what-if hidden", "busy", "too_slow"},
+ "private": true, "read_aloud": false, "remember": false}
+```
+
+The form draws `fields` in this order, one input each (a number box; money may be typed with commas,
+percent with or without `%`):
+
+| key | label | unit | limits | default |
+|---|---|---|---|---|
+| `current_age` | Your age now | years | whole 18 to 100 | **none: required** |
+| `retirement_age` | Age you stop working | years | whole 18 to 100 | **none: required** |
+| `plan_to_age` | Plan the money to age | years | whole 18 to 110, after the retirement age, at most 90 years from now | 95 (placeholder) |
+| `savings` | Savings you have now | money | 0 to 1,000,000,000 | **none: required** (0 is fine) |
+| `yearly_saving` | You add each year until you stop working | money per year | 0 to 1,000,000,000 | **none: required** (0 is fine) |
+| `yearly_spending` | You spend each year in retirement | money per year | 0 to 1,000,000,000 | **none: required** |
+| `other_income` | Pension or other income each year (optional) | money per year | 0 to 1,000,000,000 | 0 |
+| `other_income_start_age` | That income starts at age (optional) | years | whole 18 to 110 | empty = the retirement age |
+| `expected_return_percent` | Expected yearly return before inflation | percent | -5 to 15 | 7.0 (placeholder) |
+| `volatility_percent` | How much yearly returns swing | percent | 0 to 40 | 12.0 (placeholder) |
+| `inflation_percent` | Expected yearly inflation | percent | 0 to 15 | 2.5 (placeholder) |
+
+The form shows the labels, `help` lines and limits **from the response, not from its own copy**.
+The three return-related boxes start filled with their placeholder defaults and show
+`placeholder_note` beside them ("The return figures are placeholders you can change, not a
+forecast. Real life will differ."); the required boxes start empty (the form never keeps numbers
+between visits: nothing is saved, no "Keep these numbers"). `todays_money` is shown once above the
+form. Money has no currency sign: the owner's own currency, in today's money.
+
+### R3. `POST /api/retirement/run`
+
+Body: a flat object with the field keys above (numbers, or text like `"1,250,000"` / `"6.5%"`);
+empty or missing optional fields take their default. Any other key is refused. Response:
+
+```
+200 {"ok": true, "result": {
+  "kind": "retirement", "version": 1, "title": "Retirement what-if",
+  "state": "mixed" | "never_runs_out" | "always_runs_out" | "not_enough_to_say",
+  "reason": null | "no_spending",
+  "paths": 10000, "seed": 20260930,
+  "share": null | {"per_100": 71, "label": "about 71 of 100", "all": false, "none": false},
+  "bands": null | {"lower":  {"per_100", "label", "all", "none", "points": -1.0},
+                   "higher": {"per_100", "label", "all", "none", "points":  1.0}},
+  "end_balance": null | {"p10": 0, "p50": 560000, "p90": 3500000, "age": 95,
+                         "text": {"p10": "0", "p50": "560,000", "p90": "3,500,000"}},
+  "poor_case": null | {"lasts": false, "age": 82},
+  "runs_out_between": null | [81, 89],
+  "middle_lasts_to": null | 95,
+  "summary": [<sentence>, ...],
+  "text": "<summary joined, then the disclaimer>",
+  "used": [{"key", "label", "value": "<string>", "assumed": bool}],
+  "todays_money", "placeholder_note",
+  "disclaimer": "This is a simplified what-if, not financial advice.",
+  "private": true, "read_aloud": false, "remember": false,
+  "words": {"hidden": "Retirement what-if hidden"}}}
+```
+
+An example made by the real code (40 now, stop at 65, 100,000 saved, 12,000 a year, spend 30,000; all
+else the defaults): `state` "mixed", `share.label` "about 71 of 100", `bands.lower.label` "about 51
+of 100", `bands.higher.label` "about 86 of 100", `end_balance` p10 0 / p50 560000 / p90 3500000,
+`poor_case` `{"lasts": false, "age": 82}`, `runs_out_between` [81, 89] and `summary`:
+
+1. In about 71 of 100 simulated futures your money lasts to age 95. Where it runs out, that is usually at about age 81 to 89.
+2. If yearly returns are 1 point lower, that becomes about 51 of 100; 1 point higher, about 86 of 100.
+3. In a poor case (1 in 10) the money runs out at about age 82.
+4. The middle case leaves about 560,000 at age 95; a good case (1 in 10) about 3,500,000.
+
+**What the app draws, in this order:** the `summary` sentences as a short list or paragraph
+(exactly as sent, the app never edits, rounds or re-words a figure); the `disclaimer` on its own
+line right after them, always visible, never collapsible; a "What I used" list from `used` (an
+`assumed: true` row gets the word "assumed" beside it, from the app's own fixed word "assumed");
+`placeholder_note`; `todays_money`. Optional: a bar of the three end balances or a share meter drawn
+by hand (desktop hand SVG, phone Compose Canvas), only from `share.per_100`, `bands.*.per_100` and
+`end_balance`, never as a single big number; no streaks, no colours that mean pass or fail beyond
+the plain state words. The headline of the card is `share.label` phrase from the first sentence, not a
+lone number.
+
+**States (exact meaning):**
+
+| `state` | when | `summary[0]` starts | share |
+|---|---|---|---|
+| `mixed` | some futures last, some do not | "In about N of 100 simulated futures your money lasts to age A. Where it runs out, that is usually at about age X to Y." | `label` "about N of 100", N always 1 to 99 (a share that rounds to 0 or 100 is still shown as "about 1" or "about 99"; "fewer than 1" and "more than 99" belong only to the two states below) |
+| `never_runs_out` | every future lasts | "In all 10,000 simulated futures your money lasts to age A. That does not mean it is guaranteed." | `label` "more than 99 of 100", `all: true`, `per_100: 99`; `runs_out_between` null, `poor_case.lasts` true |
+| `always_runs_out` | no future lasts | "In none of the 10,000 simulated futures does your money last to age A; it runs out at about age X." (or "X to Y") | `label` "fewer than 1 of 100", `none: true`, `per_100: 0` |
+| `not_enough_to_say` | yearly spending is 0 | "There is nothing to test: with no spending in retirement the money cannot run out. Type what you expect to spend each year." | `share`, `bands`, `end_balance`, `poor_case`, `runs_out_between`, `middle_lasts_to` are all null |
+
+Other sentences the backend may add, all fixed: "Even in a poor case (1 in 10) it lasts, leaving about
+N at age A." (poor case lasts); "In the middle case the money runs out at about age A." (the middle
+case is empty); "Other income only covers spending; any extra is not saved." (when other income was
+typed). The run-out age is **never** shown as 0 or as the starting age for a future that does not run
+out (the argmax pitfall): a null `runs_out_between` means there is nothing to say, the app draws no
+"runs out" line.
+
+**Errors** (`400 {"ok": false, "error", "field", "message"}`; the app shows `message` next to the
+field named in `field`, and never repeats what was typed):
+
+| `error` | when | `message` |
+|---|---|---|
+| `missing` | a required box is empty | Please type in "<label>". I will not guess it. |
+| `bad_number` | text, NaN, infinity, true/false, a fraction for an age | <label> must be a whole number from 18 to 100. (ages) / an amount from 0 to 1,000,000,000 (money) / a number from -5 to 15 (percent; the limits of that field) |
+| `negative` | negative money | <label> cannot be negative. |
+| `out_of_range` | outside the field's limits | as `bad_number` |
+| `plan_not_after` | plan-to age not after the retirement age (or the age now) | The age to plan the money to must be after the age you stop working (and after your age now). |
+| `too_many_years` | more than 90 years from now | That is more than 90 years from your age now. Pick a nearer age. |
+| `unknown_field` | a key that is not a field (an app bug) | That is not one of the what-if's fields. |
+| `bad_request` | not a set of fields | Send the numbers as a set of named fields. |
+
+`429 {"error": "busy", "message": "Another what-if is still being worked out. Try again in a moment."}`
+(one run at a time; the app tries once more after a second, then shows the message);
+`503 {"error": "too_slow", "message": "That took too long to work out, so it was stopped. Try again."}`.
+A run normally takes 1 to 3 seconds on the PC, so both apps show a plain "Working it out" state and
+disable the button while waiting. A stale link (rule 4) greys the button like every other action; a
+result already on screen stays but the card says nothing new is possible.
+
+### R4. Hidden-lists behaviour, and what is never done
+
+- Under "Hide memory lists and chat history" (both apps) the card shows only `words.hidden`, "Retirement
+  what-if hidden", and no result or form value; the form's boxes are emptied when hidden. The desktop
+  also needs the app unlocked while App lock is on (the same rule as the spending table); the phone
+  already blocks screenshots in both states.
+- The numbers are never written by an app: not to disk, not to a store, not to a log, not to chat
+  history, not to a widget or a notification. The result lives in memory while the card is on
+  screen and goes when the owner leaves it. The backend keeps nothing either.
+- Never read aloud. Never sent to a web search, a chatbot or any cloud lane. Never remembered as a fact
+  and never offered to Goals or Projects as a number to track (the owner types those themselves).
+- No card, no Windows Hello: this is a calculation on numbers the owner typed.
+- Nothing computed on the phone. The phone builds no simulation.
+
+### R5. Fixed words the apps own (not in the response)
+
+The card title comes from `title`. Button: "Work it out". Waiting: "Working it out". The small tag
+beside a made-up figure: "assumed". Section heading above the list: "What I used". Everything else
+comes from the backend.
+
+### R6. Not verified
+
+- No app draws it yet; no real model wrote a sentence round a result (the tests script the sentence
+  check); nothing was run on Windows or the phone.
+- The default return, spread and inflation are placeholders, not researched. The share moves by a few
+  points with another random seed, and the answer says "about".
+- Whether a 30-year-old with 90 years to plan and 10,000 futures stays under the 30-second cap on the
+  owner's slowest PC was measured only on this container (about 1 second warm).

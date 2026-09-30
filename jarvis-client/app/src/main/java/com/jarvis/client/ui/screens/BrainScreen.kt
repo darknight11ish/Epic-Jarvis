@@ -484,12 +484,37 @@ fun BrainScreen(
                 )
             }
 
+            // "Spending" (the owner's decision of 2026-09-30, docs/JARVIS-API.md
+            // section 100): READ-ONLY - "Set up on the PC", the saved bank
+            // layouts and the category words (SpendingPlate.kt). The columns
+            // check and the categories editor are the PC's alone.
+            item(key = "spending") {
+                SpendingSection(
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+
             // "Quiz me on a text" (docs/STUDY-FROM-TEXT-DESIGN.md, Slice A,
             // 2026-09-30): paste a text, answer typed questions one at a
             // time, marked on the PC by the local model, nothing saved or
             // learned (QuizPlate.kt) - the desktop's Quiz page.
             item(key = "quiz") {
                 QuizSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+
+            // "My study decks" (docs/QUIZ-DECKS-DESIGN.md, contract C1-C6,
+            // 2026-09-30): questions kept from a finished quiz, asked again on
+            // the PC's schedule; the owner rates each card (DecksPlate.kt) -
+            // the desktop's section beside its Quiz page.
+            item(key = "decks") {
+                DecksSection(
                     canAct = canAct,
                     privateHidden = privateHidden,
                     showPrivateBusy = showPrivateBusy,

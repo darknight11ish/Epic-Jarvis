@@ -85,6 +85,7 @@ export const KEEP_INTRO =
 export const KEEP_SAVING = "Keeping these questions on this PC.";
 export const MISSING =
   "Your PC's Jarvis does not have study decks yet - run apply-patches.ps1 on the PC.";
+export const RATING_GROUP = "How well did you remember it?";
 export const NO_CARD_ANSWER = "(no answer written)";
 
 /** The PC's limits (JARVIS-API 102.2 `limits`), until it sends its own. */

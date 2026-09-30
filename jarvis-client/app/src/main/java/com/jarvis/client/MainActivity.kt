@@ -1053,6 +1053,9 @@ class MainActivity : FragmentActivity() {
         // The answer's id (`turn_id`) and the owner's mark on it, for the
         // Right / Wrong buttons under the answer. Ids only, memory only.
         val answerTurnId by chat.turnId.collectAsState()
+        // The spending table's id under that answer (an id only; the table is
+        // fetched and held in memory by the screen that draws it).
+        val answerTableId by chat.tableId.collectAsState()
         // The conversation the next question carries (ChatHistory). Only its
         // size is shown; memory only, like the question itself.
         val conversation by chat.history.collectAsState()
@@ -2700,6 +2703,7 @@ class MainActivity : FragmentActivity() {
                             temporary = temporaryChat,
                             usedIds = usedIds,
                             answerTurnId = answerTurnId,
+                            answerTableId = answerTableId,
                             crisisAnswer = crisisAnswer,
                             cloudOffer = cloudOffer,
                             inboxTidy = inboxTidyHeld?.let { held ->
@@ -2832,6 +2836,7 @@ class MainActivity : FragmentActivity() {
                                 onLoadUsed = { ids -> JarvisRuntime.memoryUsed(ids) },
                                 onForgetUsed = { id -> JarvisRuntime.forgetAutoFact(id) },
                                 onLoadSources = { tid -> JarvisRuntime.chatSources(tid) },
+                                onLoadSpendingTable = { tid -> JarvisRuntime.spendingTable(tid) },
                                 onShowPrivate = ::showPrivateLists,
                                 // A fingerprint instead of a tap for anything that
                                 // leaves the machine, cannot be undone, or arrived

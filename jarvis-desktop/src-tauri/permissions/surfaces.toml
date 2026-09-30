@@ -1025,6 +1025,36 @@ permissions = [
   "allow-inbox-tidy-undo",
 ]
 
+# "Spending summaries" (backend/spending.patch; JARVIS-API section 100; the
+# owner's decision of 2026-09-30). The Jarvis bar reads the table a chat answer
+# announced, by id: a read, never held on a stale link, and never asked for
+# while the private lists are hidden or App lock has locked Jarvis. It cannot
+# write anything and cannot reach the Settings box's commands.
+[[set]]
+identifier = "spending-table"
+description = "Read the spending table a chat answer announced, by its id (a read; hidden in Rust while the private lists are hidden or Jarvis is locked)."
+permissions = [
+  "allow-chat-table",
+]
+
+# The Settings box for the same feature: read the saved bank layouts and the
+# categories, check the columns of a new bank file, save or forget a layout,
+# save or reset the category words, ask for suggestions. PC only on the
+# backend (403 from any other device); no approval card; the writes are held
+# on a stale link in Rust. Settings window only.
+[[set]]
+identifier = "spending-settings"
+description = "Settings, Spending: read the layouts and categories, check a bank file's columns, save or forget a layout, edit the categories. No approval card; PC only on the backend."
+permissions = [
+  "allow-get-spending",
+  "allow-spending-profile-read",
+  "allow-spending-profile-save",
+  "allow-spending-profile-delete",
+  "allow-spending-categories-save",
+  "allow-spending-categories-reset",
+  "allow-spending-suggest",
+]
+
 # Focus sessions (backend/focus.patch; the owner's decision of 2026-09-25): a
 # timer plus Quiet, drifts named out loud on this PC, counts only. Reading it
 # is a read. ONE thing per call to the running session - pause, resume, +10

@@ -122,10 +122,13 @@ def source(log, cid="conv-source-001", n=3, **kw):
 def t_a_fork_copies_the_first_turns_into_a_new_chat():
     if skip():
         return
-    log = new_log()
+    clock = Clock()
+    log = new_log(clock=clock)
     cid = source(log)                  # idx 0 user, 1 assistant, 2 user, 3 assistant, ...
     log.tags()
     log.set_tag(cid, 2)
+    clock.tick(3600)
+    fork_time = clock()
     code, out = log.fork(cid, 3)
     check("a fork answers 200 and ok", code == 200 and out["ok"] is True, out)
     new = out["id"]
@@ -146,8 +149,9 @@ def t_a_fork_copies_the_first_turns_into_a_new_chat():
           == [t["at"] for t in src["turns"][:4]])
     check("the title read back from the fork is sealed under the new id",
           got["title"] == out["title"] and got["kind"] == "chat" and got["tag_id"] == 2)
-    check("started, updated and device are the source's",
-          (got["started"], got["updated"]) == (src["started"], src["updated"]))
+    check("started is the source's; updated is the moment of the fork (it counts as new)",
+          got["started"] == src["started"] and got["updated"] == fork_time
+          and src["updated"] < fork_time, (got, src))
     rows = {r["id"]: r for r in log.list()["conversations"]}
     check("the list shows both, the fork with four messages",
           rows[new]["turns"] == 4 and rows[cid]["turns"] == 6 and rows[new]["device"] == "desktop",
@@ -315,6 +319,8 @@ def t_bad_requests_and_missing_things():
         (cid, "1", 400, "bad_request"),
         (cid, 1.5, 400, "bad_request"),
         (cid, None, 400, "bad_request"),
+        (cid, 10 ** 30, 400, "bad_request"),      # was an OverflowError -> 500
+        (cid, 2 ** 63, 400, "bad_request"),
         ("short", 0, 400, "bad_request"),
         (None, 0, 400, "bad_request"),
         ("conv-nothere-01", 0, 404, "not_found"),
@@ -399,8 +405,15 @@ def t_the_source_hush_is_not_copied_the_fork_has_its_own():
         fork = log._hush_read(c, new)
     check("the source keeps its own hush (up to its newest user turn, erased)",
           src == {"upto": 4, "erased": True}, src)
-    check("the fork gets ITS OWN, up to the last copied user message, and not erased",
-          fork == {"upto": 2, "erased": False}, fork)
+    check("the fork gets ITS OWN, up to the last copied user message, and keeps 'erased'",
+          fork == {"upto": 2, "erased": True}, fork)
+    log3 = new_log()
+    c3 = source(log3, n=3)
+    log3.note_hush(c3, erased=False)
+    code, o3 = log3.fork(c3, 3)
+    with closing(log3._connect()) as c:
+        check("a plain Forget's hush stays 'not erased' in the fork",
+              log3._hush_read(c, o3["id"]) == {"upto": 2, "erased": False})
     # A fork of a chat with no hush also gets the fork-point hush.
     log2 = new_log()
     c2 = source(log2, n=2)
@@ -463,6 +476,130 @@ def t_copied_turns_are_not_learned_twice():
               not ctrl.get("dropped"), ctrl)
     finally:
         w.done()
+
+
+def t_a_fork_does_not_double_the_said_again_count():
+    """The audit's reproduction: chat-history.patch records a turn with an `at`
+    a few seconds EARLIER than the moment the live registry saw it, so the
+    fork's copy (put back from the record) has another time than the source's
+    live entry - and a store that keeps one row per time counted both."""
+    if skip():
+        return
+    try:
+        import test_auto_learn as TA
+        import jarvis_intake as I
+    except Exception as exc:               # pragma: no cover
+        check(f"SKIP - the learner's test World cannot be built here ({type(exc).__name__})", True)
+        return
+
+    class Store:
+        """One row per (fact, time), like MemoryStore.said_again."""
+        def __init__(self):
+            self.rows = set()
+
+        def search(self, text, k=5, word_floor=0.0):
+            return [{"id": 1, "text": "The owner lives in York", "current": True}]
+
+        def said_again(self, fid, at, prov):
+            before = len(self.rows)
+            self.rows.add((fid, at))
+            return len(self.rows) > before
+
+    import time
+    w = TA.World()
+    try:
+        src = "conv-said-src001"
+        now = time.time()
+        w.log.record_turn({"conversation_id": src, "device": "desktop", "messages": [
+            {"role": "user", "content": "I live in York", "provenance": "typed"}]},
+            lane="qwen3:8b", turn={"answer": "ok", "finish_reason": "stop"}, at=now - 30)
+        w.log.record_turn({"conversation_id": src, "device": "desktop", "messages": [
+            {"role": "user", "content": "I live in York", "provenance": "typed"},
+            {"role": "assistant", "content": "ok"},
+            {"role": "user", "content": "and I like tea", "provenance": "typed"}]},
+            lane="qwen3:8b", turn={"answer": "ok", "finish_reason": "stop"}, at=now - 20)
+        code, out = w.log.fork(src, 3)
+        check("the fork is made", code == 200, out)
+        fk = out["id"]
+        # The fork is continued: its copied messages come back from the record.
+        w.log.record_turn({"conversation_id": fk, "device": "desktop", "messages": [
+            {"role": "user", "content": "I live in York", "provenance": "typed"},
+            {"role": "assistant", "content": "ok"},
+            {"role": "user", "content": "and I like tea", "provenance": "typed"},
+            {"role": "assistant", "content": "ok"},
+            {"role": "user", "content": "one more thing", "provenance": "typed"}]},
+            lane="qwen3:8b", turn={"answer": "ok", "finish_reason": "stop"}, at=now - 10)
+        e_fork = H.live_turn(fk, "I live in York")
+        e_src = H.live_turn(src, "I live in York")
+        check("the copy came back from the record with another time than the live entry",
+              e_fork and e_src and e_fork.get("from_record") and e_fork["at"] != e_src["at"],
+              (e_fork, e_src))
+        st = Store()
+        n = I.note_said_again(["The owner lives in York"], ["I live in York"], store=st)
+        check("the words count once, not once per copy", n <= 1 and len(st.rows) == 1,
+              (n, st.rows))
+        check("...and it is the source's own live message that counted",
+              (1, e_src["at"]) in st.rows, st.rows)
+        # Only a fork: the source's live entry is gone (a restart) - nothing counts.
+        TA._restart(w)
+        w.log.record_turn({"conversation_id": fk, "device": "desktop", "messages": [
+            {"role": "user", "content": "I live in York", "provenance": "typed"},
+            {"role": "assistant", "content": "ok"},
+            {"role": "user", "content": "and I like tea", "provenance": "typed"},
+            {"role": "assistant", "content": "ok"},
+            {"role": "user", "content": "a new day", "provenance": "typed"}]},
+            lane="qwen3:8b", turn={"answer": "ok", "finish_reason": "stop"})
+        st2 = Store()
+        check("after a restart a message that only exists as a fork copy is not counted",
+              I.note_said_again(["The owner lives in York"], ["I live in York"], store=st2) == 0
+              and not st2.rows, st2.rows)
+    finally:
+        w.done()
+
+
+def t_a_fork_of_an_erased_chat_secure_deletes_re_proposals():
+    """The source hush says 'erased': the fork's must too, so the learner
+    deletes (secure_delete) a re-proposal of the erased fact in the fork, as
+    it does in the source, instead of keeping the words as a rejected row."""
+    if skip():
+        return
+    try:
+        import test_auto_learn as TA
+    except Exception as exc:               # pragma: no cover
+        check(f"SKIP - the learner's test World cannot be built here ({type(exc).__name__})", True)
+        return
+    w = TA.World()
+    try:
+        src = "conv-erase-src01"
+        w.say("I live in York", cid=src)
+        w.say("My sister is called Priya", cid=src)
+        first = w.learn(["The owner lives in York"], cid=src)
+        check("learned once in the source", TA.saved(first), first)
+        w.log.note_hush(src, erased=True)
+        code, out = w.log.fork(src, 3)
+        fk = out["id"]
+        TA._restart(w)
+        w.say("I'm learning the cello", cid=fk)
+        res = w.learn(["The owner lives in York"], cid=fk)
+        check("the fork's hush is 'erased' (copied from the source)",
+              A_hush(fk) == "erased" or bool(res.get("dropped")), res)
+        with closing(w.store._connect()) as c:
+            left = c.execute("SELECT COUNT(*) FROM proposals WHERE text LIKE ?"
+                             " AND state IN ('pending', 'rejected')",
+                             ("%lives in York%",)).fetchone()[0]
+            rej = 0
+        check("the re-proposal leaves no copy of the erased words in the fork "
+              "(deleted, not kept as rejected)", left == 0 and rej == 0, (left, rej))
+    finally:
+        w.done()
+
+
+def A_hush(cid):
+    try:
+        import jarvis_auto_learn as A
+        return A.hushed(cid, ["I live in York"])
+    except Exception:
+        return ""
 
 
 # ------------------------------------------------- forks, tags, Undo, delete

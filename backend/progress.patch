@@ -1,0 +1,23 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3650,6 +3650,20 @@
+     except Exception as exc:
+         print(f"  retirement NOT ON ({type(exc).__name__}) - the Retirement what-if is off")
+         print("             until jarvis_retirement.py is back: run apply-patches.ps1 again")
++    # progress.patch ("Activity heatmap and balance chart", the owner's decision of
++    # 2026-09-30; docs/GOALS-PROGRESS-DESIGN.md part C, JARVIS-API section 105):
++    # GET /api/progress/activity, GET and POST /api/progress/balance. Reads the owner's
++    # own ticked steps and logged numbers and keeps only the owner's choice of chart
++    # areas (no card: a display choice). Health and money numbers only shade a day;
++    # never a model tool, never spoken or sent. Wrapped round Handler here, before
++    # anything listens, like retirement above.
++    try:
++        import jarvis_progress
++        print(jarvis_progress.install(Handler, origin_ok=_origin_ok,
++                                      token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  progress   NOT ON ({type(exc).__name__}) - the Activity heatmap and balance chart are off")
++        print("             until jarvis_progress.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

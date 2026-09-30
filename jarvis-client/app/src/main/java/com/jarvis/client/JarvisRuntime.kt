@@ -4252,6 +4252,26 @@ object JarvisRuntime {
         }
 
     /**
+     * `GET /api/chat/table?id=` - the spending table under an answer
+     * ([com.jarvis.client.net.Spending]). A read: never held. The result is
+     * handed to the screen that draws it and kept nowhere else.
+     */
+    suspend fun spendingTable(id: String?): com.jarvis.client.net.Spending.Read =
+        when (val r = api.chatTable(id)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Spending.parseTable(r.value)
+                ?.let { com.jarvis.client.net.Spending.Read.Shown(it) }
+                ?: com.jarvis.client.net.Spending.Read.Failed(com.jarvis.client.net.Spending.UNREADABLE)
+            is ApiResult.Failed -> if (com.jarvis.client.net.Spending.gone(r.error)) {
+                com.jarvis.client.net.Spending.Read.Gone(com.jarvis.client.net.Spending.TABLE_GONE)
+            } else {
+                com.jarvis.client.net.Spending.Read.Failed(describe(r.error))
+            }
+        }
+
+    /** `GET /api/spending` - the Brain plate's read-only view. A read: never held. */
+    suspend fun spendingView(): ApiResult<JsonObject> = api.spending()
+
+    /**
      * Turns a temporary chat on or off on the chat both Home and the voice
      * loop send through ([com.jarvis.client.net.ChatSession.setTemporary]).
      * No card and no hold: it only ever makes Jarvis stricter. ON only when

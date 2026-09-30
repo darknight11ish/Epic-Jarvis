@@ -293,14 +293,16 @@ object Projects {
 
     /**
      * `forecast`, read with defaults; unknown keys are ignored. Null when
-     * there is none, or it has no words to show (an older PC sends none).
+     * there is none (an older PC sends none). Blank words keep the forecast: it is
+     * still drawn and only the words line is left out.
      * A `line` or `band` with a missing corner is dropped whole, never
      * half-drawn.
      */
     fun parseForecast(o: JsonObject?): Forecast? {
         if (o == null) return null
         val state = o.text("state")?.takeIf { it.isNotBlank() } ?: return null
-        val words = o.text("words")?.takeIf { it.isNotBlank() } ?: return null
+        // Blank words do not drop the forecast: it is still drawn, and no words line shows.
+        val words = o.text("words").orEmpty()
         val drawn = state == "range" || state == "open_ended"
         val line = if (!drawn) null else o.obj("line")?.let { l ->
             val from = forePoint(l.obj("from"))

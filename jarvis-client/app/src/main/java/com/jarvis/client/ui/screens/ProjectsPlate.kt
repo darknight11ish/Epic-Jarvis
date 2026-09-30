@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -457,8 +458,11 @@ private fun BenchView(
         // spoken text already carries it, so this line is for the eyes only.
         val pace = b.forecast
         if (pace != null && (b.points.orEmpty().isNotEmpty() || b.latest != null)) {
-            Text(pace.words, style = MaterialTheme.typography.bodySmall, color = chrome.textMid,
-                modifier = Modifier.clearAndSetSemantics { })
+            // A forecast with no words is still drawn; only its words line is left out.
+            if (pace.words.isNotBlank()) {
+                Text(pace.words, style = MaterialTheme.typography.bodySmall, color = chrome.textMid,
+                    modifier = Modifier.clearAndSetSemantics { })
+            }
             if (pace.basis.isNotEmpty() && (pace.state == "range" || pace.state == "open_ended")) {
                 Text(pace.basis, style = MaterialTheme.typography.labelSmall, color = chrome.textLo,
                     modifier = Modifier.clearAndSetSemantics { })
@@ -561,7 +565,7 @@ private fun Chart(b: Projects.Bench) {
     val ground = chrome.surface2
     val edge = chrome.hairlineStrong
     val targetInk = chrome.warnMark
-    val trend = chrome.textMid
+    val mark = chrome.textHi
     val forecast = b.forecast?.takeIf { it.drawable }
     Canvas(
         Modifier
@@ -577,7 +581,16 @@ private fun Chart(b: Projects.Bench) {
             Projects.chartGeometry(points, b.target, size.width, size.height, 8.dp.toPx())
         }
         drawLine(edge, Offset(0f, size.height - 1f), Offset(size.width, size.height - 1f), 1.dp.toPx())
-        // The band goes under everything else: a soft accent fill, its outline dashed.
+        // Same order and look as the desktop chart (FORECAST DRAWING RULE, docs/GOALS-PROGRESS-DESIGN.md):
+        // axis, the target, then the guess UNDER the numbers - a soft accent triangle with a dashed
+        // accent edge, a dashed accent trend line, the bracket on the target level and an open
+        // chevron (its tip at the clip point) where the drawing stops short - then the numbers.
+        target?.let {
+            drawLine(
+                targetInk, Offset(0f, it), Offset(size.width, it), 1.5.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx())),
+            )
+        }
         if (fore != null) {
             val band = Path().apply {
                 moveTo(fore.bandFrom.x, fore.bandFrom.y)
@@ -587,59 +600,55 @@ private fun Chart(b: Projects.Bench) {
             }
             drawPath(band, accent.copy(alpha = 0.20f))
             drawPath(
-                band, trend,
+                band, accent.copy(alpha = 0.7f),
                 style = Stroke(
                     width = 1.dp.toPx(),
-                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx())),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(3.dp.toPx(), 3.dp.toPx())),
                 ),
             )
-        }
-        target?.let {
             drawLine(
-                targetInk, Offset(0f, it), Offset(size.width, it), 1.5.dp.toPx(),
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx())),
-            )
-        }
-        for (i in 1 until placed.size) {
-            drawLine(accent, Offset(placed[i - 1].x, placed[i - 1].y), Offset(placed[i].x, placed[i].y), 2.dp.toPx())
-        }
-        for (pt in placed) drawCircle(accent, radius = 3.dp.toPx(), center = Offset(pt.x, pt.y))
-        if (fore != null) {
-            // The dashed trend line, then the bracket on the target level and arrows at open ends.
-            drawLine(
-                trend, Offset(fore.lineFrom.x, fore.lineFrom.y), Offset(fore.lineTo.x, fore.lineTo.y), 1.5.dp.toPx(),
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx())),
+                accent, Offset(fore.lineFrom.x, fore.lineFrom.y), Offset(fore.lineTo.x, fore.lineTo.y), 1.5.dp.toPx(),
+                cap = StrokeCap.Round,
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(2.dp.toPx(), 3.dp.toPx())),
             )
             val from = fore.bracketFrom
             val to = fore.bracketTo
             val level = fore.target
             if (from != null && to != null && level != null) {
                 val tick = 4.dp.toPx()
-                val stroke = 2.dp.toPx()
-                drawLine(trend, Offset(from, level), Offset(to, level), stroke)
-                drawLine(trend, Offset(from, level - tick), Offset(from, level + tick), stroke)
-                drawLine(trend, Offset(to, level - tick), Offset(to, level + tick), stroke)
+                val stroke = 1.5.dp.toPx()
+                drawLine(mark, Offset(from, level), Offset(to, level), stroke, cap = StrokeCap.Round)
+                drawLine(mark, Offset(from, level - tick), Offset(from, level + tick), stroke, cap = StrokeCap.Round)
+                drawLine(mark, Offset(to, level - tick), Offset(to, level + tick), stroke, cap = StrokeCap.Round)
             }
-            if (fore.arrowLine) drawArrow(trend, fore.lineTo)
-            if (fore.arrowFast) drawArrow(trend, fore.bandFast)
-            if (fore.arrowSlow) drawArrow(trend, fore.bandSlow)
+            // The chevrons are only drawn once, where two ends land on the same spot.
+            val ends = buildList {
+                if (fore.arrowFast) add(fore.bandFast)
+                if (fore.arrowSlow) add(fore.bandSlow)
+                if (fore.arrowLine) add(fore.lineTo)
+            }
+            val shown = mutableListOf<Projects.Placed>()
+            for (e in ends) {
+                if (shown.none { kotlin.math.abs(it.x - e.x) < 0.5f && kotlin.math.abs(it.y - e.y) < 0.5f }) {
+                    shown += e
+                    drawChevron(mark, e)
+                }
+            }
         }
+        for (i in 1 until placed.size) {
+            drawLine(accent, Offset(placed[i - 1].x, placed[i - 1].y), Offset(placed[i].x, placed[i].y), 2.dp.toPx())
+        }
+        for (pt in placed) drawCircle(accent, radius = 3.dp.toPx(), center = Offset(pt.x, pt.y))
     }
 }
 
-/** A small arrowhead pointing right, just past [at]: "this goes on past the edge". */
-private fun DrawScope.drawArrow(color: androidx.compose.ui.graphics.Color, at: Projects.Placed) {
-    val len = 6.dp.toPx()
+/** An open chevron pointing right with its tip at [at] (the clip point): "this goes on past the edge". */
+private fun DrawScope.drawChevron(color: androidx.compose.ui.graphics.Color, at: Projects.Placed) {
+    val len = 5.dp.toPx()
     val half = 4.dp.toPx()
-    val tip = minOf(at.x + len, size.width)
-    val base = tip - len
-    val head = Path().apply {
-        moveTo(tip, at.y)
-        lineTo(base, at.y - half)
-        lineTo(base, at.y + half)
-        close()
-    }
-    drawPath(head, color)
+    val stroke = 1.5.dp.toPx()
+    drawLine(color, Offset(at.x - len, at.y - half), Offset(at.x, at.y), stroke, cap = StrokeCap.Round)
+    drawLine(color, Offset(at.x, at.y), Offset(at.x - len, at.y + half), stroke, cap = StrokeCap.Round)
 }
 
 @Composable

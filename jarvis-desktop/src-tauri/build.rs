@@ -277,6 +277,23 @@ fn main() {
             "add_folder",
             "remove_folder",
             "import_notion",
+            // "Spending summaries" (backend/spending.patch; JARVIS-API section
+            // 100; the owner's decision of 2026-09-30). The chat table: read
+            // by id once the stream announced it (the Jarvis bar only; not
+            // asked for at all while the private lists are hidden or App lock
+            // has locked Jarvis). The Settings box: read the layouts and
+            // categories, read the columns of a waiting file, and save or
+            // forget a layout, save or reset the categories, ask for
+            // suggestions. PC only on the backend; no card; writes held on a
+            // stale link.
+            "chat_table",
+            "get_spending",
+            "spending_profile_read",
+            "spending_profile_save",
+            "spending_profile_delete",
+            "spending_categories_save",
+            "spending_categories_reset",
+            "spending_suggest",
             // Settings' "Backups" (backend/jarvis_backup.py, backup.patch;
             // the owner's decision of 2026-09-27): one locked backup file
             // with a recovery code shown once. Setting the folder reuses

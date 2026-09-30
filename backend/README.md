@@ -166,6 +166,7 @@ on a throwaway copy instead.
 | `quiz.patch` | `jarvis_hud.py` | **"Quiz me on a text"** (the owner's decision of 2026-09-30; `docs/STUDY-FROM-TEXT-DESIGN.md`, `docs/JARVIS-API.md` section 98). ONE install block, `jarvis_quiz.install(Handler, ...)`, right after `browser-engine.patch`'s own (the last one before `_loopback_companion`), so it goes last. Answers `POST /api/quiz` and `GET /api/quiz/<id>`, `POST .../answer`, `.../finish`, `.../stop`: the local model writes questions from a pasted text and marks typed answers against the source passage only. No card; quizzes live in memory only (3 open, 60 minutes); nothing is saved, learned or written to chat history. `grader_verified` stays false until `eval_quiz_grader.py` has been run against the real model on the owner's PC (apply-patches.ps1 ships it and `quiz_grader_cases.json` into the backend folder; one PowerShell line, with the real backend folder in the first quotes - it writes `quiz_grader_results.json` in that same folder and opens it: `$b = 'C:\PASTE\YOUR\BACKEND\FOLDER'; py -3 "$b\eval_quiz_grader.py" --backend-dir $b; explorer $b`) and `quiz_grader_results.json` shows 80% right and no injection winning. Needs `jarvis_quiz.py` (and `quiz_grader_cases.json`, `eval_quiz_grader.py` for the measurement); without it, or on any error, the banner says "quiz NOT ON" and the routes are not there. See `test_quiz.py`. |
 | `decks.patch` | `jarvis_hud.py` | **"Review decks"** (the owner's decision of 2026-09-30; `docs/QUIZ-DECKS-DESIGN.md`, `docs/JARVIS-API.md` section 102). ONE install block, `jarvis_decks.install(Handler, ...)`, right after `quiz.patch`'s own (so it goes after it, last before `_loopback_companion`). Answers `GET`/`POST /api/decks`, `POST /api/decks/settings`, `POST /api/decks/<id>/act`, `GET /api/decks/<id>/cards`, `POST /api/decks/<id>/cards/<cid>/act`, `GET /api/review` and `POST /api/review/reveal`\|`rate`\|`more`, and hands the quiz the function that keeps chosen questions in a deck (`jarvis_quiz.configure(keep=...)`; the quiz module itself imports no deck code). A finished quiz's `POST /api/quiz/<id>/finish` may carry a `keep` body: the server takes each question's prompt and passage from its own open quiz, the app sends only the question number and the owner's words for the back, all or nothing, and the quiz stays open on any failure. Cards are **sealed** (AES-256-GCM, the chat-history scheme, its own Credential Manager key "Jarvis Backend/study decks key") in `study.db`; no key or no `cryptography` means nothing is kept, with the reason in words. **py-fsrs 6.3.2** (pinned in `requirements.txt` and `requirements.lock`, never its optimizer/torch extra) works out when a card comes back; the owner rates each card themselves and **review calls no model**. New cards a day: 5 (0-20); a run shows at most 20 cards, "Do 10 more" adds 10. One quiet scheduler kind, `review` (`jarvis_schedule.KIND_MODULES` imports `jarvis_decks`), exists only while a deck does and gives the "N cards ready" line under Coming up; no card, no notification. The quiz also gained **typed Spanish practice** (`mode: "spanish"`; blanks cut and marked by code, translations and sentence endings marked by the local model, model-written answer keys labelled "Answer key written by the model"). No card anywhere in this feature. Needs `jarvis_decks.py` and the `fsrs` package (`py -3 -m pip install -r backend\requirements.txt`); without them, or on any error, the banner says "decks NOT ON" and the routes are not there. See `test_decks.py` (and the Spanish parts of `test_quiz.py`); `decks_fsrs_golden.json` is made by `tools/gen_decks_golden.py`. |
 | `spending.patch` | `jarvis_hud.py` | **"Spending summaries"** (the owner's decision of 2026-09-30; `docs/FINANCE-DESIGN.md` part A, `docs/JARVIS-API.md` section 100). ONE install block, `jarvis_spending.install(Handler, ...)`, right after `decks.patch`'s own, answering `GET /api/spending`, `GET`/`POST /api/spending/profile`, `POST /api/spending/profile/delete`, `/categories`, `/suggest` (this PC only) and `GET /api/chat/table?id=<id>`. No card and no gate line: the `my_spending` tool in `jarvis_agent.py` is decided under `file_read`'s action, and it reads a file in a folder the owner already listed. Needs `jarvis_spending.py` and `jarvis_money_parse.py`; without them, or on any error, the banner says so and the routes are simply not there. Last in the list. See "Spending summaries", at the very end. |
+| `retirement.patch` | `jarvis_hud.py` | **"Retirement what-if"** (the owner's decision of 2026-09-30; `docs/FINANCE-DESIGN.md` part B, `docs/JARVIS-API.md` section 103). ONE install block, `jarvis_retirement.install(Handler, ...)`, right after `spending.patch`'s own, answering `GET /api/retirement/defaults` and `POST /api/retirement/run` on any paired device. A pure calculation on numbers the owner typed: no file, no network, nothing stored, no card and no gate line. Needs `jarvis_retirement.py` (plain Python, no numpy); without it, or on any error, the banner says so and the routes are simply not there. Last in the list. See "Retirement what-if", at the very end. |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 
 ## All but two of the patches apply, and that is correct
@@ -17995,4 +17996,36 @@ python3 backend/test_agent.py
 python3 backend/test_shipped_modules.py
 python3 tools/gen_reach_cases.py --check
 python3 tools/gen_private_aloud_cases.py --check
+```
+
+## Retirement what-if (2026-09-30, JARVIS-API section 103)
+
+The owner types their own numbers (age now, age they stop working, savings, what they add each
+year, what they spend each year in retirement, optional pension) and the code plays out 10,000
+made-up futures. The answer is only ever a range: "in about 78 of 100 simulated futures your
+money lasts to age 95", with "1 point lower / higher" answers and a poor / middle / good case.
+The sentence "This is a simplified what-if, not financial advice." is added by code every time.
+
+What is here:
+
+- `jarvis_retirement.py` (shipped whole): plain Python (no numpy, no scipy, no monteplan: the
+  backend still supports Python 3.10 and starts without numpy), a fixed random seed so the same
+  numbers always give the same answer, every input checked and bounded, the routes, and the
+  model-callable door (`tool_call`, not yet wired into `jarvis_agent.py`; see section 103.6).
+- `retirement.patch`: the one install block.
+- `test_retirement.py` (158 checks): paper-worked cases, every bound, "more savings never lowers
+  the share", the argmax pitfall, the sentence check, no leaks, the time cap, the patch.
+
+Owner steps: `apply-patches.ps1`. Nothing to switch on. The forms in the two apps are separate
+work against the "Retirement contract (frozen)" in `docs/FINANCE-DESIGN.md`.
+
+Not checked, said plainly: the default return figures are placeholders, not researched; nothing
+was compared with monteplan or another calculator; no app draws the form yet.
+
+Test it:
+
+```
+python3 backend/test_retirement.py
+python3 backend/test_shipped_modules.py
+python3 backend/test_patch_history.py
 ```

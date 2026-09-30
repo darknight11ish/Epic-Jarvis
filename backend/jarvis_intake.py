@@ -1336,7 +1336,7 @@ def note_said_again(proposed, turns, store=None) -> int:
                 for turn in turns:
                     if not _says(str(fact["text"]), turn, A):
                         continue
-                    entry = H.live_turn_any(turn)
+                    entry = H.live_turn_any(turn, skip_hushed=True)
                     if not _trusted(entry, A):
                         continue
                     if not _same_dates(str(fact["text"]), turn, entry.get("at")):

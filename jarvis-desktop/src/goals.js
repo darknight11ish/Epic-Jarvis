@@ -71,39 +71,55 @@ export const BY_PLACEHOLDER = "Rough date (optional)";
    sentences whole (`lock_words`, `reached_words`, its refusals in `error`) and
    this page shows them as sent - it never works out a state itself. */
 export const NEEDS_LABEL = "Do these first";
-export const NEEDS_NONE = "Nothing - this step can start now";
 export const MEASURE_LABEL = "Follows a number";
-export const MEASURE_NONE = "None";
 export const FOLLOWS_LABEL = "Follows: ";
 export const UNDO_LABEL = "Undo";
-export const REACHED_TAG = "number reached";
-export const NEEDS_FULL = "At most {max} steps can come first.";
-export const NEEDS_CLEANED = "Removed \"{step}\" - the steps that waited on it no longer do.";
-export const UNDO_TICKED = "Ticked \"{step}\".";
-export const UNTICKED = "Unticked \"{step}\".";
 
 /**
  * The lock and number sentences, the same in both apps and equal, key for
  * key and word for word, to `goal_words` in tests/fixtures/projects-cases.json
- * (jarvis_goals.WORDS). An app shows `lock_words` / `reached_words` / `error`
- * as sent and needs only `locked` and `measure_gone` to draw a row.
+ * (jarvis_goals.WORDS, plus the screens' own sentences that
+ * tools/gen_projects_cases.py adds). An app shows `lock_words` /
+ * `reached_words` / `error` as sent. `{max}` and `{step}` are filled in by
+ * the app (brain.js goalFill).
  */
 export const GOAL_WORDS = Object.freeze({
   after: "after: {steps}",
   after_open_again: "after: {steps} (open again)",
   circle: "These steps wait on each other in a circle: {steps}.",
+  follows_empty: "No number with a target yet. Set a target on a benchmark in Projects first.",
+  follows_none: "No number",
+  follows_under: "The step shows \"reached\" when that number reaches its target. You still tick it yourself.",
   locked: "locked",
   locked_refusal: "Do \"{step}\" first, or tick it if it is already done.",
   measure_gone: "The number this step follows is gone - tick it by hand.",
+  needs_cleaned: "Removed \"{step}\" - the steps that waited on it no longer do.",
+  needs_limit: "At most {max} steps can come first.",
+  needs_none: "Nothing - this step can start now",
+  needs_under: "This step stays locked until the ones you pick are done. Pick up to 3.",
   no_such_benchmark: "\"{step}\" follows a number that does not exist any more.",
   no_target: "\"{step}\" follows \"{name}\", which has no target yet - set one first.",
   reached: "The number reached its target: {latest} (target {target}).",
+  reached_tag: "number reached",
   reached_tick: "{step}: the number reached its target - tick it when you are ready.",
   self_wait: "\"{step}\" cannot wait on itself.",
+  ticked: "Ticked \"{step}\".",
   too_many_needs: "\"{step}\" can wait on at most 3 other steps.",
   unknown_wait: "\"{step}\" waits on a step that is not in this plan.",
+  unticked: "Unticked \"{step}\".",
   waiting_on: "Waiting on \"{step}\".",
 });
+
+export const NEEDS_NONE = GOAL_WORDS.needs_none;
+export const NEEDS_UNDER = GOAL_WORDS.needs_under;
+export const NEEDS_FULL = GOAL_WORDS.needs_limit;
+export const NEEDS_CLEANED = GOAL_WORDS.needs_cleaned;
+export const MEASURE_NONE = GOAL_WORDS.follows_none;
+export const MEASURE_UNDER = GOAL_WORDS.follows_under;
+export const MEASURE_EMPTY = GOAL_WORDS.follows_empty;
+export const REACHED_TAG = GOAL_WORDS.reached_tag;
+export const UNDO_TICKED = GOAL_WORDS.ticked;
+export const UNTICKED = GOAL_WORDS.unticked;
 
 /** The step ids the PC makes (jarvis_goals.STEP_IDS). */
 export const STEP_IDS = Object.freeze(["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8", "s9"]);
@@ -331,15 +347,17 @@ export function needChoices(plan, index) {
     .map(({ s, i }) => ({ id: s.id, position: i + 1, label: `${i + 1}. ${text(s.step).trim() || "(empty step)"}` }));
 }
 
-/** The ids of the life projects in a `projects_read` list answer (nothing while hidden). */
-export function lifeProjectIds(list) {
+/** The ids of the projects in a `projects_read` list answer, at most 20
+ *  (nothing while hidden). Life and coding alike: a step may follow a number
+ *  from either. */
+export function benchProjectIds(list) {
   const l = readList(list);
-  return l.available && !l.hidden ? l.projects.filter((p) => p.kind === "life").map((p) => p.id) : [];
+  return l.available && !l.hidden ? l.projects.slice(0, 20).map((p) => p.id) : [];
 }
 
 /**
- * The life benchmarks a step can follow: those with a target and a better
- * direction (the PC refuses any other). `list` is a `projects_read` list
+ * The number benchmarks a step can follow, in life and coding projects alike:
+ * those with a target and a better direction (the PC refuses any other). `list` is a `projects_read` list
  * answer and `projectAnswers` the full-project answers, one per project;
  * anything hidden or unreadable gives nothing.
  */
@@ -350,7 +368,7 @@ export function measureChoices(list, projectAnswers) {
   for (const ans of projectAnswers || []) {
     if (!ans || ans.hidden === true) continue;
     const p = readProject(ans.project);
-    if (!p.id || p.kind !== "life") continue;
+    if (!p.id) continue;
     for (const b of p.benchList) {
       if (b.kind !== "number" || b.target === null || b.better === null) continue;
       out.push({ project: p.id, bench: b.id, label: `${p.name} - ${b.name}` });

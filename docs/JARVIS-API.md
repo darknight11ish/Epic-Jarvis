@@ -15978,3 +15978,96 @@ Automatic learning saves a fact only from a message this PC saw arrive live, and
 `jarvis_chat_log.CONV_COLS` is the single list of the `conversations` columns. `get`, `brief`, `list`, `search`, `overlapping`, `take_out` and `put_back` (`_put_one`, which pads an older held row to the list's length) all read it, so a new column is one edit and cannot be dropped by a hand-written positional tuple (a test pins the list against the real table). Added as the "refactor before Fork" the tags audit asked for; behaviour is unchanged (every existing suite passes).
 
 Tests: `backend/test_chat_fork.py`, with `test_chat_log.py` and `test_chat_tags.py` updated for the new per-turn `idx` and the new route in the patch. Shared words and worked examples are in `history-cases.json` (`words.fork*`, `fork_labels`, `fork_error_cases`).
+
+## 103. Retirement what-if (added 2026-09-30; backend built, apps to follow)
+
+The owner's decision of 2026-09-30 (`docs/BUILD-QUEUE-2026-09-30.md`, item 5; design
+`docs/FINANCE-DESIGN.md` part B; the exact shape both apps draw is its "Retirement contract
+(frozen)"). The owner types their own numbers into a small form (or gives them in chat) and the
+PC plays out 10,000 made-up futures with a fixed random seed. Backend: `jarvis_retirement.py`
+(shipped whole, plain Python, standard library only), `retirement.patch` (one install block).
+Tests: `backend/test_retirement.py` (158 checks).
+
+### 103.1 The rules
+
+- **Only ranges, never one exact number.** "In about 78 of 100 simulated futures your money
+  lasts to age 95", the same with returns 1 point lower and 1 point higher, and a poor (1 in
+  10), middle and good (1 in 10) case. Shares are whole numbers out of 100; money is shown to
+  2 significant figures; ages are whole.
+- **The sentence "This is a simplified what-if, not financial advice." is added by code** to
+  every result (`disclaimer`, and the last words of `text`). The made-up return figures carry a
+  second fixed line (`placeholder_note`).
+- **Numbers come from code, never from the model.** The model may only word the answer; a
+  sentence it writes is kept only if every number in it is in the result
+  (`jarvis_retirement.verify_sentence`), else the answer's own first sentence is used.
+- **Explicit end states.** `never_runs_out` ("In all 10,000 simulated futures your money lasts to
+  age 95. That does not mean it is guaranteed.", shown as "more than 99 of 100", never 100),
+  `always_runs_out`, `mixed`, and `not_enough_to_say` (no spending to test). A future that never
+  runs out is never given a run-out age (the `np.argmax` pitfall, reproduced 2026-09-30, cannot
+  happen: nothing here uses it, and the test keeps the case).
+- **Screen only, money.** `private: true, read_aloud: false, remember: false`. Never read aloud,
+  never remembered as a fact, never sent to a web search or a chatbot, not stored (the backend
+  keeps nothing of the numbers or the answer, prints and logs nothing), hidden under "Hide memory
+  lists and chat history" (the apps draw `words.hidden`); the desktop also needs the app unlocked
+  while App lock is on; phone screenshots are already blocked in both states.
+- **No card.** A pure calculation on numbers the owner typed: no file, no network. No gate line.
+- **Same answer every time.** Fixed seed (`20260930`), the same random draws for every path
+  whatever the inputs, so more savings, more saving each year, less spending, more pension, a
+  higher return or a later retirement can never lower the share that lasts.
+
+### 103.2 The model (all in today's money)
+
+Yearly steps from the age now to the plan-to age (at most 90 years). At the start of the year at
+age `a`: before the retirement age the yearly saving is added; from the retirement age the year's
+spending less any started other income (never below 0; extra income is not saved) is taken out. If
+the money cannot cover it, the money **ran out at age `a`**. Then the year's return is applied. The
+real return is `(1 + nominal) / (1 + inflation) - 1`; a year's growth is log-normal with that mean
+and the typed spread. Exactly enough money (nothing left) counts as lasting. Already retired
+(age now at or past the retirement age): the yearly saving is ignored.
+
+### 103.3 Routes (any paired device, behind the token and origin checks)
+
+`GET /api/retirement/defaults` -> `{"ok": true, "available": true, "title", "detail", "fields": [{"key",
+"label", "unit", "kind": "age"|"money"|"percent", "min", "max", "default": number|null, "required",
+"placeholder", "help"}], "paths": 10000, "seed", "max_years": 90, "disclaimer", "placeholder_note",
+"todays_money", "band_points": 1.0, "words": {"hidden", "busy", "too_slow"}, "private", "read_aloud",
+"remember"}`.
+
+`POST /api/retirement/run` with the fields as a flat object (numbers or text such as `"1,250,000"` and
+`"6.5%"`) -> `200 {"ok": true, "result": {...}}` (result shape: "Retirement contract (frozen)" in
+`docs/FINANCE-DESIGN.md`) or `400 {"ok": false, "error": <code>, "field": <key>, "message": <plain
+sentence>}` (`missing`, `bad_number`, `negative`, `out_of_range`, `plan_not_after`, `too_many_years`,
+`unknown_field`, `bad_request`), `429 busy` (one run at a time), `503 too_slow` (a run over 30 seconds
+is stopped). The message never repeats what was typed. An unknown field is refused, not ignored.
+
+Fields: `current_age`, `retirement_age`, `savings`, `yearly_saving`, `yearly_spending` (typed by the
+owner; asked for when missing, never guessed); `plan_to_age` (95), `other_income` (0),
+`other_income_start_age` (the retirement age), `expected_return_percent` (7.0),
+`volatility_percent` (12.0), `inflation_percent` (2.5) (defaults; the made-up ones are marked
+`assumed` in the answer). Limits: ages 18 to 100 (plan-to age to 110, and after the retirement age);
+money 0 to 1,000,000,000; return -5 to 15; spread 0 to 40; inflation 0 to 15.
+
+### 103.4 What the tests prove
+
+Cases worked out on paper with no randomness (runs out at exactly 70; a pension from 67 moves it to
+71; exactly enough lasts; one cent short fails in the last year; compounding; inflation taken out);
+every bound (0, huge, negative, NaN, infinity, booleans, text, lists); the monotonic checks; the
+argmax regression; sentence verification; no print, log or file with the numbers; the time cap; the
+route wrapper and the patch on the stack.
+
+### 103.5 Limits, said plainly
+
+The default return, spread and inflation are placeholders, not researched or recommended. The model is
+yearly and simple: no tax, no fees, no sequence of different spending in different years, no
+life-stage changes. The 10,000 futures are a sample: the shares move by a few points with another
+seed. Nothing was compared with monteplan or another calculator.
+
+### 103.6 The chat door (not wired yet)
+
+`jarvis_retirement.tool_call(args, tainted=...)`, `tool_schema()` and `chat_words()` are written and
+tested (refused after outside text; a missing number is asked for; a spoken question gets "I have put
+it on your screen."), but the `retirement_whatif` tool is **not yet registered in `jarvis_agent.py`**,
+which another builder was editing when this was built. Until it is, Jarvis in chat sends the owner to
+the form. Follow-up: register the tool (gate action decided like `calculator`, a row in `jarvis_reach.py`'s
+`TOOL_NAMES`, the `control`-style refusal after outside text through the same `tainted` flag) and hand
+the result to the apps through the existing `: jarvis-table` mechanism.

@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   FORK, FORK_BUSY, FORK_ERROR_FALLBACK, FORK_NO, FORK_TITLE, forkDoneWords, forkErrorWords, forkLabel,
-  readConversation,
+  forkedRow, readConversation, withForkedRow,
 } from "../src/history-view.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -64,11 +64,45 @@ await check("errors follow the fixture's rule", () => {
   }
   assert.equal(forkErrorWords(null), W.fork_error_fallback);
   for (const [code, sentence] of Object.entries(W.fork_errors)) {
-    if (code !== "bad_request") assert.equal(forkErrorWords({ ok: false, error: code, message: "other" }), sentence, code);
+    if (code !== "bad_request") assert.equal(forkErrorWords({ ok: false, error: code }), sentence, code);
   }
   assert.equal(forkErrorWords({ ok: false, error: "bad_request" }), W.fork_errors.bad_request);
   assert.equal(forkErrorWords({ ok: false, error: "weird", message: "  Plain.  " }), "Plain.");
   assert.equal(forkErrorWords({ ok: false, error: "weird" }), W.fork_error_fallback);
+});
+
+await check("errors: the PC's message wins, then the code's sentence, then the fallback", () => {
+  for (const [code, sentence] of Object.entries(W.fork_errors)) {
+    assert.equal(forkErrorWords({ ok: false, error: code, message: "  The PC's own words.  " }),
+      "The PC's own words.", `${code} with a message`);
+    if (code !== "bad_request") assert.equal(forkErrorWords({ ok: false, error: code, message: "" }), sentence, code);
+  }
+  assert.equal(forkErrorWords({ ok: false, error: "weird", message: "   " }), W.fork_error_fallback);
+});
+
+await check("a forked chat's row is built from the answer and goes first, once", () => {
+  const made = { ok: true, id: "fork-abc", title: "Fork of Boiler", turns: 4, tag_id: 3 };
+  const src = { id: "conv-1", started: 100, updated: 200, device: "phone", tainted: true, project: "home", kind: "live" };
+  const r = forkedRow(made, src, 5000);
+  assert.deepEqual(r, { id: "fork-abc", title: "Fork of Boiler", started: 100, updated: 5000, turns: 4,
+    device: "phone", hasVoice: false, tainted: true, kind: "chat", project: "home", tagId: 3 });
+  const bare = forkedRow({ id: "f", title: "T", turns: 1, tag_id: null }, null, 7);
+  assert.equal(bare.started, 7);
+  assert.equal(bare.tagId, null);
+  const rows = withForkedRow([{ id: "a" }, { id: "fork-abc" }, { id: "b" }], r);
+  assert.deepEqual(rows.map((c) => c.id), ["fork-abc", "a", "b"]);
+});
+
+await check("CONTROL: after a fork the narrowing is cleared and a reread cannot close the new chat", () => {
+  const brain = read("src/brain.js");
+  const at = brain.indexOf("async function forkFrom(");
+  const body = brain.slice(at, brain.indexOf("\n}\n", at));
+  assert.match(body, /clearHistoryNarrowing\(\)/);
+  assert.match(body, /chats\.forked = \{ id: made\.id, row \}/);
+  const clear = brain.slice(brain.indexOf("function clearHistoryNarrowing"), brain.indexOf("/** Copy on an opened old answer"));
+  for (const part of ['chats.kind = ""', 'chats.tag = ""', 's.query = ""']) assert.ok(clear.includes(part), part);
+  assert.match(brain, /const justForked = /);
+  assert.match(brain, /history-forked/, "the transcript is drawn above the list when its row is missing");
 });
 
 await check("the opened chat keeps idx, forkable and fork_why", () => {
@@ -208,6 +242,31 @@ if (browser) {
     assert.equal(await page.locator('.row-item[data-id="conv-0001-aaaa-fork"]').count(), 1);
     assert.equal(await page.locator("#history-transcript .history-turn").count(), 2, "the fork's two turns");
     assert.equal(await page.locator("#toast").innerText(), W.fork_done.replace("{title}", "Fork of Boiler service"));
+    await page.close();
+  });
+
+  await check("browser: forking from a Live-only list, with a tag chip and search words, still shows the new chat", async () => {
+    const live = { ...row("conv-0003-aaaa", "Evening Live", "live"), tag_id: 1 };
+    const page = await tab({}, {
+      conversations: [row("conv-0001-aaaa", "Boiler service"), live],
+      tags: [{ id: 1, name: "Home", colour: 0, icon: "folder", order: 0 }],
+      transcripts: { "conv-0003-aaaa": conv("conv-0003-aaaa", "Evening Live", { kind: "live", tag_id: 1 }) },
+    });
+    await page.locator("#history-kind").selectOption("live");
+    await page.waitForTimeout(400);
+    await openChat(page, "conv-0003-aaaa");
+    await page.locator("#history-filter").fill("Evening");
+    await page.waitForTimeout(700);
+    await page.locator(".history-fork").nth(1).click();
+    await page.waitForTimeout(900);
+    assert.equal(await page.locator("#history-kind").inputValue(), "", "the kind filter is cleared");
+    assert.equal(await page.locator("#history-filter").inputValue(), "", "the search words are cleared");
+    assert.equal(await page.locator("#history-transcript .history-turn").count(), 2, "the new chat's transcript is open");
+    assert.ok((await page.locator("#history-list .row-title").allInnerTexts()).includes("Fork of Evening Live"));
+    // A later re-read (as the 15-second one) must not close it.
+    await page.evaluate(() => window.dispatchEvent(new Event("jarvis-history-changed")));
+    await page.waitForTimeout(600);
+    assert.equal(await page.locator("#history-transcript .history-turn").count(), 2, "still open after a re-read");
     await page.close();
   });
 

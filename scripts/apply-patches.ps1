@@ -924,6 +924,20 @@ $PATCHES = @(
     # jarvis_money_parse.py copied in; without them, or on any error, the banner says so and the routes are
     # simply not there.
     'spending.patch'
+    # "Retirement what-if" (the owner's decision of 2026-09-30; docs/FINANCE-DESIGN.md part B, JARVIS-API
+    # section 103): GET /api/retirement/defaults and POST /api/retirement/run. ONE hunk in jarvis_hud.py, an
+    # install block right after spending.patch's own, so it goes after it. A pure calculation on numbers the
+    # owner typed: no file, no network, nothing stored, no card and no gate line. Needs jarvis_retirement.py
+    # (and jarvis_money_parse.py) copied in; without them, or on any error, the banner says so and the routes
+    # are simply not there.
+    'retirement.patch'
+    # "Activity heatmap and balance chart" (the owner's decision of 2026-09-30; docs/GOALS-PROGRESS-DESIGN.md
+    # part C, JARVIS-API section 105): GET /api/progress/activity and GET/POST /api/progress/balance. ONE hunk
+    # in jarvis_hud.py, an install block right after retirement.patch's own, so it goes after it. It only reads
+    # the owner's ticked steps and logged numbers; the owner's choice of chart areas is a display setting (no
+    # card, no gate line). Not a model tool. Needs jarvis_progress.py (and jarvis_projects.py, jarvis_goals.py)
+    # copied in; without them, or on any error, the banner says so and the routes are simply not there.
+    'progress.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1148,6 +1162,10 @@ $SHIPPED = @(
     # --- "Spending summaries" (2026-09-30, spending.patch) ---
     'jarvis_spending.py'         # spending.patch: totals from a bank CSV/Excel export the owner dropped in a listed folder (the my_spending tool), a table shown on screen only, the layout box (PC only) and the categories; every number from code, the model's one sentence checked against the table
     'jarvis_money_parse.py'      # money, dates and bank-file headers read exactly (Decimal, whole cents); shared by jarvis_spending.py and the retirement what-if to come
+    # --- "Retirement what-if" (2026-09-30, retirement.patch) ---
+    'jarvis_retirement.py'       # retirement.patch: a simplified what-if from numbers the owner typed - 10,000 made-up futures with a fixed seed, answered only as ranges, the disclaimer added by code; plain Python, no numpy; screen-only money
+    # --- "Activity heatmap and balance chart" (2026-09-30, progress.patch) ---
+    'jarvis_progress.py'         # progress.patch: 12 weeks of days shaded by steps ticked and numbers logged, and a 3-to-8 area balance chart the owner picks; every number from code, no streak, no total score; NOT a model tool (a test fails if anything imports it)
 )
 
 # The settings file. Installed only where none exists; never overwritten.

@@ -50,6 +50,7 @@ pub mod sidecar;
 pub mod sky;
 pub mod spec;
 pub mod spec_drift;
+pub mod spending;
 pub mod sse;
 pub mod stream;
 pub mod system_theme;
@@ -976,6 +977,16 @@ pub fn run() {
             folders::add_folder,
             folders::remove_folder,
             folders::import_notion,
+            // "Spending summaries" (spending.rs): the chat table (Jarvis bar) and
+            // the Settings box.
+            spending::chat_table,
+            spending::get_spending,
+            spending::spending_profile_read,
+            spending::spending_profile_save,
+            spending::spending_profile_delete,
+            spending::spending_categories_save,
+            spending::spending_categories_reset,
+            spending::spending_suggest,
             backup::get_backup,
             backup::list_backups,
             backup::set_backup_folder,

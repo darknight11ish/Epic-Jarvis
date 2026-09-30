@@ -1111,6 +1111,27 @@ class JarvisApi(
     }
 
     /**
+     * `GET /api/chat/table?id=` - the spending table a chat answer announced
+     * with `: jarvis-table <id>` in its stream (docs/JARVIS-API.md section
+     * 100.2). `X-Jarvis-Token` and `X-Jarvis-Client: hud` ride along like on
+     * every request ([authed]); the token is never logged. The id is checked
+     * to be exactly 32 lowercase hex characters before it goes into the URL
+     * ([Spending.tablePath]). A read. A 404 is "gone"
+     * ([Spending.gone]): the PC keeps a table two hours, in memory only.
+     */
+    suspend fun chatTable(id: String?): ApiResult<JsonObject> {
+        val path = Spending.tablePath(id)
+            ?: return ApiResult.Failed(ApiError.Malformed("no table id to read"))
+        return probe(path)
+    }
+
+    /**
+     * `GET /api/spending` - the bank layouts, categories and waiting files,
+     * read-only on the phone ([Spending.parseView]). Any device may read it. A read.
+     */
+    suspend fun spending(): ApiResult<JsonObject> = probe(Spending.VIEW_PATH)
+
+    /**
      * `POST /api/memory/profile`: pin or unpin ONE fact (the owner's
      * decision, 2026-09-24). The status and body come back whole
      * ([MemoryProfile.Reply]), like [eraseFact]: a 404 that says "no such

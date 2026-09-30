@@ -227,9 +227,9 @@ object ChatTags {
      * sentence; then [ERROR_FALLBACK].
      */
     fun errorSentence(code: String?, message: String? = null): String {
-        if (code != null && code != "bad_request") ERRORS[code]?.let { return it }
         message?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
-        return if (code == "bad_request") ERRORS.getValue("bad_request") else ERROR_FALLBACK
+        if (code != null) ERRORS[code]?.let { return it }
+        return ERROR_FALLBACK
     }
 
     // --------------------------------------------------------- requests ---

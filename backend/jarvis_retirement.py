@@ -272,7 +272,7 @@ def validate(raw) -> dict:
             if key == "other_income_start_age":
                 continue
             if f["default"] is None:
-                raise _bad("missing", key, f"I need {f['label'].lower()}. Type it in; I will not guess it.")
+                raise _bad("missing", key, f"Please type in \"{f['label']}\". I will not guess it.")
             out[key] = f["default"]
             if f["placeholder"]:
                 assumed.append(key)
@@ -457,7 +457,7 @@ def run(raw: dict, *, paths: int = PATHS, clock=time.monotonic, budget: float = 
     if v["yearly_spending"] <= 0:
         base.update({"state": "not_enough_to_say", "reason": NOT_ENOUGH_NO_SPENDING_REASON,
                      "share": None, "bands": None, "end_balance": None, "poor_case": None,
-                     "runs_out_between": None,
+                     "runs_out_between": None, "middle_lasts_to": None,
                      "summary": [NOT_ENOUGH_NO_SPENDING]})
         base["text"] = _join_text(base["summary"])
         return base

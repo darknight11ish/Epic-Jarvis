@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-spending-profile-save"
+description = "Enables the spending_profile_save command without any pre-configured scope."
+commands.allow = ["spending_profile_save"]
+
+[[permission]]
+identifier = "deny-spending-profile-save"
+description = "Denies the spending_profile_save command without any pre-configured scope."
+commands.deny = ["spending_profile_save"]

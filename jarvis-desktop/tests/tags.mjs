@@ -280,6 +280,9 @@ await check("the error words: a classified code gets its sentence; bad_request a
   assert.equal(T.errorWords({ ok: false, error: "bad_request", message: "Chat history is off. Tags are not changed." }),
     "Chat history is off. Tags are not changed.");
   assert.equal(T.errorWords({ ok: false, error: "bad_request" }), CASES.words.tag_errors.bad_request);
+  // One rule for tags and fork: the PC's message wins when it is not empty.
+  assert.equal(T.errorWords({ ok: false, error: "name_taken", message: "The PC's own words." }), "The PC's own words.");
+  assert.equal(T.errorWords({ ok: false, error: "name_taken", message: "  " }), CASES.words.tag_errors.name_taken);
   assert.equal(T.errorWords(null), CASES.words.tag_error_fallback);
   for (const c of CASES.tag_error_cases) {
     assert.equal(T.errorWords(c.answer), c.expect, JSON.stringify(c.answer));

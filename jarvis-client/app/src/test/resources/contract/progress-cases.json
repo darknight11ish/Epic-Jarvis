@@ -1,0 +1,6997 @@
+{
+ "words": {
+  "title": "Progress",
+  "heat_title": "Activity",
+  "heat_under": "Steps you tick and numbers you log, day by day. A quiet day is just a quiet day.",
+  "heat_total": "Last {weeks} weeks: {things} on {days}.",
+  "heat_empty": "Nothing here yet. A step you tick or a number you log will show on its day.",
+  "heat_undated": "Steps ticked before this was added have no date, so they are not shown.",
+  "day_some": "{things} on {date}",
+  "day_none": "Nothing on {date}",
+  "week_of": "Week of {date}",
+  "balance_title": "Balance",
+  "balance_under": "Pick 3 to 8 of your numbers or goals. Each spoke shows how far you are from your first number to your target. There is no total.",
+  "balance_none": "Nothing picked yet.",
+  "balance_few": "Pick at least 3 to see the chart.",
+  "balance_edit": "Choose what to show",
+  "balance_save": "Save the chart",
+  "balance_clear": "Clear the chart",
+  "balance_rename": "Name on the chart",
+  "balance_limit": "Pick 3 to 8 areas, or none to clear the chart.",
+  "no_numbers": "no numbers yet",
+  "no_target": "no target yet",
+  "no_steps": "no steps yet",
+  "gone": "gone",
+  "no_choices": "Nothing to pick from yet. Give a number a target, or accept a goal.",
+  "hidden": "Hidden while memory lists and chat history are hidden.",
+  "private": "Health or money: kept on screen, never read aloud or sent anywhere.",
+  "summary_heat": "Activity, last {weeks} weeks. {total}",
+  "summary_balance": "Balance chart, {n} areas. {items} No overall score."
+ },
+ "levels": [
+  {
+   "level": 0,
+   "min": 0,
+   "max": 0
+  },
+  {
+   "level": 1,
+   "min": 1,
+   "max": 1
+  },
+  {
+   "level": 2,
+   "min": 2,
+   "max": 2
+  },
+  {
+   "level": 3,
+   "min": 3,
+   "max": 4
+  },
+  {
+   "level": 4,
+   "min": 5,
+   "max": null
+  }
+ ],
+ "shading": {
+  "alpha": [
+   0.0,
+   0.22,
+   0.42,
+   0.66,
+   0.92
+  ],
+  "empty_outline": true,
+  "min_step": 0.2
+ },
+ "limits": {
+  "weeks_default": 12,
+  "weeks_min": 4,
+  "weeks_max": 26,
+  "axes_min": 3,
+  "axes_max": 8,
+  "label_max": 24
+ },
+ "heat_grid": {
+  "cell": 14,
+  "gap": 3,
+  "step": 17,
+  "sizes": {
+   "4": {
+    "cell": 14,
+    "gap": 3,
+    "width": 65,
+    "height": 116
+   },
+   "12": {
+    "cell": 14,
+    "gap": 3,
+    "width": 201,
+    "height": 116
+   },
+   "26": {
+    "cell": 14,
+    "gap": 3,
+    "width": 439,
+    "height": 116
+   }
+  }
+ },
+ "radar_constants": {
+  "size": 260,
+  "radius": 80.0,
+  "label_offset": 14.0,
+  "rings": [
+   0.25,
+   0.5,
+   0.75,
+   1.0
+  ]
+ },
+ "radar_worked": {
+  "three_full": {
+   "size": 260,
+   "center": {
+    "x": 130.0,
+    "y": 130.0
+   },
+   "radius": 80.0,
+   "rings": [
+    20.0,
+    40.0,
+    60.0,
+    80.0
+   ],
+   "fractions": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "spokes": [
+    {
+     "x": 130.0,
+     "y": 50.0
+    },
+    {
+     "x": 199.28,
+     "y": 170.0
+    },
+    {
+     "x": 60.72,
+     "y": 170.0
+    }
+   ],
+   "polygon": [
+    {
+     "x": 130.0,
+     "y": 50.0,
+     "dot": false
+    },
+    {
+     "x": 199.28,
+     "y": 170.0,
+     "dot": false
+    },
+    {
+     "x": 60.72,
+     "y": 170.0,
+     "dot": false
+    }
+   ],
+   "labels": [
+    {
+     "x": 130.0,
+     "y": 36.0,
+     "anchor": "middle"
+    },
+    {
+     "x": 211.41,
+     "y": 187.0,
+     "anchor": "start"
+    },
+    {
+     "x": 48.59,
+     "y": 187.0,
+     "anchor": "end"
+    }
+   ]
+  },
+  "four_half": {
+   "size": 260,
+   "center": {
+    "x": 130.0,
+    "y": 130.0
+   },
+   "radius": 80.0,
+   "rings": [
+    20.0,
+    40.0,
+    60.0,
+    80.0
+   ],
+   "fractions": [
+    0.5,
+    0.5,
+    0.5,
+    0.5
+   ],
+   "spokes": [
+    {
+     "x": 130.0,
+     "y": 50.0
+    },
+    {
+     "x": 210.0,
+     "y": 130.0
+    },
+    {
+     "x": 130.0,
+     "y": 210.0
+    },
+    {
+     "x": 50.0,
+     "y": 130.0
+    }
+   ],
+   "polygon": [
+    {
+     "x": 130.0,
+     "y": 90.0,
+     "dot": false
+    },
+    {
+     "x": 170.0,
+     "y": 130.0,
+     "dot": false
+    },
+    {
+     "x": 130.0,
+     "y": 170.0,
+     "dot": false
+    },
+    {
+     "x": 90.0,
+     "y": 130.0,
+     "dot": false
+    }
+   ],
+   "labels": [
+    {
+     "x": 130.0,
+     "y": 36.0,
+     "anchor": "middle"
+    },
+    {
+     "x": 224.0,
+     "y": 134.0,
+     "anchor": "start"
+    },
+    {
+     "x": 130.0,
+     "y": 234.0,
+     "anchor": "middle"
+    },
+    {
+     "x": 36.0,
+     "y": 134.0,
+     "anchor": "end"
+    }
+   ]
+  },
+  "five_mixed": {
+   "size": 260,
+   "center": {
+    "x": 130.0,
+    "y": 130.0
+   },
+   "radius": 80.0,
+   "rings": [
+    20.0,
+    40.0,
+    60.0,
+    80.0
+   ],
+   "fractions": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+   ],
+   "spokes": [
+    {
+     "x": 130.0,
+     "y": 50.0
+    },
+    {
+     "x": 206.08,
+     "y": 105.28
+    },
+    {
+     "x": 177.02,
+     "y": 194.72
+    },
+    {
+     "x": 82.98,
+     "y": 194.72
+    },
+    {
+     "x": 53.92,
+     "y": 105.28
+    }
+   ],
+   "polygon": [
+    {
+     "x": 130.0,
+     "y": 130.0,
+     "dot": false
+    },
+    {
+     "x": 149.02,
+     "y": 123.82,
+     "dot": false
+    },
+    {
+     "x": 153.51,
+     "y": 162.36,
+     "dot": false
+    },
+    {
+     "x": 94.73,
+     "y": 178.54,
+     "dot": false
+    },
+    {
+     "x": 53.92,
+     "y": 105.28,
+     "dot": false
+    }
+   ],
+   "labels": [
+    {
+     "x": 130.0,
+     "y": 36.0,
+     "anchor": "middle"
+    },
+    {
+     "x": 219.4,
+     "y": 100.95,
+     "anchor": "start"
+    },
+    {
+     "x": 185.25,
+     "y": 216.05,
+     "anchor": "start"
+    },
+    {
+     "x": 74.75,
+     "y": 216.05,
+     "anchor": "end"
+    },
+    {
+     "x": 40.6,
+     "y": 100.95,
+     "anchor": "end"
+    }
+   ]
+  },
+  "three_with_a_dot": {
+   "size": 260,
+   "center": {
+    "x": 130.0,
+    "y": 130.0
+   },
+   "radius": 80.0,
+   "rings": [
+    20.0,
+    40.0,
+    60.0,
+    80.0
+   ],
+   "fractions": [
+    null,
+    0.5,
+    0.5
+   ],
+   "spokes": [
+    {
+     "x": 130.0,
+     "y": 50.0
+    },
+    {
+     "x": 199.28,
+     "y": 170.0
+    },
+    {
+     "x": 60.72,
+     "y": 170.0
+    }
+   ],
+   "polygon": [
+    {
+     "x": 130.0,
+     "y": 130.0,
+     "dot": true
+    },
+    {
+     "x": 164.64,
+     "y": 150.0,
+     "dot": false
+    },
+    {
+     "x": 95.36,
+     "y": 150.0,
+     "dot": false
+    }
+   ],
+   "labels": [
+    {
+     "x": 130.0,
+     "y": 36.0,
+     "anchor": "middle"
+    },
+    {
+     "x": 211.41,
+     "y": 187.0,
+     "anchor": "start"
+    },
+    {
+     "x": 48.59,
+     "y": 187.0,
+     "anchor": "end"
+    }
+   ]
+  },
+  "eight_ramp": {
+   "size": 260,
+   "center": {
+    "x": 130.0,
+    "y": 130.0
+   },
+   "radius": 80.0,
+   "rings": [
+    20.0,
+    40.0,
+    60.0,
+    80.0
+   ],
+   "fractions": [
+    0.125,
+    0.25,
+    0.375,
+    0.5,
+    0.625,
+    0.75,
+    0.875,
+    1.0
+   ],
+   "spokes": [
+    {
+     "x": 130.0,
+     "y": 50.0
+    },
+    {
+     "x": 186.57,
+     "y": 73.43
+    },
+    {
+     "x": 210.0,
+     "y": 130.0
+    },
+    {
+     "x": 186.57,
+     "y": 186.57
+    },
+    {
+     "x": 130.0,
+     "y": 210.0
+    },
+    {
+     "x": 73.43,
+     "y": 186.57
+    },
+    {
+     "x": 50.0,
+     "y": 130.0
+    },
+    {
+     "x": 73.43,
+     "y": 73.43
+    }
+   ],
+   "polygon": [
+    {
+     "x": 130.0,
+     "y": 120.0,
+     "dot": false
+    },
+    {
+     "x": 144.14,
+     "y": 115.86,
+     "dot": false
+    },
+    {
+     "x": 160.0,
+     "y": 130.0,
+     "dot": false
+    },
+    {
+     "x": 158.28,
+     "y": 158.28,
+     "dot": false
+    },
+    {
+     "x": 130.0,
+     "y": 180.0,
+     "dot": false
+    },
+    {
+     "x": 87.57,
+     "y": 172.43,
+     "dot": false
+    },
+    {
+     "x": 60.0,
+     "y": 130.0,
+     "dot": false
+    },
+    {
+     "x": 73.43,
+     "y": 73.43,
+     "dot": false
+    }
+   ],
+   "labels": [
+    {
+     "x": 130.0,
+     "y": 36.0,
+     "anchor": "middle"
+    },
+    {
+     "x": 196.47,
+     "y": 63.53,
+     "anchor": "start"
+    },
+    {
+     "x": 224.0,
+     "y": 134.0,
+     "anchor": "start"
+    },
+    {
+     "x": 196.47,
+     "y": 206.47,
+     "anchor": "start"
+    },
+    {
+     "x": 130.0,
+     "y": 234.0,
+     "anchor": "middle"
+    },
+    {
+     "x": 63.53,
+     "y": 206.47,
+     "anchor": "end"
+    },
+    {
+     "x": 36.0,
+     "y": 134.0,
+     "anchor": "end"
+    },
+    {
+     "x": 63.53,
+     "y": 63.53,
+     "anchor": "end"
+    }
+   ]
+  }
+ },
+ "heat": {
+  "empty": {
+   "ok": true,
+   "available": true,
+   "title": "Activity",
+   "weeks": 12,
+   "from": "2026-07-27",
+   "to": "2026-10-14",
+   "today": "2026-10-14",
+   "columns": [
+    {
+     "col": 0,
+     "label": "Week of 27 Jul"
+    },
+    {
+     "col": 1,
+     "label": "Week of 3 Aug"
+    },
+    {
+     "col": 2,
+     "label": "Week of 10 Aug"
+    },
+    {
+     "col": 3,
+     "label": "Week of 17 Aug"
+    },
+    {
+     "col": 4,
+     "label": "Week of 24 Aug"
+    },
+    {
+     "col": 5,
+     "label": "Week of 31 Aug"
+    },
+    {
+     "col": 6,
+     "label": "Week of 7 Sep"
+    },
+    {
+     "col": 7,
+     "label": "Week of 14 Sep"
+    },
+    {
+     "col": 8,
+     "label": "Week of 21 Sep"
+    },
+    {
+     "col": 9,
+     "label": "Week of 28 Sep"
+    },
+    {
+     "col": 10,
+     "label": "Week of 5 Oct"
+    },
+    {
+     "col": 11,
+     "label": "Week of 12 Oct"
+    }
+   ],
+   "days": [
+    {
+     "date": "2026-07-27",
+     "col": 0,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 27 Jul"
+    },
+    {
+     "date": "2026-07-28",
+     "col": 0,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 28 Jul"
+    },
+    {
+     "date": "2026-07-29",
+     "col": 0,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 29 Jul"
+    },
+    {
+     "date": "2026-07-30",
+     "col": 0,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 30 Jul"
+    },
+    {
+     "date": "2026-07-31",
+     "col": 0,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 31 Jul"
+    },
+    {
+     "date": "2026-08-01",
+     "col": 0,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 1 Aug"
+    },
+    {
+     "date": "2026-08-02",
+     "col": 0,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 2 Aug"
+    },
+    {
+     "date": "2026-08-03",
+     "col": 1,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 3 Aug"
+    },
+    {
+     "date": "2026-08-04",
+     "col": 1,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 4 Aug"
+    },
+    {
+     "date": "2026-08-05",
+     "col": 1,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 5 Aug"
+    },
+    {
+     "date": "2026-08-06",
+     "col": 1,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 6 Aug"
+    },
+    {
+     "date": "2026-08-07",
+     "col": 1,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 7 Aug"
+    },
+    {
+     "date": "2026-08-08",
+     "col": 1,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 8 Aug"
+    },
+    {
+     "date": "2026-08-09",
+     "col": 1,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 9 Aug"
+    },
+    {
+     "date": "2026-08-10",
+     "col": 2,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 10 Aug"
+    },
+    {
+     "date": "2026-08-11",
+     "col": 2,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 11 Aug"
+    },
+    {
+     "date": "2026-08-12",
+     "col": 2,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 12 Aug"
+    },
+    {
+     "date": "2026-08-13",
+     "col": 2,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 13 Aug"
+    },
+    {
+     "date": "2026-08-14",
+     "col": 2,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 14 Aug"
+    },
+    {
+     "date": "2026-08-15",
+     "col": 2,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 15 Aug"
+    },
+    {
+     "date": "2026-08-16",
+     "col": 2,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 16 Aug"
+    },
+    {
+     "date": "2026-08-17",
+     "col": 3,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 17 Aug"
+    },
+    {
+     "date": "2026-08-18",
+     "col": 3,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 18 Aug"
+    },
+    {
+     "date": "2026-08-19",
+     "col": 3,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 19 Aug"
+    },
+    {
+     "date": "2026-08-20",
+     "col": 3,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 20 Aug"
+    },
+    {
+     "date": "2026-08-21",
+     "col": 3,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 21 Aug"
+    },
+    {
+     "date": "2026-08-22",
+     "col": 3,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 22 Aug"
+    },
+    {
+     "date": "2026-08-23",
+     "col": 3,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 23 Aug"
+    },
+    {
+     "date": "2026-08-24",
+     "col": 4,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 24 Aug"
+    },
+    {
+     "date": "2026-08-25",
+     "col": 4,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 25 Aug"
+    },
+    {
+     "date": "2026-08-26",
+     "col": 4,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 26 Aug"
+    },
+    {
+     "date": "2026-08-27",
+     "col": 4,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 27 Aug"
+    },
+    {
+     "date": "2026-08-28",
+     "col": 4,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 28 Aug"
+    },
+    {
+     "date": "2026-08-29",
+     "col": 4,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 29 Aug"
+    },
+    {
+     "date": "2026-08-30",
+     "col": 4,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 30 Aug"
+    },
+    {
+     "date": "2026-08-31",
+     "col": 5,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 31 Aug"
+    },
+    {
+     "date": "2026-09-01",
+     "col": 5,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 1 Sep"
+    },
+    {
+     "date": "2026-09-02",
+     "col": 5,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 2 Sep"
+    },
+    {
+     "date": "2026-09-03",
+     "col": 5,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 3 Sep"
+    },
+    {
+     "date": "2026-09-04",
+     "col": 5,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 4 Sep"
+    },
+    {
+     "date": "2026-09-05",
+     "col": 5,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 5 Sep"
+    },
+    {
+     "date": "2026-09-06",
+     "col": 5,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 6 Sep"
+    },
+    {
+     "date": "2026-09-07",
+     "col": 6,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 7 Sep"
+    },
+    {
+     "date": "2026-09-08",
+     "col": 6,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 8 Sep"
+    },
+    {
+     "date": "2026-09-09",
+     "col": 6,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 9 Sep"
+    },
+    {
+     "date": "2026-09-10",
+     "col": 6,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 10 Sep"
+    },
+    {
+     "date": "2026-09-11",
+     "col": 6,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 11 Sep"
+    },
+    {
+     "date": "2026-09-12",
+     "col": 6,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 12 Sep"
+    },
+    {
+     "date": "2026-09-13",
+     "col": 6,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 13 Sep"
+    },
+    {
+     "date": "2026-09-14",
+     "col": 7,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 14 Sep"
+    },
+    {
+     "date": "2026-09-15",
+     "col": 7,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 15 Sep"
+    },
+    {
+     "date": "2026-09-16",
+     "col": 7,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 16 Sep"
+    },
+    {
+     "date": "2026-09-17",
+     "col": 7,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 17 Sep"
+    },
+    {
+     "date": "2026-09-18",
+     "col": 7,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 18 Sep"
+    },
+    {
+     "date": "2026-09-19",
+     "col": 7,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 19 Sep"
+    },
+    {
+     "date": "2026-09-20",
+     "col": 7,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 20 Sep"
+    },
+    {
+     "date": "2026-09-21",
+     "col": 8,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 21 Sep"
+    },
+    {
+     "date": "2026-09-22",
+     "col": 8,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 22 Sep"
+    },
+    {
+     "date": "2026-09-23",
+     "col": 8,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 23 Sep"
+    },
+    {
+     "date": "2026-09-24",
+     "col": 8,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 24 Sep"
+    },
+    {
+     "date": "2026-09-25",
+     "col": 8,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 25 Sep"
+    },
+    {
+     "date": "2026-09-26",
+     "col": 8,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 26 Sep"
+    },
+    {
+     "date": "2026-09-27",
+     "col": 8,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 27 Sep"
+    },
+    {
+     "date": "2026-09-28",
+     "col": 9,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 28 Sep"
+    },
+    {
+     "date": "2026-09-29",
+     "col": 9,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 29 Sep"
+    },
+    {
+     "date": "2026-09-30",
+     "col": 9,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 30 Sep"
+    },
+    {
+     "date": "2026-10-01",
+     "col": 9,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 1 Oct"
+    },
+    {
+     "date": "2026-10-02",
+     "col": 9,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 2 Oct"
+    },
+    {
+     "date": "2026-10-03",
+     "col": 9,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 3 Oct"
+    },
+    {
+     "date": "2026-10-04",
+     "col": 9,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 4 Oct"
+    },
+    {
+     "date": "2026-10-05",
+     "col": 10,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 5 Oct"
+    },
+    {
+     "date": "2026-10-06",
+     "col": 10,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 6 Oct"
+    },
+    {
+     "date": "2026-10-07",
+     "col": 10,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 7 Oct"
+    },
+    {
+     "date": "2026-10-08",
+     "col": 10,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 8 Oct"
+    },
+    {
+     "date": "2026-10-09",
+     "col": 10,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 9 Oct"
+    },
+    {
+     "date": "2026-10-10",
+     "col": 10,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 10 Oct"
+    },
+    {
+     "date": "2026-10-11",
+     "col": 10,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 11 Oct"
+    },
+    {
+     "date": "2026-10-12",
+     "col": 11,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 12 Oct"
+    },
+    {
+     "date": "2026-10-13",
+     "col": 11,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 13 Oct"
+    },
+    {
+     "date": "2026-10-14",
+     "col": 11,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 14 Oct"
+    }
+   ],
+   "total": 0,
+   "days_active": 0,
+   "empty": true,
+   "words": "Nothing here yet. A step you tick or a number you log will show on its day.",
+   "note": "Steps ticked before this was added have no date, so they are not shown.",
+   "summary": "Activity, last 12 weeks. Nothing here yet. A step you tick or a number you log will show on its day.",
+   "levels": [
+    {
+     "level": 0,
+     "min": 0,
+     "max": 0
+    },
+    {
+     "level": 1,
+     "min": 1,
+     "max": 1
+    },
+    {
+     "level": 2,
+     "min": 2,
+     "max": 2
+    },
+    {
+     "level": 3,
+     "min": 3,
+     "max": 4
+    },
+    {
+     "level": 4,
+     "min": 5,
+     "max": null
+    }
+   ],
+   "keep_on_screen": false,
+   "hidden_words": "Hidden while memory lists and chat history are hidden.",
+   "rects": [
+    {
+     "date": "2026-07-27",
+     "x": 0,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-07-28",
+     "x": 0,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-07-29",
+     "x": 0,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-07-30",
+     "x": 0,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-07-31",
+     "x": 0,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-01",
+     "x": 0,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-02",
+     "x": 0,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-03",
+     "x": 17,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-04",
+     "x": 17,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-05",
+     "x": 17,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-06",
+     "x": 17,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-07",
+     "x": 17,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-08",
+     "x": 17,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-09",
+     "x": 17,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-10",
+     "x": 34,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-11",
+     "x": 34,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-12",
+     "x": 34,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-13",
+     "x": 34,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-14",
+     "x": 34,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-15",
+     "x": 34,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-16",
+     "x": 34,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-17",
+     "x": 51,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-18",
+     "x": 51,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-19",
+     "x": 51,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-20",
+     "x": 51,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-21",
+     "x": 51,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-22",
+     "x": 51,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-23",
+     "x": 51,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-24",
+     "x": 68,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-25",
+     "x": 68,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-26",
+     "x": 68,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-27",
+     "x": 68,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-28",
+     "x": 68,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-29",
+     "x": 68,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-30",
+     "x": 68,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-31",
+     "x": 85,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-01",
+     "x": 85,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-02",
+     "x": 85,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-03",
+     "x": 85,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-04",
+     "x": 85,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-05",
+     "x": 85,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-06",
+     "x": 85,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-07",
+     "x": 102,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-08",
+     "x": 102,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-09",
+     "x": 102,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-10",
+     "x": 102,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-11",
+     "x": 102,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-12",
+     "x": 102,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-13",
+     "x": 102,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-14",
+     "x": 119,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-15",
+     "x": 119,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-16",
+     "x": 119,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-17",
+     "x": 119,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-18",
+     "x": 119,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-19",
+     "x": 119,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-20",
+     "x": 119,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-21",
+     "x": 136,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-22",
+     "x": 136,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-23",
+     "x": 136,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-24",
+     "x": 136,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-25",
+     "x": 136,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-26",
+     "x": 136,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-27",
+     "x": 136,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-28",
+     "x": 153,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-29",
+     "x": 153,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-30",
+     "x": 153,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-01",
+     "x": 153,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-02",
+     "x": 153,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-03",
+     "x": 153,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-04",
+     "x": 153,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-05",
+     "x": 170,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-06",
+     "x": 170,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-07",
+     "x": 170,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-08",
+     "x": 170,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-09",
+     "x": 170,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-10",
+     "x": 170,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-11",
+     "x": 170,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-12",
+     "x": 187,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-13",
+     "x": 187,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-14",
+     "x": 187,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    }
+   ],
+   "size": {
+    "cell": 14,
+    "gap": 3,
+    "width": 201,
+    "height": 116
+   }
+  },
+  "one_day": {
+   "ok": true,
+   "available": true,
+   "title": "Activity",
+   "weeks": 12,
+   "from": "2026-07-27",
+   "to": "2026-10-14",
+   "today": "2026-10-14",
+   "columns": [
+    {
+     "col": 0,
+     "label": "Week of 27 Jul"
+    },
+    {
+     "col": 1,
+     "label": "Week of 3 Aug"
+    },
+    {
+     "col": 2,
+     "label": "Week of 10 Aug"
+    },
+    {
+     "col": 3,
+     "label": "Week of 17 Aug"
+    },
+    {
+     "col": 4,
+     "label": "Week of 24 Aug"
+    },
+    {
+     "col": 5,
+     "label": "Week of 31 Aug"
+    },
+    {
+     "col": 6,
+     "label": "Week of 7 Sep"
+    },
+    {
+     "col": 7,
+     "label": "Week of 14 Sep"
+    },
+    {
+     "col": 8,
+     "label": "Week of 21 Sep"
+    },
+    {
+     "col": 9,
+     "label": "Week of 28 Sep"
+    },
+    {
+     "col": 10,
+     "label": "Week of 5 Oct"
+    },
+    {
+     "col": 11,
+     "label": "Week of 12 Oct"
+    }
+   ],
+   "days": [
+    {
+     "date": "2026-07-27",
+     "col": 0,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 27 Jul"
+    },
+    {
+     "date": "2026-07-28",
+     "col": 0,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 28 Jul"
+    },
+    {
+     "date": "2026-07-29",
+     "col": 0,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 29 Jul"
+    },
+    {
+     "date": "2026-07-30",
+     "col": 0,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 30 Jul"
+    },
+    {
+     "date": "2026-07-31",
+     "col": 0,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 31 Jul"
+    },
+    {
+     "date": "2026-08-01",
+     "col": 0,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 1 Aug"
+    },
+    {
+     "date": "2026-08-02",
+     "col": 0,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 2 Aug"
+    },
+    {
+     "date": "2026-08-03",
+     "col": 1,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 3 Aug"
+    },
+    {
+     "date": "2026-08-04",
+     "col": 1,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 4 Aug"
+    },
+    {
+     "date": "2026-08-05",
+     "col": 1,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 5 Aug"
+    },
+    {
+     "date": "2026-08-06",
+     "col": 1,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 6 Aug"
+    },
+    {
+     "date": "2026-08-07",
+     "col": 1,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 7 Aug"
+    },
+    {
+     "date": "2026-08-08",
+     "col": 1,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 8 Aug"
+    },
+    {
+     "date": "2026-08-09",
+     "col": 1,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 9 Aug"
+    },
+    {
+     "date": "2026-08-10",
+     "col": 2,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 10 Aug"
+    },
+    {
+     "date": "2026-08-11",
+     "col": 2,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 11 Aug"
+    },
+    {
+     "date": "2026-08-12",
+     "col": 2,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 12 Aug"
+    },
+    {
+     "date": "2026-08-13",
+     "col": 2,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 13 Aug"
+    },
+    {
+     "date": "2026-08-14",
+     "col": 2,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 14 Aug"
+    },
+    {
+     "date": "2026-08-15",
+     "col": 2,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 15 Aug"
+    },
+    {
+     "date": "2026-08-16",
+     "col": 2,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 16 Aug"
+    },
+    {
+     "date": "2026-08-17",
+     "col": 3,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 17 Aug"
+    },
+    {
+     "date": "2026-08-18",
+     "col": 3,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 18 Aug"
+    },
+    {
+     "date": "2026-08-19",
+     "col": 3,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 19 Aug"
+    },
+    {
+     "date": "2026-08-20",
+     "col": 3,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 20 Aug"
+    },
+    {
+     "date": "2026-08-21",
+     "col": 3,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 21 Aug"
+    },
+    {
+     "date": "2026-08-22",
+     "col": 3,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 22 Aug"
+    },
+    {
+     "date": "2026-08-23",
+     "col": 3,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 23 Aug"
+    },
+    {
+     "date": "2026-08-24",
+     "col": 4,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 24 Aug"
+    },
+    {
+     "date": "2026-08-25",
+     "col": 4,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 25 Aug"
+    },
+    {
+     "date": "2026-08-26",
+     "col": 4,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 26 Aug"
+    },
+    {
+     "date": "2026-08-27",
+     "col": 4,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 27 Aug"
+    },
+    {
+     "date": "2026-08-28",
+     "col": 4,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 28 Aug"
+    },
+    {
+     "date": "2026-08-29",
+     "col": 4,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 29 Aug"
+    },
+    {
+     "date": "2026-08-30",
+     "col": 4,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 30 Aug"
+    },
+    {
+     "date": "2026-08-31",
+     "col": 5,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 31 Aug"
+    },
+    {
+     "date": "2026-09-01",
+     "col": 5,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 1 Sep"
+    },
+    {
+     "date": "2026-09-02",
+     "col": 5,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 2 Sep"
+    },
+    {
+     "date": "2026-09-03",
+     "col": 5,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 3 Sep"
+    },
+    {
+     "date": "2026-09-04",
+     "col": 5,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 4 Sep"
+    },
+    {
+     "date": "2026-09-05",
+     "col": 5,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 5 Sep"
+    },
+    {
+     "date": "2026-09-06",
+     "col": 5,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 6 Sep"
+    },
+    {
+     "date": "2026-09-07",
+     "col": 6,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 7 Sep"
+    },
+    {
+     "date": "2026-09-08",
+     "col": 6,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 8 Sep"
+    },
+    {
+     "date": "2026-09-09",
+     "col": 6,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 9 Sep"
+    },
+    {
+     "date": "2026-09-10",
+     "col": 6,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 10 Sep"
+    },
+    {
+     "date": "2026-09-11",
+     "col": 6,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 11 Sep"
+    },
+    {
+     "date": "2026-09-12",
+     "col": 6,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 12 Sep"
+    },
+    {
+     "date": "2026-09-13",
+     "col": 6,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 13 Sep"
+    },
+    {
+     "date": "2026-09-14",
+     "col": 7,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 14 Sep"
+    },
+    {
+     "date": "2026-09-15",
+     "col": 7,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 15 Sep"
+    },
+    {
+     "date": "2026-09-16",
+     "col": 7,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 16 Sep"
+    },
+    {
+     "date": "2026-09-17",
+     "col": 7,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 17 Sep"
+    },
+    {
+     "date": "2026-09-18",
+     "col": 7,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 18 Sep"
+    },
+    {
+     "date": "2026-09-19",
+     "col": 7,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 19 Sep"
+    },
+    {
+     "date": "2026-09-20",
+     "col": 7,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 20 Sep"
+    },
+    {
+     "date": "2026-09-21",
+     "col": 8,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 21 Sep"
+    },
+    {
+     "date": "2026-09-22",
+     "col": 8,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 22 Sep"
+    },
+    {
+     "date": "2026-09-23",
+     "col": 8,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 23 Sep"
+    },
+    {
+     "date": "2026-09-24",
+     "col": 8,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 24 Sep"
+    },
+    {
+     "date": "2026-09-25",
+     "col": 8,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 25 Sep"
+    },
+    {
+     "date": "2026-09-26",
+     "col": 8,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 26 Sep"
+    },
+    {
+     "date": "2026-09-27",
+     "col": 8,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 27 Sep"
+    },
+    {
+     "date": "2026-09-28",
+     "col": 9,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 28 Sep"
+    },
+    {
+     "date": "2026-09-29",
+     "col": 9,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 29 Sep"
+    },
+    {
+     "date": "2026-09-30",
+     "col": 9,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 30 Sep"
+    },
+    {
+     "date": "2026-10-01",
+     "col": 9,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 1 Oct"
+    },
+    {
+     "date": "2026-10-02",
+     "col": 9,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 2 Oct"
+    },
+    {
+     "date": "2026-10-03",
+     "col": 9,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 3 Oct"
+    },
+    {
+     "date": "2026-10-04",
+     "col": 9,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 4 Oct"
+    },
+    {
+     "date": "2026-10-05",
+     "col": 10,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 5 Oct"
+    },
+    {
+     "date": "2026-10-06",
+     "col": 10,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 6 Oct"
+    },
+    {
+     "date": "2026-10-07",
+     "col": 10,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 7 Oct"
+    },
+    {
+     "date": "2026-10-08",
+     "col": 10,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 8 Oct"
+    },
+    {
+     "date": "2026-10-09",
+     "col": 10,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 9 Oct"
+    },
+    {
+     "date": "2026-10-10",
+     "col": 10,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 10 Oct"
+    },
+    {
+     "date": "2026-10-11",
+     "col": 10,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 11 Oct"
+    },
+    {
+     "date": "2026-10-12",
+     "col": 11,
+     "row": 0,
+     "count": 1,
+     "level": 1,
+     "words": "1 thing on 12 Oct"
+    },
+    {
+     "date": "2026-10-13",
+     "col": 11,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 13 Oct"
+    },
+    {
+     "date": "2026-10-14",
+     "col": 11,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 14 Oct"
+    }
+   ],
+   "total": 1,
+   "days_active": 1,
+   "empty": false,
+   "words": "Last 12 weeks: 1 thing on 1 day.",
+   "note": "Steps ticked before this was added have no date, so they are not shown.",
+   "summary": "Activity, last 12 weeks. Last 12 weeks: 1 thing on 1 day.",
+   "levels": [
+    {
+     "level": 0,
+     "min": 0,
+     "max": 0
+    },
+    {
+     "level": 1,
+     "min": 1,
+     "max": 1
+    },
+    {
+     "level": 2,
+     "min": 2,
+     "max": 2
+    },
+    {
+     "level": 3,
+     "min": 3,
+     "max": 4
+    },
+    {
+     "level": 4,
+     "min": 5,
+     "max": null
+    }
+   ],
+   "keep_on_screen": true,
+   "hidden_words": "Hidden while memory lists and chat history are hidden.",
+   "rects": [
+    {
+     "date": "2026-07-27",
+     "x": 0,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-07-28",
+     "x": 0,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-07-29",
+     "x": 0,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-07-30",
+     "x": 0,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-07-31",
+     "x": 0,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-01",
+     "x": 0,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-02",
+     "x": 0,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-03",
+     "x": 17,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-04",
+     "x": 17,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-05",
+     "x": 17,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-06",
+     "x": 17,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-07",
+     "x": 17,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-08",
+     "x": 17,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-09",
+     "x": 17,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-10",
+     "x": 34,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-11",
+     "x": 34,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-12",
+     "x": 34,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-13",
+     "x": 34,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-14",
+     "x": 34,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-15",
+     "x": 34,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-16",
+     "x": 34,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-17",
+     "x": 51,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-18",
+     "x": 51,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-19",
+     "x": 51,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-20",
+     "x": 51,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-21",
+     "x": 51,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-22",
+     "x": 51,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-23",
+     "x": 51,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-24",
+     "x": 68,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-25",
+     "x": 68,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-26",
+     "x": 68,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-27",
+     "x": 68,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-28",
+     "x": 68,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-29",
+     "x": 68,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-30",
+     "x": 68,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-31",
+     "x": 85,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-01",
+     "x": 85,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-02",
+     "x": 85,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-03",
+     "x": 85,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-04",
+     "x": 85,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-05",
+     "x": 85,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-06",
+     "x": 85,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-07",
+     "x": 102,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-08",
+     "x": 102,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-09",
+     "x": 102,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-10",
+     "x": 102,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-11",
+     "x": 102,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-12",
+     "x": 102,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-13",
+     "x": 102,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-14",
+     "x": 119,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-15",
+     "x": 119,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-16",
+     "x": 119,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-17",
+     "x": 119,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-18",
+     "x": 119,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-19",
+     "x": 119,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-20",
+     "x": 119,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-21",
+     "x": 136,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-22",
+     "x": 136,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-23",
+     "x": 136,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-24",
+     "x": 136,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-25",
+     "x": 136,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-26",
+     "x": 136,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-27",
+     "x": 136,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-28",
+     "x": 153,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-29",
+     "x": 153,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-30",
+     "x": 153,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-01",
+     "x": 153,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-02",
+     "x": 153,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-03",
+     "x": 153,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-04",
+     "x": 153,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-05",
+     "x": 170,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-06",
+     "x": 170,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-07",
+     "x": 170,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-08",
+     "x": 170,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-09",
+     "x": 170,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-10",
+     "x": 170,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-11",
+     "x": 170,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-12",
+     "x": 187,
+     "y": 0,
+     "size": 14,
+     "level": 1
+    },
+    {
+     "date": "2026-10-13",
+     "x": 187,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-14",
+     "x": 187,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    }
+   ],
+   "size": {
+    "cell": 14,
+    "gap": 3,
+    "width": 201,
+    "height": 116
+   }
+  },
+  "mixed_levels": {
+   "ok": true,
+   "available": true,
+   "title": "Activity",
+   "weeks": 12,
+   "from": "2026-07-27",
+   "to": "2026-10-14",
+   "today": "2026-10-14",
+   "columns": [
+    {
+     "col": 0,
+     "label": "Week of 27 Jul"
+    },
+    {
+     "col": 1,
+     "label": "Week of 3 Aug"
+    },
+    {
+     "col": 2,
+     "label": "Week of 10 Aug"
+    },
+    {
+     "col": 3,
+     "label": "Week of 17 Aug"
+    },
+    {
+     "col": 4,
+     "label": "Week of 24 Aug"
+    },
+    {
+     "col": 5,
+     "label": "Week of 31 Aug"
+    },
+    {
+     "col": 6,
+     "label": "Week of 7 Sep"
+    },
+    {
+     "col": 7,
+     "label": "Week of 14 Sep"
+    },
+    {
+     "col": 8,
+     "label": "Week of 21 Sep"
+    },
+    {
+     "col": 9,
+     "label": "Week of 28 Sep"
+    },
+    {
+     "col": 10,
+     "label": "Week of 5 Oct"
+    },
+    {
+     "col": 11,
+     "label": "Week of 12 Oct"
+    }
+   ],
+   "days": [
+    {
+     "date": "2026-07-27",
+     "col": 0,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 27 Jul"
+    },
+    {
+     "date": "2026-07-28",
+     "col": 0,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 28 Jul"
+    },
+    {
+     "date": "2026-07-29",
+     "col": 0,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 29 Jul"
+    },
+    {
+     "date": "2026-07-30",
+     "col": 0,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 30 Jul"
+    },
+    {
+     "date": "2026-07-31",
+     "col": 0,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 31 Jul"
+    },
+    {
+     "date": "2026-08-01",
+     "col": 0,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 1 Aug"
+    },
+    {
+     "date": "2026-08-02",
+     "col": 0,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 2 Aug"
+    },
+    {
+     "date": "2026-08-03",
+     "col": 1,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 3 Aug"
+    },
+    {
+     "date": "2026-08-04",
+     "col": 1,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 4 Aug"
+    },
+    {
+     "date": "2026-08-05",
+     "col": 1,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 5 Aug"
+    },
+    {
+     "date": "2026-08-06",
+     "col": 1,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 6 Aug"
+    },
+    {
+     "date": "2026-08-07",
+     "col": 1,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 7 Aug"
+    },
+    {
+     "date": "2026-08-08",
+     "col": 1,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 8 Aug"
+    },
+    {
+     "date": "2026-08-09",
+     "col": 1,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 9 Aug"
+    },
+    {
+     "date": "2026-08-10",
+     "col": 2,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 10 Aug"
+    },
+    {
+     "date": "2026-08-11",
+     "col": 2,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 11 Aug"
+    },
+    {
+     "date": "2026-08-12",
+     "col": 2,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 12 Aug"
+    },
+    {
+     "date": "2026-08-13",
+     "col": 2,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 13 Aug"
+    },
+    {
+     "date": "2026-08-14",
+     "col": 2,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 14 Aug"
+    },
+    {
+     "date": "2026-08-15",
+     "col": 2,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 15 Aug"
+    },
+    {
+     "date": "2026-08-16",
+     "col": 2,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 16 Aug"
+    },
+    {
+     "date": "2026-08-17",
+     "col": 3,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 17 Aug"
+    },
+    {
+     "date": "2026-08-18",
+     "col": 3,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 18 Aug"
+    },
+    {
+     "date": "2026-08-19",
+     "col": 3,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 19 Aug"
+    },
+    {
+     "date": "2026-08-20",
+     "col": 3,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 20 Aug"
+    },
+    {
+     "date": "2026-08-21",
+     "col": 3,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 21 Aug"
+    },
+    {
+     "date": "2026-08-22",
+     "col": 3,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 22 Aug"
+    },
+    {
+     "date": "2026-08-23",
+     "col": 3,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 23 Aug"
+    },
+    {
+     "date": "2026-08-24",
+     "col": 4,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 24 Aug"
+    },
+    {
+     "date": "2026-08-25",
+     "col": 4,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 25 Aug"
+    },
+    {
+     "date": "2026-08-26",
+     "col": 4,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 26 Aug"
+    },
+    {
+     "date": "2026-08-27",
+     "col": 4,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 27 Aug"
+    },
+    {
+     "date": "2026-08-28",
+     "col": 4,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 28 Aug"
+    },
+    {
+     "date": "2026-08-29",
+     "col": 4,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 29 Aug"
+    },
+    {
+     "date": "2026-08-30",
+     "col": 4,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 30 Aug"
+    },
+    {
+     "date": "2026-08-31",
+     "col": 5,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 31 Aug"
+    },
+    {
+     "date": "2026-09-01",
+     "col": 5,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 1 Sep"
+    },
+    {
+     "date": "2026-09-02",
+     "col": 5,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 2 Sep"
+    },
+    {
+     "date": "2026-09-03",
+     "col": 5,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 3 Sep"
+    },
+    {
+     "date": "2026-09-04",
+     "col": 5,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 4 Sep"
+    },
+    {
+     "date": "2026-09-05",
+     "col": 5,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 5 Sep"
+    },
+    {
+     "date": "2026-09-06",
+     "col": 5,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 6 Sep"
+    },
+    {
+     "date": "2026-09-07",
+     "col": 6,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 7 Sep"
+    },
+    {
+     "date": "2026-09-08",
+     "col": 6,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 8 Sep"
+    },
+    {
+     "date": "2026-09-09",
+     "col": 6,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 9 Sep"
+    },
+    {
+     "date": "2026-09-10",
+     "col": 6,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 10 Sep"
+    },
+    {
+     "date": "2026-09-11",
+     "col": 6,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 11 Sep"
+    },
+    {
+     "date": "2026-09-12",
+     "col": 6,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 12 Sep"
+    },
+    {
+     "date": "2026-09-13",
+     "col": 6,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 13 Sep"
+    },
+    {
+     "date": "2026-09-14",
+     "col": 7,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 14 Sep"
+    },
+    {
+     "date": "2026-09-15",
+     "col": 7,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 15 Sep"
+    },
+    {
+     "date": "2026-09-16",
+     "col": 7,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 16 Sep"
+    },
+    {
+     "date": "2026-09-17",
+     "col": 7,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 17 Sep"
+    },
+    {
+     "date": "2026-09-18",
+     "col": 7,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 18 Sep"
+    },
+    {
+     "date": "2026-09-19",
+     "col": 7,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 19 Sep"
+    },
+    {
+     "date": "2026-09-20",
+     "col": 7,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 20 Sep"
+    },
+    {
+     "date": "2026-09-21",
+     "col": 8,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 21 Sep"
+    },
+    {
+     "date": "2026-09-22",
+     "col": 8,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 22 Sep"
+    },
+    {
+     "date": "2026-09-23",
+     "col": 8,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 23 Sep"
+    },
+    {
+     "date": "2026-09-24",
+     "col": 8,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 24 Sep"
+    },
+    {
+     "date": "2026-09-25",
+     "col": 8,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 25 Sep"
+    },
+    {
+     "date": "2026-09-26",
+     "col": 8,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 26 Sep"
+    },
+    {
+     "date": "2026-09-27",
+     "col": 8,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 27 Sep"
+    },
+    {
+     "date": "2026-09-28",
+     "col": 9,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 28 Sep"
+    },
+    {
+     "date": "2026-09-29",
+     "col": 9,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 29 Sep"
+    },
+    {
+     "date": "2026-09-30",
+     "col": 9,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 30 Sep"
+    },
+    {
+     "date": "2026-10-01",
+     "col": 9,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 1 Oct"
+    },
+    {
+     "date": "2026-10-02",
+     "col": 9,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 2 Oct"
+    },
+    {
+     "date": "2026-10-03",
+     "col": 9,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 3 Oct"
+    },
+    {
+     "date": "2026-10-04",
+     "col": 9,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 4 Oct"
+    },
+    {
+     "date": "2026-10-05",
+     "col": 10,
+     "row": 0,
+     "count": 5,
+     "level": 4,
+     "words": "5 things on 5 Oct"
+    },
+    {
+     "date": "2026-10-06",
+     "col": 10,
+     "row": 1,
+     "count": 3,
+     "level": 3,
+     "words": "3 things on 6 Oct"
+    },
+    {
+     "date": "2026-10-07",
+     "col": 10,
+     "row": 2,
+     "count": 1,
+     "level": 1,
+     "words": "1 thing on 7 Oct"
+    },
+    {
+     "date": "2026-10-08",
+     "col": 10,
+     "row": 3,
+     "count": 1,
+     "level": 1,
+     "words": "1 thing on 8 Oct"
+    },
+    {
+     "date": "2026-10-09",
+     "col": 10,
+     "row": 4,
+     "count": 3,
+     "level": 3,
+     "words": "3 things on 9 Oct"
+    },
+    {
+     "date": "2026-10-10",
+     "col": 10,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 10 Oct"
+    },
+    {
+     "date": "2026-10-11",
+     "col": 10,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 11 Oct"
+    },
+    {
+     "date": "2026-10-12",
+     "col": 11,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 12 Oct"
+    },
+    {
+     "date": "2026-10-13",
+     "col": 11,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 13 Oct"
+    },
+    {
+     "date": "2026-10-14",
+     "col": 11,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 14 Oct"
+    }
+   ],
+   "total": 13,
+   "days_active": 5,
+   "empty": false,
+   "words": "Last 12 weeks: 13 things on 5 days.",
+   "note": "Steps ticked before this was added have no date, so they are not shown.",
+   "summary": "Activity, last 12 weeks. Last 12 weeks: 13 things on 5 days.",
+   "levels": [
+    {
+     "level": 0,
+     "min": 0,
+     "max": 0
+    },
+    {
+     "level": 1,
+     "min": 1,
+     "max": 1
+    },
+    {
+     "level": 2,
+     "min": 2,
+     "max": 2
+    },
+    {
+     "level": 3,
+     "min": 3,
+     "max": 4
+    },
+    {
+     "level": 4,
+     "min": 5,
+     "max": null
+    }
+   ],
+   "keep_on_screen": false,
+   "hidden_words": "Hidden while memory lists and chat history are hidden.",
+   "rects": [
+    {
+     "date": "2026-07-27",
+     "x": 0,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-07-28",
+     "x": 0,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-07-29",
+     "x": 0,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-07-30",
+     "x": 0,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-07-31",
+     "x": 0,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-01",
+     "x": 0,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-02",
+     "x": 0,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-03",
+     "x": 17,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-04",
+     "x": 17,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-05",
+     "x": 17,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-06",
+     "x": 17,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-07",
+     "x": 17,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-08",
+     "x": 17,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-09",
+     "x": 17,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-10",
+     "x": 34,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-11",
+     "x": 34,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-12",
+     "x": 34,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-13",
+     "x": 34,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-14",
+     "x": 34,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-15",
+     "x": 34,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-16",
+     "x": 34,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-17",
+     "x": 51,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-18",
+     "x": 51,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-19",
+     "x": 51,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-20",
+     "x": 51,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-21",
+     "x": 51,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-22",
+     "x": 51,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-23",
+     "x": 51,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-24",
+     "x": 68,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-25",
+     "x": 68,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-26",
+     "x": 68,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-27",
+     "x": 68,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-28",
+     "x": 68,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-29",
+     "x": 68,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-30",
+     "x": 68,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-31",
+     "x": 85,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-01",
+     "x": 85,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-02",
+     "x": 85,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-03",
+     "x": 85,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-04",
+     "x": 85,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-05",
+     "x": 85,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-06",
+     "x": 85,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-07",
+     "x": 102,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-08",
+     "x": 102,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-09",
+     "x": 102,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-10",
+     "x": 102,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-11",
+     "x": 102,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-12",
+     "x": 102,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-13",
+     "x": 102,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-14",
+     "x": 119,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-15",
+     "x": 119,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-16",
+     "x": 119,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-17",
+     "x": 119,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-18",
+     "x": 119,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-19",
+     "x": 119,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-20",
+     "x": 119,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-21",
+     "x": 136,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-22",
+     "x": 136,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-23",
+     "x": 136,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-24",
+     "x": 136,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-25",
+     "x": 136,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-26",
+     "x": 136,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-27",
+     "x": 136,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-28",
+     "x": 153,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-29",
+     "x": 153,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-30",
+     "x": 153,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-01",
+     "x": 153,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-02",
+     "x": 153,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-03",
+     "x": 153,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-04",
+     "x": 153,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-05",
+     "x": 170,
+     "y": 0,
+     "size": 14,
+     "level": 4
+    },
+    {
+     "date": "2026-10-06",
+     "x": 170,
+     "y": 17,
+     "size": 14,
+     "level": 3
+    },
+    {
+     "date": "2026-10-07",
+     "x": 170,
+     "y": 34,
+     "size": 14,
+     "level": 1
+    },
+    {
+     "date": "2026-10-08",
+     "x": 170,
+     "y": 51,
+     "size": 14,
+     "level": 1
+    },
+    {
+     "date": "2026-10-09",
+     "x": 170,
+     "y": 68,
+     "size": 14,
+     "level": 3
+    },
+    {
+     "date": "2026-10-10",
+     "x": 170,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-11",
+     "x": 170,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-12",
+     "x": 187,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-13",
+     "x": 187,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-14",
+     "x": 187,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    }
+   ],
+   "size": {
+    "cell": 14,
+    "gap": 3,
+    "width": 201,
+    "height": 116
+   }
+  },
+  "dst_weekend": {
+   "ok": true,
+   "available": true,
+   "title": "Activity",
+   "weeks": 4,
+   "from": "2026-02-16",
+   "to": "2026-03-12",
+   "today": "2026-03-12",
+   "columns": [
+    {
+     "col": 0,
+     "label": "Week of 16 Feb"
+    },
+    {
+     "col": 1,
+     "label": "Week of 23 Feb"
+    },
+    {
+     "col": 2,
+     "label": "Week of 2 Mar"
+    },
+    {
+     "col": 3,
+     "label": "Week of 9 Mar"
+    }
+   ],
+   "days": [
+    {
+     "date": "2026-02-16",
+     "col": 0,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 16 Feb"
+    },
+    {
+     "date": "2026-02-17",
+     "col": 0,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 17 Feb"
+    },
+    {
+     "date": "2026-02-18",
+     "col": 0,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 18 Feb"
+    },
+    {
+     "date": "2026-02-19",
+     "col": 0,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 19 Feb"
+    },
+    {
+     "date": "2026-02-20",
+     "col": 0,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 20 Feb"
+    },
+    {
+     "date": "2026-02-21",
+     "col": 0,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 21 Feb"
+    },
+    {
+     "date": "2026-02-22",
+     "col": 0,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 22 Feb"
+    },
+    {
+     "date": "2026-02-23",
+     "col": 1,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 23 Feb"
+    },
+    {
+     "date": "2026-02-24",
+     "col": 1,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 24 Feb"
+    },
+    {
+     "date": "2026-02-25",
+     "col": 1,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 25 Feb"
+    },
+    {
+     "date": "2026-02-26",
+     "col": 1,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 26 Feb"
+    },
+    {
+     "date": "2026-02-27",
+     "col": 1,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 27 Feb"
+    },
+    {
+     "date": "2026-02-28",
+     "col": 1,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 28 Feb"
+    },
+    {
+     "date": "2026-03-01",
+     "col": 1,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 1 Mar"
+    },
+    {
+     "date": "2026-03-02",
+     "col": 2,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 2 Mar"
+    },
+    {
+     "date": "2026-03-03",
+     "col": 2,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 3 Mar"
+    },
+    {
+     "date": "2026-03-04",
+     "col": 2,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 4 Mar"
+    },
+    {
+     "date": "2026-03-05",
+     "col": 2,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 5 Mar"
+    },
+    {
+     "date": "2026-03-06",
+     "col": 2,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 6 Mar"
+    },
+    {
+     "date": "2026-03-07",
+     "col": 2,
+     "row": 5,
+     "count": 1,
+     "level": 1,
+     "words": "1 thing on 7 Mar"
+    },
+    {
+     "date": "2026-03-08",
+     "col": 2,
+     "row": 6,
+     "count": 3,
+     "level": 3,
+     "words": "3 things on 8 Mar"
+    },
+    {
+     "date": "2026-03-09",
+     "col": 3,
+     "row": 0,
+     "count": 1,
+     "level": 1,
+     "words": "1 thing on 9 Mar"
+    },
+    {
+     "date": "2026-03-10",
+     "col": 3,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 10 Mar"
+    },
+    {
+     "date": "2026-03-11",
+     "col": 3,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 11 Mar"
+    },
+    {
+     "date": "2026-03-12",
+     "col": 3,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 12 Mar"
+    }
+   ],
+   "total": 5,
+   "days_active": 3,
+   "empty": false,
+   "words": "Last 4 weeks: 5 things on 3 days.",
+   "note": "Steps ticked before this was added have no date, so they are not shown.",
+   "summary": "Activity, last 4 weeks. Last 4 weeks: 5 things on 3 days.",
+   "levels": [
+    {
+     "level": 0,
+     "min": 0,
+     "max": 0
+    },
+    {
+     "level": 1,
+     "min": 1,
+     "max": 1
+    },
+    {
+     "level": 2,
+     "min": 2,
+     "max": 2
+    },
+    {
+     "level": 3,
+     "min": 3,
+     "max": 4
+    },
+    {
+     "level": 4,
+     "min": 5,
+     "max": null
+    }
+   ],
+   "keep_on_screen": false,
+   "hidden_words": "Hidden while memory lists and chat history are hidden.",
+   "rects": [
+    {
+     "date": "2026-02-16",
+     "x": 0,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-02-17",
+     "x": 0,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-02-18",
+     "x": 0,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-02-19",
+     "x": 0,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-02-20",
+     "x": 0,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-02-21",
+     "x": 0,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-02-22",
+     "x": 0,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-02-23",
+     "x": 17,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-02-24",
+     "x": 17,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-02-25",
+     "x": 17,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-02-26",
+     "x": 17,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-02-27",
+     "x": 17,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-02-28",
+     "x": 17,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-03-01",
+     "x": 17,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-03-02",
+     "x": 34,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-03-03",
+     "x": 34,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-03-04",
+     "x": 34,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-03-05",
+     "x": 34,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-03-06",
+     "x": 34,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-03-07",
+     "x": 34,
+     "y": 85,
+     "size": 14,
+     "level": 1
+    },
+    {
+     "date": "2026-03-08",
+     "x": 34,
+     "y": 102,
+     "size": 14,
+     "level": 3
+    },
+    {
+     "date": "2026-03-09",
+     "x": 51,
+     "y": 0,
+     "size": 14,
+     "level": 1
+    },
+    {
+     "date": "2026-03-10",
+     "x": 51,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-03-11",
+     "x": 51,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-03-12",
+     "x": 51,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    }
+   ],
+   "size": {
+    "cell": 14,
+    "gap": 3,
+    "width": 65,
+    "height": 116
+   }
+  },
+  "private_number": {
+   "ok": true,
+   "available": true,
+   "title": "Activity",
+   "weeks": 12,
+   "from": "2026-07-27",
+   "to": "2026-10-14",
+   "today": "2026-10-14",
+   "columns": [
+    {
+     "col": 0,
+     "label": "Week of 27 Jul"
+    },
+    {
+     "col": 1,
+     "label": "Week of 3 Aug"
+    },
+    {
+     "col": 2,
+     "label": "Week of 10 Aug"
+    },
+    {
+     "col": 3,
+     "label": "Week of 17 Aug"
+    },
+    {
+     "col": 4,
+     "label": "Week of 24 Aug"
+    },
+    {
+     "col": 5,
+     "label": "Week of 31 Aug"
+    },
+    {
+     "col": 6,
+     "label": "Week of 7 Sep"
+    },
+    {
+     "col": 7,
+     "label": "Week of 14 Sep"
+    },
+    {
+     "col": 8,
+     "label": "Week of 21 Sep"
+    },
+    {
+     "col": 9,
+     "label": "Week of 28 Sep"
+    },
+    {
+     "col": 10,
+     "label": "Week of 5 Oct"
+    },
+    {
+     "col": 11,
+     "label": "Week of 12 Oct"
+    }
+   ],
+   "days": [
+    {
+     "date": "2026-07-27",
+     "col": 0,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 27 Jul"
+    },
+    {
+     "date": "2026-07-28",
+     "col": 0,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 28 Jul"
+    },
+    {
+     "date": "2026-07-29",
+     "col": 0,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 29 Jul"
+    },
+    {
+     "date": "2026-07-30",
+     "col": 0,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 30 Jul"
+    },
+    {
+     "date": "2026-07-31",
+     "col": 0,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 31 Jul"
+    },
+    {
+     "date": "2026-08-01",
+     "col": 0,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 1 Aug"
+    },
+    {
+     "date": "2026-08-02",
+     "col": 0,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 2 Aug"
+    },
+    {
+     "date": "2026-08-03",
+     "col": 1,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 3 Aug"
+    },
+    {
+     "date": "2026-08-04",
+     "col": 1,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 4 Aug"
+    },
+    {
+     "date": "2026-08-05",
+     "col": 1,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 5 Aug"
+    },
+    {
+     "date": "2026-08-06",
+     "col": 1,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 6 Aug"
+    },
+    {
+     "date": "2026-08-07",
+     "col": 1,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 7 Aug"
+    },
+    {
+     "date": "2026-08-08",
+     "col": 1,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 8 Aug"
+    },
+    {
+     "date": "2026-08-09",
+     "col": 1,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 9 Aug"
+    },
+    {
+     "date": "2026-08-10",
+     "col": 2,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 10 Aug"
+    },
+    {
+     "date": "2026-08-11",
+     "col": 2,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 11 Aug"
+    },
+    {
+     "date": "2026-08-12",
+     "col": 2,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 12 Aug"
+    },
+    {
+     "date": "2026-08-13",
+     "col": 2,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 13 Aug"
+    },
+    {
+     "date": "2026-08-14",
+     "col": 2,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 14 Aug"
+    },
+    {
+     "date": "2026-08-15",
+     "col": 2,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 15 Aug"
+    },
+    {
+     "date": "2026-08-16",
+     "col": 2,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 16 Aug"
+    },
+    {
+     "date": "2026-08-17",
+     "col": 3,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 17 Aug"
+    },
+    {
+     "date": "2026-08-18",
+     "col": 3,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 18 Aug"
+    },
+    {
+     "date": "2026-08-19",
+     "col": 3,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 19 Aug"
+    },
+    {
+     "date": "2026-08-20",
+     "col": 3,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 20 Aug"
+    },
+    {
+     "date": "2026-08-21",
+     "col": 3,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 21 Aug"
+    },
+    {
+     "date": "2026-08-22",
+     "col": 3,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 22 Aug"
+    },
+    {
+     "date": "2026-08-23",
+     "col": 3,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 23 Aug"
+    },
+    {
+     "date": "2026-08-24",
+     "col": 4,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 24 Aug"
+    },
+    {
+     "date": "2026-08-25",
+     "col": 4,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 25 Aug"
+    },
+    {
+     "date": "2026-08-26",
+     "col": 4,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 26 Aug"
+    },
+    {
+     "date": "2026-08-27",
+     "col": 4,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 27 Aug"
+    },
+    {
+     "date": "2026-08-28",
+     "col": 4,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 28 Aug"
+    },
+    {
+     "date": "2026-08-29",
+     "col": 4,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 29 Aug"
+    },
+    {
+     "date": "2026-08-30",
+     "col": 4,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 30 Aug"
+    },
+    {
+     "date": "2026-08-31",
+     "col": 5,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 31 Aug"
+    },
+    {
+     "date": "2026-09-01",
+     "col": 5,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 1 Sep"
+    },
+    {
+     "date": "2026-09-02",
+     "col": 5,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 2 Sep"
+    },
+    {
+     "date": "2026-09-03",
+     "col": 5,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 3 Sep"
+    },
+    {
+     "date": "2026-09-04",
+     "col": 5,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 4 Sep"
+    },
+    {
+     "date": "2026-09-05",
+     "col": 5,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 5 Sep"
+    },
+    {
+     "date": "2026-09-06",
+     "col": 5,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 6 Sep"
+    },
+    {
+     "date": "2026-09-07",
+     "col": 6,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 7 Sep"
+    },
+    {
+     "date": "2026-09-08",
+     "col": 6,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 8 Sep"
+    },
+    {
+     "date": "2026-09-09",
+     "col": 6,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 9 Sep"
+    },
+    {
+     "date": "2026-09-10",
+     "col": 6,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 10 Sep"
+    },
+    {
+     "date": "2026-09-11",
+     "col": 6,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 11 Sep"
+    },
+    {
+     "date": "2026-09-12",
+     "col": 6,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 12 Sep"
+    },
+    {
+     "date": "2026-09-13",
+     "col": 6,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 13 Sep"
+    },
+    {
+     "date": "2026-09-14",
+     "col": 7,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 14 Sep"
+    },
+    {
+     "date": "2026-09-15",
+     "col": 7,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 15 Sep"
+    },
+    {
+     "date": "2026-09-16",
+     "col": 7,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 16 Sep"
+    },
+    {
+     "date": "2026-09-17",
+     "col": 7,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 17 Sep"
+    },
+    {
+     "date": "2026-09-18",
+     "col": 7,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 18 Sep"
+    },
+    {
+     "date": "2026-09-19",
+     "col": 7,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 19 Sep"
+    },
+    {
+     "date": "2026-09-20",
+     "col": 7,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 20 Sep"
+    },
+    {
+     "date": "2026-09-21",
+     "col": 8,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 21 Sep"
+    },
+    {
+     "date": "2026-09-22",
+     "col": 8,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 22 Sep"
+    },
+    {
+     "date": "2026-09-23",
+     "col": 8,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 23 Sep"
+    },
+    {
+     "date": "2026-09-24",
+     "col": 8,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 24 Sep"
+    },
+    {
+     "date": "2026-09-25",
+     "col": 8,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 25 Sep"
+    },
+    {
+     "date": "2026-09-26",
+     "col": 8,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 26 Sep"
+    },
+    {
+     "date": "2026-09-27",
+     "col": 8,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 27 Sep"
+    },
+    {
+     "date": "2026-09-28",
+     "col": 9,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 28 Sep"
+    },
+    {
+     "date": "2026-09-29",
+     "col": 9,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 29 Sep"
+    },
+    {
+     "date": "2026-09-30",
+     "col": 9,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 30 Sep"
+    },
+    {
+     "date": "2026-10-01",
+     "col": 9,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 1 Oct"
+    },
+    {
+     "date": "2026-10-02",
+     "col": 9,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 2 Oct"
+    },
+    {
+     "date": "2026-10-03",
+     "col": 9,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 3 Oct"
+    },
+    {
+     "date": "2026-10-04",
+     "col": 9,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 4 Oct"
+    },
+    {
+     "date": "2026-10-05",
+     "col": 10,
+     "row": 0,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 5 Oct"
+    },
+    {
+     "date": "2026-10-06",
+     "col": 10,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 6 Oct"
+    },
+    {
+     "date": "2026-10-07",
+     "col": 10,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 7 Oct"
+    },
+    {
+     "date": "2026-10-08",
+     "col": 10,
+     "row": 3,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 8 Oct"
+    },
+    {
+     "date": "2026-10-09",
+     "col": 10,
+     "row": 4,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 9 Oct"
+    },
+    {
+     "date": "2026-10-10",
+     "col": 10,
+     "row": 5,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 10 Oct"
+    },
+    {
+     "date": "2026-10-11",
+     "col": 10,
+     "row": 6,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 11 Oct"
+    },
+    {
+     "date": "2026-10-12",
+     "col": 11,
+     "row": 0,
+     "count": 1,
+     "level": 1,
+     "words": "1 thing on 12 Oct"
+    },
+    {
+     "date": "2026-10-13",
+     "col": 11,
+     "row": 1,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 13 Oct"
+    },
+    {
+     "date": "2026-10-14",
+     "col": 11,
+     "row": 2,
+     "count": 0,
+     "level": 0,
+     "words": "Nothing on 14 Oct"
+    }
+   ],
+   "total": 1,
+   "days_active": 1,
+   "empty": false,
+   "words": "Last 12 weeks: 1 thing on 1 day.",
+   "note": "Steps ticked before this was added have no date, so they are not shown.",
+   "summary": "Activity, last 12 weeks. Last 12 weeks: 1 thing on 1 day.",
+   "levels": [
+    {
+     "level": 0,
+     "min": 0,
+     "max": 0
+    },
+    {
+     "level": 1,
+     "min": 1,
+     "max": 1
+    },
+    {
+     "level": 2,
+     "min": 2,
+     "max": 2
+    },
+    {
+     "level": 3,
+     "min": 3,
+     "max": 4
+    },
+    {
+     "level": 4,
+     "min": 5,
+     "max": null
+    }
+   ],
+   "keep_on_screen": true,
+   "hidden_words": "Hidden while memory lists and chat history are hidden.",
+   "rects": [
+    {
+     "date": "2026-07-27",
+     "x": 0,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-07-28",
+     "x": 0,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-07-29",
+     "x": 0,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-07-30",
+     "x": 0,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-07-31",
+     "x": 0,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-01",
+     "x": 0,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-02",
+     "x": 0,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-03",
+     "x": 17,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-04",
+     "x": 17,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-05",
+     "x": 17,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-06",
+     "x": 17,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-07",
+     "x": 17,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-08",
+     "x": 17,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-09",
+     "x": 17,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-10",
+     "x": 34,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-11",
+     "x": 34,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-12",
+     "x": 34,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-13",
+     "x": 34,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-14",
+     "x": 34,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-15",
+     "x": 34,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-16",
+     "x": 34,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-17",
+     "x": 51,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-18",
+     "x": 51,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-19",
+     "x": 51,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-20",
+     "x": 51,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-21",
+     "x": 51,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-22",
+     "x": 51,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-23",
+     "x": 51,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-24",
+     "x": 68,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-25",
+     "x": 68,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-26",
+     "x": 68,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-27",
+     "x": 68,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-28",
+     "x": 68,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-29",
+     "x": 68,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-30",
+     "x": 68,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-08-31",
+     "x": 85,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-01",
+     "x": 85,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-02",
+     "x": 85,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-03",
+     "x": 85,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-04",
+     "x": 85,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-05",
+     "x": 85,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-06",
+     "x": 85,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-07",
+     "x": 102,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-08",
+     "x": 102,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-09",
+     "x": 102,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-10",
+     "x": 102,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-11",
+     "x": 102,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-12",
+     "x": 102,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-13",
+     "x": 102,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-14",
+     "x": 119,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-15",
+     "x": 119,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-16",
+     "x": 119,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-17",
+     "x": 119,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-18",
+     "x": 119,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-19",
+     "x": 119,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-20",
+     "x": 119,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-21",
+     "x": 136,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-22",
+     "x": 136,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-23",
+     "x": 136,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-24",
+     "x": 136,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-25",
+     "x": 136,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-26",
+     "x": 136,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-27",
+     "x": 136,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-28",
+     "x": 153,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-29",
+     "x": 153,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-09-30",
+     "x": 153,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-01",
+     "x": 153,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-02",
+     "x": 153,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-03",
+     "x": 153,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-04",
+     "x": 153,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-05",
+     "x": 170,
+     "y": 0,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-06",
+     "x": 170,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-07",
+     "x": 170,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-08",
+     "x": 170,
+     "y": 51,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-09",
+     "x": 170,
+     "y": 68,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-10",
+     "x": 170,
+     "y": 85,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-11",
+     "x": 170,
+     "y": 102,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-12",
+     "x": 187,
+     "y": 0,
+     "size": 14,
+     "level": 1
+    },
+    {
+     "date": "2026-10-13",
+     "x": 187,
+     "y": 17,
+     "size": 14,
+     "level": 0
+    },
+    {
+     "date": "2026-10-14",
+     "x": 187,
+     "y": 34,
+     "size": 14,
+     "level": 0
+    }
+   ],
+   "size": {
+    "cell": 14,
+    "gap": 3,
+    "width": 201,
+    "height": 116
+   }
+  }
+ },
+ "balance": {
+  "nothing_picked": {
+   "ok": true,
+   "available": true,
+   "title": "Balance",
+   "axes": [],
+   "drawable": false,
+   "min": 3,
+   "max": 8,
+   "max_label": 24,
+   "words": "Nothing picked yet.",
+   "summary": "Nothing picked yet.",
+   "choices": [],
+   "keep_on_screen": false,
+   "hidden_words": "Hidden while memory lists and chat history are hidden.",
+   "radar": {
+    "size": 260,
+    "center": {
+     "x": 130.0,
+     "y": 130.0
+    },
+    "radius": 80.0,
+    "rings": [
+     20.0,
+     40.0,
+     60.0,
+     80.0
+    ],
+    "fractions": [],
+    "spokes": [],
+    "polygon": [],
+    "labels": []
+   }
+  },
+  "three_areas": {
+   "ok": true,
+   "available": true,
+   "title": "Balance",
+   "axes": [
+    {
+     "label": "Running",
+     "name": "Weekly distance",
+     "kind": "bench",
+     "ref": "00000000000000000000000000000003",
+     "project": "00000000000000000000000000000001",
+     "state": "progress",
+     "value_words": "12.5 of 20 km",
+     "fraction": 0.5,
+     "keep_on_screen": false
+    },
+    {
+     "label": "Emergency fund",
+     "name": "Emergency fund",
+     "kind": "bench",
+     "ref": "00000000000000000000000000000004",
+     "project": "00000000000000000000000000000001",
+     "state": "progress",
+     "value_words": "$400 of $1000",
+     "fraction": 0.25,
+     "keep_on_screen": true
+    },
+    {
+     "label": "Garage",
+     "name": "Insulate the garage",
+     "kind": "goal",
+     "ref": "g0000000000",
+     "project": "",
+     "state": "progress",
+     "value_words": "3 of 5 steps",
+     "fraction": 0.6,
+     "keep_on_screen": false
+    }
+   ],
+   "drawable": true,
+   "min": 3,
+   "max": 8,
+   "max_label": 24,
+   "words": "",
+   "summary": "Balance chart, 3 areas. Running: 12.5 of 20 km. Emergency fund: $400 of $1000. Garage: 3 of 5 steps. No overall score.",
+   "choices": [
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000002",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Body weight",
+     "picked": false,
+     "keep_on_screen": true
+    },
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000003",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Weekly distance",
+     "picked": true,
+     "keep_on_screen": false
+    },
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000004",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Emergency fund",
+     "picked": true,
+     "keep_on_screen": true
+    },
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000005",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Books read",
+     "picked": false,
+     "keep_on_screen": false
+    },
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000006",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Sleep target",
+     "picked": false,
+     "keep_on_screen": true
+    },
+    {
+     "kind": "goal",
+     "ref": "g0000000000",
+     "project": "",
+     "project_name": "",
+     "name": "Insulate the garage",
+     "picked": true,
+     "keep_on_screen": false
+    }
+   ],
+   "keep_on_screen": true,
+   "hidden_words": "Hidden while memory lists and chat history are hidden.",
+   "radar": {
+    "size": 260,
+    "center": {
+     "x": 130.0,
+     "y": 130.0
+    },
+    "radius": 80.0,
+    "rings": [
+     20.0,
+     40.0,
+     60.0,
+     80.0
+    ],
+    "fractions": [
+     0.5,
+     0.25,
+     0.6
+    ],
+    "spokes": [
+     {
+      "x": 130.0,
+      "y": 50.0
+     },
+     {
+      "x": 199.28,
+      "y": 170.0
+     },
+     {
+      "x": 60.72,
+      "y": 170.0
+     }
+    ],
+    "polygon": [
+     {
+      "x": 130.0,
+      "y": 90.0,
+      "dot": false
+     },
+     {
+      "x": 147.32,
+      "y": 140.0,
+      "dot": false
+     },
+     {
+      "x": 88.43,
+      "y": 154.0,
+      "dot": false
+     }
+    ],
+    "labels": [
+     {
+      "x": 130.0,
+      "y": 36.0,
+      "anchor": "middle"
+     },
+     {
+      "x": 211.41,
+      "y": 187.0,
+      "anchor": "start"
+     },
+     {
+      "x": 48.59,
+      "y": 187.0,
+      "anchor": "end"
+     }
+    ]
+   }
+  },
+  "five_areas_mixed": {
+   "ok": true,
+   "available": true,
+   "title": "Balance",
+   "axes": [
+    {
+     "label": "Body weight",
+     "name": "Body weight",
+     "kind": "bench",
+     "ref": "00000000000000000000000000000002",
+     "project": "00000000000000000000000000000001",
+     "state": "progress",
+     "value_words": "72.5 of 70 kg",
+     "fraction": 0.75,
+     "keep_on_screen": true
+    },
+    {
+     "label": "Weekly distance",
+     "name": "Weekly distance",
+     "kind": "bench",
+     "ref": "00000000000000000000000000000003",
+     "project": "00000000000000000000000000000001",
+     "state": "progress",
+     "value_words": "12.5 of 20 km",
+     "fraction": 0.5,
+     "keep_on_screen": false
+    },
+    {
+     "label": "Emergency fund",
+     "name": "Emergency fund",
+     "kind": "bench",
+     "ref": "00000000000000000000000000000004",
+     "project": "00000000000000000000000000000001",
+     "state": "progress",
+     "value_words": "$400 of $1000",
+     "fraction": 0.25,
+     "keep_on_screen": true
+    },
+    {
+     "label": "Books read",
+     "name": "Books read",
+     "kind": "bench",
+     "ref": "00000000000000000000000000000005",
+     "project": "00000000000000000000000000000001",
+     "state": "reached",
+     "value_words": "12 of 12",
+     "fraction": 1.0,
+     "keep_on_screen": false
+    },
+    {
+     "label": "Sleep target",
+     "name": "Sleep target",
+     "kind": "bench",
+     "ref": "00000000000000000000000000000006",
+     "project": "00000000000000000000000000000001",
+     "state": "no_numbers",
+     "value_words": "no numbers yet",
+     "fraction": null,
+     "keep_on_screen": true
+    }
+   ],
+   "drawable": true,
+   "min": 3,
+   "max": 8,
+   "max_label": 24,
+   "words": "",
+   "summary": "Balance chart, 5 areas. Body weight: 72.5 of 70 kg. Weekly distance: 12.5 of 20 km. Emergency fund: $400 of $1000. Books read: 12 of 12. Sleep target: no numbers yet. No overall score.",
+   "choices": [
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000002",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Body weight",
+     "picked": true,
+     "keep_on_screen": true
+    },
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000003",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Weekly distance",
+     "picked": true,
+     "keep_on_screen": false
+    },
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000004",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Emergency fund",
+     "picked": true,
+     "keep_on_screen": true
+    },
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000005",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Books read",
+     "picked": true,
+     "keep_on_screen": false
+    },
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000006",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Sleep target",
+     "picked": true,
+     "keep_on_screen": true
+    },
+    {
+     "kind": "goal",
+     "ref": "g0000000000",
+     "project": "",
+     "project_name": "",
+     "name": "Insulate the garage",
+     "picked": false,
+     "keep_on_screen": false
+    }
+   ],
+   "keep_on_screen": true,
+   "hidden_words": "Hidden while memory lists and chat history are hidden.",
+   "radar": {
+    "size": 260,
+    "center": {
+     "x": 130.0,
+     "y": 130.0
+    },
+    "radius": 80.0,
+    "rings": [
+     20.0,
+     40.0,
+     60.0,
+     80.0
+    ],
+    "fractions": [
+     0.75,
+     0.5,
+     0.25,
+     1.0,
+     null
+    ],
+    "spokes": [
+     {
+      "x": 130.0,
+      "y": 50.0
+     },
+     {
+      "x": 206.08,
+      "y": 105.28
+     },
+     {
+      "x": 177.02,
+      "y": 194.72
+     },
+     {
+      "x": 82.98,
+      "y": 194.72
+     },
+     {
+      "x": 53.92,
+      "y": 105.28
+     }
+    ],
+    "polygon": [
+     {
+      "x": 130.0,
+      "y": 70.0,
+      "dot": false
+     },
+     {
+      "x": 168.04,
+      "y": 117.64,
+      "dot": false
+     },
+     {
+      "x": 141.76,
+      "y": 146.18,
+      "dot": false
+     },
+     {
+      "x": 82.98,
+      "y": 194.72,
+      "dot": false
+     },
+     {
+      "x": 130.0,
+      "y": 130.0,
+      "dot": true
+     }
+    ],
+    "labels": [
+     {
+      "x": 130.0,
+      "y": 36.0,
+      "anchor": "middle"
+     },
+     {
+      "x": 219.4,
+      "y": 100.95,
+      "anchor": "start"
+     },
+     {
+      "x": 185.25,
+      "y": 216.05,
+      "anchor": "start"
+     },
+     {
+      "x": 74.75,
+      "y": 216.05,
+      "anchor": "end"
+     },
+     {
+      "x": 40.6,
+      "y": 100.95,
+      "anchor": "end"
+     }
+    ]
+   }
+  },
+  "target_reached_private": {
+   "ok": true,
+   "available": true,
+   "title": "Balance",
+   "axes": [
+    {
+     "label": "Body weight",
+     "name": "Body weight",
+     "kind": "bench",
+     "ref": "00000000000000000000000000000002",
+     "project": "00000000000000000000000000000001",
+     "state": "reached",
+     "value_words": "68 of 70 kg",
+     "fraction": 1.0,
+     "keep_on_screen": true
+    },
+    {
+     "label": "Weekly distance",
+     "name": "Weekly distance",
+     "kind": "bench",
+     "ref": "00000000000000000000000000000003",
+     "project": "00000000000000000000000000000001",
+     "state": "progress",
+     "value_words": "12.5 of 20 km",
+     "fraction": 0.5,
+     "keep_on_screen": false
+    },
+    {
+     "label": "Books read",
+     "name": "Books read",
+     "kind": "bench",
+     "ref": "00000000000000000000000000000005",
+     "project": "00000000000000000000000000000001",
+     "state": "reached",
+     "value_words": "12 of 12",
+     "fraction": 1.0,
+     "keep_on_screen": false
+    }
+   ],
+   "drawable": true,
+   "min": 3,
+   "max": 8,
+   "max_label": 24,
+   "words": "",
+   "summary": "Balance chart, 3 areas. Body weight: 68 of 70 kg. Weekly distance: 12.5 of 20 km. Books read: 12 of 12. No overall score.",
+   "choices": [
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000002",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Body weight",
+     "picked": true,
+     "keep_on_screen": true
+    },
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000003",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Weekly distance",
+     "picked": true,
+     "keep_on_screen": false
+    },
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000004",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Emergency fund",
+     "picked": false,
+     "keep_on_screen": true
+    },
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000005",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Books read",
+     "picked": true,
+     "keep_on_screen": false
+    },
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000006",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Sleep target",
+     "picked": false,
+     "keep_on_screen": true
+    },
+    {
+     "kind": "goal",
+     "ref": "g0000000000",
+     "project": "",
+     "project_name": "",
+     "name": "Insulate the garage",
+     "picked": false,
+     "keep_on_screen": false
+    }
+   ],
+   "keep_on_screen": true,
+   "hidden_words": "Hidden while memory lists and chat history are hidden.",
+   "radar": {
+    "size": 260,
+    "center": {
+     "x": 130.0,
+     "y": 130.0
+    },
+    "radius": 80.0,
+    "rings": [
+     20.0,
+     40.0,
+     60.0,
+     80.0
+    ],
+    "fractions": [
+     1.0,
+     0.5,
+     1.0
+    ],
+    "spokes": [
+     {
+      "x": 130.0,
+      "y": 50.0
+     },
+     {
+      "x": 199.28,
+      "y": 170.0
+     },
+     {
+      "x": 60.72,
+      "y": 170.0
+     }
+    ],
+    "polygon": [
+     {
+      "x": 130.0,
+      "y": 50.0,
+      "dot": false
+     },
+     {
+      "x": 164.64,
+      "y": 150.0,
+      "dot": false
+     },
+     {
+      "x": 60.72,
+      "y": 170.0,
+      "dot": false
+     }
+    ],
+    "labels": [
+     {
+      "x": 130.0,
+      "y": 36.0,
+      "anchor": "middle"
+     },
+     {
+      "x": 211.41,
+      "y": 187.0,
+      "anchor": "start"
+     },
+     {
+      "x": 48.59,
+      "y": 187.0,
+      "anchor": "end"
+     }
+    ]
+   }
+  },
+  "after_a_benchmark_is_deleted": {
+   "ok": true,
+   "available": true,
+   "title": "Balance",
+   "axes": [
+    {
+     "label": "Body weight",
+     "name": "Body weight",
+     "kind": "bench",
+     "ref": "00000000000000000000000000000002",
+     "project": "00000000000000000000000000000001",
+     "state": "reached",
+     "value_words": "68 of 70 kg",
+     "fraction": 1.0,
+     "keep_on_screen": true
+    },
+    {
+     "label": "Books read",
+     "name": "Books read",
+     "kind": "bench",
+     "ref": "00000000000000000000000000000005",
+     "project": "00000000000000000000000000000001",
+     "state": "reached",
+     "value_words": "12 of 12",
+     "fraction": 1.0,
+     "keep_on_screen": false
+    }
+   ],
+   "drawable": false,
+   "min": 3,
+   "max": 8,
+   "max_label": 24,
+   "words": "Pick at least 3 to see the chart.",
+   "summary": "Balance chart, 2 areas. Body weight: 68 of 70 kg. Books read: 12 of 12. No overall score.",
+   "choices": [
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000002",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Body weight",
+     "picked": true,
+     "keep_on_screen": true
+    },
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000004",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Emergency fund",
+     "picked": false,
+     "keep_on_screen": true
+    },
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000005",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Books read",
+     "picked": true,
+     "keep_on_screen": false
+    },
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000006",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Sleep target",
+     "picked": false,
+     "keep_on_screen": true
+    },
+    {
+     "kind": "goal",
+     "ref": "g0000000000",
+     "project": "",
+     "project_name": "",
+     "name": "Insulate the garage",
+     "picked": false,
+     "keep_on_screen": false
+    }
+   ],
+   "keep_on_screen": true,
+   "hidden_words": "Hidden while memory lists and chat history are hidden.",
+   "radar": {
+    "size": 260,
+    "center": {
+     "x": 130.0,
+     "y": 130.0
+    },
+    "radius": 80.0,
+    "rings": [
+     20.0,
+     40.0,
+     60.0,
+     80.0
+    ],
+    "fractions": [
+     1.0,
+     1.0
+    ],
+    "spokes": [
+     {
+      "x": 130.0,
+      "y": 50.0
+     },
+     {
+      "x": 130.0,
+      "y": 210.0
+     }
+    ],
+    "polygon": [
+     {
+      "x": 130.0,
+      "y": 50.0,
+      "dot": false
+     },
+     {
+      "x": 130.0,
+      "y": 210.0,
+      "dot": false
+     }
+    ],
+    "labels": [
+     {
+      "x": 130.0,
+      "y": 36.0,
+      "anchor": "middle"
+     },
+     {
+      "x": 130.0,
+      "y": 234.0,
+      "anchor": "middle"
+     }
+    ]
+   }
+  }
+ },
+ "refusals": {
+  "two_areas": {
+   "status": 400,
+   "error": "Pick 3 to 8 areas, or none to clear the chart."
+  },
+  "nine_areas": {
+   "status": 400,
+   "error": "Pick 3 to 8 areas, or none to clear the chart."
+  },
+  "same_twice": {
+   "status": 400,
+   "error": "Each area can be on the chart once."
+  },
+  "gone": {
+   "status": 400,
+   "error": "One of those numbers is gone."
+  },
+  "no_target": {
+   "status": 400,
+   "error": "Give \"No finish line\" a target and say which way is better first - the chart measures each area against its target."
+  },
+  "long_name": {
+   "status": 400,
+   "error": "A name on the chart is at most 24 characters."
+  }
+ }
+}

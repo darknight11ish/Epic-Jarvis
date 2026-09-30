@@ -727,6 +727,12 @@
             <p class="you-line" id="you-line" hidden></p>
             <article class="markdown" id="answer"></article>
             <div class="cursor" id="cursor" hidden aria-hidden="true"></div>
+            <!-- "Spending summaries" (spending.js; JARVIS-API.md section 100):
+                 the table under a spending answer's sentence. Drawn with
+                 textContent only, kept in memory only, never read aloud; the
+                 words "Spending table hidden" instead while the private
+                 lists are hidden or App lock has locked Jarvis. -->
+            <section class="spending-host" id="spending-table" hidden></section>
             <!-- Jarvis Live's tap buttons, under the answer they answer (the
                  review: they sat in the sign's row, looking like its
                  controls). Each is sent as the owner's TYPED words. -->

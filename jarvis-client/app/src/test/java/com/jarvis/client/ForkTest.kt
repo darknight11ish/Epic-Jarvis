@@ -93,6 +93,11 @@ class ForkTest {
         // The two why-lines are what the PC sends as `message` on not_forkable.
         assertEquals(w("fork_why_crisis"), ChatFork.errorSentence("not_forkable", w("fork_why_crisis")))
         assertEquals(w("fork_why_kind"), ChatFork.errorSentence("not_forkable", w("fork_why_kind")))
+        // A known code plus a different message: the PC's message wins (the same
+        // rule as tags); with a blank message the code's own sentence.
+        assertEquals("From the PC.", ChatFork.errorSentence("not_found", "From the PC."))
+        assertEquals(ChatFork.ERRORS.getValue("not_found"), ChatFork.errorSentence("not_found", " "))
+        assertEquals(ChatFork.NO, ChatFork.errorSentence("not_forkable", ""))
         // Unknown code, blank message: the fallback.
         assertEquals(ChatFork.ERROR_FALLBACK, ChatFork.errorSentence("teapot", "  "))
         assertEquals(ChatFork.ERROR_FALLBACK, ChatFork.errorSentence(null, null))

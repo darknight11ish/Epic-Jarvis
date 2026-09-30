@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-spending-profile-delete"
+description = "Enables the spending_profile_delete command without any pre-configured scope."
+commands.allow = ["spending_profile_delete"]
+
+[[permission]]
+identifier = "deny-spending-profile-delete"
+description = "Denies the spending_profile_delete command without any pre-configured scope."
+commands.deny = ["spending_profile_delete"]

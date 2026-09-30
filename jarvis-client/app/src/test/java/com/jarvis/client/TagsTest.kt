@@ -157,9 +157,10 @@ class TagsTest {
             assertTrue("$c has a sentence", s.isNotBlank() && s.endsWith("."))
             assertFalse("$c is plain, not a code", s.contains("_"))
         }
-        // A code the app has a sentence for wins; bad_request and unknown codes
-        // say what the PC said (the desktop's errorWords is the same rule).
-        assertEquals(ChatTags.ERRORS.getValue("bad_name"), ChatTags.errorSentence("bad_name", "Mine."))
+        // One rule for tags and fork, on both apps: the PC's own message wins
+        // when it is not empty; then the code's fixed sentence; then the fallback.
+        assertEquals("Mine.", ChatTags.errorSentence("bad_name", "Mine."))
+        assertEquals(ChatTags.ERRORS.getValue("bad_name"), ChatTags.errorSentence("bad_name", "  "))
         assertEquals(
             "Chat history is off. Tags are not changed.",
             ChatTags.errorSentence("bad_request", "Chat history is off. Tags are not changed."),

@@ -2290,8 +2290,11 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const id = `${args.id}-fork`;
             const turns = src.turns.filter((t) => t.idx <= args.upto).map((t, i) => ({ ...t, idx: i }));
             const title = `Fork of ${row.title}`;
-            h.transcripts[id] = { ...JSON.parse(JSON.stringify(src)), id, title, turns: JSON.parse(JSON.stringify(turns)) };
-            h.conversations.splice(h.conversations.indexOf(row) + 1, 0, { ...row, id, title, turns: turns.length });
+            h.transcripts[id] = { ...JSON.parse(JSON.stringify(src)), id, title, kind: "chat", turns: JSON.parse(JSON.stringify(turns)) };
+            // A fork is an ordinary chat (kind 'chat', even from a Live session),
+            // and counts as new: `updated` is the moment of the fork.
+            h.conversations.push({ ...row, id, title, turns: turns.length, kind: "chat",
+              updated: Math.floor(Date.now() / 1000) });
             return { ok: true, id, title, turns: turns.length, tag_id: row.tag_id ?? null };
           }
           case "brain_history_open": {

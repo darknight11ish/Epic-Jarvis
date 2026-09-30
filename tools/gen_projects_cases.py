@@ -75,6 +75,26 @@ PHONE = (ROOT / "jarvis-client" / "app" / "src" / "test" / "resources" / "contra
          / "projects-cases.json")
 COPIES = (DESKTOP, PHONE)
 
+#: The Goals screens' own sentences, the same in both apps (goals.js, Goals.kt),
+#: beside the PC's lock sentences (`jarvis_goals.WORDS`) in `goal_words`.
+#: The PC sends only its own keys in a goals answer's `words`; these are
+#: what the two apps say themselves (JARVIS-API section 101.5). `{max}` and
+#: `{step}` are filled in by the app.
+GOAL_UI_WORDS = {
+    "follows_none": "No number",
+    "follows_under": ("The step shows \"reached\" when that number reaches its target. You "
+                      "still tick it yourself."),
+    "follows_empty": ("No number with a target yet. Set a target on a benchmark in Projects "
+                      "first."),
+    "needs_cleaned": "Removed \"{step}\" - the steps that waited on it no longer do.",
+    "needs_limit": "At most {max} steps can come first.",
+    "needs_none": "Nothing - this step can start now",
+    "needs_under": ("This step stays locked until the ones you pick are done. Pick up to 3."),
+    "reached_tag": "number reached",
+    "ticked": "Ticked \"{step}\".",
+    "unticked": "Unticked \"{step}\".",
+}
+
 AT = 1790000000.0
 DAY = 86400.0
 FOLDER = "C:\\Users\\owner\\Code\\jarvis-desktop"
@@ -660,7 +680,7 @@ def cases() -> dict:
                                "min_span_days": F.MIN_SPAN_DAYS, "window_days": F.WINDOW_DAYS,
                                "max_used": F.MAX_USED, "max_weeks": F.MAX_WEEKS,
                                "edge_spans": F.EDGE_SPANS},
-            "goal_words": dict(G.WORDS),
+            "goal_words": {**G.WORDS, **GOAL_UI_WORDS},
             "goal_limits": {"steps": G.MAX_STEPS, "needs": G.MAX_NEEDS,
                             "step_ids": list(G.STEP_IDS)},
             "goal_cases": _goal_cases(),
