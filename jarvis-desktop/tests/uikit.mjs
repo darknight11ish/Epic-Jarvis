@@ -498,7 +498,7 @@ export const UPDATE_NONE = {
 };
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, decks,
-  folders, animal, chatbot, support, historyImport, widgets, devices, screen }) {
+  folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending }) {
   const listeners = {};
   window.__calls = [];
   // animal.rs: GET /api/animal's answer (a scenario's, else a PC nobody has
@@ -2629,6 +2629,53 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             return JSON.parse(JSON.stringify(window.__emailSending));
           // folders.rs: "Folders Jarvis may look in". The pickers are Rust's;
           // here a scenario's answers stand in for "the owner chose ...".
+          // spending.rs: "Spending summaries". `window.__spending` is null - a
+          // PC without it - unless the scenario names `spending: {...}`:
+          //   tables  {id: table}   what GET /api/chat/table has
+          //   hidden  true          Rust's answer while the lists are hidden / App lock
+          //   view / proposals {file: proposal} / categories / suggestions
+          // Every call is logged in `calls`, so a test can prove "not fetched".
+          case "chat_table":
+          case "get_spending":
+          case "spending_profile_read":
+          case "spending_profile_save":
+          case "spending_profile_delete":
+          case "spending_categories_save":
+          case "spending_categories_reset":
+          case "spending_suggest": {
+            const sp = window.__spending;
+            if (!sp) throw new Error("Your PC's Jarvis cannot add up spending yet - run apply-patches.ps1 on the PC.");
+            sp.calls.push({ cmd, args: JSON.parse(JSON.stringify(args || {})) });
+            if (sp.fails && sp.fails[cmd]) throw new Error(sp.fails[cmd]);
+            const writes = cmd !== "chat_table" && cmd !== "get_spending" && cmd !== "spending_profile_read";
+            if (writes && state.stale) throw new Error("The connection to Jarvis is catching up, so nothing can be sent until it does.");
+            if (cmd === "chat_table") {
+              if (sp.hidden) return { hidden: true, words: "Spending table hidden" };
+              const t = sp.tables[args.id];
+              if (!t) return { gone: true, message: "This table is no longer kept. Ask again to see it." };
+              return { table: JSON.parse(JSON.stringify(t)) };
+            }
+            if (cmd === "get_spending") return JSON.parse(JSON.stringify(sp.view));
+            if (cmd === "spending_profile_read") {
+              const pr = sp.proposals[args.file];
+              if (!pr) throw new Error("That file is not in a folder Jarvis may look in.");
+              return JSON.parse(JSON.stringify(pr));
+            }
+            if (cmd === "spending_profile_save") {
+              sp.saved.push(JSON.parse(JSON.stringify(args.choices)));
+              return { ok: true, fingerprint: "f1", rows_read: 7, rows_skipped: 1, view: sp.view };
+            }
+            if (cmd === "spending_profile_delete") { sp.deleted.push(args.id); return { ok: true, view: sp.view }; }
+            if (cmd === "spending_categories_save") {
+              sp.categoriesSaved.push(JSON.parse(JSON.stringify(args.categories)));
+              sp.view.categories = JSON.parse(JSON.stringify(args.categories));
+              sp.view.categories_are_starter = false;
+              return { ok: true, view: sp.view };
+            }
+            if (cmd === "spending_categories_reset") { sp.resets += 1; return { ok: true, view: sp.view }; }
+            return { ok: true, suggestions: JSON.parse(JSON.stringify(sp.suggestions || [])),
+                     note: "Nothing is saved until you tap Add these rules." };
+          }
           case "get_folders":
             return window.__folders ? JSON.parse(JSON.stringify(window.__folders.view)) : null;
           case "add_folder":
@@ -2874,6 +2921,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
     goals: [], reads: 0, fails: null, checkinByGoal: {}, ...goals })) : null;
   window.__goalsCalls = [];
   window.__quiz = quiz ? JSON.parse(JSON.stringify({ calls: [], quiz: null, ...quiz })) : null;
+  window.__spending = spending ? JSON.parse(JSON.stringify({
+    calls: [], tables: {}, hidden: false, proposals: {}, suggestions: [], fails: null,
+    saved: [], deleted: [], categoriesSaved: [], resets: 0, ...spending })) : null;
   // Review decks (brain/decks.rs). `null` - a PC without decks. Scenario
   // `decks: {decks: [{id, name, paused, cards: [{id, front, back, passage,
   // kind, level, due, new}]}], available, why, newPerDay, refuse: {cmd: code}}`.

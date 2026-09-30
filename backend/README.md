@@ -18045,7 +18045,7 @@ What is here:
 - `jarvis_projects.py` gained the `balance_axes` table, an index on `results (at)` and small read
   methods; deleting a benchmark or a project removes its chart areas.
 - `progress.patch`: the one install block.
-- `test_progress.py` (119 checks), `tools/gen_progress_cases.py` (`progress-cases.json` for both apps,
+- `test_progress.py` (120 checks), `tools/gen_progress_cases.py` (`progress-cases.json` for both apps,
   with the reference grid and radar geometry).
 
 Health and money: a private number shades its day and is never named; the answer says

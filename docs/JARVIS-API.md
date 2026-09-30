@@ -16126,7 +16126,7 @@ hide the whole picture under "Hide memory lists and chat history".
 
 ```
 {"ok": true, "available": true, "title": "Balance",
- "axes": [{"label": "Body weight", "name": "Body weight", "kind": "bench", "ref": "<id>",
+ "axes": [{"label": "Body weight", "short": "Body weight", "name": "Body weight", "kind": "bench", "ref": "<id>",
            "project": "<id>", "state": "progress", "value_words": "72.5 of 70 kg",
            "fraction": 0.75, "keep_on_screen": true}, ...],
  "drawable": true, "min": 3, "max": 8, "max_label": 24, "words": "",
@@ -16139,7 +16139,8 @@ Each area is a number or goal the owner picked. `fraction` is how far the
 latest number is from the FIRST number logged to the target, 0 to 1 (1 = the
 target reached or passed, for "higher" and for "lower is better"; 0 if it has
 moved away, never negative). `null` = nothing to measure (`state` `no_numbers`,
-`no_target`, `no_steps`): drawn as a dot in the middle, never as a zero.
+`no_target`, `no_steps`): drawn as a dot in the middle, never as a zero. `short` is the label cut to 12 characters
+(with "…") for beside the spoke; the list under the picture shows the whole `label`.
 `state` is `progress`, `reached`, `no_numbers`, `no_target` or `no_steps`.
 `value_words` is the value printed at the spoke ("72.5 of 70 kg", "$400 of
 $1000", "3 of 5 steps"). A goal area is steps done out of steps. **There is no
