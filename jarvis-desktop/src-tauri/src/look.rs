@@ -176,6 +176,9 @@ pub(crate) fn watch_body(
     let mut body = serde_json::json!({ "do": action });
     match action {
         "start" => {
+            // The PC ends a Watch started from this app after about 45 seconds
+            // without a heartbeat (jarvis_screen.py), so it must say who started it.
+            body["from"] = serde_json::json!("desktop");
             if let Some(m) = minutes {
                 if !(1..=120).contains(&m) {
                     return Err("Say 1 to 120 minutes.".to_string());
@@ -744,16 +747,16 @@ mod tests {
         );
         assert_eq!(
             watch_body("start", None, None).unwrap(),
-            json!({ "do": "start" })
+            json!({ "do": "start", "from": "desktop" })
         );
         assert_eq!(
             watch_body("start", Some(20), Some("hotkey")).unwrap(),
-            json!({ "do": "start", "minutes": 20, "by": "hotkey" })
+            json!({ "do": "start", "from": "desktop", "minutes": 20, "by": "hotkey" })
         );
         // A `by` that is not one of the fixed words is left out, never sent.
         assert_eq!(
             watch_body("start", None, Some("please do")).unwrap(),
-            json!({ "do": "start" })
+            json!({ "do": "start", "from": "desktop" })
         );
         assert_eq!(
             watch_body("extend", None, None).unwrap(),
