@@ -219,6 +219,7 @@ import {
   topicCount as quizTopicCount,
 } from "./quiz.js";
 import * as Decks from "./decks.js";
+import { createRetirementCard } from "./retirement.js";
 import {
   BUILDING as BRIEFING_BUILDING,
   EMPTY as BRIEFING_EMPTY,
@@ -871,6 +872,25 @@ const liveButtons = new Set();
 
 const STALE_TITLE = "Waiting for the link to catch up. Nothing can be sent until it does.";
 
+/** The retirement what-if (brain.work.retirement, retirement.js): the numbers
+ *  typed there live in its boxes only and go when the tab, the window or the
+ *  private lists go. */
+const retirementCard = createRetirementCard({
+  root: document.getElementById("retirement-body"),
+  titleEl: document.getElementById("retirement-title"),
+  invoke,
+  isTauri: IS_TAURI,
+  canAct: () => linkWords(currentLink()).canAct,
+  live: {
+    add: (b) => { liveButtons.add(b); syncLiveButton(b); },
+    sync: (b) => syncLiveButton(b),
+  },
+  announce,
+  listen: IS_TAURI && TAURI.event && TAURI.event.listen
+    ? (name, fn) => TAURI.event.listen(name, fn) : null,
+  view: () => state.view,
+});
+
 /** Greys a `live` button while the link cannot be confirmed (rule 4). */
 function syncLiveButton(b) {
   const blocked = !linkWords(currentLink()).canAct;
@@ -1102,6 +1122,7 @@ async function showView(name, { reload = true } = {}) {
 
 /** Paints whichever view is showing from `state.data`. */
 function render(name) {
+  if (name !== "work") retirementCard.leave();
   switch (name) {
     case "galaxy":
       renderGraph();
@@ -1138,6 +1159,7 @@ function render(name) {
       renderGoals();
       renderQuiz();
       renderDecks();
+      retirementCard.enter();
       renderBriefing();
       renderJobs();
       renderUndo();
@@ -5426,742 +5448,6 @@ function renderProfile() {
   if (IS_TAURI && !profileL.loading && Date.now() - profileL.at > PROFILE_READ_MS) loadProfile();
 }
 
-/* ==========================================================================
-   My study decks (the owner's decision of 2026-09-30; docs/QUIZ-DECKS-DESIGN.md,
-   Slice contract C3-C6; JARVIS-API.md section 102; decks.js).
-
-   Questions kept from a quiz, asked again on a schedule the PC works out.
-   Read and changed through their own commands (brain/decks.rs), not
-   brain_read. No card anywhere: the owner's own tap saves the owner's own
-   words, sealed on the PC. Every change is held on a stale link. While the
-   private lists are hidden Rust takes the names and every card's words out
-   and does not fetch a review card at all; this section shows the counts and
-   the line, and the "Show" prompt.
-
-   Nothing is stored in this window: no name, no card, no typed answer - not
-   in localStorage, not as a draft.
-   ========================================================================== */
-
-const dk = {
-  view: null, error: "", loading: false, again: false, at: 0,
-  // The deck whose cards are open, and the cards read for it.
-  opening: "", cards: null, cardsError: "", cardsLoading: false,
-  // What is being renamed / edited / confirmed / added (ids only, no words).
-  renaming: "", editing: "", confirm: "", adding: false,
-  // The review session: null when not reviewing.
-  review: null,
-  // The control that should have the keyboard after the next paint.
-  focusNext: "",
-};
-const DECKS_READ_MS = 20000;
-
-async function loadDecks() {
-  if (!IS_TAURI) return;
-  if (dk.loading) {
-    dk.again = true;
-    return;
-  }
-  dk.loading = true;
-  try {
-    const out = await invoke("brain_decks");
-    const view = Decks.readDecks(out);
-    if (view) {
-      dk.view = view;
-      dk.error = "";
-    } else {
-      dk.error = isRefusal(out) ? Decks.refusalWords(out) : Decks.MISSING;
-    }
-  } catch (error) {
-    dk.error = errorText(error);
-  } finally {
-    dk.loading = false;
-    dk.at = Date.now();
-  }
-  if (dk.again) {
-    dk.again = false;
-    await loadDecks();
-    return;
-  }
-  // Hidden lists end a review and close the cards: nothing of them stays drawn.
-  if (dk.view && dk.view.hidden) {
-    dk.review = null;
-    dk.cards = null;
-    dk.opening = "";
-    dk.renaming = "";
-    dk.editing = "";
-  }
-  if (dk.opening && !dk.cardsLoading) await loadDeckCards(dk.opening, false);
-  if (state.view === "work") paintDecks();
-}
-
-async function loadDeckCards(id, repaint = true) {
-  dk.cardsLoading = true;
-  dk.cardsError = "";
-  try {
-    const out = await invoke("brain_decks_cards", { id });
-    const cards = Decks.readCards(out);
-    if (cards) {
-      dk.cards = cards;
-    } else {
-      dk.cards = null;
-      dk.cardsError = isRefusal(out) ? Decks.refusalWords(out) : Decks.MISSING;
-      if (isRefusal(out) && out.error === "deck_not_found") dk.opening = "";
-    }
-  } catch (error) {
-    dk.cards = null;
-    dk.cardsError = errorText(error);
-  }
-  dk.cardsLoading = false;
-  if (repaint && state.view === "work") paintDecks();
-}
-
-/** One change to a deck or card. Refused on a stale link; the PC's own words
- *  for a refusal. Returns the answer, or null. */
-async function decksCall(cmd, args) {
-  if (!linkWords(currentLink()).canAct) {
-    dk.error = STALE_TITLE;
-    paintDecks();
-    return null;
-  }
-  try {
-    const out = await invoke(cmd, args);
-    if (isRefusal(out)) {
-      dk.error = Decks.refusalWords(out);
-      if (out.error === "deck_not_found" || out.error === "card_not_found") {
-        dk.opening = out.error === "deck_not_found" ? "" : dk.opening;
-        dk.at = 0;
-        loadDecks();
-      }
-      paintDecks();
-      return null;
-    }
-    dk.error = "";
-    return out;
-  } catch (error) {
-    dk.error = errorText(error);
-    paintDecks();
-    return null;
-  }
-}
-
-async function deckAct(id, action, name) {
-  const out = await decksCall("brain_decks_act", name === undefined ? { id, action } : { id, action, name });
-  if (!out) return false;
-  if (action === "delete" && dk.opening === id) {
-    dk.opening = "";
-    dk.cards = null;
-  }
-  dk.renaming = "";
-  dk.confirm = "";
-  await loadDecks();
-  return true;
-}
-
-async function cardAct(id, cid, action, front, back) {
-  const args = { id, cid, action };
-  if (action === "edit") {
-    args.front = front;
-    args.back = back;
-  }
-  const out = await decksCall("brain_decks_card_act", args);
-  if (!out) return false;
-  dk.editing = "";
-  dk.confirm = "";
-  await loadDeckCards(id, false);
-  dk.at = 0;
-  await loadDecks();
-  return true;
-}
-
-async function addDeck(name) {
-  const out = await decksCall("brain_decks_create", { name });
-  if (!out) return false;
-  dk.adding = false;
-  dk.at = 0;
-  await loadDecks();
-  return true;
-}
-
-async function setNewPerDay(value, input) {
-  const n = Number(value);
-  const max = (dk.view && dk.view.limits.newPerDay) || Decks.LIMITS.newPerDay;
-  if (!Number.isInteger(n) || n < 0 || n > max) {
-    dk.error = `New cards a day is a whole number from 0 to ${max}.`;
-    if (dk.view) input.value = String(dk.view.newPerDay);
-    paintDecks();
-    return;
-  }
-  const out = await decksCall("brain_decks_settings", { newPerDay: n });
-  if (!out) {
-    if (dk.view) input.value = String(dk.view.newPerDay);
-    return;
-  }
-  dk.at = 0;
-  await loadDecks();
-}
-
-/* ── The review session ────────────────────────────────────────────────── */
-
-async function startReview(deck) {
-  dk.review = { deck: deck || "", data: null, reveal: null, typed: "", error: "", busy: false, comes: "" };
-  paintDecks();
-  await fetchReview();
-}
-
-/** Ends the session and goes back to the deck list, read again. */
-function leaveReview() {
-  dk.review = null;
-  dk.at = 0;
-  paintDecks();
-  loadDecks();
-}
-
-/** Takes the PC's review answer into the session. */
-function takeReview(out, comes) {
-  const r = dk.review;
-  if (!r) return;
-  if (Decks.isHiddenReview(out)) {
-    r.error = Decks.REVIEW_HIDDEN;
-    r.data = null;
-    r.reveal = null;
-    return;
-  }
-  if (isRefusal(out)) {
-    r.error = Decks.refusalWords(out);
-    return;
-  }
-  const data = Decks.readReview(out);
-  if (!data) {
-    r.error = Decks.MISSING;
-    return;
-  }
-  r.error = "";
-  r.data = data;
-  r.reveal = null;
-  r.typed = "";
-  r.comes = comes || "";
-  dk.focusNext = data.state === "card" ? "typed" : "screen-title";
-}
-
-async function fetchReview() {
-  const r = dk.review;
-  if (!r) return;
-  r.busy = true;
-  try {
-    const out = await invoke("brain_review", { deck: r.deck || null });
-    takeReview(out);
-  } catch (error) {
-    r.error = errorText(error);
-  }
-  r.busy = false;
-  if (r.data && r.data.state === "no_decks") {
-    leaveReview();
-    return;
-  }
-  paintDecks();
-  if (r.data && r.data.state !== "card") {
-    // Empty / enough / paused: the next-ready day comes from the deck list.
-    dk.at = 0;
-    loadDecks();
-  }
-}
-
-async function revealCard() {
-  const r = dk.review;
-  if (!r || !r.data || !r.data.card) return;
-  if (!linkWords(currentLink()).canAct) {
-    r.error = STALE_TITLE;
-    paintDecks();
-    return;
-  }
-  r.busy = true;
-  try {
-    const out = await invoke("brain_review_reveal", { card: r.data.card.id });
-    if (Decks.isHiddenReview(out)) {
-      r.error = Decks.REVIEW_HIDDEN;
-    } else if (isRefusal(out)) {
-      r.error = Decks.refusalWords(out);
-      if (out.error === "card_not_found") {
-        r.busy = false;
-        await fetchReview();
-        return;
-      }
-    } else {
-      const back = Decks.readReveal(out);
-      if (back) {
-        r.reveal = back;
-        dk.focusNext = "answer-heading";
-        r.error = "";
-        // What was typed was only for the owner: dropped, never sent.
-        r.typed = "";
-      } else {
-        r.error = Decks.MISSING;
-      }
-    }
-  } catch (error) {
-    r.error = errorText(error);
-  }
-  r.busy = false;
-  paintDecks();
-}
-
-async function rateCard(rating) {
-  const r = dk.review;
-  if (!r || !r.data || !r.data.card || !r.reveal) return;
-  if (!linkWords(currentLink()).canAct) {
-    r.error = STALE_TITLE;
-    paintDecks();
-    return;
-  }
-  r.busy = true;
-  try {
-    const out = await invoke("brain_review_rate", { card: r.data.card.id, rating });
-    if (isRefusal(out) && out.error === "card_not_found") {
-      // The card is gone or no longer up: ask for the next one.
-      r.busy = false;
-      await fetchReview();
-      return;
-    }
-    const before = r.error;
-    const read = Decks.readReview(out);
-    takeReview(out, read && read.comesBack ? `Comes back on ${Decks.formatDay(read.comesBack)}` : "");
-    if (!r.error && before) r.error = "";
-  } catch (error) {
-    r.error = errorText(error);
-  }
-  r.busy = false;
-  if (r.data && r.data.state === "no_decks") {
-    leaveReview();
-    return;
-  }
-  paintDecks();
-  if (r.data && r.data.state !== "card") {
-    dk.at = 0;
-    loadDecks();
-  }
-}
-
-async function moreCards() {
-  const r = dk.review;
-  if (!r) return;
-  if (!linkWords(currentLink()).canAct) {
-    r.error = STALE_TITLE;
-    paintDecks();
-    return;
-  }
-  r.busy = true;
-  try {
-    const out = await invoke("brain_review_more", { deck: r.deck || null });
-    takeReview(out);
-  } catch (error) {
-    r.error = errorText(error);
-  }
-  r.busy = false;
-  if (r.data && r.data.state === "no_decks") {
-    leaveReview();
-    return;
-  }
-  paintDecks();
-}
-
-function paintReview(box) {
-  const r = dk.review;
-  const view = dk.view;
-  const top = el("div", "goal-block");
-  if (r.error) {
-    const err = el("p", "empty failed", r.error);
-    err.setAttribute("role", "alert");
-    top.append(err);
-  }
-  if (r.comes) top.append(el("p", "note", r.comes));
-  const data = r.data;
-  if (!data) {
-    if (r.busy) top.append(el("p", "note", Decks.LOADING));
-    const stop = button(Decks.STOP, leaveReview);
-    stop.dataset.fkey = "review-stop";
-    top.append(stop);
-    box.append(top);
-    return;
-  }
-  const screen = Decks.reviewScreen(data, view ? view.nextReadyDay : null);
-  if (screen.kind === "card" && data.card) {
-    const card = data.card;
-    const head = el("div", "goal-head");
-    if (QUIZ_KIND_LABELS[card.kind]) head.append(el("span", "row-tag", QUIZ_KIND_LABELS[card.kind]));
-    const level = Decks.cardLevelLine(card.level);
-    if (level) head.append(el("span", "goal-note", level));
-    top.append(head);
-    top.append(el("p", "review-front", card.front));
-    if (!r.reveal) {
-      const typed = document.createElement("textarea");
-      typed.className = "field review-typed";
-      typed.rows = 3;
-      typed.maxLength = Decks.LIMITS.back;
-      typed.placeholder = Decks.TYPED_PLACEHOLDER;
-      typed.setAttribute("aria-label", Decks.TYPED_PLACEHOLDER);
-      typed.dataset.fkey = "typed";
-      // Kept only so a repaint does not wipe it; never sent, dropped on Show answer.
-      typed.value = r.typed;
-      typed.addEventListener("input", () => { r.typed = typed.value; });
-      top.append(typed);
-      const actions = el("div", "goal-actions");
-      const show = button(Decks.SHOW_ANSWER, revealCard, { live: true });
-      show.dataset.fkey = "show";
-      actions.append(show);
-      top.append(actions);
-    } else {
-      const back = el("div", "review-back");
-      const heading = el("h3", "subhead", Decks.BACK_HEADING);
-      heading.tabIndex = -1;
-      heading.dataset.fkey = "answer-heading";
-      back.append(heading);
-      back.append(el("p", "", r.reveal.answer || Decks.NO_CARD_ANSWER));
-      if (r.reveal.passage) {
-        back.append(el("p", "goal-note", Decks.backPassageHeading(r.reveal)));
-        back.append(el("p", "quiz-passage", r.reveal.passage));
-      }
-      if (r.reveal.keyLabel) back.append(el("p", "goal-note", r.reveal.keyLabel));
-      top.append(back);
-      const ratings = el("div", "review-ratings");
-      ratings.setAttribute("role", "group");
-      ratings.setAttribute("aria-label", Decks.RATING_GROUP);
-      for (const rating of Decks.RATINGS) {
-        const b = button(rating.label, () => rateCard(rating.id), { live: true });
-        b.dataset.fkey = `rate:${rating.id}`;
-        b.dataset.rating = rating.id;
-        ratings.append(b);
-      }
-      top.append(ratings);
-    }
-    const stop = button(Decks.STOP, leaveReview);
-    stop.dataset.fkey = "review-stop";
-    const foot = el("div", "goal-actions");
-    foot.append(stop);
-    top.append(foot);
-  } else {
-    if (screen.title) {
-      const title = el("h3", "subhead", screen.title);
-      title.tabIndex = -1;
-      title.dataset.fkey = "screen-title";
-      top.append(title);
-    }
-    if (screen.note) top.append(el("p", "note", screen.note));
-    const actions = el("div", "goal-actions");
-    if (screen.actions.includes("more")) {
-      const more = button(Decks.MORE, moreCards, { live: true });
-      more.dataset.fkey = "more";
-      actions.append(more);
-    }
-    const stop = button(Decks.STOP, leaveReview);
-    stop.dataset.fkey = "review-stop";
-    actions.append(stop);
-    top.append(actions);
-  }
-  box.append(top);
-}
-
-/* ── The deck list ─────────────────────────────────────────────────────── */
-
-function labelled(b, words, name) {
-  // The visible words stay in the name; the deck is added for a screen reader.
-  b.setAttribute("aria-label", name ? `${words}: ${name}` : words);
-  return b;
-}
-
-function deckRow(deck, view) {
-  const hidden = view.hidden;
-  const item = el("div", "deck-row");
-  const head = el("div", "goal-head");
-  head.append(el("span", "deck-name", hidden ? Decks.HIDDEN_NAME : deck.name));
-  if (deck.paused) head.append(el("span", "row-tag", Decks.PAUSED_TAG));
-  item.append(head);
-  item.append(el("p", "note", Decks.deckMeta(deck)));
-  const name = hidden ? "" : deck.name;
-  if (dk.renaming === deck.id && !hidden) {
-    item.append(nameForm(deck.name, (value) => deckAct(deck.id, "rename", value), () => {
-      dk.renaming = "";
-      paintDecks();
-    }, `rename:${deck.id}`));
-    return item;
-  }
-  const actions = el("div", "goal-actions");
-  if (!hidden) {
-    const review = labelled(button(Decks.REVIEW, () => startReview(deck.id)), Decks.REVIEW, name);
-    review.dataset.fkey = `review:${deck.id}`;
-    if (!Decks.canReview(view, deck)) review.disabled = true;
-    actions.append(review);
-  }
-  const pause = labelled(
-    button(deck.paused ? Decks.RESUME : Decks.PAUSE, () => deckAct(deck.id, deck.paused ? "resume" : "pause"), { live: true }),
-    deck.paused ? Decks.RESUME : Decks.PAUSE, name);
-  pause.dataset.fkey = `pause:${deck.id}`;
-  actions.append(pause);
-  if (!hidden) {
-    const cards = labelled(button(Decks.CARDS_LINK, async () => {
-      if (dk.opening === deck.id) {
-        dk.opening = "";
-        dk.cards = null;
-        paintDecks();
-        return;
-      }
-      dk.opening = deck.id;
-      dk.cards = null;
-      dk.editing = "";
-      dk.confirm = "";
-      paintDecks();
-      await loadDeckCards(deck.id);
-    }), Decks.CARDS_LINK, name);
-    cards.dataset.fkey = `cards:${deck.id}`;
-    cards.setAttribute("aria-expanded", String(dk.opening === deck.id));
-    actions.append(cards);
-    const edit = labelled(button(Decks.EDIT, () => {
-      dk.renaming = deck.id;
-      dk.focusNext = `rename:${deck.id}`;
-      paintDecks();
-    }, { live: true }), Decks.EDIT, name);
-    edit.dataset.fkey = `edit:${deck.id}`;
-    actions.append(edit);
-    const del = labelled(button(Decks.DELETE_DECK, () => {
-      dk.confirm = `deck:${deck.id}`;
-      dk.focusNext = `confirm-delete:${deck.id}:cancel`;
-      paintDecks();
-    }, { live: true, danger: true }), Decks.DELETE_DECK, name);
-    del.dataset.fkey = `delete:${deck.id}`;
-    actions.append(del);
-  }
-  item.append(actions);
-  if (dk.confirm === `deck:${deck.id}` && !hidden) {
-    item.append(confirmBox(() => deckAct(deck.id, "delete"), `confirm-delete:${deck.id}`));
-  }
-  if (dk.opening === deck.id && !hidden) item.append(cardsBox(deck));
-  return item;
-}
-
-/** "Are you sure? ..." with Delete and Cancel. */
-function confirmBox(onDelete, fkey) {
-  const box = el("div", "deck-confirm");
-  box.setAttribute("role", "group");
-  box.append(el("p", "", Decks.DELETE_CONFIRM));
-  const actions = el("div", "goal-actions");
-  const yes = button(Decks.DELETE, onDelete, { live: true, danger: true });
-  yes.dataset.fkey = fkey;
-  const no = button(Decks.CANCEL, () => {
-    dk.confirm = "";
-    paintDecks();
-  });
-  no.dataset.fkey = `${fkey}:cancel`;
-  actions.append(yes, no);
-  box.append(actions);
-  return box;
-}
-
-/** A name box with Save and Cancel (a new deck, or a rename). */
-function nameForm(value, onSave, onCancel, fkey) {
-  const form = el("form", "todo-form");
-  form.autocomplete = "off";
-  const input = document.createElement("input");
-  input.type = "text";
-  input.className = "field todo-text";
-  input.maxLength = Decks.LIMITS.name;
-  input.placeholder = Decks.DECK_NAME;
-  input.setAttribute("aria-label", Decks.DECK_NAME);
-  input.value = value;
-  input.dataset.fkey = fkey;
-  const save = el("button", "btn small", Decks.SAVE);
-  save.type = "submit";
-  liveButtons.add(save);
-  syncLiveButton(save);
-  const cancel = button(Decks.CANCEL, onCancel);
-  cancel.dataset.fkey = `${fkey}:cancel`;
-  form.append(input, save, cancel);
-  form.addEventListener("submit", (event) => {
-    event.preventDefault();
-    if (!Decks.deckNameOk(input.value)) {
-      dk.error = "A deck name is 1 to 60 characters.";
-      paintDecks();
-      return;
-    }
-    onSave(input.value.trim());
-  });
-  return form;
-}
-
-function cardsBox(deck) {
-  const box = el("div", "deck-cards");
-  if (dk.cardsLoading && !dk.cards) box.append(el("p", "note", Decks.LOADING));
-  if (dk.cardsError) box.append(el("p", "empty failed", dk.cardsError));
-  const list = dk.cards && dk.cards.deckId === deck.id ? dk.cards : null;
-  if (!list) return box;
-  if (list.hidden) {
-    box.append(hiddenNode(0, "words"));
-    return box;
-  }
-  if (!list.cards.length) box.append(el("p", "empty", Decks.NO_CARDS));
-  for (const card of list.cards) {
-    const item = el("div", "deck-card");
-    if (dk.editing === card.id) {
-      const front = document.createElement("input");
-      front.type = "text";
-      front.className = "field";
-      front.maxLength = Decks.LIMITS.front;
-      front.setAttribute("aria-label", Decks.FRONT_LABEL);
-      front.dataset.fkey = `front:${card.id}`;
-      front.value = card.front;
-      const back = document.createElement("textarea");
-      back.className = "field keep-back";
-      back.rows = 3;
-      back.maxLength = Decks.LIMITS.back;
-      back.setAttribute("aria-label", Decks.BACK_LABEL);
-      back.dataset.fkey = `back:${card.id}`;
-      back.value = card.back;
-      const actions = el("div", "goal-actions");
-      const save = button(Decks.SAVE, () => {
-        if (!front.value.trim()) {
-          dk.error = "The front of a card is 1 to 500 characters.";
-          paintDecks();
-          return;
-        }
-        return cardAct(deck.id, card.id, "edit", front.value, back.value);
-      }, { live: true });
-      save.dataset.fkey = `save:${card.id}`;
-      const cancel = button(Decks.CANCEL, () => {
-        dk.editing = "";
-        paintDecks();
-      });
-      cancel.dataset.fkey = `cancel:${card.id}`;
-      actions.append(save, cancel);
-      item.append(front, back, actions);
-    } else {
-      item.append(el("p", "deck-front", card.front));
-      item.append(el("p", "deck-back", card.back || Decks.NO_CARD_ANSWER));
-      if (card.passage) {
-        const heading = card.keySource === "model" ? Decks.EXAMPLE_SENTENCE : Decks.FROM_TEXT;
-        item.append(el("p", "goal-note", heading));
-        item.append(el("p", "quiz-passage", card.passage));
-      }
-      if (card.keyLabel) item.append(el("p", "goal-note", card.keyLabel));
-      const actions = el("div", "goal-actions");
-      const edit = labelled(button(Decks.EDIT, () => {
-        dk.editing = card.id;
-        dk.confirm = "";
-        dk.focusNext = `front:${card.id}`;
-        paintDecks();
-      }, { live: true }), Decks.EDIT, card.front);
-      edit.dataset.fkey = `edit-card:${card.id}`;
-      const del = labelled(button(Decks.DELETE_CARD, () => {
-        dk.confirm = `card:${card.id}`;
-        dk.focusNext = `confirm-delete-card:${card.id}:cancel`;
-        paintDecks();
-      }, { live: true, danger: true }), Decks.DELETE_CARD, card.front);
-      del.dataset.fkey = `delete-card:${card.id}`;
-      actions.append(edit, del);
-      item.append(actions);
-      if (dk.confirm === `card:${card.id}`) {
-        item.append(confirmBox(() => cardAct(deck.id, card.id, "delete"), `confirm-delete-card:${card.id}`));
-      }
-    }
-    box.append(item);
-  }
-  return box;
-}
-
-function paintDecks() {
-  const box = dom.decksBody;
-  if (!box) return;
-  const focusKey = dk.focusNext || fkeyBefore(box);
-  dk.focusNext = "";
-  const parts = [];
-  const view = dk.view;
-  if (dk.error) {
-    const err = el("p", "empty failed", dk.error);
-    err.setAttribute("role", "alert");
-    parts.push(err);
-  }
-  if (dk.review && view && !view.hidden) {
-    const wrap = el("div", "");
-    paintReview(wrap);
-    parts.push(wrap);
-    box.replaceChildren(...parts);
-    fkeyAfter(box, focusKey);
-    return;
-  }
-  if (!view) {
-    if (!dk.error) parts.push(el("p", "note", Decks.LOADING));
-    box.replaceChildren(...parts);
-    return;
-  }
-  const top = Decks.sectionTop(view);
-  if (!view.available) parts.push(el("p", "empty failed", view.why || Decks.MISSING));
-  const ready = el("div", "goal-block");
-  ready.append(el("h3", "subhead", Decks.CARDS_READY_HEADING));
-  if (top.line) ready.append(el("p", "", top.line));
-  const nextLine = Decks.nextReadyLine(view.nextReadyDay);
-  if (nextLine && view.ready === 0) ready.append(el("p", "note", nextLine));
-  if (top.empty) ready.append(el("p", "empty", Decks.EMPTY_STATE));
-  parts.push(ready);
-  // New cards a day: a number from 0 to the PC's limit.
-  const perDay = el("div", "goal-block");
-  const perLabel = el("label", "quiz-lab", Decks.NEW_PER_DAY_LABEL);
-  perLabel.htmlFor = "decks-per-day";
-  const per = document.createElement("input");
-  per.type = "number";
-  per.id = "decks-per-day";
-  per.className = "field deck-per-day";
-  per.min = "0";
-  per.max = String(view.limits.newPerDay);
-  per.step = "1";
-  per.value = String(view.newPerDay);
-  per.dataset.fkey = "per-day";
-  liveButtons.add(per);
-  syncLiveButton(per);
-  per.addEventListener("change", () => setNewPerDay(per.value, per));
-  perDay.append(perLabel, per);
-  parts.push(perDay);
-  if (view.available && view.decks.length) {
-    const list = el("div", "");
-    for (const deck of view.decks) list.append(deckRow(deck, view));
-    parts.push(list);
-  }
-  if (view.hidden) {
-    parts.push(el("p", "note", Decks.REVIEW_HIDDEN));
-    parts.push(hiddenNode(0, "words"));
-  }
-  // A new deck: an empty one, named here.
-  if (view.available) {
-    const add = el("div", "goal-actions");
-    if (dk.adding) {
-      parts.push(nameForm("", (value) => addDeck(value), () => {
-        dk.adding = false;
-        paintDecks();
-      }, "new-deck"));
-    } else {
-      const b = button(Decks.NEW_DECK, () => {
-        dk.adding = true;
-        dk.focusNext = "new-deck";
-        paintDecks();
-      }, { live: true });
-      b.dataset.fkey = "new-deck-open";
-      if (view.decks.length >= view.limits.decks) b.disabled = true;
-      add.append(b);
-      parts.push(add);
-    }
-  }
-  box.replaceChildren(...parts);
-  fkeyAfter(box, focusKey);
-}
-
-function renderDecks() {
-  if (dom.decksIntro) dom.decksIntro.textContent = Decks.DECKS_INTRO;
-  paintDecks();
-  if (IS_TAURI && !dk.loading && Date.now() - dk.at > DECKS_READ_MS) loadDecks();
-}
-
-/** The private lists were turned on or off, or a Show ran out: read again. */
-function rereadDecks() {
-  dk.at = 0;
-  if (state.view === "work") loadDecks();
-}
-
 // Private answers turned on or off, or a Show ran out: read it again - Rust
 // decides whether it comes back hidden.
 if (IS_TAURI && TAURI.event && TAURI.event.listen) {
@@ -9320,2741 +8606,740 @@ if (dom.quizStart) {
   syncLiveButton(dom.quizStart);
 }
 
-// Private answers turned on or off, or a Show ran out: read it again - Rust
-// decides whether it comes back hidden.
-if (IS_TAURI && TAURI.event && TAURI.event.listen) {
-  const rereadProfile = () => {
-    profileL.at = 0;
-    if (state.view === "memory") loadProfile();
-  };
-  TAURI.event.listen("security-changed", rereadProfile);
-  TAURI.event.listen("private-hidden", rereadProfile);
-}
-
 /* ==========================================================================
-   "Between us" (the owner's decision, 2026-09-27; memory-shared.js)
+   My study decks (the owner's decision of 2026-09-30; docs/QUIZ-DECKS-DESIGN.md,
+   Slice contract C3-C6; JARVIS-API.md section 102; decks.js).
 
-   Facts the owner tagged as a shared joke or nickname - a label on an
-   ordinary fact, meta.kind = "shared" - which Jarvis may bring up when it
-   fits, in Warm manner only (never Plain). Its own section, with a "Between
-   us" toggle on every fact still in use in "Saved automatically" and "What
-   Jarvis knows about you". One fact per call (brain_memory_share), no card
-   - the owner's own tap, like Pin - held on a stale link in Rust and greyed
-   here. No event: the list is read again after every memory write, and
-   when the Memory tab is shown.
+   Questions kept from a quiz, asked again on a schedule the PC works out.
+   Read and changed through their own commands (brain/decks.rs), not
+   brain_read. No card anywhere: the owner's own tap saves the owner's own
+   words, sealed on the PC. Every change is held on a stale link. While the
+   private lists are hidden Rust takes the names and every card's words out
+   and does not fetch a review card at all; this section shows the counts and
+   the line, and the "Show" prompt.
+
+   Nothing is stored in this window: no name, no card, no typed answer - not
+   in localStorage, not as a draft.
    ========================================================================== */
 
-const sharedL = {
-  /** readShared() of the last read, or null before the first. */
-  view: null,
-  error: "",
-  loading: false,
-  again: false,
-  at: 0,
+const dk = {
+  view: null, error: "", loading: false, again: false, at: 0,
+  // The deck whose cards are open, and the cards read for it.
+  opening: "", cards: null, cardsError: "", cardsLoading: false,
+  // What is being renamed / edited / confirmed / added (ids only, no words).
+  renaming: "", editing: "", confirm: "", adding: false,
+  // The review session: null when not reviewing.
+  review: null,
+  // The control that should have the keyboard after the next paint.
+  focusNext: "",
 };
-const SHARED_READ_MS = 15000;
+const DECKS_READ_MS = 20000;
 
-async function loadShared() {
+async function loadDecks() {
   if (!IS_TAURI) return;
-  if (sharedL.loading) {
-    sharedL.again = true;
+  if (dk.loading) {
+    dk.again = true;
     return;
   }
-  sharedL.loading = true;
+  dk.loading = true;
   try {
-    sharedL.view = readShared(await invoke("brain_memory_shared"));
-    sharedL.error = "";
-  } catch (error) {
-    sharedL.error = errorText(error);
-  } finally {
-    sharedL.loading = false;
-    sharedL.at = Date.now();
-  }
-  if (sharedL.again) {
-    sharedL.again = false;
-    await loadShared();
-    return;
-  }
-  if (state.view === "memory") {
-    // The "Between us" toggle on the fact lists follows the list.
-    paintShared();
-    paintAutoList();
-    renderFacts();
-  }
-}
-
-/** "Between us" / "Not between us" for one fact, by what the PC last said -
- *  or nothing while that is not known (not read yet, an older PC, or the
- *  list hidden). */
-function shareButton(f) {
-  const v = sharedL.view;
-  if (!v || !v.available || v.hidden || !Number.isInteger(Number(f.id))) return null;
-  const on = isShared(v, f.id);
-  return button(on ? UNSHARE_LABEL : SHARE_LABEL, () => setShared(f, !on),
-    { live: true, title: on ? UNSHARE_TITLE : SHARE_TITLE });
-}
-
-/** One fact on or off "Between us". memoryWrite shows the PC's refusal in
- *  its own words and reads the pane again, this list included. */
-async function setShared(f, on) {
-  return memoryWrite("brain_memory_share", { id: Number(f.id), shared: on },
-    on ? SHARED : UNSHARED);
-}
-
-function paintShared() {
-  const box = dom.memoryShared;
-  if (!box) return;
-  box.replaceChildren();
-  const v = sharedL.view;
-  if (!v) {
-    const line = el("p", "empty", sharedL.error
-      ? `Could not read the list: ${sharedL.error}` : "Reading…");
-    if (sharedL.error) {
-      line.classList.add("failed");
-      line.append(" ", button("Retry", loadShared));
-    }
-    box.append(line);
-    return;
-  }
-  if (!v.available) {
-    box.append(el("p", "empty", v.why || SHARED_MISSING));
-    return;
-  }
-  if (v.hidden) {
-    box.append(hiddenNode(v.hiddenCount, "facts"));
-    return;
-  }
-  if (sharedL.error) {
-    box.append(el("p", "empty failed", `Could not read it again: ${sharedL.error}`));
-  }
-  if (!v.facts.length) {
-    box.append(el("p", "empty", SHARED_EMPTY));
-    return;
-  }
-  // Nothing is changed while the pane shows a past moment (memoryWrite).
-  const past = memoryAsOf !== null;
-  const list = el("div", "rows shared-rows");
-  for (const f of v.facts) {
-    const item = row({
-      tag: "shared",
-      state: "ok",
-      title: f.text || "(no text)",
-      meta: [f.created ? whenTrue(f) : ""],
-      actions: past ? [] : [
-        button(UNSHARE_LABEL, () => setShared(f, false), { live: true, title: UNSHARE_TITLE }),
-        button("Forget", () => forgetAuto(f), { live: true,
-          title: "Stop this being recalled. There is no undo." }),
-      ],
-    });
-    item.dataset.id = String(f.id);
-    list.append(item);
-  }
-  box.append(list);
-}
-
-function renderShared() {
-  paintShared();
-  if (IS_TAURI && !sharedL.loading && Date.now() - sharedL.at > SHARED_READ_MS) loadShared();
-}
-
-// Private answers turned on or off, or a Show ran out: read it again - Rust
-// decides whether it comes back hidden.
-if (IS_TAURI && TAURI.event && TAURI.event.listen) {
-  const rereadShared = () => {
-    sharedL.at = 0;
-    if (state.view === "memory") loadShared();
-  };
-  TAURI.event.listen("security-changed", rereadShared);
-  TAURI.event.listen("private-hidden", rereadShared);
-}
-
-/**
- * When a fact became true, in words: "true from 1 January 2021" when that is
- * more than a day away from when Jarvis learned it (the owner's words gave a
- * date, or history was recorded), else "saved 3 h ago" / "saved 12 Sept
- * 2026". This used to be a bare `ago(valid_from)` - "2825d ago" on a fact
- * true since 2019, with nothing saying what the number was (the memory
- * review's I10).
- */
-function whenTrue(f) {
-  const learned = Number(f.created);
-  const from = Number(f.valid_from);
-  const has = (v) => Number.isFinite(v) && v > 0;
-  if (has(from) && (!has(learned) || Math.abs(learned - from) >= 86400)) {
-    const day = plainDateOf(from);
-    return day ? `${MEMORY_WORDS.true_from} ${day}` : "";
-  }
-  const saved = whenWords(has(learned) ? learned : from);
-  return saved ? `saved ${saved}` : "";
-}
-
-/** "learned 12 September 2026" only when that differs from when the fact
- *  became true.
- *
- * valid_from and created are stamped together for anything typed or accepted
- * in the moment, so saying both every time would be noise on every row. A gap
- * of more than a day means someone recorded history, and that is worth a line.
- */
-function whenLearned(f) {
-  const learned = Number(f.created);
-  const from = Number(f.valid_from);
-  if (!Number.isFinite(learned) || !Number.isFinite(from)) return "";
-  if (Math.abs(learned - from) < 86400) return "";
-  const day = plainDateOf(learned);
-  return day ? `learned ${day}` : "";
-}
-
-/** The same gap at the other end: stopped being true then, found out later.
- *
- * "I moved in January" told in March gives valid_to = January and
- * retired_at = March. Facts retired before the retired_at column existed have
- * it backfilled equal to valid_to, so they correctly say nothing here.
- */
-function whenNoticed(f) {
-  const until = Number(f.valid_to);
-  const noticed = Number(f.retired_at);
-  if (!Number.isFinite(until) || !Number.isFinite(noticed)) return "";
-  if (Math.abs(noticed - until) < 86400) return "";
-  const a = plainDateOf(until);
-  const b = plainDateOf(noticed);
-  return a && b ? `true until ${a}, noticed ${b}` : "";
-}
-
-/** A review card's reason and older-news lines, whichever there are. */
-function reasonLines(p) {
-  const { reason, older } = cardLines(p);
-  return [reason || "", older || ""];
-}
-
-/* ==========================================================================
-   Work
-   ========================================================================== */
-
-/* ==========================================================================
-   Focus session (the owner's decision of 2026-09-25; JARVIS-API.md section
-   26; focus.js, brain/focus.rs).
-
-   Start one (minutes, and optionally what it is on), then the countdown -
-   counted down here once a second from what the PC last said - the PC's own
-   line, the drift count, and Pause / Resume, +10 minutes and Stop: ONE
-   thing per tap, no card. Start, Resume and +10 minutes are held on a stale
-   link (greyed here, refused in Rust); Pause and Stop are not. After a
-   session, its report card. The PC never sends what was in front. The
-   `focus` event (a state word, or a callout's number) reads it again.
-   ========================================================================== */
-
-const fx = { view: null, error: "", loading: false, again: false, at: 0, readAt: 0, timer: null };
-const FOCUS_READ_MS = 15000;
-
-async function loadFocus() {
-  if (!IS_TAURI) return;
-  if (fx.loading) {
-    fx.again = true;
-    return;
-  }
-  fx.loading = true;
-  try {
-    fx.view = readFocus(await invoke("focus_status"));
-    fx.error = "";
-    fx.readAt = Date.now();
-  } catch (error) {
-    fx.error = errorText(error);
-  } finally {
-    fx.loading = false;
-    fx.at = Date.now();
-  }
-  if (fx.again) {
-    fx.again = false;
-    await loadFocus();
-    return;
-  }
-  if (state.view === "work") paintFocus();
-}
-
-async function focusAct(action) {
-  try {
-    const out = await invoke("focus_act", { action, minutes: null });
-    toast(String((out && out.said) || "Done."), "ok");
-  } catch (error) {
-    toast(errorText(error), "bad");
-  }
-  await loadFocus();
-}
-
-async function focusStart() {
-  const minutes = focusMinutesOf(dom.focusMinutes && dom.focusMinutes.value);
-  if (minutes === null) {
-    toast(FOCUS_BAD_MINUTES, "bad");
-    return;
-  }
-  if (!linkWords(currentLink()).canAct) {
-    toast(STALE_TITLE, "bad");
-    return;
-  }
-  try {
-    const out = await invoke("focus_start", { minutes, on: dom.focusOn ? dom.focusOn.value : "" });
-    toast(String((out && out.said) || "Started."), "ok");
-    if (dom.focusOn) dom.focusOn.value = "";
-  } catch (error) {
-    toast(errorText(error), "bad");
-  }
-  await loadFocus();
-}
-
-function focusTick() {
-  if (state.view !== "work" || !fx.view || !fx.view.on || fx.view.paused) return;
-  const clockNode = dom.focus && dom.focus.querySelector(".focus-clock");
-  if (!clockNode) return;
-  const left = focusLeftNow(fx.view, Date.now() - fx.readAt);
-  clockNode.textContent = focusClock(left);
-  // The PC says when it ended; read again once the count reaches zero.
-  if (left <= 0 && !fx.loading && Date.now() - fx.at > 2000) loadFocus();
-}
-
-function paintFocus() {
-  const box = dom.focus;
-  if (!box) return;
-  const v = fx.view;
-  if (dom.focusReport) dom.focusReport.replaceChildren();
-  if (!v) {
-    const line = el("p", "empty", fx.error ? `Could not read the focus session: ${fx.error}` : "Reading…");
-    if (fx.error) {
-      line.classList.add("failed");
-      line.append(" ", button("Retry", loadFocus));
-    }
-    box.replaceChildren(line);
-    if (dom.focusForm) dom.focusForm.hidden = true;
-    return;
-  }
-  if (!v.available) {
-    box.replaceChildren(el("p", "empty", v.why || FOCUS_MISSING));
-    if (dom.focusForm) dom.focusForm.hidden = true;
-    return;
-  }
-  if (dom.focusForm) dom.focusForm.hidden = v.on;
-  if (!v.on) {
-    box.replaceChildren(el("p", "empty", v.line || "No focus session."));
-    if (v.report && dom.focusReport) {
-      const card = el("div", "focus-report");
-      card.append(el("h3", "subhead", FOCUS_LAST_TITLE));
-      const title = el("p", "focus-report-title", v.report.title);
-      if (v.report.clean) title.dataset.state = "ok";
-      card.append(title);
-      for (const line of v.report.lines) card.append(el("p", "note", line));
-      dom.focusReport.replaceChildren(card);
-    }
-  } else {
-    const wrap = el("div", "focus-now");
-    wrap.dataset.tone = focusToneOf(v);
-    wrap.append(el("span", "focus-clock mono", focusClock(focusLeftNow(v, Date.now() - fx.readAt))));
-    if (v.intent) wrap.append(el("p", "note", `On: ${v.intent}`));
-    else if (v.intentHidden) wrap.append(el("p", "note", FOCUS_INTENT_HIDDEN));
-    wrap.append(el("p", "focus-line", v.line));
-    wrap.append(el("p", "note", driftWords(v.drifts)));
-    if (v.note) wrap.append(el("p", "note", v.note));
-    const actions = el("div", "row-actions");
-    for (const a of focusActionsOf(v, "brain")) {
-      actions.append(button(FOCUS_LABELS[a], () => focusAct(a),
-        { live: a === "resume" || a === "extend", danger: a === "stop" }));
-    }
-    wrap.append(actions);
-    box.replaceChildren(wrap);
-  }
-  if (fx.error) box.prepend(el("p", "empty failed", `Could not read it again: ${fx.error}`));
-  const ticking = v.on && !v.paused;
-  if (ticking && !fx.timer) fx.timer = setInterval(focusTick, 1000);
-  if (!ticking && fx.timer) {
-    clearInterval(fx.timer);
-    fx.timer = null;
-  }
-}
-
-function renderFocus() {
-  paintFocus();
-  if (IS_TAURI && !fx.loading && Date.now() - fx.at > FOCUS_READ_MS) loadFocus();
-}
-
-if (dom.focusForm) {
-  dom.focusForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    focusStart();
-  });
-}
-if (dom.focusStart) {
-  liveButtons.add(dom.focusStart);
-  syncLiveButton(dom.focusStart);
-}
-
-/* ==========================================================================
-   Talk to a chatbot for me (the owner's decisions of 2026-09-27 and
-   2026-09-28; JARVIS-API.md section 87; chatbot.js, brain/chatbot.rs).
-
-   The form (which chatbot, the goal - "these words will be sent" - the
-   most messages and minutes within the version's caps, never-send words)
-   asks the PC for ONE approval card; nothing is sent before a yes. Then the
-   conversation: its state in the PC's words, the counts, Pause / Resume /
-   Stop, Change limits (a NEW card), the transcript with the chatbot's words
-   in the outside-text style, and at the end the summary - kept on screen,
-   never read aloud (nothing in this window speaks). There is no event of
-   its own: it is read again every few seconds while a conversation is
-   live, and on every activity event. The last conversation's id is kept
-   here so its summary stays on screen after it ends.
-
-   "Ask several and compare" (jarvis_chatbot_compare.py): the same form with
-   a tick box per chatbot asks the PC for ONE card listing every one. While
-   it runs: each chatbot's line, Pause / Resume / Stop for the whole
-   comparison, each conversation under its chatbot's name, and at the end
-   ONE summary - where they agree and disagree (who said what), the sources
-   each gave (not checked by Jarvis), who dropped out and why - kept on
-   screen in the outside-text style, never read aloud.
-   ========================================================================== */
-
-const cb = { view: null, error: "", loading: false, again: false, at: 0, id: "", gone: false,
-  timer: null, filled: false, starting: false, limitsKey: "", logKey: "", limitsInFlight: false,
-  cmpId: "", cmpGone: false, lastKind: "", several: new Set(), severalKey: "" };
-const CHATBOT_READ_MS = 15000;
-
-/* The last conversation's and comparison's ids outlive this window (the
-   chat audit, 2026-09-28, desktop B2: a finished summary vanished when the
-   Brain was closed, because the ids lived in the page alone). The ids only -
-   never a goal, a message or a summary - in this app's own storage; the PC
-   still answers "gone" once it restarts, and the finished conversation is
-   then in History. */
-const CHATBOT_LAST_KEY = "jarvis.chatbot.last";
-try {
-  const left = JSON.parse(localStorage.getItem(CHATBOT_LAST_KEY) || "null");
-  if (left && typeof left.id === "string") cb.id = left.id;
-  if (left && typeof left.cmp === "string") cb.cmpId = left.cmp;
-} catch {
-  /* no storage: the summary shows while this window is open, as before */
-}
-
-function keepChatbotIds() {
-  try {
-    if (cb.id || cb.cmpId) {
-      localStorage.setItem(CHATBOT_LAST_KEY, JSON.stringify({ id: cb.id, cmp: cb.cmpId }));
+    const out = await invoke("brain_decks");
+    const view = Decks.readDecks(out);
+    if (view) {
+      dk.view = view;
+      dk.error = "";
     } else {
-      localStorage.removeItem(CHATBOT_LAST_KEY);
+      dk.error = isRefusal(out) ? Decks.refusalWords(out) : Decks.MISSING;
     }
-  } catch {
-    /* no storage */
-  }
-}
-
-async function loadChatbot() {
-  if (!IS_TAURI) return;
-  if (cb.loading) {
-    cb.again = true;
-    return;
-  }
-  cb.loading = true;
-  try {
-    // The latest live conversation first (it may have been started on the
-    // phone); else the one this window last showed, for its summary.
-    let view = readChatbot(await invoke("chatbot_status", { id: null, compare: null }));
-    cb.gone = false;
-    cb.cmpGone = false;
-    if (view.available && !view.session && cb.id) {
-      const named = readChatbot(await invoke("chatbot_status", { id: cb.id, compare: null }));
-      if (named.available && named.session) view = { ...view, session: named.session, limits: named.limits };
-      else if (named.available) {
-        cb.gone = true;
-        cb.id = "";
-      }
-    }
-    // The same for a comparison: the latest one still going, else the one
-    // this window last showed, for its summary.
-    if (view.available && !view.compare && cb.cmpId) {
-      const named = readChatbot(await invoke("chatbot_status", { id: null, compare: cb.cmpId }));
-      if (named.available && named.compare) view = { ...view, compare: named.compare };
-      else if (named.available) {
-        cb.cmpGone = true;
-        cb.cmpId = "";
-      }
-    }
-    if (view.available && view.session) cb.id = view.session.id;
-    if (view.available && view.compare) cb.cmpId = view.compare.id;
-    keepChatbotIds();
-    if (view.available && view.session && view.session.live) cb.lastKind = "session";
-    if (view.available && view.compare && view.compare.live) cb.lastKind = "compare";
-    cb.view = view;
-    cb.error = "";
   } catch (error) {
-    cb.error = errorText(error);
+    dk.error = errorText(error);
   } finally {
-    cb.loading = false;
-    cb.at = Date.now();
+    dk.loading = false;
+    dk.at = Date.now();
   }
-  if (cb.again) {
-    cb.again = false;
-    await loadChatbot();
+  if (dk.again) {
+    dk.again = false;
+    await loadDecks();
     return;
   }
-  if (state.view === "work") paintChatbot();
+  // Hidden lists end a review and close the cards: nothing of them stays drawn.
+  if (dk.view && dk.view.hidden) {
+    dk.review = null;
+    dk.cards = null;
+    dk.opening = "";
+    dk.renaming = "";
+    dk.editing = "";
+  }
+  if (dk.opening && !dk.cardsLoading) await loadDeckCards(dk.opening, false);
+  if (state.view === "work") paintDecks();
 }
 
-/** The PC's refusals are sometimes lower-case fragments ("nothing is running"). */
-function asSentence(text) {
-  const t = String(text || "").trim();
-  if (!t) return "Not changed.";
-  const s = t[0].toUpperCase() + t.slice(1);
-  return /[.!?]$/.test(s) ? s : `${s}.`;
-}
-
-async function chatbotAct(cmd, args = {}) {
+async function loadDeckCards(id, repaint = true) {
+  dk.cardsLoading = true;
+  dk.cardsError = "";
   try {
-    const out = await invoke(cmd, args);
-    const said = out && (out.message || out.said);
-    toast(asSentence(said || "Done."), "ok");
-  } catch (error) {
-    toast(asSentence(errorText(error)), "bad");
-  }
-  await loadChatbot();
-}
-
-/** "Ask several and compare" is ticked. */
-function compareMode() {
-  return Boolean(dom.chatbotCompare && dom.chatbotCompare.checked
-    && dom.chatbotCompareToggle && !dom.chatbotCompareToggle.hidden);
-}
-
-async function chatbotStart() {
-  const v = cb.view;
-  const several = compareMode();
-  const form = {
-    chatbot: dom.chatbotWhich ? dom.chatbotWhich.value : "",
-    // Ticked, in the order the list shows them (grouped by kind).
-    chatbots: v && v.available ? chatbotGroups(v).flatMap((g) => g.chatbots).filter((c) => cb.several.has(c.id)).map((c) => c.id) : [],
-    goal: dom.chatbotGoal ? dom.chatbotGoal.value : "",
-    messages: dom.chatbotMessages ? dom.chatbotMessages.value : "",
-    minutes: dom.chatbotMinutes ? dom.chatbotMinutes.value : "",
-  };
-  if (cb.starting) return;
-  const problem = several ? compareFormProblem(v, form) : chatbotFormProblem(v, form);
-  if (problem) {
-    toast(problem, "bad");
-    return;
-  }
-  if (!linkWords(currentLink()).canAct) {
-    toast(STALE_TITLE, "bad");
-    return;
-  }
-  // One start at a time: a double press must not ask the PC twice.
-  cb.starting = true;
-  if (dom.chatbotStart) {
-    dom.chatbotStart.dataset.busy = "true";
-    syncLiveButton(dom.chatbotStart);
-  }
-  try {
-    const limits = {
-      goal: form.goal,
-      maxMessages: chatbotLimitOf(form.messages, v.tier.turnsMax),
-      maxMinutes: chatbotLimitOf(form.minutes, v.tier.minutesMax),
-      neverSend: neverWords(dom.chatbotNever ? dom.chatbotNever.value : ""),
-    };
-    let out;
-    if (several) {
-      out = await invoke("chatbot_compare_start", { chatbots: form.chatbots, ...limits });
-      if (out && out.compare) cb.cmpId = out.compare;
-      cb.lastKind = "compare";
+    const out = await invoke("brain_decks_cards", { id });
+    const cards = Decks.readCards(out);
+    if (cards) {
+      dk.cards = cards;
     } else {
-      out = await invoke("chatbot_start", { chatbot: form.chatbot, ...limits });
-      if (out && out.session) cb.id = out.session;
-      cb.lastKind = "session";
+      dk.cards = null;
+      dk.cardsError = isRefusal(out) ? Decks.refusalWords(out) : Decks.MISSING;
+      if (isRefusal(out) && out.error === "deck_not_found") dk.opening = "";
     }
-    toast(asSentence((out && out.message) || CHATBOT.start_note), "ok");
-    if (dom.chatbotGoal) dom.chatbotGoal.value = "";
   } catch (error) {
-    toast(asSentence(errorText(error)), "bad");
-  } finally {
-    cb.starting = false;
+    dk.cards = null;
+    dk.cardsError = errorText(error);
   }
-  await loadChatbot();
-  // paintChatbotForm sets busy again only when nothing is built.
-  if (dom.chatbotStart && cb.view && cb.view.available) paintChatbotForm(cb.view);
+  dk.cardsLoading = false;
+  if (repaint && state.view === "work") paintDecks();
 }
 
-function chatbotTurn(t, name) {
-  const item = el("div", `chatbot-turn${t.outside ? " chatbot-outside" : ""}`);
-  item.dataset.who = t.who;
-  const head = el("div", "chatbot-turn-head");
-  head.append(el("span", "chatbot-who", t.who === "jarvis" ? `Jarvis, message ${t.n}` : name));
-  if (t.outside) head.append(el("span", "history-mark history-mark-taint", "outside text"));
-  item.append(head);
-  item.append(el("p", "chatbot-text", t.text));
-  if (t.cutOff) item.append(el("p", "note chatbot-cut-off", CHATBOT.cut_off));
-  return item;
-}
-
-/** "Kept in your encrypted chat history" - or why not - and, when kept, a
- *  way to it (the second chat audit, 2026-09-28, desktop C5). Nothing when
- *  the PC did not say. */
-function historyNote(h) {
-  const line = chatbotHistoryLine(h);
-  if (!line) return null;
-  const p = el("p", "note chatbot-history-line", line);
-  if (h && h.kept) {
-    p.append(" ", button(CHATBOT.history_open, () => showView("history"),
-      { title: CHATBOT.history_open_title }));
-  }
-  return p;
-}
-
-function chatbotSummary(s) {
-  const box = el("div", "chatbot-summary chatbot-outside");
-  const head = el("div", "chatbot-turn-head");
-  head.append(el("h3", "subhead", CHATBOT.summary_title));
-  head.append(el("span", "history-mark history-mark-taint", "outside text"));
-  box.append(head);
-  box.append(el("p", "note", CHATBOT.summary_note));
-  const kept = historyNote(s.history);
-  if (kept) box.append(kept);
-  if (s.summary.answer) box.append(el("p", "chatbot-text", s.summary.answer));
-  if (s.summary.claims.length) {
-    const list = el("ul", "chatbot-claims");
-    for (const c of s.summary.claims) {
-      list.append(el("li", "", `${c.claim} - ${c.sourced ? CHATBOT.claim_sourced : CHATBOT.claim_unsourced}`));
-    }
-    box.append(list);
-  }
-  if (s.summary.open.length) {
-    box.append(el("p", "note", CHATBOT.open_title));
-    const list = el("ul", "chatbot-open");
-    for (const o of s.summary.open) list.append(el("li", "", o));
-    box.append(list);
-  }
-  return box;
-}
-
-function chatbotLimitsRow(v, s) {
-  const wrap = el("div", "");
-  const row = el("div", "row");
-  const field = (label, value, max, id) => {
-    const lab = el("label", "lbl", label);
-    const input = el("input", "field");
-    input.type = "number";
-    input.min = "1";
-    input.max = String(max);
-    input.value = String(value);
-    input.id = id;
-    lab.append(input);
-    row.append(lab);
-    return input;
-  };
-  const msgs = field(CHATBOT.messages_label, s.max, v.tier.turnsMax, "chatbot-new-messages");
-  const mins = field(CHATBOT.minutes_label, s.maxMinutes, v.tier.minutesMax, "chatbot-new-minutes");
-  wrap.append(row);
-  const neverLab = el("label", "lbl", CHATBOT.never_label);
-  const never = el("input", "field");
-  never.type = "text";
-  never.id = "chatbot-new-never";
-  never.value = s.never.join(", ");
-  never.disabled = s.hidden;
-  neverLab.append(never);
-  wrap.append(neverLab);
-  const go = button(CHATBOT.change_limits, async () => {
-    const m = chatbotLimitOf(msgs.value, v.tier.turnsMax);
-    const n = chatbotLimitOf(mins.value, v.tier.minutesMax);
-    if (m === null || n === null) {
-      toast(`Most messages: 1 to ${v.tier.turnsMax}; most minutes: 1 to ${v.tier.minutesMax}.`, "bad");
-      return;
-    }
-    cb.limitsInFlight = true;
-    try {
-      await chatbotAct("chatbot_limits", {
-        id: s.id, maxMessages: m, maxMinutes: n,
-        // While the words are hidden the box shows none: keep the PC's list.
-        neverSend: s.hidden ? null : neverWords(never.value),
-      });
-    } finally {
-      cb.limitsInFlight = false;
-    }
-  }, { live: true });
-  go.id = "chatbot-limits-go";
-  wrap.append(go);
-  wrap.append(el("p", "note", CHATBOT.limits_note));
-  wrap.append(el("p", "note chatbot-limits-said"));
-  return wrap;
-}
-
-/**
- * The limits row: rebuilt only when the conversation, its limits or what may
- * be shown change - never by the 4-second re-read, which would wipe numbers
- * being typed and take the focus away. Its last line is updated each time.
- */
-function paintChatbotLimits(v, s) {
-  const box = dom.chatbotLimits;
-  if (!box) return;
-  const show = Boolean(s && (s.state === "running" || s.state === "paused"));
-  box.hidden = !show;
-  if (!show) {
-    box.replaceChildren();
-    cb.limitsKey = "";
-    return;
-  }
-  const key = JSON.stringify([s.id, s.max, s.maxMinutes, s.never, s.hidden, v.tier.turnsMax,
-    v.tier.minutesMax]);
-  if (key !== cb.limitsKey) {
-    box.replaceChildren(chatbotLimitsRow(v, s));
-    cb.limitsKey = key;
-  }
-  // Greyed while a card for new limits waits; its own click greys it while
-  // the request is on its way (button()), and that is left alone here.
-  const go = box.querySelector("#chatbot-limits-go");
-  if (go && !cb.limitsInFlight) {
-    go.dataset.busy = v.limits.waiting ? "true" : "false";
-    syncLiveButton(go);
-  }
-  const said = box.querySelector(".chatbot-limits-said");
-  if (said) {
-    said.textContent = v.limits.waiting ? "A card for new limits is waiting for your answer."
-      : v.limits.said;
-  }
-}
-
-/** The summary and the transcript: rebuilt only when they change. */
-function paintChatbotLog(s) {
-  const box = dom.chatbotLog;
-  if (!box) return;
-  const shown = s && !s.hidden ? s : null;
-  const key = shown ? "s" + JSON.stringify([shown.id, shown.summary, shown.transcript, shown.history]) : "";
-  if (key === cb.logKey) return;
-  cb.logKey = key;
-  const out = [];
-  if (shown && shown.summary) out.push(chatbotSummary(shown));
-  if (shown && shown.transcript.length) {
-    const tr = el("div", "chatbot-transcript");
-    tr.append(el("h3", "subhead", CHATBOT.transcript_title));
-    tr.append(el("p", "note", CHATBOT.outside_note));
-    for (const t of shown.transcript) tr.append(chatbotTurn(t, shown.name));
-    out.push(tr);
-  }
-  box.replaceChildren(...out);
-}
-
-/** A list under a small heading, for the comparison's summary. */
-function summaryList(box, title, items, cls) {
-  if (!items.length) return;
-  box.append(el("p", "note", title));
-  const list = el("ul", cls);
-  for (const item of items) list.append(typeof item === "string" ? el("li", "", item) : item);
-  box.append(list);
-}
-
-function compareSummary(c) {
-  const sm = c.summary;
-  const box = el("div", "chatbot-summary chatbot-outside chatbot-compare-summary");
-  const head = el("div", "chatbot-turn-head");
-  head.append(el("h3", "subhead", CHATBOT.compare_summary_title));
-  head.append(el("span", "history-mark history-mark-taint", "outside text"));
-  box.append(head);
-  box.append(el("p", "note", CHATBOT.compare_summary_note));
-  const kept = historyNote(c.history);
-  if (kept) box.append(kept);
-  if (sm.answer) box.append(el("p", "chatbot-text", sm.answer));
-  summaryList(box, CHATBOT.agree_title, sm.agree, "chatbot-agree");
-  summaryList(box, CHATBOT.disagree_title, sm.disagree.map((d) => {
-    const li = el("li", "", d.point);
-    const views = el("ul", "");
-    for (const v of d.views) views.append(el("li", "", `${v.who}: ${v.said}`));
-    li.append(views);
-    return li;
-  }), "chatbot-disagree");
-  summaryList(box, CHATBOT.sources_title, sm.sources.map((x) => `${x.who}: ${x.items.join("; ")}`),
-    "chatbot-sources");
-  summaryList(box, CHATBOT.dropped_title, sm.dropped.map((x) => `${x.who} - ${x.why}`),
-    "chatbot-dropped");
-  summaryList(box, CHATBOT.open_title, sm.open, "chatbot-open");
-  return box;
-}
-
-/** The comparison's summary and each conversation: rebuilt only when they change. */
-function paintCompareLog(c) {
-  const box = dom.chatbotLog;
-  if (!box) return;
-  const shown = c && !c.hidden ? c : null;
-  const key = shown ? "c" + JSON.stringify([shown.id, shown.summary, shown.history,
-    shown.members.map((m) => m.transcript)]) : "";
-  if (key === cb.logKey) return;
-  cb.logKey = key;
-  const out = [];
-  if (shown && shown.summary) out.push(compareSummary(shown));
-  const talked = shown ? shown.members.filter((m) => m.transcript.length) : [];
-  if (talked.length) {
-    const tr = el("div", "chatbot-transcript");
-    tr.append(el("h3", "subhead", CHATBOT.conversations_title));
-    tr.append(el("p", "note", CHATBOT.outside_note));
-    for (const m of talked) {
-      const part = el("div", "chatbot-member-log");
-      part.dataset.chatbot = m.chatbot;
-      part.append(el("h4", "subhead", m.name));
-      for (const t of m.transcript) part.append(chatbotTurn(t, m.name));
-      tr.append(part);
-    }
-    out.push(tr);
-  }
-  box.replaceChildren(...out);
-}
-
-function hiddenBlock(title, words = CHATBOT.hidden) {
-  const hid = el("div", "private-hidden");
-  hid.append(el("p", "empty", words));
-  hid.append(button("Show", revealPrivate, { title }));
-  return hid;
-}
-
-function compareNow(c) {
-  const now = el("div", "chatbot-now chatbot-compare-now");
-  now.dataset.state = c.state;
-  now.append(el("p", "chatbot-head", c.live ? compareTalkingLine(c)
-    : `${CHATBOT.compare_title}: ${compareStatusLine(c)}`));
-  if (c.live) now.append(el("p", "chatbot-line", compareStatusLine(c)));
-  if (c.state !== "refused") now.append(el("p", "note", compareProgress(c)));
-  if (c.tierName) now.append(el("p", "note", `${CHATBOT.version}: ${c.tierName}`));
-  if (c.hidden) {
-    now.append(hiddenBlock("Asks Windows Hello - your PIN, fingerprint or face - then shows the comparison."));
-  } else if (c.goal) {
-    now.append(el("p", "note", `Your goal (sent word for word to each): ${c.goal}`));
-  }
-  if (c.members.length) {
-    const list = el("ul", "chatbot-members");
-    for (const m of c.members) {
-      const li = el("li", "", chatbotMemberLine(m, c));
-      li.dataset.state = m.state;
-      // An API conversation's counts, per chatbot.
-      if (m.usage) li.append(el("p", "note chatbot-usage", chatbotUsageLine(m.usage)));
-      list.append(li);
-    }
-    now.append(list);
-  }
-  for (const m of c.hidden ? [] : c.members) {
-    if (!m.question) continue;
-    const q = el("div", "chatbot-question chatbot-outside");
-    q.append(el("p", "subhead", `${CHATBOT.question_title}: ${m.name}`));
-    q.append(el("p", "chatbot-text", m.question));
-    q.append(el("p", "note", CHATBOT.question_note));
-    now.append(q);
-  }
-  const actions = el("div", "row-actions");
-  for (const a of chatbotActionsOf(c)) {
-    if (a === "pause") actions.append(button(CHATBOT.pause, () => chatbotAct("chatbot_pause")));
-    if (a === "resume") actions.append(button(CHATBOT.resume, () => chatbotAct("chatbot_resume"), { live: true }));
-    if (a === "stop") actions.append(button(CHATBOT.stop, () => chatbotAct("chatbot_compare_stop", { id: c.id }), { danger: true }));
-  }
-  if (actions.childElementCount) now.append(actions);
-  return now;
-}
-
-function paintChatbot() {
-  const box = dom.chatbot;
-  if (!box) return;
-  const v = cb.view;
-  if (dom.chatbotVersion) dom.chatbotVersion.textContent = v ? chatbotVersionLine(v) : "";
-  if (!v) {
-    const line = el("p", "empty", cb.error ? `Could not read it: ${cb.error}` : "Reading…");
-    if (cb.error) {
-      line.classList.add("failed");
-      line.append(" ", button("Retry", loadChatbot));
-    }
-    box.replaceChildren(line);
-    if (dom.chatbotForm) dom.chatbotForm.hidden = true;
-    paintChatbotLimits(null, null);
-    paintChatbotLog(null);
-    return;
-  }
-  if (!v.available) {
-    box.replaceChildren(el("p", "empty", v.why || CHATBOT.missing));
-    if (dom.chatbotForm) dom.chatbotForm.hidden = true;
-    paintChatbotLimits(null, null);
-    paintChatbotLog(null);
-    return;
-  }
-  const c = v.compare;
-  // A comparison going is shown; else the one this window started last.
-  const showCompare = Boolean(c && (c.live || (!(v.session && v.session.live)
-    && (cb.lastKind === "compare" || !v.session))));
-  const s = showCompare ? null : v.session;
-  const out = [];
-  if (cb.error) out.push(el("p", "empty failed", `Could not read it again: ${cb.error}`));
-  if (!v.anyBuilt) out.push(el("p", "note chatbot-none", CHATBOT.none_built));
-  if (cb.gone && !showCompare) out.push(el("p", "note", CHATBOT.gone));
-  if (cb.cmpGone && !s) out.push(el("p", "note", CHATBOT.compare_gone));
-  if (showCompare) {
-    out.push(compareNow(c));
-  } else if (s) {
-    const now = el("div", "chatbot-now");
-    now.dataset.state = s.state;
-    now.append(el("p", "chatbot-head", s.live ? chatbotTalkingLine(s) : `${s.name}: ${chatbotStatusLine(s)}`));
-    if (s.live) now.append(el("p", "chatbot-line", chatbotStatusLine(s)));
-    // "Solve it here" (handoff.js): paused at a captcha, a sign-in page or
-    // an "unusual activity" page - the window is right here on the PC.
-    const waitsForYou = s.state === "paused" ? handoffPcLine(v.handoff, "chatbot", s.id) : null;
-    if (waitsForYou) now.append(handoffAlert(waitsForYou));
-    if (s.state !== "refused") now.append(el("p", "note", chatbotProgress(s)));
-    if (s.usage) now.append(el("p", "note chatbot-usage", chatbotUsageLine(s.usage)));
-    if (s.tierName) now.append(el("p", "note", `${CHATBOT.version}: ${s.tierName}`));
-    if (s.hidden) {
-      now.append(hiddenBlock("Asks Windows Hello - your PIN, fingerprint or face - then shows the conversation."));
-    } else if (s.goal) {
-      now.append(el("p", "note", `Your goal (sent word for word): ${s.goal}`));
-    }
-    if (s.question) {
-      const q = el("div", "chatbot-question chatbot-outside");
-      q.append(el("p", "subhead", CHATBOT.question_title));
-      q.append(el("p", "chatbot-text", s.question));
-      q.append(el("p", "note", CHATBOT.question_note));
-      now.append(q);
-    }
-    const actions = el("div", "row-actions");
-    for (const a of chatbotActionsOf(s)) {
-      if (a === "pause") actions.append(button(CHATBOT.pause, () => chatbotAct("chatbot_pause")));
-      if (a === "resume") actions.append(button(CHATBOT.resume, () => chatbotAct("chatbot_resume"), { live: true }));
-      if (a === "stop") actions.append(button(CHATBOT.stop, () => chatbotAct("chatbot_stop", { id: s.id }), { danger: true }));
-    }
-    if (actions.childElementCount) now.append(actions);
-    out.push(now);
-  } else if (v.anyBuilt) {
-    out.push(el("p", "empty", "No conversation yet."));
-  }
-  // The poll repaints this box every few seconds while a conversation runs;
-  // a keyboard user sitting on Pause or Stop was thrown back to the page each
-  // time. Note which button had focus and give it back (bug audit 2026-09-29).
-  const focusedLabel = box.contains(document.activeElement)
-    && document.activeElement.closest(".row-actions")
-    ? document.activeElement.textContent : null;
-  box.replaceChildren(...out);
-  if (focusedLabel) {
-    const again = [...box.querySelectorAll(".row-actions button")]
-      .find((b) => b.textContent === focusedLabel);
-    if (again) again.focus();
-  }
-  paintChatbotLimits(v, s);
-  if (showCompare) paintCompareLog(c);
-  else paintChatbotLog(s);
-  paintChatbotForm(v);
-  const live = Boolean((v.session && v.session.live) || (c && c.live));
-  if (live && !cb.timer) {
-    cb.timer = setInterval(() => {
-      if (state.view === "work" && !cb.loading) loadChatbot();
-    }, CHATBOT_POLL_MS);
-  }
-  if (!live && cb.timer) {
-    clearInterval(cb.timer);
-    cb.timer = null;
-  }
-}
-
-/** The tick boxes, one per chatbot: rebuilt only when the list changes. */
-function paintChatbotSeveral(v) {
-  if (dom.chatbotSeveralLegend) {
-    dom.chatbotSeveralLegend.textContent = v.canCompare ? chatbotPickLine(v) : CHATBOT.compare_not_enough;
-  }
-  const list = dom.chatbotSeveralList;
-  if (!list) return;
-  const key = JSON.stringify(v.chatbots);
-  if (key === cb.severalKey) return;
-  cb.severalKey = key;
-  for (const id of [...cb.several]) {
-    if (!v.chatbots.some((c) => c.id === id && c.built)) cb.several.delete(id);
-  }
-  // Grouped by how each is reached, like the single chooser; a chatbot
-  // that cannot be used yet says why under its name.
-  const rows = [];
-  for (const g of chatbotGroups(v)) {
-    if (g.title) rows.push(el("p", "note chatbot-kind", g.title));
-    for (const c of g.chatbots) {
-      const lab = el("label", "");
-      const box = el("input", "");
-      box.type = "checkbox";
-      box.value = c.id;
-      box.disabled = !c.built;
-      box.checked = c.built && cb.several.has(c.id);
-      box.addEventListener("change", () => {
-        if (box.checked) cb.several.add(c.id);
-        else cb.several.delete(c.id);
-      });
-      lab.append(box, ` ${c.name}`);
-      rows.push(lab);
-      if (!c.built) rows.push(el("p", "note chatbot-not-ready", c.note || "Not built yet."));
-      // An API service: how much of its monthly money limit is left.
-      const money = chatbotMoneyLine(c);
-      if (money) rows.push(el("p", "note chatbot-money-line", money));
-    }
-    if (g.kind === "api") rows.push(el("p", "note chatbot-money-note", CHATBOT.money_pc_only));
-  }
-  list.replaceChildren(...rows);
-}
-
-/**
- * Under the single chooser: the chosen API service's money left this month
- * (the PC's own amounts), and that limits and prices are set on the PC.
- * Hidden for a website or the second AI on this PC.
- */
-function paintChatbotMoney(v) {
-  const box = dom.chatbotMoney;
-  if (!box) return;
-  const id = dom.chatbotWhich ? dom.chatbotWhich.value : "";
-  const bot = v && v.available ? v.chatbots.find((c) => c.id === id) : null;
-  const several = compareMode();
-  if (!bot || bot.kind !== "api" || several) {
-    box.hidden = true;
-    box.textContent = "";
-    return;
-  }
-  box.textContent = [chatbotMoneyLine(bot), CHATBOT.money_pc_only].filter(Boolean).join(" ");
-  box.hidden = false;
-}
-
-function paintChatbotForm(v) {
-  const form = dom.chatbotForm;
-  if (!form) return;
-  form.hidden = Boolean((v.session && v.session.live) || (v.compare && v.compare.live));
-  if (form.hidden) return;
-  // An older PC has no comparisons: no tick box then.
-  if (dom.chatbotCompareToggle) dom.chatbotCompareToggle.hidden = !(v.tier.compareMax > 0);
-  const several = compareMode();
-  if (dom.chatbotCompareDetail) dom.chatbotCompareDetail.hidden = !several;
-  if (dom.chatbotCompareNote) dom.chatbotCompareNote.hidden = !several;
-  if (dom.chatbotWhichLabel) dom.chatbotWhichLabel.hidden = several;
-  if (dom.chatbotSeveral) dom.chatbotSeveral.hidden = !several;
-  if (several) paintChatbotSeveral(v);
-  const which = dom.chatbotWhich;
-  if (which) {
-    const was = which.value;
-    // Grouped by how each is reached: websites, with a key, on this PC.
-    const option = (c) => {
-      const o = el("option", "", c.built ? c.name : `${c.name} - ${c.note || "Not built yet."}`);
-      o.value = c.id;
-      o.disabled = !c.built;
-      return o;
-    };
-    which.replaceChildren(...chatbotGroups(v).map((g) => {
-      if (!g.title) return g.chatbots.map(option);
-      const group = el("optgroup", "");
-      group.label = g.title;
-      group.append(...g.chatbots.map(option));
-      return [group];
-    }).flat());
-    // The first usable one as the list shows it (grouped), not as the PC sent it.
-    const shown = chatbotGroups(v).flatMap((g) => g.chatbots);
-    const pick = shown.find((c) => c.id === was && c.built) || shown.find((c) => c.built)
-      || shown[0];
-    if (pick) which.value = pick.id;
-  }
-  paintChatbotMoney(v);
-  if (dom.chatbotMessages) dom.chatbotMessages.max = String(v.tier.turnsMax);
-  if (dom.chatbotMinutes) dom.chatbotMinutes.max = String(v.tier.minutesMax);
-  if (!cb.filled) {
-    if (dom.chatbotMessages) dom.chatbotMessages.value = String(v.tier.turnsDefault);
-    if (dom.chatbotMinutes) dom.chatbotMinutes.value = String(v.tier.minutesDefault);
-    cb.filled = true;
-  }
-  if (dom.chatbotStart) {
-    // Nothing built: Start stays greyed, with the reason as its title.
-    dom.chatbotStart.dataset.title = v.anyBuilt ? "" : CHATBOT.none_built;
-    dom.chatbotStart.dataset.busy = v.anyBuilt ? "false" : "true";
-    syncLiveButton(dom.chatbotStart);
-    if (!v.anyBuilt) dom.chatbotStart.title = CHATBOT.none_built;
-  }
-}
-
-function renderChatbot() {
-  paintChatbot();
-  if (IS_TAURI && !cb.loading && Date.now() - cb.at > CHATBOT_READ_MS) loadChatbot();
-}
-
-if (dom.chatbotForm) {
-  dom.chatbotForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    chatbotStart();
-  });
-}
-if (dom.chatbotCompare) {
-  dom.chatbotCompare.addEventListener("change", () => {
-    if (cb.view && cb.view.available) paintChatbotForm(cb.view);
-  });
-}
-if (dom.chatbotWhich) {
-  dom.chatbotWhich.addEventListener("change", () => {
-    if (cb.view && cb.view.available) paintChatbotMoney(cb.view);
-  });
-}
-if (dom.chatbotStart) {
-  liveButtons.add(dom.chatbotStart);
-  syncLiveButton(dom.chatbotStart);
-}
-
-/* ==========================================================================
-   Chat with customer support for me (the owner's decisions of 2026-09-28;
-   JARVIS-API.md section 65; support.js, brain/support.rs).
-
-   The form (the company - Groupon, or another company's help page typed by
-   the owner - its terms risk, the goal, the details Jarvis may give as
-   name-and-value rows, and the limits) asks the PC for ONE approval card;
-   nothing is sent before a yes. Then the chat: its state in the PC's words
-   (waiting for the owner to open the chat in the window, the queue, the
-   agent's name), Take over / Resume / Stop, a waiting offer with its words
-   and the exact reply its card would send (accepting is ONLY that card;
-   here: Decline, Say something else, Take over), a question handed to the
-   owner, the transcript with the company's words marked outside text, and
-   at the end the summary, the reference number, whether it was kept in the
-   encrypted history, and "Export transcript" (a file the owner picks). Kept
-   on screen, never read aloud (nothing in this window speaks). Read again
-   every few seconds while a chat is going, and on every activity event.
-   ========================================================================== */
-
-const sp = { view: null, error: "", loading: false, again: false, at: 0, id: "", gone: false,
-  timer: null, filled: false, starting: false, logKey: "", rows: [{ name: "", value: "" }],
-  rowsKey: "", sayOpen: false, companiesKey: "" };
-const SUPPORT_READ_MS = 15000;
-
-async function loadSupport() {
-  if (!IS_TAURI) return;
-  if (sp.loading) {
-    sp.again = true;
-    return;
-  }
-  sp.loading = true;
-  try {
-    let view = readSupport(await invoke("support_status", { id: null }));
-    sp.gone = false;
-    // The latest chat still going first (it may have been started on the
-    // phone); else the one this window last showed, for its summary.
-    if (view.available && !view.chat && sp.id) {
-      const named = readSupport(await invoke("support_status", { id: sp.id }));
-      if (named.available && named.chat) view = { ...view, chat: named.chat };
-      else if (named.available) {
-        sp.gone = true;
-        sp.id = "";
-      }
-    }
-    if (view.available && view.chat) sp.id = view.chat.id;
-    sp.view = view;
-    sp.error = "";
-  } catch (error) {
-    sp.error = errorText(error);
-  } finally {
-    sp.loading = false;
-    sp.at = Date.now();
-  }
-  if (sp.again) {
-    sp.again = false;
-    await loadSupport();
-    return;
-  }
-  if (state.view === "work") paintSupport();
-}
-
-async function supportAct(cmd, args = {}) {
-  try {
-    const out = await invoke(cmd, args);
-    const said = out && (out.message || out.said);
-    if (out && out.cancelled) toast("Not saved.", "ok");
-    else if (out && out.saved) toast(`Saved to ${out.saved}. ${SUPPORT.export_note}`, "ok");
-    else toast(asSentence(said || "Done."), "ok");
-  } catch (error) {
-    toast(asSentence(errorText(error)), "bad");
-  }
-  await loadSupport();
-}
-
-async function supportStart() {
-  const v = sp.view;
-  const form = {
-    company: dom.supportCompany ? dom.supportCompany.value : "",
-    address: dom.supportAddress ? dom.supportAddress.value : "",
-    goal: dom.supportGoal ? dom.supportGoal.value : "",
-    rows: sp.rows,
-    messages: dom.supportMessages ? dom.supportMessages.value : "",
-    minutes: dom.supportMinutes ? dom.supportMinutes.value : "",
-    queue: dom.supportQueue ? dom.supportQueue.value : "",
-  };
-  if (sp.starting) return;
-  const problem = supportFormProblem(v, form);
-  if (problem) {
-    toast(problem, "bad");
-    return;
-  }
+/** One change to a deck or card. Refused on a stale link; the PC's own words
+ *  for a refusal. Returns the answer, or null. */
+async function decksCall(cmd, args) {
   if (!linkWords(currentLink()).canAct) {
-    toast(STALE_TITLE, "bad");
-    return;
-  }
-  sp.starting = true;
-  if (dom.supportStart) {
-    dom.supportStart.dataset.busy = "true";
-    syncLiveButton(dom.supportStart);
-  }
-  try {
-    const typed = v.companies.find((c) => c.id === form.company);
-    const out = await invoke("support_start", {
-      company: form.company,
-      address: typed && typed.typed ? form.address.trim() : null,
-      goal: form.goal,
-      details: supportDetailRows(form.rows),
-      maxMessages: supportLimitOf(form.messages, v.tier.messagesMax),
-      maxMinutes: supportLimitOf(form.minutes, v.tier.minutesMax),
-      maxQueueMinutes: supportLimitOf(form.queue, v.tier.queueMax),
-    });
-    if (out && out.support) sp.id = out.support;
-    toast(asSentence((out && out.message) || SUPPORT.start_note), "ok");
-    if (dom.supportGoal) dom.supportGoal.value = "";
-    sp.rows = [{ name: "", value: "" }];
-    sp.rowsKey = "";
-  } catch (error) {
-    toast(asSentence(errorText(error)), "bad");
-  } finally {
-    sp.starting = false;
-    if (dom.supportStart) {
-      dom.supportStart.dataset.busy = "false";
-      syncLiveButton(dom.supportStart);
-    }
-  }
-  await loadSupport();
-}
-
-/** The details rows: rebuilt only when rows are added or removed, so typing is kept. */
-function paintSupportRows() {
-  const box = dom.supportRows;
-  if (!box) return;
-  const key = String(sp.rows.length);
-  if (key === sp.rowsKey) return;
-  sp.rowsKey = key;
-  const out = sp.rows.map((r, i) => {
-    const line = el("div", "row support-row");
-    const name = el("input", "field");
-    name.type = "text";
-    name.maxLength = 40;
-    name.value = r.name;
-    name.placeholder = SUPPORT.detail_name;
-    name.setAttribute("aria-label", `${SUPPORT.detail_name}, row ${i + 1}`);
-    name.addEventListener("input", () => { sp.rows[i].name = name.value; });
-    const value = el("input", "field");
-    value.type = "text";
-    value.maxLength = 200;
-    value.spellcheck = false;
-    value.value = r.value;
-    value.placeholder = SUPPORT.detail_value;
-    value.setAttribute("aria-label", `${SUPPORT.detail_value}, row ${i + 1}`);
-    value.addEventListener("input", () => { sp.rows[i].value = value.value; });
-    const remove = button(SUPPORT.remove_detail, () => {
-      sp.rows.splice(i, 1);
-      if (!sp.rows.length) sp.rows.push({ name: "", value: "" });
-      sp.rowsKey = "";
-      paintSupportRows();
-    });
-    remove.setAttribute("aria-label", `${SUPPORT.remove_detail} row ${i + 1}`);
-    line.append(name, value, remove);
-    return line;
-  });
-  box.replaceChildren(...out);
-}
-
-function paintSupportForm(v) {
-  const form = dom.supportForm;
-  if (!form) return;
-  form.hidden = Boolean(v.chat && v.chat.live);
-  if (form.hidden) return;
-  const which = dom.supportCompany;
-  if (which) {
-    const key = JSON.stringify(v.companies.map((c) => [c.id, c.name]));
-    if (key !== sp.companiesKey) {
-      const was = which.value;
-      which.replaceChildren(...v.companies.map((c) => {
-        const o = el("option", "", c.name);
-        o.value = c.id;
-        return o;
-      }));
-      which.value = v.companies.some((c) => c.id === was) ? was : (v.companies[0] || {}).id || "";
-      sp.companiesKey = key;
-    }
-  }
-  const co = v.companies.find((c) => c.id === (which ? which.value : ""));
-  if (dom.supportTerms) {
-    dom.supportTerms.textContent = co && co.terms ? `${SUPPORT.terms_title}: ${co.terms}` : "";
-  }
-  if (dom.supportAddressLabel) dom.supportAddressLabel.hidden = !(co && co.typed);
-  if (dom.supportMessages) dom.supportMessages.max = String(v.tier.messagesMax);
-  if (dom.supportMinutes) dom.supportMinutes.max = String(v.tier.minutesMax);
-  if (dom.supportQueue) dom.supportQueue.max = String(v.tier.queueMax);
-  if (!sp.filled) {
-    if (dom.supportMessages) dom.supportMessages.value = String(v.tier.messagesDefault);
-    if (dom.supportMinutes) dom.supportMinutes.value = String(v.tier.minutesDefault);
-    if (dom.supportQueue) dom.supportQueue.value = String(v.tier.queueDefault);
-    sp.filled = true;
-  }
-  paintSupportRows();
-}
-
-function supportTurn(t, c) {
-  const item = el("div", `chatbot-turn${t.outside ? " chatbot-outside" : ""}`);
-  item.dataset.who = t.who;
-  const head = el("div", "chatbot-turn-head");
-  head.append(el("span", "chatbot-who", supportWhoOf(t, c)));
-  if (t.outside) head.append(el("span", "history-mark history-mark-taint", "outside text"));
-  item.append(head);
-  item.append(el("p", t.who === "note" ? "note" : "chatbot-text", t.text));
-  return item;
-}
-
-function supportSummaryBox(c) {
-  const sm = c.summary;
-  const box = el("div", "chatbot-summary chatbot-outside");
-  const head = el("div", "chatbot-turn-head");
-  head.append(el("h3", "subhead", SUPPORT.summary_title));
-  head.append(el("span", "history-mark history-mark-taint", "outside text"));
-  box.append(head);
-  box.append(el("p", "note", SUPPORT.summary_note));
-  if (sm.answer) box.append(el("p", "chatbot-text", sm.answer));
-  summaryList(box, SUPPORT.agreed_title, sm.agreed, "support-agreed");
-  summaryList(box, SUPPORT.open_title, sm.open, "chatbot-open");
-  return box;
-}
-
-/** The summary and the transcript: rebuilt only when they change. */
-function paintSupportLog(c) {
-  const box = dom.supportLog;
-  if (!box) return;
-  const shown = c && !c.hidden ? c : null;
-  const key = shown ? JSON.stringify([shown.id, shown.summary, shown.transcript, shown.reference,
-    shown.saved, shown.live]) : "";
-  if (key === sp.logKey) return;
-  sp.logKey = key;
-  const out = [];
-  if (shown && shown.summary) out.push(supportSummaryBox(shown));
-  if (shown && !shown.live) {
-    if (shown.reference) {
-      out.push(el("p", "note support-reference",
-        SUPPORT.reference_line.replace("{reference}", shown.reference)));
-    }
-    const saved = supportSavedLine(shown);
-    if (saved) {
-      const p = el("p", "note support-saved", saved);
-      // Kept: a way to it (the second chat audit, 2026-09-28, desktop C5).
-      if (shown.saved === "yes") {
-        p.append(" ", button(CHATBOT.history_open, () => showView("history"),
-          { title: CHATBOT.history_open_title }));
-      }
-      out.push(p);
-    }
-  }
-  if (shown && shown.transcript.length) {
-    const tr = el("div", "chatbot-transcript");
-    tr.append(el("h3", "subhead", SUPPORT.transcript_title));
-    tr.append(el("p", "note", SUPPORT.outside_note));
-    for (const t of shown.transcript) tr.append(supportTurn(t, shown));
-    const ex = button(SUPPORT.export, () => supportAct("support_export", { id: shown.id }));
-    ex.id = "support-export";
-    tr.append(ex, el("p", "note", SUPPORT.export_note));
-    out.push(tr);
-  }
-  box.replaceChildren(...out);
-}
-
-/** The waiting offer: its words, the exact reply its card would send, the owner's other choices. */
-function supportOfferBox(c) {
-  const o = c.offer;
-  const box = el("div", "chatbot-question chatbot-outside support-offer");
-  box.append(el("p", "subhead", SUPPORT.offer_title));
-  box.append(el("p", "chatbot-text", o.words));
-  box.append(el("p", "note", `If you approve the card, Jarvis sends: "${o.reply}"`));
-  box.append(el("p", "note", SUPPORT.offer_note));
-  if (o.card === "no") box.append(el("p", "note support-card-no", SUPPORT.offer_card_no));
-  const hold = supportHoldingLine(c);
-  if (hold) box.append(el("p", "note", hold));
-  if (o.said) box.append(el("p", "note failed", o.said));
-  const actions = el("div", "row-actions");
-  for (const a of supportOfferActions(c)) {
-    if (a === "decline") {
-      actions.append(button(SUPPORT.decline, () => supportAct("support_answer", {
-        id: c.id, offer: o.id, choice: "decline", text: null }), { live: true }));
-    }
-    if (a === "say_else") {
-      actions.append(button(SUPPORT.say_else, () => {
-        sp.sayOpen = !sp.sayOpen;
-        paintSupport();
-      }));
-    }
-    if (a === "take_over") {
-      actions.append(button(SUPPORT.take_over, () => supportAct("support_answer", {
-        id: c.id, offer: o.id, choice: "takeover", text: null })));
-    }
-  }
-  box.append(actions);
-  if (sp.sayOpen) {
-    const lab = el("label", "lbl", SUPPORT.say_else);
-    const input = el("input", "field");
-    input.type = "text";
-    input.maxLength = 1200;
-    input.id = "support-say";
-    lab.append(input);
-    const send = button(SUPPORT.say_send, async () => {
-      await supportAct("support_answer", { id: c.id, offer: o.id, choice: "say",
-        text: input.value });
-      sp.sayOpen = false;
-    }, { live: true });
-    send.id = "support-say-send";
-    box.append(lab, send, el("p", "note", SUPPORT.say_note));
-  }
-  return box;
-}
-
-/**
- * "Solve it here" on the PC: the same alert the phone gets, pointing at the
- * browser window on this PC (handoff.js). Only a site and a reason - never
- * a picture or a word from the page.
- */
-function handoffAlert(line) {
-  const box = el("div", "chatbot-handoff");
-  box.setAttribute("role", "status");
-  box.append(el("p", "subhead", line.title), el("p", "note", line.text));
-  return box;
-}
-
-function paintSupport() {
-  const box = dom.support;
-  if (!box) return;
-  const v = sp.view;
-  if (dom.supportVersion) dom.supportVersion.textContent = v ? supportVersionLine(v) : "";
-  if (!v) {
-    const line = el("p", "empty", sp.error ? `Could not read it: ${sp.error}` : "Reading…");
-    if (sp.error) {
-      line.classList.add("failed");
-      line.append(" ", button("Retry", loadSupport));
-    }
-    box.replaceChildren(line);
-    if (dom.supportForm) dom.supportForm.hidden = true;
-    paintSupportLog(null);
-    return;
-  }
-  if (!v.available) {
-    box.replaceChildren(el("p", "empty", v.why || SUPPORT.missing));
-    if (dom.supportForm) dom.supportForm.hidden = true;
-    paintSupportLog(null);
-    return;
-  }
-  const c = v.chat;
-  const out = [];
-  if (sp.error) out.push(el("p", "empty failed", `Could not read it again: ${sp.error}`));
-  if (sp.gone) out.push(el("p", "note", SUPPORT.gone));
-  if (c) {
-    const now = el("div", "chatbot-now support-now");
-    now.dataset.state = c.state;
-    now.append(el("p", "chatbot-head", c.live ? supportTalkingLine(c)
-      : `${c.companyName}: ${supportStatusLine(c)}`));
-    if (c.live) now.append(el("p", "chatbot-line", supportStatusLine(c)));
-    const waitsForYou = c.state === "paused" ? handoffPcLine(v.handoff, "support", c.id) : null;
-    if (waitsForYou) now.append(handoffAlert(waitsForYou));
-    if (c.state !== "refused") now.append(el("p", "note", supportProgress(c)));
-    if (c.tierName) now.append(el("p", "note", `${SUPPORT.version}: ${c.tierName}`));
-    if (c.hidden) {
-      now.append(hiddenBlock("Asks Windows Hello - your PIN, fingerprint or face - then shows the chat.",
-        SUPPORT.hidden));
-    } else {
-      if (c.goal) now.append(el("p", "note", `Your goal: ${c.goal}`));
-      if (c.details.length) {
-        now.append(el("p", "note support-details-line", "Jarvis may give: "
-          + c.details.map((d) => `${d.name}: ${d.value}`).join("; ")));
-      }
-      if (c.question) {
-        const q = el("div", "chatbot-question chatbot-outside");
-        q.append(el("p", "subhead", SUPPORT.question_title));
-        q.append(el("p", "chatbot-text", c.question));
-        q.append(el("p", "note", SUPPORT.question_note));
-        now.append(q);
-      }
-      if (c.offer) now.append(supportOfferBox(c));
-    }
-    const actions = el("div", "row-actions");
-    for (const a of supportActionsOf(c)) {
-      if (a === "take_over") {
-        const b = button(SUPPORT.take_over, () => supportAct("support_takeover", { id: c.id }));
-        b.title = SUPPORT.take_over_note;
-        actions.append(b);
-      }
-      if (a === "resume") actions.append(button(SUPPORT.resume, () => supportAct("chatbot_resume"), { live: true }));
-      if (a === "stop") actions.append(button(SUPPORT.stop, () => supportAct("support_stop", { id: c.id }), { danger: true }));
-    }
-    if (actions.childElementCount) now.append(actions);
-    out.push(now);
-  } else {
-    out.push(el("p", "empty", "No support chat yet."));
-  }
-  box.replaceChildren(...out);
-  paintSupportLog(c);
-  paintSupportForm(v);
-  const live = Boolean(c && c.live);
-  if (!live) sp.sayOpen = false;
-  if (live && !sp.timer) {
-    sp.timer = setInterval(() => {
-      if (state.view === "work" && !sp.loading) loadSupport();
-    }, SUPPORT_POLL_MS);
-  }
-  if (!live && sp.timer) {
-    clearInterval(sp.timer);
-    sp.timer = null;
-  }
-}
-
-function renderSupport() {
-  paintSupport();
-  if (IS_TAURI && !sp.loading && Date.now() - sp.at > SUPPORT_READ_MS) loadSupport();
-}
-
-if (dom.supportForm) {
-  dom.supportForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    supportStart();
-  });
-}
-if (dom.supportCompany) {
-  dom.supportCompany.addEventListener("change", () => {
-    if (sp.view && sp.view.available) paintSupportForm(sp.view);
-  });
-}
-if (dom.supportAdd) {
-  dom.supportAdd.addEventListener("click", () => {
-    if (sp.rows.length >= SUPPORT_MAX_DETAILS) {
-      toast(`At most ${SUPPORT_MAX_DETAILS} details.`, "bad");
-      return;
-    }
-    sp.rows.push({ name: "", value: "" });
-    sp.rowsKey = "";
-    paintSupportRows();
-  });
-}
-if (dom.supportStart) {
-  liveButtons.add(dom.supportStart);
-  syncLiveButton(dom.supportStart);
-}
-
-/* ==========================================================================
-   Coming up - timers, alarms, reminders and the to-do list (the owner's
-   decisions of 2026-09-25; JARVIS-API.md section 21; coming-up.js).
-
-   Read through its own command (brain/schedule.rs), not brain_read: while
-   the private lists are hidden Rust takes the words out. Every change is
-   ONE job (Pause / Resume / Delete / Done) or one new to-do item, held on a
-   stale link, with no card - none of them can make Jarvis do more. There is
-   no "delete all". The `schedule` event (ids and the kind only) reads the
-   list again; a running timer counts down here once a second from what the
-   PC last said.
-   ========================================================================== */
-
-const upL = { view: null, error: "", loading: false, again: false, at: 0, readAt: 0 };
-const SCHEDULE_READ_MS = 15000;
-/** id -> {span, job} for the countdowns the ticker repaints. */
-const ticking = new Map();
-let tickTimer = null;
-
-async function loadComingUp() {
-  if (!IS_TAURI) return;
-  if (upL.loading) {
-    upL.again = true;
-    return;
-  }
-  upL.loading = true;
-  try {
-    upL.view = readSchedule(await invoke("brain_schedule"));
-    upL.error = "";
-    upL.readAt = Date.now();
-  } catch (error) {
-    upL.error = errorText(error);
-  } finally {
-    upL.loading = false;
-    upL.at = Date.now();
-  }
-  if (upL.again) {
-    upL.again = false;
-    await loadComingUp();
-    return;
-  }
-  if (state.view === "work") {
-    paintComingUp();
-    // A goal's weekly check-in lives on this very list (goals.js's own
-    // module doc says why) - repaint it too, so its "waiting"/"paused"/next
-    // note stays in step with Coming up rather than needing its own read.
-    paintGoals();
-  }
-}
-
-async function scheduleAct(job, action) {
-  try {
-    // Snooze says how long (10 minutes), so the PC and this button agree.
-    const args = action === "snooze" ? { id: job.id, action, seconds: SNOOZE_SECONDS }
-      : { id: job.id, action };
-    const out = await invoke("brain_schedule_act", args);
-    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
-    else toast(String((out && out.said) || "Done."), "ok");
-  } catch (error) {
-    toast(errorText(error), "bad");
-  }
-  await loadComingUp();
-}
-
-/**
- * One new item, on the to-do list or (with `list`) a named list - the
- * list's own Add box. Held on a stale link.
- */
-async function addTodo(input = dom.todoText, list = null, title = "To-do list") {
-  const words = input ? input.value.trim() : "";
-  if (!words) return;
-  if (!linkWords(currentLink()).canAct) {
-    toast(STALE_TITLE, "bad");
-    return;
-  }
-  const where = title.charAt(0).toLowerCase() + title.slice(1);
-  try {
-    const out = await invoke("brain_schedule_add_todo", list ? { text: words, list } : { text: words });
-    if (out && out.ok === false) {
-      toast(String(out.error || "Refused."), "bad");
-    } else {
-      toast(out && out.job && out.job.already ? `That is already on your ${where}.`
-        : `Added to your ${where}.`, "ok");
-      input.value = "";
-    }
-  } catch (error) {
-    toast(errorText(error), "bad");
-  }
-  await loadComingUp();
-}
-
-/**
- * "Clear list" under a NAMED list: "are you sure?" first, like Forget, then
- * ONE request naming the list and how many items this page showed - the PC
- * clears nothing if that number is no longer right. Held on a stale link.
- */
-async function clearList(l) {
-  if (!window.confirm(clearListQuestion(l.title, l.items.length))) return;
-  try {
-    const out = await invoke("brain_schedule_clear_list", { list: l.name, count: l.items.length });
-    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
-    else toast(String((out && out.said) || "Cleared."), "ok");
-  } catch (error) {
-    toast(errorText(error), "bad");
-  }
-  await loadComingUp();
-}
-
-/** Something that went off in the last hour: its words, when, and Snooze. */
-function wentOffRow(job) {
-  const item = row({
-    tag: tagOf(job),
-    state: "warn",
-    title: titleOf(job),
-    meta: wentOffMeta(job),
-    actions: WENT_OFF_ACTIONS.map((a) =>
-      button(labelOf(a), () => scheduleAct(job, a), { live: true })),
-  });
-  item.dataset.id = job.id;
-  return item;
-}
-
-/**
- * The named lists, each under its own heading: its items (Done / Delete),
- * an Add box, and Clear list. While the private lists are hidden the names
- * and words are gone (Rust took them out) and nothing is offered but Show.
- */
-function paintNamedLists(v) {
-  const box = dom.namedLists;
-  if (!box) return;
-  const out = [];
-  for (const l of namedLists(v)) {
-    const part = el("div", "named-list");
-    part.dataset.list = l.name;
-    part.append(el("h3", "subhead", l.title));
-    const list = el("div", "rows");
-    for (const j of l.items) list.append(scheduleRow(j));
-    part.append(list);
-    if (!v.hidden) {
-      const form = el("form", "todo-form");
-      form.autocomplete = "off";
-      const input = el("input", "field todo-text");
-      input.type = "text";
-      input.maxLength = 300;
-      input.placeholder = addPlaceholder(l.title);
-      input.setAttribute("aria-label", addPlaceholder(l.title));
-      const add = el("button", "btn small", "Add");
-      add.type = "submit";
-      liveButtons.add(add);
-      syncLiveButton(add);
-      form.append(input, add);
-      form.addEventListener("submit", (event) => {
-        event.preventDefault();
-        addTodo(input, l.name, l.title);
-      });
-      part.append(form);
-      const actions = el("div", "row");
-      actions.append(button(CLEAR_LIST_LABEL, () => clearList(l), { live: true, danger: true }));
-      part.append(actions);
-    }
-    out.push(part);
-  }
-  box.replaceChildren(...out);
-}
-
-/**
- * The standby schedule: two times, set up at once on the PC with no card
- * (since 2026-09-26; the PC's answer says the next night). It then sits in
- * the list above like any repeating job. Held on a stale link, like every
- * change here; Rust refuses it too.
- */
-async function addStandby() {
-  const times = standbyTimes(dom.standbyStart && dom.standbyStart.value,
-    dom.standbyEnd && dom.standbyEnd.value);
-  if (!times) {
-    toast(STANDBY_BAD_TIMES, "bad");
-    return;
-  }
-  if (!linkWords(currentLink()).canAct) {
-    toast(STALE_TITLE, "bad");
-    return;
-  }
-  try {
-    const out = await invoke("brain_schedule_add_standby", { start: times.at, end: times.until });
-    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
-    else toast(String((out && out.said) || "Done."), "ok");
-  } catch (error) {
-    toast(errorText(error), "bad");
-  }
-  await loadComingUp();
-}
-
-function scheduleRow(job) {
-  const since = Date.now() - upL.readAt;
-  const item = row({
-    tag: tagOf(job),
-    state: job.state === "waiting" ? "warn" : job.state === "paused" ? "" : "ok",
-    title: titleOf(job),
-    meta: metaOf(job, since),
-    actions: actionsOf(job).map((a) =>
-      button(labelOf(a), () => scheduleAct(job, a), { live: true, danger: a === "delete" })),
-  });
-  item.dataset.id = job.id;
-  if (job.kind === "timer" && job.state === "active") {
-    const span = item.querySelector(".row-meta");
-    if (span) {
-      span.classList.add("countdown");
-      ticking.set(job.id, { span, job });
-    }
-  }
-  return item;
-}
-
-function tick() {
-  if (state.view !== "work" || !ticking.size) return;
-  const since = Date.now() - upL.readAt;
-  let finished = false;
-  for (const [id, { span, job }] of ticking) {
-    if (!span.isConnected) {
-      ticking.delete(id);
-      continue;
-    }
-    span.textContent = metaOf(job, since)[0] || "";
-    if (job.left !== null && job.left - since / 1000 <= 0) finished = true;
-  }
-  // The PC says when it went off; read again once the count reaches zero.
-  if (finished && !upL.loading && Date.now() - upL.at > 2000) loadComingUp();
-}
-
-function paintComingUp() {
-  paintToday();
-  const box = dom.comingUp;
-  if (!box) return;
-  ticking.clear();
-  const v = upL.view;
-  if (!v) {
-    const line = el("p", "empty", upL.error ? `Could not read Coming up: ${upL.error}` : "Reading…");
-    if (upL.error) {
-      line.classList.add("failed");
-      line.append(" ", button("Retry", loadComingUp));
-    }
-    box.replaceChildren(line);
-    if (dom.todoList) dom.todoList.replaceChildren();
-    return;
-  }
-  if (!v.available) {
-    box.replaceChildren(el("p", "empty", v.why || SCHEDULE_MISSING));
-    if (dom.todoList) dom.todoList.replaceChildren();
-    if (dom.namedLists) dom.namedLists.replaceChildren();
-    if (dom.wentOffPart) dom.wentOffPart.hidden = true;
-    if (dom.listsNote) dom.listsNote.hidden = true;
-    if (dom.todoForm) dom.todoForm.hidden = true;
-    if (dom.standbyForm) dom.standbyForm.hidden = true;
-    if (dom.standbyIsSet) dom.standbyIsSet.hidden = true;
-    return;
-  }
-  if (dom.todoForm) dom.todoForm.hidden = false;
-  // One standby schedule at most: the form while there is none, a pointer
-  // to its row while there is.
-  const hasStandby = Boolean(standbyOf(v));
-  if (dom.standbyForm) dom.standbyForm.hidden = hasStandby;
-  if (dom.standbyIsSet) dom.standbyIsSet.hidden = !hasStandby;
-  rows(box, v.jobs, scheduleRow, EMPTY_JOBS);
-  if (upL.error) box.prepend(el("p", "empty failed", `Could not read it again: ${upL.error}`));
-  // Just went off (the last hour): Snooze, ONE job per tap.
-  if (dom.wentOffPart) dom.wentOffPart.hidden = !v.wentOff.length;
-  if (dom.wentOff) rows(dom.wentOff, v.wentOff, wentOffRow, "");
-  if (dom.todoList) rows(dom.todoList, todoItems(v), scheduleRow, EMPTY_TODO);
-  paintNamedLists(v);
-  // Its example says "milk": nothing of that shape shows while hidden.
-  if (dom.listsNote) dom.listsNote.hidden = v.hidden;
-  if (v.hidden) {
-    box.append(hiddenNode(0, "words"));
-  }
-  if (anyTicking(v) && !tickTimer) tickTimer = setInterval(tick, 1000);
-  if (!anyTicking(v) && tickTimer) {
-    clearInterval(tickTimer);
-    tickTimer = null;
-  }
-}
-
-/* ==========================================================================
-   Widgets (widget-board.js; JARVIS-API.md section 86; brain/widgets.rs)
-
-   The owner's words become a PREVIEW on the PC (its AI model makes a small
-   description from a fixed menu, never code, and the PC checks it); Add
-   keeps it exactly as shown, Discard drops it, Delete removes a widget at
-   once. No approval card - the PC's own `no_card` sentence says why. Add
-   and Delete are held on a stale link; making a preview is not (it adds
-   nothing). Words pasted into the box are sent as pasted, which the PC
-   refuses: only the owner's own typed or spoken words make a widget.
-   ========================================================================== */
-
-const wid = { view: null, error: "", loading: false, at: 0, making: false, pasted: false };
-const WIDGETS_READ_MS = 15000;
-
-async function loadWidgets() {
-  if (!IS_TAURI || wid.loading) return;
-  wid.loading = true;
-  try {
-    wid.view = readWidgets(await invoke("brain_widgets"));
-    wid.error = "";
-  } catch (error) {
-    wid.error = errorText(error);
-  } finally {
-    wid.loading = false;
-    wid.at = Date.now();
-  }
-  if (state.view === "work") paintWidgets();
-}
-
-function widgetRow(w, draft) {
-  const actions = draft
-    ? [button(WIDGETS_DISCARD_LABEL, () => widgetAct("brain_widgets_discard", { draft: w.id })),
-      button(WIDGETS_ADD_LABEL, () => widgetAct("brain_widgets_add", { draft: w.id }),
-        { live: true })]
-    : [button(WIDGETS_DELETE_LABEL, () => widgetAct("brain_widgets_delete", { id: w.id }),
-      { live: true, danger: true })];
-  const item = row({
-    tag: draft ? "preview" : "widget",
-    state: draft ? "warn" : "ok",
-    title: w.name || (wid.view && wid.view.hidden ? "(hidden) widget" : "Widget"),
-    meta: [w.said, ...w.parts],
-    actions,
-  });
-  item.dataset.id = w.id;
-  return item;
-}
-
-function paintWidgets() {
-  const box = dom.widgets;
-  if (!box) return;
-  const v = wid.view;
-  const out = [];
-  if (!v) {
-    const line = el("p", "empty", wid.error ? `Could not read Widgets: ${wid.error}` : "Reading…");
-    if (wid.error) line.append(" ", button("Retry", loadWidgets));
-    out.push(line);
-  } else if (!v.available) {
-    out.push(el("p", "empty", v.why || WIDGETS_MISSING));
-  } else {
-    if (v.drafts.length) {
-      out.push(el("h3", "subhead", WIDGETS_PREVIEW_TITLE));
-      const list = el("div", "rows");
-      for (const d of v.drafts) list.append(widgetRow(d, true));
-      out.push(list);
-      if (v.noCard) out.push(el("p", "note", v.noCard));
-    }
-    const list = el("div", "rows");
-    for (const w of v.widgets) list.append(widgetRow(w, false));
-    out.push(v.widgets.length ? list : el("p", "empty", WIDGETS_EMPTY));
-    if (v.hidden) out.push(hiddenNode(0, "words"));
-  }
-  if (dom.widgetsForm) dom.widgetsForm.hidden = Boolean(v && !v.available);
-  if (dom.widgetsMake) {
-    dom.widgetsMake.disabled = wid.making;
-    dom.widgetsMake.textContent = wid.making ? WIDGETS_MAKING_LABEL : WIDGETS_MAKE_LABEL;
-  }
-  box.replaceChildren(...out);
-}
-
-async function widgetAct(command, args) {
-  if (command !== "brain_widgets_discard" && !linkWords(currentLink()).canAct) {
-    toast(STALE_TITLE, "bad");
-    return;
-  }
-  try {
-    const out = await invoke(command, args);
-    if (out && out.said) toast(String(out.said), "ok");
-  } catch (error) {
-    toast(errorText(error), "bad");
-  }
-  await loadWidgets();
-}
-
-async function makeWidget() {
-  if (wid.making) return;
-  const args = widgetDraftArgs(dom.widgetsWords && dom.widgetsWords.value, wid.pasted);
-  if (args.error) {
-    toast(args.error, "bad");
-    return;
-  }
-  wid.making = true;
-  paintWidgets();
-  try {
-    const out = await invoke("brain_widgets_draft", args);
-    toast(String((out && out.said) || "Preview made."), "ok");
-    if (dom.widgetsWords) dom.widgetsWords.value = "";
-    wid.pasted = false;
-  } catch (error) {
-    toast(errorText(error), "bad");
-  } finally {
-    wid.making = false;
-  }
-  await loadWidgets();
-}
-
-if (dom.widgetsForm) {
-  dom.widgetsForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    makeWidget();
-  });
-}
-if (dom.widgetsWords) {
-  // Pasted words are not the owner's own (ARCHITECTURE section 3): said to
-  // the PC as pasted, which refuses them. Emptying the box starts again.
-  dom.widgetsWords.addEventListener("paste", () => { wid.pasted = true; });
-  dom.widgetsWords.addEventListener("input", () => {
-    if (!dom.widgetsWords.value) wid.pasted = false;
-  });
-}
-
-function renderComingUp() {
-  paintWidgets();
-  if (IS_TAURI && !wid.loading && Date.now() - wid.at > WIDGETS_READ_MS) loadWidgets();
-  paintComingUp();
-  if (IS_TAURI && !upL.loading && Date.now() - upL.at > SCHEDULE_READ_MS) loadComingUp();
-}
-
-/* "Photo to reminder" (photo-reminder.js; JARVIS-API.md section 83): a
-   picture file, shrunk here to a screen capture's limits, goes to the PC,
-   which reads its words and PROPOSES a reminder. Nothing is set up until
-   "Add a Jarvis reminder" (ONE photo_add_reminder, held on a stale link).
-   The picture and its words live only in this page's memory, and go when
-   the proposal is closed. */
-let photoView = null;
-
-async function findDateInFile(file) {
-  if (!dom.photoProposal) return;
-  if (photoView) photoView.close();
-  photoView = null;
-  dom.photoProposal.hidden = false;
-  dom.photoProposal.textContent = PHOTO_READING;
-  dom.photoChoose.disabled = true;
-  let out;
-  try {
-    const image = await shrinkPicture(file, window);
-    out = await invoke("photo_scan", { image });
-  } catch (error) {
-    dom.photoProposal.textContent = errorText(error);
-    return;
-  } finally {
-    dom.photoChoose.disabled = false;
-  }
-  photoView = mountPhotoProposal(dom.photoProposal, out, {
-    invoke,
-    canAct: () => linkWords(currentLink()).canAct,
-    say: (said) => toast(said, "ok"),
-    onDone: () => loadComingUp(),
-    onClose: () => { photoView = null; },
-  });
-}
-
-if (dom.photoNote) dom.photoNote.textContent = PHOTO_NOTE;
-if (dom.photoChoose && dom.photoFile) {
-  dom.photoChoose.addEventListener("click", () => dom.photoFile.click());
-  dom.photoFile.addEventListener("change", () => {
-    const file = dom.photoFile.files && dom.photoFile.files[0];
-    // Cleared at once, so the same file can be chosen again and no
-    // reference to it is left on the input.
-    dom.photoFile.value = "";
-    if (file) findDateInFile(file);
-  });
-}
-
-if (dom.todoForm) {
-  dom.todoForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    addTodo();
-  });
-}
-if (dom.todoAdd) {
-  liveButtons.add(dom.todoAdd);
-  syncLiveButton(dom.todoAdd);
-}
-if (dom.standbyForm) {
-  dom.standbyForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    addStandby();
-  });
-}
-if (dom.standbyAdd) {
-  liveButtons.add(dom.standbyAdd);
-  syncLiveButton(dom.standbyAdd);
-}
-
-/* ==========================================================================
-   Goals - a plan the owner edits, one card per acting step (the owner's
-   "build it now", 2026-09-27; JARVIS-API.md section 59; goals.js).
-
-   Read through its own command (brain/goals.rs), not brain_read - the words
-   are taken out while the private lists are hidden, same as Coming up. A new
-   draft and marking a step raise no card; Stop tracking is one tap,
-   immediate, no confirm. Accepting a draft is the only place this can raise
-   a card, and it is the backend's own weekly-check-in card, never one this
-   window invents - see goals.js's own module doc for why that check-in's
-   live state is read from the very same Coming up list rather than a second
-   source of truth.
-   ========================================================================== */
-
-const gl = { view: null, error: "", loading: false, again: false, at: 0,
-  // The life benchmarks a step can follow (goals.js measureChoices), read
-  // from Projects only while a draft is open; `undo` is the last tick.
-  measures: [], measuresAt: 0, undo: null };
-const GOALS_READ_MS = 20000;
-
-/** goal id -> its working plan while it is still a draft, edited but not yet
- *  sent to Accept. Cleared once accepted (or the goal is gone). */
-const draftPlans = new Map();
-
-/** goal id -> the id of the weekly check-in job accept() handed back for
- *  it, so a later read can find that SAME job even if its text ever
- *  changed - a reload of the app still falls back to matching by text
- *  (goals.js checkinJobFor). */
-const checkinJobIds = new Map();
-
-async function loadGoals() {
-  if (!IS_TAURI) return;
-  if (gl.loading) {
-    gl.again = true;
-    return;
-  }
-  gl.loading = true;
-  try {
-    gl.view = readGoals(await invoke("brain_goals"));
-    gl.error = "";
-  } catch (error) {
-    gl.error = errorText(error);
-  } finally {
-    gl.loading = false;
-    gl.at = Date.now();
-  }
-  if (gl.again) {
-    gl.again = false;
-    await loadGoals();
-    return;
-  }
-  if (state.view === "work") paintGoals();
-}
-
-/** The working copy of a draft's plan - made once, from what the PC sent,
- *  then edited in place so typing does not get wiped by the next read. */
-function workingPlan(goal) {
-  if (!draftPlans.has(goal.id)) {
-    const copy = goal.plan.map((s) => ({ ...s }));
-    // While the private lists are hidden the PC sends the steps with their
-    // words taken out. Keeping THAT copy meant the blanks stayed after Show
-    // and Accept refused an empty plan (bug audit 2026-09-29). Not kept.
-    if (goal.hidden) return copy;
-    draftPlans.set(goal.id, copy);
-  }
-  return draftPlans.get(goal.id);
-}
-
-async function createGoal() {
-  const input = dom.goalsNewText;
-  const words = input ? input.value.trim() : "";
-  if (!words) return;
-  if (!linkWords(currentLink()).canAct) {
-    toast(STALE_TITLE, "bad");
-    return;
-  }
-  try {
-    const out = await invoke("brain_goals_create", { text: words });
-    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
-    else {
-      toast("Added as a draft.", "ok");
-      input.value = "";
-    }
-  } catch (error) {
-    toast(errorText(error), "bad");
-  }
-  await loadGoals();
-}
-
-async function acceptGoal(goal) {
-  const limits = gl.view ? gl.view.limits : undefined;
-  const plan = workingPlan(goal);
-  if (!planIsValid(plan, limits)) {
-    toast("Add at least one step, each with some words, none of them too long.", "bad");
-    return;
-  }
-  try {
-    const out = await invoke("brain_goals_accept", { id: goal.id, plan: planBody(plan) });
-    if (out && out.ok === false) {
-      toast(String(out.error || "Refused."), "bad");
-    } else {
-      toast("Accepted - Jarvis will check in once a week.", "ok");
-      draftPlans.delete(goal.id);
-      if (out && out.goal && out.goal.checkin && out.goal.checkin.id) {
-        checkinJobIds.set(goal.id, out.goal.checkin.id);
-      }
-    }
-  } catch (error) {
-    toast(errorText(error), "bad");
-  }
-  await loadGoals();
-  // The new job is on Coming up's own list, not this read - fetch it too,
-  // straight away, so the check-in's state shows without a second visit.
-  await loadComingUp();
-}
-
-/** The number benchmarks with a target (life and coding), for "Follows a number" (a read of
- *  Projects; nothing is written). Once a minute at most, and only when a
- *  draft is on screen. */
-async function loadMeasures() {
-  if (!IS_TAURI) return;
-  gl.measuresAt = Date.now();
-  try {
-    const list = await invoke("projects_read", {});
-    const answers = await Promise.all(benchProjectIds(list).map((project) =>
-      invoke("projects_read", { project }).catch(() => null)));
-    gl.measures = measureChoices(list, answers);
-  } catch {
-    gl.measures = [];
-  }
-  if (state.view === "work") paintGoals();
-}
-
-async function goalStep(goal, step, index, done, undoing = false) {
-  try {
-    // By the step's id when the PC gave one (it stays put when steps move),
-    // else by position, as before.
-    const args = step && step.id
-      ? { id: goal.id, stepId: step.id, done }
-      : { id: goal.id, index, done };
-    const out = await invoke("brain_goals_step", args);
-    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
-    else if (done && !undoing) {
-      gl.undo = { goalId: goal.id, stepId: step && step.id ? step.id : "", index,
-        name: goal.hidden ? "" : String((step && step.step) || "") };
-    } else gl.undo = null;
-  } catch (error) {
-    // A locked step ticked from a stale screen: the PC answers 409 with its
-    // own sentence, which is shown as it is. Nothing changed.
-    toast(errorText(error), "bad");
-  }
-  await loadGoals();
-}
-
-async function stopGoal(goal) {
-  try {
-    const out = await invoke("brain_goals_stop", { id: goal.id });
-    if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
-    else toast("Stopped tracking.", "ok");
-  } catch (error) {
-    toast(errorText(error), "bad");
-  }
-  checkinJobIds.delete(goal.id);
-  await loadGoals();
-  await loadComingUp();
-}
-
-function goalStepEditorRow(plan, index) {
-  const wrap = el("div", "goal-editor-step");
-  const line = el("div", "goal-editor-row");
-  const step = el("input", "field goal-step-field");
-  step.type = "text";
-  step.maxLength = (gl.view && gl.view.limits.text) || 300;
-  step.value = plan[index].step;
-  step.placeholder = STEP_PLACEHOLDER;
-  step.setAttribute("aria-label", STEP_PLACEHOLDER);
-  step.addEventListener("input", () => {
-    plan[index].step = step.value;
-  });
-  const by = el("input", "field goal-by-field");
-  by.type = "text";
-  by.maxLength = (gl.view && gl.view.limits.by) || 40;
-  by.value = plan[index].by;
-  by.placeholder = BY_PLACEHOLDER;
-  by.setAttribute("aria-label", BY_PLACEHOLDER);
-  by.addEventListener("input", () => {
-    plan[index].by = by.value;
-  });
-  line.append(step, by, button(REMOVE_STEP_LABEL, () => {
-    const name = String(plan[index].step || "").trim();
-    const { touched } = removeStepAt(plan, index);
-    // The PC does not clean other steps' "Do these first" for the app: it
-    // was done above, and the owner is told before anything is saved.
-    if (touched) toast(goalFill(NEEDS_CLEANED, { step: name || "the step" }), "ok");
-    paintGoals();
-  }, { danger: true }));
-  wrap.append(line);
-  if (gl.view && gl.view.locks) wrap.append(goalLockEditor(plan, index));
-  return wrap;
-}
-
-/** "Do these first" (up to 3 other steps) and "Follows a number", for one
- *  step of a draft. Plain checkboxes and a list, so a keyboard and a screen
- *  reader reach them; the PC checks circles and the rest when Accept is
- *  pressed and its sentence is shown as sent. */
-function goalLockEditor(plan, index) {
-  const s = plan[index];
-  const max = (gl.view && gl.view.limits.needs) || 3;
-  const box = el("div", "goal-lock-editor");
-  const group = el("fieldset", "goal-needs");
-  group.append(el("legend", "goal-lock-legend", NEEDS_LABEL));
-  const choices = needChoices(plan, index);
-  if (!choices.length) group.append(el("span", "goal-note", NEEDS_NONE));
-  else group.append(el("span", "goal-note", NEEDS_UNDER));
-  const boxes = [];
-  const sync = () => {
-    const full = (s.needs || []).length >= max;
-    for (const [cb, id] of boxes) cb.disabled = full && !cb.checked && !(s.needs || []).includes(id);
-    note.hidden = !full;
-  };
-  const note = el("span", "goal-note", goalFill(NEEDS_FULL, { max }));
-  for (const c of choices) {
-    const label = el("label", "goal-need");
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = (s.needs || []).includes(c.id);
-    cb.addEventListener("change", () => {
-      if (!setNeed(s, c.id, cb.checked, max)) cb.checked = (s.needs || []).includes(c.id);
-      sync();
-    });
-    boxes.push([cb, c.id]);
-    label.append(cb, el("span", "", c.label));
-    group.append(label);
-  }
-  group.append(note);
-  sync();
-  box.append(group);
-
-  const pick = el("label", "goal-measure");
-  pick.append(el("span", "goal-lock-legend", MEASURE_LABEL));
-  const sel = el("select", "field goal-measure-select");
-  const none = el("option", "", MEASURE_NONE);
-  none.value = "";
-  sel.append(none);
-  const key = (m) => `${m.project}:${m.bench}`;
-  const current = s.measure ? key(s.measure) : "";
-  const known = gl.measures.map((m) => key(m));
-  const list = [...gl.measures];
-  if (current && !known.includes(current)) {
-    // The number is not in the list read just now (still reading, or the
-    // Projects tab is hidden): keep the choice, name it as the PC did.
-    list.unshift({ project: s.measure.project, bench: s.measure.bench,
-      label: s.measureName || FOLLOWS_LABEL.replace(/:\s*$/, "") });
-  }
-  for (const m of list) {
-    const o = el("option", "", m.label);
-    o.value = key(m);
-    sel.append(o);
-  }
-  sel.value = current;
-  sel.addEventListener("change", () => {
-    if (!sel.value) {
-      s.measure = null;
-      return;
-    }
-    const [project, bench] = sel.value.split(":");
-    s.measure = { project, bench };
-    const m = list.find((x) => key(x) === sel.value);
-    s.measureName = m ? m.label : s.measureName;
-  });
-  pick.append(sel);
-  box.append(pick);
-  box.append(el("p", "goal-note", list.length ? MEASURE_UNDER : MEASURE_EMPTY));
-  return box;
-}
-
-function draftGoalBlock(goal) {
-  const plan = workingPlan(goal);
-  const block = el("div", "goal-block");
-  const head = el("div", "goal-head");
-  head.append(el("span", "goal-title", goal.hidden ? "" : goal.text));
-  head.append(el("span", "row-tag", statusLabel(goal.status)));
-  block.append(head);
-  const steps = el("div", "goal-steps");
-  plan.forEach((_, i) => steps.append(goalStepEditorRow(plan, i)));
-  block.append(steps);
-  const maxSteps = (gl.view && gl.view.limits.steps) || 7;
-  const actions = el("div", "goal-actions");
-  actions.append(button(ADD_STEP_LABEL, () => {
-    if (plan.length >= maxSteps) {
-      toast(`A plan can have at most ${maxSteps} steps - keep the big ones and drop the rest.`, "bad");
-      return;
-    }
-    plan.push(newStep(plan, Boolean(gl.view && gl.view.locks)));
-    paintGoals();
-  }));
-  actions.append(button(ACCEPT_LABEL, () => acceptGoal(goal), { live: true }));
-  block.append(actions);
-  return block;
-}
-
-function goalStepRow(goal, step, index) {
-  const row = stepRow(step, { hideWords: goal.hidden });
-  const line = el("div", "goal-step");
-  if (row.locked) line.dataset.state = "locked";
-  const label = el("label", "goal-step-label");
-  const box = document.createElement("input");
-  box.type = "checkbox";
-  box.checked = step.done;
-  const active = goal.status === "active";
-  // A locked step's tick is shown but disabled, with the reason beside it
-  // (a stale screen that ticks it anyway gets the PC's 409 sentence).
-  box.disabled = !active || row.locked;
-  if (active && !row.locked) {
-    liveButtons.add(box);
-    syncLiveButton(box);
-  }
-  const why = el("p", "goal-note goal-lock-line");
-  why.id = `goal-why-${goal.id}-${index}`;
-  const lines = [];
-  if (row.reachedLine) lines.push(row.reachedLine);
-  if (row.lockLine) lines.push(row.lockLine);
-  if (row.goneLine) lines.push(row.goneLine);
-  if (row.follows) lines.push(row.follows);
-  if (row.label && row.label !== step.step) box.setAttribute("aria-label", row.label);
-  if (row.locked) box.setAttribute("aria-describedby", why.id);
-  box.addEventListener("change", async () => {
-    const want = box.checked;
-    box.disabled = true;
-    await goalStep(goal, step, index, want);
-  });
-  label.append(box, el("span", "goal-step-text", step.step));
-  line.append(label);
-  if (row.locked) {
-    // A padlock glyph plus the word - the word is what is said and read.
-    const tag = el("span", "row-tag goal-locked-tag");
-    const glyph = el("span", "", "\u{1F512} ");
-    glyph.setAttribute("aria-hidden", "true");
-    tag.append(glyph, GOAL_WORDS.locked);
-    line.append(tag);
-  }
-  if (row.reached) line.append(el("span", "row-tag goal-reached-tag", REACHED_TAG));
-  if (step.by) line.append(el("span", "goal-step-by", step.by));
-  if (lines.length) {
-    why.textContent = lines.join(" ");
-    line.append(why);
-  }
-  return line;
-}
-
-function activeGoalBlock(goal, jobs) {
-  const block = el("div", "goal-block");
-  const head = el("div", "goal-head");
-  head.append(el("span", "goal-title", goal.hidden ? "" : goal.text));
-  const tag = el("span", "row-tag", statusLabel(goal.status));
-  if (goal.status === "active") tag.dataset.state = "running";
-  head.append(tag);
-  block.append(head);
-  const steps = el("div", "goal-steps");
-  goal.plan.forEach((s, i) => steps.append(goalStepRow(goal, s, i)));
-  block.append(steps);
-  if (gl.undo && gl.undo.goalId === goal.id) {
-    // Undo of the last tick: one tap, no card. Unticking clears only that
-    // step; a later step stays done and then reads "(open again)".
-    const u = gl.undo;
-    const said = u.name ? goalFill(UNDO_TICKED, { step: u.name }) : "Ticked a step.";
-    const row = el("p", "goal-note goal-undo");
-    row.append(said, " ", button(UNDO_LABEL, async () => {
-      const target = goal.plan.find((x) => u.stepId && x.id === u.stepId) || goal.plan[u.index];
-      if (!target) {
-        gl.undo = null;
-        paintGoals();
-        return;
-      }
-      const idx = goal.plan.indexOf(target);
-      await goalStep(goal, target, idx, false, true);
-      if (!goal.hidden) announce(goalFill(UNTICKED, { step: target.step }), "polite");
-    }, { live: true }));
-    block.append(row);
-  }
-  if (goal.status === "active") {
-    const job = checkinJobFor(goal, jobs, checkinJobIds.get(goal.id));
-    if (job) checkinJobIds.set(goal.id, job.id);
-    for (const line of checkinLines(job, WAITING)) block.append(el("p", "goal-note", line));
-    block.append(button(STOP_LABEL, () => stopGoal(goal), { live: true, danger: true }));
-  }
-  return block;
-}
-
-function paintGoals() {
-  const box = dom.goalsList;
-  if (!box) return;
-  const v = gl.view;
-  if (!v) {
-    const line = el("p", "empty", gl.error ? `Could not read Goals: ${gl.error}` : "Reading…");
-    if (gl.error) {
-      line.classList.add("failed");
-      line.append(" ", button("Retry", loadGoals));
-    }
-    box.replaceChildren(line);
-    return;
-  }
-  if (!v.available) {
-    box.replaceChildren(el("p", "empty", v.why || GOALS_MISSING));
-    if (dom.goalsNewForm) dom.goalsNewForm.hidden = true;
-    return;
-  }
-  const full = openCount(v) >= v.limits.goals;
-  if (dom.goalsNewForm) dom.goalsNewForm.hidden = full;
-  // "Follows a number" needs Projects' benchmarks, read only while a draft
-  // is showing and at most once a minute.
-  if (v.locks && v.goals.some((g) => g.status === "draft") && IS_TAURI
-    && Date.now() - gl.measuresAt > 60000) loadMeasures();
-  if (!v.goals.length) {
-    box.replaceChildren(el("p", "empty", EMPTY_GOALS));
-  } else {
-    const jobs = (upL.view && upL.view.jobs) || [];
-    box.replaceChildren(...v.goals.map((g) =>
-      (g.status === "draft" ? draftGoalBlock(g) : activeGoalBlock(g, jobs))));
-  }
-  // The rows above already carry no words while the private lists are
-  // hidden (Rust blanked them, same as Coming up) - this only adds the
-  // "Show" prompt underneath, exactly as paintComingUp does.
-  if (v.hidden) box.append(hiddenNode(0, "words"));
-  if (full) {
-    box.append(el("p", "empty", `${v.limits.goals} goals are already open - stop tracking one before adding another.`));
-  }
-}
-
-function renderGoals() {
-  paintGoals();
-  if (IS_TAURI && !gl.loading && Date.now() - gl.at > GOALS_READ_MS) loadGoals();
-}
-
-if (dom.goalsNewForm) {
-  dom.goalsNewForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    createGoal();
-  });
-}
-if (dom.goalsNewAdd) {
-  liveButtons.add(dom.goalsNewAdd);
-  syncLiveButton(dom.goalsNewAdd);
-}
-
-/* ==========================================================================
-   Quiz me on a text (the owner's "go ahead", 2026-09-30; docs/STUDY-FROM-
-   TEXT-DESIGN.md section 11; JARVIS-API.md section 98; quiz.js).
-
-   The pasted text, the questions, the answers and the marks live in this
-   window's memory and on the PC's - NEVER in localStorage or anywhere else
-   this app writes (not even a draft). No card: the text is the owner's own
-   and only the PC's local model sees it. Every change is held on a stale
-   link. While the private lists are hidden Rust takes the questions, the
-   comments and the source passages out (brain/quiz.rs), and this section
-   shows the "Show" prompt instead.
-   ========================================================================== */
-
-const qz = { quiz: null, summary: null, shown: null, busy: "", error: "", last: null, crisis: "" };
-
-function quizReset() {
-  qz.quiz = null;
-  qz.summary = null;
-  qz.shown = null;
-  qz.busy = "";
-  qz.error = "";
-  qz.last = null;
-  qz.crisis = "";
-}
-
-/** Puts words to a refusal or a thrown error; a quiz the PC no longer holds
- *  ends the session here. Returns true when it was a problem. */
-function quizProblem(out) {
-  if (isRefusal(out)) {
-    qz.error = quizErrorWords(out);
-    if (out.error === "not_found") {
-      qz.quiz = null;
-      qz.summary = null;
-      qz.shown = null;
-    }
-    return true;
-  }
-  return false;
-}
-
-async function quizCall(cmd, args, busyWords) {
-  if (!linkWords(currentLink()).canAct) {
-    qz.error = STALE_TITLE;
-    paintQuiz();
+    dk.error = STALE_TITLE;
+    paintDecks();
     return null;
   }
-  qz.busy = busyWords;
-  qz.error = "";
-  qz.crisis = "";
-  paintQuiz();
   try {
     const out = await invoke(cmd, args);
-    qz.busy = "";
-    if (quizProblem(out)) {
-      paintQuiz();
+    if (isRefusal(out)) {
+      dk.error = Decks.refusalWords(out);
+      if (out.error === "deck_not_found" || out.error === "card_not_found") {
+        dk.opening = out.error === "deck_not_found" ? "" : dk.opening;
+        dk.at = 0;
+        loadDecks();
+      }
+      paintDecks();
       return null;
     }
+    dk.error = "";
     return out;
   } catch (error) {
-    qz.busy = "";
-    qz.error = errorText(error);
-    paintQuiz();
+    dk.error = errorText(error);
+    paintDecks();
     return null;
   }
 }
 
-async function startQuiz() {
-  const box = dom.quizText;
-  const value = box ? box.value : "";
-  const c = quizTextCount(value);
-  if (!c.ok) {
-    qz.error = quizErrorWords({ error: c.n < QUIZ_LIMITS.textMin ? "text_too_short" : "text_too_long" });
-    paintQuiz();
-    return;
+async function deckAct(id, action, name) {
+  const out = await decksCall("brain_decks_act", name === undefined ? { id, action } : { id, action, name });
+  if (!out) return false;
+  if (action === "delete" && dk.opening === id) {
+    dk.opening = "";
+    dk.cards = null;
   }
-  const out = await quizCall("brain_quiz_start", { text: value }, QUIZ_WRITING);
-  if (!out) return;
-  const quiz = readQuiz(out.quiz);
-  if (!quiz) {
-    qz.error = "Jarvis answered, but not with a quiz this app can read.";
-    paintQuiz();
-    return;
-  }
-  qz.quiz = quiz;
-  qz.summary = null;
-  qz.shown = null;
-  // The pasted text is not kept here once the questions exist.
-  box.value = "";
-  paintQuizCount();
-  paintQuiz();
+  dk.renaming = "";
+  dk.confirm = "";
+  await loadDecks();
+  return true;
 }
 
-async function checkAnswer(question, box) {
-  const c = quizAnswerCount(box.value);
-  if (!c.ok) {
-    qz.error = quizErrorWords({ error: c.n < 1 || !box.value.trim() ? "answer_empty" : "answer_too_long" });
-    paintQuiz();
+async function cardAct(id, cid, action, front, back) {
+  const args = { id, cid, action };
+  if (action === "edit") {
+    args.front = front;
+    args.back = back;
+  }
+  const out = await decksCall("brain_decks_card_act", args);
+  if (!out) return false;
+  dk.editing = "";
+  dk.confirm = "";
+  await loadDeckCards(id, false);
+  dk.at = 0;
+  await loadDecks();
+  return true;
+}
+
+async function addDeck(name) {
+  const out = await decksCall("brain_decks_create", { name });
+  if (!out) return false;
+  dk.adding = false;
+  dk.at = 0;
+  await loadDecks();
+  return true;
+}
+
+async function setNewPerDay(value, input) {
+  const n = Number(value);
+  const max = (dk.view && dk.view.limits.newPerDay) || Decks.LIMITS.newPerDay;
+  if (!Number.isInteger(n) || n < 0 || n > max) {
+    dk.error = `New cards a day is a whole number from 0 to ${max}.`;
+    if (dk.view) input.value = String(dk.view.newPerDay);
+    paintDecks();
     return;
   }
-  const value = box.value;
-  const out = await quizCall("brain_quiz_answer", { id: qz.quiz.id, n: question.n, answer: value }, QUIZ_CHECKING);
-  if (!out) return;
-  if (quizIsCrisis(out)) {
-    // A crisis answer is not marked (JARVIS-API 98.4): show the PC's own help
-    // words calmly, keep the question open, and let go of what was typed.
-    box.value = "";
-    qz.crisis = quizReadCrisis(out);
-    if (!qz.crisis) qz.error = "Jarvis answered, but not with words this app can read.";
-    const open = readQuiz(out.quiz);
-    if (open) qz.quiz = open;
-    qz.shown = null;
-    paintQuiz();
+  const out = await decksCall("brain_decks_settings", { newPerDay: n });
+  if (!out) {
+    if (dk.view) input.value = String(dk.view.newPerDay);
     return;
   }
-  const quiz = readQuiz(out.quiz);
-  if (quiz) {
-    qz.quiz = quiz;
-    qz.shown = question.n;
+  dk.at = 0;
+  await loadDecks();
+}
+
+/* ── The review session ────────────────────────────────────────────────── */
+
+async function startReview(deck) {
+  dk.review = { deck: deck || "", data: null, reveal: null, typed: "", error: "", busy: false, comes: "" };
+  paintDecks();
+  await fetchReview();
+}
+
+/** Ends the session and goes back to the deck list, read again. */
+function leaveReview() {
+  dk.review = null;
+  dk.at = 0;
+  paintDecks();
+  loadDecks();
+}
+
+/** Takes the PC's review answer into the session. */
+function takeReview(out, comes) {
+  const r = dk.review;
+  if (!r) return;
+  if (Decks.isHiddenReview(out)) {
+    r.error = Decks.REVIEW_HIDDEN;
+    r.data = null;
+    r.reveal = null;
+    return;
   }
-  paintQuiz();
+  if (isRefusal(out)) {
+    r.error = Decks.refusalWords(out);
+    return;
+  }
+  const data = Decks.readReview(out);
+  if (!data) {
+    r.error = Decks.MISSING;
+    return;
+  }
+  r.error = "";
+  r.data = data;
+  r.reveal = null;
+  r.typed = "";
+  r.comes = comes || "";
+  dk.focusNext = data.state === "card" ? "typed" : "screen-title";
 }
 
-async function finishQuiz() {
-  const questions = qz.quiz;
-  const out = await quizCall("brain_quiz_finish", { id: qz.quiz.id }, "");
-  if (!out) return;
-  qz.summary = readSummary(out.summary);
-  // The PC has forgotten the quiz by now; the words shown in the summary are
-  // the ones this window already held (empty while the lists are hidden).
-  qz.last = questions;
-  qz.quiz = null;
-  qz.shown = null;
-  paintQuiz();
+async function fetchReview() {
+  const r = dk.review;
+  if (!r) return;
+  r.busy = true;
+  try {
+    const out = await invoke("brain_review", { deck: r.deck || null });
+    takeReview(out);
+  } catch (error) {
+    r.error = errorText(error);
+  }
+  r.busy = false;
+  if (r.data && r.data.state === "no_decks") {
+    leaveReview();
+    return;
+  }
+  paintDecks();
+  if (r.data && r.data.state !== "card") {
+    // Empty / enough / paused: the next-ready day comes from the deck list.
+    dk.at = 0;
+    loadDecks();
+  }
 }
 
-async function stopQuiz() {
-  const id = qz.quiz && qz.quiz.id;
-  if (!id) return;
-  const out = await quizCall("brain_quiz_stop", { id }, "");
-  if (!out) return;
-  quizReset();
-  toast("Quiz forgotten.", "ok");
-  paintQuiz();
+async function revealCard() {
+  const r = dk.review;
+  if (!r || !r.data || !r.data.card) return;
+  if (!linkWords(currentLink()).canAct) {
+    r.error = STALE_TITLE;
+    paintDecks();
+    return;
+  }
+  r.busy = true;
+  try {
+    const out = await invoke("brain_review_reveal", { card: r.data.card.id });
+    if (Decks.isHiddenReview(out)) {
+      r.error = Decks.REVIEW_HIDDEN;
+    } else if (isRefusal(out)) {
+      r.error = Decks.refusalWords(out);
+      if (out.error === "card_not_found") {
+        r.busy = false;
+        await fetchReview();
+        return;
+      }
+    } else {
+      const back = Decks.readReveal(out);
+      if (back) {
+        r.reveal = back;
+        dk.focusNext = "answer-heading";
+        r.error = "";
+        // What was typed was only for the owner: dropped, never sent.
+        r.typed = "";
+      } else {
+        r.error = Decks.MISSING;
+      }
+    }
+  } catch (error) {
+    r.error = errorText(error);
+  }
+  r.busy = false;
+  paintDecks();
 }
 
-function markBlock(mark, verified) {
-  const box = el("div", "quiz-mark");
+async function rateCard(rating) {
+  const r = dk.review;
+  if (!r || !r.data || !r.data.card || !r.reveal) return;
+  if (!linkWords(currentLink()).canAct) {
+    r.error = STALE_TITLE;
+    paintDecks();
+    return;
+  }
+  r.busy = true;
+  try {
+    const out = await invoke("brain_review_rate", { card: r.data.card.id, rating });
+    if (isRefusal(out) && out.error === "card_not_found") {
+      // The card is gone or no longer up: ask for the next one.
+      r.busy = false;
+      await fetchReview();
+      return;
+    }
+    const before = r.error;
+    const read = Decks.readReview(out);
+    takeReview(out, read && read.comesBack ? `Comes back on ${Decks.formatDay(read.comesBack)}` : "");
+    if (!r.error && before) r.error = "";
+  } catch (error) {
+    r.error = errorText(error);
+  }
+  r.busy = false;
+  if (r.data && r.data.state === "no_decks") {
+    leaveReview();
+    return;
+  }
+  paintDecks();
+  if (r.data && r.data.state !== "card") {
+    dk.at = 0;
+    loadDecks();
+  }
+}
+
+async function moreCards() {
+  const r = dk.review;
+  if (!r) return;
+  if (!linkWords(currentLink()).canAct) {
+    r.error = STALE_TITLE;
+    paintDecks();
+    return;
+  }
+  r.busy = true;
+  try {
+    const out = await invoke("brain_review_more", { deck: r.deck || null });
+    takeReview(out);
+  } catch (error) {
+    r.error = errorText(error);
+  }
+  r.busy = false;
+  if (r.data && r.data.state === "no_decks") {
+    leaveReview();
+    return;
+  }
+  paintDecks();
+}
+
+function paintReview(box) {
+  const r = dk.review;
+  const view = dk.view;
+  const top = el("div", "goal-block");
+  if (r.error) {
+    const err = el("p", "empty failed", r.error);
+    err.setAttribute("role", "alert");
+    top.append(err);
+  }
+  if (r.comes) top.append(el("p", "note", r.comes));
+  const data = r.data;
+  if (!data) {
+    if (r.busy) top.append(el("p", "note", Decks.LOADING));
+    const stop = button(Decks.STOP, leaveReview);
+    stop.dataset.fkey = "review-stop";
+    top.append(stop);
+    box.append(top);
+    return;
+  }
+  const screen = Decks.reviewScreen(data, view ? view.nextReadyDay : null);
+  if (screen.kind === "card" && data.card) {
+    const card = data.card;
+    const head = el("div", "goal-head");
+    if (QUIZ_KIND_LABELS[card.kind]) head.append(el("span", "row-tag", QUIZ_KIND_LABELS[card.kind]));
+    const level = Decks.cardLevelLine(card.level);
+    if (level) head.append(el("span", "goal-note", level));
+    top.append(head);
+    top.append(el("p", "review-front", card.front));
+    if (!r.reveal) {
+      const typed = document.createElement("textarea");
+      typed.className = "field review-typed";
+      typed.rows = 3;
+      typed.maxLength = Decks.LIMITS.back;
+      typed.placeholder = Decks.TYPED_PLACEHOLDER;
+      typed.setAttribute("aria-label", Decks.TYPED_PLACEHOLDER);
+      typed.dataset.fkey = "typed";
+      // Kept only so a repaint does not wipe it; never sent, dropped on Show answer.
+      typed.value = r.typed;
+      typed.addEventListener("input", () => { r.typed = typed.value; });
+      top.append(typed);
+      const actions = el("div", "goal-actions");
+      const show = button(Decks.SHOW_ANSWER, revealCard, { live: true });
+      show.dataset.fkey = "show";
+      actions.append(show);
+      top.append(actions);
+    } else {
+      const back = el("div", "review-back");
+      const heading = el("h3", "subhead", Decks.BACK_HEADING);
+      heading.tabIndex = -1;
+      heading.dataset.fkey = "answer-heading";
+      back.append(heading);
+      back.append(el("p", "", r.reveal.answer || Decks.NO_CARD_ANSWER));
+      if (r.reveal.passage) {
+        back.append(el("p", "goal-note", Decks.backPassageHeading(r.reveal)));
+        back.append(el("p", "quiz-passage", r.reveal.passage));
+      }
+      if (r.reveal.keyLabel) back.append(el("p", "goal-note", r.reveal.keyLabel));
+      top.append(back);
+      const ratings = el("div", "review-ratings");
+      ratings.setAttribute("role", "group");
+      ratings.setAttribute("aria-label", Decks.RATING_GROUP);
+      for (const rating of Decks.RATINGS) {
+        const b = button(rating.label, () => rateCard(rating.id), { live: true });
+        b.dataset.fkey = `rate:${rating.id}`;
+        b.dataset.rating = rating.id;
+        ratings.append(b);
+      }
+      top.append(ratings);
+    }
+    const stop = button(Decks.STOP, leaveReview);
+    stop.dataset.fkey = "review-stop";
+    const foot = el("div", "goal-actions");
+    foot.append(stop);
+    top.append(foot);
+  } else {
+    if (screen.title) {
+      const title = el("h3", "subhead", screen.title);
+      title.tabIndex = -1;
+      title.dataset.fkey = "screen-title";
+      top.append(title);
+    }
+    if (screen.note) top.append(el("p", "note", screen.note));
+    const actions = el("div", "goal-actions");
+    if (screen.actions.includes("more")) {
+      const more = button(Decks.MORE, moreCards, { live: true });
+      more.dataset.fkey = "more";
+      actions.append(more);
+    }
+    const stop = button(Decks.STOP, leaveReview);
+    stop.dataset.fkey = "review-stop";
+    actions.append(stop);
+    top.append(actions);
+  }
+  box.append(top);
+}
+
+/* ── The deck list ─────────────────────────────────────────────────────── */
+
+function labelled(b, words, name) {
+  // The visible words stay in the name; the deck is added for a screen reader.
+  b.setAttribute("aria-label", name ? `${words}: ${name}` : words);
+  return b;
+}
+
+function deckRow(deck, view) {
+  const hidden = view.hidden;
+  const item = el("div", "deck-row");
   const head = el("div", "goal-head");
-  head.append(el("span", "goal-title", quizLevelLabel(mark.level)));
-  if (!verified) head.append(el("span", "row-tag", QUIZ_GUESS));
-  box.append(head);
-  if (mark.comment) box.append(el("p", "", mark.comment));
-  if (mark.passage) {
-    box.append(el("p", "goal-note", QUIZ_SOURCE));
-    box.append(el("p", "quiz-passage", mark.passage));
+  head.append(el("span", "deck-name", hidden ? Decks.HIDDEN_NAME : deck.name));
+  if (deck.paused) head.append(el("span", "row-tag", Decks.PAUSED_TAG));
+  item.append(head);
+  item.append(el("p", "note", Decks.deckMeta(deck)));
+  const name = hidden ? "" : deck.name;
+  if (dk.renaming === deck.id && !hidden) {
+    item.append(nameForm(deck.name, (value) => deckAct(deck.id, "rename", value), () => {
+      dk.renaming = "";
+      paintDecks();
+    }, `rename:${deck.id}`));
+    return item;
+  }
+  const actions = el("div", "goal-actions");
+  if (!hidden) {
+    const review = labelled(button(Decks.REVIEW, () => startReview(deck.id)), Decks.REVIEW, name);
+    review.dataset.fkey = `review:${deck.id}`;
+    if (!Decks.canReview(view, deck)) review.disabled = true;
+    actions.append(review);
+  }
+  const pause = labelled(
+    button(deck.paused ? Decks.RESUME : Decks.PAUSE, () => deckAct(deck.id, deck.paused ? "resume" : "pause"), { live: true }),
+    deck.paused ? Decks.RESUME : Decks.PAUSE, name);
+  pause.dataset.fkey = `pause:${deck.id}`;
+  actions.append(pause);
+  if (!hidden) {
+    const cards = labelled(button(Decks.CARDS_LINK, async () => {
+      if (dk.opening === deck.id) {
+        dk.opening = "";
+        dk.cards = null;
+        paintDecks();
+        return;
+      }
+      dk.opening = deck.id;
+      dk.cards = null;
+      dk.editing = "";
+      dk.confirm = "";
+      paintDecks();
+      await loadDeckCards(deck.id);
+    }), Decks.CARDS_LINK, name);
+    cards.dataset.fkey = `cards:${deck.id}`;
+    cards.setAttribute("aria-expanded", String(dk.opening === deck.id));
+    actions.append(cards);
+    const edit = labelled(button(Decks.EDIT, () => {
+      dk.renaming = deck.id;
+      dk.focusNext = `rename:${deck.id}`;
+      paintDecks();
+    }, { live: true }), Decks.EDIT, name);
+    edit.dataset.fkey = `edit:${deck.id}`;
+    actions.append(edit);
+    const del = labelled(button(Decks.DELETE_DECK, () => {
+      dk.confirm = `deck:${deck.id}`;
+      dk.focusNext = `confirm-delete:${deck.id}:cancel`;
+      paintDecks();
+    }, { live: true, danger: true }), Decks.DELETE_DECK, name);
+    del.dataset.fkey = `delete:${deck.id}`;
+    actions.append(del);
+  }
+  item.append(actions);
+  if (dk.confirm === `deck:${deck.id}` && !hidden) {
+    item.append(confirmBox(() => deckAct(deck.id, "delete"), `confirm-delete:${deck.id}`));
+  }
+  if (dk.opening === deck.id && !hidden) item.append(cardsBox(deck));
+  return item;
+}
+
+/** "Are you sure? ..." with Delete and Cancel. */
+function confirmBox(onDelete, fkey) {
+  const box = el("div", "deck-confirm");
+  box.setAttribute("role", "group");
+  box.append(el("p", "", Decks.DELETE_CONFIRM));
+  const actions = el("div", "goal-actions");
+  const yes = button(Decks.DELETE, onDelete, { live: true, danger: true });
+  yes.dataset.fkey = fkey;
+  const no = button(Decks.CANCEL, () => {
+    dk.confirm = "";
+    paintDecks();
+  });
+  no.dataset.fkey = `${fkey}:cancel`;
+  actions.append(yes, no);
+  box.append(actions);
+  return box;
+}
+
+/** A name box with Save and Cancel (a new deck, or a rename). */
+function nameForm(value, onSave, onCancel, fkey) {
+  const form = el("form", "todo-form");
+  form.autocomplete = "off";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "field todo-text";
+  input.maxLength = Decks.LIMITS.name;
+  input.placeholder = Decks.DECK_NAME;
+  input.setAttribute("aria-label", Decks.DECK_NAME);
+  input.value = value;
+  input.dataset.fkey = fkey;
+  const save = el("button", "btn small", Decks.SAVE);
+  save.type = "submit";
+  liveButtons.add(save);
+  syncLiveButton(save);
+  const cancel = button(Decks.CANCEL, onCancel);
+  cancel.dataset.fkey = `${fkey}:cancel`;
+  form.append(input, save, cancel);
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!Decks.deckNameOk(input.value)) {
+      dk.error = "A deck name is 1 to 60 characters.";
+      paintDecks();
+      return;
+    }
+    onSave(input.value.trim());
+  });
+  return form;
+}
+
+function cardsBox(deck) {
+  const box = el("div", "deck-cards");
+  if (dk.cardsLoading && !dk.cards) box.append(el("p", "note", Decks.LOADING));
+  if (dk.cardsError) box.append(el("p", "empty failed", dk.cardsError));
+  const list = dk.cards && dk.cards.deckId === deck.id ? dk.cards : null;
+  if (!list) return box;
+  if (list.hidden) {
+    box.append(hiddenNode(0, "words"));
+    return box;
+  }
+  if (!list.cards.length) box.append(el("p", "empty", Decks.NO_CARDS));
+  for (const card of list.cards) {
+    const item = el("div", "deck-card");
+    if (dk.editing === card.id) {
+      const front = document.createElement("input");
+      front.type = "text";
+      front.className = "field";
+      front.maxLength = Decks.LIMITS.front;
+      front.setAttribute("aria-label", Decks.FRONT_LABEL);
+      front.dataset.fkey = `front:${card.id}`;
+      front.value = card.front;
+      const back = document.createElement("textarea");
+      back.className = "field keep-back";
+      back.rows = 3;
+      back.maxLength = Decks.LIMITS.back;
+      back.setAttribute("aria-label", Decks.BACK_LABEL);
+      back.dataset.fkey = `back:${card.id}`;
+      back.value = card.back;
+      const actions = el("div", "goal-actions");
+      const save = button(Decks.SAVE, () => {
+        if (!front.value.trim()) {
+          dk.error = "The front of a card is 1 to 500 characters.";
+          paintDecks();
+          return;
+        }
+        return cardAct(deck.id, card.id, "edit", front.value, back.value);
+      }, { live: true });
+      save.dataset.fkey = `save:${card.id}`;
+      const cancel = button(Decks.CANCEL, () => {
+        dk.editing = "";
+        paintDecks();
+      });
+      cancel.dataset.fkey = `cancel:${card.id}`;
+      actions.append(save, cancel);
+      item.append(front, back, actions);
+    } else {
+      item.append(el("p", "deck-front", card.front));
+      item.append(el("p", "deck-back", card.back || Decks.NO_CARD_ANSWER));
+      if (card.passage) {
+        const heading = card.keySource === "model" ? Decks.EXAMPLE_SENTENCE : Decks.FROM_TEXT;
+        item.append(el("p", "goal-note", heading));
+        item.append(el("p", "quiz-passage", card.passage));
+      }
+      if (card.keyLabel) item.append(el("p", "goal-note", card.keyLabel));
+      const actions = el("div", "goal-actions");
+      const edit = labelled(button(Decks.EDIT, () => {
+        dk.editing = card.id;
+        dk.confirm = "";
+        dk.focusNext = `front:${card.id}`;
+        paintDecks();
+      }, { live: true }), Decks.EDIT, card.front);
+      edit.dataset.fkey = `edit-card:${card.id}`;
+      const del = labelled(button(Decks.DELETE_CARD, () => {
+        dk.confirm = `card:${card.id}`;
+        dk.focusNext = `confirm-delete-card:${card.id}:cancel`;
+        paintDecks();
+      }, { live: true, danger: true }), Decks.DELETE_CARD, card.front);
+      del.dataset.fkey = `delete-card:${card.id}`;
+      actions.append(edit, del);
+      item.append(actions);
+      if (dk.confirm === `card:${card.id}`) {
+        item.append(confirmBox(() => cardAct(deck.id, card.id, "delete"), `confirm-delete-card:${card.id}`));
+      }
+    }
+    box.append(item);
   }
   return box;
 }
 
-function paintQuizCount() {
-  if (!dom.quizTextCount || !dom.quizText) return;
-  dom.quizTextCount.textContent = quizTextCount(dom.quizText.value).note;
-}
-
-function paintQuiz() {
-  const run = dom.quizRun;
-  if (!run) return;
-  // A repaint from elsewhere (the tab shown again, a link change) must not
-  // wipe an answer being typed: carry it over to the same question. It stays
-  // in this window's memory only.
-  const typing = run.querySelector(".quiz-answer");
-  const typed = typing ? { n: typing.dataset.n, value: typing.value } : null;
-  if (dom.quizStartForm) dom.quizStartForm.hidden = Boolean(qz.quiz || qz.summary);
+function paintDecks() {
+  const box = dom.decksBody;
+  if (!box) return;
+  const focusKey = dk.focusNext || fkeyBefore(box);
+  dk.focusNext = "";
   const parts = [];
-  if (qz.busy) parts.push(el("p", "note", qz.busy));
-  if (qz.error) parts.push(el("p", "empty failed", qz.error));
-  if (qz.crisis) {
-    // The PC's help words, shown calmly in place of a mark: no colour, no
-    // mark label, no "Jarvis's guess". Text only; kept until the next action.
-    const calm = el("div", "quiz-crisis");
-    calm.setAttribute("role", "status");
-    for (const para of quizCrisisParagraphs(qz.crisis)) {
-      const p = el("p", "");
-      for (const run of para) {
-        if (run.bold) p.append(el("strong", "", run.text));
-        else p.append(document.createTextNode(run.text));
-      }
-      calm.append(p);
-    }
-    parts.push(calm);
+  const view = dk.view;
+  if (dk.error) {
+    const err = el("p", "empty failed", dk.error);
+    err.setAttribute("role", "alert");
+    parts.push(err);
   }
-  const q = qz.quiz;
-  if (qz.summary) {
-    const s = qz.summary;
-    const block = el("div", "goal-block");
-    block.append(el("h3", "subhead", QUIZ_AGAIN_HEADING));
-    block.append(el("p", "note", quizCountsLine(s)));
-    if (s.again.length) {
-      const list = el("div", "quiz-again");
-      for (const n of s.again) list.append(el("p", "", quizAgainLine(n, qz.last)));
-      block.append(list);
+  if (dk.review && view && !view.hidden) {
+    const wrap = el("div", "");
+    paintReview(wrap);
+    parts.push(wrap);
+    box.replaceChildren(...parts);
+    fkeyAfter(box, focusKey);
+    return;
+  }
+  if (!view) {
+    if (!dk.error) parts.push(el("p", "note", Decks.LOADING));
+    box.replaceChildren(...parts);
+    return;
+  }
+  const top = Decks.sectionTop(view);
+  if (!view.available) parts.push(el("p", "empty failed", view.why || Decks.MISSING));
+  const ready = el("div", "goal-block");
+  ready.append(el("h3", "subhead", Decks.CARDS_READY_HEADING));
+  if (top.line) ready.append(el("p", "", top.line));
+  const nextLine = Decks.nextReadyLine(view.nextReadyDay);
+  if (nextLine && view.ready === 0) ready.append(el("p", "note", nextLine));
+  if (top.empty) ready.append(el("p", "empty", Decks.EMPTY_STATE));
+  parts.push(ready);
+  // New cards a day: a number from 0 to the PC's limit.
+  const perDay = el("div", "goal-block");
+  const perLabel = el("label", "quiz-lab", Decks.NEW_PER_DAY_LABEL);
+  perLabel.htmlFor = "decks-per-day";
+  const per = document.createElement("input");
+  per.type = "number";
+  per.id = "decks-per-day";
+  per.className = "field deck-per-day";
+  per.min = "0";
+  per.max = String(view.limits.newPerDay);
+  per.step = "1";
+  per.value = String(view.newPerDay);
+  per.dataset.fkey = "per-day";
+  liveButtons.add(per);
+  syncLiveButton(per);
+  per.addEventListener("change", () => setNewPerDay(per.value, per));
+  perDay.append(perLabel, per);
+  parts.push(perDay);
+  if (view.available && view.decks.length) {
+    const list = el("div", "");
+    for (const deck of view.decks) list.append(deckRow(deck, view));
+    parts.push(list);
+  }
+  if (view.hidden) {
+    parts.push(el("p", "note", Decks.REVIEW_HIDDEN));
+    parts.push(hiddenNode(0, "words"));
+  }
+  // A new deck: an empty one, named here.
+  if (view.available) {
+    const add = el("div", "goal-actions");
+    if (dk.adding) {
+      parts.push(nameForm("", (value) => addDeck(value), () => {
+        dk.adding = false;
+        paintDecks();
+      }, "new-deck"));
     } else {
-      block.append(el("p", "empty", QUIZ_AGAIN_EMPTY));
+      const b = button(Decks.NEW_DECK, () => {
+        dk.adding = true;
+        dk.focusNext = "new-deck";
+        paintDecks();
+      }, { live: true });
+      b.dataset.fkey = "new-deck-open";
+      if (view.decks.length >= view.limits.decks) b.disabled = true;
+      add.append(b);
+      parts.push(add);
     }
-    block.append(button(QUIZ_CLOSE, () => {
-      quizReset();
-      paintQuiz();
-    }));
-    parts.push(block);
-  } else if (q) {
-    const block = el("div", "goal-block");
-    if (!q.hidden) block.append(el("p", "goal-note", quizProgressLine(q)));
-    if (q.hidden) {
-      block.append(hiddenNode(0, "words"));
-    } else {
-      const shown = qz.shown != null ? q.questions.find((x) => x.n === qz.shown) : null;
-      const next = quizNextQuestion(q);
-      if (shown && shown.mark) {
-        block.append(el("p", "quiz-prompt", shown.prompt));
-        block.append(markBlock(shown.mark, q.verified));
-        const more = quizNextQuestion(q);
-        const actions = el("div", "goal-actions");
-        if (more) {
-          actions.append(button(QUIZ_NEXT, () => {
-            qz.shown = null;
-            paintQuiz();
-          }));
-        }
-        block.append(actions);
-      } else if (next) {
-        block.append(el("span", "row-tag", QUIZ_KIND_LABELS[next.kind]));
-        block.append(el("p", "quiz-prompt", next.prompt));
-        const answer = document.createElement("textarea");
-        answer.className = "field quiz-answer";
-        answer.rows = 4;
-        answer.maxLength = QUIZ_LIMITS.answerMax;
-        answer.spellcheck = true;
-        answer.placeholder = QUIZ_ANSWER_PLACEHOLDER;
-        answer.setAttribute("aria-label", `Your answer to question ${next.n}`);
-        answer.dataset.n = String(next.n);
-        if (typed && typed.n === answer.dataset.n) answer.value = typed.value;
-        const count = el("p", "note", quizAnswerCount(answer.value).note);
-        answer.addEventListener("input", () => {
-          count.textContent = quizAnswerCount(answer.value).note;
-        });
-        block.append(answer, count);
-        const actions = el("div", "goal-actions");
-        actions.append(button(QUIZ_ANSWER_LABEL, () => checkAnswer(next, answer), { live: true }));
-        block.append(actions);
-      } else {
-        block.append(el("p", "note", quizProgressLine(q)));
-      }
-    }
-    const foot = el("div", "goal-actions");
-    // Finish and Stop reveal nothing (numbers only), so both stay while hidden.
-    foot.append(button(QUIZ_FINISH, finishQuiz, { live: true }));
-    foot.append(button(QUIZ_STOP, stopQuiz, { live: true, danger: true }));
-    block.append(foot);
-    parts.push(block);
   }
-  run.replaceChildren(...parts);
+  box.replaceChildren(...parts);
+  fkeyAfter(box, focusKey);
 }
 
-/** A hidden quiz read again after Show (or a setting change): Rust decides
- *  whether the words come back. Nothing is asked of the PC when no quiz is
- *  open. */
-async function rereadQuiz() {
-  if (!IS_TAURI || !qz.quiz) return;
-  try {
-    const out = await invoke("brain_quiz_get", { id: qz.quiz.id });
-    if (quizProblem(out)) {
-      paintQuiz();
-      return;
-    }
-    const quiz = readQuiz(out.quiz);
-    if (quiz) qz.quiz = quiz;
-  } catch (error) {
-    qz.error = errorText(error);
-  }
-  paintQuiz();
+function renderDecks() {
+  if (dom.decksIntro) dom.decksIntro.textContent = Decks.DECKS_INTRO;
+  paintDecks();
+  if (IS_TAURI && !dk.loading && Date.now() - dk.at > DECKS_READ_MS) loadDecks();
 }
 
-function renderQuiz() {
-  paintQuizCount();
-  paintQuiz();
-}
-
-if (dom.quizStartForm) {
-  dom.quizStartForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    startQuiz();
-  });
-}
-if (dom.quizText) dom.quizText.addEventListener("input", paintQuizCount);
-if (dom.quizStart) {
-  liveButtons.add(dom.quizStart);
-  syncLiveButton(dom.quizStart);
+/** The private lists were turned on or off, or a Show ran out: read again. */
+function rereadDecks() {
+  dk.at = 0;
+  if (state.view === "work") loadDecks();
 }
 
 // Private answers turned on or off, or a Show ran out: read it again - Rust
@@ -14036,6 +11321,7 @@ onLink((link) => {
   dom.linkPill.title = link.error || `${link.base} · last event ${link.lastId}`;
   dom.reconnectLink.hidden = link.connected;
   syncLiveButtons();
+  retirementCard.sync();
   if (historyImport) historyImport.sync();
   paintFreshness();
   if (state.view === "now") renderLive();

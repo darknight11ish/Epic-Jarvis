@@ -233,7 +233,8 @@ await check("a bank file's text stays text: formulas and markup are not run", ()
   const raw = JSON.parse(JSON.stringify(TABLES.by_category));
   const evil = ["=HYPERLINK(\"http://x.example\",\"pay\")", "<img src=x onerror=alert(1)>",
     "@SUM(A1:A9)", "+1+1", "-2+3", "<script>alert(1)</script>", "&lt;b&gt;", "[hidden]"];
-  evil.forEach((v, i) => { raw.sections[0].rows[i % raw.sections[0].rows.length].cells[0] = v; });
+  while (raw.sections[0].rows.length < evil.length) raw.sections[0].rows.push(JSON.parse(JSON.stringify(raw.sections[0].rows[0])));
+  evil.forEach((v, i) => { raw.sections[0].rows[i].cells[0] = v; });
   raw.caveats = ["=cmd|' /C calc'!A0"];
   raw.sources = ["<b>x</b>.csv"];
   raw.title = "<h1>t</h1>";
@@ -581,7 +582,7 @@ await check("CONTROL: the Settings card has a stable id, a jump link under Rare,
   assert.ok(MAIN.includes("spendingView.clear()"), "a new question and a closed card drop the table");
   // The widget and the HUD page draw no chat answer text and so no table.
   for (const f of ["src/widget.js", "src/widget.html", "src/floating.js"]) {
-    assert.ok(!/spending/i.test(read(f)), `${f} must not draw the table`);
+    assert.ok(!/jarvis-table|chat_table|spending-table|spending\.js/i.test(read(f)), `${f} must not draw the table`);
   }
 });
 

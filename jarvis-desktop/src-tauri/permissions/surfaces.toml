@@ -868,6 +868,21 @@ permissions = [
   "allow-brain-goals-stop",
 ]
 
+# Activity heatmap and balance chart (docs/GOALS-PROGRESS-DESIGN.md part C;
+# brain/progress.rs, backend jarvis_progress.py; JARVIS-API.md section 105).
+# Two pictures in Brain -> Projects, drawn from what the PC sends. No approval
+# card and nothing saved here; choosing the chart's areas is the owner's own
+# display choice, held on a stale link; a picture with a health or money item in
+# it is taken out while the private lists are hidden or App lock is on.
+[[set]]
+identifier = "brain-progress"
+description = "Read the activity heatmap and the balance chart, and save which 3 to 8 areas the chart shows - no card, nothing kept by the app, the save held on a stale link, the picture hidden with the private lists."
+permissions = [
+  "allow-brain-progress-activity",
+  "allow-brain-progress-balance",
+  "allow-brain-progress-balance-save",
+]
+
 # Quiz me on a text (docs/STUDY-FROM-TEXT-DESIGN.md section 11; brain/quiz.rs,
 # backend jarvis_quiz.py; JARVIS-API.md section 98). The owner pastes a text,
 # the PC's local model writes questions, the owner types answers and gets a

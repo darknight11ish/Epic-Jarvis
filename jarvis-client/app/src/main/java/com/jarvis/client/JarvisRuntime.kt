@@ -4271,6 +4271,40 @@ object JarvisRuntime {
     /** `GET /api/spending` - the Brain plate's read-only view. A read: never held. */
     suspend fun spendingView(): ApiResult<JsonObject> = api.spending()
 
+    /** `GET /api/retirement/defaults` - the what-if form. A read: never held. */
+    suspend fun retirementDefaults(): ApiResult<JsonObject> = api.retirementDefaults()
+
+    /**
+     * `POST /api/retirement/run` - works the what-if out on the PC from the
+     * typed boxes ([com.jarvis.client.net.Retirement.requestBody]). No card:
+     * a calculation on numbers the owner typed. Held on a stale link
+     * ([actionBlocker], rule 4) and refused while "Hide memory lists and chat
+     * history" is on ([listsHidden]). A busy PC is asked once more after a
+     * second. The numbers and the answer are never logged or kept here: the
+     * result goes back to the screen and nowhere else.
+     */
+    suspend fun retirementRun(
+        values: Map<String, String>,
+        listsHidden: Boolean,
+        words: com.jarvis.client.net.Retirement.Words = com.jarvis.client.net.Retirement.Words(),
+    ): com.jarvis.client.net.Retirement.Outcome {
+        if (com.jarvis.client.net.Retirement.hiddenNow(listsHidden, false)) {
+            return com.jarvis.client.net.Retirement.Outcome.Problem(words.hidden)
+        }
+        actionBlocker()?.let { return com.jarvis.client.net.Retirement.Outcome.Problem(it) }
+        val body = com.jarvis.client.net.Retirement.requestBody(values)
+        suspend fun once(): com.jarvis.client.net.Retirement.Outcome = when (val r = api.retirementRun(body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Retirement.classify(r.value, words)
+            is ApiResult.Failed -> com.jarvis.client.net.Retirement.Outcome.Problem(noticeFor(r.error))
+        }
+        val first = once()
+        if (first is com.jarvis.client.net.Retirement.Outcome.Problem && first.busy) {
+            delay(1_000)
+            return once()
+        }
+        return first
+    }
+
     /**
      * Turns a temporary chat on or off on the chat both Home and the voice
      * loop send through ([com.jarvis.client.net.ChatSession.setTemporary]).

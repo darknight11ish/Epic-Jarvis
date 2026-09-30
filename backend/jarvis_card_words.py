@@ -131,6 +131,9 @@ TITLES = {
     "learning_sensitive_enable": "also learn sensitive topics automatically",
     "history_enable": "keep your chat history",
     "memory_manage": "change what it remembers",
+    # jarvis_topics.py (2026-09-30): turning a private topic back on, and the
+    # other loosenings of topic controls
+    "topic_loosen": "turn a private topic back on, or let it learn or be used again",
     # jarvis_forget_range.py (2026-09-28): ONE card for a whole time frame
     "memory_forget_range": "forget what it learned and delete chats from the days you chose",
     "user_profile_manage": "change your profile",

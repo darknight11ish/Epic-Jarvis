@@ -593,7 +593,9 @@ def _default_saved_facts(message: str) -> list:
     check only - never shown to the driver. Raises when memory cannot be
     read: the check then blocks (fail closed)."""
     import jarvis_memory
-    rows = jarvis_memory.store().search(str(message or ""), k=FACTS_CHECKED)
+    # topics="all": the leak check reads saved facts to make sure none of them
+    # goes into a web chat; it is blind to nothing (topic controls, 4.4).
+    rows = jarvis_memory.store().search(str(message or ""), k=FACTS_CHECKED, topics="all")
     return [str(r.get("text") or "") for r in rows if isinstance(r, dict) and r.get("text")]
 
 

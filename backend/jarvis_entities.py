@@ -235,12 +235,20 @@ def run_pass(fact_ids, *, ollama: Optional[str] = None, model: Optional[str] = N
             store = jarvis_memory.store()
         facts = []
         now = time.time()
+        # The facts of an OFF topic are not shown to the model (topic
+        # controls, section 4.4): this pass sends fact text to the local model.
+        try:
+            hide = store.topic_blocked("visible")
+        except Exception:
+            hide = frozenset()
         for fid in list(fact_ids or [])[:MAX_FACTS]:
             if isinstance(fid, bool) or not isinstance(fid, int):
                 continue
             f = store.get(fid)
             if (not f or f.get("erased_at") is not None
                     or (f.get("valid_to") is not None and float(f["valid_to"]) <= now)):
+                continue
+            if fid in hide:
                 continue
             facts.append((fid, str(f.get("text") or "")))
         out["facts"] = len(facts)

@@ -496,6 +496,19 @@ fun BrainScreen(
                 )
             }
 
+            // "Retirement what-if" (the owner's decision of 2026-09-30,
+            // docs/JARVIS-API.md section 103; menu id brain.retirement, group
+            // finance): a form and an answer drawn from the PC, the typed
+            // numbers held in memory only (RetirementPlate.kt).
+            item(key = "retirement") {
+                RetirementSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+
             // "Quiz me on a text" (docs/STUDY-FROM-TEXT-DESIGN.md, Slice A,
             // 2026-09-30): paste a text, answer typed questions one at a
             // time, marked on the PC by the local model, nothing saved or

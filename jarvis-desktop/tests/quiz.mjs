@@ -118,7 +118,12 @@ await check("reading the PC's quiz: questions, marks, the guess flag and a summa
   assert.equal(q.questions.length, 2, "a question without a number was kept");
   assert.equal(q.verified, false);
   assert.equal(q.questions[1].kind, "recall", "an unknown kind falls back");
-  assert.deepEqual(q.questions[0].mark, { level: "partly", comment: "c", passage: "p" });
+  // An older PC sends no marked_by / expected / key_label: its marks are the model's.
+  assert.deepEqual(q.questions[0].mark, { level: "partly", comment: "c", passage: "p",
+    markedBy: "model", expected: null, keyLabel: null });
+  assert.equal(q.mode, "", "no mode means an older PC (JARVIS-API 102.4)");
+  assert.equal(q.level, null);
+  assert.equal(q.notice, "");
   assert.equal(nextQuestion(q).n, 2);
   assert.equal(progressLine(q), "Question 2 of 2 · 1 answered");
   assert.equal(readMark({ level: "A+" }), null, "a letter grade was accepted");
@@ -150,7 +155,8 @@ await check("the limits: 200-20000 for the text, 1-2000 for an answer", async ()
 });
 
 await check("the words both apps share beyond the first list", async () => {
-  assert.deepEqual(KIND_LABELS, { recall: "Remember", explain: "Explain why", apply: "Apply" });
+  assert.deepEqual(KIND_LABELS, { recall: "Remember", explain: "Explain why", apply: "Apply",
+    translate: "Translate", blank: "Fill the blank", complete: "Finish the sentence" });
   assert.equal(CLOSE_LABEL, "Close");
   assert.equal(HIDDEN_WORDS, "(hidden)");
   const q = { questions: [{ n: 1, prompt: "Why?" }, { n: 3, prompt: "" }] };

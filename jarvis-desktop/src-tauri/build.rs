@@ -479,6 +479,14 @@ fn main() {
             "brain_goals_accept",
             "brain_goals_step",
             "brain_goals_stop",
+            // Activity heatmap and balance chart (docs/GOALS-PROGRESS-DESIGN.md
+            // part C, JARVIS-API.md section 105): read the days, read the
+            // balance areas, save the picked areas. No card; the save held on a
+            // stale link; the picture taken out while the private lists are
+            // hidden or App lock is on. Brain only.
+            "brain_progress_activity",
+            "brain_progress_balance",
+            "brain_progress_balance_save",
             // Quiz me on a text (docs/STUDY-FROM-TEXT-DESIGN.md section 11,
             // JARVIS-API.md section 98): write questions for a pasted text,
             // read the quiz again, check one answer, finish, stop. No card,

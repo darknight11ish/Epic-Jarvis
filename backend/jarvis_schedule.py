@@ -323,8 +323,13 @@ KINDS: dict = {}
 #: plain repeat), and going off only tells the apps the list changed.
 #: jarvis_decks (2026-09-30): the quiet `review` job - "N cards ready" under
 #: Coming up while the owner has a deck; no card, no notification.
+#: jarvis_topics (2026-09-30): the quiet hourly `topic_sort` step that labels the
+#: facts already saved (rules only, labels only) and, if the owner switched it
+#: on, asks the local model to suggest a topic for a few Unsorted facts a night.
+#: Not listed in Coming up, tells nobody, changes no fact.
 KIND_MODULES = ("jarvis_standby_schedule", "jarvis_briefing", "jarvis_tellme", "jarvis_focus",
-                "jarvis_next_time", "jarvis_tidy", "jarvis_today", "jarvis_decks")
+                "jarvis_next_time", "jarvis_tidy", "jarvis_today", "jarvis_decks",
+                "jarvis_topics")
 
 
 def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = False,

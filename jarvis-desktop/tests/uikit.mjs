@@ -498,7 +498,7 @@ export const UPDATE_NONE = {
 };
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, decks,
-  folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending }) {
+  folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement }) {
   const listeners = {};
   window.__calls = [];
   // animal.rs: GET /api/animal's answer (a scenario's, else a PC nobody has
@@ -1701,6 +1701,31 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               window.__schedule.jobs = window.__schedule.jobs.filter((j) => j.id !== jobId);
             }
             return { ok: true, goal: { ...goal } };
+          }
+          // brain/retirement.rs (the retirement what-if). `window.__retirement` is
+          // null - a PC without it, which Rust answers with the "run
+          // apply-patches.ps1" sentence - unless the scenario names
+          // `retirement: {form, script, delayMs}`. `form` is the PC's answer to
+          // GET /api/retirement/defaults; each run answers the next entry of
+          // `script` (the last one repeats) exactly as Rust hands it on (the
+          // real answers are in tests/fixtures/retirement-cases.json). While
+          // the private lists are hidden, or App lock is on, neither command
+          // asks the PC: both answer the hidden words, as Rust does. Every
+          // call is recorded in `calls` (the typed numbers stay in this test
+          // page's memory, like everything in this stand-in).
+          case "brain_retirement_defaults":
+          case "brain_retirement_run": {
+            const rt = window.__retirement;
+            if (!rt) throw new Error("Your PC's Jarvis cannot work out a retirement what-if yet - run apply-patches.ps1 on the PC.");
+            rt.calls.push({ cmd, ...(cmd === "brain_retirement_run" ? { values: args.values } : {}) });
+            if (cmd === "brain_retirement_run" && state.stale) throw new Error("the event stream is stale");
+            if ((window.__security.hidden && !window.__security.revealed) || window.__appLock) {
+              return { ok: true, hidden: true, words: { hidden: "Retirement what-if hidden" } };
+            }
+            if (cmd === "brain_retirement_defaults") return JSON.parse(JSON.stringify(rt.form));
+            if (rt.delayMs) await new Promise((r) => setTimeout(r, rt.delayMs));
+            const next = rt.script.length > 1 ? rt.script.shift() : rt.script[0];
+            return JSON.parse(JSON.stringify(next));
           }
           // brain/quiz.rs (Quiz me on a text). `window.__quiz` is null - a PC
           // without Quiz, which Rust answers with the "run apply-patches.ps1"
@@ -2920,6 +2945,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__goals = goals ? JSON.parse(JSON.stringify({
     goals: [], reads: 0, fails: null, checkinByGoal: {}, ...goals })) : null;
   window.__goalsCalls = [];
+  window.__retirement = retirement ? JSON.parse(JSON.stringify({ calls: [], form: null, script: [], delayMs: 0, ...retirement })) : null;
   window.__quiz = quiz ? JSON.parse(JSON.stringify({ calls: [], quiz: null, ...quiz })) : null;
   window.__spending = spending ? JSON.parse(JSON.stringify({
     calls: [], tables: {}, hidden: false, proposals: {}, suggestions: [], fails: null,

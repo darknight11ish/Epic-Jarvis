@@ -560,7 +560,7 @@ await check("'Follows a number' lists life AND coding number benchmarks with a t
 await check("the editor says what 'Do these first' does, and 'Follows a number' says when there is nothing", async () => {
   const page = await draftTab(goalOf(GC.created, "draft"));
   const needs = await page.locator("#goals-list .goal-needs").nth(0).innerText();
-  const editor = await page.locator("#goals-list .goal-lock-editor").nth(0).innerText();
+  const editor = await page.locator("#goals-list .goal-lock-editor").nth(1).innerText();   // s2 follows nothing
   await page.close();
   assert.ok(needs.includes(GOAL_WORDS.needs_under));
   assert.ok(editor.includes(GOAL_WORDS.follows_empty), "no benchmark with a target: the empty line shows");

@@ -304,6 +304,14 @@ second_card_combined_enable = "ask"
 # same reason as above.
 second_card_third_assign = "ask"
 
+# Topic controls (2026-09-30; docs/TOPIC-CONTROLS-DESIGN.md): turning a PRIVATE
+# topic (Health, Money, or one the owner marked private) back on, clearing its
+# private mark, moving a batch of its facts out to a looser topic, or any
+# loosening asked from outside text is ONE card. Nothing leaves this PC. Must
+# stay "ask": a person saying yes is what makes it safe (jarvis_topics.py
+# refuses to apply a change if this is anything else).
+topic_loosen = "ask"
+
 # --- Picture mode for "Look at this" and "Watch with me" (2026-09-29) -----
 # Lets a small picture model, running on the PROCESSOR (never the graphics
 # card) in its own copy of Ollama that only this PC can reach, also look at

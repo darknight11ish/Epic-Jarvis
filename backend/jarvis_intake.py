@@ -869,10 +869,17 @@ def candidates(store, messages, k: int = CANDIDATES_K) -> list[dict]:
     # told nothing was close, and the correction could be saved next to
     # the old fact (the memory review, B3). Search's own ranking and k
     # still decide which facts are shown.
+    # topics="visible": these facts are shown to the learner's local model, so
+    # the facts of an OFF topic are not (topic controls, section 4.4). The
+    # facts of a topic that is only "don't use" stay: the learner still needs
+    # them to notice a correction.
     try:
-        hits = store.search(query, k=k, word_floor=0.0)
+        hits = store.search(query, k=k, word_floor=0.0, topics="visible")
     except TypeError:
-        hits = store.search(query, k=k)       # a store from before the floor
+        try:
+            hits = store.search(query, k=k, word_floor=0.0)
+        except TypeError:
+            hits = store.search(query, k=k)   # a store from before the floor
     for h in hits:
         if h.get("current", True) is False:
             continue
@@ -998,9 +1005,18 @@ def prepare_llm(llm: Callable, messages, *, when=None, store=None) -> Callable:
         except Exception:
             wrapped.proposed = []
         try:
-            return rewrite_answer(out, cands)
+            fixed = rewrite_answer(out, cands)
         except Exception:
-            return out
+            fixed = out
+        # Topic controls: a fact that is sure to belong to a topic set to not
+        # learn is taken out HERE, before the review queue ever sees it (and
+        # counted, never quoted). jarvis_auto_learn checks again at save time.
+        try:
+            import jarvis_topics
+            fixed = jarvis_topics.gate_proposals(fixed, store=store)
+        except Exception:
+            pass
+        return fixed
 
     wrapped.candidates = cands      # for tests and for anyone debugging a pass
     wrapped.proposed = []           # what the model proposed; "said again" reads it
@@ -1205,7 +1221,13 @@ def near_duplicate(text: str, f: dict, store) -> bool:
         return False                              # too little to compare
     others = []
     try:
-        others += [h["text"] for h in store.search(text, k=5)]
+        # topics="all": compares words only, never shown to a model.
+        others += [h["text"] for h in store.search(text, k=5, topics="all")]
+    except TypeError:
+        try:
+            others += [h["text"] for h in store.search(text, k=5)]
+        except Exception:
+            pass
     except Exception:
         pass
     with closing(store._connect()) as c:
@@ -1265,7 +1287,13 @@ def _repeats_of(text: str, store) -> list:
     if not want:
         return []
     out = []
-    for h in store.search(text, k=5, word_floor=0.0):
+    # topics="all": "said again" only compares words, and a fact in a topic the
+    # owner turned off is still the same fact.
+    try:
+        found = store.search(text, k=5, word_floor=0.0, topics="all")
+    except TypeError:
+        found = store.search(text, k=5, word_floor=0.0)
+    for h in found:
         if h.get("current") is False:
             continue
         other = undated(h.get("text"))

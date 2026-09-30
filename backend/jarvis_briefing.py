@@ -1199,7 +1199,7 @@ def _auto_facts_section(since: float, now: float) -> Optional[dict]:
     out, like a source not set up."""
     try:
         import jarvis_auto_learn as AL
-        out = AL.list_auto(limit=AL.LIST_MAX, now=now)
+        out = AL.list_auto(limit=AL.LIST_MAX, now=now, topics="use")
     except Exception:
         return None
     title = "Facts saved automatically"
