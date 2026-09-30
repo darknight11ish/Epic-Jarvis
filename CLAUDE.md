@@ -1970,6 +1970,9 @@ the next version, and every version goes on GitHub.
 
 ## Where everything is written down
 
+- `docs/HANDOFF-2026-09-30.md` — **start here in a new conversation**: where things
+  stand after PR #39, the owner's decisions, the whole queue in order, every known
+  unfixed finding, and how the work has been run.
 - `docs/ARCHITECTURE.md` — **read first.** The invariants, the one permission
   model every feature must use, memory, events, and what does not exist yet.
 - `docs/MODEL-TOPOLOGY.md` — what runs on the graphics card and why.
