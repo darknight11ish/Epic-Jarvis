@@ -79,3 +79,9 @@ and "show the Finance menu" by asking Jarvis. Sections can also be collapsed to 
 Safety-critical areas can never be hidden: approvals, security and App lock, "What asks first",
 connection/stale-link status, crisis help, Stop everything. Deep links (open_settings / open_brain)
 to a hidden menu must still work by opening it for that visit.
+
+## Final step: cohesiveness audit (owner, 2026-09-30)
+
+| # | Item |
+|---|---|
+| 12 | When ALL current work is done and nothing needs the owner's opinion, run a **cohesiveness audit**: how well the new additions (quiz, decks and Spanish practice, chat tags and fork, spending summaries, retirement what-if, goal locks and forecast, heatmap and balance chart, topic controls, menu visibility, referee switch, Galaxy panel, suggested tags) fit into Jarvis as ONE product, and the best way to integrate them. Covers: overlapping or duplicated screens and words, one shared look (palette, icons, wording), navigation and where each thing lives, the menu-visibility groups, settings patterns, the one permission model and scheduler, memory/privacy consistency (screen-only money and health, topic modes), both apps' parity, performance and startup cost, docs (ARCHITECTURE, JARVIS-API, README) and the update guide, and a ranked list of integration fixes. Reported in plain words with choices for the owner as multiple choice. |

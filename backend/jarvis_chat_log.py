@@ -122,6 +122,7 @@ import secrets
 import sqlite3
 import threading
 import time
+import unicodedata
 import uuid as _uuid
 from collections import OrderedDict
 from contextlib import closing
@@ -452,7 +453,7 @@ def _tag_err(code: str, message: str) -> dict:
 
 
 TAG_MESSAGES = {
-    "bad_name": "A tag name needs 1 to 24 letters or numbers.",
+    "bad_name": "A tag name needs 1 to 24 characters, with at least one letter, number or symbol it can show.",
     "name_taken": "You already have a tag with that name.",
     "too_many_tags": "You can have up to 12 tags. Delete one to make room.",
     "bad_colour": "That colour is not one of the eight.",
@@ -486,7 +487,11 @@ def _clean_tag_name(v):
     if not isinstance(v, str):
         return None
     n = unicodedata.normalize("NFC", v).strip()
-    if not (1 <= len(n) <= TAG_NAME_MAX) or not n.isprintable():
+    if not (1 <= len(n) <= TAG_NAME_MAX):
+        return None
+    # Printable only - but the joiners that build one emoji out of several
+    # (a family, a flag with a skin tone) are allowed inside a name.
+    if any(not (ch.isprintable() or ch in "\u200d\u200c") for ch in n):
         return None
     if not _has_visible_char(n):
         return None
@@ -496,18 +501,6 @@ def _clean_tag_name(v):
 def _tag_key(n: str) -> str:
     """What "the same name" means: NFC, then casefold, then NFC again."""
     return unicodedata.normalize("NFC", unicodedata.normalize("NFC", n).casefold())
-
-
-def _tag_cipher(self):
-    """(aead or None, why). Tags are the owner's own labels on chats already
-    saved, so they work while chat history is switched OFF (owner,
-    2026-09-30); only a missing or wrong key stops them (fail closed)."""
-    try:
-        return self._cipher(), ""
-    except KeyUnavailable as exc:
-        return None, str(exc)
-    except Exception as exc:
-        return None, f"the chat history could not be opened ({type(exc).__name__})"
 
 
 def _off_message(why: str, tail: str) -> str:
@@ -1793,6 +1786,19 @@ class ChatLog:
                 "tag_id": _tag_id(row[3])}
 
     # -- chat tags (docs/CHAT-TAGS-DESIGN.md, JARVIS-API section 99) --------
+    def _tag_cipher(self):
+        """(aead or None, why). Tags are the owner's own labels on chats that
+        are already saved, so they work while chat history is switched OFF
+        (owner, 2026-09-30: filing an old chat records nothing new). Only a
+        missing or wrong key stops them - fail closed, nothing read or
+        written."""
+        try:
+            return self._cipher(), ""
+        except KeyUnavailable as exc:
+            return None, str(exc)
+        except Exception as exc:
+            return None, f"the chat history could not be opened ({type(exc).__name__})"
+
     def _load_tags(self, c, aead) -> dict:
         """The registry {"next_id", "tags": [{"id","name","colour","icon"}]}
         from `meta` (or the starter tags, not yet written). Raises on a value
@@ -1860,7 +1866,7 @@ class ChatLog:
         op = body["op"]
         if op not in ("add", "rename", "style", "move", "delete"):
             return 400, _tag_fail("bad_request")
-        aead, why = self._recording()
+        aead, why = self._tag_cipher()
         if aead is None:
             return 503, _tag_fail("bad_request", _off_message(why, "Tags are not changed."))
         with self._lock, closing(self._connect()) as c:
@@ -1877,7 +1883,7 @@ class ChatLog:
                 return next((t for t in tags if t["id"] == v), None)
 
             def taken(name, skip=None):
-                return any(t["name"].casefold() == name.casefold() and t is not skip
+                return any(_tag_key(t["name"]) == _tag_key(name) and t is not skip
                            for t in tags)
 
             with c:
@@ -1961,7 +1967,7 @@ class ChatLog:
         if not (isinstance(cid, str) and _CID.fullmatch(cid)) \
                 or not (tag_id is None or _is_int(tag_id)):
             return 400, _tag_fail("bad_request")
-        aead, why = self._recording()
+        aead, why = self._tag_cipher()
         if aead is None:
             return 503, _tag_fail("bad_request", _off_message(why, "The chat is not filed."))
         if not self.db_path.exists():

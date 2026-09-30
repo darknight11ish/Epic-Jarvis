@@ -287,6 +287,9 @@ SHIPPED = (
     # Projects, build steps 1 and 2: projects, life benchmarks and their
     # numbers in projects.db; GET/POST /api/projects (projects.patch)
     "jarvis_projects.py",
+    # "about N to M weeks": the pure finish-time range jarvis_projects.py
+    # and jarvis_goals.py read (2026-09-30, JARVIS-API section 101)
+    "jarvis_forecast.py",
     # ... and its Gemini website adapter: a visible browser window,
     # stopping at any captcha or sign-in page (chatbot.patch gives
     # the gate its _RISK line)
