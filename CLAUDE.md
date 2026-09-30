@@ -1700,6 +1700,11 @@ and a manual **"new section here"** marker. Also decided: the tldraw canvas,
 React Flow, Datasette, Evidence, BERTopic and the other chat-clustering repos
 stay refused; the Galaxy is not swapped for a library.
 
+Standing instruction, 2026-09-30: **never open a pull request into `main` (or any
+branch) unless the owner asks for one.** Work is committed and pushed to the
+session's own branch only. This overrides the earlier plans in this file to open
+"one pull request" per batch: those wait until the owner says so.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
