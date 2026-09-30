@@ -46,6 +46,14 @@ backend folder as written in INSTALL.md; change it if yours moved.
    cd "$env:USERPROFILE\Epic-Jarvis"; git checkout main; git pull; powershell -ExecutionPolicy Bypass -File .\scripts\apply-patches.ps1 -BackendPath "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"
    ```
 
+   **If nearly every patch says "not onto the files as they are"** and near
+   the top it says `Endings : ... CRLF`, your backend's files have Windows line
+   endings (the patches use Unix ones). Add `-FixLineEndings` to the end of the
+   same command: each affected file is copied into a
+   `_jarvis-backup-<date>-endings` folder first, then only its line endings
+   change (2026-09-30). Also make sure the clone is on the real `main`
+   (`git status -sb` shows `## main...origin/main`), not an old branch.
+
    **Worked if:** it ends with a test summary and no `FAIL` lines, and a
    line naming the log file (in `_jarvis-logs` inside your backend folder).
    **If not:** send back that log file. Nothing was changed if it says so.
