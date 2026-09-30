@@ -1200,6 +1200,21 @@ def t_long_blank_sentences_and_decomposed_text():
 
 
 
+def t_after_a_pc_restart_the_next_rating_is_refused_then_recovers():
+    w = World()
+    v = w.d.create_deck("R")["id"]
+    w.d.keep({"deck": v}, mkcards(3))
+    cid = w.d.review_state(v)["card"]["id"]
+    w.d.reveal(cid)
+    d2 = D.Decks(w.path, lambda: KEY, clock=w.clock, scheduler=w.sched, fuzz=False)   # the PC restarted
+    check("the reveal list is memory only: after a restart the rating is refused with not_revealed",
+          raises(lambda: d2.rate(cid, "good", v), "not_revealed"))
+    st = d2.review_state(v)
+    check("... the same card is asked for again", st["state"] == "card" and st["card"]["id"] == cid)
+    d2.reveal(cid)
+    check("... and after showing the answer again the rating works", d2.rate(cid, "good", v)["ok"])
+
+
 def t_wording_and_the_shared_fixture():
     import subprocess
     r = subprocess.run([sys.executable, str(HERE.parent / "tools" / "gen_decks_cases.py"), "--check"],

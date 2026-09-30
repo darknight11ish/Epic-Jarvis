@@ -990,6 +990,28 @@ if (K) {
     assert.match(translate, /Jarvis's guess/i);
   });
 
+  await check("the Keep sheet of a Spanish quiz shows the PC's crisis notice; a text quiz's sheet has none", async () => {
+    const page = await workTab({ quiz: { notice: "THE PC'S OWN SPANISH NOTICE" }, decks: { decks: [PLANTS()] } });
+    await startSpanish(page, { exercise: "mixed" });
+    await answerAll(page, 1);
+    await page.locator("#quiz-run").getByRole("button", { name: W.keep_button }).click();
+    await settle(page, 600);
+    const sheet = await text(page, "#quiz-run");
+    await page.close();
+    assert.ok(sheet.includes("THE PC'S OWN SPANISH NOTICE"), "the notice is on the Keep sheet");
+    assert.ok(sheet.includes(W.keep_finish));
+    const plain = await workTab({ quiz: { notice: "THE PC'S OWN SPANISH NOTICE" }, decks: { decks: [PLANTS()] } });
+    await plain.locator("#quiz-text").fill(PASTE);
+    await plain.locator("#quiz-start").click();
+    await settle(plain, 500);
+    await answerAll(plain, 1);
+    await plain.locator("#quiz-run").getByRole("button", { name: W.keep_button }).click();
+    await settle(plain, 600);
+    const other = await text(plain, "#quiz-run");
+    await plain.close();
+    assert.ok(!other.includes("THE PC'S OWN SPANISH NOTICE"), "no Spanish notice on a text quiz's sheet");
+  });
+
   await check("a PC without Spanish practice says so, and Text mode is all that is offered afterwards", async () => {
     // Pasting Spanish text: the older PC answers with a quiz that has no mode.
     const withText = await workTab({ quiz: { noMode: true } });
