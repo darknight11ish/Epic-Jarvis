@@ -306,6 +306,7 @@ import {
   ALL as TAG_ALL,
   bannerText as tagBannerText,
   BANNER_CANCEL,
+  clipTagName,
   COLOURS as TAG_COLOURS,
   deleteConfirm as tagDeleteConfirm,
   DELETE_TAG,
@@ -323,7 +324,6 @@ import {
   MOVE_TO,
   MOVE_UP,
   NAME_LABEL,
-  NAME_MAX,
   NO_TAG,
   NO_TAG_CHATS,
   NOT_LOADED_LINE,
@@ -332,13 +332,14 @@ import {
   readTags,
   RENAME as TAG_RENAME,
   saveOpenFlag,
-  sectionSpeech,
+  sectionLabel,
   tagById,
   TAG_CHIPS_LABEL,
   TAGS_EDITOR_NOTE,
   TAGS_TITLE,
   UNFILED_WORDS,
   UNTAGGED,
+  validTagName,
 } from "./history-tags.js";
 import {
   addPage as addAutoPage,
@@ -3057,6 +3058,13 @@ const chats = {
   editor: { open: false, error: "", drafts: { add: { name: "", colour: 0, icon: "folder" }, names: {} } },
   filing: null,
   filingPending: null,
+  /** Which tag control had the keyboard (`data-fkey` names, first choice
+   *  first), so a repaint can give it back; and whether a repaint was held
+   *  back because a menu or the editor was in use. */
+  focus: null,
+  paintPending: false,
+  /** True while paintHistory paints everything: focus is given back once, at the end. */
+  batch: false,
   /** The conversation open below its row, and its transcript. */
   openId: null,
   open: null,
@@ -3094,9 +3102,10 @@ const HISTORY_SEARCH_WAIT_MS = 350;
 
 const errorText = (error) => String((error && error.message) || error);
 
-async function loadHistory() {
+async function loadHistory({ background = false } = {}) {
   if (chats.loading) return;
   chats.loading = true;
+  let hold = false;
   try {
     const kind = chats.kind;
     const tag = chats.tag;
@@ -3141,11 +3150,18 @@ async function loadHistory() {
       chats.open = null;
     }
     if (v.hidden) chats.search.view = null;
+    // The 15-second re-read must not close a menu or the editor the owner
+    // is using: the data is in, the repaint waits until they let go.
+    hold = background && tagControlBusy();
   } catch (error) {
     chats.error = errorText(error);
   } finally {
     chats.loading = false;
     chats.at = Date.now();
+  }
+  if (hold) {
+    chats.paintPending = true;
+    return;
   }
   paintHistory();
 }
@@ -3615,16 +3631,27 @@ function conversationRow(c, { needle = "", snippet = null } = {}) {
   // 2026-09-28, desktop A1): "Open" ten times over names nothing.
   const named = c.title || NO_TITLE;
   const buttons = item.querySelectorAll(".row-actions button");
-  if (buttons[0]) buttons[0].setAttribute("aria-label", `${open ? "Close" : "Open"} ${named}`);
-  if (buttons[1]) buttons[1].setAttribute("aria-label", `Delete ${named}`);
+  if (buttons[0]) {
+    buttons[0].setAttribute("aria-label", `${open ? "Close" : "Open"} ${named}`);
+    buttons[0].dataset.fkey = `open:${c.id}`;
+  }
+  if (buttons[1]) {
+    buttons[1].setAttribute("aria-label", `Delete ${named}`);
+    buttons[1].dataset.fkey = `delete:${c.id}`;
+  }
   const main = item.querySelector(".row-main");
   if (tagOf) main.append(tagPillNode(tagOf));
   const actionsBox = item.querySelector(".row-actions");
   if (chats.filing && tagView) {
-    const go = button(fileUnderWords(chats.filing.name), () => fileChat(c.id, chats.filing.tagId),
+    const go = button(fileUnderWords(chats.filing.name), () => {
+      chats.focus = { keys: [`move:${c.id}`, `open:${c.id}`, "editor-toggle"], at: Date.now() };
+      return fileChat(c.id, chats.filing.tagId);
+    },
       { live: true, title: tagBannerText(chats.filing.name) });
     go.classList.add("history-file-here");
-    go.setAttribute("aria-label", `File ${named} under ${chats.filing.name}`);
+    // The label starts with the words on the button, so Voice Access can say them.
+    go.setAttribute("aria-label", `${fileUnderWords(chats.filing.name)}: ${named}`);
+    go.dataset.fkey = `file:${c.id}`;
     actionsBox.prepend(go);
     item.dataset.filing = "true";
     item.addEventListener("click", (e) => {
@@ -3828,6 +3855,7 @@ function paintHistoryList() {
   const active = document.activeElement;
   const refocus = active && active.id === "history-find"
     ? [active.selectionStart, active.selectionEnd] : null;
+  rememberTagFocus();
   paintHistoryListNow(box);
   if (chats.open && $("history-transcript-turns")) paintFound();
   if (refocus) {
@@ -3837,6 +3865,7 @@ function paintHistoryList() {
       try { input.setSelectionRange(refocus[0], refocus[1]); } catch { /* type=search may refuse */ }
     }
   }
+  if (!chats.batch) giveBackTagFocus();
 }
 
 function paintHistoryListNow(box) {
@@ -3897,9 +3926,10 @@ function paintHistoryListNow(box) {
     if (chats.openId === c.id) list.append(transcriptNode());
   };
   const tagView = chats.tags && chats.tags.available && !chats.tags.hidden ? chats.tags : null;
-  if (tagView && !chats.tag) {
+  if (tagView && tagView.tags.length && !chats.tag) {
     // Sections, one per tag in the owner's order, "Untagged" last
     // (docs/CHAT-TAGS-DESIGN.md sections 1 and 6). Each header is a button.
+    // With no tags at all the list stays flat, as on the phone.
     const exact = !chats.kind && !needle;
     for (const sec of groupRows(shown, tagView, { exact })) {
       box.append(sectionNode(sec, appendRow));
@@ -3947,6 +3977,7 @@ function sectionNode(sec, appendRow) {
   head.type = "button";
   const bodyId = `history-section-${sec.key}`;
   head.setAttribute("aria-controls", bodyId);
+  head.dataset.fkey = `sec:${sec.key}`;
   head.append(
     iconNode(sec.tag ? sec.tag.icon : "folder"),
     el("span", "history-section-name", tagHeaderText(name, sec.count)),
@@ -3964,7 +3995,8 @@ function sectionNode(sec, appendRow) {
   }
   const apply = () => {
     head.setAttribute("aria-expanded", String(open));
-    head.setAttribute("aria-label", sectionSpeech(name, sec.count, open));
+    // The state is aria-expanded's to say; the label is the name and count.
+    head.setAttribute("aria-label", sectionLabel(name, sec.count));
     body.hidden = !open;
   };
   apply();
@@ -3983,6 +4015,7 @@ function moveControl(c, tagView) {
   if (!tagView || !tagView.tags.length) return null;
   const select = document.createElement("select");
   select.className = "field history-move";
+  select.dataset.fkey = `move:${c.id}`;
   select.setAttribute("aria-label", `${MOVE_TO}: ${c.title || NO_TITLE}`);
   const first = document.createElement("option");
   first.value = "";
@@ -4009,6 +4042,13 @@ function moveControl(c, tagView) {
     select.value = "";
     if (!value) return;
     select.disabled = true;
+    // The row moves to another section: keep the keyboard on it if it is
+    // still on screen, else on the header of the section it landed under.
+    chats.focus = {
+      keys: [`move:${c.id}`, `sec:${value === "none" ? "none" : value}`, `open:${c.id}`,
+        `chip:${chats.tag}`, "editor-toggle"],
+      at: Date.now(),
+    };
     await fileChat(c.id, value === "none" ? null : Number(value));
   });
   return select;
@@ -4042,17 +4082,20 @@ async function fileChat(id, tagId) {
 
 /** The chip row, the Tags editor and the banner, above the search box. */
 function paintHistoryTagBar() {
+  paintTagBarNow();
+  if (!chats.batch) giveBackTagFocus();
+}
+
+function paintTagBarNow() {
   const box = $("history-tagbar");
   if (!box) return;
   const v = chats.view;
   const tv = chats.tags;
   const show = Boolean(v && v.available && !v.hidden && tv && tv.available && !tv.hidden);
   box.hidden = !show;
-  // Typing in the editor survives the 15-second repaint: remember the
-  // focused box and where its caret was, and put both back.
-  const active = document.activeElement;
-  const refocus = active && box.contains(active) && active.id
-    ? { id: active.id, start: active.selectionStart, end: active.selectionEnd } : null;
+  // Typing in the editor survives a repaint: the control that had the
+  // keyboard is found again by its `data-fkey` (giveBackTagFocus, after paint).
+  rememberTagFocus();
   box.replaceChildren();
   if (!show) return;
 
@@ -4062,7 +4105,9 @@ function paintHistoryTagBar() {
     banner.setAttribute("role", "status");
     if (t) banner.dataset.colour = String(t.colour);
     banner.append(el("p", "", tagBannerText(chats.filing.name)));
-    banner.append(button(BANNER_CANCEL, () => { chats.filing = null; paintHistory(); }));
+    const cancel = button(BANNER_CANCEL, () => { chats.filing = null; paintHistory(); });
+    cancel.dataset.fkey = "banner-cancel";
+    banner.append(cancel);
     box.append(banner);
   }
 
@@ -4079,6 +4124,7 @@ function paintHistoryTagBar() {
     b.append(el("span", "", label));
     if (count !== null) b.append(el("span", "tag-chip-count", String(count)));
     b.setAttribute("aria-pressed", String(chats.tag === value));
+    b.dataset.fkey = `chip:${value}`;
     b.addEventListener("click", () => setTagChip(value));
     return b;
   };
@@ -4088,6 +4134,7 @@ function paintHistoryTagBar() {
   const edit = el("button", "btn small tag-editor-toggle", TAGS_TITLE);
   edit.type = "button";
   edit.id = "tag-editor-toggle";
+  edit.dataset.fkey = "editor-toggle";
   edit.setAttribute("aria-expanded", String(chats.editor.open));
   edit.setAttribute("aria-controls", "tag-editor");
   edit.addEventListener("click", () => {
@@ -4098,18 +4145,113 @@ function paintHistoryTagBar() {
   chips.append(edit);
   box.append(chips);
   if (chats.editor.open) box.append(tagEditorNode(tv));
+}
 
-  if (refocus) {
-    const input = document.getElementById(refocus.id);
-    if (input) {
-      input.focus({ preventScroll: true });
-      try {
-        if (refocus.start !== null && refocus.start !== undefined) {
-          input.setSelectionRange(refocus.start, refocus.end);
-        }
-      } catch { /* a select has no caret */ }
-    }
+/* ---- Keeping the keyboard where it was (docs/CHAT-TAGS-DESIGN.md section 10) ----
+ *
+ * Every interactive tag control carries a stable `data-fkey` (chip:3, sec:none,
+ * move:<chat id>, up:<tag id>...). The list and the tag bar are drawn afresh
+ * on each repaint, so the control that had the keyboard is remembered by that
+ * key and found again afterwards - even when pressing it disabled it for a
+ * moment (which drops focus). A control that is gone hands the keyboard to a
+ * named neighbour (a moved row to the header it landed under). */
+
+const FOCUS_KEEP_MS = 30_000;
+
+/** The keys to try after `key`, in order, when the control itself is gone. */
+function focusFallbacks(key) {
+  const [kind, id] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
+  switch (kind) {
+    case "up": return [`down:${id}`, `name:${id}`];
+    case "down": return [`up:${id}`, `name:${id}`];
+    case "del": return ["add-name", "editor-toggle"];
+    case "rename": return [`name:${id}`];
+    case "move": return [`open:${id}`];
+    case "file": return [`move:${id}`, `open:${id}`];
+    case "chip": return ["chip:"];
+    default: return key === "add-btn" ? ["add-name"] : [];
   }
+}
+
+function inTagBoxes(node) {
+  return Boolean(node && node.closest && node.closest("#history-tagbar, #history-list"));
+}
+
+/** Notes which tag control has the keyboard (and its caret). */
+function noteTagFocus(node) {
+  const key = node && node.dataset ? node.dataset.fkey : "";
+  if (!key) return;
+  const caret = typeof node.selectionStart === "number" && node.type !== "search";
+  chats.focus = {
+    keys: [key, ...focusFallbacks(key)],
+    start: caret ? node.selectionStart : null,
+    end: caret ? node.selectionEnd : null,
+    at: Date.now(),
+  };
+}
+
+/** Called just before a repaint: the caret has moved since the last focus event. */
+function rememberTagFocus() {
+  const a = document.activeElement;
+  if (a && a.dataset && a.dataset.fkey && inTagBoxes(a)) noteTagFocus(a);
+}
+
+let givingBackFocus = false;
+
+/** Called after a repaint: puts the keyboard back on the control it was on. */
+function giveBackTagFocus() {
+  const f = chats.focus;
+  if (!f || Date.now() - f.at > FOCUS_KEEP_MS) return;
+  const a = document.activeElement;
+  if (a && a !== document.body && a.isConnected) return;   // the keyboard is somewhere real
+  const boxes = ["history-tagbar", "history-list"].map((id) => $(id)).filter(Boolean);
+  for (const [i, key] of f.keys.entries()) {
+    let found = null;
+    for (const box of boxes) {
+      for (const n of box.querySelectorAll("[data-fkey]")) {
+        if (n.dataset.fkey === key) { found = n; break; }
+      }
+      if (found) break;
+    }
+    if (!found || found.disabled || found.closest("[hidden]")) continue;
+    givingBackFocus = true;
+    try {
+      found.focus({ preventScroll: true });
+      if (i === 0 && f.start !== null && f.start !== undefined) {
+        try { found.setSelectionRange(f.start, f.end); } catch { /* a select has no caret */ }
+      }
+    } finally {
+      givingBackFocus = false;
+    }
+    return;
+  }
+}
+
+/** A tag menu, the editor or a text box in it is in use: no repaint under the hand. */
+function tagControlBusy() {
+  const a = document.activeElement;
+  if (!a || !a.closest) return false;
+  if (a.closest("#tag-editor")) return true;
+  return a.tagName === "SELECT" && inTagBoxes(a);
+}
+
+if (typeof document !== "undefined") {
+  document.addEventListener("focusin", (e) => {
+    if (givingBackFocus) return;
+    if (inTagBoxes(e.target) && e.target.dataset && e.target.dataset.fkey) noteTagFocus(e.target);
+    else chats.focus = null;
+  });
+  // A click on empty space (or anything that is not a tag control) lets go.
+  document.addEventListener("pointerdown", (e) => {
+    if (!(e.target && e.target.closest && e.target.closest("[data-fkey]"))) chats.focus = null;
+  }, true);
+  // A repaint held back while a menu was open happens once it is closed.
+  document.addEventListener("focusout", () => {
+    if (!chats.paintPending) return;
+    setTimeout(() => {
+      if (chats.paintPending && !tagControlBusy() && state.view === "history") paintHistory();
+    }, 0);
+  });
 }
 
 /** A chip was pressed: show one tag's chats (the PC filters), or all. */
@@ -4161,6 +4303,17 @@ function optionsFor(select, items, current) {
   select.value = String(current);
 }
 
+/** A name box's value cut to NAME_MAX code points (never inside a surrogate
+ *  pair), the caret kept. The browser's own maxLength counts UTF-16 units. */
+function limitNameField(input) {
+  const clipped = clipTagName(input.value);
+  if (clipped !== input.value) {
+    const caret = Math.min(input.selectionStart ?? clipped.length, clipped.length);
+    queueMicrotask(() => { try { input.setSelectionRange(caret, caret); } catch { /* no caret */ } });
+  }
+  return clipped;
+}
+
 const COLOUR_ITEMS = TAG_COLOURS.map((c) => [c.slot, c.name[0].toUpperCase() + c.name.slice(1)]);
 const ICON_ITEMS = TAG_ICONS.map((n) => [n, n[0].toUpperCase() + n.slice(1)]);
 
@@ -4178,27 +4331,37 @@ function tagEditorNode(tv) {
     const input = document.createElement("input");
     input.className = "field";
     input.id = `tag-name-${t.id}`;
+    input.dataset.fkey = `name:${t.id}`;
     input.type = "text";
-    input.maxLength = NAME_MAX;
     input.autocomplete = "off";
     input.spellcheck = false;
     input.setAttribute("aria-label", `${NAME_LABEL}: ${t.name}`);
     input.value = editor.drafts.names[t.id] ?? t.name;
-    input.addEventListener("input", () => { editor.drafts.names[t.id] = input.value; });
+    input.addEventListener("input", () => {
+      input.value = limitNameField(input);
+      editor.drafts.names[t.id] = input.value;
+    });
     const rename = async () => {
-      const name = input.value.trim();
+      const name = validTagName(input.value);
       if (name === t.name) { delete editor.drafts.names[t.id]; return; }
+      if (name === null) {
+        editor.error = tagErrorWords({ error: "bad_name" });
+        paintHistoryTagBar();
+        return;
+      }
       if (await editTags({ op: "rename", id: t.id, name })) delete editor.drafts.names[t.id];
     };
     input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); rename(); } });
     const colour = document.createElement("select");
     colour.className = "field";
     colour.setAttribute("aria-label", `Colour for ${t.name}`);
+    colour.dataset.fkey = `colour:${t.id}`;
     optionsFor(colour, COLOUR_ITEMS, t.colour);
     colour.addEventListener("change", () => editTags({ op: "style", id: t.id, colour: Number(colour.value) }));
     const icon = document.createElement("select");
     icon.className = "field";
     icon.setAttribute("aria-label", `Icon for ${t.name}`);
+    icon.dataset.fkey = `icon:${t.id}`;
     optionsFor(icon, ICON_ITEMS, t.icon);
     icon.addEventListener("change", () => editTags({ op: "style", id: t.id, icon: icon.value }));
     for (const s of [colour, icon]) { liveButtons.add(s); syncLiveButton(s); }
@@ -4207,18 +4370,23 @@ function tagEditorNode(tv) {
       { live: true, title: `${MOVE_UP}: ${t.name}` });
     up.disabled = i === 0;
     up.setAttribute("aria-label", `${MOVE_UP}: ${t.name}`);
+    up.dataset.fkey = `up:${t.id}`;
     const down = button(MOVE_DOWN,
       () => editTags({ op: "move", id: t.id, before: tv.tags[i + 2] ? tv.tags[i + 2].id : null }),
       { live: true, title: `${MOVE_DOWN}: ${t.name}` });
     down.setAttribute("aria-label", `${MOVE_DOWN}: ${t.name}`);
+    down.dataset.fkey = `down:${t.id}`;
+    down.disabled = i === tv.tags.length - 1;
     const del = button(DELETE_TAG, async () => {
       if (!window.confirm(tagDeleteConfirm(t.name, t.count))) return;
       // If its chip was chosen, the re-read finds the tag gone and shows All.
       await editTags({ op: "delete", id: t.id });
     }, { danger: true, live: true, title: `${DELETE_TAG}: ${t.name}` });
     del.setAttribute("aria-label", `${DELETE_TAG}: ${t.name}`);
+    del.dataset.fkey = `del:${t.id}`;
     const renameBtn = button(TAG_RENAME, rename, { live: true, title: `${TAG_RENAME}: ${t.name}` });
     renameBtn.setAttribute("aria-label", `${TAG_RENAME}: ${t.name}`);
+    renameBtn.dataset.fkey = `rename:${t.id}`;
     line.append(input, renameBtn, colour, icon, up, down, del);
     box.append(line);
   });
@@ -4229,28 +4397,33 @@ function tagEditorNode(tv) {
   const name = document.createElement("input");
   name.className = "field";
   name.id = "tag-add-name";
+  name.dataset.fkey = "add-name";
   name.type = "text";
-  name.maxLength = NAME_MAX;
   name.autocomplete = "off";
   name.spellcheck = false;
   name.placeholder = ADD_TAG;
   name.setAttribute("aria-label", `${ADD_TAG}: ${NAME_LABEL}`);
   name.value = draft.name;
-  name.addEventListener("input", () => { draft.name = name.value; });
+  name.addEventListener("input", () => {
+    name.value = limitNameField(name);
+    draft.name = name.value;
+  });
   const colour = document.createElement("select");
   colour.className = "field";
   colour.id = "tag-add-colour";
+  colour.dataset.fkey = "add-colour";
   colour.setAttribute("aria-label", `${ADD_TAG}: colour`);
   optionsFor(colour, COLOUR_ITEMS, draft.colour);
   colour.addEventListener("change", () => { draft.colour = Number(colour.value); });
   const icon = document.createElement("select");
   icon.className = "field";
   icon.id = "tag-add-icon";
+  icon.dataset.fkey = "add-icon";
   icon.setAttribute("aria-label", `${ADD_TAG}: icon`);
   optionsFor(icon, ICON_ITEMS, draft.icon);
   icon.addEventListener("change", () => { draft.icon = icon.value; });
   const addNow = async () => {
-    const wanted = draft.name.trim();
+    const wanted = validTagName(draft.name);
     if (!wanted) { editor.error = tagErrorWords({ error: "bad_name" }); paintHistoryTagBar(); return; }
     if (await editTags({ op: "add", name: wanted, colour: draft.colour, icon: draft.icon })) {
       draft.name = "";
@@ -4260,6 +4433,7 @@ function tagEditorNode(tv) {
   name.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addNow(); } });
   const addBtn = button(ADD_TAG, addNow, { live: true, title: `${ADD_TAG}. Up to ${MAX_TAGS} tags.` });
   addBtn.disabled = tv.tags.length >= MAX_TAGS;
+  addBtn.dataset.fkey = "add-btn";
   add.append(name, colour, icon, addBtn);
   liveButtons.add(colour); liveButtons.add(icon); syncLiveButton(colour); syncLiveButton(icon);
   box.append(add);
@@ -4379,15 +4553,26 @@ function historyChanged() {
 window.addEventListener(HISTORY_CHANGED, historyChanged);
 
 function paintHistory() {
-  paintHistoryTools();
-  paintHistoryTagBar();
-  paintHistorySettings();
-  paintHistoryList();
+  chats.paintPending = false;
+  chats.batch = true;
+  try {
+    paintHistoryTools();
+    paintHistoryTagBar();
+    paintHistorySettings();
+    paintHistoryList();
+  } finally {
+    chats.batch = false;
+  }
+  giveBackTagFocus();
 }
 
 function renderHistory() {
-  paintHistory();
-  if (IS_TAURI && !chats.loading && Date.now() - chats.at > HISTORY_READ_MS) loadHistory();
+  // A tag menu or the editor in use is not repainted under the owner's hand.
+  if (tagControlBusy()) chats.paintPending = true;
+  else paintHistory();
+  if (IS_TAURI && !chats.loading && Date.now() - chats.at > HISTORY_READ_MS) {
+    loadHistory({ background: true });
+  }
 }
 
 /* ==========================================================================

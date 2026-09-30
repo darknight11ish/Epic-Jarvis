@@ -321,8 +321,10 @@ KINDS: dict = {}
 #: jarvis_today (2026-09-28): Today cards - the owner's own words shown on
 #: the Today part of both apps at a time, on chosen days; no card (like a
 #: plain repeat), and going off only tells the apps the list changed.
+#: jarvis_decks (2026-09-30): the quiet `review` job - "N cards ready" under
+#: Coming up while the owner has a deck; no card, no notification.
 KIND_MODULES = ("jarvis_standby_schedule", "jarvis_briefing", "jarvis_tellme", "jarvis_focus",
-                "jarvis_next_time", "jarvis_tidy", "jarvis_today")
+                "jarvis_next_time", "jarvis_tidy", "jarvis_today", "jarvis_decks")
 
 
 def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = False,

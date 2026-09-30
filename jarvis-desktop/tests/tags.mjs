@@ -74,6 +74,9 @@ await check("section headers, the screen-reader form and the delete question mat
   for (const c of CASES.tag_section_cases) {
     assert.equal(T.headerText(c.name, c.count), c.header);
     assert.equal(T.sectionSpeech(c.name, c.count, c.expanded), c.sr);
+    // The desktop's label leaves the state to aria-expanded (no double announcement).
+    assert.equal(T.sectionLabel(c.name, c.count), c.label);
+    assert.ok(!/collapsed|expanded/.test(T.sectionLabel(c.name, c.count)));
   }
   for (const c of CASES.tag_delete_cases) assert.equal(T.deleteConfirm(c.name, c.count), c.expect);
 });
@@ -201,9 +204,37 @@ await check("a tag whose chats are all on older pages still shows, with its coun
   assert.equal(learning.count, 2);
 });
 
-await check("no tags at all: every chat is under Untagged", () => {
+await check("no tags at all: no sections, the list is flat", () => {
   const sec = T.groupRows([row("a", null, 1)], T.readTags({ tags: [], untagged: 1 }));
-  assert.deepEqual(sec.map((s) => s.key), ["none"]);
+  assert.deepEqual(sec, []);
+});
+
+await check("the fixture's worked grouping cases give the same sections in both apps", () => {
+  assert.ok(CASES.tag_group_cases.length >= 6);
+  for (const c of CASES.tag_group_cases) {
+    const view = T.readTags({ ok: true, untagged: c.untagged,
+      tags: c.tags.map((t, i) => ({ id: t.id, name: t.name, colour: 0, icon: "folder", order: i, count: t.count })) });
+    const rows = c.rows.map((r) => ({ id: r.id, tagId: r.tag, updated: r.updated }));
+    const sections = T.groupRows(rows, view, { exact: c.exact });
+    const got = { flat: sections.length === 0 && c.tags.length === 0,
+      sections: sections.map((s) => ({ key: s.key, count: s.count, rows: s.rows.map((r) => r.id) })) };
+    assert.deepEqual(got, c.expect, c.name);
+  }
+});
+
+await check("a tag name is judged in code points, NFC, with something visible (the fixture's cases)", () => {
+  for (const c of CASES.tag_name_cases) {
+    const got = T.validTagName(c.name);
+    assert.equal(got !== null, c.valid, JSON.stringify(c.name));
+  }
+  const emoji24 = "\u{1F600}".repeat(24);
+  assert.equal(T.codePointLength(emoji24), 24);
+  assert.equal(emoji24.length, 48, "24 code points are 48 UTF-16 units");
+  assert.equal(T.clipTagName("\u{1F600}".repeat(30)), emoji24, "cut at 24 code points");
+  const cut = T.clipTagName("a".repeat(23) + "\u{1F600}\u{1F600}");
+  assert.equal(T.codePointLength(cut), 24);
+  assert.ok(!/[\ud800-\udbff]$/.test(cut), "never cut inside a surrogate pair");
+  assert.equal(T.validTagName("Cafe\u0301"), "Caf\u00e9", "NFC");
 });
 
 /* ── What this device keeps ─────────────────────────────────────────────── */
@@ -243,10 +274,16 @@ await check("the older-chat route fields are read as a tag id and search words, 
   assert.equal(T.readFilePlace({ file_under: "3", history_q: "x".repeat(300) }).q.length, 100);
 });
 
-await check("the error words: a code gets its sentence, an unknown one the PC's message", () => {
+await check("the error words: a classified code gets its sentence; bad_request and unknown codes the PC's own", () => {
   assert.equal(T.errorWords({ ok: false, error: "name_taken" }), CASES.words.tag_errors.name_taken);
   assert.equal(T.errorWords({ ok: false, error: "weird", message: "Try later." }), "Try later.");
-  assert.equal(T.errorWords(null), CASES.words.tag_errors.bad_request);
+  assert.equal(T.errorWords({ ok: false, error: "bad_request", message: "Chat history is off. Tags are not changed." }),
+    "Chat history is off. Tags are not changed.");
+  assert.equal(T.errorWords({ ok: false, error: "bad_request" }), CASES.words.tag_errors.bad_request);
+  assert.equal(T.errorWords(null), CASES.words.tag_error_fallback);
+  for (const c of CASES.tag_error_cases) {
+    assert.equal(T.errorWords(c.answer), c.expect, JSON.stringify(c.answer));
+  }
 });
 
 /* ── CONTROL: the Rust, the permissions and the page hold to the rules ─── */
@@ -308,10 +345,41 @@ await check("CONTROL: main.js leaves the two fields for the Brain, and the Brain
   assert.match(read("src/forget-range-panel.js"), /export function takePlaceExtras/);
 });
 
+await check("CONTROL: main.js drops the place key after a minute if the Brain never read it", () => {
+  const main = read("src/main.js");
+  assert.match(main, /now\.at === left\.at\) localStorage\.removeItem\(BRAIN_PLACE_KEY\)/);
+  const panel = read("src/forget-range-panel.js");
+  assert.match(panel, /if \(left\) localStorage\.removeItem\(BRAIN_PLACE_KEY\)/, "removed as soon as it is read");
+});
+
+await check("CONTROL: every tag control has a stable data-fkey, focus is given back, and a used menu is not repainted", () => {
+  const brain = read("src/brain.js");
+  for (const key of ["`chip:${value}`", "`sec:${sec.key}`", "`move:${c.id}`", "`open:${c.id}`", "`file:${c.id}`",
+    "`up:${t.id}`", "`down:${t.id}`", "`del:${t.id}`", "`rename:${t.id}`", "`name:${t.id}`", "`colour:${t.id}`",
+    "`icon:${t.id}`", '"editor-toggle"', '"add-name"', '"add-btn"', '"banner-cancel"']) {
+    assert.ok(brain.includes(`dataset.fkey = ${key}`) || brain.includes(key), `no data-fkey ${key}`);
+  }
+  assert.match(brain, /function giveBackTagFocus\(\)/);
+  assert.match(brain, /function tagControlBusy\(\)/);
+  assert.match(brain, /hold = background && tagControlBusy\(\)/, "the 15-second re-read waits for a used menu");
+  assert.match(brain, /if \(tagControlBusy\(\)\) chats\.paintPending = true;/);
+  assert.match(brain, /document\.addEventListener\("focusout"/, "and repaints when it closes");
+  assert.match(brain, /`sec:\$\{value === "none" \? "none" : value\}`/, "a moved row falls back to its new header");
+});
+
+await check("CONTROL: the File under button's label starts with its visible words; chips are 32px tall", () => {
+  const brain = read("src/brain.js");
+  assert.match(brain, /aria-label", `\$\{fileUnderWords\(chats\.filing\.name\)\}: \$\{named\}`/);
+  assert.ok(!/maxLength = NAME_MAX/.test(brain), "the UTF-16 maxLength is gone; code points are counted");
+  assert.match(read("src/brain.css"), /\.tag-chip \{[^}]*min-height: 32px/s);
+  assert.match(brain, /tagView\.tags\.length && !chats\.tag/, "no tags: a flat list, no Untagged-only section");
+});
+
 await check("CONTROL: the page is keyboard-operable, reads the shared words and respects reduced motion", () => {
   const brain = read("src/brain.js");
   assert.match(brain, /head\.setAttribute\("aria-expanded"/);
-  assert.match(brain, /sectionSpeech\(name, sec\.count, open\)/);
+  assert.match(brain, /aria-label", sectionLabel\(name, sec\.count\)/);
+  assert.ok(!/sectionSpeech\(/.test(brain), "the state is said once, by aria-expanded");
   assert.match(brain, /"history-section-head"/);
   assert.match(brain, /el\("button", "history-section-head"\)/, "a section header is a button");
   const css = read("src/brain.css");
@@ -372,7 +440,8 @@ if (browser) {
     const heads = await page.locator(".history-section-head").evaluateAll((els) =>
       els.map((e) => ({ text: e.innerText, label: e.getAttribute("aria-label"), expanded: e.getAttribute("aria-expanded") })));
     assert.deepEqual(heads.map((h) => h.text.trim()), ["Work (2)", "Learning (1)", "Untagged (1)"]);
-    assert.deepEqual(heads.map((h) => h.label), ["Work, 2 chats, expanded", "Learning, 1 chats, expanded", "Untagged, 1 chats, expanded"]);
+    assert.deepEqual(heads.map((h) => h.label), ["Work, 2 chats", "Learning, 1 chats", "Untagged, 1 chats"]);
+    assert.deepEqual(heads.map((h) => h.expanded), ["true", "true", "true"], "the state is aria-expanded's");
     const inWork = await page.locator('.history-section[data-key="1"] .row-title').allInnerTexts();
     assert.deepEqual(inWork, ["Quarterly numbers", "Team offsite"]);
     assert.equal(await page.locator('.history-section[data-key="1"] .history-section-head svg').count(), 1, "an icon");
@@ -385,7 +454,8 @@ if (browser) {
     await head.focus();
     await page.keyboard.press("Enter");
     assert.equal(await head.getAttribute("aria-expanded"), "false");
-    assert.equal(await head.getAttribute("aria-label"), "Work, 2 chats, collapsed");
+    assert.equal(await head.getAttribute("aria-label"), "Work, 2 chats");
+    assert.equal(await head.evaluate((n) => document.activeElement === n), true, "still focused");
     assert.equal(await page.locator('.history-section[data-key="1"] .history-section-body').isVisible(), false);
     const stored = await page.evaluate(() => localStorage.getItem("jarvis.history.sections"));
     assert.deepEqual(JSON.parse(stored), { 1: false });
@@ -420,6 +490,61 @@ if (browser) {
     await page.locator('.row-item[data-id="conv-0003-aaaa"] select.history-move').selectOption({ label: "No tag" });
     await page.waitForTimeout(300);
     assert.deepEqual((await calls(page, "brain_history_tag")).at(-1), { id: "conv-0003-aaaa", tagId: null });
+    await page.close();
+  });
+
+  const activeKey = (page) => page.evaluate(() => document.activeElement && document.activeElement.dataset.fkey || "");
+
+  await check("browser: the keyboard stays on a chip after it is pressed", async () => {
+    const page = await tab();
+    await page.locator(".tag-chip", { hasText: "Learning" }).focus();
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(350);
+    assert.equal(await activeKey(page), "chip:2");
+    await page.close();
+  });
+
+  await check("browser: after Move to, the keyboard is on the moved row (or its new header)", async () => {
+    const page = await tab();
+    const move = page.locator('.row-item[data-id="conv-0003-aaaa"] select.history-move');
+    await move.focus();
+    await move.selectOption({ label: "Personal" });
+    await page.waitForTimeout(400);
+    const key = await activeKey(page);
+    assert.ok(key === "move:conv-0003-aaaa" || key === "sec:3", `focus was ${JSON.stringify(key)}`);
+    await page.close();
+  });
+
+  await check("browser: Move up / Rename keep the keyboard, and the editor is not closed by a re-read", async () => {
+    const page = await tab();
+    await page.locator("#tag-editor-toggle").click();
+    const down = page.locator('.tag-editor-row[data-tag="1"] button', { hasText: "Move down" });
+    await down.focus();
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(350);
+    assert.ok(["down:1", "up:1"].includes(await activeKey(page)), "Move down keeps the keyboard on that tag");
+    await page.close();
+  });
+
+  await check("browser: a Move-to menu in use is not repainted by the 15-second re-read", async () => {
+    const page = await tab();
+    const move = page.locator('.row-item[data-id="conv-0003-aaaa"] select.history-move');
+    await move.focus();
+    await page.evaluate(() => { document.querySelector("select.history-move").dataset.mark = "same"; });
+    // Painting the tab again (what the re-read ends with) must leave the menu alone.
+    await page.evaluate(() => document.querySelector("#tab-history").click());
+    await page.waitForTimeout(300);
+    assert.equal(await page.evaluate(() => document.querySelector("select.history-move").dataset.mark), "same",
+      "the menu was drawn afresh under the owner's hand");
+    await page.locator("#history-find, #history-filter").first().focus();
+    await page.waitForTimeout(200);
+    await page.close();
+  });
+
+  await check("browser: with no tags at all the list is flat", async () => {
+    const page = await tab({ tags: [] });
+    assert.equal(await page.locator(".history-section").count(), 0);
+    assert.equal(await page.locator("#history-list .row-item").count(), 4);
     await page.close();
   });
 

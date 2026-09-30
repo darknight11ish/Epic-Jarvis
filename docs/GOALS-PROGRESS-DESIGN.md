@@ -1,6 +1,8 @@
 # Goals that show progress: design (2026-09-30)
 
-Status: **designed, not built.** The owner ticked three things on 2026-09-30
+Status: **parts A and B: backend built 2026-09-30 (JARVIS-API §101), screens
+next, from the "Slice contract (frozen)" at the end of this file; part C
+designed, not built.** The owner ticked three things on 2026-09-30
 (build queue items 3 and 7, `docs/BUILD-QUEUE-2026-09-30.md`): (A) goal steps
 that are locked until the steps or numbers they depend on are done, (B) a
 finish-time range on the benchmark chart, (C) an activity heatmap and a
@@ -470,3 +472,188 @@ making them longer.
   re-checked today.
 - Kotlin and Rust were not compiled; there is no Android build here, and
   nothing in this document has been built.
+
+
+## Slice contract (frozen)
+
+Written 2026-09-30, after the backend for parts A and B was built and tested
+(`backend/jarvis_goals.py`, `backend/jarvis_forecast.py`,
+`backend/jarvis_projects.py`; `docs/JARVIS-API.md` section 101). Two builders
+(desktop, phone) build the screens from this alone. **Where this file and
+the design above differ, this section wins.** Real answers of the real code,
+in named situations, are in `projects-cases.json` (desktop:
+`jarvis-desktop/tests/fixtures/`, phone:
+`jarvis-client/app/src/test/resources/contract/`; byte-identical, made by
+`python3 tools/gen_projects_cases.py`, checked by `--check` and by
+`backend/test_projects.py`). Read it before writing a parser.
+
+### What changed from the design text above
+
+- The forecast fields are `low_weeks` / `high_weeks` (not `weeks_low`), and the
+  band and line are sent as finished points (below), already stopped at the
+  drawing's edge. `forecast` lives in `jarvis_forecast.py`, not
+  `jarvis_progress.py` (that name is left for part C).
+- The forecast is on `GET /api/projects/<pid>/benchmarks/<bid>?points=N`
+  only (any N >= 1), not on the project read or the list.
+- Q1 to Q5 use the recommended answers: 7 steps, rows only (no diagram),
+  "More than 2 years at this pace.", the pace line for non-private benchmarks.
+- There is no route to edit an already-accepted goal's plan (there never was):
+  locks and measures are set in the draft, before Accept, through `POST
+  /api/goals` and `POST /api/goals/<id>/accept`. No new route exists in this
+  slice, so `tools/check_parity.py` needs no new line.
+
+### 1. The step (Goals)
+
+Sent by `GET /api/goals` and `GET /api/goals/<id>` and every goal answer:
+
+```
+step = {
+  "id": "s1".."s9",              // stable; send it back unchanged on every save
+  "step": str, "by": str, "done": bool,
+  "done_at": number|null,        // seconds since 1970; null = not done, or unknown
+  "needs": [id, ...],            // 0..3 ids of other steps in this plan
+  "measure": null | {"project": 32hex, "bench": 32hex},
+  // computed by the PC - ignored if sent back:
+  "state": "open" | "locked" | "met_by_number" | "done",
+  "waiting_on": [id, ...],       // needs that are not met; also present on a "done" step
+  "lock_words": str,             // "" | 'after: "Get quotes", "Pick one"' | 'after: "X" (open again)'
+  "reached": bool, "reached_words": str,  // "The number reached its target: 29.5 min (target 30 min)."
+  "measure_name": str, "measure_gone": bool, "measure_sensitive": bool
+}
+limits = {"text", "steps": 7, "goals", "by", "needs": 3}
+words  = goal_words      // in projects-cases.json too
+```
+
+Rules the apps must show, not decide: **met** = `state` in (`done`,
+`met_by_number`). **Locked** = `state == "locked"`. An app never works out a
+state itself. `met_by_number` is NOT a tick: show it as "reached", keep the
+tick button (the owner still ticks it). The tick button of a `locked` step is
+shown but disabled with the `lock_words` beside it; if it is pressed anyway
+(stale screen) the PC answers 409 (below) and the app shows its `error`.
+
+**Saving a plan** (`POST /api/goals {"text", "plan"}` and `POST
+/api/goals/<id>/accept {"plan"}`): send every step as `{"id", "step", "by",
+"done", "needs", "measure"}` (a new step: no `id`). The PC answers `400
+{"ok": false, "error": <sentence>}` and stores nothing for: itself/unknown/
+more than 3/circle needs, and a `measure` for a benchmark that does not exist
+or has no target. Show the sentence as is. The editor must, before saving,
+remove a deleted step's id from every other step's `needs` and say so; the PC
+does not clean it for the app.
+
+**Ticking**: `POST /api/goals/<id>/step` with `{"id": "s2", "done": true}` (or
+`{"index": 1, "done": true}`). Locked: `409 {"ok": false, "locked": true,
+"error": 'Do "Get quotes" first, or tick it if it is already done.',
+"waiting_on": ["s1"]}`. Untick (the Undo) is always allowed: it clears
+`done_at` and changes no other step; a later step stays `done` and then reads
+`lock_words` = `after: "..." (open again)`. Success answers `{"ok": true,
+"goal": ...}` as before. No card for any of it.
+
+**Words** (`goal_words` in the fixture; the apps' own list must equal it key
+for key and word for word - `{step}` `{steps}` `{latest}` `{target}` `{name}`
+are filled in by the PC, so an app normally shows `lock_words`,
+`reached_words` and `error` as sent and needs only the fixed labels):
+`locked` = "locked" (the small padlock label next to the step),
+`after` = "after: {steps}", `after_open_again`, `reached`, `reached_tick`,
+`waiting_on`, `measure_gone` = "The number this step follows is gone - tick it
+by hand.", and the refusals. Show `measure_gone` when `measure_gone` is true.
+
+### 2. Goals panels (both apps): what each builds
+
+- **Rows, in the owner's order** (no diagram). Each row: tick control, step
+  words, `by`, then one small line: `lock_words` for a locked or reopened
+  step; `reached_words` when `reached`; the measure's `measure_name` as "Follows:
+  <name>" when there is a `measure`. A locked row is greyed (lower contrast,
+  text still readable) with the words "locked" and the `lock_words`; greyed is
+  never the only signal. A screen reader hears: "<step>, locked, after: <steps>".
+  `measure_sensitive`: hide `measure_name` and `reached_words` under "Hide
+  memory lists and chat history" (desktop: the same Windows Hello gate Goals
+  uses), exactly as the private lists hide.
+- **Needs editor** (in the draft editor, before Accept; not on an accepted
+  goal): per step, a "Do these first" picker over the OTHER steps (up to 3;
+  the fourth is refused by the PC with the sentence, and the picker should
+  stop at 3), and a "Follows a number" picker over the life benchmarks
+  (`GET /api/projects` then each project's benchmarks with a `target`).
+  Deleting a step removes its id from the others' `needs`.
+  Desktop: `jarvis-desktop/src/goals.js` (+ `brain.js`, `src-tauri/src/brain/
+  goals.rs` passes JSON through unchanged). Phone: `net/Goals.kt` (parse the
+  new fields with defaults, unknown keys ignored), `ui/screens/GoalsPlate.kt`.
+- Coming up's check-in note needs no work: the PC sends it whole.
+
+### 3. The forecast (Projects benchmark chart)
+
+`GET /api/projects/<pid>/benchmarks/<bid>?points=N` -> `benchmark.forecast`
+(absent on a read without `points`, and from an older PC: draw nothing then):
+
+```
+forecast = {
+  "state": "no_target"|"reached"|"not_enough"|"range"|"open_ended"|"never",
+  "words": str,          // SHOW AS SENT, never rebuild
+  "basis": str,          // "" unless range/open_ended: 'A straight line through your last N numbers. It is a rough guess, not a promise.'
+  "low_weeks": int|null, "high_weeks": int|null,   // range: both; open_ended: low only (105 = "more than 2 years")
+  "over_two_years": bool, "why": ""|"scattered"|"long",
+  "used": int, "needed": int,                       // not_enough: how many more numbers
+  "first_at","last_at","horizon_at": number|null,   // seconds; horizon = last + 3 x (last - first)
+  "cross_low_at","cross_at","cross_high_at": number|null,  // null = past the edge / open
+  "line": null | {"from": {"at","value"}, "to": {"at","value"}, "clipped": bool},
+  "band": null | {"from": {"at","value"},
+                  "fast": {"at","value","clipped"},
+                  "slow": {"at","value","clipped","open"}}
+}
+```
+
+`line` and `band` are non-null only for `range` and `open_ended`. Nothing is
+drawn for the other four states; just the `words` (below the chart, where the
+"Target" caption is).
+
+**The words, sentence by sentence** (`forecast_words` in the fixture is the
+list; the apps show `words`): no_target "Set a target to see a pace."; reached
+"You have reached your target."; not_enough "Not enough numbers yet - N more
+needed." or "...they need to be on at least 3 different days, spread over a
+week or more."; range "About 6 to 9 weeks at this pace." / "About 6 weeks at
+this pace." / "Less than a week at this pace."; open_ended "About N weeks or
+more - your numbers are too scattered to say how much more." / "...it could
+take more than 2 years." / "More than 2 years at this pace."; never "Not
+reached at this pace." **`never` is its own answer: never draw or say "0
+weeks" for it, never fill a default** (the argmax pitfall).
+
+**Drawing** (`forecast_cases[*].extent` is the worked answer; test against it):
+
+- The chart's existing y-scale rule (`chart_scale`) is unchanged but its input
+  becomes: every number, the target, and, when `line` exists, these values as
+  well: `line.from.value`, `line.to.value`, `band.from.value`,
+  `band.fast.value`, `band.slow.value`. The x range runs from the first number
+  to the largest of: the last number, `line.to.at`, `band.fast.at`,
+  `band.slow.at` (so the picture grows to the right; never wider than
+  `horizon_at`). `tools/gen_projects_cases.py forecast_extent()` is the one
+  reference: `{"x": [lo, hi], "y": [lo, hi]}`.
+- Dashed straight line: `line.from` to `line.to`.
+- Band: a translucent filled triangle `band.from`, `band.fast`, `band.slow`, its
+  outline dashed. On the target level a bracket from `cross_low_at` to
+  `cross_high_at` when both exist. A `clipped: true` end gets a small arrow
+  pointing right; `slow.open` means "no upper end": arrow, no bracket end.
+- Colours: the chart's existing accent at low opacity for the band; the target
+  line and everything else as today. No red. A health/money benchmark
+  (`keep_on_screen`) draws the same, on its own screen only.
+- Nothing on the event stream, no notification, no card, not spoken, never
+  put into a chat answer.
+
+**Screen-reader text** for the chart = the existing `chart_summary` sentence,
+then a space, then `forecast.words` when a forecast exists:
+"5 numbers. Latest: 76 min. About 6 weeks at this pace."
+(`forecast_cases[*].summary` is the worked answer.) The dashed picture itself is
+`aria-hidden` on the desktop and has no content description on the phone.
+
+**Which app builds what.** Desktop: `projects.js` (a `forecastExtent` beside
+`chartGeometry`, parsing), `projects-panel.js` (the line, band, bracket, the
+words line, the summary), `tests/projects.mjs` (compare with `forecast_cases`).
+Phone: `net/Projects.kt` (parse `forecast` with defaults, `forecastExtent`
+beside `Projects.chartGeometry`), `ui/screens/ProjectsPlate.kt` (Canvas: dashed
+line, band path, bracket, arrow, words), `ProjectsTest.kt` (compare with
+`forecast_cases`). Rust `brain/projects.rs` passes JSON through unchanged
+(its test already checks every real read is passed on unchanged).
+
+### 4. Not part of this slice
+
+The activity heatmap and the balance chart (part C, queue item 7, section
+105); a plan editor for an accepted goal; any new route. The pace line in the
+weekly check-in is the PC's and needs no screen.

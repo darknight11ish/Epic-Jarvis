@@ -45,6 +45,7 @@ import sys
 import shutil
 import tempfile
 import types
+from datetime import timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -65,6 +66,8 @@ sys.modules.setdefault("jarvis_framework", fw)
 
 import jarvis_app_workspace as W  # noqa: E402
 import jarvis_apps as A  # noqa: E402
+import jarvis_forecast as F  # noqa: E402
+import jarvis_goals as G  # noqa: E402
 import jarvis_projects as P  # noqa: E402
 
 DESKTOP = ROOT / "jarvis-desktop" / "tests" / "fixtures" / "projects-cases.json"
@@ -370,6 +373,176 @@ def _app_cases() -> tuple:
     return out, posts, merge_card
 
 
+# --------------------------------------------------------------------------
+#   Goal step locks and the finish-time range (JARVIS-API section 101)
+# --------------------------------------------------------------------------
+
+def _weekly(vals, end=AT - 3600, step_days=7.0):
+    n = len(vals)
+    return [(end - (n - 1 - i) * step_days * DAY, v) for i, v in enumerate(vals)]
+
+
+def forecast_extent(points, f, target=None):
+    """Where the chart's edges are once a forecast is drawn (both apps
+    implement exactly this, as they do chart_scale): x runs from the first
+    number to the last number or the farthest end of the dashed line and
+    band; y is chart_scale over the numbers, the target, and the forecast's
+    own values (the line's first value, the band's three corners, the
+    line's end). A forecast without a line (anything but range/open_ended)
+    changes nothing."""
+    xs = [float(a) for a, _ in points]
+    ys = [float(v) for _, v in points]
+    if f.get("line"):
+        xs += [f["line"]["to"]["at"], f["band"]["fast"]["at"], f["band"]["slow"]["at"]]
+        ys += [f["line"]["from"]["value"], f["line"]["to"]["value"], f["band"]["from"]["value"],
+               f["band"]["fast"]["value"], f["band"]["slow"]["value"]]
+    return {"x": [min(xs), max(xs)] if xs else [0.0, 1.0], "y": chart_scale(ys, target)}
+
+
+def _forecast_cases() -> list:
+    """Named, worked answers of the real jarvis_forecast.forecast() - the
+    apps' tests compare what they DRAW (extent, dashed line, band corners)
+    and SAY (`words`, `summary`) with these, word for word."""
+    day = lambda k: AT - 3600 - k * DAY          # noqa: E731
+    specs = [
+        ("no_numbers", [], 25, "lower"),
+        ("two_more_needed", _weekly([31, 30, 29]), 25, "lower"),
+        ("one_day_only", [(AT - 7200 + i * 600, 31 - i) for i in range(5)], 25, "lower"),
+        ("steady_fall", _weekly([80, 79, 78, 77, 76]), 70, "lower"),
+        ("scattered_fall", _weekly([80, 76, 79, 75, 78, 74]), 70, "lower"),
+        ("very_scattered", _weekly([80, 84, 79, 83, 77]), 70, "lower"),
+        ("slow_end_past_two_years", _weekly([80, 79, 80, 79, 78]), 70, "lower"),
+        ("rising_goal_higher", _weekly([10, 10.5, 11, 11.5, 12]), 21.1, "higher"),
+        ("less_than_a_week", [(day(7), 80.0), (day(6.75), 79.75), (day(6.5), 79.5),
+                              (day(4), 77.0), (day(0), 73.0)], 70, "lower"),
+        ("clipped_at_the_edge", _weekly([80, 79.5, 79, 78.5, 78]), 60, "lower"),
+        ("more_than_two_years", _weekly([80, 79.99, 79.98, 79.97, 79.96]), 70, "lower"),
+        ("flat", _weekly([75] * 5), 70, "lower"),
+        ("wrong_way", _weekly([72, 73, 74, 75, 76]), 70, "lower"),
+        ("reached", _weekly([75, 74, 72, 71, 69]), 70, "lower"),
+        ("no_target", _weekly([80, 79, 78, 77, 76]), None, "lower"),
+        ("no_direction", _weekly([80, 79, 78, 77, 76]), 70, None),
+    ]
+    out = []
+    for name, pts, target, better in specs:
+        f = F.forecast(pts, target, better, AT, tz=timezone.utc)
+        latest = sorted(pts)[-1][1] if pts else None
+        summary = (WORDS["chart_empty"] if latest is None else
+                   f"{len(pts)} numbers. Latest: {P._with_unit(latest, 'min')}. {f['words']}")
+        out.append({"name": name, "unit": "min", "target": target, "better": better,
+                    "now": AT, "zone": "UTC",
+                    "points": [{"at": a, "value": v} for a, v in sorted(pts)],
+                    "forecast": f, "extent": forecast_extent(pts, f, target),
+                    "summary": summary})
+    return out
+
+
+class _Counted:
+    """uuid4().hex, counted: goal ids that do not change from run to run."""
+    def __init__(self):
+        self.n = 0
+
+    def uuid4(self):
+        self.n += 1
+        return types.SimpleNamespace(hex=f"{self.n:032x}")
+
+
+class _NoSched:
+    def __init__(self):
+        self.n = 0
+
+    def add_repeat(self, kind, rule, text="", source="app"):
+        self.n += 1
+        return {"id": f"job{self.n}", "state": "active"}
+
+    def act(self, job, what):
+        return None
+
+
+def _goal_cases() -> dict:
+    """What /api/goals really answers for locked, reached, undone and refused
+    steps, and what the weekly check-in says - from the real jarvis_goals.py
+    with a stand-in for the benchmark read."""
+    pj, bn = "a" * 32, "b" * 32
+    state = {"latest": 31.0, "sensitive": False, "forecast": None}
+    clock = [AT]
+
+    def read(project, bench):
+        if (project, bench) != (pj, bn):
+            raise KeyError(bench)
+        return {"id": bn, "name": "5k time", "unit": "min", "better": "lower", "target": 30.0,
+                "sensitive": state["sensitive"], "keep_on_screen": state["sensitive"],
+                "latest": {"id": "x", "value": state["latest"], "at": AT},
+                "forecast": state["forecast"]}
+
+    real_uuid = G.uuid
+    G.uuid = _Counted()
+    path = _CONF / "goals-cases.db"
+    if path.exists():
+        path.unlink()
+    g = G.Goals(path, clock=lambda: clock[0], scheduler=_NoSched(), bench_reader=read)
+    real_get = G.get
+    G.get = lambda: g
+    out = {}
+    try:
+        def post(route, body):
+            code, resp = G.handle_post(route, body)
+            return {"status": code, "body": resp}
+
+        made = post("/api/goals", {"text": "Run a race", "plan": [
+            {"step": "Get the 5k under 30", "by": "March",
+             "measure": {"project": pj, "bench": bn}},
+            {"step": "Enter the race", "by": "April", "needs": ["s1"]},
+            {"step": "Book the train", "by": "April", "needs": ["s2"]}]})
+        out["created"] = made
+        gid = made["body"]["goal"]["id"]
+        out["refuse_tick_locked"] = post(f"/api/goals/{gid}/step", {"id": "s2", "done": True})
+        state["latest"] = 29.5
+        out["number_reached"] = G.handle_get(f"/api/goals/{gid}")[1]
+        clock[0] = AT + 60
+        out["ticked_by_hand"] = post(f"/api/goals/{gid}/step", {"id": "s1", "done": True})
+        clock[0] = AT + 120
+        out["second_ticked"] = post(f"/api/goals/{gid}/step", {"index": 1, "done": True})
+        clock[0] = AT + 180
+        out["first_undone"] = post(f"/api/goals/{gid}/step", {"id": "s1", "done": False})
+        out["refuse_cycle"] = post("/api/goals", {"text": "Loop", "plan": [
+            {"id": "s1", "step": "Paint", "needs": ["s2"]},
+            {"id": "s2", "step": "Sand", "needs": ["s1"]}]})
+        out["refuse_self"] = post("/api/goals", {"text": "Self", "plan": [
+            {"id": "s1", "step": "Paint", "needs": ["s1"]}]})
+        out["refuse_unknown"] = post("/api/goals", {"text": "Unknown", "plan": [
+            {"id": "s1", "step": "Paint", "needs": ["s4"]}]})
+        out["refuse_too_many"] = post("/api/goals", {"text": "Many", "plan": [
+            {"step": "a"}, {"step": "b"}, {"step": "c"}, {"step": "d"},
+            {"step": "e", "needs": ["s1", "s2", "s3", "s4"]}]})
+        # the check-in's own words
+        notes = {}
+        state["latest"] = 31.0
+        g.accept(gid)
+        clock[0] = AT + 240
+        g.mark_step(gid, None, False, step_id="s2")
+        g.mark_step(gid, None, False, step_id="s1")
+        notes["first_step_open"] = g.checkin_note(gid)
+        state["forecast"] = {"state": "range", "words": "About 6 to 9 weeks at this pace."}
+        notes["with_pace_line"] = g.checkin_note(gid)
+        state["sensitive"] = True
+        notes["private_benchmark_no_pace_line"] = g.checkin_note(gid)
+        state["sensitive"] = False
+        state["forecast"] = None
+        state["latest"] = 29.0
+        notes["number_reached"] = g.checkin_note(gid)
+        g.mark_step(gid, None, True, step_id="s1")
+        g.mark_step(gid, None, True, step_id="s2")
+        g.mark_step(gid, None, True, step_id="s3")
+        notes["all_done"] = g.checkin_note(gid)
+        out["checkin_notes"] = notes
+        out["list"] = G.handle_get("/api/goals")[1]
+    finally:
+        G.get = real_get
+        G.uuid = real_uuid
+    return out
+
+
 def cases() -> dict:
     s = _store()
     out, posts = {}, {}
@@ -480,6 +653,17 @@ def cases() -> dict:
             # A backend without jarvis_projects.py / projects.patch.
             "missing": {"status": 404, "body": {"error": "not found"}},
             "words": WORDS, "numbers": numbers, "scales": scales,
+            # Section 101: the sentences and worked answers both apps must match.
+            "forecast_words": dict(F.WORDS),
+            "forecast_cases": _forecast_cases(),
+            "forecast_rules": {"min_numbers": F.MIN_USED, "min_days": F.MIN_DAYS,
+                               "min_span_days": F.MIN_SPAN_DAYS, "window_days": F.WINDOW_DAYS,
+                               "max_used": F.MAX_USED, "max_weeks": F.MAX_WEEKS,
+                               "edge_spans": F.EDGE_SPANS},
+            "goal_words": dict(G.WORDS),
+            "goal_limits": {"steps": G.MAX_STEPS, "needs": G.MAX_NEEDS,
+                            "step_ids": list(G.STEP_IDS)},
+            "goal_cases": _goal_cases(),
             "share_card": P.share_card("Half marathon"),
             # The apps' shared sentences (JARVIS-API section 92): how a merge
             # ended (the PC sends them in `app.merge.last.message`), and the

@@ -83,6 +83,7 @@ THIRD_PARTY = {
     "f5_tts": "f5-tts",
     "soundfile": "soundfile",
     "cryptography": "cryptography",
+    "fsrs": "fsrs",
     "ddgs": "ddgs",
     "winrt": "winrt-Windows.Media.Control",
     "espeakng_loader": "espeakng-loader",

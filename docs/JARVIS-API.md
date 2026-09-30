@@ -15632,3 +15632,117 @@ Errors are `{"ok": false, "error": <code>, "message": <one plain sentence>}`: `b
 `Untagged`, `All`, `Tags` (editor title), `Add a tag`, `Rename`, `Delete this tag`, `Move to`, `No tag`; section header `{name} ({count})` with the screen-reader form `{name}, {count} chats, collapsed|expanded`; delete confirm `Delete the tag {name}? Its {count} chats become untagged.`; banner `Tap the chat to file it under {name}.`. Under "Hide memory lists and chat history" the apps hide tag names with the titles (sections show only a count).
 
 Tests: `backend/test_chat_tags.py` (the registry, every limit and error code, sealing checked in the raw file, the filter including a page cut inside one second, Undo of Forget-a-time-frame keeping tags, an old file migrated, no key and history off, the routes, contrast of the palette, the phrases with injection-style texts and near misses, both apps' fixture copies), with `test_chat_log.py` and `test_chat_kinds.py` updated for the new column and route lists.
+
+## 101. Goal step locks and finish-time range (added 2026-09-30)
+
+Build queue item 3 (`docs/BUILD-QUEUE-2026-09-30.md`; design
+`docs/GOALS-PROGRESS-DESIGN.md` parts A and B, whose "Slice contract
+(frozen)" section is the exact shape both apps build from). Two things: a
+Goals step can wait on other steps, and a benchmark chart says "about 6 to 9
+weeks at this pace". Everything is plain code on the PC - no model writes a
+number or a sentence, no SQL is stored or run, no route is new, and nothing
+here needs an approval card (every tick, pick and read is the owner's own).
+`backend/jarvis_goals.py` (shipped whole, changed), `backend/jarvis_forecast.py`
+(new, shipped whole, pure) and `backend/jarvis_projects.py` (one read gains a
+field). No patch changed: `goals.patch` and `projects.patch` only install
+routes, and those are the same.
+
+### 101.1 A step
+
+A stored step is `{"id", "step", "by", "done", "done_at", "needs",
+"measure"}`:
+
+| Field | Meaning |
+|---|---|
+| `id` | `"s1"` to `"s9"`, given by the PC (kept when the steps are reordered; a repeated or missing id gets a free one). Old plans without ids are read as `s1`, `s2` ... by position and the ids are written the next time the plan is saved. |
+| `done_at` | Seconds since 1970 when the owner ticked it; `null` when not done, or done before this existed ("unknown"). Set by the PC, never taken from the app. |
+| `needs` | 0 to 3 step ids that must be met first. |
+| `measure` | `null`, or `{"project": <32 hex>, "bench": <32 hex>}`: the step is met when that benchmark's latest number reaches its target. The benchmark must exist and have a target and a better-direction (checked when the measure is new or changed). |
+
+**Met** = ticked by hand, or its `measure` benchmark reached its target
+(`higher` is better: latest >= target; `lower`: latest <= target).
+**Reaching a target never ticks the step** - `done` and `done_at` stay as the
+owner left them. **Locked** = not met, while a step it `needs` is not met.
+The limit stays 7 steps.
+
+Every step the PC sends also carries computed fields (an app sends them back
+harmlessly; the PC ignores them on save): `state` (`open`, `locked`,
+`met_by_number`, `done`), `waiting_on` (ids of the needs that are not met -
+also on a `done` step, which then reads "open again"), `lock_words` (the
+sentence to show, or `""`), `reached` (bool), `reached_words`,
+`measure_name`, `measure_gone` (the benchmark was deleted), `measure_sensitive`
+(health or money - hide it wherever the private lists are hidden).
+
+### 101.2 Routes (same as §59; bodies and answers changed)
+
+| Route | Change |
+|---|---|
+| `GET /api/goals`, `GET /api/goals/<id>` | steps as above; `limits.needs` (3); `words` (the lock sentences, §101.5) |
+| `POST /api/goals`, `POST /api/goals/<id>/accept` | `plan` steps may carry `id`, `needs`, `measure`. `400 {"ok": false, "error": <sentence>}` for: a step that waits on itself, on a step that is not in the plan, on more than 3 steps, a circle of steps (a plain depth-first walk; the sentence names the steps), a `measure` that is not a real benchmark, or one with no target. Nothing is stored on a refusal. |
+| `POST /api/goals/<id>/step` | `{"index"` **or** `"id", "done"}`. A tick on a locked step is refused: `409 {"ok": false, "locked": true, "error": "Do \"<step>\" first, or tick it if it is already done.", "waiting_on": ["s1"]}` - there is no "unlock anyway". An untick clears `done_at`, changes no other step, and is always allowed. |
+
+### 101.3 The weekly check-in
+
+Still calls no model. It picks the first step, in the owner's order, that is
+`open` (or `met_by_number`): `"<goal>": still on track for "<step>" (<by>)?`,
+or `"<goal>": <step>: the number reached its target - tick it when you are
+ready.`. If every open step is locked it says `"<goal>": Waiting on "<step>".`
+(only reachable defensively; a circle cannot be saved). One optional neutral
+**pace line** follows the first form - the forecast's own words ("About 6 to 9
+weeks at this pace.") - only when that step follows a benchmark that is not
+health or money and the forecast state is `range`. A private benchmark's range
+stays on its screen: it never reaches the check-in note (which shows in Coming
+up on both apps).
+
+### 101.4 The finish-time range
+
+`GET /api/projects/<pid>/benchmarks/<bid>?points=N` (§88) gains
+`forecast`, for any `N` (the answer never depends on how many chart points
+were asked for; a list read, without points, has none):
+
+```
+{"state": "no_target"|"reached"|"not_enough"|"range"|"open_ended"|"never",
+ "words": "...", "basis": "...", "low_weeks": int|null, "high_weeks": int|null,
+ "over_two_years": bool, "why": ""|"scattered"|"long", "used": int, "needed": int,
+ "first_at", "last_at", "horizon_at", "cross_low_at", "cross_at", "cross_high_at": seconds|null,
+ "line": null | {"from": {"at","value"}, "to": {"at","value"}, "clipped": bool},
+ "band": null | {"from": {"at","value"}, "fast": {"at","value","clipped"},
+                 "slow": {"at","value","clipped","open"}}}
+```
+
+A straight line (least squares) through the last up to 12 numbers of the last
+90 days, needing at least 5 numbers on at least 3 different days (the PC's
+own calendar days) spread over at least 7 days. The spread is the slope's
+standard error times a small fixed t-table (about the middle 80%; the words
+never say a percentage). Anchored on the line's own value at the last date;
+low end rounded down and high end up to whole weeks, at least 1. **`never` is
+its own answer** - a flat or wrong-way line is `never` before any division,
+never "0 weeks" (the argmax pitfall: `test_forecast.py` has a regression test
+and checks the file has no numpy and no argmax). More than 104 weeks is
+`open_ended` with `over_two_years` ("More than 2 years at this pace." - the
+owner's answer to the design's Q3). The drawing stops 3 data-lengths past the
+last number (`clipped: true`, an arrow); the words carry the rest. A health or
+money benchmark keeps its `keep_on_screen`: its range is for its screen only.
+
+### 101.5 Words (identical in both apps; `tools/gen_projects_cases.py` writes them)
+
+`jarvis_forecast.WORDS` (the forecast's) and `jarvis_goals.WORDS` (the locks')
+are in `projects-cases.json` as `forecast_words` and `goal_words`, with worked
+answers in `forecast_cases` (numbers in, `forecast`, chart `extent` and screen
+reader `summary` out) and `goal_cases` (real route answers). The forecast's
+`words` are sent whole: an app shows them, it never builds them.
+
+### 101.6 Limits, said plainly
+
+Nothing has run on the owner's PC with real logged numbers: the t-table and
+the "3 days over a week" minimum are choices to try on real data before the
+words are trusted. The forecast is a straight line - a benchmark that improves
+in steps or levels off will be mis-read, and the basis sentence says it is "a
+rough guess, not a promise". There is no route to edit the plan of an
+already-accepted goal (as before); locks are set in the draft, before Accept.
+
+Tests: `backend/test_forecast.py` (the edge-case table with hand-worked
+expectations), `backend/test_goals.py` (locks, cycles, ticks and undo,
+measures, old plans, check-in words, the pace-line rule, the routes),
+`backend/test_projects.py` (the read carries the range), and
+`tools/gen_projects_cases.py --check` (both apps' fixture copies).

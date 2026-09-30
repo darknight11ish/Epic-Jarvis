@@ -666,6 +666,19 @@ MarkItDown (Microsoft), MIT - https://github.com/microsoft/markitdown
   magika (Apache-2.0), beautifulsoup4 and markdownify (MIT), defusedxml
   (PSFL) and charset-normalizer (MIT).
 
+REVIEW DECKS (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+py-fsrs (the `fsrs` package, version 6.3.2), MIT - https://github.com/open-spaced-repetition/py-fsrs
+  Used by backend/jarvis_decks.py to work out when a kept quiz question comes
+  back (the FSRS spaced-repetition schedule, default parameters, no optimizer).
+  Installed on the PC by pip from backend/requirements.txt (fsrs==6.3.2, never
+  its [optimizer] extra, which needs torch); not shipped here and none of its
+  code is copied. Its wheel's metadata (fsrs-6.3.2-py3-none-any.whl, PyPI,
+  released 2026-08-09) says "License: MIT License" and carries a LICENSE file;
+  the MIT text is the one given for browser-use above, with the copyright
+  line its LICENSE file gives: Copyright (c) 2022 Open Spaced Repetition. It brings, also by pip,
+  typing-extensions (PSF-2.0), named as its installed metadata names it.
+
 THE FACES' SHAPE MATHS (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 Inigo Quilez - https://iquilezles.org/articles/distfunctions/ and

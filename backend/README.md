@@ -17909,3 +17909,40 @@ python3 backend/test_obscura.py
 python3 backend/test_browser_engine.py
 node jarvis-desktop/tests/browser-engine.mjs
 ```
+
+# Goal step locks and the finish-time range (2026-09-30, JARVIS-API section 101)
+
+Build queue item 3 (`docs/GOALS-PROGRESS-DESIGN.md` parts A and B). **No patch
+changed** - `goals.patch` and `projects.patch` only install routes, and the
+routes are the same. What changed is whole modules:
+
+- `jarvis_goals.py` (shipped whole, changed): a step now has a stable `id`,
+  `done_at`, `needs` (up to 3 step ids) and `measure` (a benchmark that meets
+  the step when it reaches its target - never ticks it). A tick on a locked
+  step is refused (HTTP 409); cycles, unknown ids and more than 3 needs are
+  refused on save by a plain depth-first walk; the weekly check-in skips
+  locked steps, says "Waiting on ..." and may add one neutral pace line
+  (non-private benchmarks only). Old plans load with defaults; ids are
+  written the next time they are saved.
+- `jarvis_forecast.py` (**new**, shipped whole, pure - no file, network, model,
+  random numbers or numpy): "about N to M weeks", six separate answers, "never
+  reached" its own answer (the argmax pitfall). It is a separate module, not
+  more lines in the 2000-line `jarvis_projects.py`, because goals reads the
+  same answer and it can be tested with no database; the cost is one line in
+  `apply-patches.ps1`'s `$SHIPPED` and one in `_where.SHIPPED`.
+- `jarvis_projects.py` (shipped whole, one small change): the benchmark read
+  with `?points=N` gains `forecast`.
+
+Owner step: none beyond `apply-patches.ps1` (it copies `jarvis_forecast.py`).
+Not checked: nothing ran on the owner's PC with real numbers; both apps'
+screens (rows with lock states, the dashed range band) are separate work
+against the "Slice contract (frozen)" in `docs/GOALS-PROGRESS-DESIGN.md`.
+
+Test it:
+
+```
+python3 backend/test_forecast.py
+python3 backend/test_goals.py
+python3 backend/test_projects.py
+python3 tools/gen_projects_cases.py --check
+```

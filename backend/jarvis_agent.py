@@ -725,6 +725,61 @@ def _folders_listed() -> bool:
         return False
 
 
+#: "How much did I spend on food last month?" (jarvis_spending.py; the owner's
+#: decisions of 2026-09-30, docs/FINANCE-DESIGN.md part A, JARVIS-API section
+#: 100). ONE tool that adds up a bank CSV/Excel export the owner dropped into a
+#: folder Jarvis may look in. The numbers come from code, never from the model:
+#: the tool's result carries a private `_table`, which _one_call takes out
+#: before the model reads anything (the model sees only totals and category
+#: names), and the ONE sentence the model then writes is held back until code
+#: has checked that every number in it is in the table (see run_local_turn).
+#: Decided under file_read's action (read_files_readonly) like my_files: it
+#: reads the same files with the same limit, and adds no way out of the PC.
+#: Not in NEEDS_A_PERSON (it changes nothing and sends nothing). Offered only
+#: while a folder is listed, like my_files.
+SPENDING_TOOL = "my_spending"
+SPENDING_ONE_TABLE = ("refused: one table is already on the owner's screen for this answer. "
+                      "Answer from it, and tell the owner they can ask the next question in "
+                      "a new message.")
+SPENDING_OUTSIDE = ("refused: outside text shaped this answer (something was read from an "
+                    "email, web page or file, or the message was pasted or shared), so no bank "
+                    "file is opened in it. Nothing was opened. Tell the owner to ask about "
+                    "their spending in a message of their own.")
+
+
+def _prepare_my_spending(args: dict):
+    try:
+        import jarvis_spending as SPEND
+    except Exception as exc:
+        return None, f"Add up your spending (unavailable: {type(exc).__name__})"
+    return None, SPEND.describe(args)
+
+
+def _run_my_spending(args: dict, plan_obj, **_) -> dict:
+    try:
+        import jarvis_spending as SPEND
+    except Exception as exc:
+        return {"ok": False, "error": f"adding up spending is not available here "
+                                      f"({type(exc).__name__})"}
+    return SPEND.run_tool(args)
+
+
+def _spending_refusal(watch: "_TurnWatch", args: dict) -> str:
+    """Why this turn may not open a bank file, or "". Outside text in THIS turn
+    (a reading tool other than this one ran), a conversation that read outside
+    text before, a message that was pasted or shared, or text the app added:
+    the choice of file could be steered by planted words. And one table an
+    answer, because the one sentence is checked against that table."""
+    if watch.tainted or watch.provenance or watch.app_context:
+        return SPENDING_OUTSIDE
+    if any(n != SPENDING_TOOL for n in watch.read):
+        return SPENDING_OUTSIDE
+    if (str(args.get("action") or "summary").strip().lower() == "summary"
+            and watch.spending_table is not None):
+        return SPENDING_ONE_TABLE
+    return ""
+
+
 def _prepare_home_read(args: dict):
     try:
         import jarvis_home as HOME
@@ -902,7 +957,8 @@ def _plain_prepare(label: str) -> Callable[[dict], tuple]:
 # A step naming one of these is refused with a plain reason, rather than
 # guessing at a smaller version of a check this file is most careful about
 # getting right.
-_PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "tidy_inbox", "propose_plan"})
+_PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "tidy_inbox", "propose_plan",
+                                  "my_spending"})
 
 #: The gate action a plan step is put to when it must be asked about on its
 #: own card (marked risky, or filled in from an earlier step's result) but
@@ -1427,6 +1483,25 @@ TOOLS: dict = {
         gate_lookup_name=lambda args: "file_read",
         instead={"notes_search": "For Obsidian or Joplin notes, use notes_search.",
                  "file_read": "For a PDF or Word file, use this, not file_read."}),
+    # Spending from a bank export (jarvis_spending.py). Decided under
+    # file_read's action - see SPENDING_TOOL.
+    "my_spending": Tool(
+        "my_spending",
+        "Add up spending from a bank CSV or Excel file in the owner's listed folders. summary "
+        "shows a table on their screen; then reply in ONE short sentence, only figures from the "
+        "result. files: list bank files. suggest: shop names no category fits.",
+        {"type": "object", "properties": {
+            "action": {"type": "string", "enum": ["summary", "files", "suggest"]},
+            "path": {"type": "string", "description": "the full path files gave"},
+            "all": {"type": "boolean", "description": "combine every file with a saved layout"},
+            "period": {"type": "string", "description":
+                       "last_month, this_year, 2026, 2026-03, 2026-01-01..2026-03-31"},
+            "by": {"type": "string", "enum": ["category", "month", "both"]},
+            "category": {"type": "string"}},
+         "required": ["action"]},
+        _prepare_my_spending, _run_my_spending,
+        gate_lookup_name=lambda args: "file_read",
+        instead={"my_files": "To read what a file says, use my_files."}),
     "home_read": Tool(
         "home_read",
         "Read the state of named Home Assistant entities. Read-only.",
@@ -3507,6 +3582,14 @@ class _TurnWatch:
         self.reasked = False         # a round was asked again (Ollama)
         self.cards = 0               # approval cards this turn (CARDS_PER_TURN)
         self.file_parts = 0          # document parts read this turn (FILES_PARTS_PER_TURN)
+        # A spending table (jarvis_spending.py): the block the apps draw, taken
+        # out of my_spending's result before the model read anything, and the
+        # id it was kept under once the sentence round is delivered. While the
+        # table is set, the model's next words are HELD until code has checked
+        # them against it (run_local_turn).
+        self.spending_table = None
+        self.spending_id = ""
+        self.spending_done = False
         self.secrets: list = []      # KINDS of password or key read, never values
         # "Where this came from" (I42, jarvis_sources.py): each reading
         # tool's own result, by reference only - a note's ref, a wiki page's
@@ -3617,6 +3700,11 @@ class _TurnWatch:
         labelled as outside data."""
         if not isinstance(result, dict):
             return result
+        if "_table" in result:
+            # A spending table is for the apps' screen only, never the model
+            # (jarvis_spending.py). _one_call takes it out first; this is the
+            # belt for any other path that reaches here.
+            result = {k: v for k, v in result.items() if k != "_table"}
         if name not in _NOT_READING:
             self.read[name] = self.read.get(name, 0) + 1
             pieces = _strings_in(result, [])
@@ -3912,6 +4000,8 @@ def offered_tools(enabled_tools) -> list:
         # Nothing to look in: not offered, so its description costs no tokens
         # (jarvis_documents.py - the list is empty by default).
         wanted.discard(FILES_TOOL)
+    if SPENDING_TOOL in wanted and not _folders_listed():
+        wanted.discard(SPENDING_TOOL)
     return [n for n in TOOLS if n in wanted]
 
 
@@ -3978,7 +4068,8 @@ TOOL_GROUPS = (
     # Its own group, not "files": asking about the owner's documents must not
     # also put the command tool in front of the model. Offered only while a
     # folder is listed (offered_tools), so the group appears only then too.
-    ("documents", "find and read files in the folders the owner listed", ("my_files",)),
+    ("documents", "find and read files in the folders the owner listed",
+     ("my_files", "my_spending")),
     ("files", "read a file on this PC, run a command", ("file_read", "shell_exec")),
     ("github", "check GitHub for an existing library", ("github_search",)),
     # propose_plan (jarvis_plan.py, "one card, several steps") joins this
@@ -6236,6 +6327,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                          opts, offer["schemas"] if offer_tools else None)
         stripper = _ThinkStripper()
         first = {"text": True}
+        # A spending table is on the screen for this answer: the model's words
+        # are HELD, not sent, until code has checked them (deliver_table).
+        held: list = []
+        holding = watch.spending_table is not None and not watch.spending_done
 
         def on_text(piece: str) -> None:
             clean = stripper.feed(piece)
@@ -6248,7 +6343,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                     first["text"] = False
                     out.set_status(None)
                     say_step("answer")
-                emit(clean)
+                if holding:
+                    held.append(clean)
+                else:
+                    emit(clean)
 
         if post is not None:
             whole = dict(body, stream=False)
@@ -6307,11 +6405,41 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             if first["text"]:
                 first["text"] = False
                 say_step("answer")
-            emit(tail)
+            if holding:
+                held.append(tail)
+            else:
+                emit(tail)
+        if holding and not rnd.tool_calls():
+            # The round that answers: the table and its checked sentence go out.
+            # (A round that asks for another tool sends nothing of its words.)
+            deliver_table("".join(held))
         for key, got in (("prompt", rnd.prompt_tokens), ("cached", rnd.cached_tokens)):
             if got is not None:
                 prompt_use[key] = (prompt_use[key] or 0) + got
         return rnd
+
+    def deliver_table(text: str) -> None:
+        """The spending table (jarvis_spending.py) and its ONE sentence. The
+        table is kept in memory under an id and announced in the stream as
+        `: jarvis-table <id>` (the apps fetch it with GET /api/chat/table); the
+        sentence goes out only if every number in it is in the table, else a
+        plain line does. A spoken question gets "I have put it on your
+        screen." and no figures. Nothing of the table is in `answer`, so the
+        kept chat history holds the question and the sentence only."""
+        watch.spending_done = True
+        table = watch.spending_table
+        try:
+            import jarvis_spending as SPEND
+            tid = SPEND.keep_table(table)
+            sentence = SPEND.checked_sentence(text, table, spoken=watch.spoken)
+            mark = (SPEND.STREAM_MARK + tid + "\n\n").encode("utf-8")
+        except Exception:
+            tid, sentence, mark = "", "The table could not be shown. Ask again.", b""
+        watch.spending_id = tid
+        out.set_status(None)
+        if tid and out.sse and not out.send(mark):
+            raise ClientGone()
+        emit(sentence)
 
     def fail(message: str) -> None:
         if out.sse:
@@ -6496,6 +6624,10 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                                      f"which has room for long web pages")
                         except Exception:
                             pass
+        if watch.spending_table is not None and not watch.spending_done:
+            # The loop ended without a round that answered (too many tool
+            # calls): the table still goes out, with the plain line.
+            deliver_table("")
         # "I've done it" when nothing was done ("Smarter answers",
         # 2026-09-28): the answer claims an action and no action tool
         # returned ok in it (jarvis_claims.py). One plain line at the end, in
@@ -6519,13 +6651,17 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 out.send(_sse(_chunk(cid, created, cur["model"], {}, finish or "stop")))
                 out.send(_sse("[DONE]"))
         else:
-            out.send(json.dumps({
+            body_out = {
                 "id": cid, "object": "chat.completion", "created": created,
                 "model": cur["model"], "system_fingerprint": "fp_ollama",
                 "choices": [{"index": 0,
                              "message": {"role": "assistant", "content": "".join(answer)},
                              "finish_reason": finish}],
-            }, ensure_ascii=False, separators=(",", ":")).encode("utf-8") + b"\n")
+            }
+            if watch.spending_id:
+                body_out["jarvis_table"] = watch.spending_id   # GET /api/chat/table?id=
+            out.send(json.dumps(body_out, ensure_ascii=False,
+                                separators=(",", ":")).encode("utf-8") + b"\n")
     except ClientGone:
         pass
     except UpstreamError as exc:
@@ -6602,7 +6738,11 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # The picture's words count as a read (with_picture_text): this PC's
     # record of the turn then marks the conversation as having read outside
     # text (jarvis_chat_log.record_turn reads `tools_ran`).
-    ran = [s["tool"] for s in steps if s.get("ran")]
+    # The bank-file tool is left out of what the PC's chat record keeps
+    # (jarvis_chat_log reads `tools_ran` to mark a conversation as having read
+    # outside text): its own table is the owner's figures, worked out by code,
+    # and marking the chat would refuse the very next spending question.
+    ran = [s["tool"] for s in steps if s.get("ran") and s["tool"] != SPENDING_TOOL]
     if picture_text is not None and picture_text.get("read"):
         ran = [PICTURE_TEXT_TOOL] + ran
     if screen_read:
@@ -6722,6 +6862,16 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                           "content": _tool_content({"ok": False, "done": 0,
                                                     "error": why})})
+            steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+            say_step("tool_refused", name)
+            return
+    if name == SPENDING_TOOL:
+        # Refused before a bank file is opened: outside text shaped this
+        # turn, or a table is already on the screen (see _spending_refusal).
+        why = _spending_refusal(watch, args)
+        if why:
+            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                          "content": _tool_content({"ok": False, "error": why})})
             steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
             say_step("tool_refused", name)
             return
@@ -7049,6 +7199,13 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             if task_id is not None:
                 tc.end(task_id)
             out.set_status("thinking")
+        if name == SPENDING_TOOL and isinstance(result, dict) and "_table" in result:
+            # The table goes to the apps' screen, never to the model: keep it
+            # for the sentence round and take it out of what the model reads.
+            result = dict(result)
+            table = result.pop("_table")
+            if isinstance(table, dict) and watch.spending_table is None:
+                watch.spending_table = table
         # Outside text: checked, cleaned and labelled before the model reads
         # it - see "Outside text in the tool loop".
         result = watch.took_in(name, result)

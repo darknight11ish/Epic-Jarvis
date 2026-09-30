@@ -907,6 +907,14 @@ $PATCHES = @(
     # jarvis_quiz.py copied in; without it, or on any error, the banner says so and the routes
     # are simply not there.
     'quiz.patch'
+    # "Review decks" (the owner's decision of 2026-09-30; docs/QUIZ-DECKS-DESIGN.md, JARVIS-API section
+    # 102): GET/POST /api/decks, /api/decks/<id>/act|cards, /api/decks/settings, GET /api/review and
+    # POST /api/review/reveal|rate|more, and the function the quiz calls to keep chosen questions in a
+    # deck. ONE hunk in jarvis_hud.py, an install block right after quiz.patch's own, so it goes after
+    # it. No card: the owner's own tap saves the owner's own words, sealed in study.db under a key of
+    # their own. Needs jarvis_decks.py copied in (and the py-fsrs package from requirements.txt);
+    # without it, or on any error, the banner says so and the routes are simply not there.
+    'decks.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1126,6 +1134,8 @@ $SHIPPED = @(
     # --- "Quiz me on a text" (2026-09-30, quiz.patch) ---
     'jarvis_quiz.py'             # quiz.patch: questions written from a pasted text and answers marked against the passage, by the local model only; in memory only, no card, never learned from
     'eval_quiz_grader.py'        # run by hand on the PC: checks the quiz's marking against the real local model and writes quiz_grader_results.json beside jarvis_quiz.py (quiz_grader_cases.json is copied in step 3b)
+    # --- "Review decks" (2026-09-30, decks.patch) ---
+    'jarvis_decks.py'            # decks.patch: kept quiz questions studied again on a spaced schedule (py-fsrs), sealed in study.db under their own key; the owner rates each card, no model is called; the one quiet `review` scheduler kind
 )
 
 # The settings file. Installed only where none exists; never overwritten.

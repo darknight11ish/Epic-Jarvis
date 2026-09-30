@@ -106,6 +106,7 @@ TOOL_NAMES = {
     "email_check": "Reading your email",
     "notes_search": "Searching your notes",
     "my_files": "Finding and reading files in the folders you listed",
+    "my_spending": "Adding up spending from your bank files (shown on screen only)",
     "home_read": "Reading Home Assistant",
     "home_control": "Changing things in Home Assistant",
     "append_logseq_journal": "Adding to your Logseq journal",

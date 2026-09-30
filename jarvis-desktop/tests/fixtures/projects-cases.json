@@ -394,6 +394,25 @@
     "change": null,
     "changed": 1790000000.0,
     "created": 1790000000.0,
+    "forecast": {
+     "band": null,
+     "basis": "",
+     "cross_at": null,
+     "cross_high_at": null,
+     "cross_low_at": null,
+     "first_at": null,
+     "high_weeks": null,
+     "horizon_at": null,
+     "last_at": null,
+     "line": null,
+     "low_weeks": null,
+     "needed": 0,
+     "over_two_years": false,
+     "state": "no_target",
+     "used": 0,
+     "why": "",
+     "words": "Set a target to see a pace."
+    },
     "id": "00000000000000000000000000000010",
     "keep_on_screen": false,
     "keep_on_screen_words": "",
@@ -428,6 +447,25 @@
     },
     "changed": 1790000000.0,
     "created": 1790000000.0,
+    "forecast": {
+     "band": null,
+     "basis": "",
+     "cross_at": null,
+     "cross_high_at": null,
+     "cross_low_at": null,
+     "first_at": null,
+     "high_weeks": null,
+     "horizon_at": null,
+     "last_at": null,
+     "line": null,
+     "low_weeks": null,
+     "needed": 2,
+     "over_two_years": false,
+     "state": "not_enough",
+     "used": 3,
+     "why": "",
+     "words": "Not enough numbers yet - 2 more needed."
+    },
     "id": "00000000000000000000000000000002",
     "keep_on_screen": false,
     "keep_on_screen_words": "",
@@ -482,6 +520,25 @@
     },
     "changed": 1790000000.0,
     "created": 1790000000.0,
+    "forecast": {
+     "band": null,
+     "basis": "",
+     "cross_at": null,
+     "cross_high_at": null,
+     "cross_low_at": null,
+     "first_at": null,
+     "high_weeks": null,
+     "horizon_at": null,
+     "last_at": null,
+     "line": null,
+     "low_weeks": null,
+     "needed": 0,
+     "over_two_years": false,
+     "state": "no_target",
+     "used": 0,
+     "why": "",
+     "words": "Set a target to see a pace."
+    },
     "id": "00000000000000000000000000000003",
     "keep_on_screen": true,
     "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
@@ -1376,6 +1433,1718 @@
     "waiting": false
    }
   }
+ },
+ "forecast_cases": [
+  {
+   "better": "lower",
+   "extent": {
+    "x": [
+     0.0,
+     1.0
+    ],
+    "y": [
+     22.5,
+     27.5
+    ]
+   },
+   "forecast": {
+    "band": null,
+    "basis": "",
+    "cross_at": null,
+    "cross_high_at": null,
+    "cross_low_at": null,
+    "first_at": null,
+    "high_weeks": null,
+    "horizon_at": null,
+    "last_at": null,
+    "line": null,
+    "low_weeks": null,
+    "needed": 5,
+    "over_two_years": false,
+    "state": "not_enough",
+    "used": 0,
+    "why": "",
+    "words": "Not enough numbers yet - 5 more needed."
+   },
+   "name": "no_numbers",
+   "now": 1790000000.0,
+   "points": [],
+   "summary": "No numbers yet - log the first one.",
+   "target": 25,
+   "unit": "min",
+   "zone": "UTC"
+  },
+  {
+   "better": "lower",
+   "extent": {
+    "x": [
+     1788786800.0,
+     1789996400.0
+    ],
+    "y": [
+     24.4,
+     31.6
+    ]
+   },
+   "forecast": {
+    "band": null,
+    "basis": "",
+    "cross_at": null,
+    "cross_high_at": null,
+    "cross_low_at": null,
+    "first_at": null,
+    "high_weeks": null,
+    "horizon_at": null,
+    "last_at": null,
+    "line": null,
+    "low_weeks": null,
+    "needed": 2,
+    "over_two_years": false,
+    "state": "not_enough",
+    "used": 3,
+    "why": "",
+    "words": "Not enough numbers yet - 2 more needed."
+   },
+   "name": "two_more_needed",
+   "now": 1790000000.0,
+   "points": [
+    {
+     "at": 1788786800.0,
+     "value": 31
+    },
+    {
+     "at": 1789391600.0,
+     "value": 30
+    },
+    {
+     "at": 1789996400.0,
+     "value": 29
+    }
+   ],
+   "summary": "3 numbers. Latest: 29 min. Not enough numbers yet - 2 more needed.",
+   "target": 25,
+   "unit": "min",
+   "zone": "UTC"
+  },
+  {
+   "better": "lower",
+   "extent": {
+    "x": [
+     1789992800.0,
+     1789995200.0
+    ],
+    "y": [
+     24.4,
+     31.6
+    ]
+   },
+   "forecast": {
+    "band": null,
+    "basis": "",
+    "cross_at": null,
+    "cross_high_at": null,
+    "cross_low_at": null,
+    "first_at": null,
+    "high_weeks": null,
+    "horizon_at": null,
+    "last_at": null,
+    "line": null,
+    "low_weeks": null,
+    "needed": 0,
+    "over_two_years": false,
+    "state": "not_enough",
+    "used": 5,
+    "why": "",
+    "words": "Not enough numbers yet - they need to be on at least 3 different days, spread over a week or more."
+   },
+   "name": "one_day_only",
+   "now": 1790000000.0,
+   "points": [
+    {
+     "at": 1789992800.0,
+     "value": 31
+    },
+    {
+     "at": 1789993400.0,
+     "value": 30
+    },
+    {
+     "at": 1789994000.0,
+     "value": 29
+    },
+    {
+     "at": 1789994600.0,
+     "value": 28
+    },
+    {
+     "at": 1789995200.0,
+     "value": 27
+    }
+   ],
+   "summary": "5 numbers. Latest: 27 min. Not enough numbers yet - they need to be on at least 3 different days, spread over a week or more.",
+   "target": 25,
+   "unit": "min",
+   "zone": "UTC"
+  },
+  {
+   "better": "lower",
+   "extent": {
+    "x": [
+     1787577200.0,
+     1793625200.0
+    ],
+    "y": [
+     69.0,
+     81.0
+    ]
+   },
+   "forecast": {
+    "band": {
+     "fast": {
+      "at": 1793625200.0,
+      "clipped": false,
+      "value": 70.0
+     },
+     "from": {
+      "at": 1789996400.0,
+      "value": 76.0
+     },
+     "slow": {
+      "at": 1793625200.0,
+      "clipped": false,
+      "open": false,
+      "value": 70.0
+     }
+    },
+    "basis": "A straight line through your last 5 numbers. It is a rough guess, not a promise.",
+    "cross_at": 1793625200.0,
+    "cross_high_at": 1793625200.0,
+    "cross_low_at": 1793625200.0,
+    "first_at": 1787577200.0,
+    "high_weeks": 6,
+    "horizon_at": 1797254000.0,
+    "last_at": 1789996400.0,
+    "line": {
+     "clipped": false,
+     "from": {
+      "at": 1787577200.0,
+      "value": 80.0
+     },
+     "to": {
+      "at": 1793625200.0,
+      "value": 70.0
+     }
+    },
+    "low_weeks": 6,
+    "needed": 0,
+    "over_two_years": false,
+    "state": "range",
+    "used": 5,
+    "why": "",
+    "words": "About 6 weeks at this pace."
+   },
+   "name": "steady_fall",
+   "now": 1790000000.0,
+   "points": [
+    {
+     "at": 1787577200.0,
+     "value": 80
+    },
+    {
+     "at": 1788182000.0,
+     "value": 79
+    },
+    {
+     "at": 1788786800.0,
+     "value": 78
+    },
+    {
+     "at": 1789391600.0,
+     "value": 77
+    },
+    {
+     "at": 1789996400.0,
+     "value": 76
+    }
+   ],
+   "summary": "5 numbers. Latest: 76 min. About 6 weeks at this pace.",
+   "target": 70,
+   "unit": "min",
+   "zone": "UTC"
+  },
+  {
+   "better": "lower",
+   "extent": {
+    "x": [
+     1786972400.0,
+     1799068400.0
+    ],
+    "y": [
+     69.0,
+     81.0
+    ]
+   },
+   "forecast": {
+    "band": {
+     "fast": {
+      "at": 1791946092.825046,
+      "clipped": false,
+      "value": 70.0
+     },
+     "from": {
+      "at": 1789996400.0,
+      "value": 75.0
+     },
+     "slow": {
+      "at": 1799068400.0,
+      "clipped": true,
+      "open": false,
+      "value": 74.265203
+     }
+    },
+    "basis": "A straight line through your last 6 numbers. It is a rough guess, not a promise.",
+    "cross_at": 1793776400.0,
+    "cross_high_at": null,
+    "cross_low_at": 1791946092.825046,
+    "first_at": 1786972400.0,
+    "high_weeks": 103,
+    "horizon_at": 1799068400.0,
+    "last_at": 1789996400.0,
+    "line": {
+     "clipped": false,
+     "from": {
+      "at": 1786972400.0,
+      "value": 79.0
+     },
+     "to": {
+      "at": 1793776400.0,
+      "value": 70.0
+     }
+    },
+    "low_weeks": 3,
+    "needed": 0,
+    "over_two_years": false,
+    "state": "range",
+    "used": 6,
+    "why": "",
+    "words": "About 3 to 103 weeks at this pace."
+   },
+   "name": "scattered_fall",
+   "now": 1790000000.0,
+   "points": [
+    {
+     "at": 1786972400.0,
+     "value": 80
+    },
+    {
+     "at": 1787577200.0,
+     "value": 76
+    },
+    {
+     "at": 1788182000.0,
+     "value": 79
+    },
+    {
+     "at": 1788786800.0,
+     "value": 75
+    },
+    {
+     "at": 1789391600.0,
+     "value": 78
+    },
+    {
+     "at": 1789996400.0,
+     "value": 74
+    }
+   ],
+   "summary": "6 numbers. Latest: 74 min. About 3 to 103 weeks at this pace.",
+   "target": 70,
+   "unit": "min",
+   "zone": "UTC"
+  },
+  {
+   "better": "lower",
+   "extent": {
+    "x": [
+     1787577200.0,
+     1797254000.0
+    ],
+    "y": [
+     68.6,
+     85.4
+    ]
+   },
+   "forecast": {
+    "band": {
+     "fast": {
+      "at": 1792425195.633571,
+      "clipped": false,
+      "value": 70.0
+     },
+     "from": {
+      "at": 1789996400.0,
+      "value": 79.2
+     },
+     "slow": {
+      "at": 1797254000.0,
+      "clipped": true,
+      "open": true,
+      "value": 79.2
+     }
+    },
+    "basis": "A straight line through your last 5 numbers. It is a rough guess, not a promise.",
+    "cross_at": null,
+    "cross_high_at": null,
+    "cross_low_at": 1792425195.633571,
+    "first_at": 1787577200.0,
+    "high_weeks": null,
+    "horizon_at": 1797254000.0,
+    "last_at": 1789996400.0,
+    "line": {
+     "clipped": true,
+     "from": {
+      "at": 1787577200.0,
+      "value": 82.0
+     },
+     "to": {
+      "at": 1797254000.0,
+      "value": 70.8
+     }
+    },
+    "low_weeks": 4,
+    "needed": 0,
+    "over_two_years": false,
+    "state": "open_ended",
+    "used": 5,
+    "why": "scattered",
+    "words": "About 4 weeks or more - your numbers are too scattered to say how much more."
+   },
+   "name": "very_scattered",
+   "now": 1790000000.0,
+   "points": [
+    {
+     "at": 1787577200.0,
+     "value": 80
+    },
+    {
+     "at": 1788182000.0,
+     "value": 84
+    },
+    {
+     "at": 1788786800.0,
+     "value": 79
+    },
+    {
+     "at": 1789391600.0,
+     "value": 83
+    },
+    {
+     "at": 1789996400.0,
+     "value": 77
+    }
+   ],
+   "summary": "5 numbers. Latest: 77 min. About 4 weeks or more - your numbers are too scattered to say how much more.",
+   "target": 70,
+   "unit": "min",
+   "zone": "UTC"
+  },
+  {
+   "better": "lower",
+   "extent": {
+    "x": [
+     1787577200.0,
+     1797254000.0
+    ],
+    "y": [
+     69.0,
+     81.0
+    ]
+   },
+   "forecast": {
+    "band": {
+     "fast": {
+      "at": 1796978697.965915,
+      "clipped": false,
+      "value": 70.0
+     },
+     "from": {
+      "at": 1789996400.0,
+      "value": 78.4
+     },
+     "slow": {
+      "at": 1797254000.0,
+      "clipped": true,
+      "open": false,
+      "value": 77.5312
+     }
+    },
+    "basis": "A straight line through your last 5 numbers. It is a rough guess, not a promise.",
+    "cross_at": null,
+    "cross_high_at": null,
+    "cross_low_at": 1796978697.965915,
+    "first_at": 1787577200.0,
+    "high_weeks": null,
+    "horizon_at": 1797254000.0,
+    "last_at": 1789996400.0,
+    "line": {
+     "clipped": true,
+     "from": {
+      "at": 1787577200.0,
+      "value": 80.0
+     },
+     "to": {
+      "at": 1797254000.0,
+      "value": 73.6
+     }
+    },
+    "low_weeks": 11,
+    "needed": 0,
+    "over_two_years": false,
+    "state": "open_ended",
+    "used": 5,
+    "why": "long",
+    "words": "About 11 weeks or more - it could take more than 2 years."
+   },
+   "name": "slow_end_past_two_years",
+   "now": 1790000000.0,
+   "points": [
+    {
+     "at": 1787577200.0,
+     "value": 80
+    },
+    {
+     "at": 1788182000.0,
+     "value": 79
+    },
+    {
+     "at": 1788786800.0,
+     "value": 80
+    },
+    {
+     "at": 1789391600.0,
+     "value": 79
+    },
+    {
+     "at": 1789996400.0,
+     "value": 78
+    }
+   ],
+   "summary": "5 numbers. Latest: 78 min. About 11 weeks or more - it could take more than 2 years.",
+   "target": 70,
+   "unit": "min",
+   "zone": "UTC"
+  },
+  {
+   "better": "higher",
+   "extent": {
+    "x": [
+     1787577200.0,
+     1797254000.0
+    ],
+    "y": [
+     8.89,
+     22.21
+    ]
+   },
+   "forecast": {
+    "band": {
+     "fast": {
+      "at": 1797254000.0,
+      "clipped": true,
+      "value": 18.0
+     },
+     "from": {
+      "at": 1789996400.0,
+      "value": 12.0
+     },
+     "slow": {
+      "at": 1797254000.0,
+      "clipped": true,
+      "open": false,
+      "value": 18.0
+     }
+    },
+    "basis": "A straight line through your last 5 numbers. It is a rough guess, not a promise.",
+    "cross_at": null,
+    "cross_high_at": null,
+    "cross_low_at": null,
+    "first_at": 1787577200.0,
+    "high_weeks": 19,
+    "horizon_at": 1797254000.0,
+    "last_at": 1789996400.0,
+    "line": {
+     "clipped": true,
+     "from": {
+      "at": 1787577200.0,
+      "value": 10.0
+     },
+     "to": {
+      "at": 1797254000.0,
+      "value": 18.0
+     }
+    },
+    "low_weeks": 18,
+    "needed": 0,
+    "over_two_years": false,
+    "state": "range",
+    "used": 5,
+    "why": "",
+    "words": "About 18 to 19 weeks at this pace."
+   },
+   "name": "rising_goal_higher",
+   "now": 1790000000.0,
+   "points": [
+    {
+     "at": 1787577200.0,
+     "value": 10
+    },
+    {
+     "at": 1788182000.0,
+     "value": 10.5
+    },
+    {
+     "at": 1788786800.0,
+     "value": 11
+    },
+    {
+     "at": 1789391600.0,
+     "value": 11.5
+    },
+    {
+     "at": 1789996400.0,
+     "value": 12
+    }
+   ],
+   "summary": "5 numbers. Latest: 12 min. About 18 to 19 weeks at this pace.",
+   "target": 21.1,
+   "unit": "min",
+   "zone": "UTC"
+  },
+  {
+   "better": "lower",
+   "extent": {
+    "x": [
+     1789391600.0,
+     1790255600.0
+    ],
+    "y": [
+     69.0,
+     81.0
+    ]
+   },
+   "forecast": {
+    "band": {
+     "fast": {
+      "at": 1790255600.0,
+      "clipped": false,
+      "value": 70.0
+     },
+     "from": {
+      "at": 1789996400.0,
+      "value": 73.0
+     },
+     "slow": {
+      "at": 1790255600.0,
+      "clipped": false,
+      "open": false,
+      "value": 70.0
+     }
+    },
+    "basis": "A straight line through your last 5 numbers. It is a rough guess, not a promise.",
+    "cross_at": 1790255600.0,
+    "cross_high_at": 1790255600.0,
+    "cross_low_at": 1790255600.0,
+    "first_at": 1789391600.0,
+    "high_weeks": 1,
+    "horizon_at": 1791810800.0,
+    "last_at": 1789996400.0,
+    "line": {
+     "clipped": false,
+     "from": {
+      "at": 1789391600.0,
+      "value": 80.0
+     },
+     "to": {
+      "at": 1790255600.0,
+      "value": 70.0
+     }
+    },
+    "low_weeks": 1,
+    "needed": 0,
+    "over_two_years": false,
+    "state": "range",
+    "used": 5,
+    "why": "",
+    "words": "Less than a week at this pace."
+   },
+   "name": "less_than_a_week",
+   "now": 1790000000.0,
+   "points": [
+    {
+     "at": 1789391600.0,
+     "value": 80.0
+    },
+    {
+     "at": 1789413200.0,
+     "value": 79.75
+    },
+    {
+     "at": 1789434800.0,
+     "value": 79.5
+    },
+    {
+     "at": 1789650800.0,
+     "value": 77.0
+    },
+    {
+     "at": 1789996400.0,
+     "value": 73.0
+    }
+   ],
+   "summary": "5 numbers. Latest: 73 min. Less than a week at this pace.",
+   "target": 70,
+   "unit": "min",
+   "zone": "UTC"
+  },
+  {
+   "better": "lower",
+   "extent": {
+    "x": [
+     1787577200.0,
+     1797254000.0
+    ],
+    "y": [
+     58.0,
+     82.0
+    ]
+   },
+   "forecast": {
+    "band": {
+     "fast": {
+      "at": 1797254000.0,
+      "clipped": true,
+      "value": 72.0
+     },
+     "from": {
+      "at": 1789996400.0,
+      "value": 78.0
+     },
+     "slow": {
+      "at": 1797254000.0,
+      "clipped": true,
+      "open": false,
+      "value": 72.0
+     }
+    },
+    "basis": "A straight line through your last 5 numbers. It is a rough guess, not a promise.",
+    "cross_at": null,
+    "cross_high_at": null,
+    "cross_low_at": null,
+    "first_at": 1787577200.0,
+    "high_weeks": 36,
+    "horizon_at": 1797254000.0,
+    "last_at": 1789996400.0,
+    "line": {
+     "clipped": true,
+     "from": {
+      "at": 1787577200.0,
+      "value": 80.0
+     },
+     "to": {
+      "at": 1797254000.0,
+      "value": 72.0
+     }
+    },
+    "low_weeks": 36,
+    "needed": 0,
+    "over_two_years": false,
+    "state": "range",
+    "used": 5,
+    "why": "",
+    "words": "About 36 weeks at this pace."
+   },
+   "name": "clipped_at_the_edge",
+   "now": 1790000000.0,
+   "points": [
+    {
+     "at": 1787577200.0,
+     "value": 80
+    },
+    {
+     "at": 1788182000.0,
+     "value": 79.5
+    },
+    {
+     "at": 1788786800.0,
+     "value": 79
+    },
+    {
+     "at": 1789391600.0,
+     "value": 78.5
+    },
+    {
+     "at": 1789996400.0,
+     "value": 78
+    }
+   ],
+   "summary": "5 numbers. Latest: 78 min. About 36 weeks at this pace.",
+   "target": 60,
+   "unit": "min",
+   "zone": "UTC"
+  },
+  {
+   "better": "lower",
+   "extent": {
+    "x": [
+     1787577200.0,
+     1797254000.0
+    ],
+    "y": [
+     69.0,
+     81.0
+    ]
+   },
+   "forecast": {
+    "band": {
+     "fast": {
+      "at": 1797254000.0,
+      "clipped": true,
+      "value": 79.84
+     },
+     "from": {
+      "at": 1789996400.0,
+      "value": 79.96
+     },
+     "slow": {
+      "at": 1797254000.0,
+      "clipped": true,
+      "open": false,
+      "value": 79.84
+     }
+    },
+    "basis": "A straight line through your last 5 numbers. It is a rough guess, not a promise.",
+    "cross_at": null,
+    "cross_high_at": null,
+    "cross_low_at": null,
+    "first_at": 1787577200.0,
+    "high_weeks": null,
+    "horizon_at": 1797254000.0,
+    "last_at": 1789996400.0,
+    "line": {
+     "clipped": true,
+     "from": {
+      "at": 1787577200.0,
+      "value": 80.0
+     },
+     "to": {
+      "at": 1797254000.0,
+      "value": 79.84
+     }
+    },
+    "low_weeks": 105,
+    "needed": 0,
+    "over_two_years": true,
+    "state": "open_ended",
+    "used": 5,
+    "why": "long",
+    "words": "More than 2 years at this pace."
+   },
+   "name": "more_than_two_years",
+   "now": 1790000000.0,
+   "points": [
+    {
+     "at": 1787577200.0,
+     "value": 80
+    },
+    {
+     "at": 1788182000.0,
+     "value": 79.99
+    },
+    {
+     "at": 1788786800.0,
+     "value": 79.98
+    },
+    {
+     "at": 1789391600.0,
+     "value": 79.97
+    },
+    {
+     "at": 1789996400.0,
+     "value": 79.96
+    }
+   ],
+   "summary": "5 numbers. Latest: 79.96 min. More than 2 years at this pace.",
+   "target": 70,
+   "unit": "min",
+   "zone": "UTC"
+  },
+  {
+   "better": "lower",
+   "extent": {
+    "x": [
+     1787577200.0,
+     1789996400.0
+    ],
+    "y": [
+     69.5,
+     75.5
+    ]
+   },
+   "forecast": {
+    "band": null,
+    "basis": "",
+    "cross_at": null,
+    "cross_high_at": null,
+    "cross_low_at": null,
+    "first_at": null,
+    "high_weeks": null,
+    "horizon_at": null,
+    "last_at": null,
+    "line": null,
+    "low_weeks": null,
+    "needed": 0,
+    "over_two_years": false,
+    "state": "never",
+    "used": 5,
+    "why": "",
+    "words": "Not reached at this pace."
+   },
+   "name": "flat",
+   "now": 1790000000.0,
+   "points": [
+    {
+     "at": 1787577200.0,
+     "value": 75
+    },
+    {
+     "at": 1788182000.0,
+     "value": 75
+    },
+    {
+     "at": 1788786800.0,
+     "value": 75
+    },
+    {
+     "at": 1789391600.0,
+     "value": 75
+    },
+    {
+     "at": 1789996400.0,
+     "value": 75
+    }
+   ],
+   "summary": "5 numbers. Latest: 75 min. Not reached at this pace.",
+   "target": 70,
+   "unit": "min",
+   "zone": "UTC"
+  },
+  {
+   "better": "lower",
+   "extent": {
+    "x": [
+     1787577200.0,
+     1789996400.0
+    ],
+    "y": [
+     69.4,
+     76.6
+    ]
+   },
+   "forecast": {
+    "band": null,
+    "basis": "",
+    "cross_at": null,
+    "cross_high_at": null,
+    "cross_low_at": null,
+    "first_at": null,
+    "high_weeks": null,
+    "horizon_at": null,
+    "last_at": null,
+    "line": null,
+    "low_weeks": null,
+    "needed": 0,
+    "over_two_years": false,
+    "state": "never",
+    "used": 5,
+    "why": "",
+    "words": "Not reached at this pace."
+   },
+   "name": "wrong_way",
+   "now": 1790000000.0,
+   "points": [
+    {
+     "at": 1787577200.0,
+     "value": 72
+    },
+    {
+     "at": 1788182000.0,
+     "value": 73
+    },
+    {
+     "at": 1788786800.0,
+     "value": 74
+    },
+    {
+     "at": 1789391600.0,
+     "value": 75
+    },
+    {
+     "at": 1789996400.0,
+     "value": 76
+    }
+   ],
+   "summary": "5 numbers. Latest: 76 min. Not reached at this pace.",
+   "target": 70,
+   "unit": "min",
+   "zone": "UTC"
+  },
+  {
+   "better": "lower",
+   "extent": {
+    "x": [
+     1787577200.0,
+     1789996400.0
+    ],
+    "y": [
+     68.4,
+     75.6
+    ]
+   },
+   "forecast": {
+    "band": null,
+    "basis": "",
+    "cross_at": null,
+    "cross_high_at": null,
+    "cross_low_at": null,
+    "first_at": null,
+    "high_weeks": null,
+    "horizon_at": null,
+    "last_at": null,
+    "line": null,
+    "low_weeks": null,
+    "needed": 0,
+    "over_two_years": false,
+    "state": "reached",
+    "used": 0,
+    "why": "",
+    "words": "You have reached your target."
+   },
+   "name": "reached",
+   "now": 1790000000.0,
+   "points": [
+    {
+     "at": 1787577200.0,
+     "value": 75
+    },
+    {
+     "at": 1788182000.0,
+     "value": 74
+    },
+    {
+     "at": 1788786800.0,
+     "value": 72
+    },
+    {
+     "at": 1789391600.0,
+     "value": 71
+    },
+    {
+     "at": 1789996400.0,
+     "value": 69
+    }
+   ],
+   "summary": "5 numbers. Latest: 69 min. You have reached your target.",
+   "target": 70,
+   "unit": "min",
+   "zone": "UTC"
+  },
+  {
+   "better": "lower",
+   "extent": {
+    "x": [
+     1787577200.0,
+     1789996400.0
+    ],
+    "y": [
+     75.6,
+     80.4
+    ]
+   },
+   "forecast": {
+    "band": null,
+    "basis": "",
+    "cross_at": null,
+    "cross_high_at": null,
+    "cross_low_at": null,
+    "first_at": null,
+    "high_weeks": null,
+    "horizon_at": null,
+    "last_at": null,
+    "line": null,
+    "low_weeks": null,
+    "needed": 0,
+    "over_two_years": false,
+    "state": "no_target",
+    "used": 0,
+    "why": "",
+    "words": "Set a target to see a pace."
+   },
+   "name": "no_target",
+   "now": 1790000000.0,
+   "points": [
+    {
+     "at": 1787577200.0,
+     "value": 80
+    },
+    {
+     "at": 1788182000.0,
+     "value": 79
+    },
+    {
+     "at": 1788786800.0,
+     "value": 78
+    },
+    {
+     "at": 1789391600.0,
+     "value": 77
+    },
+    {
+     "at": 1789996400.0,
+     "value": 76
+    }
+   ],
+   "summary": "5 numbers. Latest: 76 min. Set a target to see a pace.",
+   "target": null,
+   "unit": "min",
+   "zone": "UTC"
+  },
+  {
+   "better": null,
+   "extent": {
+    "x": [
+     1787577200.0,
+     1789996400.0
+    ],
+    "y": [
+     69.0,
+     81.0
+    ]
+   },
+   "forecast": {
+    "band": null,
+    "basis": "",
+    "cross_at": null,
+    "cross_high_at": null,
+    "cross_low_at": null,
+    "first_at": null,
+    "high_weeks": null,
+    "horizon_at": null,
+    "last_at": null,
+    "line": null,
+    "low_weeks": null,
+    "needed": 0,
+    "over_two_years": false,
+    "state": "no_target",
+    "used": 0,
+    "why": "",
+    "words": "Set a target to see a pace."
+   },
+   "name": "no_direction",
+   "now": 1790000000.0,
+   "points": [
+    {
+     "at": 1787577200.0,
+     "value": 80
+    },
+    {
+     "at": 1788182000.0,
+     "value": 79
+    },
+    {
+     "at": 1788786800.0,
+     "value": 78
+    },
+    {
+     "at": 1789391600.0,
+     "value": 77
+    },
+    {
+     "at": 1789996400.0,
+     "value": 76
+    }
+   ],
+   "summary": "5 numbers. Latest: 76 min. Set a target to see a pace.",
+   "target": 70,
+   "unit": "min",
+   "zone": "UTC"
+  }
+ ],
+ "forecast_rules": {
+  "edge_spans": 3,
+  "max_used": 12,
+  "max_weeks": 104,
+  "min_days": 3,
+  "min_numbers": 5,
+  "min_span_days": 7,
+  "window_days": 90
+ },
+ "forecast_words": {
+  "basis": "A straight line through your last {n} numbers. It is a rough guess, not a promise.",
+  "less_than_a_week": "Less than a week at this pace.",
+  "never": "Not reached at this pace.",
+  "no_target": "Set a target to see a pace.",
+  "not_enough_count": "Not enough numbers yet - {more} more needed.",
+  "not_enough_days": "Not enough numbers yet - they need to be on at least 3 different days, spread over a week or more.",
+  "open_long": "About {low} {weeks} or more - it could take more than 2 years.",
+  "open_scattered": "About {low} {weeks} or more - your numbers are too scattered to say how much more.",
+  "over_two_years": "More than 2 years at this pace.",
+  "range": "About {low} to {high} weeks at this pace.",
+  "range_same": "About {low} weeks at this pace.",
+  "reached": "You have reached your target."
+ },
+ "goal_cases": {
+  "checkin_notes": {
+   "all_done": "\"Run a race\" - every step is marked done.",
+   "first_step_open": "\"Run a race\": still on track for \"Get the 5k under 30\" (March)?",
+   "number_reached": "\"Run a race\": Get the 5k under 30: the number reached its target - tick it when you are ready.",
+   "private_benchmark_no_pace_line": "\"Run a race\": still on track for \"Get the 5k under 30\" (March)?",
+   "with_pace_line": "\"Run a race\": still on track for \"Get the 5k under 30\" (March)? About 6 to 9 weeks at this pace."
+  },
+  "created": {
+   "body": {
+    "goal": {
+     "changed": 1790000000.0,
+     "created": 1790000000.0,
+     "id": "g0000000000",
+     "plan": [
+      {
+       "by": "March",
+       "done": false,
+       "done_at": null,
+       "id": "s1",
+       "lock_words": "",
+       "measure": {
+        "bench": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "project": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+       },
+       "measure_gone": false,
+       "measure_name": "5k time",
+       "measure_sensitive": false,
+       "needs": [],
+       "reached": false,
+       "reached_words": "",
+       "state": "open",
+       "step": "Get the 5k under 30",
+       "waiting_on": []
+      },
+      {
+       "by": "April",
+       "done": false,
+       "done_at": null,
+       "id": "s2",
+       "lock_words": "after: \"Get the 5k under 30\"",
+       "measure": null,
+       "measure_gone": false,
+       "measure_name": "",
+       "measure_sensitive": false,
+       "needs": [
+        "s1"
+       ],
+       "reached": false,
+       "reached_words": "",
+       "state": "locked",
+       "step": "Enter the race",
+       "waiting_on": [
+        "s1"
+       ]
+      },
+      {
+       "by": "April",
+       "done": false,
+       "done_at": null,
+       "id": "s3",
+       "lock_words": "after: \"Enter the race\"",
+       "measure": null,
+       "measure_gone": false,
+       "measure_name": "",
+       "measure_sensitive": false,
+       "needs": [
+        "s2"
+       ],
+       "reached": false,
+       "reached_words": "",
+       "state": "locked",
+       "step": "Book the train",
+       "waiting_on": [
+        "s2"
+       ]
+      }
+     ],
+     "status": "draft",
+     "text": "Run a race"
+    },
+    "ok": true
+   },
+   "status": 200
+  },
+  "first_undone": {
+   "body": {
+    "goal": {
+     "changed": 1790000180.0,
+     "created": 1790000000.0,
+     "id": "g0000000000",
+     "plan": [
+      {
+       "by": "March",
+       "done": false,
+       "done_at": null,
+       "id": "s1",
+       "lock_words": "",
+       "measure": {
+        "bench": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "project": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+       },
+       "measure_gone": false,
+       "measure_name": "5k time",
+       "measure_sensitive": false,
+       "needs": [],
+       "reached": true,
+       "reached_words": "The number reached its target: 29.5 min (target 30 min).",
+       "state": "met_by_number",
+       "step": "Get the 5k under 30",
+       "waiting_on": []
+      },
+      {
+       "by": "April",
+       "done": true,
+       "done_at": 1790000120.0,
+       "id": "s2",
+       "lock_words": "",
+       "measure": null,
+       "measure_gone": false,
+       "measure_name": "",
+       "measure_sensitive": false,
+       "needs": [
+        "s1"
+       ],
+       "reached": false,
+       "reached_words": "",
+       "state": "done",
+       "step": "Enter the race",
+       "waiting_on": []
+      },
+      {
+       "by": "April",
+       "done": false,
+       "done_at": null,
+       "id": "s3",
+       "lock_words": "",
+       "measure": null,
+       "measure_gone": false,
+       "measure_name": "",
+       "measure_sensitive": false,
+       "needs": [
+        "s2"
+       ],
+       "reached": false,
+       "reached_words": "",
+       "state": "open",
+       "step": "Book the train",
+       "waiting_on": []
+      }
+     ],
+     "status": "draft",
+     "text": "Run a race"
+    },
+    "ok": true
+   },
+   "status": 200
+  },
+  "list": {
+   "goals": [
+    {
+     "changed": 1790000240.0,
+     "created": 1790000000.0,
+     "id": "g0000000000",
+     "plan": [
+      {
+       "by": "March",
+       "done": true,
+       "done_at": 1790000240.0,
+       "id": "s1",
+       "lock_words": "",
+       "measure": {
+        "bench": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "project": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+       },
+       "measure_gone": false,
+       "measure_name": "5k time",
+       "measure_sensitive": false,
+       "needs": [],
+       "reached": true,
+       "reached_words": "The number reached its target: 29 min (target 30 min).",
+       "state": "done",
+       "step": "Get the 5k under 30",
+       "waiting_on": []
+      },
+      {
+       "by": "April",
+       "done": true,
+       "done_at": 1790000240.0,
+       "id": "s2",
+       "lock_words": "",
+       "measure": null,
+       "measure_gone": false,
+       "measure_name": "",
+       "measure_sensitive": false,
+       "needs": [
+        "s1"
+       ],
+       "reached": false,
+       "reached_words": "",
+       "state": "done",
+       "step": "Enter the race",
+       "waiting_on": []
+      },
+      {
+       "by": "April",
+       "done": true,
+       "done_at": 1790000240.0,
+       "id": "s3",
+       "lock_words": "",
+       "measure": null,
+       "measure_gone": false,
+       "measure_name": "",
+       "measure_sensitive": false,
+       "needs": [
+        "s2"
+       ],
+       "reached": false,
+       "reached_words": "",
+       "state": "done",
+       "step": "Book the train",
+       "waiting_on": []
+      }
+     ],
+     "status": "active",
+     "text": "Run a race"
+    }
+   ],
+   "limits": {
+    "by": 40,
+    "goals": 20,
+    "needs": 3,
+    "steps": 7,
+    "text": 300
+   },
+   "ok": true,
+   "words": {
+    "after": "after: {steps}",
+    "after_open_again": "after: {steps} (open again)",
+    "circle": "These steps wait on each other in a circle: {steps}.",
+    "locked": "locked",
+    "locked_refusal": "Do \"{step}\" first, or tick it if it is already done.",
+    "measure_gone": "The number this step follows is gone - tick it by hand.",
+    "no_such_benchmark": "\"{step}\" follows a number that does not exist any more.",
+    "no_target": "\"{step}\" follows \"{name}\", which has no target yet - set one first.",
+    "reached": "The number reached its target: {latest} (target {target}).",
+    "reached_tick": "{step}: the number reached its target - tick it when you are ready.",
+    "self_wait": "\"{step}\" cannot wait on itself.",
+    "too_many_needs": "\"{step}\" can wait on at most 3 other steps.",
+    "unknown_wait": "\"{step}\" waits on a step that is not in this plan.",
+    "waiting_on": "Waiting on \"{step}\"."
+   }
+  },
+  "number_reached": {
+   "goal": {
+    "changed": 1790000000.0,
+    "created": 1790000000.0,
+    "id": "g0000000000",
+    "plan": [
+     {
+      "by": "March",
+      "done": false,
+      "done_at": null,
+      "id": "s1",
+      "lock_words": "",
+      "measure": {
+       "bench": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+       "project": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "measure_gone": false,
+      "measure_name": "5k time",
+      "measure_sensitive": false,
+      "needs": [],
+      "reached": true,
+      "reached_words": "The number reached its target: 29.5 min (target 30 min).",
+      "state": "met_by_number",
+      "step": "Get the 5k under 30",
+      "waiting_on": []
+     },
+     {
+      "by": "April",
+      "done": false,
+      "done_at": null,
+      "id": "s2",
+      "lock_words": "",
+      "measure": null,
+      "measure_gone": false,
+      "measure_name": "",
+      "measure_sensitive": false,
+      "needs": [
+       "s1"
+      ],
+      "reached": false,
+      "reached_words": "",
+      "state": "open",
+      "step": "Enter the race",
+      "waiting_on": []
+     },
+     {
+      "by": "April",
+      "done": false,
+      "done_at": null,
+      "id": "s3",
+      "lock_words": "after: \"Enter the race\"",
+      "measure": null,
+      "measure_gone": false,
+      "measure_name": "",
+      "measure_sensitive": false,
+      "needs": [
+       "s2"
+      ],
+      "reached": false,
+      "reached_words": "",
+      "state": "locked",
+      "step": "Book the train",
+      "waiting_on": [
+       "s2"
+      ]
+     }
+    ],
+    "status": "draft",
+    "text": "Run a race"
+   },
+   "ok": true
+  },
+  "refuse_cycle": {
+   "body": {
+    "error": "These steps wait on each other in a circle: \"Paint\" -> \"Sand\" -> \"Paint\".",
+    "ok": false
+   },
+   "status": 400
+  },
+  "refuse_self": {
+   "body": {
+    "error": "\"Paint\" cannot wait on itself.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "refuse_tick_locked": {
+   "body": {
+    "error": "Do \"Get the 5k under 30\" first, or tick it if it is already done.",
+    "locked": true,
+    "ok": false,
+    "waiting_on": [
+     "s1"
+    ]
+   },
+   "status": 409
+  },
+  "refuse_too_many": {
+   "body": {
+    "error": "\"e\" can wait on at most 3 other steps.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "refuse_unknown": {
+   "body": {
+    "error": "\"Paint\" waits on a step that is not in this plan.",
+    "ok": false
+   },
+   "status": 400
+  },
+  "second_ticked": {
+   "body": {
+    "goal": {
+     "changed": 1790000120.0,
+     "created": 1790000000.0,
+     "id": "g0000000000",
+     "plan": [
+      {
+       "by": "March",
+       "done": true,
+       "done_at": 1790000060.0,
+       "id": "s1",
+       "lock_words": "",
+       "measure": {
+        "bench": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "project": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+       },
+       "measure_gone": false,
+       "measure_name": "5k time",
+       "measure_sensitive": false,
+       "needs": [],
+       "reached": true,
+       "reached_words": "The number reached its target: 29.5 min (target 30 min).",
+       "state": "done",
+       "step": "Get the 5k under 30",
+       "waiting_on": []
+      },
+      {
+       "by": "April",
+       "done": true,
+       "done_at": 1790000120.0,
+       "id": "s2",
+       "lock_words": "",
+       "measure": null,
+       "measure_gone": false,
+       "measure_name": "",
+       "measure_sensitive": false,
+       "needs": [
+        "s1"
+       ],
+       "reached": false,
+       "reached_words": "",
+       "state": "done",
+       "step": "Enter the race",
+       "waiting_on": []
+      },
+      {
+       "by": "April",
+       "done": false,
+       "done_at": null,
+       "id": "s3",
+       "lock_words": "",
+       "measure": null,
+       "measure_gone": false,
+       "measure_name": "",
+       "measure_sensitive": false,
+       "needs": [
+        "s2"
+       ],
+       "reached": false,
+       "reached_words": "",
+       "state": "open",
+       "step": "Book the train",
+       "waiting_on": []
+      }
+     ],
+     "status": "draft",
+     "text": "Run a race"
+    },
+    "ok": true
+   },
+   "status": 200
+  },
+  "ticked_by_hand": {
+   "body": {
+    "goal": {
+     "changed": 1790000060.0,
+     "created": 1790000000.0,
+     "id": "g0000000000",
+     "plan": [
+      {
+       "by": "March",
+       "done": true,
+       "done_at": 1790000060.0,
+       "id": "s1",
+       "lock_words": "",
+       "measure": {
+        "bench": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "project": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+       },
+       "measure_gone": false,
+       "measure_name": "5k time",
+       "measure_sensitive": false,
+       "needs": [],
+       "reached": true,
+       "reached_words": "The number reached its target: 29.5 min (target 30 min).",
+       "state": "done",
+       "step": "Get the 5k under 30",
+       "waiting_on": []
+      },
+      {
+       "by": "April",
+       "done": false,
+       "done_at": null,
+       "id": "s2",
+       "lock_words": "",
+       "measure": null,
+       "measure_gone": false,
+       "measure_name": "",
+       "measure_sensitive": false,
+       "needs": [
+        "s1"
+       ],
+       "reached": false,
+       "reached_words": "",
+       "state": "open",
+       "step": "Enter the race",
+       "waiting_on": []
+      },
+      {
+       "by": "April",
+       "done": false,
+       "done_at": null,
+       "id": "s3",
+       "lock_words": "after: \"Enter the race\"",
+       "measure": null,
+       "measure_gone": false,
+       "measure_name": "",
+       "measure_sensitive": false,
+       "needs": [
+        "s2"
+       ],
+       "reached": false,
+       "reached_words": "",
+       "state": "locked",
+       "step": "Book the train",
+       "waiting_on": [
+        "s2"
+       ]
+      }
+     ],
+     "status": "draft",
+     "text": "Run a race"
+    },
+    "ok": true
+   },
+   "status": 200
+  }
+ },
+ "goal_limits": {
+  "needs": 3,
+  "step_ids": [
+   "s1",
+   "s2",
+   "s3",
+   "s4",
+   "s5",
+   "s6",
+   "s7",
+   "s8",
+   "s9"
+  ],
+  "steps": 7
+ },
+ "goal_words": {
+  "after": "after: {steps}",
+  "after_open_again": "after: {steps} (open again)",
+  "circle": "These steps wait on each other in a circle: {steps}.",
+  "locked": "locked",
+  "locked_refusal": "Do \"{step}\" first, or tick it if it is already done.",
+  "measure_gone": "The number this step follows is gone - tick it by hand.",
+  "no_such_benchmark": "\"{step}\" follows a number that does not exist any more.",
+  "no_target": "\"{step}\" follows \"{name}\", which has no target yet - set one first.",
+  "reached": "The number reached its target: {latest} (target {target}).",
+  "reached_tick": "{step}: the number reached its target - tick it when you are ready.",
+  "self_wait": "\"{step}\" cannot wait on itself.",
+  "too_many_needs": "\"{step}\" can wait on at most 3 other steps.",
+  "unknown_wait": "\"{step}\" waits on a step that is not in this plan.",
+  "waiting_on": "Waiting on \"{step}\"."
  },
  "limits": {
   "bench_name": 40,
@@ -2478,6 +4247,25 @@
      },
      "changed": 1790000000.0,
      "created": 1790000000.0,
+     "forecast": {
+      "band": null,
+      "basis": "",
+      "cross_at": null,
+      "cross_high_at": null,
+      "cross_low_at": null,
+      "first_at": null,
+      "high_weeks": null,
+      "horizon_at": null,
+      "last_at": null,
+      "line": null,
+      "low_weeks": null,
+      "needed": 0,
+      "over_two_years": false,
+      "state": "no_target",
+      "used": 0,
+      "why": "",
+      "words": "Set a target to see a pace."
+     },
      "id": "00000000000000000000000000000004",
      "keep_on_screen": true,
      "keep_on_screen_words": "Health or money: kept on screen, never read aloud or sent anywhere.",
@@ -2514,6 +4302,25 @@
      "change": null,
      "changed": 1790000000.0,
      "created": 1790000000.0,
+     "forecast": {
+      "band": null,
+      "basis": "",
+      "cross_at": null,
+      "cross_high_at": null,
+      "cross_low_at": null,
+      "first_at": null,
+      "high_weeks": null,
+      "horizon_at": null,
+      "last_at": null,
+      "line": null,
+      "low_weeks": null,
+      "needed": 0,
+      "over_two_years": false,
+      "state": "no_target",
+      "used": 0,
+      "why": "",
+      "words": "Set a target to see a pace."
+     },
      "id": "00000000000000000000000000000005",
      "keep_on_screen": false,
      "keep_on_screen_words": "",

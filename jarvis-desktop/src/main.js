@@ -1529,6 +1529,16 @@ function openBrainFromRoute(route) {
     } catch {
       /* no storage: the Brain opens where it was, and the answer's own words say where */
     }
+    // The Brain removes the key the moment it reads it (takeAnyPlace). If it
+    // never opens, the search words are not left lying about: gone in a minute.
+    setTimeout(() => {
+      try {
+        const now = JSON.parse(localStorage.getItem(BRAIN_PLACE_KEY) || "null");
+        if (now && now.at === left.at) localStorage.removeItem(BRAIN_PLACE_KEY);
+      } catch {
+        /* nothing to clear */
+      }
+    }, 65_000);
     invoke("open_fix_place", { place: "brain" });
     return;
   }

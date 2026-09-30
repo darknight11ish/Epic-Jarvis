@@ -130,7 +130,7 @@
     "tag_move_placeholder": "Move to…",
     "tag_file_under": "File under {name}",
     "tag_errors": {
-      "bad_name": "A tag name needs 1 to 24 letters or numbers.",
+      "bad_name": "A tag name needs 1 to 24 characters, with at least one letter, number or symbol it can show.",
       "name_taken": "You already have a tag with that name.",
       "too_many_tags": "You can have up to 12 tags. Delete one to make room.",
       "bad_colour": "That colour is not one of the eight.",
@@ -138,7 +138,9 @@
       "tag_not_found": "That tag is gone. Reload History to see your tags.",
       "not_found": "That chat is gone - it may have been deleted.",
       "bad_request": "That request was not understood."
-    }
+    },
+    "tag_error_fallback": "Your PC did not make that change.",
+    "tag_section_label": "{name}, {count} chats"
   },
   "kinds": [
     "chat",
@@ -872,21 +874,489 @@
       "count": 12,
       "expanded": false,
       "header": "Work (12)",
-      "sr": "Work, 12 chats, collapsed"
+      "sr": "Work, 12 chats, collapsed",
+      "label": "Work, 12 chats"
     },
     {
       "name": "Learning",
       "count": 1,
       "expanded": true,
       "header": "Learning (1)",
-      "sr": "Learning, 1 chats, expanded"
+      "sr": "Learning, 1 chats, expanded",
+      "label": "Learning, 1 chats"
     },
     {
       "name": "Untagged",
       "count": 0,
       "expanded": false,
       "header": "Untagged (0)",
-      "sr": "Untagged, 0 chats, collapsed"
+      "sr": "Untagged, 0 chats, collapsed",
+      "label": "Untagged, 0 chats"
+    }
+  ],
+  "tag_error_cases": [
+    {
+      "answer": {
+        "error": "name_taken"
+      },
+      "expect": "You already have a tag with that name."
+    },
+    {
+      "answer": {
+        "error": "name_taken",
+        "message": "Something else."
+      },
+      "expect": "You already have a tag with that name."
+    },
+    {
+      "answer": {
+        "error": "bad_request",
+        "message": "Chat history is off. Tags are not changed."
+      },
+      "expect": "Chat history is off. Tags are not changed."
+    },
+    {
+      "answer": {
+        "error": "bad_request",
+        "message": "  "
+      },
+      "expect": "That request was not understood."
+    },
+    {
+      "answer": {
+        "error": "bad_request"
+      },
+      "expect": "That request was not understood."
+    },
+    {
+      "answer": {
+        "error": "weird",
+        "message": "Try later."
+      },
+      "expect": "Try later."
+    },
+    {
+      "answer": {
+        "error": "weird"
+      },
+      "expect": "Your PC did not make that change."
+    },
+    {
+      "answer": {},
+      "expect": "Your PC did not make that change."
+    }
+  ],
+  "tag_name_cases": [
+    {
+      "name": "Work",
+      "valid": true
+    },
+    {
+      "name": "  Work ",
+      "valid": true
+    },
+    {
+      "name": "",
+      "valid": false
+    },
+    {
+      "name": "   ",
+      "valid": false
+    },
+    {
+      "name": "ㅤ",
+      "valid": false
+    },
+    {
+      "name": "‍‍",
+      "valid": false
+    },
+    {
+      "name": "  ㅤ ",
+      "valid": false
+    },
+    {
+      "name": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "valid": true
+    },
+    {
+      "name": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+      "valid": false
+    },
+    {
+      "name": "aaaaaaaaaaaaaaaaaaaaaaaa",
+      "valid": true
+    },
+    {
+      "name": "aaaaaaaaaaaaaaaaaaaaaaaaa",
+      "valid": false
+    },
+    {
+      "name": "👨‍👩‍👧‍👦",
+      "valid": true
+    },
+    {
+      "name": "Café",
+      "valid": true
+    },
+    {
+      "name": "⠀",
+      "valid": false
+    }
+  ],
+  "tag_group_cases": [
+    {
+      "name": "nothing narrows: the PC's counts, an unloaded tag still listed",
+      "tags": [
+        {
+          "id": 1,
+          "name": "Work",
+          "count": 12
+        },
+        {
+          "id": 2,
+          "name": "Learning",
+          "count": 1
+        },
+        {
+          "id": 3,
+          "name": "Personal",
+          "count": 0
+        }
+      ],
+      "untagged": 2,
+      "rows": [
+        {
+          "id": "u1",
+          "tag": null,
+          "updated": 90
+        },
+        {
+          "id": "w1",
+          "tag": 1,
+          "updated": 80
+        },
+        {
+          "id": "l1",
+          "tag": 2,
+          "updated": 70
+        },
+        {
+          "id": "gone",
+          "tag": 99,
+          "updated": 60
+        }
+      ],
+      "exact": true,
+      "expect": {
+        "flat": false,
+        "sections": [
+          {
+            "key": "1",
+            "count": 12,
+            "rows": [
+              "w1"
+            ]
+          },
+          {
+            "key": "2",
+            "count": 1,
+            "rows": [
+              "l1"
+            ]
+          },
+          {
+            "key": "none",
+            "count": 2,
+            "rows": [
+              "u1",
+              "gone"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a Show or title filter narrows: counts are the rows shown, empty sections go",
+      "tags": [
+        {
+          "id": 1,
+          "name": "Work",
+          "count": 12
+        },
+        {
+          "id": 2,
+          "name": "Learning",
+          "count": 1
+        },
+        {
+          "id": 3,
+          "name": "Personal",
+          "count": 0
+        }
+      ],
+      "untagged": 2,
+      "rows": [
+        {
+          "id": "u1",
+          "tag": null,
+          "updated": 90
+        },
+        {
+          "id": "w1",
+          "tag": 1,
+          "updated": 80
+        },
+        {
+          "id": "l1",
+          "tag": 2,
+          "updated": 70
+        },
+        {
+          "id": "gone",
+          "tag": 99,
+          "updated": 60
+        }
+      ],
+      "exact": false,
+      "expect": {
+        "flat": false,
+        "sections": [
+          {
+            "key": "1",
+            "count": 1,
+            "rows": [
+              "w1"
+            ]
+          },
+          {
+            "key": "2",
+            "count": 1,
+            "rows": [
+              "l1"
+            ]
+          },
+          {
+            "key": "none",
+            "count": 2,
+            "rows": [
+              "u1",
+              "gone"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "a tag with chats the page has not loaded shows its count",
+      "tags": [
+        {
+          "id": 1,
+          "name": "Work",
+          "count": 12
+        },
+        {
+          "id": 2,
+          "name": "Learning",
+          "count": 1
+        },
+        {
+          "id": 3,
+          "name": "Personal",
+          "count": 0
+        },
+        {
+          "id": 4,
+          "name": "Ideas",
+          "count": 4
+        }
+      ],
+      "untagged": 0,
+      "rows": [
+        {
+          "id": "u1",
+          "tag": null,
+          "updated": 90
+        },
+        {
+          "id": "w1",
+          "tag": 1,
+          "updated": 80
+        }
+      ],
+      "exact": true,
+      "expect": {
+        "flat": false,
+        "sections": [
+          {
+            "key": "1",
+            "count": 12,
+            "rows": [
+              "w1"
+            ]
+          },
+          {
+            "key": "2",
+            "count": 1,
+            "rows": []
+          },
+          {
+            "key": "4",
+            "count": 4,
+            "rows": []
+          },
+          {
+            "key": "none",
+            "count": 1,
+            "rows": [
+              "u1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "...but not when narrowed",
+      "tags": [
+        {
+          "id": 1,
+          "name": "Work",
+          "count": 12
+        },
+        {
+          "id": 2,
+          "name": "Learning",
+          "count": 1
+        },
+        {
+          "id": 3,
+          "name": "Personal",
+          "count": 0
+        },
+        {
+          "id": 4,
+          "name": "Ideas",
+          "count": 4
+        }
+      ],
+      "untagged": 0,
+      "rows": [
+        {
+          "id": "u1",
+          "tag": null,
+          "updated": 90
+        },
+        {
+          "id": "w1",
+          "tag": 1,
+          "updated": 80
+        }
+      ],
+      "exact": false,
+      "expect": {
+        "flat": false,
+        "sections": [
+          {
+            "key": "1",
+            "count": 1,
+            "rows": [
+              "w1"
+            ]
+          },
+          {
+            "key": "none",
+            "count": 1,
+            "rows": [
+              "u1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "no Untagged section when none are loaded or counted",
+      "tags": [
+        {
+          "id": 1,
+          "name": "Work",
+          "count": 12
+        },
+        {
+          "id": 2,
+          "name": "Learning",
+          "count": 1
+        },
+        {
+          "id": 3,
+          "name": "Personal",
+          "count": 0
+        }
+      ],
+      "untagged": 0,
+      "rows": [
+        {
+          "id": "w1",
+          "tag": 1,
+          "updated": 80
+        },
+        {
+          "id": "l1",
+          "tag": 2,
+          "updated": 70
+        }
+      ],
+      "exact": true,
+      "expect": {
+        "flat": false,
+        "sections": [
+          {
+            "key": "1",
+            "count": 12,
+            "rows": [
+              "w1"
+            ]
+          },
+          {
+            "key": "2",
+            "count": 1,
+            "rows": [
+              "l1"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "no tags at all: a flat list, no sections",
+      "tags": [],
+      "untagged": 5,
+      "rows": [
+        {
+          "id": "u1",
+          "tag": null,
+          "updated": 90
+        },
+        {
+          "id": "w1",
+          "tag": 1,
+          "updated": 80
+        },
+        {
+          "id": "l1",
+          "tag": 2,
+          "updated": 70
+        },
+        {
+          "id": "gone",
+          "tag": 99,
+          "updated": 60
+        }
+      ],
+      "exact": true,
+      "expect": {
+        "flat": true,
+        "sections": []
+      }
     }
   ],
   "tag_delete_cases": [

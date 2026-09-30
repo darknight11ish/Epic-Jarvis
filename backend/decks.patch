@@ -1,0 +1,24 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3609,6 +3609,20 @@
+     except Exception as exc:
+         print(f"  quiz       NOT ON ({type(exc).__name__}) - Quiz me on a text is off")
+         print("             until jarvis_quiz.py is back: run apply-patches.ps1 again")
++    # decks.patch ("Review decks", the owner's decision of 2026-09-30;
++    # docs/QUIZ-DECKS-DESIGN.md, JARVIS-API section 102): GET/POST /api/decks,
++    # /api/decks/<id>/act|cards, /api/decks/settings and GET /api/review,
++    # POST /api/review/reveal|rate|more. Also hands the quiz the function that
++    # keeps chosen questions in a deck. No card: the owner's own tap saves the
++    # owner's own words, sealed on this PC in study.db under a key of its own.
++    # Wrapped round Handler here, before anything listens, like quiz above; the
++    # rules are all in jarvis_decks.py.
++    try:
++        import jarvis_decks
++        print(jarvis_decks.install(Handler, origin_ok=_origin_ok,
++                                   token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  decks      NOT ON ({type(exc).__name__}) - Review decks are off")
++        print("             until jarvis_decks.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

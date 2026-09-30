@@ -370,6 +370,9 @@ SHIPPED = (
     # ... and the script that checks the quiz's marking against the real local
     # model (quiz_grader_cases.json is copied beside it, apply-patches.ps1 step 3b)
     "eval_quiz_grader.py",
+    # "Review decks" (2026-09-30; decks.patch): kept quiz questions, spaced
+    # review with py-fsrs, sealed in study.db.
+    "jarvis_decks.py",
 )
 
 
