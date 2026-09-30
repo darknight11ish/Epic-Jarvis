@@ -1882,8 +1882,9 @@ def t_study_call_routes_to_the_lane():
               getattr(out, "model", None) == "qwen3:8b")
         import threading as _th
         seen_other = []
-        _th.Thread(target=lambda: seen_other.append(call.active_model())).start()
-        time.sleep(0.2)
+        _t = _th.Thread(target=lambda: seen_other.append(call.active_model()))
+        _t.start()
+        _t.join(5)
         check("another thread's call never sees this thread's model", seen_other == [""], str(seen_other))
         # The lane does not answer: fall back to today's behaviour, this call only.
         def broken(url, payload=None, timeout=2.0):

@@ -326,6 +326,14 @@ def t_the_other_readers():
           all(h["id"] != a for h in M.with_profile(st, [], 5)))
     view = M.profile_view(st)
     check("... the list says it is paused", view["facts"][0].get("paused") is True)
+    fam = topic_ids(st)["Family"]
+    check("... and names the topic that pauses it (its id)", view["facts"][0].get("topic") == fam,
+          str(view["facts"][0]))
+    set_mode_raw(st, "Family", "learn_only")
+    check("... also for Learn, but don't use (the apps word it differently by mode)",
+          M.profile_view(st)["facts"][0].get("topic") == fam and
+          M.profile_view(st)["facts"][0].get("paused") is True)
+    set_mode_raw(st, "Family", "off")
     set_mode_raw(st, "Family", "both")
     check("switched back on, the pin is read again",
           [h["id"] for h in M.with_profile(st, [], 5)] == [a])
@@ -530,6 +538,23 @@ def t_the_model_is_only_a_suggestion():
     T.set_model_help(True, st)
     res = T.model_pass(st, ollama="https://api.example.com", model="gpt-x")
     check("a non-local model is refused", res["ran"] is False and res["why"], str(res))
+
+
+def t_conversation_facts_leave_out_an_off_topic():
+    st = store()
+    cid = "conv-abcdef12"
+    a = st.add("Owner's sister is getting married in June", source="auto",
+               meta={"conversation_id": cid})
+    b = st.add("Owner enjoys chess", source="auto", meta={"conversation_id": cid})
+    with T._db(st) as c:
+        T._write_row(c, a, topic_ids(st)["Family"], None, "owner", True)
+    got = M.conversation_facts_view(cid, st=st)
+    check("a conversation's facts list shows both while the topics are on",
+          {f["id"] for f in got["facts"]} == {a, b}, str(got))
+    set_mode_raw(st, "Family", "off")
+    got = M.conversation_facts_view(cid, st=st)
+    check("... and leaves out a fact in an Off topic",
+          {f["id"] for f in got["facts"]} == {b} and got["count"] == 1, str(got))
 
 
 def t_model_pass_does_not_hold_the_memory_lock():

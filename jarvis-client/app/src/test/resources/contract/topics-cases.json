@@ -4,6 +4,7 @@
     "title": "Topics",
     "intro": "A topic is a folder for things Jarvis knows. Pick what Jarvis may do with each folder.",
     "sorted_guess": "Jarvis sorted {n} of your {total} facts by guessing from the words. Check them so switching a topic off works as you expect.",
+    "sorted_guess_one": "Jarvis sorted 1 fact by guessing from the words. Check it so switching a topic off works as you expect.",
     "check_button": "Check these ({n})",
     "check_right": "These are right",
     "check_held": "Held back: might be about {name}",
@@ -13,9 +14,11 @@
     "private_asks": "This will ask for your OK first.",
     "unsorted_name": "Unsorted",
     "kept_hidden": "{n} facts kept, hidden",
+    "kept_hidden_one": "1 fact kept, hidden",
     "show_them": "Show them",
     "not_used_tag": "not used in answers",
     "skipped": "{n} new things not saved this week",
+    "skipped_one": "1 new thing not saved this week",
     "left_out": "Left out {n} facts because of your topic settings",
     "left_out_one": "Left out 1 fact because of your topic settings",
     "preview_left_out": "{n} things Jarvis knows about {name} will be left out of answers.",
@@ -29,7 +32,9 @@
     "model_help_note": "Uses the model on this PC, never a cloud one, on up to 20 facts a night. It only suggests; you check.",
     "confirm_delete": "Delete this topic? Its facts are kept; pick where they go.",
     "screen_reader": "{name}, {n} facts, {mode}, button: change mode",
+    "screen_reader_one": "{name}, 1 fact, {mode}, button: change mode",
     "hidden_row": "Topic {index}, {n} facts, {mode}",
+    "hidden_row_one": "Topic {index}, 1 fact, {mode}",
     "moved_line": "Done: {name} is {mode}. You can change it in Brain.",
     "pick_line": "Pick what Jarvis may do with {name}.",
     "no_such_topic": "I do not have a topic called {name}.",
@@ -39,6 +44,7 @@
     "waiting": "Waiting for your approval.",
     "sorting_now": "Jarvis is still sorting {n} of your facts.",
     "pin_paused": "Paused: {name} is off",
+    "pin_paused_learn": "Paused: {name} is set to Learn, but don't use",
     "used_left_out": "A memory from a topic you have since switched off.",
     "ask_save": "Save under Unsorted",
     "ask_skip": "Skip it",
@@ -532,6 +538,12 @@
       "facts": 41,
       "mode": "use_only",
       "expect": "Work, 41 facts, Use, but don't learn, button: change mode"
+    },
+    {
+      "name": "Work",
+      "facts": 1,
+      "mode": "use_only",
+      "expect": "Work, 1 fact, Use, but don't learn, button: change mode"
     }
   ],
   "hidden_row_cases": [
@@ -540,6 +552,58 @@
       "facts": 41,
       "mode": "use_only",
       "expect": "Topic 1, 41 facts, Use, but don't learn"
+    },
+    {
+      "index": 2,
+      "facts": 1,
+      "mode": "use_only",
+      "expect": "Topic 2, 1 fact, Use, but don't learn"
+    }
+  ],
+  "count_cases": [
+    {
+      "line": "kept_hidden",
+      "n": 1,
+      "expect": "1 fact kept, hidden"
+    },
+    {
+      "line": "kept_hidden",
+      "n": 5,
+      "expect": "5 facts kept, hidden"
+    },
+    {
+      "line": "skipped",
+      "n": 1,
+      "expect": "1 new thing not saved this week"
+    },
+    {
+      "line": "skipped",
+      "n": 3,
+      "expect": "3 new things not saved this week"
+    },
+    {
+      "line": "sorted_guess",
+      "n": 1,
+      "total": 40,
+      "expect": "Jarvis sorted 1 fact by guessing from the words. Check it so switching a topic off works as you expect."
+    },
+    {
+      "line": "sorted_guess",
+      "n": 3,
+      "total": 40,
+      "expect": "Jarvis sorted 3 of your 40 facts by guessing from the words. Check them so switching a topic off works as you expect."
+    }
+  ],
+  "pin_paused_cases": [
+    {
+      "name": "Work",
+      "mode": "off",
+      "expect": "Paused: Work is off"
+    },
+    {
+      "name": "Work",
+      "mode": "learn_only",
+      "expect": "Paused: Work is set to Learn, but don't use"
     }
   ],
   "preview_cases": [

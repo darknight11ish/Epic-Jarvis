@@ -124,3 +124,5 @@ things" list on the phone (no map)** - this bends the "no memory graph on the ph
 list only, hidden under "Hide memory lists". **"New section here" marker: divider only** (Jarvis
 still reads the whole chat). Overnight tags: `docs/OVERNIGHT-TAGS-DESIGN.md` (edits ARCHITECTURE §5
 in the same PR). GitHub tools: `docs/GITHUB-TOOLS-DESIGN.md` written; its 3 owner questions pending.
+
+Owner answers, 2026-09-30 (before bed): GitHub tools: **two cards** (Try, then Pull request), **only tools with no installer are test-run**, **phone may approve with fingerprint/PIN** (never widget/notification). Overnight tags: **up to 3 cards a night**. Topics: **Money Off also stops spending summaries and the retirement calculator**; **topic phrases join "what can I say"**.
