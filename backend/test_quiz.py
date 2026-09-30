@@ -237,8 +237,15 @@ def t_finish_and_stop():
     m.mark = ("got_it", "ok.")
     Q.handle_post(f"/api/quiz/{qid}/answer", {"n": 1, "answer": "a"})
     out = Q.handle_post(f"/api/quiz/{qid}/finish", {})[1]["summary"]
-    check("unanswered questions are not counted and not listed",
-          out == {"counts": {"got_it": 1, "partly": 0, "not_yet": 0}, "again": []}, out)
+    check("unanswered questions are not counted but ARE listed to look at again, in order",
+          out == {"counts": {"got_it": 1, "partly": 0, "not_yet": 0}, "again": [2, 3]}, out)
+    qid = new_quiz()[1]["quiz"]["id"]
+    for n, lvl in ((1, "partly"), (3, "got_it")):
+        m.mark = (lvl, "ok.")
+        Q.handle_post(f"/api/quiz/{qid}/answer", {"n": n, "answer": "a"})
+    out = Q.handle_post(f"/api/quiz/{qid}/finish", {})[1]["summary"]
+    check("again mixes answered-not-got-it and skipped ones in question order",
+          out["again"] == [1, 2] and out["counts"] == {"got_it": 1, "partly": 1, "not_yet": 0}, out)
     qid = new_quiz()[1]["quiz"]["id"]
     check("stop answers ok true and forgets the quiz",
           Q.handle_post(f"/api/quiz/{qid}/stop", {}) == (200, {"ok": True})
@@ -535,6 +542,35 @@ def t_cases_file_and_eval_script():
         raise Q.QuizError("model_unavailable")
     r = E.run(doc, boom)
     check("a grader that errors counts every case as wrong", r["correct"] == 0 and r["errors"] == r["total"])
+    check("two injection cases hide the instruction inside the passage, not the answer",
+          sum(1 for c in cases if c["kind"] == "injection"
+              and "got_it" in c["passage"] and "got_it" not in c["answer"]) >= 2)
+    # --backend-dir: results land beside the jarvis_quiz.py in THAT folder
+    import subprocess
+    fake = Path(tempfile.mkdtemp(prefix="jarvis-quiz-live-", dir=_TMP))
+    (fake / "jarvis_quiz.py").write_text(
+        "from pathlib import Path\nRESULTS_PATH = Path(__file__).resolve().parent / 'quiz_grader_results.json'\n"
+        "def grade_answer(p, q, a):\n    return ('not_yet', '.')\n"
+        "def _lane():\n    return ('x', 'fake-model')\n"
+        "def grader_verified():\n    return False\n", encoding="utf-8")
+    shutil.copy(HERE / "quiz_grader_cases.json", fake / "quiz_grader_cases.json")
+    before = (HERE / "quiz_grader_results.json").exists()
+    r = subprocess.run([sys.executable, str(HERE / "eval_quiz_grader.py"), "--backend-dir", str(fake)],
+                       capture_output=True, text=True, cwd=str(_TMP))
+    res = fake / "quiz_grader_results.json"
+    check("--backend-dir writes the results beside that folder's jarvis_quiz.py",
+          res.is_file() and json.loads(res.read_text(encoding="utf-8"))["model"] == "fake-model"
+          and json.loads(res.read_text(encoding="utf-8"))["total"] == len(cases), r.stdout + r.stderr)
+    check("... and not beside the repository's own copy",
+          (HERE / "quiz_grader_results.json").exists() == before)
+    shutil.copy(HERE / "eval_quiz_grader.py", fake / "eval_quiz_grader.py")
+    res.unlink()
+    subprocess.run([sys.executable, str(fake / "eval_quiz_grader.py")], capture_output=True, text=True, cwd=str(_TMP))
+    check("with no argument it uses its own folder", res.is_file())
+    r = subprocess.run([sys.executable, str(HERE / "eval_quiz_grader.py"), "--backend-dir", str(_TMP / "nope")],
+                       capture_output=True, text=True)
+    check("a folder with no jarvis_quiz.py is a plain error, nothing written",
+          r.returncode != 0 and "jarvis_quiz.py" in (r.stdout + r.stderr))
     real = Q.RESULTS_PATH
     try:
         Q.RESULTS_PATH = _TMP / "r2.json"

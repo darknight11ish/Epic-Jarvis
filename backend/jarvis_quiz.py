@@ -417,6 +417,10 @@ def finish(qid: str) -> dict:
                 counts[q["mark"]["level"]] += 1
                 if q["mark"]["level"] != "got_it":
                     again.append(i + 1)
+            else:
+                # skipped: not counted (counts are answered ones only) but
+                # still worth another look (owner, 2026-09-30)
+                again.append(i + 1)
         del _SESSIONS[qid]
         return {"counts": counts, "again": again}
 
