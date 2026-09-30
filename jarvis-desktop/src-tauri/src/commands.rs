@@ -1308,6 +1308,88 @@ pub fn notify(app: &AppHandle, title: &str, body: &str) {
     }
 }
 
+/// What a toast says while App lock or "Hide memory lists and chat history"
+/// is on and the words could carry private detail: nothing but this. The
+/// title stays; the detail is one click away, behind the lock.
+pub const LOCKED_TOAST_BODY: &str =
+    "Open Jarvis to see what happened - it will ask you to unlock it first.";
+
+/// Where a failure toast points for the details the toast leaves out.
+pub const DETAILS_IN_LOG: &str = "Details: Settings, More options, Open the log folder.";
+/// The same, for a failure that also leaves a crash note (a backend crash or
+/// hang, or Jarvis Desktop failing to start it).
+pub const DETAILS_IN_CRASH_NOTES: &str =
+    "Details are in the crash notes: Settings, More options (and the log folder).";
+
+/// Which "where to look" line a failure toast carries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Details {
+    Log,
+    CrashNotes,
+}
+
+/// True while a toast must not carry private detail: App lock is on, or the
+/// Brain's private lists are still hidden (the same two conditions the
+/// approval toast reads, `stream.rs` `toast_words`).
+pub fn toast_privacy_on(app: &AppHandle) -> bool {
+    crate::lock::current(app).app_lock || crate::lock::private_hidden(app)
+}
+
+/// The body of a failure toast, as plain words: what went wrong in Jarvis's
+/// own sentence, then where the details are. Never the raw error - that goes
+/// to the log, scrubbed, by [`notify_failed`]. While `locked`, only
+/// [`LOCKED_TOAST_BODY`]. Pure, so it is tested.
+pub fn failure_body(locked: bool, plain: &str, details: Details) -> String {
+    if locked {
+        return LOCKED_TOAST_BODY.to_string();
+    }
+    let hint = match details {
+        Details::Log => DETAILS_IN_LOG,
+        Details::CrashNotes => DETAILS_IN_CRASH_NOTES,
+    };
+    let plain = plain.trim();
+    if plain.is_empty() {
+        hint.to_string()
+    } else {
+        format!("{plain} {hint}")
+    }
+}
+
+/// A toast for something that failed. `plain` is Jarvis's own sentence;
+/// `raw` is the system's error text, which is kept OUT of the toast (it can
+/// hold file paths, addresses or a user name) and written to the log,
+/// scrubbed. App lock or hidden private lists: the generic
+/// [`LOCKED_TOAST_BODY`].
+pub fn notify_failed(app: &AppHandle, title: &str, plain: &str, raw: &str, details: Details) {
+    crate::logfile::log(&format!(
+        "[jarvis] {title}: {}",
+        crate::crash_notes::scrub(raw.trim())
+    ));
+    notify(
+        app,
+        title,
+        &failure_body(toast_privacy_on(app), plain, details),
+    );
+}
+
+/// A toast whose words may carry detail of the owner's own (what was
+/// stopped, what a look was about): [`LOCKED_TOAST_BODY`] - or `locked_body`
+/// when a safer sentence is given - while App lock or hidden private lists
+/// are on.
+pub fn notify_guarded(app: &AppHandle, title: &str, body: &str, locked_body: Option<&str>) {
+    let locked = toast_privacy_on(app);
+    notify(app, title, &guarded_body(locked, body, locked_body));
+}
+
+/// The pure half of [`notify_guarded`].
+pub fn guarded_body(locked: bool, body: &str, locked_body: Option<&str>) -> String {
+    if locked {
+        locked_body.unwrap_or(LOCKED_TOAST_BODY).to_string()
+    } else {
+        body.to_string()
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Desktop capture
 // ---------------------------------------------------------------------------
@@ -2578,7 +2660,14 @@ pub fn stop_everything_now(app: &AppHandle) {
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         let said = stop_everything_words(post_stop_all(&handle).await);
-        notify(&handle, STOP_EVERYTHING_TITLE, &said);
+        // The PC's own sentence can name what was stopped; while locked the
+        // toast says only that speech stopped.
+        notify_guarded(
+            &handle,
+            STOP_EVERYTHING_TITLE,
+            &said,
+            Some(STOP_LOCKED_BODY),
+        );
     });
 }
 
@@ -2614,6 +2703,9 @@ async fn post_stop_all(app: &AppHandle) -> Result<serde_json::Value, String> {
 /// Always true by the time the PC answers: speech stopped here first. The
 /// phone's `StopEverything.SPEECH` - the same words.
 pub const STOP_SPEECH: &str = "Stopped speaking.";
+/// The toast's words while App lock is on: what happened here, nothing the
+/// PC said about what it stopped.
+pub const STOP_LOCKED_BODY: &str = "Stopped speaking. Open Jarvis to see what else was stopped.";
 /// The PC answered without a sentence of its own (`StopEverything.PC_SILENT`).
 pub const STOP_PC_SILENT: &str = "Jarvis stopped what it was doing.";
 /// The PC could not be asked (`StopEverything.NOT_REACHED`); why follows.
@@ -6130,6 +6222,41 @@ mod deep_hidden_tests {
         assert_eq!(out["jobs"][0]["state"], "done");
         assert_eq!(out["jobs"][0]["seconds"], 90);
         assert_eq!(out["jobs"][1]["why"], "The big model stopped.");
+    }
+}
+
+#[cfg(test)]
+mod toast_words_tests {
+    use super::*;
+
+    #[test]
+    fn a_failure_toast_never_carries_the_raw_error() {
+        let body = failure_body(false, "The Brain could not open.", Details::Log);
+        assert!(!body.contains("os error"), "{body}");
+        assert!(body.starts_with("The Brain could not open."), "{body}");
+        assert!(body.ends_with(DETAILS_IN_LOG), "{body}");
+        assert!(failure_body(false, "x", Details::CrashNotes).contains("crash notes"));
+        assert_eq!(failure_body(false, "", Details::Log), DETAILS_IN_LOG);
+    }
+
+    #[test]
+    fn under_app_lock_a_toast_says_nothing_specific() {
+        let body = failure_body(true, "The Brain could not open.", Details::Log);
+        assert_eq!(body, LOCKED_TOAST_BODY);
+        assert_eq!(
+            guarded_body(true, "Stopped the task called Taxes.", None),
+            LOCKED_TOAST_BODY
+        );
+        assert_eq!(
+            guarded_body(
+                true,
+                "Stopped the task called Taxes.",
+                Some(STOP_LOCKED_BODY)
+            ),
+            STOP_LOCKED_BODY
+        );
+        assert_eq!(guarded_body(false, "Stopped.", None), "Stopped.");
+        assert!(!STOP_LOCKED_BODY.contains("task called"));
     }
 }
 

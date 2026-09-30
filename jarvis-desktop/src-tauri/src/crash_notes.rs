@@ -80,7 +80,7 @@ pub struct CrashNote {
     /// `"desktop"` (this process panicked) or `"backend"` (the Python
     /// backend crashed or stopped answering).
     pub source: String,
-    /// `"panic"`, `"crash"` or `"hang"`.
+    /// `"panic"`, `"crash"`, `"hang"` or `"start"` (a backend that could not be started).
     pub kind: String,
     /// The scrubbed text. Never the raw panic payload or raw watchdog
     /// detail - see [`scrub`].

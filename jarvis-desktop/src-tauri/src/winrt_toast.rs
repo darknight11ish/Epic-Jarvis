@@ -222,9 +222,70 @@ fn try_notify_approval(
     let doc = XmlDocument::new()?;
     doc.LoadXml(&HSTRING::from(xml))?;
     let toast = ToastNotification::CreateToastNotification(&doc)?;
+    // Tagged with the card's id so it can be taken away when the card leaves
+    // the queue ([`remove_approval`]). A second toast for the same id replaces
+    // the first instead of stacking.
+    if !id.is_empty() {
+        toast.SetTag(&HSTRING::from(id))?;
+        toast.SetGroup(&HSTRING::from(APPROVAL_GROUP))?;
+    }
     let notifier = ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(AUMID))?;
     notifier.Show(&toast)
 }
+
+/// The group every approval toast is put in, tagged with the card's id.
+const APPROVAL_GROUP: &str = "jarvis-approval";
+
+/// Takes a card's toast away once the card is no longer waiting: decided on
+/// this PC or the phone, timed out or cancelled (`stream.rs`, the same read
+/// that tracks the pending queue). A toast left behind keeps a Deny button
+/// that can only fail. Quiet when there is nothing to remove.
+pub fn remove_approval(id: &str) {
+    if is_uninstalled_build() || id.is_empty() {
+        return;
+    }
+    let removed = ToastNotificationManager::History().and_then(|h| {
+        h.RemoveGroupedTagWithId(
+            &HSTRING::from(id),
+            &HSTRING::from(APPROVAL_GROUP),
+            &HSTRING::from(AUMID),
+        )
+    });
+    if let Err(e) = removed {
+        crate::logfile::log(&format!(
+            "[jarvis] could not take the approval toast for {id} away: {e}"
+        ));
+    }
+}
+
+/// What a Deny click that did not go through means for the owner. Pure, so it
+/// is tested.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum DenyFailure {
+    /// The card was already decided, expired or gone (the server's 409 from
+    /// `/api/deny`): nothing is wrong, so nothing is shown but a quiet note.
+    AlreadyDecided,
+    /// Not sent; the owner is told the card is still waiting. `plain` is a
+    /// sentence of this app's own, or empty - never the raw error text.
+    NotSent { plain: String },
+}
+
+/// Sorts a `deny_from_notification` error. Raw system or server text (an
+/// HTTP status and body, "unable to ...") is never passed on; this app's own
+/// plain refusals (a stale stream) are.
+pub(crate) fn classify_deny_failure(err: &str) -> DenyFailure {
+    let e = err.trim();
+    if e.contains("HTTP 409") {
+        return DenyFailure::AlreadyDecided;
+    }
+    let raw = e.contains("HTTP ") || e.starts_with("unable to") || e.contains("os error");
+    DenyFailure::NotSent {
+        plain: if raw { String::new() } else { e.to_string() },
+    }
+}
+
+/// The quiet words for a card that was already decided.
+pub(crate) const ALREADY_DECIDED: &str = "Already decided.";
 
 /// The XML of a toast that keeps ringing: an alarm, or an urgent "tell me
 /// when" (backend jarvis_tellme.py; the owner's decision of 2026-09-25,
@@ -374,9 +435,27 @@ pub fn decide_denied_detached(app: &AppHandle, id: &str) {
         // refusing all of them is one answer however many there are.
         if let Err(e) = crate::commands::deny_from_notification(app.clone(), id.clone()).await {
             crate::logfile::log(&format!(
-                "[jarvis] notification Deny for {id} did not go through: {e}"
+                "[jarvis] notification Deny for {id} did not go through: {}",
+                crate::crash_notes::scrub(&e)
             ));
-            crate::commands::notify(&app, "Jarvis", &deny_not_sent_words(&e));
+            match classify_deny_failure(&e) {
+                // Decided somewhere else first: no error toast, and the old
+                // toast goes. A quiet note says why the click did nothing.
+                DenyFailure::AlreadyDecided => {
+                    remove_approval(&id);
+                    if !crate::commands::toast_privacy_on(&app) {
+                        notify_quiet(&app, "Jarvis", ALREADY_DECIDED);
+                    }
+                }
+                DenyFailure::NotSent { plain } => {
+                    crate::commands::notify_guarded(
+                        &app,
+                        "Jarvis",
+                        &deny_not_sent_words(&plain),
+                        None,
+                    );
+                }
+            }
         }
     });
 }
@@ -586,6 +665,35 @@ mod tests {
         assert!(!xml.contains("<action"));
         assert!(!xml.contains("Looping"));
         assert!(xml.contains("Wake &lt;up&gt;"));
+    }
+
+    #[test]
+    fn a_deny_on_a_card_already_decided_is_not_an_error() {
+        assert_eq!(
+            classify_deny_failure("the server answered HTTP 409 to /deny: {\"error\":\"gone\"}"),
+            DenyFailure::AlreadyDecided
+        );
+        // Any other raw failure is "not sent" with no raw text passed on.
+        assert_eq!(
+            classify_deny_failure("the server answered HTTP 500 to /deny: Traceback in C:/x.py"),
+            DenyFailure::NotSent {
+                plain: String::new()
+            }
+        );
+        assert_eq!(
+            classify_deny_failure("unable to deny `a`: connection reset (os error 10054)"),
+            DenyFailure::NotSent {
+                plain: String::new()
+            }
+        );
+        // This app's own plain sentence is kept.
+        assert_eq!(
+            classify_deny_failure("the event stream is stale, so nothing can be answered"),
+            DenyFailure::NotSent {
+                plain: "the event stream is stale, so nothing can be answered".to_string()
+            }
+        );
+        assert!(!ALREADY_DECIDED.to_lowercase().contains("error"));
     }
 
     #[test]
