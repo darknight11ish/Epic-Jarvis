@@ -229,9 +229,6 @@ SHIPPED = (
     # "Goals with one card per step" (the owner's "build it now",
     # 2026-09-27; goals.patch): a goal's own plan and weekly check-in.
     "jarvis_goals.py",
-    # "Quiz me on a text" (2026-09-30; quiz.patch): questions from a pasted
-    # text, marked by the local model, in memory only.
-    "jarvis_quiz.py",
     # "One card, several steps" (the owner's own words, 2026-09-28;
     # plan-gate.patch): SWITCHED OFF until tools/tool_eval clears the bar.
     "jarvis_plan.py",
@@ -364,6 +361,12 @@ SHIPPED = (
     # docs/PAIRING-DESIGN.md phase 1): the check on every request's key,
     # the registry of key hashes, the pairing session and its card
     "jarvis_devices.py",
+    # "Quiz me on a text" (2026-09-30; quiz.patch): questions from a pasted
+    # text, marked by the local model, in memory only.
+    "jarvis_quiz.py",
+    # ... and the script that checks the quiz's marking against the real local
+    # model (quiz_grader_cases.json is copied beside it, apply-patches.ps1 step 3b)
+    "eval_quiz_grader.py",
 )
 
 

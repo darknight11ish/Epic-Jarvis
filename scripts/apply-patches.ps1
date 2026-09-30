@@ -1124,6 +1124,7 @@ $SHIPPED = @(
     'jarvis_devices.py'          # devices.patch: every request's key checked (a device key never falls back to the shared one), the registry of key hashes, ONE pairing at a time, the pair_device card (PC only, Windows Hello), Remove and Retire
     # --- "Quiz me on a text" (2026-09-30, quiz.patch) ---
     'jarvis_quiz.py'             # quiz.patch: questions written from a pasted text and answers marked against the passage, by the local model only; in memory only, no card, never learned from
+    'eval_quiz_grader.py'        # run by hand on the PC: checks the quiz's marking against the real local model and writes quiz_grader_results.json beside jarvis_quiz.py (quiz_grader_cases.json is copied in step 3b)
 )
 
 # The settings file. Installed only where none exists; never overwritten.
@@ -2018,7 +2019,7 @@ try {
 # folder is not this checkout. Copied by content, every run, the same
 # "already matches: leave it; an older one: back it up first" rule step 3
 # uses for the modules themselves - NOT part of $SHIPPED, because neither
-# file is Python (test_shipped_modules.py parses every $SHIPPED entry as a
+# file is Python (quiz_grader_cases.json, for eval_quiz_grader.py, rides here too; test_shipped_modules.py parses every $SHIPPED entry as a
 # module's source). Cargo.lock lands under a different name (rust-crates.lock)
 # so it is never mistaken for an active Rust project sitting in a Python
 # backend folder.
@@ -2026,6 +2027,7 @@ Say ""
 $toolManifests = @(
     @{ Src = (Join-Path $PatchDir 'requirements.lock'); Dst = 'requirements.lock' }
     @{ Src = (Join-Path $RepoRoot 'jarvis-desktop\src-tauri\Cargo.lock'); Dst = 'rust-crates.lock' }
+    @{ Src = (Join-Path $PatchDir 'quiz_grader_cases.json'); Dst = 'quiz_grader_cases.json' }
 )
 $manifestsCopied = 0
 $manifestsAbsent = @()
