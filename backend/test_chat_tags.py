@@ -9,11 +9,12 @@ them:
 
   * tag NAMES are the owner's words, so they are sealed - the raw file must not
     contain one; a chat carries only an opaque number;
-  * at most 12 tags, names 1-24 characters, unique ignoring case, ids never
+  * at most 12 tags, names 1-24 code points (NFC, at least one visible), unique ignoring case and NFC/NFD, ids never
     reused, colours 0-7, a fixed icon list;
   * deleting a tag leaves its chats untagged; "Forget a time frame" + Undo keeps
     a chat's tag;
-  * nothing is written without the key, or while history is off;
+  * nothing is read or written without the key; while history is OFF, already-saved
+    chats can still be filed (owner, 2026-09-30);
   * "label this chat ..." acts at once with no card, only on the owner's own
     newest words and never in a conversation that has read outside text; an
     older chat is never guessed at - History is opened with a pending
@@ -409,19 +410,68 @@ def t_fail_closed():
     check("no key: no database was created", not log.db_path.exists())
     code, out = log.set_tag("conv-none-0001", 1)
     check("no key: filing is refused", code == 503 and out["ok"] is False, out)
-    # History off: a plain refusal, like the other write routes.
+    # History OFF: tagging chats that are already saved still works (owner,
+    # 2026-09-30: filing an old chat records nothing new). Only the key matters.
     log = new_log()
     turn(log, "conv-off-00001", "hi")
     log.tags()
     log.set_enabled(False)
-    code, out = log.tag_op({"op": "add", "name": "Nope"})
-    check("history off: adding a tag is refused in words",
-          code == 503 and "off" in out["message"].lower() and out["ok"] is False, out)
+    code, out = log.tag_op({"op": "add", "name": "Garden"})
+    check("history off: adding a tag works", code == 200 and out["ok"] is True, (code, out))
     code, out = log.set_tag("conv-off-00001", 1)
-    check("history off: filing is refused in words", code == 503 and "off" in out["message"].lower(),
-          out)
-    check("history off: the tags can still be read",
-          len(log.tags()["tags"]) == 5 and len(log.list()["conversations"]) == 1)
+    check("history off: filing a saved chat works", code == 200 and out["tag_id"] == 1, (code, out))
+    check("history off: the tags and counts read", len(log.tags()["tags"]) == 6
+          and log.tags()["tags"][0]["count"] == 1 and len(log.list()["conversations"]) == 1)
+    code, out = log.set_tag("conv-off-00001", None)
+    check("history off: unfiling works", code == 200 and out["tag_id"] is None, (code, out))
+    code, out = log.set_tag("conv-never-0001", 1)
+    check("history off: a chat that was never saved is still 'not found'",
+          code == 404 and out["error"] == "not_found", (code, out))
+    check("history off: it recorded nothing new", log.settings()["enabled"] is False
+          and len(log.list()["conversations"]) == 1)
+    # ...and with the wrong key nothing is read or written, history on or off.
+    other = new_log(key=bytes(reversed(range(32))))
+    other.db_path.write_bytes(log.db_path.read_bytes())
+    other.set_enabled(False)
+    code, out = other.set_tag("conv-off-00001", 1)
+    check("history off + wrong key: filing is refused", code == 503 and out["ok"] is False, (code, out))
+
+
+def t_names():
+    if skip():
+        return
+    import unicodedata
+    log = new_log()
+    log.tags()
+    nfc, nfd = "Caf\u00e9", "Cafe\u0301"
+    code, out = log.tag_op({"op": "add", "name": nfd})
+    check("an NFD name is stored as NFC", code == 200 and out["tag"]["name"] == nfc
+          and unicodedata.is_normalized("NFC", out["tag"]["name"]), (code, out))
+    code, out = log.tag_op({"op": "add", "name": nfc})
+    check("the same name in NFC is 'taken'", code == 409 and out["error"] == "name_taken", (code, out))
+    code, out = log.tag_op({"op": "add", "name": "CAFE\u0301"})
+    check("...and so is NFD in another case", code == 409 and out["error"] == "name_taken", (code, out))
+    for label, bad in (("U+3164 Hangul filler", "\u3164"), ("only zero-width joiners", "\u200d\u200d"),
+                       ("spaces and a filler", "  \u3164 "), ("only a control mark", "\u200b"),
+                       ("Braille blank", "\u2800")):
+        code, out = log.tag_op({"op": "add", "name": bad})
+        check(f"{label}: refused as bad_name", code == 400 and out["error"] == "bad_name", (code, out))
+    check("the refusal says it needs something visible",
+          "letter, number or symbol it can show" in out["message"], out)
+    family = "\U0001F468\u200d\U0001F469\u200d\U0001F467\u200d\U0001F466"
+    code, out = log.tag_op({"op": "add", "name": family})
+    check("a ZWJ family emoji (7 code points) is a fine name", code == 200
+          and out["tag"]["name"] == family, (code, out))
+    # 24 code points is the limit, counted as code points (not UTF-16 units).
+    log2 = new_log()
+    log2.tags()
+    ok24 = "\U0001F600" * 24
+    code, out = log2.tag_op({"op": "add", "name": ok24})
+    check("24 astral code points fit (48 UTF-16 units)", code == 200, (code, out))
+    code, out = log2.tag_op({"op": "add", "name": ok24 + "a"})
+    check("25 code points do not", code == 400 and out["error"] == "bad_name", (code, out))
+    code, out = log2.tag_op({"op": "rename", "id": 1, "name": "Ide\u0061\u0301s"})
+    check("rename also normalises to NFC", code == 200 and out["tag"]["name"] == "Ide\u00e1s", (code, out))
 
 
 # ----------------------------------------------------------- the routes
