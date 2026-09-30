@@ -70,7 +70,7 @@ with "Show them"; turning a normal topic on is instant; a pinned fact in an Off 
 
 | # | Item | Design doc | JARVIS-API § |
 |---|---|---|---|
-| 11 | Collapse settings sections; hide whole feature menus; easy unhide, in both apps | MENU-VISIBILITY-DESIGN (to write) | 108 if a backend route is needed |
+| 11 | Collapse settings sections; hide whole feature menus; easy unhide, in both apps | MENU-VISIBILITY-DESIGN (to write) | 109 if a backend route is needed (108 is taken by the second-card switches) |
 
 Owner's answers: **hiding only tidies the menu** - the feature keeps working if the owner asks
 Jarvis (nothing is turned off, nothing is lost, no card needed either way). **One "Show or hide

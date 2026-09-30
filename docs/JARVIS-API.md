@@ -16394,7 +16394,7 @@ it runs in (the tests pass a zone in); the phone's Compose screens (no local
 Android build; `ProgressTest` runs the pure Kotlin only, and CI compiles the
 rest).
 
-## 107. Topic controls: include or exclude topics in Jarvis's brain (added 2026-09-30; backend built, apps to follow)
+## 107. Topic controls: include or exclude topics in Jarvis's brain (added 2026-09-30; backend and both apps built)
 
 The owner's request (2026-09-30): "add the ability to adjust the brain of Jarvis to include or exclude different topics". Designed in `docs/TOPIC-CONTROLS-DESIGN.md` (its last section, "Slice contract (frozen)", is what the two apps are built against); the owner's answers are in `docs/BUILD-QUEUE-2026-09-30.md`. Backend: `jarvis_topics.py` (shipped whole), the tables and the search filter in the rebuilt `jarvis_memory.py`, `topics.patch` (an install block, the route-header line, and the `topic_loosen` gate lines), and small changes in `jarvis_intake.py`, `jarvis_auto_learn.py`, `jarvis_places.py`, `jarvis_tidy.py`, `jarvis_briefing.py`, `jarvis_entities.py`, `jarvis_chatbot.py`, `jarvis_search.py`, `jarvis_quick.py` and `jarvis_settings_registry.py`. Tests: `test_topics.py`, `test_topics_leaks.py` (the guard), the `topic` cases in `eval/learner_cases.jsonl`, and `eval_topics.py` (run by the memory self-test).
 
@@ -16433,6 +16433,8 @@ Every route is behind the usual origin and token checks. Errors are `{"ok": fals
 | | `{"ids": [...], "confirm": true}` | "These are right": `200` the view plus `"confirmed": n` |
 | `GET /api/topics/hidden` | `?id=&after=&limit=` | `{"ok": true, "id", "mode", "facts": [...], "next": int \| null}` - "Show them"; a memory list |
 | `POST /api/topics/settings` | `{"model_help": bool}` | `200` the view. No card: it lets the local model suggest a topic for at most 20 Unsorted facts a night, reading the owner's own facts as the learner already does |
+
+`GET /api/topics/hidden` pages by `next`: both apps show a "Show more" button while `next` is not null, which asks again with `after=<next>` and adds the page under the ones shown. A pinned fact whose topic may not be used carries `"paused": true` and, since the audit of 2026-09-30, `"topic": <id>` in `GET /api/memory/profile`; the apps name that topic and say "is off" for Off or "is set to Learn, but don't use" for that mode. `GET /api/memory/conversation-facts` leaves out facts in an Off topic, like the other lists. Deleting a topic also deletes its `topic_skips` rows, so a new topic that reuses the id starts from zero. The fixture's `words` gained singular lines (`kept_hidden_one`, `skipped_one`, `sorted_guess_one`, `screen_reader_one`, `hidden_row_one`) and `pin_paused_learn`, with `count_cases` and `pin_paused_cases`.
 
 Error codes: `bad_request`, `bad_name` (400), `name_taken` (409), `too_many_topics` (409), `bad_colour`, `bad_icon`, `bad_words`, `topic_not_found` (404), `bad_mode`, `no_delete_unsorted` (409), `no_rename_unsorted` (409), `needs_destination`, `bad_destination`, `no_such_fact` (404), `unavailable` (503); a card that cannot be raised is `503 {"error": "gate_not_ask" \| "no_card"}`.
 
@@ -16491,7 +16493,7 @@ In `memory.db`: `topics`, `fact_topics` (fact id, topic id, second topic id, how
 
 `tools/gen_topics_cases.py` writes `jarvis-desktop/tests/fixtures/topics-cases.json` and `jarvis-client/app/src/test/resources/contract/topics-cases.json` (byte-identical; `python3 tools/gen_topics_cases.py --check`): every word, the four modes and their sentences, the errors, the palette and icons, the ready-made list, worked cases for which changes need a card, the name and keyword rules, and the screen-reader lines.
 
-## 108. Second-card switches: Study helper and Referee suggestions (added 2026-09-30; backend built, apps to follow)
+## 108. Second-card switches: Study helper and Referee suggestions (added 2026-09-30; backend and both apps built)
 
 The owner's decisions of 2026-09-30: a sixth and a seventh switch in the second graphics card's list,
 both **built switched off** until the 12 GB card is installed and measured (`CLAUDE.md`; the rule every

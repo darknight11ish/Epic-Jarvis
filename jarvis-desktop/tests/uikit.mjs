@@ -2107,7 +2107,11 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (cmd === "brain_topics_review" || cmd === "brain_topics_hidden") {
               if (hideIt()) return { ok: true, lists_hidden: true, facts: [], next: null, total: 0 };
               if (cmd === "brain_topics_hidden") {
-                return { ok: true, id: args.id, mode: (byId(args.id) || {}).mode, facts: (z.hidden[args.id] || []).map((f) => ({ ...f })), next: null };
+                const rest = (z.hidden[args.id] || []).filter((f) => !args.after || f.id > args.after);
+                const size = z.hiddenPage || 100;
+                const slice = rest.slice(0, size);
+                return { ok: true, id: args.id, mode: (byId(args.id) || {}).mode, facts: slice.map((f) => ({ ...f })),
+                  next: rest.length > size ? slice[slice.length - 1].id : null };
               }
               const batch = z.review.slice(0, args.limit || 10);
               return { ok: true, facts: batch.map((f) => ({ ...f, checked: false })), next: z.review.length > batch.length ? "n" + batch.length : null,

@@ -449,6 +449,34 @@ class TopicsTest {
         val two = Topics.view(obj("""{"topics": [{"id": 2, "name": "Work", "mode": "off"}, {"id": 3, "name": "Pets", "mode": "learn_only"}]}"""))!!
         assertEquals(Topics.PIN_PAUSED_GENERIC, Topics.pinPausedFor(two))
         assertEquals(Topics.PIN_PAUSED_GENERIC, Topics.pinPausedFor(null))
+        // The PC now sends the pin's topic id: it names the topic and the mode it is in.
+        assertEquals("Paused: Work is off", Topics.pinPausedFor(two, 2))
+        assertEquals("Paused: Pets is set to Learn, but don't use", Topics.pinPausedFor(two, 3))
+        for (c in doc["pin_paused_cases"]!!.jsonArray) {
+            val o = c.jsonObject
+            assertEquals(
+                o["expect"]!!.jsonPrimitive.content,
+                Topics.pinPausedLine(o["name"]!!.jsonPrimitive.content, o["mode"]!!.jsonPrimitive.content),
+            )
+        }
+    }
+
+    @Test
+    fun `one fact reads singular - count_cases and the singular rows`() {
+        for (c in doc["count_cases"]!!.jsonArray) {
+            val o = c.jsonObject
+            val n = o["n"]!!.jsonPrimitive.int
+            val got = when (o["line"]!!.jsonPrimitive.content) {
+                "kept_hidden" -> Topics.keptHiddenLine(n)
+                "skipped" -> Topics.w(if (n == 1) "skipped_one" else "skipped", "n" to n)
+                else -> Topics.guessLine(
+                    Topics.view(obj("""{"topics": [{"id": 1, "name": "Unsorted", "system": true}], "unchecked": $n, "facts": ${o["total"]!!.jsonPrimitive.int}}"""))!!,
+                )
+            }
+            assertEquals(o["expect"]!!.jsonPrimitive.content, got)
+        }
+        assertEquals("1 fact", Topics.factsText(1))
+        assertEquals("2 facts", Topics.factsText(2))
     }
 
     @Test

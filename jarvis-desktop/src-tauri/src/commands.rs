@@ -3597,7 +3597,7 @@ pub async fn set_second_card(
 /// A feature id `assign` may name for the third card - never "master" or
 /// "combined" (those have no third-card lane): reuses [`second_card_feature`]'s
 /// shape check (lower-case letters and underscores) - the backend refuses
-/// anything that is not one of its five feature ids with its own sentence.
+/// anything that is not one of its seven feature ids with its own sentence.
 pub(crate) fn second_card_third_feature(assign: &str) -> Result<&str, String> {
     second_card_feature(assign)
 }

@@ -1,6 +1,6 @@
 # Topic controls: include or exclude topics in Jarvis's brain (design, 2026-09-30)
 
-Status: **backend built 2026-09-30; the two apps are next.** The owner asked
+Status: **backend and both apps built 2026-09-30** (a first audit's fixes are in). The owner asked
 (2026-09-30): "add the ability to adjust the brain of Jarvis to include or exclude
 different topics". The backend (JARVIS-API section 107) is built and tested; the
 last section of this file, **"Slice contract (frozen)"**, is what the apps are

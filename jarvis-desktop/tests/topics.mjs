@@ -119,6 +119,16 @@ await check("screen_reader_cases and hidden_row_cases", async () => {
   assert.equal(T.hiddenName(3), "Topic 3");
 });
 
+await check("count_cases: one fact / one thing reads singular, never '1 facts'", async () => {
+  for (const c of FIX.count_cases) {
+    const got = c.line === "kept_hidden" ? T.keptHiddenLine(c.n)
+      : c.line === "skipped" ? T.rowTags({ private: false, mode: "both", facts: 9, skippedWeek: c.n })[0].text
+      : T.sortedGuessLine({ unchecked: c.n, facts: c.total });
+    assert.equal(got, c.expect, JSON.stringify(c));
+  }
+  assert.equal(T.rowTags({ private: false, mode: "off", facts: 1, skippedWeek: 0 })[0].text, "1 fact kept, hidden");
+});
+
 await check("preview_cases: the sentence is built from the numbers when the PC's is blanked", async () => {
   for (const c of FIX.preview_cases) {
     const got = T.previewLines({ ok: true, affected: c.n, pinned: 0, stops_learning: false, line: "", card_line: "" }, c.name);
@@ -273,6 +283,10 @@ await check("the lines elsewhere: left out, kept hidden, the tag, the paused pin
   assert.equal(T.factTag(null, 3), "", "no view, no claim");
   assert.equal(T.factTag(v, 99), "");
   assert.equal(T.pinPausedLine("Work"), "Paused: Work is off");
+  assert.equal(T.pinPausedLine("Work", "off"), "Paused: Work is off");
+  assert.equal(T.pinPausedLine("Work", "learn_only"), "Paused: Work is set to Learn, but don't use");
+  for (const c of FIX.pin_paused_cases) assert.equal(T.pinPausedLine(c.name, c.mode), c.expect);
+  assert.equal(T.keptHiddenLine(1), "1 fact kept, hidden");
   assert.deepEqual(T.askLabels({ topic_ask: true }), { accept: W.ask_save, decline: W.ask_skip });
   assert.equal(T.askLabels({ topic_ask: false }), null);
   assert.equal(T.askLabels({}), null);
@@ -645,6 +659,25 @@ if (K) {
     assert.deepEqual(read.map((c) => c.id), [4]);
   });
 
+  await check("Show them: a long list shows Show more, which asks for the page after the last one", async () => {
+    const many = [31, 32, 33].map((id) => ({ id, text: `Fact number ${id}`, saved_at: 1, topic: 4, alt: null, how: "rule", checked: true, held_back: true }));
+    const page = await memoryTab(scenario({ hidden: { 4: many }, hiddenPage: 2 }));
+    await row(page, 4).getByRole("button", { name: W.show_them }).click();
+    await settle(page, 500);
+    const before = await text(page, `#topics-card .topics-row[data-topic="4"]`);
+    await row(page, 4).getByRole("button", { name: "Show more" }).click();
+    await settle(page, 500);
+    const after = await text(page, `#topics-card .topics-row[data-topic="4"]`);
+    const moreLeft = await row(page, 4).getByRole("button", { name: "Show more" }).count();
+    const reads = await sent(page, "brain_topics_hidden");
+    await page.close();
+    assert.ok(!before.includes("Fact number 33") && before.includes("Fact number 32"));
+    assert.ok(after.includes("Fact number 31") && after.includes("Fact number 33"));
+    assert.equal(moreLeft, 0);
+    assert.equal(reads.length, 2);
+    assert.equal(reads[1].after, 32);
+  });
+
   await check("Add a topic: name, colour, icon and keywords go in one body; a name in use shows the PC's sentence; the button stops at 16", async () => {
     const page = await memoryTab(scenario());
     await page.getByRole("button", { name: W.add_button }).click();
@@ -824,7 +857,7 @@ if (K) {
         { id: 71, text: "Presents at the Monday stand-up.", source: "conversation", confidence: 0.8,
           created: now - 100, topic_ask: true },
         { id: 72, text: "Likes tea.", source: "conversation", confidence: 0.8, created: now - 100 }] } };
-    data.profile = { reads: 0, limit: 1200, facts: [{ id: 61, text: "Has a dentist appointment.", added: now - 500, paused: true }] };
+    data.profile = { reads: 0, limit: 1200, facts: [{ id: 61, text: "Has a dentist appointment.", added: now - 500, paused: true, topic: 3 }] };
     const page = await memoryTab(data);
     await settle(page, 700);
     const facts = await text(page, "#memory-facts");
@@ -836,7 +869,8 @@ if (K) {
     const first = facts.split("Has a dentist")[1].split("Likes the piano")[0];
     assert.ok(first.includes(W.not_used_tag), "the Learn-but-don't-use topic's fact carries the tag");
     assert.ok(!facts.split("Likes the piano")[1].includes(W.not_used_tag), "a Use-only topic's fact does not");
-    assert.match(pins, /Paused: Health is off/);
+    assert.match(pins, /Paused: Health is set to Learn, but don't use/);
+    assert.ok(!/is off/.test(pins), "Learn-but-don't-use is not called Off");
     assert.deepEqual(waiting[0], [W.ask_save, W.ask_skip]);
     assert.deepEqual(waiting[1], ["Keep", "Discard"]);
   });
