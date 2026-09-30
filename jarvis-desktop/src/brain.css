@@ -2221,15 +2221,15 @@ body {
 /* "New section here" (JARVIS-API.md section 106): a button on the owner's own
    messages and a divider above a marked one. No motion of its own. The divider
    is a heading landmark; its colour and rule use the existing tokens only. */
-.history-mark {
+.history-newsection {
   font-size: var(--text-xs);
   margin-left: auto;
 }
-.history-fork ~ .history-mark {
+.history-fork ~ .history-newsection {
   margin-left: 0;
 }
-.history-mark:disabled,
-.history-mark-remove:disabled {
+.history-newsection:disabled,
+.history-newsection-remove:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
@@ -2248,7 +2248,7 @@ body {
   flex: 1 1 24px;
   border-top: var(--stroke-hair) solid var(--border-strong);
 }
-.history-section-break > .history-mark-remove {
+.history-section-break > .history-newsection-remove {
   order: 3;
   flex: 0 0 auto;
 }

@@ -913,7 +913,7 @@ export function renderTranscript(box, conv, { el, onCopy = null, fork = null, ma
       brk.setAttribute("aria-level", "3");
       brk.dataset.idx = String(t.idx);
       brk.append(el("span", "history-section-break-text", MARK_DIVIDER));
-      const rm = el("button", "btn ghost small history-mark-remove", mark.busy ? MARK_BUSY : MARK_REMOVE);
+      const rm = el("button", "btn ghost small history-newsection-remove", mark.busy ? MARK_BUSY : MARK_REMOVE);
       rm.type = "button";
       rm.dataset.fkey = `unmark:${conv.id}:${t.idx}`;
       rm.setAttribute("aria-label", MARK_REMOVE);
@@ -973,7 +973,7 @@ export function renderTranscript(box, conv, { el, onCopy = null, fork = null, ma
     // chat is markable (10 or more messages, a chat or Live session).
     if (mark && mark.markable && markOffered(true, t.role, t.idx, mark.marks)) {
       const busyHere = mark.busy && mark.busy.idx === t.idx;
-      const mb = el("button", "btn ghost small history-mark", busyHere ? MARK_BUSY : MARK);
+      const mb = el("button", "btn ghost small history-newsection", busyHere ? MARK_BUSY : MARK);
       mb.type = "button";
       mb.dataset.fkey = `mark:${conv.id}:${t.idx}`;
       mb.setAttribute("aria-label", busyHere ? MARK_BUSY : MARK_LABEL);

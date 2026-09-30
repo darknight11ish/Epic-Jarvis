@@ -81,6 +81,8 @@ TITLES = {
     "support_offer": "accept an offer from customer support in your name",
     # jarvis_youtube.py (2026-09-30): ONE card per YouTube link, caption text only
     "youtube_captions_read": "fetch the caption text of a YouTube video for a quiz",
+    # jarvis_quiz_cloud.py (2026-09-30): ONE card per "grade this better" request
+    "quiz_cloud_grade": "send a quiz to a cloud AI service to be graded better",
     "stop_asking_before_every_web_search": "stop asking before every web search",
     # --- notes
     "read_joplin_note": "read a note in Joplin",

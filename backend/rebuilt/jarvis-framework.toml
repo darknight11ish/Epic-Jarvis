@@ -130,6 +130,14 @@ support_offer             = "ask"
 # switches the feature off. A file without this line asks too
 # (unknown_action_tier).
 youtube_captions_read     = "ask"
+# "Grade this better" on a quiz (jarvis_quiz_cloud.py; the owner's decision of
+# 2026-09-30, docs/STUDY-FROM-TEXT-DESIGN.md section 7): ONE card per request,
+# listing EXACTLY what leaves this PC (the quiz's questions, your answers and
+# the passages as shown) and which service gets it. Bends rule 1 for that one
+# quiz only. Must stay "ask": anything else and nothing is sent; "never"
+# switches the feature off. A file without this line asks too
+# (unknown_action_tier).
+quiz_cloud_grade          = "ask"
 # GitHub watches in "tell me when" (jarvis_tellme.py "github" source, the
 # owner's choice of 2026-09-28): one read-only GET to api.github.com per look
 # - a workflow run list or one pull request - for a watch the owner already

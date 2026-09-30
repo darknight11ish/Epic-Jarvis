@@ -198,10 +198,10 @@ await check("CONTROL: a suggestion card loses the chat title in Rust while the l
 
 await check("CONTROL: the page is keyboard-operable, held on a stale link, hidden with the lists, with stable focus keys", () => {
   const view = read("src/history-view.js");
-  assert.match(view, /el\("button", "btn ghost small history-mark"/, "a real button");
+  assert.match(view, /el\("button", "btn ghost small history-newsection"/, "a real button");
   assert.match(view, /mb\.dataset\.fkey = `mark:\$\{conv\.id\}:\$\{t\.idx\}`/);
   assert.match(view, /setAttribute\("role", "heading"\)/, "the divider is a heading landmark");
-  assert.match(view, /el\("button", "btn ghost small history-mark-remove"/);
+  assert.match(view, /el\("button", "btn ghost small history-newsection-remove"/);
   const brain = read("src/brain.js");
   assert.match(brain, /function markHelpers\(conv\)/);
   assert.match(brain, /!conv\.markable && !conv\.marks\.length/);
@@ -213,7 +213,7 @@ await check("CONTROL: the page is keyboard-operable, held on a stale link, hidde
   assert.match(brain, /invoke\("brain_history_tag_suggest", \{ enabled: want \}\)/);
   assert.match(brain, /input\.checked = s\.enabled;/, "the switch shows what the PC says, never what was clicked");
   const css = read("src/brain.css");
-  assert.ok(!/history-mark[^}]*animation|history-mark[^}]*transition|history-section-break[^}]*animation|history-section-break[^}]*transition/s.test(css), "no motion of its own");
+  assert.ok(!/history-newsection[^}]*animation|history-newsection[^}]*transition|history-section-break[^}]*animation|history-section-break[^}]*transition/s.test(css), "no motion of its own");
   assert.ok(!/localStorage|sessionStorage|indexedDB/.test(brain.slice(brain.indexOf("async function markSection("), brain.indexOf("/** Back to every chat"))), "nothing stored");
 });
 
@@ -281,19 +281,19 @@ if (browser) {
   await check("browser: a button on each of the owner's messages only, named for the fixture", async () => {
     const page = await tab();
     await openChat(page, "conv-0001-aaaa");
-    const btns = page.locator(".history-mark");
+    const btns = page.locator(".history-newsection");
     assert.equal(await btns.count(), 6, "six owner messages, none of Jarvis's answers");
     assert.deepEqual(await btns.evaluateAll((els) => [...new Set(els.map((e) => e.getAttribute("aria-label")))]), [W.mark_label]);
     for (const t of await btns.allInnerTexts()) assert.equal(t.trim(), W.mark);
     assert.equal(await btns.first().evaluate((e) => e.tagName), "BUTTON");
-    assert.equal(await page.locator('.history-turn[data-role="assistant"] .history-mark').count(), 0);
+    assert.equal(await page.locator('.history-turn[data-role="assistant"] .history-newsection').count(), 0);
     await page.close();
   });
 
   await check("browser: pressing it sends exactly id, idx and on, draws a divider above that message and says so politely", async () => {
     const page = await tab();
     await openChat(page, "conv-0001-aaaa");
-    await page.locator(".history-mark").nth(2).click();
+    await page.locator(".history-newsection").nth(2).click();
     await page.waitForTimeout(400);
     assert.deepEqual((await calls(page, "brain_history_mark")).at(-1), { id: "conv-0001-aaaa", idx: 4, on: true });
     const brk = page.locator(".history-section-break");
@@ -305,7 +305,7 @@ if (browser) {
     assert.match(await brk.evaluate((e) => e.closest("li").innerText), /Question 4/);
     assert.equal(await page.locator("#toast").innerText(), W.mark_done);
     // A marked message offers no second button; the others still do.
-    assert.equal(await page.locator(".history-mark").count(), 5);
+    assert.equal(await page.locator(".history-newsection").count(), 5);
     await page.close();
   });
 
@@ -313,7 +313,7 @@ if (browser) {
     const page = await tab({ transcripts: { "conv-0001-aaaa": conv("conv-0001-aaaa", "Boiler service", { marks: [2, 6] }) } });
     await openChat(page, "conv-0001-aaaa");
     assert.equal(await page.locator(".history-section-break").count(), 2);
-    await page.locator(".history-section-break .history-mark-remove").first().click();
+    await page.locator(".history-section-break .history-newsection-remove").first().click();
     await page.waitForTimeout(400);
     assert.deepEqual((await calls(page, "brain_history_mark")).at(-1), { id: "conv-0001-aaaa", idx: 2, on: false });
     assert.equal(await page.locator(".history-section-break").count(), 1);
@@ -324,12 +324,11 @@ if (browser) {
   await check("browser: a chat that is not markable shows no button and no sentence in the way", async () => {
     const page = await tab();
     await openChat(page, "conv-0002-aaaa");
-    assert.equal(await page.locator(".history-mark").count(), 0);
-    await page.locator("#history-list .row-item").first().click({ position: { x: 5, y: 5 } }).catch(() => {});
+    assert.equal(await page.locator(".history-newsection").count(), 0);
     await page.close();
     const page2 = await tab();
     await openChat(page2, "conv-0003-aaaa");
-    assert.equal(await page2.locator(".history-mark").count(), 0);
+    assert.equal(await page2.locator(".history-newsection").count(), 0);
     await page2.close();
   });
 
@@ -337,7 +336,7 @@ if (browser) {
     for (const c of CASES.mark_error_cases.filter((x) => x.answer.error)) {
       const page = await tab({ markRefuse: c.answer });
       await openChat(page, "conv-0001-aaaa");
-      await page.locator(".history-mark").first().click();
+      await page.locator(".history-newsection").first().click();
       await page.waitForTimeout(350);
       assert.equal(await page.locator("#toast").innerText(), c.expect, JSON.stringify(c.answer));
       assert.equal(await page.locator(".history-section-break").count(), 0, "nothing drawn on a refusal");
@@ -349,7 +348,7 @@ if (browser) {
     const page = await tab({ transcripts: { "conv-0001-aaaa": conv("conv-0001-aaaa", "Boiler service",
       { turns: turns(60), marks: Array.from({ length: 20 }, (_, i) => i * 2 + 1) }) } });
     await openChat(page, "conv-0001-aaaa");
-    await page.locator(".history-mark").first().click();
+    await page.locator(".history-newsection").first().click();
     await page.waitForTimeout(350);
     assert.equal(await page.locator("#toast").innerText(), W.mark_limit);
     await page.close();
@@ -357,21 +356,31 @@ if (browser) {
 
   await check("browser: hidden lists offer no marker at all", async () => {
     const page = await tab({}, { security: { hidden: true } });
-    assert.equal(await page.locator(".history-mark, .history-section-break").count(), 0);
+    assert.equal(await page.locator(".history-newsection, .history-section-break").count(), 0);
     await page.close();
   });
 
-  await check("browser: the buttons are greyed on a stale link", async () => {
-    const page = await tab();
+  await check("browser: the buttons are greyed on a stale link and send nothing", async () => {
+    const page = await tab({ transcripts: { "conv-0001-aaaa": conv("conv-0001-aaaa", "Boiler service", { marks: [2] }) } },
+      { link: { stale: true } });
     await openChat(page, "conv-0001-aaaa");
-    await page.evaluate(() => window.__setLink && window.__setLink({ stale: true, connected: false }));
-    await page.waitForTimeout(300);
-    const stale = await page.evaluate(() => !!window.__setLink);
-    if (stale) assert.equal(await page.locator(".history-mark").first().isDisabled(), true);
+    assert.equal(await page.locator(".history-newsection").first().isDisabled(), true);
+    assert.equal(await page.locator(".history-newsection-remove").first().isDisabled(), true);
+    await page.locator(".history-newsection").first().click({ force: true }).catch(() => {});
+    assert.equal((await calls(page, "brain_history_mark")).length, 0);
     await page.close();
   });
 
   /* -- Suggest tags overnight -- */
+
+  await check("browser: the switch is greyed on a stale link and asks nothing", async () => {
+    const page = await tab({ suggest: { enabled: false, paused: false, waiting: 0, last_day: "" } }, { link: { stale: true } });
+    await openEditor(page);
+    assert.equal(await page.locator("#tag-suggest-enabled").isDisabled(), true);
+    await page.locator("#tag-suggest-enabled").click({ force: true }).catch(() => {});
+    assert.equal(await page.evaluate(() => (window.__history.suggestWrites || []).length), 0);
+    await page.close();
+  });
 
   await check("browser: the row is the last thing in the Tags editor, off, with the fixture's words", async () => {
     const page = await tab({ suggest: { enabled: false, paused: false, waiting: 0, last_day: "" } });

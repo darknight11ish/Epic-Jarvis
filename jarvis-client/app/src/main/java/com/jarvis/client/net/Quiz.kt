@@ -162,6 +162,8 @@ object Quiz {
         val keySource: String? = null,
         /** The backend's Spanish crisis-words notice; never a copy in this app. */
         val notice: String? = null,
+        /** "youtube" for a quiz made from a video's captions (JARVIS-API 112); null otherwise. */
+        val source: String? = null,
     )
 
     /** One card to keep: the question's number and the owner's own words for the back. */
@@ -237,6 +239,7 @@ object Quiz {
             level = o.text("level")?.takeIf { it in LEVELS },
             keySource = o.text("key_source")?.takeIf { it == "text" || it == "model" },
             notice = if (mode == MODE_SPANISH) o.text("notice") else null,
+            source = o.text("source")?.takeIf { it == "youtube" },
         )
     }
 
