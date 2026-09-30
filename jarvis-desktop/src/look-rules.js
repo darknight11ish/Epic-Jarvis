@@ -223,8 +223,9 @@ export const PICTURE = Object.freeze({
     "the picture itself, so it can tell what a chart, a button or a photo shows. It runs on your PC's main chip (the CPU), not your " +
     "graphics card, so your chat model is not slowed down - but it is SLOW, and how slow depends on your PC. " +
     "Anything that looks like a key, a card number or a password is blacked out first, and if that part is missing no " +
-    "picture is used. Nothing leaves this PC and nothing is saved. Off by default. Turning it on asks first, because a " +
-    "model has to be downloaded.",
+    "picture is used. Nothing leaves this PC and nothing is saved. If you have also turned on Pictures on an extra " +
+    "graphics card and it is running, a look uses that card's picture model instead, which is much faster, and this " +
+    "slow reader is only the backup. Off by default. Turning it on asks first, because a model has to be downloaded.",
   switch: "Turn on Picture mode (slow)",
   offLine: "Picture mode is off. Jarvis reads the words on your screen only.",
   waitingLine: "Waiting for your yes on the card. Nothing has changed yet.",

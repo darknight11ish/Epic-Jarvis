@@ -191,7 +191,7 @@ TIER_WORDS = {
                "writes the follow-ups from short notes and the latest reply, and it "
                "waits while you are chatting with Jarvis, so your chat always comes "
                "first."),
-    TWO_CARDS: ("longer conversations; Jarvis's model on the second graphics card "
+    TWO_CARDS: ("longer conversations; Jarvis's model on the extra graphics card "
                 "reads the whole conversation each time, and your own chat is not "
                 "slowed."),
 }

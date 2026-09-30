@@ -45,8 +45,10 @@ object ScreenPicture {
             "so your chat model is not slowed down - but it is SLOW, and how slow depends on " +
             "your PC. Anything that looks like a key, a card number or a password is blacked out first, " +
             "and if that part is missing no picture is used. Nothing leaves this PC and nothing " +
-            "is saved. Off by default. Turning it on asks first, because a model has to be " +
-            "downloaded."
+            "is saved. If you have also turned on Pictures on an extra graphics card and it is " +
+            "running, a look uses that card's picture model instead, which is much faster, and " +
+            "this slow reader is only the backup. Off by default. Turning it on asks first, " +
+            "because a model has to be downloaded."
     const val SWITCH = "Turn on Picture mode (slow)"
     const val OFF_LINE = "Picture mode is off. Jarvis reads the words on your screen only."
     const val WAITING_LINE = "Waiting for your yes on the card. Nothing has changed yet."
