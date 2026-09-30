@@ -87,7 +87,7 @@ export const CONTINUE_WHY = Object.freeze({
 });
 /* "Fork from here" (JARVIS-API.md section 110; docs/CHAT-TAGS-DESIGN.md "Fork
  * contract"). The words are the phone's, word for word (history-cases.json
- * `words.fork*`); the title "Fork of ..." is made by the PC, never here. */
+ * `words.fork*`); the new title is made by the PC, never here. */
 export const FORK = "Fork from here";
 export const FORK_TITLE = "Start a new chat that begins with everything up to this message.";
 export const FORK_BUSY = "Forking\u2026";
