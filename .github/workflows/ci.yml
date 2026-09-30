@@ -289,6 +289,11 @@ jobs:
           $cfg = Join-Path $env:RUNNER_TEMP 'cfg'
           New-Item -ItemType Directory -Force -Path $repo, $be, $cfg | Out-Null
           Copy-Item -Recurse scripts, backend -Destination $repo
+          # The script also reads jarvis-desktop\src-tauri\Cargo.lock from the
+          # repository root (the "Check for tool updates" file, step 3b), and
+          # now says so when it is missing, so the copy carries it too.
+          New-Item -ItemType Directory -Force -Path (Join-Path $repo 'jarvis-desktop\src-tauri') | Out-Null
+          Copy-Item jarvis-desktop\src-tauri\Cargo.lock (Join-Path $repo 'jarvis-desktop\src-tauri')
           Remove-Item (Join-Path $repo 'backend\*.patch')
           $ps1 = Join-Path $repo 'scripts\apply-patches.ps1'
           $t = [IO.File]::ReadAllText($ps1)
@@ -419,6 +424,11 @@ jobs:
           $repo = Join-Path $env:RUNNER_TEMP 'repo-old'
           New-Item -ItemType Directory -Force -Path $repo | Out-Null
           Copy-Item -Recurse scripts, backend -Destination $repo
+          # The script also reads jarvis-desktop\src-tauri\Cargo.lock from the
+          # repository root (the "Check for tool updates" file, step 3b), and
+          # now says so when it is missing, so the copy carries it too.
+          New-Item -ItemType Directory -Force -Path (Join-Path $repo 'jarvis-desktop\src-tauri') | Out-Null
+          Copy-Item jarvis-desktop\src-tauri\Cargo.lock (Join-Path $repo 'jarvis-desktop\src-tauri')
           $pd = Join-Path $repo 'backend'
           Remove-Item (Join-Path $pd '*.patch')
           Remove-Item -LiteralPath (Join-Path $pd 'patch-history') -Recurse -Force
