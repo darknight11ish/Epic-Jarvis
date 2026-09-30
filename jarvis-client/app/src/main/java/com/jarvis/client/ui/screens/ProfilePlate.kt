@@ -67,6 +67,17 @@ internal fun AlwaysKeepInMindSection(
     var busyId by remember { mutableStateOf<Long?>(null) }
     var said by remember { mutableStateOf<String?>(null) }
 
+    // A paused pin ("Paused: Work is off") names its topic: the PC marks the pin
+    // `paused` but not which topic, so the topic list is read only when one is.
+    var topicView by remember { mutableStateOf<com.jarvis.client.net.Topics.View?>(null) }
+    val anyPaused = profile?.facts?.any { it.paused } == true
+    LaunchedEffect(anyPaused, reads, tick) {
+        topicView = if (!anyPaused) null else {
+            (JarvisRuntime.topicsRead(com.jarvis.client.net.Topics.TOPICS_PATH) as? ApiResult.Ok)
+                ?.let { com.jarvis.client.net.Topics.view(it.value.body) }
+        }
+    }
+
     LaunchedEffect(reads, tick) {
         when (val r = JarvisRuntime.memoryProfile()) {
             is ApiResult.Ok -> {
@@ -132,6 +143,13 @@ internal fun AlwaysKeepInMindSection(
                     Gap(10)
                     Column(Modifier.fillMaxWidth()) {
                         Text(fact.text, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi)
+                        if (fact.paused) {
+                            Text(
+                                com.jarvis.client.net.Topics.pinPausedFor(topicView),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = chrome.warnInk,
+                            )
+                        }
                         Quiet(
                             if (busyId == fact.id) MemoryProfile.UNPINNING else MemoryProfile.UNPIN,
                             enabled = canAct && busyId == null,

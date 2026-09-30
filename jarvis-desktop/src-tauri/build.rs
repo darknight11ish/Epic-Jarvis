@@ -515,6 +515,21 @@ fn main() {
             "brain_review_reveal",
             "brain_review_rate",
             "brain_review_more",
+            // Topic controls (docs/TOPIC-CONTROLS-DESIGN.md; JARVIS-API.md
+            // section 107; the owner's request of 2026-09-30): the topics and
+            // their four modes, one change to the list, one mode change, filing
+            // facts, the "local model may help sort" switch, the preview of a
+            // change, and the two fact lists (Check these, Show them). The PC
+            // raises the only cards; every write is held on a stale link; names
+            // and both fact lists are hidden with the private lists. Brain only.
+            "brain_topics",
+            "brain_topics_edit",
+            "brain_topics_mode",
+            "brain_topics_file",
+            "brain_topics_settings",
+            "brain_topics_preview",
+            "brain_topics_review",
+            "brain_topics_hidden",
             // "Photo to reminder" (photo-reminder.patch, 2026-09-28): the
             // dates in a picture, read on the PC and PROPOSED (a scan sets
             // nothing up), and the owner's tap adding ONE reminder - no

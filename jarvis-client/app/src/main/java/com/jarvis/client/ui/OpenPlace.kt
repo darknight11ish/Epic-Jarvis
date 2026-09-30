@@ -88,6 +88,9 @@ object OpenPlace {
         // place "forget what you learned last week" opens, named by the
         // answer's `open_brain` (net/ForgetRange.kt, ChatSession).
         com.jarvis.client.net.ForgetRange.PLACE to Where.Go(Screen.BRAIN, "forget-range"),
+        // "Switch off my work topic" (2026-09-30): not a settings section - the place
+        // named by the answer's `open_brain` (net/Topics.kt, ChatSession).
+        com.jarvis.client.net.Topics.PLACE to Where.Go(Screen.BRAIN, "topics"),
     )
 
     /**

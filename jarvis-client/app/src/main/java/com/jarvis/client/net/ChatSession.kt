@@ -303,6 +303,35 @@ class ChatSession(
         _fileUnder.value = null
     }
 
+    private val _topicPick = MutableStateFlow<Topics.Open?>(null)
+
+    /**
+     * "Switch off my work topic" (docs/TOPIC-CONTROLS-DESIGN.md, the frozen
+     * contract C4): the answer's `X-Jarvis-Route` said `open_brain: "topics"`,
+     * with the topic's id when it named one ([Topics.openFromRoute]), or null.
+     * Pure navigation: MainActivity opens Brain at Topics and hands the id on
+     * to the plate, which shows the four-choice picker - nothing has changed,
+     * and nothing changes until the owner taps Change. Cleared with the
+     * answer; consumed once by [consumeTopicPick].
+     */
+    val topicPick: StateFlow<Topics.Open?> = _topicPick.asStateFlow()
+
+    fun consumeTopicPick() {
+        _topicPick.value = null
+    }
+
+    private val _topicsLeftOut = MutableStateFlow(0)
+
+    /**
+     * How many facts the owner's topic settings kept out of the answer on
+     * screen (`topics_left_out` in its `X-Jarvis-Route`,
+     * [Topics.leftOutFromRoute]) - a count, never words. "Left out 2 facts
+     * because of your topic settings" sits beside "Used 2 memories". Cleared
+     * with the answer, like [usedIds]; 0 for a temporary chat (it recalls
+     * nothing).
+     */
+    val topicsLeftOut: StateFlow<Int> = _topicsLeftOut.asStateFlow()
+
     private val _faceTuningChange = MutableStateFlow<String?>(null)
 
     /**
@@ -510,6 +539,8 @@ class ChatSession(
         _crisis.value = false
         _openSettings.value = null
         _fileUnder.value = null
+        _topicPick.value = null
+        _topicsLeftOut.value = 0
         _cloudOffer.value = null
         // A temporary question goes only to a PC that says it can hold one -
         // asked again now, since the PC may have changed since it was turned on.
@@ -701,8 +732,15 @@ class ChatSession(
                         // `open_brain` names Brain's "Forget a time frame",
                         // the list already filled in - the same navigation,
                         // through OpenPlace. Nothing is removed by it.
+                        // "Switch off my work topic" (2026-09-30): `open_brain:
+                        // "topics"` opens Brain's Topics; its `topic_id` opens
+                        // that topic's picker, changing nothing.
+                        val topicOpen = Topics.openFromRoute(routeHeader)
+                        _topicPick.value = topicOpen
+                        _topicsLeftOut.value = if (asTemporary) 0 else Topics.leftOutFromRoute(routeHeader)
                         _openSettings.value = Schedule.openSettingsFromRoute(routeHeader)
                             ?: ForgetRange.openFromRoute(routeHeader)
+                            ?: topicOpen?.let { Topics.PLACE }
                         // "Label my chat about the boiler as Home": History,
                         // the search filled in, a banner (ChatTags).
                         _fileUnder.value = ChatTags.fileUnderFromRoute(routeHeader)
@@ -994,6 +1032,8 @@ class ChatSession(
         _crisis.value = false
         _openSettings.value = null
         _fileUnder.value = null
+        _topicPick.value = null
+        _topicsLeftOut.value = 0
         _cloudOffer.value = null
     }
 

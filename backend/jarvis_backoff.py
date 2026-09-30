@@ -173,6 +173,11 @@ MAY_ASK = {
     "suggest_bigger_model": ("to raise the same approval card that already exists for turning "
                              "on \"One bigger model on both cards\" - nothing changes until "
                              "you say yes on that card"),
+    # jarvis_referee.py, 2026-09-30: "This looks done - tick it?" - the tick is
+    # written only by the owner's tap on that card, and nothing is shown or
+    # trusted more.
+    "tick_a_step": ("to ask whether one goal step is done, when its number has reached "
+                    "your target - the step is ticked only if you say yes on that card"),
 }
 
 #: Every kind of offer Jarvis makes on its own, and what it asks for. A new
@@ -192,6 +197,8 @@ OFFERS = {
     # struggle or a repeated correction and would like to suggest the
     # bigger model - see that module's docstring.
     "second_card_combined_offer": ("suggest_bigger_model",),
+    # jarvis_referee.py: "This looks done - tick it?", at most three a day.
+    "referee_tick_offer": ("tick_a_step",),
 }
 
 

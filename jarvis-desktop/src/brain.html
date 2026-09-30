@@ -349,6 +349,15 @@
               </div>
               <p class="hint" id="history-import-how"></p>
             </div>
+            <!-- Topic controls (topics.js; JARVIS-API.md section 107): each topic
+                 has one of four modes. The words are topics.js's WORDS, word for
+                 word; brain.js paints the body. Topic names are the owner's words,
+                 so they are drawn as text only and hidden with the private lists. -->
+            <div class="card card-wide" id="topics-card" data-menu-id="brain.memory.topics">
+              <h2 id="topics-title" tabindex="-1">Topics</h2>
+              <p class="note" id="topics-intro"></p>
+              <div id="topics-body"></div>
+            </div>
             <div class="card card-wide" id="memory-auto-card">
               <h2>Saved automatically</h2>
               <!-- auto-learn.js HISTORY_NOTE, word for word. -->

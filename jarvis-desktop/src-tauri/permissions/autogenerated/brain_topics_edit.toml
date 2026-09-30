@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-topics-edit"
+description = "Enables the brain_topics_edit command without any pre-configured scope."
+commands.allow = ["brain_topics_edit"]
+
+[[permission]]
+identifier = "deny-brain-topics-edit"
+description = "Denies the brain_topics_edit command without any pre-configured scope."
+commands.deny = ["brain_topics_edit"]

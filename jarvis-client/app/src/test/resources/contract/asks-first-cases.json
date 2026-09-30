@@ -230,6 +230,15 @@
        "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
       },
       {
+       "action": "referee_tick",
+       "fixed": false,
+       "id": "referee_tick",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tick a goal step whose number reached its target"
+      },
+      {
        "action": "schedule_repeat",
        "fixed": false,
        "id": "schedule_repeat",
@@ -1233,6 +1242,15 @@
        "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
       },
       {
+       "action": "referee_tick",
+       "fixed": false,
+       "id": "referee_tick",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tick a goal step whose number reached its target"
+      },
+      {
        "action": "schedule_repeat",
        "fixed": false,
        "id": "schedule_repeat",
@@ -2233,6 +2251,15 @@
        "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
       },
       {
+       "action": "referee_tick",
+       "fixed": false,
+       "id": "referee_tick",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tick a goal step whose number reached its target"
+      },
+      {
        "action": "schedule_repeat",
        "fixed": false,
        "id": "schedule_repeat",
@@ -3226,6 +3253,15 @@
        "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
       },
       {
+       "action": "referee_tick",
+       "fixed": false,
+       "id": "referee_tick",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tick a goal step whose number reached its target"
+      },
+      {
        "action": "schedule_repeat",
        "fixed": false,
        "id": "schedule_repeat",
@@ -4217,6 +4253,15 @@
        "note": "Your own words only. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing; ticking a step and stopping are immediate. A step that does something (a search, an email) still asks on its own card in ordinary chat.",
        "says": "Does it without asking",
        "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
+      },
+      {
+       "action": "referee_tick",
+       "fixed": false,
+       "id": "referee_tick",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tick a goal step whose number reached its target"
       },
       {
        "action": "schedule_repeat",
@@ -5224,6 +5269,15 @@
        "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
       },
       {
+       "action": "referee_tick",
+       "fixed": false,
+       "id": "referee_tick",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tick a goal step whose number reached its target"
+      },
+      {
        "action": "schedule_repeat",
        "fixed": false,
        "id": "schedule_repeat",
@@ -6222,6 +6276,15 @@
        "note": "Your own words only. Accepting a plan sets up a weekly check-in that reads nothing and acts on nothing; ticking a step and stopping are immediate. A step that does something (a search, an email) still asks on its own card in ordinary chat.",
        "says": "Does it without asking",
        "title": "Make a goal, edit its plan, tick a step off, or stop tracking it"
+      },
+      {
+       "action": "referee_tick",
+       "fixed": false,
+       "id": "referee_tick",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Tick a goal step whose number reached its target"
       },
       {
        "action": "schedule_repeat",

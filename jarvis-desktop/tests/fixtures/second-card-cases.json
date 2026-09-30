@@ -126,6 +126,32 @@
           "needs": [],
           "what": "Lets the wiki builder use the second card: documents you put in your vault's Jarvis Wiki/Sources folder become linked pages, each one after its own approval card.",
           "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "study",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
+          "model_installed": true,
+          "name": "Study helper",
+          "needs": [],
+          "what": "Quiz questions are written, and your answers marked, on the second card, so a quiz never slows the everyday chat. The text you paste and the answers you type stay on this PC.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "referee",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Referee suggestions",
+          "needs": [],
+          "what": "When a goal step's number reaches your target, Jarvis asks \"This looks done - tick it?\" on a card that shows the numbers. Only your tap ticks it: Jarvis never ticks a step by itself and never runs a test. Today it compares numbers on this PC and loads no model.",
+          "why": "Off."
         }
       ],
       "lane": {
@@ -305,6 +331,32 @@
           "needs": [],
           "what": "Lets the wiki builder use the second card: documents you put in your vault's Jarvis Wiki/Sources folder become linked pages, each one after its own approval card.",
           "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "study",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
+          "model_installed": true,
+          "name": "Study helper",
+          "needs": [],
+          "what": "Quiz questions are written, and your answers marked, on the second card, so a quiz never slows the everyday chat. The text you paste and the answers you type stay on this PC.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "referee",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Referee suggestions",
+          "needs": [],
+          "what": "When a goal step's number reaches your target, Jarvis asks \"This looks done - tick it?\" on a card that shows the numbers. Only your tap ticks it: Jarvis never ticks a step by itself and never runs a test. Today it compares numbers on this PC and loads no model.",
+          "why": "Off."
         }
       ],
       "lane": {
@@ -468,6 +520,32 @@
           "name": "Wiki builder",
           "needs": [],
           "what": "Lets the wiki builder use the second card: documents you put in your vault's Jarvis Wiki/Sources folder become linked pages, each one after its own approval card.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "study",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Study helper",
+          "needs": [],
+          "what": "Quiz questions are written, and your answers marked, on the second card, so a quiz never slows the everyday chat. The text you paste and the answers you type stay on this PC.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "referee",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Referee suggestions",
+          "needs": [],
+          "what": "When a goal step's number reaches your target, Jarvis asks \"This looks done - tick it?\" on a card that shows the numbers. Only your tap ticks it: Jarvis never ticks a step by itself and never runs a test. Today it compares numbers on this PC and loads no model.",
           "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
         }
       ],
@@ -651,6 +729,32 @@
           "needs": [],
           "what": "Lets the wiki builder use the second card: documents you put in your vault's Jarvis Wiki/Sources folder become linked pages, each one after its own approval card.",
           "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "study",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
+          "model_installed": true,
+          "name": "Study helper",
+          "needs": [],
+          "what": "Quiz questions are written, and your answers marked, on the second card, so a quiz never slows the everyday chat. The text you paste and the answers you type stay on this PC.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "referee",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Referee suggestions",
+          "needs": [],
+          "what": "When a goal step's number reaches your target, Jarvis asks \"This looks done - tick it?\" on a card that shows the numbers. Only your tap ticks it: Jarvis never ticks a step by itself and never runs a test. Today it compares numbers on this PC and loads no model.",
+          "why": "Off."
         }
       ],
       "lane": {
@@ -824,6 +928,32 @@
           "needs": [],
           "what": "Lets the wiki builder use the second card: documents you put in your vault's Jarvis Wiki/Sources folder become linked pages, each one after its own approval card.",
           "why": "Needs a capable second graphics card: the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "study",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Study helper",
+          "needs": [],
+          "what": "Quiz questions are written, and your answers marked, on the second card, so a quiz never slows the everyday chat. The text you paste and the answers you type stay on this PC.",
+          "why": "Needs a capable second graphics card: the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "referee",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Referee suggestions",
+          "needs": [],
+          "what": "When a goal step's number reaches your target, Jarvis asks \"This looks done - tick it?\" on a card that shows the numbers. Only your tap ticks it: Jarvis never ticks a step by itself and never runs a test. Today it compares numbers on this PC and loads no model.",
+          "why": "Needs a capable second graphics card: the NVIDIA GeForce GTX 1080 is older than Turing (the RTX 20 generation, compute capability 7.5), which the second-card features need."
         }
       ],
       "lane": {
@@ -986,6 +1116,32 @@
           "needs": [],
           "what": "Lets the wiki builder use the second card: documents you put in your vault's Jarvis Wiki/Sources folder become linked pages, each one after its own approval card.",
           "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "study",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Study helper",
+          "needs": [],
+          "what": "Quiz questions are written, and your answers marked, on the second card, so a quiz never slows the everyday chat. The text you paste and the answers you type stay on this PC.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "referee",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Referee suggestions",
+          "needs": [],
+          "what": "When a goal step's number reaches your target, Jarvis asks \"This looks done - tick it?\" on a card that shows the numbers. Only your tap ticks it: Jarvis never ticks a step by itself and never runs a test. Today it compares numbers on this PC and loads no model.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
         }
       ],
       "lane": {
@@ -1147,6 +1303,32 @@
           "name": "Wiki builder",
           "needs": [],
           "what": "Lets the wiki builder use the second card: documents you put in your vault's Jarvis Wiki/Sources folder become linked pages, each one after its own approval card.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "study",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Study helper",
+          "needs": [],
+          "what": "Quiz questions are written, and your answers marked, on the second card, so a quiz never slows the everyday chat. The text you paste and the answers you type stay on this PC.",
+          "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "referee",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Referee suggestions",
+          "needs": [],
+          "what": "When a goal step's number reaches your target, Jarvis asks \"This looks done - tick it?\" on a card that shows the numbers. Only your tap ticks it: Jarvis never ticks a step by itself and never runs a test. Today it compares numbers on this PC and loads no model.",
           "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."
         }
       ],
@@ -1326,6 +1508,32 @@
           "name": "Wiki builder",
           "needs": [],
           "what": "Lets the wiki builder use the second card: documents you put in your vault's Jarvis Wiki/Sources folder become linked pages, each one after its own approval card.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "study",
+          "memory_gib": 7.69,
+          "model": "qwen3:8b",
+          "model_installed": true,
+          "name": "Study helper",
+          "needs": [],
+          "what": "Quiz questions are written, and your answers marked, on the second card, so a quiz never slows the everyday chat. The text you paste and the answers you type stay on this PC.",
+          "why": "Off."
+        },
+        {
+          "active": false,
+          "available": false,
+          "enabled": false,
+          "id": "referee",
+          "memory_gib": null,
+          "model": null,
+          "model_installed": null,
+          "name": "Referee suggestions",
+          "needs": [],
+          "what": "When a goal step's number reaches your target, Jarvis asks \"This looks done - tick it?\" on a card that shows the numbers. Only your tap ticks it: Jarvis never ticks a step by itself and never runs a test. Today it compares numbers on this PC and loads no model.",
           "why": "Off."
         }
       ],

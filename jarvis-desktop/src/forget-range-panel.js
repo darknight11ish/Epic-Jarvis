@@ -261,7 +261,9 @@ export function takeAnyPlace(freshMs = 60_000) {
     return "";
   }
   if (!left || Date.now() - Number(left.at) >= freshMs) return "";
-  if (left.place === PLACE || left.place === HISTORY_PLACE) {
+  // "topics": "switch off my work topic" (topics.js TOPICS_PLACE) - the
+  // picker for `topic_id`, a whole number checked again by the Brain.
+  if (left.place === PLACE || left.place === HISTORY_PLACE || left.place === "topics") {
     lastLeft = left;
     return left.place;
   }

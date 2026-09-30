@@ -497,7 +497,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks,
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
   folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement }) {
   const listeners = {};
   window.__calls = [];
@@ -2015,6 +2015,152 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const { card: next, ...rest } = out;
             return { ...rest, next, comes_back: "2026-10-03" };
           }
+          // brain/topics.rs (Topic controls, JARVIS-API section 107).
+          // `window.__topics` is null - a PC without topic controls, which
+          // Rust answers with the "run apply-patches.ps1" sentence - unless
+          // the scenario names `topics: {...}`. It behaves like the PC: the
+          // modes, the preview, a card for a looser choice on a private topic
+          // (`waiting` until the test calls window.__topicsDecide), the
+          // review and hidden lists, and names/keywords/lists taken out while
+          // the private lists are hidden (or App lock has locked), as Rust does.
+          case "brain_topics":
+          case "brain_topics_edit":
+          case "brain_topics_mode":
+          case "brain_topics_file":
+          case "brain_topics_settings":
+          case "brain_topics_preview":
+          case "brain_topics_review":
+          case "brain_topics_hidden": {
+            const z = window.__topics;
+            if (!z) throw new Error("Your PC's Jarvis does not have topic controls yet - run apply-patches.ps1 on the PC.");
+            z.calls.push({ cmd, ...JSON.parse(JSON.stringify(args || {})) });
+            const writes = ["brain_topics_edit", "brain_topics_mode", "brain_topics_file", "brain_topics_settings"].includes(cmd);
+            if (writes && state.stale) throw new Error("the event stream is stale");
+            const MSG = z.errors;
+            const no = (error) => ({ ok: false, error, message: MSG[error] || ("the PC's own words for " + error) });
+            if (z.refuse && z.refuse[cmd]) return no(z.refuse[cmd]);
+            const hideIt = () => (window.__security.hidden && !window.__security.revealed) || window.__appLock;
+            const CAPS = { both: [1, 1], use_only: [0, 1], learn_only: [1, 0], off: [0, 0] };
+            const loosens = (a, b) => (CAPS[b][0] && !CAPS[a][0]) || (CAPS[b][1] && !CAPS[a][1]);
+            const byId = (id) => z.topics.find((t) => t.id === id);
+            const usedIn = (t) => CAPS[t.mode][1];
+            const view = () => {
+              const own = z.topics.filter((t) => !t.system);
+              const list = [z.topics.find((t) => t.system), ...own].filter(Boolean).map((t, i) => ({
+                id: t.id, name: hideIt() && !t.system ? "" : t.name, colour: t.colour, icon: t.icon, mode: t.mode,
+                private: Boolean(t.private), words: hideIt() ? [] : (t.words || []), ord: i, system: Boolean(t.system),
+                created: 1790000000, facts: t.facts, unchecked: t.unchecked || 0, hidden: t.mode === "off",
+                skipped_week: t.skipped_week || 0 }));
+              const unchecked = list.filter((t) => !t.system).reduce((a, t) => a + t.unchecked, 0);
+              const facts = list.reduce((a, t) => a + t.facts, 0);
+              return { ok: true, topics: list, unchecked, facts, sorted: facts - list[0].facts, model_help: Boolean(z.modelHelp),
+                backfill: z.backfill, limits: { max_topics: 16, name_max: 24, words_max: 20, batch: 10, colours: 8, icons: [] },
+                modes: [], waiting: z.waiting, last: z.last, ...(hideIt() ? { lists_hidden: true } : {}) };
+            };
+            const decide = (outcome) => {
+              const w = z.waiting; const p = z.pendingChange;
+              if (!w || !p) return;
+              if (outcome === "applied") p.apply();
+              z.last = { outcome, why: "", at: 1790000001, message: z.lastWords[outcome] };
+              z.waiting = null; z.pendingChange = null;
+            };
+            window.__topicsDecide = decide;
+            window.__topicsView = view;
+            const card = (id, kind, apply) => {
+              z.waiting = { topic: id, kind }; z.pendingChange = { id, kind, apply };
+              return { ok: true, waiting: true, id, kind, message: "Waiting for your approval." };
+            };
+            if (cmd === "brain_topics") return view();
+            if (cmd === "brain_topics_settings") { z.modelHelp = args.modelHelp; return view(); }
+            if (cmd === "brain_topics_preview") {
+              const t = byId(args.id);
+              if (!t) return no("topic_not_found");
+              const stops = CAPS[t.mode][0] && !CAPS[args.mode][0];
+              const affected = usedIn(t) && !CAPS[args.mode][1] ? t.facts : 0;
+              const loose = loosens(t.mode, args.mode);
+              const bits = [];
+              const nm = hideIt() ? "" : t.name;
+              bits.push(affected === 0 ? "Nothing Jarvis knows about " + nm + " will change in answers."
+                : affected === 1 ? "1 thing Jarvis knows about " + nm + " will be left out of answers."
+                : affected + " things Jarvis knows about " + nm + " will be left out of answers.");
+              if (stops) bits.push("Jarvis will stop saving new things about " + nm + ".");
+              const pinned = usedIn(t) && !CAPS[args.mode][1] ? (t.pinned || 0) : 0;
+              if (pinned) bits.push(pinned === 1 ? "1 pinned fact about " + nm + " will pause until you switch it back on."
+                : pinned + " pinned facts about " + nm + " will pause until you switch it back on.");
+              return { ok: true, id: t.id, mode: args.mode, affected, pinned, stops_learning: Boolean(stops), loosens: Boolean(loose),
+                needs_card: Boolean(loose && t.private), private: Boolean(t.private),
+                line: hideIt() ? "" : bits.join(" "), card_line: loose && t.private ? "This will ask for your OK first." : "",
+                ...(hideIt() ? { lists_hidden: true } : {}) };
+            }
+            if (cmd === "brain_topics_mode") {
+              const t = byId(args.id);
+              if (!t) return no("topic_not_found");
+              if (!CAPS[args.mode]) return no("bad_mode");
+              if (loosens(t.mode, args.mode) && (t.private || z.outside)) {
+                return card(t.id, "mode", () => { t.mode = args.mode; });
+              }
+              if (z.waiting && z.waiting.topic === t.id) { z.waiting = null; z.pendingChange = null; }
+              const changed = t.mode !== args.mode;
+              t.mode = args.mode;
+              return { ...view(), id: t.id, changed };
+            }
+            if (cmd === "brain_topics_review" || cmd === "brain_topics_hidden") {
+              if (hideIt()) return { ok: true, lists_hidden: true, facts: [], next: null, total: 0 };
+              if (cmd === "brain_topics_hidden") {
+                return { ok: true, id: args.id, mode: (byId(args.id) || {}).mode, facts: (z.hidden[args.id] || []).map((f) => ({ ...f })), next: null };
+              }
+              const batch = z.review.slice(0, args.limit || 10);
+              return { ok: true, facts: batch.map((f) => ({ ...f, checked: false })), next: z.review.length > batch.length ? "n" + batch.length : null,
+                total: z.review.length, batch: 10 };
+            }
+            if (cmd === "brain_topics_file") {
+              if (args.confirm) {
+                z.review = z.review.filter((f) => !args.ids.includes(f.id));
+                return { ...view(), filed: 0, confirmed: args.ids.length };
+              }
+              if (!byId(args.topicId)) return no("topic_not_found");
+              z.review = z.review.filter((f) => !args.ids.includes(f.id));
+              return { ...view(), filed: args.ids.length };
+            }
+            // brain_topics_edit
+            const e = args.edit || {};
+            const t = byId(e.id);
+            if (e.op === "add") {
+              if (z.topics.some((x) => !x.system && x.name.toLowerCase() === e.name.toLowerCase())) return no("name_taken");
+              if (z.topics.filter((x) => !x.system).length >= 16) return no("too_many_topics");
+              const id = Math.max(...z.topics.map((x) => x.id)) + 1;
+              z.topics.push({ id, name: e.name, colour: e.colour ?? 0, icon: e.icon || "folder", mode: "both",
+                private: Boolean(e.private), words: e.words || [], facts: 0 });
+              return { ...view(), id };
+            }
+            if (!t) return no("topic_not_found");
+            if (e.op === "rename") { if (t.system) return no("no_rename_unsorted"); t.name = e.name; return { ...view(), id: t.id }; }
+            if (e.op === "style") { if (e.colour !== undefined) t.colour = e.colour; if (e.icon) t.icon = e.icon; return { ...view(), id: t.id }; }
+            if (e.op === "words") { t.words = e.words; return { ...view(), id: t.id }; }
+            if (e.op === "move") {
+              const own = z.topics.filter((x) => !x.system);
+              const rest = own.filter((x) => x !== t);
+              const at = e.before === null || e.before === undefined ? rest.length : rest.findIndex((x) => x.id === e.before);
+              rest.splice(at < 0 ? rest.length : at, 0, t);
+              z.topics = [z.topics.find((x) => x.system), ...rest];
+              return { ...view(), id: t.id };
+            }
+            if (e.op === "private") {
+              if (e.private === false && t.private) return card(t.id, "private_clear", () => { t.private = false; });
+              t.private = Boolean(e.private);
+              return { ...view(), id: t.id };
+            }
+            if (e.op === "delete") {
+              if (t.system) return no("no_delete_unsorted");
+              const home = byId(e.moveTo);
+              if (!home || home.id === t.id) return no("bad_destination");
+              const apply = () => { home.facts += t.facts; z.topics = z.topics.filter((x) => x !== t); };
+              if (t.private && loosens(t.mode, home.mode)) return card(t.id, "delete", apply);
+              apply();
+              return { ...view(), id: t.id, deleted: t.id };
+            }
+            return no("bad_request");
+          }
           case "brain_widgets_draft": {
             window.__widgetCalls.push({ cmd, ...args });
             if (args.pasted) {
@@ -3016,6 +3162,30 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__decks = decks ? JSON.parse(JSON.stringify({
     calls: [], decks: [], available: true, why: "", newPerDay: 5, limit: 20, revealed: "", done: 0,
     refuse: {}, ...decks })) : null;
+  // Topic controls (brain/topics.rs). `null` - a PC without them. Scenario
+  // `topics: {topics: [{id, name, colour, icon, mode, private, words, system,
+  // facts, unchecked, skipped_week, pinned}], review: [fact], hidden: {id: [fact]},
+  // modelHelp, backfill, waiting, last, outside, refuse: {cmd: code}}`.
+  window.__topics = topics ? JSON.parse(JSON.stringify({
+    calls: [], topics: [], review: [], hidden: {}, modelHelp: false, backfill: { done: true, remaining: 0 },
+    waiting: null, last: null, pendingChange: null, outside: false, refuse: {},
+    errors: {
+      name_taken: "You already have a topic with that name.",
+      topic_not_found: "That topic is not there any more.",
+      too_many_topics: "You can have up to 16 topics of your own. Delete one first.",
+      bad_destination: "Pick a different topic for its facts to move to.",
+      no_delete_unsorted: "Unsorted cannot be deleted.",
+      no_rename_unsorted: "Unsorted cannot be renamed.",
+      bad_mode: "That is not one of the four choices.",
+      bad_request: "Jarvis could not understand that request.",
+      unavailable: "Topics are not available on this PC yet.",
+    },
+    lastWords: {
+      applied: "You approved the card, so the change was made.",
+      denied: "The card was turned down, so nothing about your topics changed.",
+      timed_out: "Nobody answered the card in time, so nothing about your topics changed.",
+    },
+    ...topics })) : null;
   // "Widgets you describe" (brain/widgets.rs). Unset, a PC without it.
   // `widgets`/`drafts` are the PC's rows (with said and parts); `shows` maps
   // an id to its GET /api/widgets/show answer; `draft` is the preview the

@@ -134,6 +134,8 @@ TITLES = {
     # jarvis_topics.py (2026-09-30): turning a private topic back on, and the
     # other loosenings of topic controls
     "topic_loosen": "turn a private topic back on, or let it learn or be used again",
+    # jarvis_referee.py (2026-09-30): "This looks done - tick it?"
+    "referee_tick": "tick a goal step whose number reached its target",
     # jarvis_forget_range.py (2026-09-28): ONE card for a whole time frame
     "memory_forget_range": "forget what it learned and delete chats from the days you chose",
     "user_profile_manage": "change your profile",

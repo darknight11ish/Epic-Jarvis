@@ -235,6 +235,10 @@
       "title": "Jarvis wants to read a page in Logseq"
     },
     {
+      "action": "referee_tick",
+      "title": "Jarvis wants to tick a goal step whose number reached its target"
+    },
+    {
       "action": "register_approval_key",
       "title": "Jarvis wants to let a phone approve risky actions with its fingerprint or PIN"
     },

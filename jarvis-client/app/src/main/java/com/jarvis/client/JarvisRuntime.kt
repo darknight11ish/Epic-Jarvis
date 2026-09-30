@@ -4431,6 +4431,70 @@ object JarvisRuntime {
         }
     }
 
+    // ---------------------------------------------------- Topic controls ----
+    // docs/JARVIS-API.md section 107 (the owner's request of 2026-09-30) - see
+    // [com.jarvis.client.net.Topics] and ui/screens/TopicsPlate.kt. The PC keeps
+    // the topics and enforces the modes; the phone keeps nothing of them.
+
+    private val _topicsTick = MutableStateFlow(0)
+
+    /** Goes up by one after a topic change made from this phone, so the plate reads itself again. */
+    val topicsTick: StateFlow<Int> = _topicsTick.asStateFlow()
+
+    private val _topicPick = MutableStateFlow<com.jarvis.client.net.Topics.Open?>(null)
+
+    /**
+     * "Switch off my work topic" by voice or chat: the answer's route said
+     * `open_brain: "topics"`, with the topic id when it named one. Brain's
+     * Topics plate opens that topic's four-choice picker (changing nothing)
+     * and calls [consumeTopicPick]. Pure navigation.
+     */
+    val topicPick: StateFlow<com.jarvis.client.net.Topics.Open?> = _topicPick.asStateFlow()
+
+    fun requestTopicPick(open: com.jarvis.client.net.Topics.Open) {
+        _topicPick.value = open
+    }
+
+    fun consumeTopicPick() {
+        _topicPick.value = null
+    }
+
+    /**
+     * A topic read: the list, a preview, a review batch or "Show them". A
+     * read is never held on a stale link (rule 4 holds writes). The status
+     * and body come back whole, so a 404 from a PC without the routes reads
+     * differently from "that topic is not there any more".
+     */
+    suspend fun topicsRead(path: String): ApiResult<com.jarvis.client.net.Topics.Reply> = api.topicsCall(path, null)
+
+    /**
+     * ONE topic change: `POST` [json] to [path] (a `/api/topics` route).
+     * Held on a stale link ([actionBlocker], rule 4), and - while "Hide memory
+     * lists and chat history" hides the names ([listsHidden]) - refused for
+     * everything but a mode change and the local-model switch
+     * ([com.jarvis.client.net.Topics.refusedWhileHidden]), since nothing else
+     * can be done without the names or the fact words on screen. A 202 means
+     * the PC raised ONE approval card (`topic_loosen`): nothing has changed
+     * yet, and the plate reads the list every 2 seconds until it is decided.
+     * The topic names in the body are never logged.
+     */
+    suspend fun topicsWrite(
+        path: String,
+        json: String,
+        listsHidden: Boolean,
+    ): com.jarvis.client.net.Topics.Outcome {
+        if (listsHidden && com.jarvis.client.net.Topics.refusedWhileHidden(path)) {
+            return com.jarvis.client.net.Topics.Outcome.Failed(com.jarvis.client.net.Topics.LISTS_HIDDEN_REFUSAL)
+        }
+        actionBlocker()?.let { return com.jarvis.client.net.Topics.Outcome.Failed(it) }
+        return when (val r = api.topicsCall(path, json)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Topics.outcome(r.value.code, r.value.body).also {
+                if (it !is com.jarvis.client.net.Topics.Outcome.Failed) _topicsTick.update { n -> n + 1 }
+            }
+            is ApiResult.Failed -> com.jarvis.client.net.Topics.Outcome.Failed("Not changed. " + describe(r.error))
+        }
+    }
+
     // --------------------------------------------------------- Widgets ----
     // "Widgets you describe" (the owner's choice of 2026-09-28, the SAFE
     // version; docs/JARVIS-API.md section 86) - see

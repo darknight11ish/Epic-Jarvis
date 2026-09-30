@@ -949,6 +949,16 @@ $PATCHES = @(
     # them, or on any error, the banner says so and the routes are simply not there - and with every topic on
     # "Learn and use" nothing about learning or answers changes at all.
     'topics.patch'
+    # "Referee suggestions" and "Study helper" (the owner's decisions of 2026-09-30; JARVIS-API section 108;
+    # two more switches on the second graphics card, both built OFF until the card is installed and
+    # measured). THREE hunks: in jarvis_gate.py the new action `referee_tick` joins the "acts only on tier ask"
+    # set and gets its _RISK line (both right after topics.patch's own last lines, so it goes after it); in
+    # jarvis_hud.py ONE block right after topics.patch's own (the last one before `_loopback_companion`) that
+    # installs the quiet hourly "This looks done - tick it?" look and hands the quiz its model call, so the
+    # quiz uses the second card while "Study helper" is on. It adds no route and no tool. Needs jarvis_referee.py
+    # copied in (and the rebuilt jarvis-framework.toml's `referee_tick = "ask"` line); without it, or on any
+    # error, the banner says so and both switches simply do nothing.
+    'referee.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1179,6 +1189,7 @@ $SHIPPED = @(
     'jarvis_progress.py'         # progress.patch: 12 weeks of days shaded by steps ticked and numbers logged, and a 3-to-8 area balance chart the owner picks; every number from code, no streak, no total score; NOT a model tool (a test fails if anything imports it)
     # --- "Topic controls" (2026-09-30, topics.patch) ---
     'jarvis_topics.py'           # topics.patch: per-topic mode (Learn and use / Use but don't learn / Learn but don't use / Off) - tables in memory.db, sorting by fixed rules with the local model only as an opt-in suggestion, one card (topic_loosen) for turning a private topic back on; the filter itself lives in the rebuilt jarvis_memory.py
+    'jarvis_referee.py'          # referee.patch: "This looks done - tick it?" - one card per goal step whose number reached its target, at most three a day, no model, only the owner's tap ticks; a second-card switch (id referee)
 )
 
 # The settings file. Installed only where none exists; never overwritten.

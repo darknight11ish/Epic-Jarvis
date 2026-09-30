@@ -169,6 +169,7 @@ on a throwaway copy instead.
 | `retirement.patch` | `jarvis_hud.py` | **"Retirement what-if"** (the owner's decision of 2026-09-30; `docs/FINANCE-DESIGN.md` part B, `docs/JARVIS-API.md` section 103). ONE install block, `jarvis_retirement.install(Handler, ...)`, right after `spending.patch`'s own, answering `GET /api/retirement/defaults` and `POST /api/retirement/run` on any paired device. A pure calculation on numbers the owner typed: no file, no network, nothing stored, no card and no gate line. Needs `jarvis_retirement.py` (plain Python, no numpy); without it, or on any error, the banner says so and the routes are simply not there. Last in the list. See "Retirement what-if", at the very end. |
 | `progress.patch` | `jarvis_hud.py` | **"Activity heatmap and balance chart"** (the owner's decision of 2026-09-30; `docs/GOALS-PROGRESS-DESIGN.md` part C, `docs/JARVIS-API.md` section 105). ONE install block, `jarvis_progress.install(Handler, ...)`, right after `retirement.patch`'s own, answering `GET /api/progress/activity`, `GET` and `POST /api/progress/balance`. Reads the owner's ticked goal steps and logged numbers; the only thing kept is the owner's choice of chart areas (a small table in `projects.db`; no card, no gate line). Health and money numbers only shade a day and are never named. NOT a model tool: a test fails if any other module mentions it. Needs `jarvis_progress.py` (and `jarvis_projects.py`, `jarvis_goals.py`); without it, or on any error, the banner says so and the routes are simply not there. Last in the list. See "Activity heatmap and balance chart", at the very end. |
 | `topics.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Topic controls"** (the owner's decision of 2026-09-30; `docs/TOPIC-CONTROLS-DESIGN.md`, `docs/JARVIS-API.md` section 107). Three hunks: in `jarvis_gate.py` the new action `topic_loosen` joins the "acts only on tier ask" set and gets its `_RISK` line (both right after `browser-engine.patch`'s own last lines); in `jarvis_hud.py` ONE install block right after `progress.patch`'s, and ONE line after `auto-learn.patch`'s `injected_sensitive` line that puts `topics_left_out` (a count) in the chat route's header. Needs `jarvis_topics.py` and the rebuilt `jarvis_memory.py` (its three tables and the `topics=` search filter). A mode per topic - Learn and use / Use but don't learn / Learn but don't use / Off; turning a private topic back on is ONE card. With every topic on "Learn and use" nothing changes. See "Topic controls", at the very end. |
+| `referee.patch` | `jarvis_gate.py`, `jarvis_hud.py` | **"Referee suggestions" and "Study helper"** (the owner's decisions of 2026-09-30; `docs/JARVIS-API.md` section 108, `docs/STUDY-FROM-TEXT-DESIGN.md` section 13). Two more switches on the second graphics card, both built OFF until the card is installed and measured. THREE hunks: in `jarvis_gate.py` the new action `referee_tick` joins the "acts only on tier ask" set and gets its `_RISK` line (both right after `topics.patch`'s own last lines, so it goes after it); in `jarvis_hud.py` ONE block right after `topics.patch`'s, which installs the quiet hourly "This looks done - tick it?" look and hands the quiz its model call (`jarvis_second_card.wire_study()`), so the quiz uses the second card while "Study helper" is on. It adds no route and no tool. Needs `jarvis_referee.py` (and the rebuilt `jarvis-framework.toml`'s `referee_tick = "ask"` line). Both switches are rows in `GET /api/second-card`; turning either on is the ordinary second-card card. Referee suggestions only proposes: the owner's tap ticks a goal step. See "Referee suggestions and Study helper", at the very end. |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 
 ## All but two of the patches apply, and that is correct
@@ -18129,4 +18130,40 @@ python3 backend/test_topics_leaks.py
 python3 tools/gen_topics_cases.py --check
 python3 backend/eval_memory.py --words-only --sizes 0,100,1000
 python3 backend/test_shipped_modules.py
+```
+
+## Referee suggestions and Study helper (2026-09-30, JARVIS-API section 108)
+
+Two more switches on the second graphics card, built OFF until the card is installed and measured
+(CLAUDE.md: nothing that depends on the 12 GB card is switched on before then). Both are rows in the
+`features` list of `GET /api/second-card`, both follow the five older switches exactly: needs a capable
+second card and says so plainly on a one-card PC, turning ON is one approval card (`second_card_enable`,
+tier `ask`) that names the card, turning OFF is at once.
+
+- **Study helper** (`study`): the quiz's model call (`jarvis_quiz.configure(call=...)`) goes to the
+  second card's model while the switch is working. `jarvis_second_card.study_call()` is that call and
+  `wire_study()` hands it over at startup (`referee.patch`); `jarvis_quiz.py` still imports nothing
+  from the second-card module. Off, or with the lane down or silent, the quiz runs exactly as before.
+  The marks stay "Jarvis's guess" until the grader test has been run on the second card's model too.
+  Using the bigger model (`qwen3:14b`) for marking is a follow-up, not built.
+- **Referee suggestions** (`referee`): `jarvis_referee.py`. When an open, unlocked step of an active
+  goal follows a number that has reached its target (`jarvis_forecast.better_reached`), it raises ONE
+  card "This looks done - tick it?" (`referee_tick`, tier `ask`, reversible, local). Yes ticks that
+  step through `Goals.mark_step`, exactly as the owner's own tick; the ordinary untick undoes it. It is
+  propose-only: no route, no tool, no model, no test run, no benchmark result written. At most three
+  cards in 24 hours, none while one waits, none in a focus session, Quiet, Standby or mid-chat, and a
+  "no" is heard for 1, 7, then 30 days (`jarvis_backoff`). A health or money number is marked
+  keep-on-screen. Runs as the quiet hourly kind `referee` on the one scheduler. It loads no model today
+  (`model_free`), so it starts no second Ollama.
+
+Test it:
+
+```
+python3 backend/test_referee.py
+python3 backend/test_second_card.py
+python3 backend/test_backoff_rule.py
+python3 backend/test_shipped_modules.py
+python3 tools/gen_second_card_cases.py --check
+python3 tools/gen_asks_first_cases.py --check
+python3 tools/gen_card_words_cases.py --check
 ```

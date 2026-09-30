@@ -16490,3 +16490,132 @@ In `memory.db`: `topics`, `fact_topics` (fact id, topic id, second topic id, how
 ### 107.9 The shared fixture
 
 `tools/gen_topics_cases.py` writes `jarvis-desktop/tests/fixtures/topics-cases.json` and `jarvis-client/app/src/test/resources/contract/topics-cases.json` (byte-identical; `python3 tools/gen_topics_cases.py --check`): every word, the four modes and their sentences, the errors, the palette and icons, the ready-made list, worked cases for which changes need a card, the name and keyword rules, and the screen-reader lines.
+
+## 108. Second-card switches: Study helper and Referee suggestions (added 2026-09-30; backend built, apps to follow)
+
+The owner's decisions of 2026-09-30: a sixth and a seventh switch in the second graphics card's list,
+both **built switched off** until the 12 GB card is installed and measured (`CLAUDE.md`; the rule every
+second-card switch follows). No new route: both are rows of `GET /api/second-card` and are turned on and
+off with the existing `POST /api/second-card`. `backend/jarvis_second_card.py`, `backend/jarvis_referee.py`,
+`backend/referee.patch`, `backend/test_second_card.py`, `backend/test_referee.py`.
+
+### 108.1 The two rows
+
+`features[]` now has seven rows, in this order: `long_context`, `vision`, `learning`, `browser_control`,
+`wiki`, **`study`**, **`referee`**. Every row has the same keys as before (`id`, `name`, `what`, `enabled`,
+`active`, `available`, `needs`, `model`, `model_installed`, `memory_gib`, `why`); an app that builds its
+list from `features[]` shows the two new ones with no change (`docs/STUDY-FROM-TEXT-DESIGN.md` section 13
+has the exact rows and words).
+
+* **`study`, "Study helper"** - needs nothing else. While it is working, the quiz's questions are written
+  and the answers marked (Spanish practice included) by the second card's model (`qwen3:8b` at 32K, the
+  same lane and model as "Longer conversations"). The text pasted and the answers typed stay on this PC.
+* **`referee`, "Referee suggestions"** - needs nothing else. Propose-only: see 108.4. It loads **no
+  model today**, so its row carries `model: null`, `memory_gib: null`, `model_installed: null`, its
+  `available` does not wait for a lane or a model, it starts no second Ollama, and it never blocks
+  "One bigger model on both cards". It still needs a capable second card to be switched on, because the
+  later step (reading a project's change summary, 108.6) will use that card's model.
+
+On a one-card PC both are shown, cannot be turned on, and say why in the same words as the others
+(`Needs a capable second graphics card: only one graphics card found (...)`).
+
+### 108.2 Turning them on and off
+
+`POST /api/second-card` with `{"feature": "study" | "referee", "enabled": true | false}`, exactly as for the
+five older switches: OFF is at once (200 `{"ok": true, "enabled": false, "pending": false, "message":
+"\"Study helper\" is off."}`); ON raises ONE card, action **`second_card_enable`**, tier `ask`, and answers
+200 `{"ok": true, "enabled": false, "pending": true, "message": "Approve the card on your PC or phone to
+turn it on. Nothing changes until you do."}` - `pending: true` means a card is up, not that it is on. The
+errors are the existing ones: 400 (unknown id; the main switch is off), 409 (a card is already waiting;
+"One bigger model on both cards" is on), 503 (no capable second card, with the reason; the tier is not
+`ask`). The switch for `study` conflicts with "One bigger model on both cards" as the others do;
+`referee` does not. A third card cannot be assigned `referee` (400 `"Referee suggestions" loads no model,
+so there is nothing to move to the third card.`) and `third.assignable` never lists it.
+
+### 108.3 Study helper: how the quiz reaches the second card
+
+`jarvis_quiz.configure(call=...)` is the quiz's one injection point and the quiz imports nothing from
+the second-card module (its import rule is unchanged: only `jarvis_local_http` and `jarvis_wellbeing`).
+`jarvis_second_card.wire_study()` (run once at startup by `referee.patch`, after the quiz is installed)
+hands it `study_call()`, which asks `lane_for("study")` on every call:
+
+* the lane is up: one structured `/api/chat` request to `127.0.0.1:11435` (loopback only), the lane's
+  model and context, the schema as `format`, `think: false`, temperature 0 - the same body the quiz's own
+  default call sends;
+* the switch is off, the lane is down, does not answer, or the reply was cut short: the quiz's own default
+  call answers, exactly as before this existed (for that one call only).
+
+**The marks stay "Jarvis's guess" on the second card.** `grader_verified` reads
+`quiz_grader_results.json`, measured on the everyday model. While the last call was answered by the
+second card's model, the result vouches for it only if it was measured on that same model
+(`eval_quiz_grader.py` records the model; run it with `OLLAMA_URL=http://127.0.0.1:11435
+JARVIS_LOCAL_MODEL=qwen3:8b` once the card is in). Nothing about the quiz's routes, errors or words changes.
+
+### 108.4 Referee suggestions: the card
+
+Once an hour (a quiet, single job of kind `referee` on the one scheduler, not listed in Coming up, telling
+nobody), if the switch is really on, `jarvis_referee.run_pass()` looks at the owner's **active** goals for an
+**open, unlocked** step that follows a number (a benchmark) whose newest value reaches its target
+(`jarvis_forecast.better_reached`, higher or lower is better). If it finds one and no limit holds, it raises
+ONE card, action **`referee_tick`** (tier `ask`; reversible, local). The card, word for word:
+
+```
+This looks done - tick it?
+
+Goal: "<goal, at most 80 characters>"
+Step: "<step, at most 80 characters>"
+Evidence: "<benchmark name>" is now <latest, with its unit>, and your target is <target> (<lower|higher> is better).
+
+This is a suggestion from a number, not a check. Jarvis only compared the latest number you logged with your target. It did not run a test, and it cannot tell whether the work is really finished - only you can say that.
+
+[health or money numbers only:] This number is private (health or money): it is shown on this screen only and is never read aloud or sent anywhere.
+
+If you say yes: this step is ticked, the same as if you had ticked it yourself. You can untick it at once in Goals.
+If you say no: nothing changes, and Jarvis will not ask about this step again for a day, then a week, then a month.
+```
+
+The evidence is worked out by **code**, so no model can misstate it; the label therefore says "a
+suggestion from a number", not "a guess by the small model" (that wording is kept for 108.6). The gate
+`detail` is `{"text", "what": "tick one step of one of your goals", "leaves_this_pc": false,
+"keep_on_screen": <true for a health or money benchmark>, "goal": <id>, "step": <id>}`; `what` never holds
+a number or a name, and the audit log holds only outcomes and counts.
+
+**Only the owner's tap ticks.** A yes calls `Goals.mark_step` (the PC sets `done_at`), after checking again
+that the goal is still active, the step still open and its number still at the target; if anything changed
+while the card waited (`stale`), the switch was turned off (`withdrawn`), or the answer was anything but a
+person's yes at tier `ask`, **nothing is ticked**. Undo is the existing untick (`POST /api/goals/<id>/step`
+with `{"id": "<step id>", "done": false}`); nothing new is needed. The module has no route, no tool and no
+argument that takes words; it never calls a model, writes a benchmark result, sets a verified mark or runs a
+test (a test run stays on the projects module's own command path, with its own card).
+
+**Limits** (each has a test): at most **3 cards in any 24 hours**; none while one of its cards waits; none in a
+focus session; none in Quiet or Standby, or within two minutes of a chat message (`jarvis_backoff`); the
+same step at most once a day even if nobody answered; a "no" keeps that step quiet for 1, then 7, then 30
+days; an unreadable ledger (`referee.json`, times and fingerprints only) or a gate line that is not `ask`
+raises nothing.
+
+### 108.5 The gate action and "What asks first"
+
+`referee_tick`: tier `ask` in `jarvis-framework.toml`, on the "acts only on tier ask" list, in `HARD_LIMITS`
+and `MUST_ASK` (it can never be loosened from an app), under "Timers and reminders" on the "What asks first"
+page, with the words "tick a goal step whose number reached its target" (`jarvis_card_words.py`). Its `_RISK`
+line is `("yes", "local", ...)`, so it is not a risky approval (no Windows Hello): it is reversible and local.
+`jarvis_backoff.OFFERS` declares the offer (`referee_tick_offer`, asks for `tick_a_step`).
+
+### 108.6 Not built, or not measured
+
+* **Reading a project task's change summary** ("This looks done" for a coding task, using the second card's
+  model, labelled "a guess by the small model, not a check"): not built. `jarvis_apps.py` has a per-task
+  change summary, but no goal step can follow a task yet - only a number - so there is nothing to compare.
+  It waits for the second card and for that link.
+* The bigger local model (`qwen3:14b`, "One bigger model on both cards") for the quiz's marking: not built.
+* Nothing here has run on the real second card, which is not installed. The 7.69 GB figure on the study
+  card is the same arithmetic as "Longer conversations" and is not measured.
+* The quiz's grader has not been run on the second card's model; until it has, marks made there stay
+  "Jarvis's guess".
+
+### 108.7 The shared fixtures
+
+`tools/gen_second_card_cases.py` (both apps' `second-card-cases.json`) now carries the two rows in every one of
+its eight cases; `tools/gen_asks_first_cases.py` and `tools/gen_card_words_cases.py` carry the `referee_tick`
+row and words. All three changes are additions.

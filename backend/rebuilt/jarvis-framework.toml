@@ -312,6 +312,14 @@ second_card_third_assign = "ask"
 # refuses to apply a change if this is anything else).
 topic_loosen = "ask"
 
+# Referee suggestions (2026-09-30; a second-card switch, JARVIS-API section 108):
+# "This looks done - tick it?" is ONE card per goal step whose number reached its
+# target, at most three a day. Yes ticks that one step, exactly as the owner's own
+# tick would; the model never writes a tick. Nothing leaves this PC. Must stay
+# "ask": a person's tap is the only thing that ticks (jarvis_referee.py raises no
+# card at any other tier).
+referee_tick = "ask"
+
 # --- Picture mode for "Look at this" and "Watch with me" (2026-09-29) -----
 # Lets a small picture model, running on the PROCESSOR (never the graphics
 # card) in its own copy of Ollama that only this PC can reach, also look at

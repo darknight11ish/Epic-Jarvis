@@ -474,6 +474,14 @@ be the **bigger or longer-context lane, not the fast one**.
   merely "the slower card's pace for its share" as this line used to say.
   Not measured: the second card is not installed.
 
+**Two more users of that lane (2026-09-30, `docs/JARVIS-API.md` section 108, both
+built OFF until the card is installed and measured).** "Study helper" sends the quiz's
+question-writing and marking to the same `qwen3:8b` at 32K lane (nothing extra to fit: it is
+the model "Longer conversations" already loads; not measured). "Referee suggestions" loads
+**no model** today - it compares logged numbers with targets in code and raises a "tick it?"
+card - so it takes none of the 12 GB; the later step that reads a project's changes would use
+this lane's model. Marking with the 14B on both cards is not built.
+
 **The alternative: an RTX 2080 Ti 11 GB.** Also Turing, compute capability
 7.5, so everything above about drivers and the `q8_0` cache applies. Its
 memory is the fastest of the three (about 616 GB/s published, against the

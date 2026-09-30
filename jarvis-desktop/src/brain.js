@@ -219,6 +219,7 @@ import {
   topicCount as quizTopicCount,
 } from "./quiz.js";
 import * as Decks from "./decks.js";
+import * as Topics from "./topics.js";
 import { createRetirementCard } from "./retirement.js";
 import {
   BUILDING as BRIEFING_BUILDING,
@@ -1138,6 +1139,7 @@ function render(name) {
       break;
     case "memory":
       renderLearning();
+      renderTopics();
       renderHistoryImport();
       renderProfile();
       renderShared();
@@ -2089,8 +2091,9 @@ async function refreshMemory() {
   // (brain/auto_learn.rs), next to the pane's sections: a Forget or a
   // decision changes it too.
   await Promise.all([load(VIEW_SECTIONS.memory, { quiet: true }), loadAuto(), loadProfile(),
-    loadShared(), loadSavedFacts()]);
+    loadShared(), loadSavedFacts(), loadTopics()]);
   render("memory");
+  reloadShown();
 }
 
 /** Turn a write into a toast, so no handler swallows a failure silently. */
@@ -2442,6 +2445,10 @@ function proposalRow(p) {
   if (p.source === MERGE_SOURCE) return mergeRow(p, id);
   const flags = Array.isArray(p.flags) ? p.flags.filter((f) => f && typeof f === "object") : [];
   const retire = p.source === "feedback_retire";
+  // Topic controls: a card that asks about a topic set to not learn keeps
+  // its two decisions, worded for what they do ("Save under Unsorted" /
+  // "Skip it"); nothing else about the card changes.
+  const ask = retire ? null : Topics.askLabels(p);
   const meta = retire
     ? [
         p.replaces_text || p.replaces ? `The fact: “${p.replaces_text || p.replaces}”` : "",
@@ -2486,19 +2493,20 @@ function proposalRow(p) {
         }, { title: "Leave the fact exactly as it is.", live: true }),
       ]
     : [
-        button("Keep", async () => {
+        button(ask ? ask.accept : "Keep", async () => {
           await memoryWrite("brain_memory_decide", { id, accept: true },
-            "Kept. Jarvis can recall it now.");
-        }, { title: "Add it to memory. It can be reworded or forgotten later.", live: true }),
+            ask ? "Saved under Unsorted. Jarvis can recall it now." : "Kept. Jarvis can recall it now.");
+        }, { title: ask ? "Save it under Unsorted. It can be reworded or forgotten later."
+          : "Add it to memory. It can be reworded or forgotten later.", live: true }),
         ...(p.keep_both_ok === true
           ? [button("Both are true", async () => {
               await memoryWrite("brain_memory_keep_both", { id },
                 "Kept both. The older fact stays current too.");
             }, { title: "Keep this AND the fact it would replace. Nothing is retired.", live: true })]
           : []),
-        button("Discard", async () => {
+        button(ask ? ask.decline : "Discard", async () => {
           await memoryWrite("brain_memory_decide", { id, accept: false },
-            "Discarded. It was never in memory.");
+            ask ? "Skipped. Nothing was saved." : "Discarded. It was never in memory.");
         }, { title: "Throw the proposal away. Nothing is removed from memory, because it was never there.", live: true }),
       ];
   const item = row({
@@ -2645,7 +2653,8 @@ function paintAbout() {
       const item = row({
         tag: "fact",
         state: f.current ? "ok" : "idle",
-        title: f.erasedAt ? erasedLine(f.erasedAt) : (f.text || "(no text)"),
+        title: f.erasedAt ? erasedLine(f.erasedAt)
+          : f.leftOut ? Topics.WORDS.used_left_out : (f.text || "(no text)"),
         meta: marks,
         actions: [],
       });
@@ -2866,6 +2875,8 @@ function renderFacts() {
           // from the JSON export.
           whenLearned(f),
           whenNoticed(f),
+          // Topic controls: this fact's topic may not be used in answers.
+          topicMark(f),
         ],
         actions,
       });
@@ -2895,8 +2906,996 @@ function renderFacts() {
       list
     );
   } else {
-    dom.memoryFacts.replaceChildren(list);
+    // Topic controls: facts of a topic switched Off are left out of this
+    // list; how many is said, with a way to the Topics.
+    const kept = topicsHiddenNode(body.topics_hidden);
+    dom.memoryFacts.replaceChildren(...(kept ? [kept, list] : [list]));
   }
+}
+
+/* ==========================================================================
+   Topics (the owner's request of 2026-09-30; docs/TOPIC-CONTROLS-DESIGN.md,
+   Slice contract C1-C10; JARVIS-API.md section 107; topics.js).
+
+   Every saved fact sits under one topic, and each topic has one of four
+   modes: learn and use, use but don't learn, learn but don't use, or off. The
+   PC enforces the modes and decides which changes need an approval card; this
+   window carries the owner's taps to it through brain/topics.rs (its own
+   commands, not brain_read). A change that raises a card comes back "waiting":
+   the row says so, and this window reads the topics again every two seconds
+   until the card has ended, then shows the PC's own sentence about how it
+   ended. Undo is just another change, sent the same way.
+
+   Topic names are the owner's words: only ever set as text, never stored in
+   this window (not in localStorage, not as a draft), and taken out by Rust
+   while "Hide memory lists and chat history" is on or App lock has locked -
+   the rows then read "Topic N, X facts, mode", and "Check these", "Show them"
+   and the row menus are not drawn at all. The picker still works then.
+   ========================================================================== */
+
+const tp = {
+  view: null, missing: false, error: "", loading: false, again: false, at: 0,
+  // {text, undo: {id, mode} | null}: the quiet line above the rows.
+  notice: null,
+  // The card being waited on: polled until it ends (topics.js LIMITS.pollMs).
+  timer: null, sawWaiting: false, pollUntil: 0,
+  // The topic whose "More" is open (an id, 0 for none).
+  menu: 0,
+  // "Check these": {facts, next, total, loading, error} or null.
+  review: null,
+  // "Show them": topic id -> {facts, next, loading, error}.
+  shown: {},
+  // The one dialog open (an element) and the control that had the keyboard.
+  dlg: null, dlgReturn: "",
+  focusNext: "", lastFocus: "",
+};
+const TOPICS_READ_MS = 15000;
+const TOPICS_POLL_MAX_MS = 10 * 60 * 1000;
+
+function takeTopics(view) {
+  if (view.listsHidden) {
+    // Nothing the owner wrote stays drawn: the check list, "Show them" and
+    // every open form go with the names.
+    tp.review = null;
+    tp.shown = {};
+    tp.menu = 0;
+    closeTopicDialog();
+  }
+  tp.view = view;
+  if (view.waiting) {
+    tp.sawWaiting = true;
+  } else if (tp.sawWaiting) {
+    // The card that was up has ended: say how, in the PC's own sentence, and
+    // read the lists again (a mode may have changed under them).
+    tp.sawWaiting = false;
+    const words = Topics.endedWords(view);
+    if (words) setTopicsNotice(words, null);
+    refreshMemory();
+  }
+  ensureTopicsPoll();
+}
+
+function ensureTopicsPoll() {
+  const need = Boolean(tp.view && tp.view.waiting) || tp.sawWaiting;
+  if (need && !tp.timer) {
+    tp.pollUntil = Date.now() + TOPICS_POLL_MAX_MS;
+    tp.timer = setInterval(() => {
+      if (Date.now() > tp.pollUntil) {
+        tp.sawWaiting = false;
+        ensureTopicsPoll();
+        return;
+      }
+      if (!tp.loading) loadTopics();
+    }, Topics.LIMITS.pollMs);
+  } else if (!need && tp.timer) {
+    clearInterval(tp.timer);
+    tp.timer = null;
+  }
+}
+
+async function loadTopics() {
+  if (!IS_TAURI) return;
+  if (tp.loading) {
+    tp.again = true;
+    return;
+  }
+  tp.loading = true;
+  try {
+    const out = await invoke("brain_topics");
+    const view = Topics.readTopics(out);
+    if (view) {
+      tp.missing = false;
+      tp.error = "";
+      takeTopics(view);
+    } else if (Topics.isRefusal(out) && out.error === "unavailable") {
+      tp.missing = true;
+      tp.view = null;
+      tp.error = "";
+    } else {
+      tp.error = Topics.isRefusal(out) ? Topics.refusalWords(out) : Topics.WORDS.missing;
+    }
+  } catch (error) {
+    const words = errorText(error);
+    if (words === Topics.WORDS.missing) {
+      tp.missing = true;
+      tp.view = null;
+      tp.error = "";
+    } else {
+      tp.error = words;
+    }
+  } finally {
+    tp.loading = false;
+    tp.at = Date.now();
+  }
+  if (tp.again) {
+    tp.again = false;
+    await loadTopics();
+    return;
+  }
+  if (state.view === "memory") paintTopics();
+}
+
+function renderTopics() {
+  paintTopics();
+  if (IS_TAURI && !tp.loading && Date.now() - tp.at > TOPICS_READ_MS) loadTopics();
+}
+
+function setTopicsNotice(text, undo) {
+  tp.notice = text ? { text, undo: undo || null } : null;
+  if (text) announce(text, "polite");
+  if (state.view === "memory") paintTopics();
+}
+
+/** One write. Refused on a stale link, the PC's own words for a refusal.
+ *  Returns {out} or {error, code}. */
+async function topicsCall(cmd, args) {
+  if (!linkWords(currentLink()).canAct) return { error: STALE_TITLE, code: "stale" };
+  try {
+    const out = await invoke(cmd, args);
+    if (Topics.isRefusal(out)) return { error: Topics.refusalWords(out), code: out.error };
+    return { out };
+  } catch (error) {
+    return { error: errorText(error), code: "failed" };
+  }
+}
+
+/** A write's answer: 202 (a card is up: nothing changed yet) or the new view.
+ *  Returns "waiting" or "done". */
+async function takeTopicsWrite(out) {
+  if (Topics.isWaitingAnswer(out)) {
+    tp.sawWaiting = true;
+    tp.notice = null;
+    ensureTopicsPoll();
+    await loadTopics();
+    return "waiting";
+  }
+  const view = Topics.readTopics(out);
+  if (view) takeTopics(view);
+  else await loadTopics();
+  return "done";
+}
+
+/** Changes one topic's mode. `undo` false for an Undo itself. */
+async function topicSetMode(id, mode, { undo = true } = {}) {
+  const before = Topics.topicById(tp.view, id);
+  const r = await topicsCall("brain_topics_mode", { id, mode });
+  if (r.error) return r;
+  const kind = await takeTopicsWrite(r.out);
+  if (kind === "waiting") return { waiting: true };
+  const now = Topics.topicById(tp.view, id);
+  if (r.out.changed !== false && now) {
+    const name = Topics.displayName(tp.view, now);
+    const said = undo
+      ? `${name} is now: ${Topics.modeName(now.mode)}.`
+      : `${name} is back to: ${Topics.modeName(now.mode)}.`;
+    setTopicsNotice(said, undo && before ? { id, mode: before.mode } : null);
+  }
+  await refreshMemory();
+  return { done: true };
+}
+
+/** One change to the list (add, rename, style, move, words, private, delete). */
+async function topicEdit(edit) {
+  const r = await topicsCall("brain_topics_edit", { edit });
+  if (r.error) return r;
+  const kind = await takeTopicsWrite(r.out);
+  if (kind === "waiting") return { waiting: true, out: r.out };
+  if (edit.op === "delete") await refreshMemory();
+  return { done: true, out: r.out };
+}
+
+/* ---- The dialog every form uses ----------------------------------------- */
+
+let topicDialogSeq = 0;
+
+function closeTopicDialog() {
+  const dlg = tp.dlg;
+  if (!dlg) return;
+  tp.dlg = null;
+  if (typeof dlg.close === "function" && dlg.open) dlg.close();
+  else dlg.remove();
+}
+
+/** Opens a modal dialog with a title, a body and footer buttons. `build`
+ *  gets the body element and returns the footer's buttons. The dialog sits on
+ *  the page, outside the section, so a repaint of the rows never destroys it.
+ *  Escape and Cancel close it and the keyboard goes back to where it was. */
+function openTopicDialog(title, build) {
+  closeTopicDialog();
+  const dlg = document.createElement("dialog");
+  dlg.className = "topics-dialog";
+  const titleId = `topics-dialog-title-${++topicDialogSeq}`;
+  const h = el("h3", "topics-dialog-title", title);
+  h.id = titleId;
+  dlg.setAttribute("aria-labelledby", titleId);
+  const body = el("div", "topics-dialog-body");
+  const error = el("p", "topics-dialog-error failed");
+  error.setAttribute("role", "alert");
+  error.hidden = true;
+  const foot = el("div", "row-actions topics-dialog-foot");
+  const api = {
+    dlg,
+    body,
+    say(words) {
+      error.textContent = words || "";
+      error.hidden = !words;
+    },
+    close: () => closeTopicDialog(),
+  };
+  const buttons = build(body, api) || [];
+  for (const b of buttons) foot.append(b);
+  dlg.append(h, body, error, foot);
+  tp.dlgReturn = tp.lastFocus || "";
+  dlg.addEventListener("close", () => {
+    if (tp.dlg === dlg) tp.dlg = null;
+    dlg.remove();
+    tp.focusNext = tp.focusNext || tp.dlgReturn;
+    paintTopics();
+  });
+  document.body.append(dlg);
+  tp.dlg = dlg;
+  if (typeof dlg.showModal === "function") dlg.showModal();
+  else dlg.setAttribute("open", "");
+  const first = dlg.querySelector("input:checked, input, select, textarea") || dlg.querySelector("button");
+  if (first) first.focus({ preventScroll: true });
+  return api;
+}
+
+function cancelButton() {
+  return button(Topics.APP_WORDS.cancel, () => closeTopicDialog());
+}
+
+/* ---- The four-choice picker (contract C4) ------------------------------- */
+
+function openModePicker(id) {
+  const v = tp.view;
+  const t = Topics.topicById(v, id);
+  if (!t || Topics.isWaitingOn(v, id)) return;
+  const name = Topics.displayName(v, t);
+  let token = 0;
+  let chosen = t.mode;
+  const preview = { line: "", card: "" };
+  openTopicDialog(name, (body, api) => {
+    body.append(el("p", "note", Topics.fill(Topics.WORDS.pick_line, { name })));
+    const set = el("fieldset", "topics-choices");
+    set.append(el("legend", "sr-only", name));
+    const lines = el("p", "topics-preview");
+    lines.setAttribute("aria-live", "polite");
+    const card = el("p", "topics-card-line");
+    card.setAttribute("aria-live", "polite");
+    let go = null;
+    const paintLines = () => {
+      lines.textContent = preview.line;
+      card.textContent = preview.card;
+      lines.hidden = !preview.line;
+      card.hidden = !preview.card;
+    };
+    Topics.MODES.forEach((m) => {
+      const label = el("label", "topics-choice");
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "topics-mode";
+      input.value = m.id;
+      input.checked = m.id === t.mode;
+      const said = el("span", "topics-choice-name", m.name);
+      const sentence = el("span", "topics-choice-sentence", m.sentence);
+      sentence.id = `topics-choice-${topicDialogSeq}-${m.id}`;
+      input.setAttribute("aria-describedby", sentence.id);
+      label.append(input, said, sentence);
+      input.addEventListener("change", async () => {
+        chosen = m.id;
+        api.say("");
+        preview.line = "";
+        preview.card = "";
+        paintLines();
+        if (go) go.disabled = m.id === t.mode || go.dataset.busy === "true";
+        if (m.id === t.mode) return;
+        const mine = ++token;
+        try {
+          const out = await invoke("brain_topics_preview", { id, mode: m.id });
+          if (mine !== token) return;
+          if (Topics.isRefusal(out)) {
+            api.say(Topics.refusalWords(out));
+            return;
+          }
+          const got = Topics.previewLines(out, name);
+          preview.line = got.line;
+          preview.card = got.cardLine;
+          paintLines();
+        } catch (error) {
+          if (mine === token) api.say(errorText(error));
+        }
+      });
+      set.append(label);
+    });
+    body.append(set, lines, card);
+    paintLines();
+    go = button(Topics.APP_WORDS.change, async () => {
+      if (chosen === t.mode) return;
+      api.say("");
+      const r = await topicSetMode(id, chosen);
+      if (r.error) {
+        api.say(r.error);
+        return;
+      }
+      closeTopicDialog();
+    }, { live: true });
+    go.disabled = true;
+    go.dataset.fkey = "topics-change";
+    return [go, cancelButton()];
+  });
+}
+
+/* ---- Add, rename, colour and icon, keywords ----------------------------- */
+
+function colourPicker(current) {
+  const set = el("fieldset", "topics-palette");
+  set.append(el("legend", "", Topics.APP_WORDS.colour_label));
+  Topics.COLOURS.forEach((c) => {
+    const label = el("label", "topics-swatch-choice");
+    label.dataset.colour = String(c.slot);
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "topics-colour";
+    input.value = String(c.slot);
+    input.checked = c.slot === current;
+    const dot = el("span", "topics-swatch");
+    dot.setAttribute("aria-hidden", "true");
+    label.append(input, dot, el("span", "topics-swatch-name", c.name));
+    set.append(label);
+  });
+  return set;
+}
+
+function iconPicker(current) {
+  const set = el("fieldset", "topics-icons");
+  set.append(el("legend", "", Topics.APP_WORDS.icon_label));
+  Topics.ICONS.forEach((name) => {
+    const label = el("label", "topics-icon-choice");
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = "topics-icon";
+    input.value = name;
+    input.checked = name === current;
+    label.append(input, Topics.topicIconNode(name), el("span", "topics-icon-name", name));
+    set.append(label);
+  });
+  return set;
+}
+
+const pickedValue = (root, name) => {
+  const on = root.querySelector(`input[name="${name}"]:checked`);
+  return on ? on.value : null;
+};
+
+/** add | rename | style | words. Names and keywords are typed here and go to
+ *  the PC; nothing is kept in this window. */
+function openTopicForm(kind, id) {
+  const v = tp.view;
+  const t = kind === "add" ? null : Topics.topicById(v, id);
+  if (kind !== "add" && !t) return;
+  if (v && v.listsHidden) return;
+  const title = kind === "add" ? Topics.WORDS.add_title
+    : kind === "rename" ? Topics.APP_WORDS.rename
+      : kind === "style" ? Topics.APP_WORDS.colour_icon : Topics.APP_WORDS.keywords;
+  openTopicDialog(title, (body, api) => {
+    let nameBox = null;
+    let wordsBox = null;
+    if (kind === "add" || kind === "rename") {
+      const label = el("label", "lbl", Topics.WORDS.name_label);
+      nameBox = document.createElement("input");
+      nameBox.type = "text";
+      nameBox.className = "field";
+      nameBox.maxLength = Topics.LIMITS.nameMax;
+      nameBox.autocomplete = "off";
+      nameBox.spellcheck = false;
+      nameBox.value = t ? t.name : "";
+      label.append(nameBox);
+      body.append(label);
+    }
+    if (kind === "add" || kind === "style") {
+      body.append(colourPicker(t ? t.colour : Topics.nextColour(v)));
+      body.append(iconPicker(t ? t.icon : "folder"));
+    }
+    if (kind === "add" || kind === "words") {
+      const label = el("label", "lbl", Topics.WORDS.words_label);
+      wordsBox = document.createElement("textarea");
+      wordsBox.className = "field";
+      wordsBox.rows = 3;
+      wordsBox.spellcheck = false;
+      wordsBox.value = t ? t.words.join(", ") : "";
+      label.append(wordsBox);
+      body.append(label);
+    }
+    const save = button(Topics.APP_WORDS.save, async () => {
+      api.say("");
+      const edit = { op: kind, id: t ? t.id : undefined };
+      if (nameBox) {
+        const clean = Topics.cleanName(nameBox.value);
+        if (!clean) {
+          api.say(Topics.ERRORS.bad_name);
+          return;
+        }
+        edit.name = clean;
+      }
+      if (wordsBox) {
+        const words = Topics.cleanWords(wordsBox.value);
+        if (words === null) {
+          api.say(Topics.ERRORS.bad_words);
+          return;
+        }
+        edit.words = words;
+      }
+      if (kind === "add" || kind === "style") {
+        edit.colour = Number(pickedValue(body, "topics-colour"));
+        edit.icon = pickedValue(body, "topics-icon");
+      }
+      const r = await topicEdit(edit);
+      if (r.error) {
+        api.say(r.error);
+        return;
+      }
+      if (kind === "add" && r.out && Number.isInteger(r.out.id)) tp.focusNext = `mode-${r.out.id}`;
+      closeTopicDialog();
+    }, { live: true });
+    save.dataset.fkey = "topics-save";
+    if (nameBox) {
+      nameBox.addEventListener("keydown", (event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          save.click();
+        }
+      });
+    }
+    return [save, cancelButton()];
+  });
+}
+
+/* ---- Delete: its facts are kept, and go to a topic the owner picks ------- */
+
+function openDeleteDialog(id) {
+  const v = tp.view;
+  const t = Topics.topicById(v, id);
+  if (!t || t.system || (v && v.listsHidden)) return;
+  const homes = Topics.deleteDestinations(v, id);
+  openTopicDialog(Topics.displayName(v, t), (body, api) => {
+    body.append(el("p", "note", Topics.WORDS.confirm_delete));
+    const set = el("fieldset", "topics-choices");
+    set.append(el("legend", "", Topics.WORDS.delete_where));
+    const warn = el("p", "topics-card-line");
+    warn.setAttribute("aria-live", "polite");
+    warn.hidden = true;
+    let chosen = 0;
+    let go = null;
+    homes.forEach((home) => {
+      const label = el("label", "topics-choice");
+      const input = document.createElement("input");
+      input.type = "radio";
+      input.name = "topics-home";
+      input.value = String(home.id);
+      const said = el("span", "topics-choice-name", Topics.displayName(v, home));
+      label.append(input, said, el("span", "topics-choice-sentence", Topics.modeName(home.mode)));
+      input.addEventListener("change", () => {
+        chosen = home.id;
+        const words = Topics.deleteWarning(v, t, home);
+        warn.textContent = words;
+        warn.hidden = !words;
+        if (go) go.disabled = go.dataset.busy === "true";
+      });
+      set.append(label);
+    });
+    body.append(set, warn);
+    go = button(Topics.APP_WORDS.delete, async () => {
+      if (!chosen) {
+        api.say(Topics.ERRORS.needs_destination);
+        return;
+      }
+      api.say("");
+      const r = await topicEdit({ op: "delete", id, moveTo: chosen });
+      if (r.error) {
+        api.say(r.error);
+        return;
+      }
+      tp.menu = 0;
+      closeTopicDialog();
+    }, { live: true, danger: true });
+    go.disabled = true;
+    return [go, cancelButton()];
+  });
+}
+
+/* ---- "Check these": the facts Jarvis sorted by guessing ----------------- */
+
+async function loadReview(after) {
+  const r = tp.review;
+  if (!r) return;
+  r.loading = true;
+  r.error = "";
+  paintTopics();
+  try {
+    const args = { limit: Topics.LIMITS.batch };
+    if (after) args.after = after;
+    const out = await invoke("brain_topics_review", args);
+    const got = Topics.readFacts(out);
+    if (!tp.review) return;
+    if (got && got.listsHidden) {
+      tp.review = null;
+    } else if (got) {
+      r.facts = got.facts;
+      r.next = got.next;
+      r.total = got.total;
+    } else {
+      r.error = Topics.isRefusal(out) ? Topics.refusalWords(out) : Topics.WORDS.missing;
+    }
+  } catch (error) {
+    r.error = errorText(error);
+  } finally {
+    r.loading = false;
+  }
+  paintTopics();
+}
+
+function openReview() {
+  tp.review = { facts: [], next: null, total: 0, loading: true, error: "", from: "" };
+  tp.focusNext = "review-close";
+  loadReview(null);
+}
+
+function closeReview() {
+  tp.review = null;
+  tp.focusNext = "check";
+  paintTopics();
+}
+
+async function confirmBatch() {
+  const r = tp.review;
+  if (!r || !r.facts.length) return;
+  const ids = r.facts.map((f) => f.id);
+  const res = await topicsCall("brain_topics_file", { ids, confirm: true });
+  if (res.error) {
+    r.error = res.error;
+    paintTopics();
+    return;
+  }
+  const view = Topics.readTopics(res.out);
+  if (view) takeTopics(view);
+  // The confirmed facts are off the list now: read it again from the top.
+  await loadReview(null);
+}
+
+async function fileFact(fact, topicId) {
+  const r = tp.review;
+  if (!r) return;
+  const res = await topicsCall("brain_topics_file", { ids: [fact.id], topicId });
+  if (res.error) {
+    r.error = res.error;
+    paintTopics();
+    return;
+  }
+  const view = Topics.readTopics(res.out);
+  if (view) takeTopics(view);
+  r.facts = r.facts.filter((f) => f.id !== fact.id);
+  r.error = "";
+  if (!r.facts.length) await loadReview(null);
+  else paintTopics();
+  await refreshMemory();
+}
+
+function reviewNode(v) {
+  const r = tp.review;
+  const box = el("section", "topics-review");
+  box.setAttribute("aria-label", Topics.checkButtonLabel(v.unchecked));
+  const head = el("div", "topics-review-head");
+  head.append(el("h3", "topics-review-title", Topics.checkButtonLabel(v.unchecked)));
+  box.append(head);
+  if (r.error) box.append(el("p", "empty failed", r.error));
+  if (r.loading && !r.facts.length) {
+    box.append(el("p", "empty", Topics.APP_WORDS.reading));
+  } else if (!r.facts.length && !r.error) {
+    box.append(el("p", "empty", Topics.APP_WORDS.nothing_to_check));
+  }
+  for (const group of Topics.groupByTopic(r.facts)) {
+    const topic = Topics.topicById(v, group.topic) || Topics.topicById(v, Topics.LIMITS.unsortedId);
+    const name = topic ? Topics.displayName(v, topic) : Topics.WORDS.unsorted_name;
+    const gh = el("h4", "topics-review-group");
+    if (topic) gh.dataset.colour = String(topic.colour);
+    gh.append(Topics.topicIconNode(topic ? topic.icon : "flag"), el("span", "", name));
+    box.append(gh);
+    const list = el("ul", "topics-review-list");
+    for (const f of group.facts) {
+      const li = el("li", "topics-review-fact");
+      li.dataset.id = String(f.id);
+      li.append(el("span", "topics-review-text", f.text || "(no text)"));
+      const tags = el("span", "topics-tags");
+      if (f.how === "model") tags.append(el("span", "topics-tag", Topics.WORDS.check_guessed));
+      if (f.heldBack) tags.append(el("span", "topics-tag topics-tag-held", Topics.heldWords(name)));
+      if (tags.childNodes.length) li.append(tags);
+      const pick = document.createElement("select");
+      pick.className = "field topics-file-under";
+      pick.setAttribute("aria-label", `${Topics.APP_WORDS.file_under_label} (${(f.text || "").slice(0, 40)})`);
+      pick.append(new Option(Topics.APP_WORDS.file_under, ""));
+      for (const other of v.topics) {
+        if (other.id === f.topic) continue;
+        pick.append(new Option(Topics.displayName(v, other), String(other.id)));
+      }
+      liveButtons.add(pick);
+      syncLiveButton(pick);
+      pick.addEventListener("change", async () => {
+        const to = Number(pick.value);
+        if (!to) return;
+        pick.disabled = true;
+        await fileFact(f, to);
+      });
+      li.append(pick);
+      list.append(li);
+    }
+    box.append(list);
+  }
+  const foot = el("div", "row-actions");
+  if (r.facts.length) {
+    const right = button(Topics.WORDS.check_right, confirmBatch, { live: true });
+    right.dataset.fkey = "review-right";
+    foot.append(right);
+    if (r.next) {
+      foot.append(button(Topics.APP_WORDS.next_ten, () => loadReview(r.next)));
+    }
+  }
+  const close = button("Close", closeReview);
+  close.dataset.fkey = "review-close";
+  foot.append(close);
+  box.append(foot);
+  return box;
+}
+
+/* ---- "Show them": an Off topic's facts, read-only ------------------------ */
+
+async function loadShown(id) {
+  const s = tp.shown[id];
+  if (!s) return;
+  s.loading = true;
+  s.error = "";
+  paintTopics();
+  try {
+    const out = await invoke("brain_topics_hidden", { id });
+    const got = Topics.readFacts(out);
+    if (!tp.shown[id]) return;
+    if (got && got.listsHidden) {
+      delete tp.shown[id];
+    } else if (got) {
+      s.facts = got.facts;
+      s.next = got.next;
+    } else {
+      s.error = Topics.isRefusal(out) ? Topics.refusalWords(out) : Topics.WORDS.missing;
+    }
+  } catch (error) {
+    s.error = errorText(error);
+  } finally {
+    s.loading = false;
+  }
+  paintTopics();
+}
+
+function toggleShown(id) {
+  if (tp.shown[id]) {
+    delete tp.shown[id];
+    tp.focusNext = `show-${id}`;
+    paintTopics();
+    return;
+  }
+  tp.shown[id] = { facts: [], next: null, loading: true, error: "" };
+  tp.focusNext = `show-${id}`;
+  loadShown(id);
+}
+
+/** After a Forget or an Erase anywhere: the open "Show them" lists are read
+ *  again, so a fact just forgotten is not left on them. */
+function reloadShown() {
+  for (const id of Object.keys(tp.shown)) loadShown(Number(id));
+}
+
+function shownNode(id) {
+  const s = tp.shown[id];
+  const box = el("div", "topics-shown");
+  if (s.error) box.append(el("p", "empty failed", s.error));
+  if (s.loading && !s.facts.length) {
+    box.append(el("p", "empty", Topics.APP_WORDS.reading));
+    return box;
+  }
+  if (!s.facts.length && !s.error) {
+    box.append(el("p", "empty", Topics.APP_WORDS.no_facts));
+    return box;
+  }
+  const list = el("div", "rows");
+  for (const f of s.facts) {
+    const item = row({
+      tag: "hidden",
+      state: "idle",
+      title: f.text || "(no text)",
+      meta: [Topics.APP_WORDS.hidden_from_answers],
+      actions: [
+        button("Forget", async () => {
+          if (!window.confirm(forgetQuestion(f))) return;
+          await memoryWrite("brain_memory_forget", { id: f.id }, FORGOTTEN);
+        }, { danger: true, live: true, title: "Stop this being recalled. There is no undo." }),
+        button(ERASE_LABEL, () => eraseFact(f), { danger: true, live: true, title: ERASE_TITLE }),
+      ],
+    });
+    item.classList.add("topics-hidden-fact");
+    item.dataset.id = String(f.id);
+    list.append(item);
+  }
+  box.append(list);
+  return box;
+}
+
+/* ---- The section ---------------------------------------------------------- */
+
+function topicRow(v, t) {
+  const item = el("div", "topics-row");
+  item.setAttribute("role", "listitem");
+  item.dataset.colour = String(t.colour);
+  item.dataset.topic = String(t.id);
+  item.dataset.mode = t.mode;
+  const name = Topics.displayName(v, t);
+
+  const head = el("div", "topics-row-head");
+  const mark = el("span", "topics-mark");
+  mark.append(Topics.topicIconNode(t.icon));
+  head.append(mark, el("span", "topics-name", name), el("span", "topics-count", Topics.factCount(t.facts)));
+  item.append(head);
+
+  const tags = el("div", "topics-tags");
+  for (const tag of Topics.rowTags(t)) tags.append(el("span", `topics-tag topics-tag-${tag.kind}`, tag.text));
+  if (tags.childNodes.length) item.append(tags);
+
+  const acts = el("div", "topics-row-actions");
+  if (Topics.isWaitingOn(v, t.id)) {
+    const waiting = el("span", "topics-waiting", Topics.WORDS.waiting);
+    waiting.setAttribute("role", "status");
+    acts.append(waiting);
+  } else {
+    const modeBtn = button(Topics.modeName(t.mode), () => openModePicker(t.id));
+    modeBtn.classList.add("topics-mode");
+    modeBtn.setAttribute("aria-label", Topics.rowSpeech(v, t));
+    modeBtn.dataset.fkey = `mode-${t.id}`;
+    acts.append(modeBtn);
+  }
+  if (!v.listsHidden && t.mode === "off") {
+    const open = Boolean(tp.shown[t.id]);
+    const show = button(Topics.WORDS.show_them, () => toggleShown(t.id));
+    show.dataset.fkey = `show-${t.id}`;
+    show.setAttribute("aria-expanded", String(open));
+    acts.append(show);
+  }
+  if (!v.listsHidden && !t.system) {
+    const open = tp.menu === t.id;
+    const more = button(Topics.APP_WORDS.edit, () => {
+      tp.menu = open ? 0 : t.id;
+      tp.focusNext = `more-${t.id}`;
+      paintTopics();
+    });
+    more.dataset.fkey = `more-${t.id}`;
+    more.setAttribute("aria-expanded", String(open));
+    more.setAttribute("aria-label", `${Topics.APP_WORDS.edit}: ${name}`);
+    acts.append(more);
+  }
+  item.append(acts);
+
+  if (!v.listsHidden && !t.system && tp.menu === t.id) item.append(topicMenu(v, t));
+  if (!v.listsHidden && t.mode === "off" && tp.shown[t.id]) item.append(shownNode(t.id));
+  return item;
+}
+
+function topicMenu(v, t) {
+  const menu = el("div", "topics-menu");
+  menu.setAttribute("role", "group");
+  menu.setAttribute("aria-label", `${Topics.APP_WORDS.edit}: ${t.name}`);
+  const add = (label, fn, { title = "", danger = false, key = "" } = {}) => {
+    const b = button(label, fn, { live: true, title, danger });
+    if (key) b.dataset.fkey = `${key}-${t.id}`;
+    menu.append(b);
+    return b;
+  };
+  add(Topics.APP_WORDS.rename, () => openTopicForm("rename", t.id));
+  add(Topics.APP_WORDS.colour_icon, () => openTopicForm("style", t.id));
+  const up = Topics.moveTarget(v, t.id, -1);
+  const down = Topics.moveTarget(v, t.id, 1);
+  const mover = (label, before, key) => add(label, async () => {
+    const r = await topicEdit({ op: "move", id: t.id, before });
+    if (r.error) setTopicsNotice(r.error, null);
+  }, { key });
+  if (up !== undefined) mover(Topics.APP_WORDS.move_up, up, "up");
+  if (down !== undefined) mover(Topics.APP_WORDS.move_down, down, "down");
+  add(t.private ? Topics.APP_WORDS.not_private : Topics.APP_WORDS.mark_private, async () => {
+    const r = await topicEdit({ op: "private", id: t.id, private: !t.private });
+    if (r.error) setTopicsNotice(r.error, null);
+  }, { title: t.private ? Topics.WORDS.private_asks : "", key: "private" });
+  add(Topics.APP_WORDS.keywords, () => openTopicForm("words", t.id));
+  add(Topics.APP_WORDS.delete, () => openDeleteDialog(t.id), { danger: true, key: "delete" });
+  return menu;
+}
+
+function paintTopics() {
+  const root = $("topics-body");
+  if (!root) return;
+  const intro = $("topics-intro");
+  if (intro) intro.textContent = Topics.WORDS.intro;
+  const key = fkeyBefore(root, tp);
+  root.replaceChildren();
+  const done = () => {
+    fkeyAfter(root, tp.focusNext || key);
+    tp.focusNext = "";
+  };
+  if (tp.notice) {
+    const line = el("div", "topics-notice");
+    line.setAttribute("role", "status");
+    line.append(el("span", "", tp.notice.text));
+    if (tp.notice.undo) {
+      const undo = tp.notice.undo;
+      const b = button(Topics.APP_WORDS.undo, async () => {
+        tp.notice = null;
+        const r = await topicSetMode(undo.id, undo.mode, { undo: false });
+        if (r.error) setTopicsNotice(r.error, null);
+      }, { live: true });
+      b.dataset.fkey = "undo";
+      line.append(b);
+    }
+    root.append(line);
+  }
+  if (tp.missing) {
+    root.append(el("p", "empty", Topics.WORDS.missing));
+    return done();
+  }
+  const v = tp.view;
+  if (!v) {
+    const line = el("p", `empty${tp.error ? " failed" : ""}`,
+      tp.error ? `Could not read your topics: ${tp.error}` : Topics.APP_WORDS.reading);
+    if (tp.error) line.append(" ", button("Retry", loadTopics));
+    root.append(line);
+    return done();
+  }
+  if (tp.error) root.append(el("p", "empty failed", tp.error));
+  if (v.listsHidden) {
+    const hid = el("div", "private-hidden");
+    hid.append(el("p", "hint", Topics.APP_WORDS.hidden_note));
+    hid.append(button("Show", revealPrivate,
+      { title: "Asks Windows Hello - your PIN, fingerprint or face - then shows this list." }));
+    root.append(hid);
+  }
+  const sorting = Topics.sortingLine(v);
+  if (sorting) root.append(el("p", "note topics-sorting", sorting));
+  const guess = Topics.sortedGuessLine(v);
+  if (guess && !v.listsHidden) {
+    const line = el("div", "topics-guess");
+    line.append(el("p", "note", guess));
+    const check = button(Topics.checkButtonLabel(v.unchecked), openReview);
+    check.dataset.fkey = "check";
+    line.append(check);
+    root.append(line);
+  }
+  if (tp.review && !v.listsHidden) root.append(reviewNode(v));
+
+  const list = el("div", "topics-rows");
+  list.setAttribute("role", "list");
+  for (const t of v.topics) list.append(topicRow(v, t));
+  root.append(list);
+
+  const foot = el("div", "topics-foot");
+  if (!v.listsHidden) {
+    const atLimit = !Topics.canAdd(v);
+    const add = button(Topics.WORDS.add_button, () => openTopicForm("add"),
+      { live: true, title: atLimit ? Topics.APP_WORDS.at_limit : "" });
+    add.dataset.fkey = "add";
+    if (atLimit) {
+      add.disabled = true;
+      add.dataset.busy = "true";
+      add.title = Topics.APP_WORDS.at_limit;
+    }
+    foot.append(add);
+  }
+  const help = el("label", "lbl check topics-model-help");
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = v.modelHelp;
+  box.dataset.fkey = "model-help";
+  liveButtons.add(box);
+  syncLiveButton(box);
+  box.addEventListener("change", async () => {
+    const want = box.checked;
+    box.disabled = true;
+    const r = await topicsCall("brain_topics_settings", { modelHelp: want });
+    if (r.error) {
+      box.checked = !want;
+      setTopicsNotice(r.error, null);
+      return;
+    }
+    const view = Topics.readTopics(r.out);
+    if (view) takeTopics(view);
+    else await loadTopics();
+    paintTopics();
+  });
+  help.append(box, el("span", "", Topics.WORDS.model_help));
+  foot.append(help);
+  root.append(foot);
+  root.append(el("p", "hint topics-model-note", Topics.WORDS.model_help_note));
+  root.append(el("p", "hint topics-help", Topics.WORDS.help_plain));
+  done();
+}
+
+if (IS_TAURI) trackFkeys($("topics-body"), tp);
+
+// Private answers turned on or off, or a Show ran out: read the topics again.
+// Rust decides whether the names come back.
+if (IS_TAURI && TAURI.event && TAURI.event.listen) {
+  const rereadTopics = () => {
+    tp.at = 0;
+    if (state.view === "memory") loadTopics();
+  };
+  TAURI.event.listen("security-changed", rereadTopics);
+  TAURI.event.listen("private-hidden", rereadTopics);
+}
+
+/** The Jarvis bar sent the owner here (`open_brain: "topics"`), maybe with a
+ *  topic to open the picker for. Changes nothing until Change is tapped. */
+async function goToTopics(topicId) {
+  await showView("memory");
+  tp.at = 0;
+  await loadTopics();
+  const card = $("topics-card");
+  if (card) {
+    card.scrollIntoView({ block: "start" });
+    const h = $("topics-title");
+    if (h) h.focus({ preventScroll: true });
+  }
+  if (topicId && Topics.topicById(tp.view, topicId)) openModePicker(topicId);
+}
+
+/** The small tag on a fact whose topic is "Learn, but don't use". */
+function topicMark(f) {
+  return Topics.factTag(tp.view, f && f.topic);
+}
+
+/** "3 facts kept, hidden" over the facts list, with a way to the Topics. */
+function topicsHiddenNode(n) {
+  const words = Topics.keptHiddenLine(n);
+  if (!words) return null;
+  const line = el("p", "hint topics-hidden-line", `${words} `);
+  line.append(button(Topics.WORDS.title, () => {
+    const card = $("topics-card");
+    if (card) card.scrollIntoView({ block: "start" });
+    const h = $("topics-title");
+    if (h) h.focus({ preventScroll: true });
+  }));
+  return line;
+}
+
+/** The name of the topic a fact sits in, for "Paused: Work is off". */
+function topicNameOfFact(id) {
+  const rows = (state.data.memory_facts && state.data.memory_facts.facts) || [];
+  const found = rows.find((r) => r && Number(r.id) === Number(id))
+    || autoL.rows.find((r) => r && Number(r.id) === Number(id));
+  const t = found ? Topics.topicById(tp.view, found.topic) : null;
+  return t ? Topics.displayName(tp.view, t) : "this topic";
 }
 
 /* ==========================================================================
@@ -5026,7 +6025,8 @@ function savedFactsNode() {
       const item = row({
         tag: "auto",
         state: f.current ? "ok" : "idle",
-        title: f.erasedAt ? erasedLine(f.erasedAt) : (f.text || "(no text)"),
+        title: f.erasedAt ? erasedLine(f.erasedAt)
+          : f.leftOut ? Topics.WORDS.used_left_out : (f.text || "(no text)"),
         meta: marks,
         actions: past ? [] : [
           ...(acts.forget ? [button("Forget", () => forgetSaved(f),
@@ -5280,7 +6280,7 @@ function paintAutoList() {
       tag: "auto",
       state: "ok",
       title: f.text || "(no text)",
-      meta: [factMeta(f)],
+      meta: [factMeta(f), topicMark(f)],
       // Nothing is changed while the pane shows a past moment (memoryWrite).
       actions: past ? [] : [
         ...[pinButton(f)].filter(Boolean),
@@ -5432,7 +6432,11 @@ function paintProfile() {
       tag: "pinned",
       state: "ok",
       title: f.text || "(no text)",
-      meta: [f.added ? `pinned ${ago(f.added)}` : ""],
+      meta: [
+        f.added ? `pinned ${ago(f.added)}` : "",
+        // Topic controls: a pin in a topic that may not be used is not read.
+        f.paused ? Topics.pinPausedLine(topicNameOfFact(f.id)) : "",
+      ],
       actions: past ? [] : [
         button(UNPIN_LABEL, () => setPinned(f, false), { live: true, title: UNPIN_TITLE }),
       ],
@@ -11502,6 +12506,10 @@ onEvent((frame) => {
   } else if (place === HISTORY_PLACE) {
     await showView("history");
     await applyHistoryFilePlace(takePlaceExtras());
+  } else if (place === Topics.TOPICS_PLACE) {
+    // "Switch off my work topic", said or typed: the picker opens for that
+    // topic (topic controls). Nothing changes until Change is tapped.
+    await goToTopics(Topics.readTopicPlace(takePlaceExtras()).topicId);
   } else {
     await showView("memory");
   }
@@ -11515,6 +12523,8 @@ async function goToPlace(place = takeAnyPlace()) {
   } else if (place === HISTORY_PLACE) {
     await showView("history");
     await applyHistoryFilePlace(takePlaceExtras());
+  } else if (place === Topics.TOPICS_PLACE) {
+    await goToTopics(Topics.readTopicPlace(takePlaceExtras()).topicId);
   }
 }
 window.addEventListener("focus", () => goToPlace());

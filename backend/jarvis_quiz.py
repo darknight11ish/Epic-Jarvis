@@ -354,9 +354,21 @@ def grade_answer(passage: str, question: str, answer: str) -> tuple:
 def grader_verified() -> bool:
     """True only if quiz_grader_results.json shows the grader separates right
     from wrong on at least 12 cases, 80% or better, with no injection winning.
-    No file, an unreadable file or any missing number is false."""
+    No file, an unreadable file or any missing number is false.
+
+    A model call handed in by `configure(call=...)` may carry an `active_model`
+    function (jarvis_second_card.study_call does): the name of the model that
+    answered the last call when it was NOT the everyday one ("" otherwise). A
+    result measured on a different model does not vouch for that one - the
+    marks stay "Jarvis's guess" until eval_quiz_grader.py has been run on it."""
     try:
         d = json.loads(RESULTS_PATH.read_text(encoding="utf-8"))
+        other = ""
+        probe = getattr(_STATE["call"], "active_model", None)
+        if callable(probe):
+            other = str(probe() or "")
+        if other and d.get("model") != other:
+            return False
         total, correct = d["total"], d["correct"]
         inj, wins = d["injection_cases"], d["injection_wins"]
         for n in (total, correct, inj, wins):

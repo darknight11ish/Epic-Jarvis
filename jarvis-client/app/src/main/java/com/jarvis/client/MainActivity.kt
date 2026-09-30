@@ -1087,6 +1087,9 @@ class MainActivity : FragmentActivity() {
         // only) - docs/JARVIS-API.md sections 18.1 and 4, 2026-09-25.
         val temporaryChat by chat.temporary.collectAsState()
         val usedIds by chat.usedIds.collectAsState()
+        // Topic controls (2026-09-30): how many facts the owner's topic settings kept out
+        // of the answer on screen - a count only ([com.jarvis.client.net.Topics]).
+        val topicsLeftOut by chat.topicsLeftOut.collectAsState()
         // The crisis help line (jarvis_wellbeing.py, 2026-09-27): whether
         // the answer on screen is shown as a calm, plain panel.
         val crisisAnswer by chat.crisis.collectAsState()
@@ -1212,6 +1215,17 @@ class MainActivity : FragmentActivity() {
             filingQuery = target.query
             nav.go(Screen.HISTORY)
             chat.consumeFileUnder()
+        }
+        // "Switch off my work topic" (X-Jarvis-Route `open_brain: "topics"` with
+        // `topic_id`, docs/TOPIC-CONTROLS-DESIGN.md C4): Brain is opened at Topics by
+        // the `open_settings` path above (OpenPlace, "topics"); the topic id goes to
+        // the plate, which shows the four-choice picker and changes NOTHING until the
+        // owner taps Change.
+        val topicPickTarget by chat.topicPick.collectAsState()
+        LaunchedEffect(topicPickTarget) {
+            val target = topicPickTarget ?: return@LaunchedEffect
+            JarvisRuntime.requestTopicPick(target)
+            chat.consumeTopicPick()
         }
         // An empty Quick Settings tile slot was tapped: the same one-time
         // scroll, to "Quick Settings tiles".
@@ -2702,6 +2716,7 @@ class MainActivity : FragmentActivity() {
                                 .takeIf { keepAliveOfferShown },
                             temporary = temporaryChat,
                             usedIds = usedIds,
+                            topicsLeftOut = topicsLeftOut,
                             answerTurnId = answerTurnId,
                             answerTableId = answerTableId,
                             crisisAnswer = crisisAnswer,

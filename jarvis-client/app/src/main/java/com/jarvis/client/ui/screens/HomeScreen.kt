@@ -509,6 +509,12 @@ data class HomeState(
      */
     val usedIds: List<Long> = emptyList(),
     /**
+     * How many facts the owner's topic settings kept out of the answer on
+     * screen ([com.jarvis.client.net.Topics.leftOutLine]) - a count, so the
+     * lock settings do not hide it.
+     */
+    val topicsLeftOut: Int = 0,
+    /**
      * The answer on screen's own id ([com.jarvis.client.net.Feedback];
      * already read for the right/wrong mark) - also what "Where this came
      * from" fetches by, feasibility I42/I132
@@ -1355,6 +1361,7 @@ private fun ConversationList(
                     onShow = actions.onShowPrivate,
                     load = actions.onLoadUsed,
                     forget = actions.onForgetUsed,
+                    leftOut = state.topicsLeftOut,
                 ),
                 sources = SourcesAnswer(
                     turnId = state.answerTurnId,
@@ -2790,6 +2797,18 @@ private fun Reply(
                         )
                     }
                 }
+                // "Left out 2 facts because of your topic settings" (docs/
+                // TOPIC-CONTROLS-DESIGN.md C4): beside "Used 2 memories". A count,
+                // never words, so the lock settings do not hide it.
+                com.jarvis.client.net.Topics.leftOutLine(used?.leftOut ?: 0)?.let { line ->
+                    Gap(4)
+                    Text(
+                        line,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textMid,
+                        modifier = Modifier.liveStatus(),
+                    )
+                }
                 // "Where this came from" (feasibility I42/I132): fetched
                 // once, quietly, as soon as this answer's turn_id is known
                 // - there is no cheap count the way "Used 2 memories" has
@@ -2957,6 +2976,8 @@ internal data class UsedAnswer(
     val onShow: () -> Unit,
     val load: suspend (List<Long>) -> com.jarvis.client.net.MemoryUsed.Read,
     val forget: suspend (Long) -> Pair<Boolean, String>,
+    /** Facts the topic settings kept out of this answer - a count ([com.jarvis.client.net.Topics.leftOutLine]). */
+    val leftOut: Int = 0,
 )
 
 /** What "Where this came from" under the answer needs (feasibility

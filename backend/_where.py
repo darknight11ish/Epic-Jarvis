@@ -387,6 +387,9 @@ SHIPPED = (
     # use), the sorting, the one card. The search filter is in the rebuilt
     # jarvis_memory.py; test_topics_leaks.py lists every reader of facts.
     "jarvis_topics.py",
+    # "Referee suggestions" (2026-09-30; referee.patch): the propose-only
+    # "This looks done - tick it?" card. No route, no tool, no model.
+    "jarvis_referee.py",
 )
 
 

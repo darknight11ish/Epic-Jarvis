@@ -67,6 +67,7 @@ import {
   forgetQuestion,
 } from "./auto-learn.js";
 import { DONE_LINE } from "./coming-up.js";
+import { leftOutLine, WORDS as TOPIC_WORDS } from "./topics.js";
 
 /** The strip's line: the label beside it already says "Temporary chat". */
 const TEMPORARY_STRIP_LINE = TEMPORARY_LINE.replace(/^Temporary chat:\s*/, "");
@@ -248,6 +249,10 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     if (a.done && outcome === "unconfirmed") lines.push(TEMPORARY_NOT_CONFIRMED);
     if (outcome === "game") lines.push(GAME_TEMPORARY);
     if (a.route && a.route.remember_off === true) lines.push(REMEMBER_OFF);
+    // Topic controls: how many facts the owner's topic settings kept out of
+    // this answer. A count, so it is shown whatever the lock settings say.
+    const leftOut = a.route ? leftOutLine(a.route.topics_left_out) : "";
+    if (leftOut) lines.push(leftOut);
     // Answered WITHOUT the model (a timer, a reminder, the to-do list -
     // JARVIS-API.md section 21): the small "done" line both apps show.
     if (a.route && typeof a.route.quick === "string" && a.route.quick) lines.push(DONE_LINE);
@@ -342,7 +347,9 @@ export function createAnswerMemory({ box, lineButton, list, note, invoke, isStal
     if (f.erasedAt) {
       item.append(el("span", "answer-used-text erased", erasedLine(f.erasedAt)));
     } else {
-      item.append(el("span", "answer-used-text", f.text || "(no words)"));
+      // A fact whose topic was switched off since: the PC sends no words.
+      item.append(el("span", "answer-used-text",
+        f.leftOut ? TOPIC_WORDS.used_left_out : f.text || "(no words)"));
     }
     const marks = el("span", "answer-used-marks");
     if (f.pinned) {

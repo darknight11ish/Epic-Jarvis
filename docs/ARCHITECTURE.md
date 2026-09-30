@@ -2254,8 +2254,9 @@ they landed):
 
 - **The second graphics card** (added 2026-09-24), built and ALL OFF.
   `jarvis_second_card.py` detects a capable second card (Turing or newer,
-  10 GB or more), and five switches - longer conversations, pictures,
-  background learning, browser control, the wiki builder - each turned
+  10 GB or more), and seven switches - longer conversations, pictures,
+  background learning, browser control, the wiki builder, and (2026-09-30,
+  JARVIS-API section 108) the study helper and referee suggestions - each turned
   on by one approval card (`second_card_enable`, the same four steps as
   section 3) and only while that card is detected. When one is on, a second
   Ollama runs on `127.0.0.1:11435`, pinned to that card by its id; chat,

@@ -1238,6 +1238,44 @@ class JarvisApi(
         }
 
     /**
+     * Topic controls (docs/JARVIS-API.md section 107): a read (`json` null,
+     * a GET - the list, a preview, a review batch, "Show them") or ONE change
+     * (a POST of `json`). The path comes from [Topics] and nothing outside
+     * `/api/topics` is sent. The status and body come back whole
+     * ([Topics.Reply]): a 202 (a card was raised), a 404 the PC sent itself
+     * ("that topic is not there any more") and a 404 from a PC without the
+     * routes all read differently. Carries the pairing token and
+     * `X-Jarvis-Client: hud` like every call ([authed]); neither is logged.
+     */
+    suspend fun topicsCall(path: String, json: String?): ApiResult<Topics.Reply> =
+        withContext(Dispatchers.IO) {
+            if (path != Topics.TOPICS_PATH && !path.startsWith(Topics.TOPICS_PATH + "/") &&
+                !path.startsWith(Topics.TOPICS_PATH + "?")
+            ) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a topics route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val builder = Request.Builder().url(target)
+            if (json == null) {
+                builder.get()
+            } else {
+                builder.post(json.toRequestBody("application/json".toMediaType()))
+            }
+            val req = builder.authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Topics.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * "Inbox tidy by voice" (docs/JARVIS-API.md section 95): the status (a
      * GET of [InboxTidy.PATH] - counts and the PC's own words, never a sender
      * or a subject) or Undo (a POST of an empty object to

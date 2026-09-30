@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-topics-review"
+description = "Enables the brain_topics_review command without any pre-configured scope."
+commands.allow = ["brain_topics_review"]
+
+[[permission]]
+identifier = "deny-brain-topics-review"
+description = "Denies the brain_topics_review command without any pre-configured scope."
+commands.deny = ["brain_topics_review"]

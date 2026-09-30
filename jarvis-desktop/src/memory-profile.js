@@ -80,7 +80,9 @@ export function readProfile(answer) {
   const facts = available ? a.facts : [];
   const rows = facts
     .filter((f) => f && Number.isInteger(f.id))
-    .map((f) => ({ id: f.id, text: text(f.text), added: num(f.added) }));
+    // `paused`: the fact's topic may not be used, so it is not read with
+    // questions until the topic is back on (topic controls).
+    .map((f) => ({ id: f.id, text: text(f.text), added: num(f.added), paused: f.paused === true }));
   const chars = num(a.chars);
   return {
     available,

@@ -1873,6 +1873,22 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
     {
         out.insert("file_under".to_string(), serde_json::Value::String(id));
     }
+    // Topic controls (docs/TOPIC-CONTROLS-DESIGN.md C1, JARVIS-API.md section
+    // 107): `topics_left_out` is how many facts the owner's topic settings
+    // kept out of this answer (a count, so it is not hidden by the lock
+    // settings), and `topic_id` is the topic a spoken "switch off my work
+    // topic" opens the picker for (`open_brain: "topics"`; an id, no name).
+    // Whole numbers only; anything else is left out.
+    if let Some(n) = route.get("topics_left_out").and_then(|v| v.as_u64()) {
+        out.insert("topics_left_out".to_string(), serde_json::json!(n));
+    }
+    if let Some(n) = route
+        .get("topic_id")
+        .and_then(|v| v.as_u64())
+        .filter(|n| (1..=999_999).contains(n))
+    {
+        out.insert("topic_id".to_string(), serde_json::json!(n));
+    }
     // How many remembered facts went into the question - a count, never
     // which ones. With `gate: "private"` it is how the quickbar knows not to
     // read a voice question's answer aloud (docs/JARVIS-API.md section 16,
@@ -5963,6 +5979,37 @@ mod turn_tests {
         assert_eq!(got["quick"], "forget_range");
         let odd = super::route_line_from_header(r#"{"lane": "x", "open_brain": 3}"#).unwrap();
         assert!(!odd.contains("open_brain"), "{odd}");
+    }
+
+    /// Topic controls (2026-09-30): `open_brain: "topics"` opens the picker for
+    /// `topic_id`, and `topics_left_out` is the "Left out N facts" count. Both
+    /// pass on as whole numbers (the id and the count carry no name); anything
+    /// else is left out.
+    #[test]
+    fn the_route_line_carries_the_topic_fields_as_numbers_only() {
+        let line = super::route_line_from_header(
+            r#"{"lane": "x", "quick": "topic_picker", "open_brain": "topics", "topic_id": 3, "topics_left_out": 2}"#,
+        )
+        .unwrap();
+        let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(got["open_brain"], "topics");
+        assert_eq!(got["topic_id"], 3);
+        assert_eq!(got["topics_left_out"], 2);
+        for odd in [r#""3""#, "-3", "1.5", "true", "null"] {
+            let header = format!(
+                r#"{{"lane": "x", "open_brain": "topics", "topic_id": {odd}, "topics_left_out": {odd}}}"#
+            );
+            let line = super::route_line_from_header(&header).unwrap();
+            let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+            assert!(got.get("topic_id").is_none(), "{odd}: {line}");
+            assert!(got.get("topics_left_out").is_none(), "{odd}: {line}");
+        }
+        // An id is a small whole number from 1; a count may be 0.
+        for odd in ["0", "1000000"] {
+            let header = format!(r#"{{"lane": "x", "open_brain": "topics", "topic_id": {odd}}}"#);
+            let line = super::route_line_from_header(&header).unwrap();
+            assert!(!line.contains("topic_id"), "{odd}: {line}");
+        }
     }
 
     /// "Label my chat about the boiler as Home" (2026-09-30): `file_under` and

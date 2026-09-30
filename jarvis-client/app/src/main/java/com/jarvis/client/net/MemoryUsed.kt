@@ -204,6 +204,12 @@ object MemoryUsed {
         val pinned: Boolean,
         val validTo: Double?,
         val erasedAt: Double?,
+        /**
+         * The fact's topic was switched off since the answer used it
+         * (`left_out: true`, docs/JARVIS-API.md section 107): the PC sends no
+         * words, and the list says [Topics.usedLeftOutLine] instead.
+         */
+        val leftOut: Boolean = false,
     ) {
         /** Forget only on a fact still in use: a forgotten one has nothing to forget. */
         val canForget: Boolean get() = current && erasedAt == null
@@ -234,11 +240,12 @@ object MemoryUsed {
             val current = o.flag("current") == true && erasedAt == null
             Fact(
                 id = id,
-                text = if (erasedAt != null) "" else o.text("text").orEmpty(),
+                text = if (erasedAt != null || o.flag("left_out") == true) "" else o.text("text").orEmpty(),
                 current = current,
                 pinned = current && o.flag("pinned") == true,
                 validTo = o.number("valid_to")?.doubleOrNull?.takeIf { it.isFinite() },
                 erasedAt = erasedAt,
+                leftOut = erasedAt == null && o.flag("left_out") == true,
             )
         }
         val missing = (body["missing"] as? JsonArray).orEmpty().mapNotNull {

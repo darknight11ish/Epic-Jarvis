@@ -296,7 +296,7 @@ HARD_LIMITS = frozenset({
     "agent_spawn", "agent_kill", "execute_pending_actions", "unclassified_tool",
     "watch_notifications_enable", ENABLE_TOOL_ACTION, "restore_backup", "check_tool_updates",
     "app_merge_change",
-    "run_plan", "phone_notifications_read", "topic_loosen",
+    "run_plan", "phone_notifications_read", "topic_loosen", "referee_tick",
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
     "register_approval_key",
     "support_chat", "support_offer",
@@ -315,7 +315,7 @@ MUST_ASK = frozenset({
     "custom_voice", "better_voice_enable", "change_own_config", "modify_own_code",
     "wiki_update", LOOSEN_ACTION, "watch_notifications_enable", ENABLE_TOOL_ACTION,
     "restore_backup", "check_tool_updates", "run_plan", "phone_notifications_read",
-    "topic_loosen",
+    "topic_loosen", "referee_tick",
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
     "register_approval_key", "app_merge_change",
     "support_chat", "support_offer",
@@ -332,7 +332,7 @@ GROUPS = (
                             "edit_logseq_page", "delete_joplin_note", "delete_logseq_page",
                             "write_notes_after_outside_text", "wiki_update"]),
     ("Timers and reminders", ["fixed:timers", "fixed:repeats", "fixed:goals",
-                              "schedule_repeat"]),
+                              "referee_tick", "schedule_repeat"]),
     ("Your smart home", ["fixed:lights", "home_control"]),
     # Projects (the owner's decision of 2026-09-28; jarvis_projects.py). Its
     # two cards are change_own_config cards, decided in the code; these rows

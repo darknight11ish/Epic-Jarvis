@@ -1567,6 +1567,29 @@ function openBrainFromRoute(route) {
     invoke("open_fix_place", { place: "brain" });
     return;
   }
+  // Topic controls (docs/TOPIC-CONTROLS-DESIGN.md C1): "switch off my work
+  // topic" is ambiguous, so the PC opens the picker instead of guessing.
+  // Only the place and a whole-number topic id ride along; the Brain checks
+  // the id again and changes nothing until the owner taps Change.
+  if (route.open_brain === "topics") {
+    const left = { place: "topics", at: Date.now() };
+    if (Number.isInteger(route.topic_id) && route.topic_id >= 1) left.topic_id = route.topic_id;
+    try {
+      localStorage.setItem(BRAIN_PLACE_KEY, JSON.stringify(left));
+    } catch {
+      /* no storage: the Brain opens where it was, and the answer's own words say where */
+    }
+    setTimeout(() => {
+      try {
+        const now = JSON.parse(localStorage.getItem(BRAIN_PLACE_KEY) || "null");
+        if (now && now.at === left.at) localStorage.removeItem(BRAIN_PLACE_KEY);
+      } catch {
+        /* nothing to clear */
+      }
+    }, 65_000);
+    invoke("open_fix_place", { place: "brain" });
+    return;
+  }
   if (route.open_brain !== FORGET_RANGE_PLACE) return;
   try {
     localStorage.setItem(BRAIN_PLACE_KEY, JSON.stringify({ place: FORGET_RANGE_PLACE, at: Date.now() }));

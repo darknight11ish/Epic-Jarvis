@@ -303,6 +303,10 @@ fun BrainScreen(
         val listState = rememberLazyListState()
         val listScope = rememberCoroutineScope()
         ScrollToKeyOnce(listState, initialSection, onSectionConsumed)
+        // A jump inside Brain: the "facts kept, hidden" link under Saved automatically
+        // brings Topics into view (docs/TOPIC-CONTROLS-DESIGN.md C4).
+        var jumpTo by remember { mutableStateOf<String?>(null) }
+        ScrollToKeyOnce(listState, jumpTo) { jumpTo = null }
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
             state = listState,
@@ -657,6 +661,7 @@ fun BrainScreen(
                     privateHidden = privateHidden,
                     showPrivateBusy = showPrivateBusy,
                     onShowPrivate = onShowPrivate,
+                    onOpenTopics = { jumpTo = "topics" },
                 )
             }
             // "Always keep in mind" (the owner's decision, 2026-09-24): the
@@ -678,6 +683,20 @@ fun BrainScreen(
             // keep in mind", the other fact label with its own section.
             item(key = "memory-shared") {
                 BetweenUsSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+            // Topics (the owner's request of 2026-09-30; TopicsPlate.kt, docs/
+            // TOPIC-CONTROLS-DESIGN.md): which topics Jarvis may learn about and
+            // use in answers. Its names hide under "Hide memory lists and chat
+            // history" as rows "Topic 1, 41 facts, mode" (the plate does that
+            // itself, so it is drawn in both cases). "switch off my work topic"
+            // opens this item (OpenPlace, "topics").
+            item(key = "topics") {
+                TopicsSection(
                     canAct = canAct,
                     privateHidden = privateHidden,
                     showPrivateBusy = showPrivateBusy,

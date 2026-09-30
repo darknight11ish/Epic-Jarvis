@@ -346,6 +346,23 @@ happen, write down which line and what you saw instead.
   area whose value is long ("1234567.5 of 2000000 kg") - its label wraps and stays
   inside the picture. Nothing here is read aloud or sent anywhere.
 
+- [ ] **Study helper and Referee suggestions (only once the 12 GB card is in;
+  both are OFF and cannot be turned on before, and say why).** (1) Settings →
+  Second graphics card (or the phone's Brain) now lists seven switches. With one
+  card, **Study helper** and **Referee suggestions** say "Needs a capable second
+  graphics card". (2) With the card in, turn on **Study helper**: one card naming
+  the card and `qwen3:8b`. Paste a text into "Quiz me on a text": the questions
+  come from the second card (`ollama ps` on port 11435 shows the model) and the
+  marks still say "Jarvis's guess" until you run
+  `OLLAMA_URL=http://127.0.0.1:11435 JARVIS_LOCAL_MODEL=qwen3:8b python backend\eval_quiz_grader.py`.
+  Turn it off: the quiz works as before. (3) Turn on **Referee suggestions**: one
+  card, no model, no second Ollama starts. Make a goal step follow a number
+  (Projects), set a target, then log a number that reaches it: within the hour a
+  card "This looks done - tick it?" shows the numbers and says "a suggestion from a
+  number, not a check". Say no: nothing is ticked and it does not ask again for a
+  day. Say yes: the step is ticked; untick it in Goals. For a weight or money
+  number the card says it is private. **Nobody has seen either card on a real PC.**
+
 ### Measurements only your PC can make
 
 1. **Memory tests with the real model** (they decide the entity layer; the

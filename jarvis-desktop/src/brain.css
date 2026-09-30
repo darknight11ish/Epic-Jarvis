@@ -2581,3 +2581,339 @@ mark.find-current {
   padding-left: 8px;
   border-left: 2px solid var(--warn);
 }
+
+/* ---- Topics (topics.js; docs/TOPIC-CONTROLS-DESIGN.md; JARVIS-API.md 107) --
+   One row per topic: swatch + icon, name, count, tags, the mode as a button.
+   Colour is the tags' eight slots (theme.css --tag-0..7, set by
+   [data-colour] above); it is never the only clue - the icon, the name and
+   the mode's words always show. Nothing moves except on the owner's tap, so
+   there is no animation to switch off; the reduced-motion rule below keeps it
+   that way if one is ever added. */
+
+.topics-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 6px 10px;
+  font-size: var(--text-sm);
+  color: var(--text);
+  border-left: 2px solid var(--border-accent);
+  background: var(--surface-sunken);
+}
+
+.topics-guess {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 10px;
+}
+
+.topics-guess .note {
+  margin: 0;
+  flex: 1 1 260px;
+}
+
+.topics-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.topics-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px 12px;
+  padding: 7px 10px;
+  border: var(--stroke-hair) solid var(--border);
+  border-left: 3px solid var(--tag-ink, var(--border-strong));
+  border-radius: var(--radius-control);
+  background: color-mix(in srgb, var(--tag-ink, var(--text)) 5%, transparent);
+}
+
+.topics-row-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.topics-mark {
+  display: inline-flex;
+  flex: none;
+  color: var(--tag-ink, var(--text));
+}
+
+.topics-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.topics-count {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.topics-tags {
+  grid-column: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+}
+
+.topics-tag {
+  padding: 1px 8px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-radius: var(--radius-chip);
+}
+
+.topics-tag-private,
+.topics-tag-held {
+  color: var(--text);
+  border-color: var(--warn);
+}
+
+.topics-row-actions {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.topics-mode {
+  border-color: var(--tag-ink, var(--border-strong));
+}
+
+.topics-waiting {
+  font-size: var(--text-sm);
+  color: var(--warn);
+}
+
+.topics-menu,
+.topics-shown {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: var(--stroke-hair) solid var(--border);
+}
+
+.topics-shown {
+  display: block;
+}
+
+.topics-hidden-fact {
+  opacity: 0.75;
+}
+
+.topics-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 10px;
+}
+
+.topics-model-note,
+.topics-help {
+  margin: 6px 0 0;
+}
+
+.topics-review {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--border-accent);
+  background: var(--surface-sunken);
+}
+
+.topics-review-title {
+  margin: 0 0 6px;
+  font-size: var(--text-md);
+}
+
+.topics-review-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 10px 0 4px;
+  font-size: var(--text-sm);
+  color: var(--tag-ink, var(--text));
+}
+
+.topics-review-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.topics-review-fact {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 4px 0;
+  border-bottom: var(--stroke-hair) solid var(--border);
+}
+
+.topics-review-text {
+  flex: 1 1 260px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.topics-file-under {
+  width: auto;
+  max-width: 180px;
+}
+
+.topics-dialog {
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: 14px 16px;
+  color: var(--text);
+  background: var(--surface-sunken);
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-pane);
+}
+
+.topics-dialog::backdrop {
+  background: color-mix(in srgb, var(--surface-sunken) 65%, transparent);
+}
+
+.topics-dialog-title {
+  margin: 0 0 8px;
+  font-size: var(--text-md);
+  overflow-wrap: anywhere;
+}
+
+.topics-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.topics-dialog-error {
+  margin: 8px 0 0;
+}
+
+.topics-dialog-foot {
+  margin-top: 12px;
+}
+
+.topics-choices,
+.topics-palette,
+.topics-icons {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.topics-palette legend,
+.topics-icons legend,
+.topics-choices legend {
+  padding: 0 0 4px;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+
+.topics-choice {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0 8px;
+  padding: 5px 0;
+  cursor: pointer;
+}
+
+.topics-choice input {
+  grid-row: 1 / span 2;
+  margin-top: 3px;
+}
+
+.topics-choice-name {
+  font-weight: 600;
+}
+
+.topics-choice-sentence {
+  grid-column: 2;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.topics-preview,
+.topics-card-line {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.topics-card-line {
+  color: var(--warn);
+}
+
+.topics-palette,
+.topics-icons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.topics-palette legend,
+.topics-icons legend {
+  flex: 0 0 100%;
+}
+
+.topics-swatch-choice,
+.topics-icon-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-radius: var(--radius-chip);
+  cursor: pointer;
+}
+
+.topics-swatch-choice:has(input:checked),
+.topics-icon-choice:has(input:checked) {
+  color: var(--text);
+  border-color: var(--tag-ink, var(--text));
+  background: color-mix(in srgb, var(--tag-ink, var(--text)) var(--tag-tint), transparent);
+}
+
+.topics-swatch-choice:has(input:focus-visible),
+.topics-icon-choice:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.topics-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-chip);
+  background: var(--tag-ink, var(--text));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .topics-row,
+  .topics-dialog,
+  .topics-mode {
+    transition: none;
+    animation: none;
+  }
+}

@@ -21,7 +21,8 @@ import kotlin.math.sin
 
 /**
  * The ten chat-tag icons (docs/CHAT-TAGS-DESIGN.md section 10's shared list:
- * briefcase book home folder lightbulb star flag wrench leaf music), drawn on
+ * briefcase book home folder lightbulb star flag wrench leaf music) and the three
+ * topics add (heart coin people, docs/TOPIC-CONTROLS-DESIGN.md), drawn on
  * a [Canvas] the way NavIcons.kt draws its glyphs: no icon font, no vector
  * asset, no new dependency. A 24-unit grid, one round-capped outline stroke,
  * no fill. The desktop draws the same names with its own icon set.
@@ -115,6 +116,39 @@ private fun DrawScope.drawTag(name: String, c: Color, s: Stroke, u: Float) {
             line(c, s, u, 19f, 4f, 19f, 15f)
             drawCircle(c, radius = 2.2f * u, center = Offset(7f * u, 17.5f * u), style = s)
             drawCircle(c, radius = 2.2f * u, center = Offset(17f * u, 15.5f * u), style = s)
+        }
+        // The three topics add (docs/TOPIC-CONTROLS-DESIGN.md section 2): heart, coin, people.
+        "heart" -> {
+            val p = Path().apply {
+                moveTo(12f * u, 20f * u)
+                cubicTo(5f * u, 14.5f * u, 3f * u, 11f * u, 3f * u, 8f * u)
+                cubicTo(3f * u, 5.5f * u, 5f * u, 4f * u, 7.2f * u, 4f * u)
+                cubicTo(9.3f * u, 4f * u, 11f * u, 5.2f * u, 12f * u, 7f * u)
+                cubicTo(13f * u, 5.2f * u, 14.7f * u, 4f * u, 16.8f * u, 4f * u)
+                cubicTo(19f * u, 4f * u, 21f * u, 5.5f * u, 21f * u, 8f * u)
+                cubicTo(21f * u, 11f * u, 19f * u, 14.5f * u, 12f * u, 20f * u)
+                close()
+            }
+            drawPath(p, c, style = s)
+        }
+        "coin" -> {
+            drawCircle(c, radius = 8.5f * u, center = Offset(12f * u, 12f * u), style = s)
+            drawCircle(c, radius = 4.5f * u, center = Offset(12f * u, 12f * u), style = s)
+        }
+        "people" -> {
+            drawCircle(c, radius = 3f * u, center = Offset(9f * u, 8f * u), style = s)
+            val near = Path().apply {
+                moveTo(3.5f * u, 19.5f * u)
+                cubicTo(3.5f * u, 15f * u, 6f * u, 13.5f * u, 9f * u, 13.5f * u)
+                cubicTo(12f * u, 13.5f * u, 14.5f * u, 15f * u, 14.5f * u, 19.5f * u)
+            }
+            drawPath(near, c, style = s)
+            drawCircle(c, radius = 2.5f * u, center = Offset(16.5f * u, 9f * u), style = s)
+            val far = Path().apply {
+                moveTo(16.5f * u, 13.5f * u)
+                cubicTo(19.5f * u, 13.5f * u, 20.5f * u, 15.5f * u, 20.5f * u, 19.5f * u)
+            }
+            drawPath(far, c, style = s)
         }
         else -> drawCircle(c, radius = 6f * u, center = Offset(12f * u, 12f * u), style = s)
     }

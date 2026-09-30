@@ -934,6 +934,28 @@ permissions = [
   "allow-brain-review-more",
 ]
 
+# Topic controls (docs/TOPIC-CONTROLS-DESIGN.md; brain/topics.rs, backend
+# jarvis_topics.py; JARVIS-API.md section 107). Every saved fact sits under one
+# topic and each topic has a mode: learn and use, use but do not learn, learn
+# but do not use, or off. The PC enforces the modes and raises the only cards
+# (a private topic turned back on); this app carries the owner's taps. Every
+# write is held on a stale link; topic names, keywords and both fact lists are
+# taken out in Rust while "Hide memory lists and chat history" is on. Nothing
+# here approves a card or changes topics in bulk.
+[[set]]
+identifier = "brain-topics"
+description = "Read the topics, change one topic's mode or the list itself (add, rename, colour, reorder, keywords, delete with a home for its facts), file facts under a topic, and read the two fact lists - the PC raises any approval card, every change held on a stale link, names hidden with the private lists."
+permissions = [
+  "allow-brain-topics",
+  "allow-brain-topics-edit",
+  "allow-brain-topics-mode",
+  "allow-brain-topics-file",
+  "allow-brain-topics-settings",
+  "allow-brain-topics-preview",
+  "allow-brain-topics-review",
+  "allow-brain-topics-hidden",
+]
+
 # "Widgets you describe" (the owner's choice of 2026-09-28, the SAFE
 # version; brain/widgets.rs, backend jarvis_widgets.py; JARVIS-API.md section
 # 87). The Brain lists the widgets, asks the PC for a PREVIEW from the

@@ -58,6 +58,7 @@ pub mod schedule;
 pub mod shared;
 pub mod sources;
 pub mod support;
+pub mod topics;
 pub mod used;
 pub mod widgets;
 use routes::{first_line, route_for};
