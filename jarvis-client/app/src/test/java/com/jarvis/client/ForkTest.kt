@@ -165,7 +165,7 @@ class ForkTest {
     }
 
     @Test
-    fun `an older PC sends neither: no buttons and no reason line`() {
+    fun `an older PC sends neither - no buttons and no reason line`() {
         val t = ChatLog.transcript(obj("""{"id":"chat-0001","turns":[{"role":"user","text":"hi"}]}"""))!!
         assertFalse(t.forkable)
         assertNull(t.forkWhy)

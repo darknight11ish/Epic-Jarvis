@@ -136,7 +136,7 @@ class TagsTest {
     }
 
     @Test
-    fun `the filter chip values: All, Untagged and a tag id`() {
+    fun `the filter chip values - All, Untagged and a tag id`() {
         assertNull(ChatTags.filterKey(""))
         assertEquals(ChatTags.UNTAGGED_KEY, ChatTags.filterKey(ChatTags.NONE_FILTER))
         assertEquals(3, ChatTags.filterKey("3"))
