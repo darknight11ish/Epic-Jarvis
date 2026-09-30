@@ -16748,3 +16748,40 @@ A request that **fails after a yes** is a normal answer (status 200) with `state
 `youtube.patch` adds `youtube_captions_read` to `jarvis_gate.py`'s "acts only on tier ask" set and its `_RISK` (`"no"`, `"outbound"`) and installs the routes in `jarvis_hud.py` after `tag-suggest.patch`. The framework file gets `youtube_captions_read = "ask"`. The action is in `jarvis_asks_first.py` (`MUST_ASK`, the page's "The internet" group, `LOCKDOWN_ACTIONS`), `jarvis_card_words.py` (title "fetch the caption text of a YouTube video for a quiz"), and `jarvis_reach.py` has a row "YouTube captions (for a quiz)"; `tools/gen_asks_first_cases.py`, `gen_card_words_cases.py` and `gen_reach_cases.py` were re-run. `docs/ARCHITECTURE.md` section 4 has its row. `tools/check_parity.py` lists the four routes as `planned`.
 
 Tests: `backend/test_youtube.py` (the link forms, refusals, the card's words, the gate order, cancel, cleaning and the cap, every error mapped to plain words, the real transport's call, the quiz hook, crisis, injection, no learner or disk, the routes, the patch on the stack, every table and doc).
+
+## 113. Grade this better: send one quiz to a cloud AI service (added 2026-09-30; backend built and tested, apps planned)
+
+The owner's decision (2026-09-30, `docs/STUDY-FROM-TEXT-DESIGN.md` sections 7 and 15): the local model marks a quiz by default; a **"Grade this better" button may send that one quiz to a cloud model, one approval card per request**, and the card lists exactly what leaves the PC. This bends rule 1 for that one quiz only. Cloud keys follow rule 3. Backend: `backend/jarvis_quiz_cloud.py` (the whole feature), `backend/quiz-cloud.patch` (the gate action and ONE install block in `jarvis_hud.py`), `backend/jarvis_quiz.py` (the owner's typed answers are now kept in the open quiz's memory so the card can list them; `cloud_export`, `apply_cloud_marks`, `mark_private`), `backend/test_quiz_cloud.py`. It reuses the chatbot driver's API adapters and monthly money limit (`backend/jarvis_chatbot_api.py`; section 87) and does not copy them. **Never run against a real provider** (no network in the build container).
+
+### 113.1 The routes
+
+| route | body | answer |
+|---|---|---|
+| `GET /api/quiz-cloud` | - | `{"ok": true, "available": true, "title", "intro", "leaves", "button", "ready": bool, "cheapest": short \| null, "services": [{"id", "short", "name", "host", "model", "ready": bool, "why": str, "money": str}], "latest": Request \| null}` |
+| `POST /api/quiz-cloud/grade` | `{"quiz_id": str, "service": str?}` | **202** `{"ok": true, "waiting": true, "request": Request, "message"}` - ONE approval card is raised; nothing is sent yet |
+| `GET /api/quiz-cloud/{id}` | - | `{"ok": true, "request": Request}` |
+| `POST /api/quiz-cloud/{id}/cancel` | `{}` | `{"ok": true, "request": Request}` |
+
+* `Request` = `{"id", "state", "message", "quiz_id", "service": name \| null, "host", "model", "chars": int, "marks": [{"n", "level", "comment"}] \| null, "cost": "about $0.01" \| null, "error": code \| null, "quiz": Quiz \| null}`. `state` is `waiting` (the card is open), `sending`, `ready` (`marks` are the new marks, `quiz` is the quiz with them applied), or an end: `denied`, `timed_out`, `withdrawn`, `refused`, `failed` (`error` says why; the marks are unchanged). `message` is the PC's plain sentence; the apps show it and do not write their own.
+* `service` (optional) is a service's `short` or `id` from `GET /api/quiz-cloud`; left out, Jarvis picks **the cheapest one that is set up** for this message (a key saved on this PC AND a monthly limit AND a price; ties go to the service that can cap an answer's length). It never falls back silently: a named service that is not ready is refused with its own reason.
+* After a successful request each newly marked question's `mark` in the quiz has `"marked_by": "cloud"` and `"service": <name>`, and the quiz's `grader_verified` is `false` (nothing has measured a cloud grader) - the apps keep showing "Jarvis's guess".
+* **The card** (an ordinary approval, gate action `quiz_cloud_grade`, tier `ask` only, a **risky approval**; never "always allow", never decided by voice) shows the whole message word for word, the service, its host and model, the driver's "about $X of $Y left" line, what is not sent, that it bends the rule that study words stay on this PC for this one quiz, that it costs a little and cannot be taken back, and - for a YouTube-caption quiz - that the passages are caption text.
+* **Limits:** at most 60,000 characters in the message; one waiting card at a time; finished requests are forgotten after an hour and at most five are kept; 120 seconds to wait for the service.
+
+### 113.2 Errors
+
+Refusals are `{"ok": false, "error": <code>, "message": <plain words>}` and raise **no** card: `bad_request`, `bad_service`, `outside_text_turn` (409, from a chat door), `quiz_not_found` (404), `not_text_quiz` (Spanish practice), `nothing_answered`, `after_crisis`, `quiz_private`, `private_material` (money, health, credentials, ID or a secret looks to be in it), `private_unchecked` (the check could not run: fail closed), `outside_source_refused`, `too_big`, `no_service` (with the two PowerShell lines that set a service up), `service_not_ready` (with that service's own reason), `request_waiting`, `tier_not_ask` (503), `card_unavailable` (503), `request_not_found` (404), `already_started` (cancel too late). A failure **after** a yes is a normal answer (200) with `state: "failed"` and `error` one of `quiz_closed`, `quiz_changed` (the quiz no longer gives the identical message), `service_missing`, `cloud_unreadable` (not exactly one mark per question), `cloud_timeout`, `cloud_failed` (the message is the chatbot driver's own plain words, e.g. a rejected key). **No message ever quotes an answer, a key or the provider's own error text.**
+
+### 113.3 What it keeps and what it does not do
+
+* The card comes before any network call; only a person's yes sends. The message is built once and the card shows that exact text; after a yes the quiz is read again and if it gives a different message nothing is sent.
+* Never for: a quiz with a crisis answer (a per-quiz yes/no, never the words, never a count), a quiz marked private, Spanish practice, outside text other than YouTube captions, or anything the sensitive-topic and secret checks flag. A refusal says so in plain words and the marks stay on this PC.
+* The key is only ever read by the chatbot driver's adapter and sent to that preset's one host; this feature never sees, logs or returns it. The money limit is the driver's own: no key, limit or price means no service; a message that could pass the limit is not sent.
+* The reply is data: a level from the fixed three and one sentence per question are used, all or nothing; nothing in it is followed. Nothing is learned, nothing is written to disk here, the audit line holds outcomes only.
+* **Not built:** a chat door or model tool (`jarvis_agent.py` untouched); Spanish practice; any UI; comparing several services; a "which service" chooser beyond the optional `service` field.
+
+### 113.4 The gate, tables and files
+
+`quiz-cloud.patch` adds `quiz_cloud_grade` to `jarvis_gate.py`'s "acts only on tier ask" set and its `_RISK` (`"no"`, `"outbound"`) and installs the routes in `jarvis_hud.py` after `youtube.patch`. The framework file gets `quiz_cloud_grade = "ask"`. The action is in `jarvis_asks_first.py` (`HARD_LIMITS`, `MUST_ASK`, the page's "The internet" group, `LOCKDOWN_ACTIONS`), `jarvis_card_words.py` (title "send a quiz to a cloud AI service to be graded better"), and `jarvis_reach.py` has a row "Quiz grading in the cloud"; the three fixture generators were re-run. `docs/ARCHITECTURE.md` section 4 has its row. `tools/check_parity.py` lists the four routes as `planned`. `NEEDS_A_PERSON` (in `jarvis_agent.py`) is not touched because no model tool exists yet.
+
+Tests: `backend/test_quiz_cloud.py`.

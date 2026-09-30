@@ -130,6 +130,16 @@
     },
     {
      "asks": "-",
+     "id": "quiz_cloud",
+     "line": "Not set up: no cloud service has a saved key AND a monthly money limit on this PC yet. See the chatbot API lines on the AI chatbots row.",
+     "name": "Quiz grading in the cloud",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "phone_push",
      "line": "When a card waits, it pushes \"Jarvis wants to ...\" to your phone - never the details, and never while the conversation holds private text.",
      "name": "Phone notifications (ntfy)",
@@ -404,6 +414,16 @@
     },
     {
      "asks": "-",
+     "id": "quiz_cloud",
+     "line": "Not set up: no cloud service has a saved key AND a monthly money limit on this PC yet. See the chatbot API lines on the AI chatbots row.",
+     "name": "Quiz grading in the cloud",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "phone_push",
      "line": "Not set up: no ntfy topic is set, so nothing is pushed.",
      "name": "Phone notifications (ntfy)",
@@ -671,6 +691,16 @@
      "state": "on",
      "state_words": "On",
      "where": "youtube.com"
+    },
+    {
+     "asks": "-",
+     "id": "quiz_cloud",
+     "line": "Not set up: no cloud service has a saved key AND a monthly money limit on this PC yet. See the chatbot API lines on the AI chatbots row.",
+     "name": "Quiz grading in the cloud",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
     },
     {
      "asks": "-",
@@ -965,6 +995,16 @@
      "state": "on",
      "state_words": "On",
      "where": "youtube.com"
+    },
+    {
+     "asks": "-",
+     "id": "quiz_cloud",
+     "line": "Not set up: no cloud service has a saved key AND a monthly money limit on this PC yet. See the chatbot API lines on the AI chatbots row.",
+     "name": "Quiz grading in the cloud",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
     },
     {
      "asks": "-",
@@ -1342,6 +1382,16 @@
     },
     {
      "asks": "-",
+     "id": "quiz_cloud",
+     "line": "Not set up: no cloud service has a saved key AND a monthly money limit on this PC yet. See the chatbot API lines on the AI chatbots row.",
+     "name": "Quiz grading in the cloud",
+     "on": false,
+     "state": "not_set_up",
+     "state_words": "Not set up",
+     "where": ""
+    },
+    {
+     "asks": "-",
      "id": "phone_push",
      "line": "Not set up: no ntfy topic is set, so nothing is pushed.",
      "name": "Phone notifications (ntfy)",
@@ -1494,6 +1544,7 @@
   "notes_write",
   "github",
   "youtube",
+  "quiz_cloud",
   "phone_push",
   "computer",
   "browser",

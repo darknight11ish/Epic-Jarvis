@@ -227,6 +227,10 @@
       "title": "Jarvis wants to change its power mode (Active, Quiet or Standby)"
     },
     {
+      "action": "quiz_cloud_grade",
+      "title": "Jarvis wants to send a quiz to a cloud AI service to be graded better"
+    },
+    {
       "action": "read_calendar",
       "title": "Jarvis wants to read your calendar"
     },

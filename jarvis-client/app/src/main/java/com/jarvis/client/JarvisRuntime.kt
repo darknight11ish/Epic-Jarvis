@@ -4886,6 +4886,7 @@ object JarvisRuntime {
     /** Drops the open quiz from this phone's memory (it is already gone on the PC, or being stopped). */
     fun forgetQuiz() {
         _quiz.value = null
+        _youtubeNote.value = null
     }
 
     private val _spanishSupported = MutableStateFlow<Boolean?>(null)
@@ -5113,6 +5114,175 @@ object JarvisRuntime {
             return true to "Stopped. Nothing was kept."
         }
         return false to out.said
+    }
+
+    // ------------------------------------------------- Quiz on a video ----
+    // "Quiz me on a YouTube video" (docs/STUDY-FROM-TEXT-DESIGN.md section 14,
+    // JARVIS-API section 112) - see [com.jarvis.client.net.Youtube] and the block
+    // at the foot of ui/screens/QuizPlate.kt. The link is sent ONCE, in the body
+    // of the start call, and is not kept here: only the PC's request (whose `link`
+    // is the canonical address its card shows) is held, in process memory, while
+    // it is open. Nothing is written to disk, logged or put in a notification.
+
+    private val _youtube = MutableStateFlow<com.jarvis.client.net.Youtube.Request?>(null)
+
+    /** The YouTube request that is open on the PC (waiting, fetching or writing). Process memory only. */
+    val youtube: StateFlow<com.jarvis.client.net.Youtube.Request?> = _youtube.asStateFlow()
+
+    private val _youtubeAvailable = MutableStateFlow<Boolean?>(null)
+
+    /** Whether the PC has YouTube quizzes: null until a read answered, false on a 404 or 503. */
+    val youtubeAvailable: StateFlow<Boolean?> = _youtubeAvailable.asStateFlow()
+
+    private val _youtubeNote = MutableStateFlow<Pair<String, String>?>(null)
+
+    /**
+     * For a quiz that covers only the first part of a long video: (the quiz's id,
+     * the PC's own sentence). Shown above the questions of that quiz only.
+     */
+    val youtubeNote: StateFlow<Pair<String, String>?> = _youtubeNote.asStateFlow()
+
+    /** When a state this phone does not know was first seen (uptime ms), else null. */
+    private var youtubeUnknownSince: Long? = null
+
+    /** What one poll came to: [done] ends the polling, [said] is the sentence to show (or null). */
+    data class YoutubePoll(val done: Boolean, val said: String?)
+
+    /**
+     * Reads `GET /api/youtube` (a read: never held on a stale link): whether the
+     * PC has the feature, and picks up a request already in flight (for example
+     * after the app restarted). It never starts anything.
+     */
+    suspend fun youtubeCheck() {
+        when (val r = api.quizCall(com.jarvis.client.net.Youtube.PATH, null)) {
+            is ApiResult.Ok -> {
+                val reply = r.value
+                if (com.jarvis.client.net.Youtube.missing(reply)) {
+                    _youtubeAvailable.value = false
+                    return
+                }
+                val info = reply.body?.let(com.jarvis.client.net.Youtube::parseInfo) ?: return
+                _youtubeAvailable.value = info.available
+                val latest = info.latest
+                if (info.available && _youtube.value == null && latest != null &&
+                    com.jarvis.client.net.Youtube.keepPolling(latest.phase)
+                ) {
+                    _youtube.value = latest
+                }
+            }
+            is ApiResult.Failed -> Unit
+        }
+    }
+
+    /** Forgets the open request here (it is over, or the PC no longer has it). */
+    private fun endYoutube() {
+        _youtube.value = null
+        youtubeUnknownSince = null
+    }
+
+    /**
+     * Sends the pasted link to the PC, which raises ONE approval card. Held on a
+     * stale link (rule 4). The link goes in the body only and is not kept.
+     * @return whether a card is now waiting, and the sentence to show.
+     */
+    suspend fun startYoutube(link: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        if (!com.jarvis.client.net.Youtube.canStart(link)) return false to "Paste a video link first."
+        val body = com.jarvis.client.net.Youtube.startBody(link)
+        val out = when (val r = api.quizCall(com.jarvis.client.net.Youtube.QUIZ_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Youtube.startedSaid(r.value)
+            is ApiResult.Failed -> return false to ("Not started. " + describe(r.error))
+        }
+        val req = out.request
+        if (out.ok && req != null) {
+            youtubeUnknownSince = null
+            _youtubeNote.value = null
+            _youtube.value = req
+            return true to out.said
+        }
+        return false to out.said
+    }
+
+    /**
+     * One poll of the open request (a read: never held). On `ready` the quiz
+     * opens as the ordinary quiz; on any end the PC's own sentence comes back
+     * and the request is forgotten, so the link field is offered again. An
+     * unknown state keeps polling, for at most 3 minutes.
+     */
+    suspend fun pollYoutube(): YoutubePoll {
+        val cur = _youtube.value ?: return YoutubePoll(true, null)
+        if (!com.jarvis.client.net.Youtube.validId(cur.id)) {
+            endYoutube()
+            return YoutubePoll(true, null)
+        }
+        val r = api.quizCall("${com.jarvis.client.net.Youtube.PATH}/${cur.id}", null)
+        if (r is ApiResult.Failed) return YoutubePoll(false, noticeFor(r.error))
+        val out = com.jarvis.client.net.Youtube.readSaid((r as ApiResult.Ok).value)
+        val req = out.request
+        if (!out.ok || req == null) {
+            // The PC no longer has it, or a ready request had nothing readable in it: over.
+            if (out.gone || req != null) {
+                endYoutube()
+                return YoutubePoll(true, out.said)
+            }
+            return YoutubePoll(false, out.said)
+        }
+        when (req.phase) {
+            com.jarvis.client.net.Youtube.Phase.READY -> {
+                val quiz = req.quiz
+                endYoutube()
+                if (quiz != null) {
+                    adoptQuiz(quiz)
+                    val note = com.jarvis.client.net.Youtube.truncatedNote(req)
+                    _youtubeNote.value = if (note != null) quiz.id to note else null
+                }
+                return YoutubePoll(true, null)
+            }
+            com.jarvis.client.net.Youtube.Phase.ENDED -> {
+                endYoutube()
+                return YoutubePoll(true, out.said)
+            }
+            else -> {
+                _youtube.value = req
+                if (com.jarvis.client.net.Youtube.isKnown(req.state)) {
+                    youtubeUnknownSince = null
+                } else {
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    val since = youtubeUnknownSince ?: now
+                    youtubeUnknownSince = since
+                    if (com.jarvis.client.net.Youtube.giveUpOnUnknown(since, now)) {
+                        endYoutube()
+                        return YoutubePoll(true, out.said)
+                    }
+                }
+                return YoutubePoll(false, null)
+            }
+        }
+    }
+
+    /**
+     * Withdraws the card while it is still waiting. Never held on a stale link
+     * (it only ever makes things safer). @return the sentence to show.
+     */
+    suspend fun cancelYoutube(): String {
+        val cur = _youtube.value ?: return ""
+        if (!com.jarvis.client.net.Youtube.validId(cur.id)) {
+            endYoutube()
+            return ""
+        }
+        return when (val r = api.quizCall("${com.jarvis.client.net.Youtube.PATH}/${cur.id}/cancel", com.jarvis.client.net.Youtube.EMPTY_BODY)) {
+            is ApiResult.Ok -> {
+                val out = com.jarvis.client.net.Youtube.cancelledSaid(r.value)
+                val req = out.request
+                when {
+                    out.gone -> endYoutube()
+                    out.ok && req != null && req.phase == com.jarvis.client.net.Youtube.Phase.ENDED -> endYoutube()
+                    out.ok && req != null -> _youtube.value = req
+                }
+                out.said
+            }
+            is ApiResult.Failed -> "Not cancelled. " + describe(r.error)
+        }
     }
 
     // ------------------------------------------------------- Study decks ----

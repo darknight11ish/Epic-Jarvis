@@ -187,8 +187,8 @@ object Youtube {
         reply.code in 200..299 && reply.body?.flag("ok") != false
 
     /**
-     * The sentence for a refused call: the PC's own `message`, word for word
-     * (first letter capitalised only if it is not already). Only a body with no
+     * The sentence for a refused call: the PC's own `message`, word for word,
+     * never rewritten (the contract: an app shows it as it came). Only a body with no
      * message of its own gets a generic sentence, and none of them names the link.
      */
     fun refusalSaid(reply: Quiz.Reply, lead: String): String {

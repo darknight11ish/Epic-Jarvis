@@ -653,6 +653,10 @@ class _Quiz:
         self.model = ""                 # the model that last wrote or marked here ("" = everyday)
         self.provenance = provenance    # "outside" for text the owner did not write (YouTube captions), else None
         self.source = source            # a short label for where outside text came from, e.g. "youtube"
+        # For the cloud "grade this better" button (jarvis_quiz_cloud.py); all in memory, gone with the quiz.
+        self.crisis_seen = False        # a crisis answer was typed here: the quiz never goes to a cloud service
+        self.private = False            # something marked this quiz private: it never goes to a cloud service
+        self.cloud_graded = False       # the marks were replaced by a cloud service's (never "verified")
 
 
 def _purge(now: float) -> None:
@@ -665,7 +669,8 @@ def _view(s: _Quiz) -> dict:
          # Nothing has measured the model's marking of Spanish yet, so a Spanish
          # quiz is never called verified (a code-marked blank shows no guess label
          # anyway: its mark says marked_by "code").
-         "grader_verified": grader_verified(s.model) and s.mode == "text",
+         "grader_verified": (grader_verified(s.model) and s.mode == "text"
+                             and not s.cloud_graded),
          "questions": [{"n": i + 1, "kind": q["kind"], "prompt": q["prompt"],
                         "mark": dict(q["mark"]) if q["mark"] else None}
                        for i, q in enumerate(s.questions)],
@@ -835,6 +840,10 @@ def answer(qid: str, body: dict) -> dict:
     # question stays unanswered and can be answered again. It runs for every
     # mode and kind, code-marked blanks included.
     if _is_crisis(text):
+        with _LOCK:
+            # One yes/no for the session, never the words and never a count
+            # (the cloud button reads it: no cloud after a crisis).
+            _get(qid).crisis_seen = True
         return {"crisis": True, "message": _help_message(), "quiz": show(qid)}
     # The model is asked outside the sessions lock; the question is re-checked after.
     marked_by = "model"
@@ -852,6 +861,10 @@ def answer(qid: str, body: dict) -> dict:
         q = s.questions[n - 1]
         if q["mark"] is not None:
             raise QuizError("already_answered")
+        # The owner's typed answer stays in this process's memory for the
+        # session only, so the cloud "grade this better" card can list it
+        # word for word. Never in a view, a mark or a log.
+        q["answer"] = text.strip()
         q["mark"] = {"level": level, "comment": comment, "passage": passage,
                      "marked_by": marked_by,
                      "expected": expected if spanish else None,
@@ -860,6 +873,58 @@ def answer(qid: str, body: dict) -> dict:
         if marked_by == "model":
             s.model = marked_on
         return {"mark": dict(q["mark"]), "quiz": _view(s)}
+
+
+# ---- for the cloud "grade this better" button (jarvis_quiz_cloud.py) ----------
+
+def mark_private(qid: str) -> None:
+    """Flag a quiz as private: it can then never be sent to a cloud service."""
+    with _LOCK:
+        _get(qid).private = True
+
+
+def cloud_export(qid: str) -> dict:
+    """What a cloud grader would be given, taken from THIS quiz only: the
+    questions, the owner's typed answers and the passages, for every answered
+    question. Raises QuizError("not_found"). Holds no mark and never the full
+    source text (this module does not keep it)."""
+    with _LOCK:
+        s = _get(qid)
+        rows = [{"n": i + 1, "kind": q["kind"], "prompt": q["prompt"], "passage": q["passage"],
+                 "answer": q.get("answer") or ""}
+                for i, q in enumerate(s.questions) if q["mark"] and q.get("answer")]
+        return {"id": s.id, "title": s.title, "mode": s.mode, "provenance": s.provenance,
+                "source": s.source, "crisis_seen": s.crisis_seen, "private": s.private,
+                "answered": rows, "total": len(s.questions)}
+
+
+def apply_cloud_marks(qid: str, marks: list, service: str) -> dict:
+    """Replace the marks of the answered questions named in `marks`
+    ([{"n", "level", "comment"}]) with a cloud service's. All or nothing:
+    every entry must name an answered question and carry a known level and a
+    comment. Returns the quiz view."""
+    with _LOCK:
+        s = _get(qid)
+        staged = {}
+        for m in marks:
+            n = m.get("n") if isinstance(m, dict) else None
+            if isinstance(n, bool) or not isinstance(n, int) or not 1 <= n <= len(s.questions) \
+                    or s.questions[n - 1]["mark"] is None or n in staged:
+                raise QuizError("bad_question")
+            level, comment = m.get("level"), _clean_line(m.get("comment"), COMMENT_MAX)
+            if level not in LEVELS or not comment:
+                raise QuizError("model_unavailable")
+            staged[n] = (level, comment)
+        for n, (level, comment) in staged.items():
+            old = s.questions[n - 1]["mark"]
+            s.questions[n - 1]["mark"] = {
+                "level": level, "comment": comment, "passage": old["passage"],
+                "marked_by": "cloud", "service": _clean_line(service, 60),
+                "expected": old.get("expected"), "key_label": old.get("key_label")}
+        if staged:
+            s.cloud_graded = True
+        s.last_used = _CLOCK["now"]()
+        return _view(s)
 
 
 class _Crisis(Exception):

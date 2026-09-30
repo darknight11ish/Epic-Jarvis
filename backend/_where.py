@@ -395,6 +395,9 @@ SHIPPED = (
     # "Quiz me on a YouTube video" (2026-09-30; youtube.patch): one card per
     # link, caption text only, quizzed on as outside text.
     "jarvis_youtube.py",
+    # "Grade this better" (2026-09-30; quiz-cloud.patch): one card per request,
+    # the whole message shown, the cheapest set-up cloud service; never private.
+    "jarvis_quiz_cloud.py",
 )
 
 

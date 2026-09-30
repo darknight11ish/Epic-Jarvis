@@ -485,6 +485,15 @@
        "title": "Fetch the caption text of a YouTube video for a quiz"
       },
       {
+       "action": "quiz_cloud_grade",
+       "fixed": false,
+       "id": "quiz_cloud_grade",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a quiz to a cloud AI service to be graded better"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -1524,6 +1533,15 @@
        "title": "Fetch the caption text of a YouTube video for a quiz"
       },
       {
+       "action": "quiz_cloud_grade",
+       "fixed": false,
+       "id": "quiz_cloud_grade",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a quiz to a cloud AI service to be graded better"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -2559,6 +2577,15 @@
        "title": "Fetch the caption text of a YouTube video for a quiz"
       },
       {
+       "action": "quiz_cloud_grade",
+       "fixed": false,
+       "id": "quiz_cloud_grade",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a quiz to a cloud AI service to be graded better"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -3588,6 +3615,15 @@
        "title": "Fetch the caption text of a YouTube video for a quiz"
       },
       {
+       "action": "quiz_cloud_grade",
+       "fixed": false,
+       "id": "quiz_cloud_grade",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a quiz to a cloud AI service to be graded better"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -4615,6 +4651,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch the caption text of a YouTube video for a quiz"
+      },
+      {
+       "action": "quiz_cloud_grade",
+       "fixed": false,
+       "id": "quiz_cloud_grade",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a quiz to a cloud AI service to be graded better"
       },
       {
        "fixed": true,
@@ -5659,6 +5704,15 @@
        "title": "Fetch the caption text of a YouTube video for a quiz"
       },
       {
+       "action": "quiz_cloud_grade",
+       "fixed": false,
+       "id": "quiz_cloud_grade",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a quiz to a cloud AI service to be graded better"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -6692,6 +6746,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Fetch the caption text of a YouTube video for a quiz"
+      },
+      {
+       "action": "quiz_cloud_grade",
+       "fixed": false,
+       "id": "quiz_cloud_grade",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a quiz to a cloud AI service to be graded better"
       },
       {
        "fixed": true,

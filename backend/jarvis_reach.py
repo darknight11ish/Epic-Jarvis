@@ -272,6 +272,11 @@ class Ctx:
     # None} - the module is here and its caption reader installed / the module
     # is here but the reader is not / the module is not here; None: look.
     youtube: Optional[dict] = None
+    # "Grade this better" on a quiz (jarvis_quiz_cloud.py): {"ready": True | False |
+    # None} - the module is here and a cloud service is set up (a saved key AND a
+    # monthly limit) / the module is here but no service is set up / the module
+    # is not here; None: look.
+    quiz_cloud: Optional[dict] = None
 
 
 def _gate_action(lookup: str) -> Optional[str]:
@@ -1134,6 +1139,51 @@ def _sky_weather(ctx: Ctx) -> dict:
                 "online - they are worked out on your own devices.")
 
 
+def _quiz_cloud_ready() -> Optional[bool]:
+    """Is jarvis_quiz_cloud here, and is a cloud service set up for it (a key
+    saved on this PC AND a monthly limit)? None = the module itself is not on
+    this PC. Opens no connection."""
+    try:
+        import jarvis_quiz_cloud as QC
+    except Exception:
+        return None
+    try:
+        return bool(QC.status()[1].get("ready"))
+    except Exception:
+        return False
+
+
+def _quiz_cloud(ctx: Ctx) -> dict:
+    """"Grade this better" on a quiz (jarvis_quiz_cloud.py, the owner's decision of
+    2026-09-30): ONE approval card per request lists exactly what would leave
+    this PC; the quiz is then sent to the cheapest cloud service the chatbot
+    driver has set up. Never for a private quiz or after a crisis answer."""
+    name = "Quiz grading in the cloud"
+    ready = ctx.quiz_cloud.get("ready") if ctx.quiz_cloud is not None else _quiz_cloud_ready()
+    if ready is None:
+        return _row("quiz_cloud", name, "not_set_up", "", ASK_NA,
+                    "Not set up: this PC's Jarvis does not have \"Grade this better\" yet - "
+                    "run apply-patches.ps1.")
+    tier = "ask"
+    try:
+        tier = str(ctx.tier("quiz_cloud_grade"))
+    except Exception:
+        pass
+    if tier == "never":
+        return _row("quiz_cloud", name, "blocked", "", ASK_NEVER,
+                    "Your settings say never, so a quiz is never sent to a cloud service.")
+    if not ready:
+        return _row("quiz_cloud", name, "not_set_up", "", ASK_NA,
+                    "Not set up: no cloud service has a saved key AND a monthly money limit on "
+                    "this PC yet. See the chatbot API lines on the AI chatbots row.")
+    return _row("quiz_cloud", name, "on", "your chosen AI service", ASK_EVERY,
+                "Sends one quiz you have answered - the questions, your answers and the "
+                "passages, shown word for word on the card - to the cheapest AI service you "
+                "have set up, to be marked better. One card per request. Never for a quiz "
+                "about money, health or anything private, and never after a crisis message. "
+                "It costs a little, within your monthly limit.")
+
+
 #: Every way Jarvis can reach something outside itself, in the order both
 #: apps show them. A new way out is ONE entry here.
 KINDS = (
@@ -1149,6 +1199,7 @@ KINDS = (
     ("notes_write", _notes_write),
     ("github", _github),
     ("youtube", _youtube),
+    ("quiz_cloud", _quiz_cloud),
     ("phone_push", _phone_push),
     ("computer", _computer),
     ("browser", _browser),

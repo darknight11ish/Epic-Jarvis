@@ -979,6 +979,17 @@ $PATCHES = @(
     # requirements.txt, and the rebuilt jarvis-framework.toml's `youtube_captions_read = "ask"` line; without
     # them, or on any error, the banner says so and the routes are simply not there.
     'youtube.patch'
+    # "Grade this better" on a quiz (the owner's decision of 2026-09-30; docs/STUDY-FROM-TEXT-DESIGN.md
+    # section 7 and 15, JARVIS-API section 113): ONE card per request that lists exactly what would leave the
+    # PC (the quiz's questions, the owner's answers and the passages), then that one message goes to the
+    # cheapest cloud service the chatbot driver has set up (a saved key AND a monthly limit). Never for a
+    # quiz that looks private or had a crisis answer. TWO files: in jarvis_gate.py the new action
+    # `quiz_cloud_grade` joins the "acts only on tier ask" set and gets its _RISK line (both right after
+    # youtube.patch's own, so it goes after it); in jarvis_hud.py ONE install block after youtube.patch's
+    # own (the last one before `_loopback_companion`). Needs jarvis_quiz_cloud.py copied in, chatbot.patch's
+    # jarvis_chatbot_api.py, and the rebuilt jarvis-framework.toml's `quiz_cloud_grade = "ask"` line; without
+    # them, or on any error, the banner says so and the routes are simply not there.
+    'quiz-cloud.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1213,6 +1224,8 @@ $SHIPPED = @(
     'jarvis_tag_suggest.py'      # tag-suggest.patch: "Suggest tags overnight" - the local model may suggest a tag for a few untagged chats a night, each a card (chat_tag_suggest), filed only on a tap; off by default, turning it on is one card (chat_tags_suggest_on)
     # --- "Quiz me on a YouTube video" (2026-09-30, youtube.patch) ---
     'jarvis_youtube.py'          # youtube.patch: ONE card per YouTube link (youtube_captions_read), then the caption text only is fetched (youtube-transcript-api) and quizzed on as outside text; breaks YouTube's terms, may be blocked; never video or audio
+    # --- "Grade this better" (2026-09-30, quiz-cloud.patch) ---
+    'jarvis_quiz_cloud.py'       # quiz-cloud.patch: ONE card per request (quiz_cloud_grade) listing exactly what leaves the PC, then one message to the cheapest set-up cloud service (jarvis_chatbot_api.py); never for a private quiz or after a crisis answer
 )
 
 # The settings file. Installed only where none exists; never overwritten.

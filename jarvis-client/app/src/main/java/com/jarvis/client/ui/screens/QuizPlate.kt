@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.Decks
 import com.jarvis.client.net.Quiz
+import com.jarvis.client.net.Youtube
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
@@ -97,6 +98,8 @@ internal fun QuizSection(
     val open by JarvisRuntime.quiz.collectAsState()
     val spanishSupported by JarvisRuntime.spanishSupported.collectAsState()
     val rememberedNotice by JarvisRuntime.spanishNotice.collectAsState()
+    val youtubeNote by JarvisRuntime.youtubeNote.collectAsState()
+    val youtubeOpen by JarvisRuntime.youtube.collectAsState()
     var pasted by remember { mutableStateOf("") }
     // Spanish practice's start form (the level and exercise are requests; the PC's default otherwise).
     var mode by remember { mutableStateOf(Quiz.MODE_TEXT) }
@@ -256,6 +259,14 @@ internal fun QuizSection(
                     },
                 )
                 quiz != null -> {
+                    if (Youtube.fromCaptions(quiz)) {
+                        // A quiz made from a video's captions (JARVIS-API 112): a small label,
+                        // and the PC's own sentence when the video was too long to cover.
+                        Text(Youtube.LABEL, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                        youtubeNote?.takeIf { it.first == quiz.id }?.let {
+                            Text(it.second, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                        }
+                    }
                     if (quiz.mode == Quiz.MODE_SPANISH) {
                         quiz.level?.let {
                             Text(
@@ -403,7 +414,9 @@ internal fun QuizSection(
                             )
                         }
                         Gap(6)
-                        if (quiz.mode != Quiz.MODE_SPANISH || quiz.keySource != "model") {
+                        if (Youtube.fromCaptions(quiz)) {
+                            Text(Youtube.OUTSIDE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                        } else if (quiz.mode != Quiz.MODE_SPANISH || quiz.keySource != "model") {
                             Text(Quiz.OUTSIDE_TEXT, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -470,6 +483,8 @@ internal fun QuizSection(
                 }
                 open != null -> Unit
                 else -> {
+                    // A request already open on the PC keeps its block in either mode.
+                    val showYoutube = mode == Quiz.MODE_TEXT || youtubeOpen != null
                     if (!privateHidden) {
                         StartForm(
                             mode = mode,
@@ -490,6 +505,10 @@ internal fun QuizSection(
                             canAct = canAct,
                             onStart = { start() },
                         )
+                        if (showYoutube) {
+                            Gap(10)
+                            YoutubeBlock(canAct = canAct, privateHidden = false)
+                        }
                     } else {
                         Text(
                             "Show your lists to paste a text for a quiz.",
@@ -499,6 +518,11 @@ internal fun QuizSection(
                             if (showPrivateBusy) "Checking…" else "Show",
                             enabled = !showPrivateBusy, onClick = onShowPrivate,
                         )
+                        // A waiting request still shows its state and Cancel; the link field is not offered.
+                        if (youtubeOpen != null) {
+                            Gap(10)
+                            YoutubeBlock(canAct = canAct, privateHidden = true)
+                        }
                     }
                 }
             }
@@ -1003,5 +1027,131 @@ private fun SummaryView(
         Gap(4)
         Text(Quiz.OUTSIDE_TEXT, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         Quiet(Quiz.CLOSE, onClick = onDone)
+    }
+}
+
+/**
+ * "Quiz me on a YouTube video" (docs/STUDY-FROM-TEXT-DESIGN.md section 14,
+ * [Youtube]): a second block on the Quiz page, under the paste box. A link
+ * field and one button; the PC raises ONE approval card for that link (decided
+ * in the ordinary approval screens, never here), and this block polls the
+ * request about every [Youtube.POLL_SECONDS] seconds until it is ready (the
+ * ordinary quiz opens), or over (the PC's own sentence is shown and the field
+ * is offered again). Cancel shows only while the card is waiting.
+ *
+ * The link is never kept: it is sent once, the field is cleared the moment the
+ * card is raised, and no sentence here ever repeats it. With "Hide memory lists
+ * and chat history" on ([privateHidden]) the field and the request's link are
+ * not shown - the state sentence and Cancel are. The terms line is always
+ * visible, not behind a tap. A PC without the feature gets one line and no block.
+ * The start button is held on a stale link (rule 4); polling and Cancel are not.
+ */
+@Composable
+private fun YoutubeBlock(canAct: Boolean, privateHidden: Boolean) {
+    val chrome = LocalChrome.current
+    val scope = rememberCoroutineScope()
+    val request by JarvisRuntime.youtube.collectAsState()
+    val available by JarvisRuntime.youtubeAvailable.collectAsState()
+    // Plain `remember`: the link lives in this block's memory only and is gone when the block is.
+    var link by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var said by remember { mutableStateOf<String?>(null) }
+
+    // Ask the PC whether it has the feature (a read; never starts anything), again when the link comes back.
+    LaunchedEffect(canAct) {
+        JarvisRuntime.youtubeCheck()
+    }
+
+    // Poll while a request is open. The effect ends when the request does, or when the page closes.
+    val polling = request?.let { Youtube.keepPolling(it.phase) } == true
+    LaunchedEffect(request?.id, polling) {
+        while (polling) {
+            kotlinx.coroutines.delay(Youtube.POLL_SECONDS * 1000L)
+            val poll = JarvisRuntime.pollYoutube()
+            said = poll.said
+            if (poll.done) break
+        }
+    }
+
+    if (available == false) {
+        Text(Youtube.MISSING, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        return
+    }
+    if (available == null && request == null) return
+
+    Text(Youtube.TITLE, style = MaterialTheme.typography.labelMedium, color = chrome.textMid)
+    Text(Youtube.INTRO, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    Gap(4)
+    val open = request
+    if (open != null) {
+        Text(
+            Youtube.shown(open),
+            style = MaterialTheme.typography.bodySmall, color = chrome.textHi,
+            modifier = Modifier.liveStatus(),
+        )
+        if (!privateHidden) {
+            open.link?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textLo) }
+        }
+        if (open.phase == Youtube.Phase.WAITING) {
+            // Never held on a stale link: it only ever makes things safer.
+            Quiet(
+                if (busy) Youtube.CANCELLING else Youtube.CANCEL,
+                enabled = !busy,
+                onClick = {
+                    busy = true
+                    scope.launch {
+                        try {
+                            said = JarvisRuntime.cancelYoutube().ifEmpty { null }
+                        } finally {
+                            busy = false
+                        }
+                    }
+                },
+            )
+        }
+    } else if (!privateHidden) {
+        TextInput(
+            value = link,
+            // One over the limit is kept, never cut to fit: the PC refuses it in its own words.
+            onValueChange = { link = it.take(Youtube.LINK_MAX + 1) },
+            placeholder = Youtube.PLACEHOLDER,
+            singleLine = true,
+        )
+        Text(Youtube.TERMS, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        Text(Youtube.OUTSIDE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        Quiet(
+            if (busy) Youtube.STARTING else Youtube.START,
+            enabled = canAct && !busy && Youtube.canStart(link),
+            onClick = {
+                if (canAct && !busy && Youtube.canStart(link)) {
+                    busy = true
+                    said = null
+                    val sent = link
+                    scope.launch {
+                        try {
+                            val (ok, sentence) = JarvisRuntime.startYoutube(sent)
+                            // The card is raised: the link is let go at once. The block now
+                            // shows the PC's state sentence itself, so nothing is said twice.
+                            if (ok) {
+                                link = ""
+                                said = null
+                            } else {
+                                said = sentence.ifEmpty { null }
+                            }
+                        } finally {
+                            busy = false
+                        }
+                    }
+                }
+            },
+        )
+    } else {
+        Text(Youtube.WORDS_HIDDEN, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    }
+    said?.let {
+        Text(
+            it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
+            modifier = Modifier.liveStatus(),
+        )
     }
 }

@@ -559,3 +559,42 @@ Slice B, built on the backend (2026-09-30); the apps build from this. The owner'
 **What is not in this slice.** A model tool or chat door for it (`jarvis_agent.py` untouched, so "quiz me on this video" in chat is not yet understood); playlists; a timestamped outline; choosing a caption language in the apps; Spanish-mode practice from captions; the cloud "grade this better" button; any audio or video download (refused for good, section 9); the second-card "Study helper" for this quiz (it uses whatever lane the quiz uses).
 
 **Known limits, said plainly.** Never run against the real site here. YouTube may refuse this PC's address (`youtube_refused`), change how captions are served (`youtube_failed`), or close nothing of the owner's - no account or cookie is involved. An auto-generated caption is used when no human-made one exists, and can be wrong; the quiz is marked against it anyway.
+
+## 15. Slice contract (frozen 2026-09-30): the cloud "Grade this better" button
+
+The cloud grader, built on the backend (2026-09-30); the apps build from this. The owner's rule (section 7, answer 2): **grading is local first, cloud on request; a card lists exactly what leaves the PC (the quiz's questions, the owner's answers and the source passages as shown), one card per request; this bends rule 1 for that one quiz only; keys follow rule 3; the chatbot driver's monthly money limit applies.** API: `docs/JARVIS-API.md` section 113 (109 and 111 are reserved by the build queue, 110 and 112 are taken). Backend: `backend/jarvis_quiz_cloud.py`, `backend/quiz-cloud.patch`, the hooks in `backend/jarvis_quiz.py`, `backend/test_quiz_cloud.py`. **Never run against a real provider** (no network in the build container); the transport is the chatbot driver's own `ApiChatbot`, unchanged. **Builders do not edit `jarvis_quiz_cloud.py`, `quiz-cloud.patch`, `jarvis_chatbot_api.py` or the gate.**
+
+**Where it lives.** One button on the existing quiz screen in both apps, shown once at least one question is answered and the quiz is a text quiz (not Spanish practice). No new Brain entry and no new page. The button sits beside Finish; the result is the same quiz screen with new marks.
+
+**The flow (both apps identical).**
+1. On open, and when the quiz screen is shown, the app reads `GET /api/quiz-cloud`. A 404/503 means the PC does not have it: show nothing (no button). `ready: false` means no service is set up: show the button disabled with the `leaves` line and, on tap, the PC's own `no_service` message (it names the two PowerShell lines); the app never tries to set a key up (keys are added on the PC only, as for the chatbot API services).
+2. The owner presses **Grade this better**. The app sends `POST /api/quiz-cloud/grade` `{quiz_id}` (no `service` in the first version). Any refusal is shown as the PC's `message`, word for word, and no card exists.
+3. On **202** the app shows `request.message` and **polls `GET /api/quiz-cloud/{id}` about every 2 seconds** (stop at any end state or when the page closes). The card is an ordinary approval (`/api/pending`), decided in the apps' existing approval screens - a **risky approval** (Windows Hello / phone screen lock), never by voice, never from the phone widget's Approve without the lock. The app does not build the card text.
+4. States: `waiting` -> `sending` -> `ready`. On `ready` the app reloads the quiz (`request.quiz`, or `GET /api/quiz/{id}`): each re-marked question now has `mark.marked_by == "cloud"` and `mark.service`; show `Marked by <service>` beside such a mark. On `denied`, `timed_out`, `withdrawn`, `refused` or `failed` show `request.message`; the marks are unchanged and the button is offered again. **Cancel** (`POST /api/quiz-cloud/{id}/cancel`) only in `waiting`; never held on a stale link.
+5. A quiz with `grader_verified: false` keeps "Jarvis's guess" beside every mark, cloud marks included.
+
+**Rules for the apps.**
+* **Rule 4 / stale link:** the start button is held (greyed, the usual "waiting for a live link" words). Polling, Cancel and reading a finished quiz are not held.
+* **Under "Hide memory lists and chat history":** the request's `marks` comments and the quiz words are hidden like the quiz's own; the state message and Cancel stay.
+* **App lock (desktop):** the button is behind the lock like the rest of Quiz.
+* **Never** put an answer, a comment, the service's key or any card text into a notification, toast, widget line or the tray. Approval-card titles are the PC's words (`send a quiz to a cloud AI service to be graded better`).
+* **Speech:** cloud marks and comments are ordinary quiz text; none is read aloud.
+* **Nothing is kept:** the apps do not save the request, the marks or the service reply anywhere.
+
+**Shared words (both apps, word for word; the PC also sends them in `GET /api/quiz-cloud`).**
+* Button: `Grade this better`
+* Intro (under the button when disabled, and in the disabled tooltip): `Send this quiz to a cloud AI service that marks it more carefully than the model on this PC. It asks with a card first, every time, and the card lists exactly what would leave this PC.`
+* Leaves line (always visible under the button, not behind a tap): `This sends your questions, your answers and the passages to an outside company. It costs a little money and is kept under that company's own terms. Nothing private is ever sent.`
+* Mark label: `Marked by <service>`
+* State messages come from the PC (`request.message`); for reference: `waiting`: Waiting for your yes on the approval card. `sending`: Sending the quiz to <service>... `ready`: Ready. <service> marked N answers (about $0.01). `denied`: You said no, so nothing was sent. `timed_out`: Nobody answered the card in time, so nothing was sent. `withdrawn`: You cancelled before the card was answered, so nothing was sent. `refused`: The card could not be answered, so nothing was sent. `failed`: The quiz could not be marked by the cloud service. Your marks were not changed.
+* Every refusal and failure message comes from the PC (section 113.2); the apps never rewrite it and never show an error code.
+
+**Wire shapes (frozen).** Section 113.1 has the routes and the `Request` shape. `Mark` (section 98) gains, additively and only for a re-marked question, `"marked_by": "cloud"` and `"service": str`. **Decode leniently:** ignore unknown keys and unknown `state` values (treat an unknown state as still working, and stop after 3 minutes with the PC's last message).
+
+**Fixtures.** The words above and example `Request` shapes are for a `tools/gen_quiz_cloud_cases.py` (not written yet; the first app builder writes it in the pattern of `gen_decks_cases.py`).
+
+**Parity.** `tools/check_parity.py` lists `/api/quiz-cloud`, `/api/quiz-cloud/grade`, `/api/quiz-cloud/{id}` and `/api/quiz-cloud/{id}/cancel` as `planned`; the app builder moves them to `ported`. Nothing about this feature is deliberately one-sided.
+
+**What is refused, said plainly (so the apps expect it).** A quiz with a crisis answer; a quiz marked private; anything whose questions, passages or answers look like money, health, a password, an account or ID number or a secret (also a possible false alarm on a study text about medicine or finance - it then simply stays on this PC); Spanish practice; a quiz made from outside text other than YouTube captions. For a YouTube-caption quiz the card says the passages are caption text. The service is the cheapest one the owner has set up with a key AND a monthly limit; there is none until the owner sets one up on the PC.
+
+**What is not in this slice.** Any UI; a chat door; choosing the service in the app; Spanish practice; the second-card "Study helper" bigger local grader (section 9, the answer to a noisy local grader that should be tried first); measuring the cloud grader's marks against `quiz_grader_cases.json` (until then cloud marks are not "verified").
