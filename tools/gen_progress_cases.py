@@ -31,6 +31,7 @@ import datetime as dt
 import json
 import math
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -71,8 +72,17 @@ GAP = 3
 STEP = CELL + GAP
 #: The share of the accent colour laid over the surface for level 0..4. Level
 #: 0 is no fill at all: the surface with a thin outline (neutral, never red).
-SHADING = {"alpha": [0.0, 0.22, 0.42, 0.66, 0.92], "empty_outline": True,
-           "min_step": 0.20}
+#: The ladder is held to MEASURED contrast (see `ladder_report`): level 1 at
+#: least 1.5:1 over the surface, every neighbouring pair at least 1.25:1, the
+#: top level at least 4.5:1 - for each desktop theme in theme.css. The phone's
+#: accent is the owner's choice, so ProgressTest measures the worst case over
+#: the whole accent palette instead (the top level clears 3.9:1 there, because
+#: the accent is only guaranteed 4.5:1 against the card, not against the
+#: slightly darker surface the grid sits on).
+SHADING = {"alpha": [0.0, 0.40, 0.58, 0.79, 1.0], "empty_outline": True,
+           "min_step": 0.18,
+           "require": {"first_over_surface": 1.5, "neighbour": 1.25, "top": 4.5,
+                       "phone_top": 3.9}}
 #: The radar: a square canvas, its middle, the outer ring's radius, and how
 #: far past the ring a label sits.
 RADAR_SIZE = 260
@@ -83,6 +93,67 @@ RINGS = (0.25, 0.5, 0.75, 1.0)
 
 assert all(b - a >= SHADING["min_step"] - 1e-9
            for a, b in zip(SHADING["alpha"], SHADING["alpha"][1:])), "shading steps too close"
+
+
+def _lin(c: float) -> float:
+    c /= 255
+    return c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4
+
+
+def _lum(rgb) -> float:
+    r, g, b = rgb
+    return 0.2126 * _lin(r) + 0.7152 * _lin(g) + 0.0722 * _lin(b)
+
+
+def _ratio(a, b) -> float:
+    hi, lo = sorted((_lum(a), _lum(b)), reverse=True)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def _mix(under, over, alpha):
+    return [round(o * alpha + u * (1 - alpha)) for u, o in zip(under, over)]
+
+
+def _theme_tokens() -> dict:
+    """--surface-2 and --accent-rgb of every desktop theme, read from theme.css
+    (a translucent surface is laid over black, the usual dark desktop)."""
+    css = (ROOT / "jarvis-desktop" / "src" / "theme.css").read_text(encoding="utf-8")
+    blocks = {"deep-space": css[css.index(":root {"):css.index("\n}\n", css.index(":root {"))]}
+    for name in ("paper", "high-contrast"):
+        i = css.index(f'[data-theme="{name}"] {{')
+        blocks[name] = css[i:css.index("\n}\n", i)]
+    out = {}
+    for name, text in blocks.items():
+        m = re.search(r"--surface-2:\s*rgba?\(([^)]*)\)", text)
+        a = re.search(r"--accent-rgb:\s*(\d+)\s+(\d+)\s+(\d+)", text)
+        if name != "deep-space":
+            assert m and a, name
+        if name == "deep-space":
+            base = css[:css.index('[data-theme="deep-space"]')]
+            m = re.search(r"--surface-2:\s*rgba?\(([^)]*)\)", base)
+            a = re.search(r"--accent-rgb:\s*(\d+)\s+(\d+)\s+(\d+)", base)
+        parts = [float(x) for x in re.split(r"[ ,/]+", m.group(1).strip()) if x]
+        alpha = parts[3] if len(parts) > 3 else 1.0
+        surface = _mix([0, 0, 0], parts[:3], alpha)
+        out[name] = {"surface": surface, "accent": [int(x) for x in a.groups()]}
+    return out
+
+
+def ladder_report() -> dict:
+    """The measured contrast of the five levels in every desktop theme; raises
+    when the ladder is not distinguishable (the owner's rule, 2026-09-30)."""
+    need = SHADING["require"]
+    out = {}
+    for name, t in _theme_tokens().items():
+        levels = [_mix(t["surface"], t["accent"], a) for a in SHADING["alpha"][1:]]
+        over = [round(_ratio(c, t["surface"]), 2) for c in levels]
+        near = [round(_ratio(levels[i], levels[i - 1]), 2) for i in range(1, 4)]
+        assert over[0] >= need["first_over_surface"], f"{name}: level 1 is only {over[0]}:1"
+        assert min(near) >= need["neighbour"], f"{name}: neighbouring levels {near}"
+        assert over[-1] >= need["top"], f"{name}: the top level is only {over[-1]}:1"
+        out[name] = {"surface": t["surface"], "accent": t["accent"],
+                     "over_surface": over, "neighbours": near}
+    return out
 
 
 def ts(y, m, d, hh=12, mm=0):
@@ -134,7 +205,7 @@ class _Counted:
 
     def uuid4(self):
         self.n += 1
-        return types.SimpleNamespace(hex=f"{self.n:032x}")
+        return types.SimpleNamespace(hex=f"{self.n:010x}" + "0" * 22)   # a goal id keeps the first 10
 
 
 class _NoSched:
@@ -257,6 +328,24 @@ def balance_cases() -> dict:
                                          ("bench", read, ""))
     p.delete_benchmark(pid, run)
     out["after_a_benchmark_is_deleted"] = PR.balance(projects=p, goals=g)
+    # A stopped goal leaves the chart like a draft (owner, 2026-09-30).
+    p, g, clock = _world("bal-stopped")
+    pid = p.create({"name": "Life", "kind": "life"}, here=False)["id"]
+    a1 = _bench(p, pid, "Weekly distance", "km", "higher", 20)
+    a2 = _bench(p, pid, "Books read", "", "higher", 12)
+    p.log(pid, a1, 5, at=ts(2026, 9, 1))
+    p.log(pid, a1, 12.5, at=ts(2026, 10, 1))
+    p.log(pid, a2, 1, at=ts(2026, 9, 1))
+    p.log(pid, a2, 6, at=ts(2026, 10, 1))
+    live = g.accept(g.create("Insulate the garage", [{"step": s, "by": "", "done": False}
+                                                    for s in ("a", "b")])["id"])["id"]
+    gone = g.accept(g.create("Paint the fence", [{"step": s, "by": "", "done": False}
+                                                for s in ("a", "b")])["id"])["id"]
+    PR.set_balance({"axes": [{"kind": "bench", "ref": a1}, {"kind": "bench", "ref": a2},
+                             {"kind": "goal", "ref": live}, {"kind": "goal", "ref": gone}]},
+                   projects=p, goals=g)
+    g.stop(gone)
+    out["after_a_goal_is_stopped"] = PR.balance(projects=p, goals=g)
     for c in out.values():
         c["radar"] = radar([a["fraction"] for a in c["axes"]])
     return out
@@ -306,7 +395,7 @@ def cases() -> dict:
     return {
         "words": dict(PR.WORDS),
         "levels": [dict(x) for x in PR.LEVELS],
-        "shading": SHADING,
+        "shading": dict(SHADING, themes=ladder_report()),
         "limits": {"weeks_default": PR.WEEKS_DEFAULT, "weeks_min": PR.WEEKS_MIN,
                    "weeks_max": PR.WEEKS_MAX, "axes_min": PR.MIN_AXES, "axes_max": PR.MAX_AXES,
                    "label_max": PR.MAX_LABEL, "label_short": PR.MAX_SHORT},

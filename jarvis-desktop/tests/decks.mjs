@@ -5,7 +5,8 @@
  * decks" and the Keep sheet, src-tauri/src/brain/decks.rs and quiz.rs).
  *
  * The first half needs no browser and runs anywhere (CI's backend job too):
- * - the shared words, word for word, against tests/fixtures/decks-words.json;
+ * - the shared words, word for word, against tests/fixtures/decks-cases.json (written by tools/gen_decks_cases.py, which
+ *   the phone's DecksTest.kt and QuizTest.kt read as well);
  * - no streak, point, heart or lateness word in any string of the new screens
  *   (the contract's banned list, whole words, any case) - with a control that
  *   proves the scan does see one;
@@ -27,7 +28,7 @@ import { dirname, join } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const read = (p) => readFileSync(join(HERE, "..", p), "utf8");
-const FIX = JSON.parse(readFileSync(join(HERE, "fixtures", "decks-words.json"), "utf8"));
+const FIX = JSON.parse(readFileSync(join(HERE, "fixtures", "decks-cases.json"), "utf8"));
 const W = FIX.words;
 
 const D = await import("../src/decks.js");
@@ -116,8 +117,34 @@ await check("the shared words are word for word what the contract says", async (
   eq(D.BACK_HEADING, W.back_answer);
   eq(D.FROM_TEXT, W.passage_from_text);
   eq(D.EXAMPLE_SENTENCE, W.passage_example);
+  eq(D.REVIEW_ALL, W.review_all);
+  eq(D.PER_DECK_NOTE, W.per_deck_note);
+  eq(Q.QUIZ_INTRO, W.quiz_intro);
+  eq(Q.SPANISH_INTRO, W.spanish_intro);
+  eq(Q.ERROR_WORDS.model_unavailable, W.model_unavailable);
+  eq(Q.ACCENT_ROW_LABEL, W.accent_row_label);
   assert.deepEqual([...Q.ACCENTS], FIX.accents);
   assert.deepEqual([...Q.LEVEL_IDS], ["A1", "A2", "B1", "B2", "C1", "C2"]);
+});
+
+await check("the small rules give the worked examples' answers (the phone runs the same ones)", async () => {
+  const E = FIX.examples;
+  for (const [day, want] of E.format_day) assert.equal(D.formatDay(day), want, String(day));
+  for (const [day, want] of E.next_ready_line) assert.equal(D.nextReadyLine(day), want, String(day));
+  for (const [n, want] of E.cards_label) assert.equal(D.cardsLabel(n), want);
+  for (const [n, want] of E.kept_line) assert.equal(D.keptLine(n), want);
+  for (const [deck, available, hidden, want] of E.can_review) {
+    assert.equal(D.canReview({ available, hidden }, deck), want, JSON.stringify([deck, available, hidden]));
+  }
+  for (const [ready, available, hidden, want] of E.can_review_all) {
+    assert.equal(D.canReviewAll({ available, hidden, ready }), want, JSON.stringify([ready, available, hidden]));
+  }
+  for (const [each, total, want] of E.per_deck_note) {
+    assert.equal(D.perDeckNoteShown({ ready: total, decks: each.map((ready) => ({ ready })) }), want,
+      JSON.stringify([each, total]));
+  }
+  // The wording the PC sends is in the file for the tests only: the apps never copy it.
+  assert.equal(FIX.pc_words.key_label_model, W.key_label_model);
 });
 
 await check("the sentence about a key written by the model comes from the PC, not from a copy here", async () => {
@@ -169,7 +196,7 @@ await check("CONTROL: the scan does see a banned word, whole and in any case", a
   assert.deepEqual(banned("Keep it up"), ["keep it up"]);
   assert.deepEqual(banned("Earn XP"), ["XP"]);
   assert.deepEqual(banned("Three hearts left"), ["hearts"]);
-  assert.deepEqual(banned("Nothing was lost"), ["lost"]);
+  assert.deepEqual(banned("Your progress is lost"), ["lost"]);
   assert.deepEqual(banned("Top of the leaderboard, in the league"), ["leaderboard", "league"]);
   // Whole words only.
   assert.deepEqual(banned("An expert is not an XP-free zone? Lostock, hearth, behinds"), ["XP"]);
@@ -717,19 +744,64 @@ if (K) {
     assert.match(back, /Plants/);
   });
 
-  await check("a paused deck says so and reviews nothing; all decks paused reads the PC's line", async () => {
+  await check("Review is offered only for a deck with cards ready that is not paused; all decks paused: the PC's line, no Review", async () => {
     const page = await workTab(decksData());
-    await fkey(page, "review:d2b3c4d5e6f7").click();
-    await settle(page, 500);
-    const one = await text(page, "#decks-body");
+    const paused = await fkey(page, "review:d2b3c4d5e6f7").isDisabled();
+    const ready = await fkey(page, "review:d1a2b3c4d5e6").isDisabled();
     await page.close();
-    assert.match(one, /This deck is paused/i);
+    assert.equal(paused, true);
+    assert.equal(ready, false);
     const both = await workTab({ decks: { decks: [{ ...PLANTS(), paused: true }, VERBOS()] } });
-    await both.locator("#decks-card").getByRole("button", { name: /^Review/ }).first().click();
-    await settle(both, 500);
     const all = await text(both, "#decks-body");
+    const offs = await both.locator('#decks-card [data-fkey^="review"]').evaluateAll((els) => els.map((e) => e.disabled));
     await both.close();
-    assert.match(all, /paused/i);
+    // (the test PC's stand-in says "Nothing ready today"; the real PC says "All decks paused")
+    assert.match(all, /All decks paused|Nothing ready today/);
+    assert.ok(offs.length > 0 && offs.every(Boolean), JSON.stringify(offs));
+  });
+
+  await check("Review all decks: one review over every deck; a rating names its scope (all = empty, a deck = its id)", async () => {
+    const page = await workTab(decksData());
+    await page.getByRole("button", { name: W.review_all }).click();
+    await settle(page, 500);
+    await page.getByRole("button", { name: W.show_answer }).click();
+    await settle(page);
+    await page.locator('[data-rating="good"]').click();
+    await settle(page, 500);
+    await fkey(page, "review-stop").click();
+    await settle(page, 500);
+    await fkey(page, "review:d1a2b3c4d5e6").click();
+    await settle(page, 500);
+    await page.getByRole("button", { name: W.show_answer }).click();
+    await settle(page);
+    await page.locator('[data-rating="good"]').click();
+    await settle(page, 500);
+    const calls = await dcalls(page);
+    await page.close();
+    const reviews = calls.filter((c) => c.cmd === "brain_review");
+    const rates = calls.filter((c) => c.cmd === "brain_review_rate");
+    assert.equal(reviews[0].deck ?? null, null, "the first review covers every deck");
+    assert.equal(reviews[1].deck, "d1a2b3c4d5e6");
+    assert.deepEqual(rates.map((c) => c.deck), ["", "d1a2b3c4d5e6"]);
+  });
+
+  await check("the PC no longer remembers the reveal (it restarted): the reveal is dropped and the card asked for again", async () => {
+    const page = await workTab(decksData({}));
+    await page.close();
+    const p2 = await workTab({ ...decksData(), decks: { ...decksData().decks, refuse: { brain_review_rate: "not_revealed" } } });
+    await fkey(p2, "review:d1a2b3c4d5e6").click();
+    await settle(p2, 500);
+    await p2.getByRole("button", { name: W.show_answer }).click();
+    await settle(p2);
+    await p2.locator('[data-rating="good"]').click();
+    await settle(p2, 600);
+    const reads = (await dcalls(p2)).filter((c) => c.cmd === "brain_review").length;
+    const again = await p2.getByRole("button", { name: W.show_answer }).count();
+    const rated = await p2.locator('[data-rating="good"]').count();
+    await p2.close();
+    assert.ok(reads >= 2, `the review was read ${reads} times`);
+    assert.equal(again, 1, "Show answer is back");
+    assert.equal(rated, 0, "the rating buttons are gone until the answer is shown again");
   });
 
   await check("a card that is gone: the review asks again instead of failing", async () => {

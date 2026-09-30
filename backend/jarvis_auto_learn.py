@@ -1691,7 +1691,7 @@ def _note_card(c, pid: int, reason: str, provenance: Optional[str] = None,
 
 
 def card_notes(ids) -> dict:
-    """{proposal id: {"auto_reason", "provenance"}} for these proposals."""
+    """{proposal id: {"auto_reason", "provenance", "topic_ask"}} for these proposals."""
     ids = [int(i) for i in ids or [] if isinstance(i, int) and not isinstance(i, bool)]
     if not ids:
         return {}
@@ -1703,11 +1703,12 @@ def card_notes(ids) -> dict:
         with closing(st._connect()) as c:
             _init_notes(c)
             rows = c.execute(
-                "SELECT proposal_id, reason, provenance FROM auto_learn_notes WHERE proposal_id IN (%s)"
-                % ",".join("?" * len(ids)), ids).fetchall()
+                "SELECT proposal_id, reason, provenance, topic_ask FROM auto_learn_notes"
+                " WHERE proposal_id IN (%s)" % ",".join("?" * len(ids)), ids).fetchall()
     except Exception:
         return {}
-    return {int(r[0]): {"auto_reason": r[1] or "", "provenance": r[2]} for r in rows}
+    return {int(r[0]): {"auto_reason": r[1] or "", "provenance": r[2],
+                        "topic_ask": r[3] is not None} for r in rows}
 
 
 def annotate(rows: list) -> list:
@@ -1722,6 +1723,10 @@ def annotate(rows: list) -> list:
             continue
         n = notes.get(r.get("id")) or {}
         r["auto_reason"] = n.get("auto_reason") or ""
+        # Topic controls: a card that asks "this might be about Work, which you
+        # set to not learn" - the apps label its two buttons "Save under
+        # Unsorted" (accept) and "Skip it" (decline). A flag, never the topic.
+        r["topic_ask"] = bool(n.get("topic_ask"))
         if r.get("source") == "remember" and n:
             r["verbatim"] = n.get("provenance") in ("typed", "voice")
     return rows

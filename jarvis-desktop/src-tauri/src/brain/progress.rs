@@ -24,6 +24,10 @@
 //! that is private while nothing else is hidden loses its name and cannot be
 //! ticked.
 //!
+//! While the lists are hidden the chart cannot be changed either: every answer
+//! then carries `lists_hidden: true` (the page draws no picker) and the save
+//! command refuses with the hidden words, as the phone does.
+//!
 //! Nothing from this file is cached, written to disk or logged. The token is
 //! only in the headers `commands::jarvis_headers` builds.
 //!
@@ -213,9 +217,23 @@ fn words_hidden(app: &AppHandle) -> bool {
     crate::lock::private_hidden(app) || crate::lock::app_locked(app)
 }
 
+/// Says on the answer that the private lists are hidden right now (Windows
+/// Hello for memory lists, or App lock locked), whether or not this answer had
+/// anything private in it. The page uses it to offer no picker, the same rule
+/// as the phone: while the lists are hidden nothing on this section changes.
+pub(crate) fn mark_lists_hidden(mut answer: serde_json::Value) -> serde_json::Value {
+    if answer.get("available").and_then(|a| a.as_bool()) == Some(false) {
+        return answer;
+    }
+    if let Some(o) = answer.as_object_mut() {
+        o.insert("lists_hidden".into(), serde_json::json!(true));
+    }
+    answer
+}
+
 fn shown(app: &AppHandle, answer: serde_json::Value) -> serde_json::Value {
     if words_hidden(app) {
-        hide_private(answer)
+        mark_lists_hidden(hide_private(answer))
     } else {
         answer
     }
@@ -272,6 +290,11 @@ pub async fn brain_progress_balance_save(
     axes: serde_json::Value,
 ) -> Result<serde_json::Value, String> {
     require_link_live(&app)?;
+    // The one rule on both apps: while the private lists are hidden (or App
+    // lock is locked) the chart cannot be changed - its names are not shown.
+    if words_hidden(&app) {
+        return Err(HIDDEN_WORDS.to_string());
+    }
     let body = axes_body(&axes)?;
     let base = commands::jarvis_base(&app);
     let response = commands::jarvis_client(Some(WRITE_TIMEOUT))?
@@ -437,6 +460,7 @@ mod tests {
             "five_areas_mixed",
             "target_reached_private",
             "after_a_benchmark_is_deleted",
+            "after_a_goal_is_stopped",
         ] {
             let body = c["balance"][key].to_string();
             let got = progress_answer(200, &body, "axes").unwrap();
@@ -546,6 +570,19 @@ mod tests {
     }
 
     #[test]
+    fn hidden_lists_are_marked_on_every_answer_so_the_page_offers_no_picker() {
+        let plain = cases()["balance"]["nothing_picked"].clone();
+        let out = mark_lists_hidden(hide_private(plain));
+        assert_eq!(out["lists_hidden"], true);
+        assert!(out["axes"].is_array(), "nothing private: the answer stays");
+        let private = mark_lists_hidden(hide_private(cases()["heat"]["private_number"].clone()));
+        assert_eq!(private["lists_hidden"], true);
+        assert_eq!(private["hidden"], true);
+        let old = serde_json::json!({ "available": false });
+        assert_eq!(mark_lists_hidden(old.clone()), old);
+    }
+
+    #[test]
     fn a_hidden_answer_with_no_words_of_its_own_gets_the_shared_ones() {
         let out = hidden_answer(&serde_json::json!({ "keep_on_screen": true }));
         assert_eq!(out["hidden_words"], cases()["words"]["hidden"]);
@@ -558,6 +595,10 @@ mod tests {
             assert!(src.contains(route), "{route}");
         }
         assert!(src.contains("require_link_live(&app)?;"));
+        assert!(
+            src.contains("if words_hidden(&app) {\n        return Err(HIDDEN_WORDS.to_string());"),
+            "a save is refused while the lists are hidden"
+        );
         assert!(src.contains("private_hidden"));
         assert!(src.contains("app_locked"));
     }

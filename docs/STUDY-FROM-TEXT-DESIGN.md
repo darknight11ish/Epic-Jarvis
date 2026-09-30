@@ -288,12 +288,12 @@ has passed on this PC; while false, every app shows "Jarvis's guess" beside a ma
 **Errors** (`{"ok": false, "error": <code>, "message": <plain words>}`): `text_too_short`,
 `text_too_long`, `bad_count`, `too_many_quizzes`, `not_found`, `bad_question`,
 `already_answered`, `answer_empty`, `answer_too_long`, `model_unavailable`
-(plain message: the local model did not answer; nothing was lost).
+(plain message: the local model did not answer; nothing was changed).
 On a stale link the apps hold the buttons, like Goals (rule 4).
 
 **Shared words** (both apps, word for word):
 - Page title: `Quiz me on a text`
-- Intro: `Paste some text and Jarvis writes a few questions about it. Your answers are marked by the model on this PC. Nothing is saved or learned, and nothing leaves this PC.`
+- Intro: `Paste some text and Jarvis writes a few questions about it. Your answers are marked by the model on this PC. Nothing is saved unless you choose Keep, nothing is learned, and nothing leaves this PC.`
 - Start button: `Write questions`
 - Answer button: `Check my answer`
 - Marks: `Got it` / `Partly` / `Not yet`; label `Jarvis's guess` (while `grader_verified` is false)

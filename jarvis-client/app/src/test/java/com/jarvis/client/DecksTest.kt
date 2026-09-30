@@ -4,7 +4,10 @@ import com.jarvis.client.net.Decks
 import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.Quiz
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -17,9 +20,9 @@ import java.io.File
 /**
  * "My study decks" on the phone (docs/QUIZ-DECKS-DESIGN.md, "Slice contract
  * (frozen)", C1-C6; [Decks]). The shapes read here are the frozen contract's;
- * the PC side of the same contract is `backend/test_decks.py`. No shared
- * words fixture exists for this slice yet, so the words are asserted here
- * against the contract's section C5 word for word.
+ * the PC side of the same contract is `backend/test_decks.py`. The words and
+ * the worked examples are read from contract/decks-cases.json, which
+ * tools/gen_decks_cases.py writes and the desktop's tests read as well.
  */
 class DecksTest {
 
@@ -171,43 +174,118 @@ class DecksTest {
 
     // -------------------------------------------------------------- words ----
 
+    // The words and the worked examples are written by tools/gen_decks_cases.py; the
+    // desktop's decks.mjs reads the same file, so the two apps cannot drift apart.
+    private val fixture: JsonObject = run {
+        val text = requireNotNull(javaClass.classLoader?.getResource("contract/decks-cases.json")) {
+            "contract/decks-cases.json is missing - run tools/gen_decks_cases.py"
+        }.readText()
+        obj(text)
+    }
+    private val words get() = fixture["words"]!!.jsonObject
+    private fun w(key: String) = words[key]!!.jsonPrimitive.content
+
     @Test
-    fun theWordsAreTheContractsWordsForWord() {
-        assertEquals("My study decks", Decks.TITLE)
-        assertEquals("Cards ready", Decks.READY_HEADING)
-        assertEquals("Nothing ready today", Decks.NOTHING_READY)
-        assertEquals("New cards a day", Decks.NEW_PER_DAY)
-        assertEquals("Review", Decks.REVIEW)
-        assertEquals("Pause", Decks.PAUSE)
-        assertEquals("Resume", Decks.RESUME)
-        assertEquals("Delete this deck", Decks.DELETE_DECK)
-        assertEquals("Delete this card", Decks.DELETE_CARD)
-        assertEquals("Edit", Decks.EDIT)
-        assertEquals("Save", Decks.SAVE)
-        assertEquals("Cards", Decks.CARDS)
-        assertEquals("Delete", Decks.DELETE)
-        assertEquals("Cancel", Decks.CANCEL)
+    fun theWordsAreTheGeneratedFixturesWordsForWord() {
+        listOf(
+            "section_title" to Decks.TITLE,
+            "cards_ready" to Decks.READY_HEADING,
+            "nothing_ready" to Decks.NOTHING_READY,
+            "new_per_day" to Decks.NEW_PER_DAY,
+            "review" to Decks.REVIEW,
+            "review_all" to Decks.REVIEW_ALL,
+            "pause" to Decks.PAUSE,
+            "resume" to Decks.RESUME,
+            "delete_deck" to Decks.DELETE_DECK,
+            "delete_card" to Decks.DELETE_CARD,
+            "edit" to Decks.EDIT,
+            "save" to Decks.SAVE,
+            "cards_link" to Decks.CARDS,
+            "delete" to Decks.DELETE,
+            "delete_confirm" to Decks.CONFIRM_DELETE,
+            "empty_state" to Decks.EMPTY,
+            "review_hidden" to Decks.HIDDEN_REVIEW,
+            "new_deck" to Decks.NEW_DECK,
+            "deck_name" to Decks.DECK_NAME,
+            "choose_deck" to Decks.CHOOSE_DECK,
+            "show_answer" to Decks.SHOW_ANSWER,
+            "typed_placeholder" to Decks.TYPE_HINT,
+            "enough" to Decks.ENOUGH,
+            "more" to Decks.DO_10_MORE,
+            "stop" to Decks.STOP,
+            "back_answer" to Decks.ANSWER_HEADING,
+            "passage_from_text" to Decks.FROM_TEXT,
+            "passage_example" to Decks.EXAMPLE_SENTENCE,
+            "per_deck_note" to Decks.PER_DECK_NOTE,
+            "keep_cancel" to Decks.CANCEL,
+            "cards_many" to Decks.cardsWords(8),
+            "cards_one" to Decks.cardsWords(1),
+            "ready_row" to Decks.readyWords(3),
+        ).forEach { (key, mine) -> assertEquals(key, w(key), mine) }
+        assertEquals(w("cards_many") + " · " + w("ready_row"), Decks.countsLine(Decks.Deck("d1", "Plants", 8, 3, false, "study")))
         assertEquals(
-            "Are you sure? Deleting is immediate. Copies in older backups stay until they age out.",
-            Decks.CONFIRM_DELETE,
+            fixture["ratings"]!!.jsonArray.map { it.jsonPrimitive.content },
+            Decks.RATINGS.map { it.first },
         )
-        assertEquals("Keep questions from a quiz to make your first deck.", Decks.EMPTY)
-        assertEquals("Turn off Hide memory lists to review", Decks.HIDDEN_REVIEW)
-        assertEquals("New deck", Decks.NEW_DECK)
-        assertEquals("Deck name", Decks.DECK_NAME)
-        assertEquals("Choose a deck", Decks.CHOOSE_DECK)
-        assertEquals("Show answer", Decks.SHOW_ANSWER)
-        assertEquals("Type your answer (only for you - it is not sent or marked)", Decks.TYPE_HINT)
-        assertEquals("That's enough for now", Decks.ENOUGH)
-        assertEquals("Do 10 more", Decks.DO_10_MORE)
-        assertEquals("Stop", Decks.STOP)
-        assertEquals("Answer", Decks.ANSWER_HEADING)
-        assertEquals("From the text", Decks.FROM_TEXT)
-        assertEquals("Example sentence", Decks.EXAMPLE_SENTENCE)
-        assertEquals("8 cards", Decks.cardsWords(8))
-        assertEquals("1 card", Decks.cardsWords(1))
-        assertEquals("3 ready", Decks.readyWords(3))
-        assertEquals("8 cards · 3 ready", Decks.countsLine(Decks.Deck("d1", "Plants", 8, 3, false, "study")))
+        listOf("again", "hard", "good", "easy").forEach { id ->
+            assertEquals(w("rating_$id"), Decks.ratingWords(id))
+        }
+        assertEquals(fixture["accents"]!!.jsonArray.map { it.jsonPrimitive.content }, Quiz.ACCENTS)
+    }
+
+    @Test
+    fun theWorkedExamplesOfTheSmallRulesGiveTheGeneratedAnswers() {
+        val ex = fixture["examples"]!!.jsonObject
+        fun day(el: kotlinx.serialization.json.JsonElement): String? =
+            (el as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+        ex["format_day"]!!.jsonArray.forEach {
+            val row = it.jsonArray
+            assertEquals(row[1].jsonPrimitive.content, Decks.dayLabel(day(row[0])))
+        }
+        ex["next_ready_line"]!!.jsonArray.forEach {
+            val row = it.jsonArray
+            assertEquals(row[1].jsonPrimitive.content, Decks.nextReadyLine(day(row[0])))
+        }
+        ex["cards_label"]!!.jsonArray.forEach {
+            val row = it.jsonArray
+            assertEquals(row[1].jsonPrimitive.content, Decks.cardsWords(row[0].jsonPrimitive.int))
+        }
+        ex["kept_line"]!!.jsonArray.forEach {
+            val row = it.jsonArray
+            assertEquals(row[1].jsonPrimitive.content, Quiz.keptLine(row[0].jsonPrimitive.int))
+        }
+        // Which deck rows may start a review: ready and not paused, never while hidden or unavailable.
+        ex["can_review"]!!.jsonArray.forEach {
+            val row = it.jsonArray
+            val d = row[0].jsonObject
+            val deck = Decks.Deck(
+                "d1", d["name"]!!.jsonPrimitive.content, d["cards"]!!.jsonPrimitive.int,
+                d["ready"]!!.jsonPrimitive.int, d["paused"]!!.jsonPrimitive.boolean, "study",
+            )
+            assertEquals(
+                row.toString(),
+                row[3].jsonPrimitive.boolean,
+                Decks.canReview(deck, available = row[1].jsonPrimitive.boolean, hidden = row[2].jsonPrimitive.boolean),
+            )
+        }
+        ex["can_review_all"]!!.jsonArray.forEach {
+            val row = it.jsonArray
+            assertEquals(
+                row.toString(),
+                row[3].jsonPrimitive.boolean,
+                Decks.canReviewAll(row[0].jsonPrimitive.int, row[1].jsonPrimitive.boolean, row[2].jsonPrimitive.boolean),
+            )
+        }
+        // The note under the deck list: shown when the rows add up to more than the total.
+        ex["per_deck_note"]!!.jsonArray.forEach {
+            val row = it.jsonArray
+            val decks = row[0].jsonArray.mapIndexed { i, n ->
+                Decks.Deck("d$i", "n", 5, n.jsonPrimitive.int, false, "study")
+            }
+            val list = Decks.parseList(obj("""{"available":true,"decks":[],"ready":${row[1].jsonPrimitive.int}}"""))!!
+                .copy(decks = decks)
+            assertEquals(row.toString(), row[2].jsonPrimitive.boolean, Decks.perDeckNoteShown(list))
+        }
     }
 
     @Test
@@ -228,7 +306,12 @@ class DecksTest {
         val body = obj(Decks.rateBody("c1", "again")!!)
         assertEquals("c1", body["card"]!!.jsonPrimitive.content)
         assertEquals("again", body["rating"]!!.jsonPrimitive.content)
+        assertNull("no scope sent unless asked", body["deck"])
         assertNull(Decks.rateBody("c1", "perfect"))
+        // The scope the screen reviews: every deck is "", one deck is its id; a bad id is refused.
+        assertEquals("", obj(Decks.rateBody("c1", "good", "")!!)["deck"]!!.jsonPrimitive.content)
+        assertEquals("d1a2", obj(Decks.rateBody("c1", "good", "d1a2")!!)["deck"]!!.jsonPrimitive.content)
+        assertNull(Decks.rateBody("c1", "good", "../bad"))
     }
 
     @Test
@@ -426,13 +509,11 @@ class DecksTest {
     @Test
     fun noOwnerVisibleStringOfTheNewScreensUsesABannedWord() {
         // Contract C1: no streak, XP, hearts or guilt words in the decks, review, Keep and Spanish screens.
-        // (Quiz.kt's older "Nothing was lost" sentence is the desktop's word for word and is not new here.)
-        val older = setOf("\"The AI model on your PC did not answer. Nothing was lost - try again in a moment.\"")
         val files = listOf("net/Decks.kt", "net/Quiz.kt", "ui/screens/DecksPlate.kt", "ui/screens/QuizPlate.kt")
         files.forEach { f ->
             val lits = literalsOf(f)
             assertTrue("$f has string literals", lits.isNotEmpty())
-            lits.filter { it !in older }.forEach { lit ->
+            lits.forEach { lit ->
                 assertEquals("$f: $lit", emptyList<String>(), banned(lit))
             }
         }

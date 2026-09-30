@@ -552,10 +552,15 @@ def t_injection_style_fact_text_does_nothing():
         n = c.execute("SELECT COUNT(*) FROM topics").fetchone()[0]
     check("... nor create or drop a topic (still 8)", n == 8)
     p, tag = T.model_prompt(evil[2], ["Work"])
-    check("the data tag in the prompt is not the one the text tried", "1234" not in tag)
+    check("the data tag in the prompt is not the one the text tried",
+          tag != "=====DATA-1234=====" and prompt_has_two(p, tag))
     check("a keyword list with regex tricks is refused", T.clean_words(["a.*", "x"]) is None
           and T.clean_words(["(?i)", "yy"]) is None)
     check("a name with a control character is refused", T.clean_name("Bad\x00name") is None)
+
+
+def prompt_has_two(prompt: str, tag: str) -> bool:
+    return prompt.count(tag) == 2
 
 
 def _topics(st):
@@ -1127,6 +1132,66 @@ def t_the_owners_lists_and_export_through_the_wrapper():
     set_mode_raw(st3, "Money", "off")
     check("... and does not answer from a topic the owner switched off",
           PL.lookup(st3, "passport") == [])
+
+
+def t_a_might_be_about_card_saves_under_unsorted_when_accepted():
+    import jarvis_auto_learn as A
+    import eval_learner
+    st = store()
+    M._store = st
+    ids = topic_ids(st)
+    with closing(st._connect()) as c:
+        eval_learner._proposals_table(c)
+        cur = c.execute("INSERT INTO proposals (text, source, created) VALUES (?,?,?)",
+                        ("Owner's sister works at the hospital", "conversation", time.time()))
+        pid = cur.lastrowid
+        A._note_card(c, pid, "This might be about Work, which you set to not learn.",
+                     topic_ask=ids["Work"])
+    rows = A.annotate([{"id": pid, "source": "conversation"}])
+    check("the pending row says it is a topic question (a flag, never the topic)",
+          rows[0]["topic_ask"] is True and "Work" in rows[0]["auto_reason"]
+          and "topic_id" not in rows[0])
+    set_mode_raw(st, "Work", "use_only")
+    fid = st.add("Owner's sister works at the hospital", source="conversation",
+                 meta={"proposal_id": pid})
+    with T._db(st) as c:
+        row = c.execute("SELECT topic_id, how, checked FROM fact_topics WHERE fact_id=?",
+                        (fid,)).fetchone()
+    check("accepting it ('Save under Unsorted') files the fact under Unsorted, the owner's choice",
+          row["topic_id"] == 1 and row["how"] == "owner" and row["checked"] == 1)
+    check("a card that was not a topic question is not flagged",
+          A.annotate([{"id": pid + 999, "source": "conversation"}])[0]["topic_ask"] is False)
+    fid2 = st.add("Owner's sister works at the hospital again", source="conversation")
+    with T._db(st) as c:
+        row = c.execute("SELECT how FROM fact_topics WHERE fact_id=?", (fid2,)).fetchone()
+    check("a fact saved another way is filed by the rules", row is not None and row["how"] == "rule")
+    check("the two buttons have words", T.WORDS["ask_save"] == "Save under Unsorted"
+          and T.WORDS["ask_skip"] == "Skip it")
+
+
+def t_add_takes_a_topic_and_a_correction_keeps_the_owners_choice():
+    st = store()
+    ids = topic_ids(st)
+    a = st.add("Owner has a red bicycle", source="t", topic=ids["Hobbies"])
+    b = st.add("Owner has a green bicycle", source="t",
+               topic={"topic_id": ids["Work"], "alt_topic_id": ids["Family"], "how": "owner",
+                      "checked": True})
+    c_ = st.add("Owner has a blue bicycle", source="t", topic=9999)
+    with T._db(st) as c:
+        ra = c.execute("SELECT * FROM fact_topics WHERE fact_id=?", (a,)).fetchone()
+        rb = c.execute("SELECT * FROM fact_topics WHERE fact_id=?", (b,)).fetchone()
+        rc = c.execute("SELECT * FROM fact_topics WHERE fact_id=?", (c_,)).fetchone()
+    check("add(topic=<id>) files the fact in the same transaction (how owner)",
+          ra["topic_id"] == ids["Hobbies"] and ra["how"] == "owner")
+    check("add(topic={...}) takes the second topic and the flags",
+          rb["alt_topic_id"] == ids["Family"] and rb["checked"] == 1)
+    check("an unknown topic id files nothing (the fact simply follows Unsorted)", rc is None)
+    d = st.add("Owner has a yellow bicycle now", source="t", supersedes=a)
+    with T._db(st) as c:
+        rd = c.execute("SELECT topic_id, how, checked FROM fact_topics WHERE fact_id=?",
+                       (d,)).fetchone()
+    check("a corrected fact keeps the topic the owner gave the old one",
+          rd["topic_id"] == ids["Hobbies"] and rd["how"] == "owner" and rd["checked"] == 1)
 
 
 def t_the_scheduler_step():

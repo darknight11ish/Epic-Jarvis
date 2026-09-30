@@ -83,7 +83,7 @@ await check("the form is read as sent: eleven fields in order, limits and units 
   }
   // Only the made-up figures start filled, and they say so.
   const filled = f.fields.filter((x) => R.startText(x) !== "").map((x) => [x.key, R.startText(x)]);
-  assert.deepEqual(filled, [["plan_to_age", "95"], ["expected_return_percent", "7"],
+  assert.deepEqual(filled, [["plan_to_age", "95"], ["expected_return_percent", "6"],
     ["volatility_percent", "12"], ["inflation_percent", "2.5"]]);
   assert.equal(by.other_income.placeholder, false);
   assert.equal(R.startText(by.other_income), "");
@@ -126,11 +126,12 @@ await check("each of the four states is read as sent, nothing rounded or reworde
       raw.used.map((u) => [u.label, u.value, u.assumed]));
   }
   const m = R.readResult(result("mixed"));
-  assert.equal(m.summary[0],
-    "In about 71 of 100 simulated futures your money lasts to age 95. Where it runs out, that is usually at about age 81 to 89.");
-  assert.equal(m.share.label, "about 71 of 100");
-  assert.equal(m.bands.lower.label, "about 51 of 100");
-  assert.equal(m.bands.higher.label, "about 86 of 100");
+  const raw = result("mixed");
+  assert.equal(m.summary[0], raw.summary[0]);
+  assert.match(m.summary[0], /^In about \d+ of 100 simulated futures your money lasts to age 95\./);
+  assert.equal(m.share.label, raw.share.label);
+  assert.equal(m.bands.lower.label, raw.bands.lower.label);
+  assert.equal(m.bands.higher.label, raw.bands.higher.label);
   const assumed = m.used.filter((u) => u.assumed).map((u) => u.key);
   assert.deepEqual(assumed, ["plan_to_age", "expected_return_percent", "volatility_percent", "inflation_percent"]);
   const none = R.readResult(result("not_enough_to_say"));
@@ -151,8 +152,10 @@ await check("a result that is not one is null; a missing disclaimer is still sho
 
 await check("the meter is drawn only from the per-100 figures, never as one big number", async () => {
   const m = R.readResult(result("mixed"));
-  assert.deepEqual(R.meterGeometry(m), { from: 51, to: 86, at: 71 });
-  assert.deepEqual(R.meterLabels(m), ["about 51 of 100", "about 71 of 100", "about 86 of 100"]);
+  const raw = result("mixed");
+  assert.deepEqual(R.meterGeometry(m), { from: raw.bands.lower.per_100, to: raw.bands.higher.per_100,
+    at: raw.share.per_100 });
+  assert.deepEqual(R.meterLabels(m), [raw.bands.lower.label, raw.share.label, raw.bands.higher.label]);
   assert.equal(R.meterGeometry(R.readResult(result("not_enough_to_say"))), null);
   assert.equal(R.meterGeometry(null), null);
   const g = R.meterGeometry(R.readResult(result("never_runs_out")));
@@ -288,7 +291,12 @@ if (!K) {
     }
     assert.equal(await card.locator(".ret-assumed").count(), 4);
     assert.equal(await page.locator("#ret-plan_to_age").inputValue(), "95");
-    assert.equal(await page.locator("#ret-expected_return_percent").inputValue(), "7");
+    assert.equal(await page.locator("#ret-expected_return_percent").inputValue(), "6");
+    // The PC's default for the optional pension is a grey hint, not a value (the phone does the same).
+    assert.equal(await page.locator("#ret-other_income").getAttribute("placeholder"), "0");
+    assert.equal(await page.locator("#ret-other_income").inputValue(), "");
+    // The placeholders are labelled for what they are, in the PC's words.
+    assert.ok(text.includes("placeholders for a mix of stocks and bonds, not a forecast"));
     assert.equal(await page.locator("#ret-current_age").inputValue(), "");
     assert.equal(await page.locator("#ret-savings").inputValue(), "");
     assert.ok(text.includes("years · 18 to 100"));
@@ -312,7 +320,7 @@ if (!K) {
     assert.equal(sent.length, 1);
     assert.deepEqual(sent[0].values, {
       current_age: "40", retirement_age: "65", plan_to_age: "95", savings: "100,000",
-      yearly_saving: "12000", yearly_spending: "30,000", expected_return_percent: "7",
+      yearly_saving: "12000", yearly_spending: "30,000", expected_return_percent: "6",
       volatility_percent: "12", inflation_percent: "2.5" });
     const r = result("mixed");
     const region = page.locator(".ret-result");
@@ -334,7 +342,7 @@ if (!K) {
     assert.equal(await region.locator(".ret-used-heading").textContent(), R.USED_HEADING);
     assert.ok(text.includes(r.placeholder_note));
     assert.ok(text.includes(r.todays_money));
-    assert.ok(text.includes("about 51 of 100"), "the meter's labels");
+    assert.ok(text.includes(r.bands.lower.label), "the meter's labels");
     // The keyboard goes to the answer.
     assert.equal(await page.evaluate(() => document.activeElement && document.activeElement.id), "ret-headline");
     // Nothing to copy, save or export.
@@ -435,7 +443,8 @@ if (!K) {
     await work(page);
     const stored = await page.evaluate(() => JSON.stringify([
       Object.entries(localStorage), Object.entries(sessionStorage)]));
-    assert.doesNotMatch(stored, /7654321|100,000|30,000|about 71|simulated/);
+    assert.doesNotMatch(stored, /7654321|100,000|30,000|simulated/);
+    assert.ok(!stored.includes(result("mixed").share.label), "the answer was stored");
     await page.locator("#tab-memory").click();
     await page.waitForTimeout(300);
     await page.locator("#tab-work").click();
@@ -450,8 +459,11 @@ if (!K) {
   await check("hidden with the private lists: only the fixed words, no boxes, nothing asked or sent", async () => {
     const page = await workTab({ ...scenario([ok("mixed")]), security: { hidden: true } });
     const card = page.locator("#retirement-card");
-    assert.equal(await page.locator("#retirement-body").innerText(), "Retirement what-if hidden");
-    assert.equal(await card.locator("input, button").count(), 0);
+    assert.equal(await page.locator("#retirement-body .ret-hidden").innerText(), "Retirement what-if hidden");
+    // No boxes and no way to run it: only the Show button every hidden section has.
+    assert.equal(await card.locator("input").count(), 0);
+    assert.deepEqual(await card.locator("button").allInnerTexts(), [R.SHOW_LABEL]);
+    assert.equal((await calls(page)).filter((c) => c.cmd === "brain_retirement_run").length, 0);
     // Typed, then hidden meanwhile: the boxes and the answer are wiped.
     await page.evaluate(() => { window.__security.hidden = false; window.__emit("security-changed", {}); });
     await page.waitForTimeout(500);
@@ -460,9 +472,11 @@ if (!K) {
     assert.equal(await page.locator(".ret-result").count(), 1);
     await page.evaluate(() => { window.__security.hidden = true; window.__security.revealed = false; window.__emit("private-hidden", {}); });
     await page.waitForTimeout(500);
-    assert.equal(await page.locator("#retirement-body").innerText(), "Retirement what-if hidden");
-    assert.equal(await card.locator("input, button, .ret-result").count(), 0);
-    assert.doesNotMatch(await card.innerText(), /about 71|simulated|40|100,000/);
+    assert.equal(await page.locator("#retirement-body .ret-hidden").innerText(), "Retirement what-if hidden");
+    assert.equal(await card.locator("input, .ret-result").count(), 0);
+    assert.deepEqual(await card.locator("button").allInnerTexts(), [R.SHOW_LABEL]);
+    assert.doesNotMatch(await card.innerText(), /simulated|40|100,000/);
+    assert.ok(!(await card.innerText()).includes(result("mixed").share.label));
     // Shown again: an empty form, not the old numbers.
     await page.evaluate(() => { window.__security.hidden = false; window.__emit("security-changed", {}); });
     await page.waitForTimeout(500);
@@ -471,9 +485,31 @@ if (!K) {
     await page.close();
   });
 
-  await check("while App lock is on the card shows only the fixed words too", async () => {
+  await check("Show asks Windows Hello, then brings back an EMPTY form", async () => {
+    const page = await workTab({ ...scenario([ok("mixed")]), security: { hidden: true } });
+    await page.getByRole("button", { name: R.SHOW_LABEL }).click();
+    await page.waitForTimeout(600);
+    assert.equal(await page.evaluate(() => window.__security.reveals), 1);
+    assert.equal(await page.locator("#ret-savings").inputValue(), "");
+    assert.equal(await page.locator("#ret-plan_to_age").inputValue(), "95");
+    assert.equal(await page.locator(".ret-hidden").count(), 0);
+    await page.close();
+    // Windows Hello said no: the card stays hidden and says why in the PC's words.
+    const no = await workTab({ ...scenario([ok("mixed")]), security: { hidden: true, revealFails: "Windows Hello did not confirm it." } });
+    await no.getByRole("button", { name: R.SHOW_LABEL }).click();
+    await no.waitForTimeout(400);
+    assert.equal(await no.locator(".ret-line").innerText(), "Windows Hello did not confirm it.");
+    assert.equal(await no.locator("#ret-savings").count(), 0);
+    await no.close();
+  });
+
+  await check("while App lock is on the card shows only the fixed words too; Show cannot lift a lock", async () => {
     const page = await workTab({ ...scenario([ok("mixed")]), appLock: true });
-    assert.equal(await page.locator("#retirement-body").innerText(), "Retirement what-if hidden");
+    assert.equal(await page.locator("#retirement-body .ret-hidden").innerText(), "Retirement what-if hidden");
+    assert.equal(await page.locator("#retirement-card input").count(), 0);
+    await page.getByRole("button", { name: R.SHOW_LABEL }).click();
+    await page.waitForTimeout(500);
+    assert.equal(await page.locator(".ret-line").innerText(), R.STILL_HIDDEN);
     assert.equal(await page.locator("#retirement-card input").count(), 0);
     await page.close();
   });

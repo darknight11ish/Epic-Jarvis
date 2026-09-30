@@ -24,6 +24,17 @@ class QuizTest {
 
     private fun obj(json: String) = JarvisJson.parseToJsonElement(json) as JsonObject
 
+    // The words both apps share, written by tools/gen_decks_cases.py (the desktop's quiz.mjs and
+    // decks.mjs read the same file).
+    private val cases: JsonObject = run {
+        val text = requireNotNull(javaClass.classLoader?.getResource("contract/decks-cases.json")) {
+            "contract/decks-cases.json is missing - run tools/gen_decks_cases.py"
+        }.readText()
+        obj(text)
+    }
+
+    private fun word(key: String) = cases["words"]!!.jsonObject[key]!!.jsonPrimitive.content
+
     private val quizJson = """{"ok":true,"quiz":{"id":"q-abc123","title":"Bees","grader_verified":false,
         "questions":[
           {"n":2,"kind":"explain","prompt":"Why do bees dance?","mark":null},
@@ -202,7 +213,7 @@ class QuizTest {
         }
         assertNull(Quiz.messageFor("something_new"))
         assertNull(Quiz.messageFor(null))
-        assertTrue(Quiz.messageFor(Quiz.E_MODEL)!!.contains("Nothing was lost"))
+        assertTrue(Quiz.messageFor(Quiz.E_MODEL)!!.contains("Nothing was changed"))
     }
 
     @Test
@@ -258,11 +269,7 @@ class QuizTest {
         assertEquals("Look at these again", Quiz.SUMMARY_TITLE)
         assertEquals("Nothing to look at again.", Quiz.SUMMARY_EMPTY)
         assertEquals("This text is treated as outside text: Jarvis never learns facts from it.", Quiz.OUTSIDE_TEXT)
-        assertEquals(
-            "Paste some text and Jarvis writes a few questions about it. Your answers are marked by the model " +
-                "on this PC. Nothing is saved or learned, and nothing leaves this PC.",
-            Quiz.INTRO,
-        )
+        assertEquals(cases["words"]!!.jsonObject["quiz_intro"]!!.jsonPrimitive.content, Quiz.INTRO)
         assertEquals("Got it", Quiz.levelWords("got_it"))
         assertEquals("Partly", Quiz.levelWords("partly"))
         assertEquals("Not yet", Quiz.levelWords("not_yet"))
@@ -424,6 +431,31 @@ class QuizTest {
         assertEquals("Topic (optional)", Quiz.TOPIC_LABEL)
         assertEquals("Paste Spanish text (optional)", Quiz.SPANISH_HINT)
         assertEquals("Answer: ", Quiz.ANSWER_PREFIX)
+        assertEquals(word("accent_row_label"), Quiz.ACCENT_ROW_LABEL)
+        assertEquals("Spanish letters", Quiz.ACCENT_ROW_LABEL)
+        assertEquals(word("model_unavailable"), Quiz.messageFor(Quiz.E_MODEL))
+        assertEquals(word("guess_label"), Quiz.GUESS)
+        assertEquals(word("answer_line_example"), Quiz.ANSWER_PREFIX + "está")
+        assertEquals(word("kept_many"), Quiz.keptLine(3))
+        assertEquals(word("kept_one"), Quiz.keptLine(1))
+        assertEquals(word("level_label_b1"), Quiz.levelLine("B1"))
+        assertEquals(word("keep_button"), Quiz.KEEP_OPEN)
+        assertEquals(word("keep_finish"), Quiz.KEEP_DO)
+        assertEquals(word("keep_back_placeholder"), Quiz.KEEP_HINT)
+        assertEquals(word("keep_hidden"), Quiz.KEEP_HIDDEN)
+        assertEquals(word("mode_text"), Quiz.MODE_TEXT_LABEL)
+        assertEquals(word("mode_spanish"), Quiz.MODE_SPANISH_LABEL)
+        assertEquals(word("level_heading"), Quiz.LEVEL_HEADING)
+        assertEquals(word("topic_label"), Quiz.TOPIC_LABEL)
+        assertEquals(word("spanish_placeholder"), Quiz.SPANISH_HINT)
+        assertEquals(word("start_button"), Quiz.START)
+        assertEquals(word("kind_translate"), Quiz.kindWords("translate"))
+        assertEquals(word("kind_blank"), Quiz.kindWords("blank"))
+        assertEquals(word("kind_complete"), Quiz.kindWords("complete"))
+        assertEquals(
+            listOf("exercise_translate", "exercise_blank", "exercise_complete", "exercise_mixed").map { word(it) },
+            Quiz.EXERCISES.map { it.second },
+        )
         assertEquals(listOf("á", "é", "í", "ó", "ú", "ñ", "ü", "¿", "¡"), Quiz.ACCENTS)
         assertEquals("Translate", Quiz.kindWords("translate"))
         assertEquals("Fill the blank", Quiz.kindWords("blank"))

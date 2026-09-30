@@ -1278,6 +1278,10 @@ class Projects:
         _audit("projects.balance.set", {"axes": len(axes)})
 
     def axes_drop_goal(self, goal_ref: str) -> None:
+        """A goal that was stopped or removed leaves the balance chart, the
+        order closes up. Nothing is created when there is no projects.db."""
+        if not self.exists():
+            return
         with self._lock, self._db() as c:
             self._drop_axes(c, "goal", [goal_ref])
 

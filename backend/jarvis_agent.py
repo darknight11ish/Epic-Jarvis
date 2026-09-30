@@ -764,6 +764,36 @@ def _run_my_spending(args: dict, plan_obj, **_) -> dict:
     return SPEND.run_tool(args)
 
 
+SPENDING_REFUSED_LINE = ("Jarvis did not open a bank file for this question. Ask about your "
+                         "spending in a message of its own.")
+
+
+def _spending_hold(watch: "_TurnWatch", names) -> bool:
+    """Are the model's words held back this round? Yes once my_spending has been
+    called (a table or not), and - before any call - on a question that looks
+    like one about spending while the tool is on offer, so a sentence written
+    before the tool is used cannot carry an amount either."""
+    if watch.spending_done:
+        return False
+    if watch.spending_table is not None or watch.spending_asked:
+        return True
+    if SPENDING_TOOL not in (names or ()):
+        return False
+    try:
+        import jarvis_spending as SPEND
+        return SPEND.looks_like_spending_question(watch.newest_raw)
+    except Exception:
+        return False
+
+
+def _spending_words_problem(text: str, owner_text: str) -> bool:
+    try:
+        import jarvis_spending as SPEND
+        return SPEND.plain_problem(text, owner_text)
+    except Exception:
+        return True                       # cannot be checked: not shown
+
+
 def _spending_refusal(watch: "_TurnWatch", args: dict) -> str:
     """Why this turn may not open a bank file, or "". Outside text in THIS turn
     (a reading tool other than this one ran), a conversation that read outside
@@ -777,6 +807,65 @@ def _spending_refusal(watch: "_TurnWatch", args: dict) -> str:
     if (str(args.get("action") or "summary").strip().lower() == "summary"
             and watch.spending_table is not None):
         return SPENDING_ONE_TABLE
+    return ""
+
+
+#: "What if I retire at 65?" (jarvis_retirement.py; the owner's decision of
+#: 2026-09-30, docs/FINANCE-DESIGN.md part B, docs/JARVIS-API.md section 103).
+#: A pure calculation on numbers the owner typed: no file, no network, no card,
+#: decided under the calculator's own gate action (tier auto). The owner chose
+#: that the chat shows CODE-WRITTEN text only: the tool's result never goes to
+#: the model as an answer, code puts the whole text (the summary sentences and
+#: "This is a simplified what-if, not financial advice.") into the answer
+#: itself, and the model's own words that round are held back and dropped, the
+#: way a spending table's are. The typed numbers are never written to a step,
+#: the audit prompt or the card (see RETIREMENT_PROMPT, _gate_prompt).
+RETIREMENT_TOOL = "retirement_whatif"
+try:
+    import jarvis_retirement as _RET
+except Exception:  # pragma: no cover - the tool is then not offered (offered_tools)
+    _RET = None
+RETIREMENT_OUTSIDE = ("refused: outside text shaped this answer (something was read from an "
+                      "email, web page, file or another tool, or the message was pasted or "
+                      "shared), so no what-if is run in it. Nothing was worked out. Tell the "
+                      "owner to type the numbers in a message of their own.")
+#: The one line the model is given back for a run that worked. It has no
+#: figure in it and asks for no words: the answer is already on the screen.
+RETIREMENT_DONE = ("The answer is written on the owner's screen by code, with its own note. "
+                   "Write NOTHING more about it: no figure, no summary, no advice.")
+#: What the card and the audit line say instead of the typed numbers.
+RETIREMENT_PROMPT = "Retirement what-if (the numbers typed are not shown here)"
+
+
+def _prepare_retirement(args: dict):
+    return None, RETIREMENT_PROMPT
+
+
+def _run_retirement(args: dict, plan_obj, **_) -> dict:
+    """The result for the model: never a figure. The text the owner reads
+    rides in `_retirement_text` (taken out by _one_call before the model reads
+    anything, like a spending `_table`); a failure comes back as its plain
+    error so the model can ask for the number that is missing."""
+    try:
+        import jarvis_retirement as RET
+    except Exception as exc:
+        return {"ok": False, "error": f"the retirement what-if is not available here "
+                                      f"({type(exc).__name__})"}
+    out = RET.tool_call(args)
+    if not out.get("ok"):
+        return {"ok": False, "error": out.get("error", ""), "field": out.get("field", ""),
+                "message": out.get("message", "")}
+    return {"ok": True, "shown_on_screen": True, "note": RETIREMENT_DONE,
+            "_retirement_result": out["result"]}
+
+
+def _retirement_refusal(watch: "_TurnWatch") -> str:
+    """Why this turn may not run a what-if, or "". Outside text in THIS turn
+    (any reading tool ran), a conversation that read outside text before, a
+    message that was pasted or shared, or text the app added: planted words
+    could have chosen the numbers. Checked BEFORE prepare and before any run."""
+    if watch.tainted or watch.provenance or watch.app_context or watch.read:
+        return RETIREMENT_OUTSIDE
     return ""
 
 
@@ -930,6 +1019,15 @@ class Tool:
             "parameters": self.parameters}}
 
 
+def _gate_prompt(name: str, args: dict) -> str:
+    """The line the gate keeps beside a decision (its audit log): the tool and
+    its arguments. Not for the retirement what-if, whose arguments are the
+    owner's own money figures - nothing of them is written down."""
+    if name == RETIREMENT_TOOL:
+        return f"tool {name}"
+    return f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}"
+
+
 def _plain_prepare(label: str) -> Callable[[dict], tuple]:
     return lambda args: (None, f"{label}: {json.dumps(args, ensure_ascii=False)}")
 
@@ -958,7 +1056,7 @@ def _plain_prepare(label: str) -> Callable[[dict], tuple]:
 # guessing at a smaller version of a check this file is most careful about
 # getting right.
 _PLAN_EXCLUDED_STEPS = frozenset({"send_email", "draft_email", "tidy_inbox", "propose_plan",
-                                  "my_spending"})
+                                  "my_spending", "retirement_whatif"})
 
 #: The gate action a plan step is put to when it must be asked about on its
 #: own card (marked risky, or filled in from an earlier step's result) but
@@ -1502,6 +1600,14 @@ TOOLS: dict = {
         _prepare_my_spending, _run_my_spending,
         gate_lookup_name=lambda args: "file_read",
         instead={"my_files": "To read what a file says, use my_files."}),
+    # A retirement what-if from numbers the owner typed (jarvis_retirement.py).
+    # Decided under the calculator's action (tier auto): it reads nothing and
+    # sends nothing. See RETIREMENT_TOOL.
+    RETIREMENT_TOOL: Tool(
+        RETIREMENT_TOOL, _RET.TOOL_DESCRIPTION if _RET is not None else "Retirement what-if.",
+        _RET.tool_schema() if _RET is not None else {"type": "object", "properties": {}},
+        _prepare_retirement, _run_retirement,
+        gate_lookup_name=lambda args: "calculator"),
     "home_read": Tool(
         "home_read",
         "Read the state of named Home Assistant entities. Read-only.",
@@ -2192,6 +2298,8 @@ WEB_SEARCH_LOCKDOWN = ("Lockdown is on, so Jarvis asks before every web search u
 WEB_SEARCH_READ = ("Jarvis read outside text in this conversation (an email, a file, a "
                    "note, a web page or another tool's answer), so it asks before "
                    "searching - something private could be in the search words.")
+WEB_SEARCH_MONEY = ("Jarvis looked at your bank spending earlier in this conversation, so it "
+                    "asks before searching - money details are never sent to a search.")
 WEB_SEARCH_SENSITIVE = ("Jarvis used a saved fact about {topics} for this question, so it "
                         "asks before searching - something private could be in the "
                         "search words.")
@@ -2274,6 +2382,8 @@ def web_search_card_lines(watch: "_TurnWatch", ask_every_time: bool,
     lines = []
     if watch.read or watch.tainted:
         lines.append(WEB_SEARCH_READ)
+    if watch.money or watch.spending_asked:
+        lines.append(WEB_SEARCH_MONEY)
     if watch.memory:
         lines += web_search_memory_lines(watch.facts, query, watch.owner_words)
     if watch.provenance:
@@ -3301,6 +3411,11 @@ def check_call(name, raw_args, names, tools=None) -> tuple:
         return None, (f"The arguments for {name} must be one JSON object with named "
                       f"fields, not {_PLAIN_TYPE.get(_json_type(args), 'a bare value')}. "
                       f"Write the call again.")
+    if name == RETIREMENT_TOOL:
+        # Every field is text (or a number: models often write a bare 40).
+        args = {k: (str(int(v) if isinstance(v, float) and v.is_integer() else v)
+                    if isinstance(v, (int, float)) and not isinstance(v, bool) else v)
+                for k, v in args.items()}
     problems = _schema_problems(tools[name].parameters, args, name)
     if problems:
         shown = "; ".join(problems[:_MAX_PROBLEMS])
@@ -3434,7 +3549,7 @@ def _provenance(m: dict) -> str:
 #: outside text just because the first one was sent or saved.
 #: tidy_inbox's own answer ("Archived 3 emails.") is counts and words of
 #: ours, never a subject or a sender - so it is not outside text either.
-_NOT_READING = {"calculator", "send_email", "draft_email", "tidy_inbox"}
+_NOT_READING = {"calculator", "send_email", "draft_email", "tidy_inbox", "retirement_whatif"}
 
 
 def strip_chat_markers(text: str) -> str:
@@ -3526,6 +3641,17 @@ def _conversation_tainted(conversation_id, messages=None) -> bool:
         return _has_earlier_turn(messages)
 
 
+def _conversation_money(conversation_id, messages=None) -> bool:
+    """Did an earlier turn of this conversation add up the owner's bank
+    spending (my_spending)? False when the chat log cannot say - the
+    conversation of a PC that lost its record is tainted anyway."""
+    try:
+        import jarvis_chat_log
+        return bool(jarvis_chat_log.conversation_money(conversation_id, messages))
+    except Exception:
+        return False
+
+
 def _has_earlier_turn(messages) -> bool:
     """True unless `messages` is a list whose only user or assistant message
     is the newest one. Not a list: True (it cannot be told)."""
@@ -3590,6 +3716,18 @@ class _TurnWatch:
         self.spending_table = None
         self.spending_id = ""
         self.spending_done = False
+        # my_spending was CALLED this turn (it ran, failed or was refused): the
+        # model's words are then held and checked whether or not a table was
+        # made, and the conversation is marked money-sensitive
+        # (jarvis_chat_log.note_money). `spending_message` is the tool's own
+        # plain sentence, shown in place of words that carry an amount.
+        self.spending_asked = False
+        self.spending_message = ""
+        # A retirement what-if (jarvis_retirement.py): the result whose
+        # code-written text goes into the answer in place of the model's own
+        # words, held the same way (RETIREMENT_TOOL).
+        self.retirement_result = None
+        self.retirement_done = False
         self.secrets: list = []      # KINDS of password or key read, never values
         # "Where this came from" (I42, jarvis_sources.py): each reading
         # tool's own result, by reference only - a note's ref, a wiki page's
@@ -3658,6 +3796,11 @@ class _TurnWatch:
             if _provenance(m) in OWN_WORDS).lower()
         self.tainted = (bool(tainted) if tainted is not None
                         else _conversation_tainted(req.get("conversation_id"), raw))
+        # An earlier turn of this conversation looked at the owner's bank
+        # spending: a web search then asks first, and a chatbot is not started
+        # from it (money is never sent to either; docs/ARCHITECTURE.md
+        # section 5). Not a taint: every other tool works as before.
+        self.money = _conversation_money(req.get("conversation_id"), raw)
         # Saved memories recalled into this turn by the chat route - read off
         # `messages`, which carry the server's own system turns (the FACTS
         # block), not off the request as the app sent it.
@@ -3705,6 +3848,10 @@ class _TurnWatch:
             # (jarvis_spending.py). _one_call takes it out first; this is the
             # belt for any other path that reaches here.
             result = {k: v for k, v in result.items() if k != "_table"}
+        if "_retirement_result" in result:
+            # The what-if's figures are for the owner's screen (see
+            # RETIREMENT_TOOL); _one_call takes them out first, this is the belt.
+            result = {k: v for k, v in result.items() if k != "_retirement_result"}
         if name not in _NOT_READING:
             self.read[name] = self.read.get(name, 0) + 1
             pieces = _strings_in(result, [])
@@ -4002,6 +4149,8 @@ def offered_tools(enabled_tools) -> list:
         wanted.discard(FILES_TOOL)
     if SPENDING_TOOL in wanted and not _folders_listed():
         wanted.discard(SPENDING_TOOL)
+    if RETIREMENT_TOOL in wanted and _RET is None:
+        wanted.discard(RETIREMENT_TOOL)
     return [n for n in TOOLS if n in wanted]
 
 
@@ -4054,7 +4203,7 @@ MORE_TOOLS = "more_tools"
 #: test_short_tool_list.py fails when a tool in TOOLS is in neither the core
 #: nor exactly one group, so a new tool cannot land nowhere.
 TOOL_GROUPS = (
-    ("timers", "a countdown timer, the to-do list, what is coming up",
+    ("timers", "a timer, the to-do list, what is coming up",
      ("set_timer", "todo_add", "todo_done", "coming_up")),
     ("send_email", "send an email", ("send_email",)),
     # tidy_inbox (jarvis_inbox_tidy.py) shares this group rather than adding
@@ -4062,16 +4211,19 @@ TOOL_GROUPS = (
     # below for the same reasoning): both change the owner's mailbox, and
     # both are opt-in via [tools].enabled.
     ("draft_email", "draft or tidy email", ("draft_email", "tidy_inbox")),
-    ("notes", "add to the owner's Logseq, Obsidian or Joplin notes",
+    ("notes", "add to Logseq, Obsidian or Joplin notes",
      ("append_logseq_journal", "append_obsidian_daily", "create_joplin_note")),
-    ("home_control", "switch a light or another device", ("home_control",)),
+    ("home_control", "switch a light or device", ("home_control",)),
     # Its own group, not "files": asking about the owner's documents must not
     # also put the command tool in front of the model. Offered only while a
     # folder is listed (offered_tools), so the group appears only then too.
-    ("documents", "find and read files in the folders the owner listed",
+    ("documents", "find and read files in the listed folders",
      ("my_files", "my_spending")),
     ("files", "read a file on this PC, run a command", ("file_read", "shell_exec")),
-    ("github", "check GitHub for an existing library", ("github_search",)),
+    # Its own group: my_spending's group is dropped while no folder is listed,
+    # and this needs no folder.
+    ("retirement", "a retirement what-if", ("retirement_whatif",)),
+    ("github", "search GitHub for a library", ("github_search",)),
     # propose_plan (jarvis_plan.py, "one card, several steps") joins this
     # group rather than starting a new one: a NEW group's name would add
     # to more_tools' own description and enum every turn (more_tools_schema
@@ -6330,7 +6482,15 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         # A spending table is on the screen for this answer: the model's words
         # are HELD, not sent, until code has checked them (deliver_table).
         held: list = []
-        holding = watch.spending_table is not None and not watch.spending_done
+        # (Also on a spending question before any table: the words before the
+        # tool call are held too, so nothing with an amount in it can stream.)
+        spend_hold = _spending_hold(watch, names)
+        holding = (spend_hold
+                   or (watch.retirement_result is not None and not watch.retirement_done))
+        # The model's words this round are thrown away and replaced by code's
+        # own text (a what-if): they are not "what it said" for the checks
+        # that read the model's words (the "I've done it" line).
+        dropping = watch.retirement_result is not None and not watch.retirement_done
 
         def on_text(piece: str) -> None:
             clean = stripper.feed(piece)
@@ -6338,7 +6498,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
                 # Kept per round too: a round that then asks for a tool goes
                 # back to the model with the words it wrote before asking.
                 rnd.text.append(clean)
-                model_words.append(clean)
+                if not dropping:
+                    model_words.append(clean)
                 if first["text"]:
                     first["text"] = False
                     out.set_status(None)
@@ -6401,7 +6562,8 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         tail = stripper.flush()
         if tail:
             rnd.text.append(tail)
-            model_words.append(tail)
+            if not dropping:
+                model_words.append(tail)
             if first["text"]:
                 first["text"] = False
                 say_step("answer")
@@ -6412,7 +6574,18 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         if holding and not rnd.tool_calls():
             # The round that answers: the table and its checked sentence go out.
             # (A round that asks for another tool sends nothing of its words.)
-            deliver_table("".join(held))
+            if watch.spending_table is not None and not watch.spending_done:
+                deliver_table("".join(held))
+            elif spend_hold:
+                deliver_plain("".join(held))
+            deliver_retirement()
+        elif spend_hold and not watch.spending_asked and watch.spending_table is None:
+            # Words before a tool call on a spending question: shown only when
+            # they carry no amount of money (they were written before any bank
+            # file was read, so any figure in them is the model's own).
+            before = "".join(held)
+            if before.strip() and not _spending_words_problem(before, watch.newest_raw):
+                emit(before)
         for key, got in (("prompt", rnd.prompt_tokens), ("cached", rnd.cached_tokens)):
             if got is not None:
                 prompt_use[key] = (prompt_use[key] or 0) + got
@@ -6440,6 +6613,41 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
         if tid and out.sse and not out.send(mark):
             raise ClientGone()
         emit(sentence)
+
+    def deliver_plain(text: str) -> None:
+        """A spending question that made NO table (no layout yet, a layout that
+        does not fit, an empty period, a refusal, or the model never used the
+        tool): the model's words are shown only if they carry no amount of money
+        (jarvis_spending.checked_plain); otherwise the tool's own plain sentence
+        is. Figures the owner needs come from the table alone."""
+        if not watch.spending_asked and not text.strip():
+            return
+        watch.spending_done = True
+        try:
+            import jarvis_spending as SPEND
+            sentence = SPEND.checked_plain(text, watch.spending_message, spoken=watch.spoken,
+                                           allowed_from=watch.newest_raw)
+        except Exception:
+            sentence = "Jarvis could not add up your spending this time."
+        out.set_status(None)
+        emit(sentence)
+
+    def deliver_retirement() -> None:
+        """The retirement what-if's answer (jarvis_retirement.py): code's own
+        text, never a sentence the model wrote - whatever the model said this
+        round was held and is dropped. A spoken question gets one true line
+        first; either way the answer stays on screen and is not read aloud (the
+        tool is not on the read-aloud list)."""
+        if watch.retirement_done or watch.retirement_result is None:
+            return
+        watch.retirement_done = True
+        try:
+            text = _RET.chat_words(watch.retirement_result, spoken=watch.spoken)
+        except Exception:
+            text = "The what-if could not be shown. Ask again."
+        said["gap"] = True          # a blank line after a spending sentence in the same answer
+        out.set_status(None)
+        emit(text)
 
     def fail(message: str) -> None:
         if out.sse:
@@ -6628,6 +6836,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
             # The loop ended without a round that answered (too many tool
             # calls): the table still goes out, with the plain line.
             deliver_table("")
+        elif watch.spending_asked and not watch.spending_done:
+            deliver_plain("")
+        deliver_retirement()
         # "I've done it" when nothing was done ("Smarter answers",
         # 2026-09-28): the answer claims an action and no action tool
         # returned ok in it (jarvis_claims.py). One plain line at the end, in
@@ -6742,7 +6953,7 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     # (jarvis_chat_log reads `tools_ran` to mark a conversation as having read
     # outside text): its own table is the owner's figures, worked out by code,
     # and marking the chat would refuse the very next spending question.
-    ran = [s["tool"] for s in steps if s.get("ran") and s["tool"] != SPENDING_TOOL]
+    ran = [s["tool"] for s in steps if s.get("ran") and s["tool"] not in (SPENDING_TOOL, RETIREMENT_TOOL)]
     if picture_text is not None and picture_text.get("read"):
         ran = [PICTURE_TEXT_TOOL] + ran
     if screen_read:
@@ -6760,6 +6971,9 @@ def run_local_turn(messages: list, model: str, *, ollama_url: str,
     return {"finish_reason": finish, "client_gone": out.gone, "rounds": rounds,
             "answer": final_answer,
             "tools_ran": ran,
+            # my_spending was called in this turn: the chat log marks the whole
+            # conversation money-sensitive (jarvis_chat_log.conversation_money)
+            "money": bool(watch.spending_asked),
             "outside_flags": sorted(watch.flags),
             "crisis": watch.crisis,
             "side_talk": bool(watch.live and _is_side_talk(final_answer)),
@@ -6868,7 +7082,20 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
     if name == SPENDING_TOOL:
         # Refused before a bank file is opened: outside text shaped this
         # turn, or a table is already on the screen (see _spending_refusal).
+        watch.spending_asked = True
         why = _spending_refusal(watch, args)
+        if why:
+            if watch.spending_table is None:
+                watch.spending_message = SPENDING_REFUSED_LINE
+            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                          "content": _tool_content({"ok": False, "error": why})})
+            steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+            say_step("tool_refused", name)
+            return
+    if name == RETIREMENT_TOOL:
+        # Refused before anything is worked out: outside text shaped this
+        # turn (see _retirement_refusal).
+        why = _retirement_refusal(watch)
         if why:
             convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                           "content": _tool_content({"ok": False, "error": why})})
@@ -7066,8 +7293,7 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         # The gate may wait minutes for a person. Say so to the app (after a
         # moment, so a tool the gate lets straight through never flashes it).
         out.set_status("approval")
-        verdict = checker(action_name, {"text": plan_text},
-                          f"tool {name} {json.dumps(args, ensure_ascii=False)[:1500]}")
+        verdict = checker(action_name, {"text": plan_text}, _gate_prompt(name, args))
         out.card_answered(verdict)
         out.set_status("thinking")
         if _a_card_was_shown(verdict):
@@ -7199,6 +7425,14 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             if task_id is not None:
                 tc.end(task_id)
             out.set_status("thinking")
+        if name == RETIREMENT_TOOL and isinstance(result, dict) and "_retirement_result" in result:
+            # The figures go into the answer as code's own text, never to the
+            # model: keep the result for the answering round and take it out
+            # of what the model reads.
+            result = dict(result)
+            kept = result.pop("_retirement_result")
+            if isinstance(kept, dict) and watch.retirement_result is None:
+                watch.retirement_result = kept
         if name == SPENDING_TOOL and isinstance(result, dict) and "_table" in result:
             # The table goes to the apps' screen, never to the model: keep it
             # for the sentence round and take it out of what the model reads.
@@ -7206,6 +7440,13 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             table = result.pop("_table")
             if isinstance(table, dict) and watch.spending_table is None:
                 watch.spending_table = table
+        elif name == SPENDING_TOOL:
+            # No table (nothing set up, a layout that does not fit, an empty
+            # period): the tool's own plain sentence is what the owner reads if
+            # the model's words carry an amount (deliver_plain).
+            watch.spending_asked = True
+            said_err = str((result or {}).get("error") or "") if isinstance(result, dict) else ""
+            watch.spending_message = re.sub(r"^refused:\s*", "", said_err)[:400]
         # Outside text: checked, cleaned and labelled before the model reads
         # it - see "Outside text in the tool loop".
         result = watch.took_in(name, result)

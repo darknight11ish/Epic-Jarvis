@@ -15,6 +15,8 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
+import kotlin.math.pow
 
 /**
  * The activity heatmap and balance chart on the phone (the owner's tick of
@@ -72,12 +74,13 @@ class ProgressTest {
         val alphas = doc["shading"]!!.jsonObject["alpha"]!!.jsonArray.map { it.jsonPrimitive.doubleOrNull!! }
         assertEquals(alphas.size, Progress.ALPHAS.size)
         for (i in alphas.indices) assertEquals(alphas[i], Progress.ALPHAS[i].toDouble(), 1e-6)
-        // Neighbouring steps differ by at least 0.20 so the ladder holds in every theme.
+        // Neighbouring steps differ by at least the contract's minimum.
+        val minStep = doc["shading"]!!.jsonObject["min_step"]!!.jsonPrimitive.doubleOrNull!!
         for (i in 1 until Progress.ALPHAS.size) {
-            assertTrue(Progress.ALPHAS[i] - Progress.ALPHAS[i - 1] >= 0.20f - 1e-6f)
+            assertTrue(Progress.ALPHAS[i] - Progress.ALPHAS[i - 1] >= minStep - 1e-6)
         }
         assertEquals(0.0f, Progress.alphaFor(-3), 0f)
-        assertEquals(0.92f, Progress.alphaFor(9), 0f)
+        assertEquals(1.0f, Progress.alphaFor(9), 0f)
         val g = doc["heat_grid"]!!.jsonObject
         assertEquals(g["cell"]!!.jsonPrimitive.content.toInt(), Progress.CELL)
         assertEquals(g["gap"]!!.jsonPrimitive.content.toInt(), Progress.GAP)
@@ -92,6 +95,68 @@ class ProgressTest {
         assertEquals(rc["radius"]!!.jsonPrimitive.doubleOrNull!!, Progress.RADAR_RADIUS, 1e-9)
         assertEquals(rc["label_offset"]!!.jsonPrimitive.doubleOrNull!!, Progress.RADAR_LABEL_OFFSET, 1e-9)
         assertEquals(rc["rings"]!!.jsonArray.map { it.jsonPrimitive.doubleOrNull!! }, Progress.RINGS)
+    }
+
+    // --------------------------------------------- the colour ladder, measured ---
+
+    private fun lin(c: Int): Double {
+        val v = c / 255.0
+        return if (v <= 0.04045) v / 12.92 else ((v + 0.055) / 1.055).pow(2.4)
+    }
+
+    private fun lum(rgb: IntArray) = 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2])
+
+    private fun ratio(a: IntArray, b: IntArray): Double {
+        val hi = maxOf(lum(a), lum(b))
+        val lo = minOf(lum(a), lum(b))
+        return (hi + 0.05) / (lo + 0.05)
+    }
+
+    /** The accent laid over the surface at [alpha], as the screen composites it (rounded per channel). */
+    private fun over(surface: IntArray, accent: IntArray, alpha: Double) =
+        IntArray(3) { Math.round(accent[it] * alpha + surface[it] * (1 - alpha)).toInt() }
+
+    private fun hex(h: String) = intArrayOf(
+        h.substring(0, 2).toInt(16), h.substring(2, 4).toInt(16), h.substring(4, 6).toInt(16),
+    )
+
+    private fun source(rel: String): String {
+        val f = listOf("src/main/java/com/jarvis/client/$rel", "app/src/main/java/com/jarvis/client/$rel")
+            .map { File(it) }.firstOrNull { it.isFile }
+        return requireNotNull(f) { "cannot find $rel from ${File(".").absolutePath}" }.readText()
+    }
+
+    @Test
+    fun `the five levels can be told apart in every phone theme, whatever accent the owner chose`() {
+        val need = doc["shading"]!!.jsonObject["require"]!!.jsonObject
+        val first = need["first_over_surface"]!!.jsonPrimitive.doubleOrNull!!
+        val neighbour = need["neighbour"]!!.jsonPrimitive.doubleOrNull!!
+        val top = need["phone_top"]!!.jsonPrimitive.doubleOrNull!!
+        val themes = source("ui/theme/Themes.kt")
+        val s1 = Regex("""surface1 = Color\(0xFF([0-9A-Fa-f]{6})\)""").findAll(themes).map { hex(it.groupValues[1]) }.toList()
+        val s2 = Regex("""surface2 = Color\(0xFF([0-9A-Fa-f]{6})\)""").findAll(themes).map { hex(it.groupValues[1]) }.toList()
+        assertEquals("Reactor, Daylight and High Contrast", 3, s1.size)
+        assertEquals(3, s2.size)
+        val palette = Regex("""Color\(0xFF([0-9A-Fa-f]{6})\)""").findAll(source("face/Palette.kt"))
+            .map { hex(it.groupValues[1]) }.toList()
+        assertTrue("the accent palette was found", palette.size >= 40)
+        for (t in 0..2) {
+            // The chrome accent always clears 4.5:1 on the card (accentFor's floor), so those are the accents possible.
+            val accents = palette.filter { ratio(it, s1[t]) >= 4.5 }
+            assertTrue("theme $t has accents", accents.isNotEmpty())
+            var worstFirst = 99.0
+            var worstNeighbour = 99.0
+            var worstTop = 99.0
+            for (a in accents) {
+                val levels = (1..4).map { over(s2[t], a, Progress.ALPHAS[it].toDouble()) }
+                worstFirst = minOf(worstFirst, ratio(levels[0], s2[t]))
+                worstTop = minOf(worstTop, ratio(levels[3], s2[t]))
+                for (i in 1..3) worstNeighbour = minOf(worstNeighbour, ratio(levels[i], levels[i - 1]))
+            }
+            assertTrue("theme $t: level 1 is only $worstFirst:1 over the surface", worstFirst >= first)
+            assertTrue("theme $t: neighbouring levels read $worstNeighbour:1", worstNeighbour >= neighbour)
+            assertTrue("theme $t: the top level is only $worstTop:1", worstTop >= top)
+        }
     }
 
     @Test
@@ -339,5 +404,111 @@ class ProgressTest {
         assertFalse(bareB.drawable)
         assertEquals(3, bareB.min)
         assertEquals(8, bareB.max)
+    }
+
+    // ------------------------------------------------ radar labels stay inside ---
+
+    @Test
+    fun `no radar label reaches past the picture's box, and the longest value still fits its lines`() {
+        val worst = "1234567.5 of 2000000 kg"
+        val values = listOf(worst, "\$400 of \$1000", "3 of 5 steps") +
+            balance.values.flatMap { b -> balanceOf0(b.jsonObject).axes.map { it.valueWords } }
+        val lo = -Progress.RADAR_PAD_X + Progress.LABEL_EDGE
+        val hi = Progress.RADAR_SIZE + Progress.RADAR_PAD_X - Progress.LABEL_EDGE
+        for (n in Progress.AXES_MIN..Progress.AXES_MAX) {
+            val radar = Progress.radar(List(n) { 0.5 })
+            radar.labels.forEachIndexed { i, spot ->
+                val box = Progress.labelBox(spot)
+                val name = "n=$n spoke $i (${spot.anchor})"
+                assertTrue("$name starts inside: ${box.left}", box.left >= lo - 1e-9)
+                assertTrue("$name ends inside: ${box.left + box.width}", box.left + box.width <= hi + 1e-9)
+                assertTrue("$name is at least 48 wide: ${box.width}", box.width >= 48.0)
+                assertTrue("$name is never wider than 84", box.width <= Progress.LABEL_MAX_WIDTH + 1e-9)
+                for (v in values) {
+                    val need = Progress.linesNeeded(v, box.width)
+                    assertTrue("$name: '$v' needs $need lines", need <= Progress.valueLines(spot))
+                }
+            }
+        }
+        // The side labels are the tight ones: 56 dp, not the old 84 dp that ran 28 dp out.
+        val side = Progress.labelBox(Progress.LabelSpot(130.0 + 94.0, 134.0, "start"))
+        assertEquals(56.0, side.width, 1e-9)
+        val left = Progress.labelBox(Progress.LabelSpot(130.0 - 94.0, 134.0, "end"))
+        assertEquals(56.0, left.width, 1e-9)
+        assertTrue(Progress.linesNeeded(worst, 56.0) in 3..4)
+        assertEquals(1, Progress.linesNeeded("3 of 5 steps", 84.0))
+    }
+
+    private fun balanceOf0(o: JsonObject): Progress.Balance = Progress.parseBalance(o)!!
+
+    // ---------------------------------------------------- the same rules as the desktop ---
+
+    @Test
+    fun `a stopped goal has left the chart in the real answer`() {
+        val b = balanceOf("after_a_goal_is_stopped")
+        assertEquals(3, b.axes.size)
+        assertTrue(b.axes.none { it.label.contains("fence") })
+        assertTrue(b.choices.none { it.name.contains("fence") })
+    }
+
+    @Test
+    fun `one hidden-lists rule for both apps`() {
+        assertTrue(Progress.hiddenOnly(privateHidden = true, keepOnScreen = true))
+        assertFalse(Progress.hiddenOnly(privateHidden = true, keepOnScreen = false))
+        assertFalse(Progress.hiddenOnly(privateHidden = false, keepOnScreen = true))
+        assertTrue(Progress.canEdit(privateHidden = false))
+        assertFalse("no picker while the lists are hidden", Progress.canEdit(privateHidden = true))
+        assertEquals("Show", Progress.w("show"))
+    }
+
+    @Test
+    fun `the chart keeps its order and a new tick goes after it, like the desktop`() {
+        val chart = listOf(Progress.Pick("goal", "G", "Garage"), Progress.Pick("bench", "B", ""), Progress.Pick("bench", "A", ""))
+        var picks = chart
+        picks = Progress.toggled(picks, "bench", "N1", true)
+        picks = Progress.toggled(picks, "bench", "N2", true)
+        assertEquals(listOf("G", "B", "A", "N1", "N2"), picks.map { it.ref })
+        assertEquals("Garage", picks[0].label)
+        // Untick and tick again: it goes to the end.
+        picks = Progress.toggled(picks, "bench", "B", false)
+        picks = Progress.toggled(picks, "bench", "B", true)
+        assertEquals(listOf("G", "A", "N1", "N2", "B"), picks.map { it.ref })
+        // The ninth is not taken; ticking a ticked one changes nothing.
+        var full = List(8) { Progress.Pick("bench", "r$it", "") }
+        assertEquals(full, Progress.toggled(full, "bench", "x", true))
+        assertEquals(full, Progress.toggled(full, "bench", "r3", true))
+        assertEquals(7, Progress.toggled(full, "bench", "r3", false).size)
+        full = emptyList()
+        assertEquals(1, Progress.toggled(full, "goal", "g", true).size)
+    }
+
+    @Test
+    fun `what the phone says is the desktop's words`() {
+        assertEquals(Progress.w("saved"), Progress.savedLine(3))
+        assertEquals("Chart saved.", Progress.savedLine(8))
+        assertEquals("Chart cleared.", Progress.savedLine(0))
+        assertEquals("Could not read the Progress pictures: Jarvis is not reachable.",
+            Progress.readFailedLine("Jarvis is not reachable"))
+        assertEquals("Could not read the Progress pictures: nope.", Progress.readFailedLine("nope."))
+        assertEquals("Refresh", Progress.w("refresh"))
+    }
+
+    @Test
+    fun `a day can be reached by its week and by a touch`() {
+        val h = heatOf("mixed_levels")
+        val first = h.days.first()
+        assertEquals(first.words, Progress.dayWords(h, first.col, first.row))
+        assertNull(Progress.dayWords(h, 99, 0))
+        val week = Progress.weekDays(h, 0)
+        assertEquals(7, week.size)
+        assertEquals((0..6).toList(), week.map { it.first })
+        assertEquals(h.days.filter { it.col == 0 }.sortedBy { it.row }.map { it.words }, week.map { it.second })
+        // The last week runs only up to today.
+        assertTrue(Progress.weekDays(h, h.columns.last().col).size in 1..7)
+        // A touch: 17 dp per cell, the gap belongs to the cell before it; below row 7 is nothing.
+        assertEquals(0 to 0, Progress.cellAt(15.0, 15.0))
+        assertEquals(1 to 2, Progress.cellAt(18.0, 40.0))
+        assertNull(Progress.cellAt(5.0, 7 * 17.0 + 1))
+        assertNull(Progress.cellAt(-1.0, 5.0))
     }
 }

@@ -14,9 +14,12 @@
  *   total. There is no overall score, no run of days, no share of days.
  * - The pictures are decoration for a screen reader: a week-per-row table
  *   and the list under the balance chart carry the same words.
- * - When the PC says `keep_on_screen` and Rust has taken the picture out
- *   (private lists hidden, or App lock locked), only its words and a Show
- *   button are drawn - the same Windows Hello gate Projects uses.
+ * - ONE rule for hidden lists, the same on the phone: when the PC says
+ *   `keep_on_screen` and Rust has taken the picture out (private lists hidden,
+ *   or App lock locked), only its hidden words and a Show button are drawn -
+ *   the same Windows Hello gate Projects uses (when it is App lock that hides
+ *   it, Show cannot lift that, and the line says to unlock first). While the
+ *   lists are hidden (`lists_hidden`) there is no picker and a save is refused.
  * - Nothing is stored here: not the answers, not the ticks. Not spoken.
  * - The save is greyed on a stale link (rule 4; Rust refuses it too). A
  *   refusal from the PC is shown beside the picker as sent and changes
@@ -39,6 +42,7 @@ import {
   RADAR,
   readActivity,
   readBalance,
+  readFailedLine,
   SCREEN_WORDS,
   saveState,
   WORDS,
@@ -61,6 +65,8 @@ const state = {
   visible: true,
   reading: false,
   again: false,
+  /** Counts the ticks in one edit, so new areas are added in the order ticked. */
+  seq: 0,
 };
 
 /** Controls that send a change: greyed while the link cannot be confirmed. */
@@ -188,7 +194,9 @@ export async function refreshProgress() {
     }
     state.missing = none === 2;
     state.error = errors[0] || "";
-    if (state.editing && (!state.balance || state.balance.hidden)) state.editing = false;
+    if (state.editing && (!state.balance || state.balance.hidden || state.balance.listsHidden)) {
+      state.editing = false;
+    }
   } finally {
     state.reading = false;
   }
@@ -211,11 +219,16 @@ export function setProgressVisible(visible) {
 function openEditor() {
   const b = state.balance;
   if (!b) return;
+  if (b.listsHidden) return;
+  state.seq = 0;
   state.rows = b.choices.map((c) => {
-    const axis = b.axes.find((a) => a.kind === c.kind && a.ref === c.ref);
+    const at = b.axes.findIndex((a) => a.kind === c.kind && a.ref === c.ref);
     return {
       kind: c.kind, ref: c.ref, name: c.name, projectName: c.projectName, hidden: c.hidden,
-      picked: c.picked && !c.hidden, label: axis ? axis.label : c.name,
+      picked: c.picked && !c.hidden, label: at >= 0 ? b.axes[at].label : c.name,
+      // Where it is on the chart now (-1: not on it) and when it was ticked in
+      // this edit: the chart keeps its order and new areas go after it.
+      at: c.picked && !c.hidden ? at : -1, tick: 0,
     };
   });
   state.editError = "";
@@ -231,6 +244,11 @@ function closeEditor() {
 
 async function saveChart() {
   const axes = pickBody(state.rows);
+  if (state.balance && state.balance.listsHidden) {
+    state.editError = state.balance.hiddenWords;
+    paint("save");
+    return;
+  }
   try {
     const out = await invoke("brain_progress_balance_save", { axes });
     if (out === null) return;
@@ -238,7 +256,7 @@ async function saveChart() {
     state.editing = false;
     state.editError = "";
     paint("edit-open");
-    say(axes.length ? "Chart saved." : "Chart cleared.", "ok");
+    say(axes.length ? WORDS.saved : WORDS.cleared, "ok");
   } catch (error) {
     // The PC's own sentence, as sent; nothing was stored, so the picker stays.
     state.editError = errorText(error);
@@ -269,16 +287,23 @@ function paint(focusKey) {
   h.id = "progress-heading";
   card.append(h);
   if (state.error && !state.activity && !state.balance) {
-    card.append(el("p", "empty failed", `${SCREEN_WORDS.read_failed}${state.error}.`));
+    card.append(el("p", "empty failed", readFailedLine(state.error)));
   } else {
     if (state.activity) card.append(heatBlock(state.activity));
     if (state.balance) card.append(balanceBlock(state.balance));
-    if (state.error) card.append(el("p", "empty failed", `${SCREEN_WORDS.read_failed}${state.error}.`));
+    if (state.error) card.append(el("p", "empty failed", readFailedLine(state.error)));
   }
+  // After the pictures and the picker, so the keyboard reaches them first. The
+  // phone's "Refresh" link does the same: read both pictures again.
+  const foot = el("div", "pg-foot");
+  foot.append(button(WORDS.refresh, () => refreshProgress(), {
+    ghost: true, fkey: "refresh", title: "Read the Progress pictures again",
+  }));
   const said = el("p", "pg-said", state.said);
   said.id = "progress-said";
   said.setAttribute("role", "status");
-  card.append(said);
+  foot.append(said);
+  card.append(foot);
   box.replaceChildren(card);
   restoreFocus(box, focusKey || had);
 }
@@ -294,7 +319,7 @@ function hiddenBlock(kind, words) {
   const wrap = el("div", "private-hidden pg-hidden");
   wrap.dataset.kind = kind;
   wrap.append(el("p", "empty", words));
-  wrap.append(button(SCREEN_WORDS.show, async () => {
+  wrap.append(button(WORDS.show, async () => {
     try {
       await invoke("reveal_private_answers");
     } catch (error) {
@@ -302,6 +327,10 @@ function hiddenBlock(kind, words) {
       return;
     }
     await refreshProgress();
+    // "Show" lifts "Hide memory lists" only. When the picture is hidden because
+    // App lock is locked, nothing changes: say what to do, not a dead button.
+    const still = kind === "activity" ? state.activity : state.balance;
+    if (still && still.hidden) say(WORDS.still_hidden, "bad");
   }, { title: SCREEN_WORDS.show_title, fkey: `show:${kind}` }));
   return wrap;
 }
@@ -424,6 +453,8 @@ function balanceBlock(b) {
     }
     block.append(ul);
   }
+  // No picker while the lists are hidden: the same rule as the phone.
+  if (b.listsHidden) return block;
   block.append(state.editing ? editor(b) : editButton(b));
   return block;
 }
@@ -515,7 +546,13 @@ function editor(b) {
     const box = event.target;
     if (!box || box.type !== "checkbox") return;
     const r = state.rows.find((x) => `${x.kind}:${x.ref}` === box.dataset.key);
-    if (r && !r.hidden) r.picked = box.checked;
+    if (r && !r.hidden) {
+      r.picked = box.checked;
+      // Ticked: after the areas already on the chart, in the order ticked.
+      // Unticked: it gives up its place, so ticking it again adds it at the end.
+      r.at = -1;
+      r.tick = box.checked ? (state.seq += 1) : 0;
+    }
     sync();
   });
   form.addEventListener("submit", async (event) => {

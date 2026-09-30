@@ -8313,6 +8313,9 @@ function keepSheet(q) {
   const box = el("div", "goal-block");
   box.append(el("h3", "subhead", Decks.KEEP_BUTTON));
   box.append(el("p", "note", Decks.KEEP_INTRO));
+  // The backend's check for a crisis phrase reads English only: say so where the
+  // owner types the words that will be kept (the quiz's own notice, word for word).
+  if (q.mode === "spanish" && q.notice) box.append(el("p", "note", q.notice));
   if (k.loading) box.append(el("p", "note", Decks.LOADING));
   if (k.why) box.append(el("p", "empty failed", k.why));
   k.rows.forEach((r, i) => {
@@ -8885,7 +8888,7 @@ async function fetchReview() {
 
 async function revealCard() {
   const r = dk.review;
-  if (!r || !r.data || !r.data.card) return;
+  if (!r || !r.data || !r.data.card || r.busy) return;
   if (!linkWords(currentLink()).canAct) {
     r.error = STALE_TITLE;
     paintDecks();
@@ -8925,6 +8928,9 @@ async function revealCard() {
 async function rateCard(rating) {
   const r = dk.review;
   if (!r || !r.data || !r.data.card || !r.reveal) return;
+  // One rating at a time: a second tap while the first is on its way would
+  // rate the next card from the first card's answer.
+  if (r.busy) return;
   if (!linkWords(currentLink()).canAct) {
     r.error = STALE_TITLE;
     paintDecks();
@@ -8932,10 +8938,13 @@ async function rateCard(rating) {
   }
   r.busy = true;
   try {
-    const out = await invoke("brain_review_rate", { card: r.data.card.id, rating });
-    if (isRefusal(out) && out.error === "card_not_found") {
-      // The card is gone or no longer up: ask for the next one.
+    const out = await invoke("brain_review_rate", { card: r.data.card.id, rating, deck: r.deck || "" });
+    if (isRefusal(out) && (out.error === "card_not_found" || out.error === "not_revealed")) {
+      // The card is gone or no longer up, or the PC no longer remembers that its
+      // back was shown (it restarted): drop the reveal and ask for the card
+      // again, so the owner can show the answer and rate it.
       r.busy = false;
+      r.reveal = null;
       await fetchReview();
       return;
     }
@@ -8960,7 +8969,7 @@ async function rateCard(rating) {
 
 async function moreCards() {
   const r = dk.review;
-  if (!r) return;
+  if (!r || r.busy) return;
   if (!linkWords(currentLink()).canAct) {
     r.error = STALE_TITLE;
     paintDecks();
@@ -9315,6 +9324,15 @@ function paintDecks() {
   const nextLine = Decks.nextReadyLine(view.nextReadyDay);
   if (nextLine && view.ready === 0) ready.append(el("p", "note", nextLine));
   if (top.empty) ready.append(el("p", "empty", Decks.EMPTY_STATE));
+  // One review over every deck (the phone has the same button).
+  if (view.available && !view.hidden && view.ready > 0) {
+    const all = labelled(button(Decks.REVIEW, () => startReview("")), Decks.REVIEW_ALL, "");
+    all.dataset.fkey = "review-all";
+    if (!Decks.canReviewAll(view)) all.disabled = true;
+    const allRow = el("div", "goal-actions");
+    allRow.append(all);
+    ready.append(allRow);
+  }
   parts.push(ready);
   // New cards a day: a number from 0 to the PC's limit.
   const perDay = el("div", "goal-block");
@@ -9338,6 +9356,9 @@ function paintDecks() {
     const list = el("div", "");
     for (const deck of view.decks) list.append(deckRow(deck, view));
     parts.push(list);
+    // Each row counts what that deck alone would offer today; the day's new
+    // cards are shared, so the rows can add up to more than the total above.
+    if (Decks.perDeckNoteShown(view)) parts.push(el("p", "note", Decks.PER_DECK_NOTE));
   }
   if (view.hidden) {
     parts.push(el("p", "note", Decks.REVIEW_HIDDEN));

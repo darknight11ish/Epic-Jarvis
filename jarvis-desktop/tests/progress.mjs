@@ -13,7 +13,7 @@
  * - no forbidden word (streak, run of days, longest, missed, share of days,
  *   average, points) in any string of this feature, nor in what it draws;
  * - the page: 12 weeks of squares (level 0 an outline only, levels 1 to 4 the
- *   accent at 0.22, 0.42, 0.66, 0.92, no red), a week-per-row table for a
+ *   accent at 0.40, 0.58, 0.79, 1, measured in every theme, no red), a week-per-row table for a
  *   screen reader, the radar (rings at 25/50/75/100 per cent, the target ring
  *   dashed amber, spokes up then clockwise, a centre circle for "no numbers
  *   yet", no overall score), the list under it, and the picker (3 to 8, a name
@@ -87,7 +87,7 @@ await check("the limits and the shading are the contract's", async () => {
   for (let i = 1; i < 5; i += 1) {
     assert.ok(shadeAlpha(i) - shadeAlpha(i - 1) >= C.shading.min_step - 1e-9, `step ${i}`);
   }
-  assert.equal(shadeAlpha(99), 0.92);
+  assert.equal(shadeAlpha(99), 1);
   assert.equal(shadeAlpha(-1), 0);
   assert.deepEqual(C.levels.map(levelWords), ["0", "1", "2", "3-4", "5+"]);
 });
@@ -206,6 +206,23 @@ await check("the picker's rules: the ninth is off, 3 to 8 saves, none clears", a
   ]);
   assert.deepEqual(body, [{ kind: "bench", ref: "a" }, { kind: "goal", ref: "g", label: "Garage" },
     { kind: "bench", ref: "c" }]);
+});
+
+await check("the chart keeps its order; new ticks go after it in the order ticked (the phone does the same)", async () => {
+  // On the chart now: goal G, bench B, bench A (that order). The picker lists benches first.
+  const rows = [
+    { picked: true, kind: "bench", ref: "A", name: "A", label: "A", at: 2, tick: 0 },
+    { picked: true, kind: "bench", ref: "B", name: "B", label: "B", at: 1, tick: 0 },
+    { picked: true, kind: "bench", ref: "N2", name: "N2", label: "N2", at: -1, tick: 2 },
+    { picked: true, kind: "bench", ref: "N1", name: "N1", label: "N1", at: -1, tick: 1 },
+    { picked: true, kind: "goal", ref: "G", name: "G", label: "G", at: 0, tick: 0 },
+    { picked: false, kind: "bench", ref: "Z", name: "Z", label: "Z", at: -1, tick: 0 },
+  ];
+  assert.deepEqual(pickBody(rows).map((a) => a.ref), ["G", "B", "A", "N1", "N2"]);
+  // An area unticked and ticked again goes to the end, like the phone's list.
+  rows[1].at = -1;
+  rows[1].tick = 3;
+  assert.deepEqual(pickBody(rows).map((a) => a.ref), ["G", "A", "N1", "N2", "B"]);
 });
 
 await check("no forbidden word in this feature's strings or the PC's real sentences", async () => {
@@ -351,7 +368,7 @@ if (K) {
     assert.deepEqual(errors, []);
   });
 
-  await check("level 0 is an outline only; levels 1 to 4 are the accent at 0.22 / 0.42 / 0.66 / 0.92 in every theme", async () => {
+  await check("level 0 is an outline only; levels 1 to 4 are the accent at the contract's alphas, and distinguishable in every theme", async () => {
     const page = await tab({ progress: ok({ activity: C.heat.mixed_levels }) });
     // The legend holds one swatch of every level, so all five are measured.
     const out = {};
@@ -375,29 +392,37 @@ if (K) {
       }, theme);
     }
     await page.close();
+    const need = C.shading.require;
     for (const [theme, v] of Object.entries(out)) {
       assert.equal(v.levels[0].fill, "none", `${theme}: level 0 has a fill`);
       assert.equal(v.levels[0].stroke, v.border, `${theme}: level 0's outline is not border-strong`);
       assert.equal(v.levels[0].strokeWidth, "1px");
       const composed = [];
-      const under = contrast.parseColor(v.surface);
+      const under = contrast.flatten(contrast.parseColor(v.surface), contrast.BLACK);
       for (let l = 1; l <= 4; l += 1) {
         const c = contrast.parseColor(v.levels[l].fill);
         assert.ok(Math.abs(c[3] - C.shading.alpha[l]) < 0.005, `${theme}: level ${l} alpha ${c[3]}`);
         assert.equal(v.levels[l].stroke, "none");
-        composed.push(contrast.flatten(c, contrast.flatten(under, contrast.BLACK)));
+        composed.push(contrast.flatten(c, under));
       }
       const acc = contrast.parseColor(v.accent);
-      assert.deepEqual(composed[0].length, 3);
-      // The ladder holds: each step is a visible step away from the one before,
-      // and the last level is the accent itself (within its 0.92).
+      // The owner's rule (2026-09-30): the ladder can be told apart. Level 1 is
+      // clearly there over the surface, every neighbouring pair is a visible
+      // step, and the top level reads as text-strength.
+      const first = contrast.ratio(composed[0], under);
+      assert.ok(first >= need.first_over_surface, `${theme}: level 1 is only ${first.toFixed(2)}:1 over the surface`);
       for (let l = 1; l < 4; l += 1) {
         const r = contrast.ratio(composed[l], composed[l - 1]);
-        assert.ok(r >= 1.05, `${theme}: levels ${l} and ${l + 1} read ${r.toFixed(2)}:1`);
+        assert.ok(r >= need.neighbour, `${theme}: levels ${l} and ${l + 1} read ${r.toFixed(2)}:1`);
       }
-      const top = contrast.ratio(composed[3], contrast.flatten(under, contrast.BLACK));
-      assert.ok(top >= 1.5, `${theme}: the top level is only ${top.toFixed(2)}:1 over the surface`);
-      assert.ok(contrast.ratio(composed[3], acc.slice(0, 3)) < 1.3, `${theme}: level 4 is not the accent`);
+      const top = contrast.ratio(composed[3], under);
+      assert.ok(top >= need.top, `${theme}: the top level is only ${top.toFixed(2)}:1 over the surface`);
+      assert.deepEqual(composed[3], acc.slice(0, 3), `${theme}: level 4 is the accent itself`);
+      // The fixture's own measured numbers (made from theme.css by the generator) agree.
+      const fx = C.shading.themes[theme];
+      assert.deepEqual(fx.surface, under, `${theme}: the fixture's surface`);
+      assert.deepEqual(fx.over_surface.map((x) => Math.round(x * 100)),
+        composed.map((c) => Math.round(contrast.ratio(c, under) * 100)), `${theme}: the fixture's ratios`);
       // No red anywhere in the ladder: the hue is the accent's, never the error's.
       for (let l = 1; l <= 4; l += 1) {
         const [r, g, b] = contrast.parseColor(v.levels[l].fill);
@@ -668,15 +693,31 @@ if (K) {
     const focus = await page.evaluate(() => document.activeElement && document.activeElement.dataset.fkey);
     await page.close();
     assert.equal(sent.length, 1, "one save");
+    // Nothing was on the chart, so the ticks go in the order they were made: 2, 0, 5.
     assert.deepEqual(sent[0].axes, [
-      { kind: "bench", ref: "00000000000000000000000000000000" },
       { kind: "bench", ref: "00000000000000000000000000000002", label: "Garage" },
+      { kind: "bench", ref: "00000000000000000000000000000000" },
       { kind: "bench", ref: "00000000000000000000000000000005" },
     ]);
     assert.equal(editorGone, 0);
     assert.equal(items, 3);
     assert.equal(said, "Chart saved.");
     assert.equal(focus, "edit-open", "the keyboard is put back on the button that opened the picker");
+  });
+
+  await check("saving keeps the chart's order and adds a new tick after it", async () => {
+    const want = C.balance.three_areas;
+    const page = await tab({ progress: { activity: C.heat.empty, balance: want, saved: want } });
+    await page.getByRole("button", { name: C.words.balance_edit }).click();
+    const boxes = page.locator("#progress-root .pg-pick input[type=checkbox]");
+    const firstOff = want.choices.findIndex((c) => !c.picked);
+    await boxes.nth(firstOff).check();
+    await page.locator("#progress-save").click();
+    await page.waitForTimeout(300);
+    const sent = (await calls(page)).filter((c) => c.cmd === "brain_progress_balance_save");
+    await page.close();
+    const chartOrder = want.axes.map((a) => a.ref);
+    assert.deepEqual(sent[0].axes.map((a) => a.ref), [...chartOrder, want.choices[firstOff].ref]);
   });
 
   await check("none ticked clears the chart: an empty list is sent", async () => {
@@ -736,27 +777,54 @@ if (K) {
     assert.ok(reads >= 2, "both pictures were read");
   });
 
-  await check("a private picker row reads (hidden) and cannot be ticked while the lists are hidden", async () => {
+  await check("while the lists are hidden there is no picker at all, and a save is refused in Rust and here", async () => {
     const b = JSON.parse(JSON.stringify(C.balance.three_areas));
     b.keep_on_screen = false;
     b.axes.forEach((a) => { a.keep_on_screen = false; });
     const page = await tab({ progress: { activity: C.heat.empty, balance: b }, security: { hidden: true } });
-    await page.getByRole("button", { name: C.words.balance_edit }).click();
-    const rows = await page.locator("#progress-root .pg-pick").evaluateAll((els) => els.map((e) => ({
-      name: e.querySelector(".pg-pick-name").textContent,
-      off: e.querySelector("input[type=checkbox]").disabled,
-      checked: e.querySelector("input[type=checkbox]").checked,
-      rename: Boolean(e.querySelector(".pg-rename")),
-    })));
-    const text = await page.locator("#progress-root .pg-editor").innerText();
-    await page.close();
-    const want = b.choices;
-    rows.forEach((r, i) => {
-      if (want[i].keep_on_screen) {
-        assert.deepEqual(r, { name: "(hidden)", off: true, checked: false, rename: false }, `row ${i}`);
-      } else assert.equal(r.name, want[i].name);
+    const edit = await page.getByRole("button", { name: C.words.balance_edit }).count();
+    const list = await page.locator("#progress-root .pg-list li").count();
+    const editor = await page.locator("#progress-root .pg-editor").count();
+    // The command itself refuses too (a page script could call it directly).
+    const refused = await page.evaluate(async () => {
+      try {
+        await window.__TAURI__.core.invoke("brain_progress_balance_save", { axes: [] });
+        return "";
+      } catch (e) { return String((e && e.message) || e); }
     });
-    assert.doesNotMatch(text, /Body weight|Emergency fund|Sleep target/);
+    await page.close();
+    assert.equal(edit, 0, "a picker is offered while the lists are hidden");
+    assert.equal(editor, 0);
+    assert.equal(list, b.axes.length, "an ordinary chart is still drawn");
+    assert.equal(refused, C.words.hidden);
+  });
+
+  await check("Show cannot lift App lock: the picture stays hidden and the line says to unlock first", async () => {
+    const page = await tab({
+      progress: ok({ activity: C.heat.private_number, balance: C.balance.nothing_picked }),
+      appLock: true,
+    });
+    const before = await page.locator("#progress-root .pg-hidden[data-kind=activity]").count();
+    await page.locator("#progress-root .pg-hidden[data-kind=activity] button").click();
+    await page.waitForTimeout(400);
+    const after = await page.locator("#progress-root .pg-hidden[data-kind=activity]").count();
+    const said = await page.locator("#progress-said").textContent();
+    const edit = await page.getByRole("button", { name: C.words.balance_edit }).count();
+    await page.close();
+    assert.equal(before, 1);
+    assert.equal(after, 1, "still hidden");
+    assert.equal(said, C.words.still_hidden);
+    assert.equal(edit, 0, "no picker while App lock hides the lists");
+  });
+
+  await check("Refresh reads both pictures again", async () => {
+    const page = await tab({ progress: ok() });
+    const before = (await calls(page)).length;
+    await page.locator("#progress-root").getByRole("button", { name: C.words.refresh }).click();
+    await page.waitForTimeout(300);
+    const after = (await calls(page)).length;
+    await page.close();
+    assert.equal(after - before, 2);
   });
 
   await check("the keyboard: Enter opens the picker, Tab reaches a box, Space ticks it and focus stays", async () => {

@@ -32,8 +32,10 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,9 +69,11 @@ import kotlinx.coroutines.launch
  * week is one focusable strip with that week's days read out. The radar is
  * decorative; the list under it carries every area's value.
  *
- * "Hide memory lists and chat history": an answer the PC marks
- * `keep_on_screen` is not drawn - only its hidden sentence shows - and the
- * picker is not offered.
+ * "Hide memory lists and chat history" - ONE rule, the same as the desktop's:
+ * an answer the PC marks `keep_on_screen` is not drawn; only its hidden
+ * sentence and a Show button are (Show asks for the fingerprint or PIN, as on
+ * Brain's other private lists). While the lists are hidden the picker is not
+ * offered and a save is refused ([JarvisRuntime.progressBalanceSave]).
  *
  * Nothing here is remembered beyond the screen (plain `remember`, no saved
  * state, nothing on disk), nothing is read aloud, and a PC without these
@@ -79,6 +83,8 @@ import kotlinx.coroutines.launch
 internal fun ProgressSection(
     canAct: Boolean,
     privateHidden: Boolean,
+    showPrivateBusy: Boolean,
+    onShowPrivate: () -> Unit,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
@@ -92,9 +98,13 @@ internal fun ProgressSection(
     var editing by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
+    // "Chart saved." / "Chart cleared." after a save, in the desktop's own words.
+    var savedNote by remember { mutableStateOf<String?>(null) }
     val picks = remember { mutableStateListOf<Progress.Pick>() }
 
     LaunchedEffect(reads, privateHidden) {
+        // The picker closes when the lists become hidden; it does not come back stale.
+        if (privateHidden) editing = false
         when (val r = JarvisRuntime.progressActivity(Progress.WEEKS_DEFAULT)) {
             is ApiResult.Ok -> {
                 val reply = r.value
@@ -141,9 +151,9 @@ internal fun ProgressSection(
     if (heatMissing && balanceMissing) return
 
     // The picker is offered only while nothing is hidden (its names would be blanked).
-    val showEditor = editing && !privateHidden
+    val showEditor = editing && Progress.canEdit(privateHidden)
 
-    Section(Progress.w("title"), trailing = { Quiet("Refresh", onClick = { reads += 1 }) }) {
+    Section(Progress.w("title"), trailing = { Quiet(Progress.w("refresh"), onClick = { reads += 1 }) }) {
         Plate {
             val h = heat
             val b = balance
@@ -155,12 +165,12 @@ internal fun ProgressSection(
                 Gap(8)
                 when {
                     h == null -> Text(
-                        heatProblem?.let { "Couldn't read this: $it" } ?: "Reading…",
+                        heatProblem?.let { Progress.readFailedLine(it) } ?: "Reading…",
                         style = MaterialTheme.typography.bodySmall,
                         color = if (heatProblem != null) chrome.warnInk else chrome.textLo,
                     )
-                    privateHidden && h.keepOnScreen -> Text(
-                        h.hiddenWords, style = MaterialTheme.typography.bodySmall, color = chrome.textMid,
+                    Progress.hiddenOnly(privateHidden, h.keepOnScreen) -> HiddenLine(
+                        h.hiddenWords, showPrivateBusy, onShowPrivate,
                     )
                     else -> ActivityGrid(h)
                 }
@@ -174,7 +184,7 @@ internal fun ProgressSection(
                 Gap(8)
                 when {
                     b == null -> Text(
-                        balanceProblem?.let { "Couldn't read this: $it" } ?: "Reading…",
+                        balanceProblem?.let { Progress.readFailedLine(it) } ?: "Reading…",
                         style = MaterialTheme.typography.bodySmall,
                         color = if (balanceProblem != null) chrome.warnInk else chrome.textLo,
                     )
@@ -189,10 +199,12 @@ internal fun ProgressSection(
                             said = null
                             scope.launch {
                                 try {
+                                    val count = picks.size
                                     val out = JarvisRuntime.progressBalanceSave(Progress.saveBody(picks.toList()))
                                     if (out.ok && out.balance != null) {
                                         balance = out.balance
                                         editing = false
+                                        savedNote = Progress.savedLine(count)
                                     } else {
                                         // Refused: nothing changed, the sentence stays beside the picker as sent.
                                         said = out.said
@@ -208,8 +220,8 @@ internal fun ProgressSection(
                         },
                     )
                     else -> {
-                        if (privateHidden && b.keepOnScreen) {
-                            Text(b.hiddenWords, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+                        if (Progress.hiddenOnly(privateHidden, b.keepOnScreen)) {
+                            HiddenLine(b.hiddenWords, showPrivateBusy, onShowPrivate)
                         } else {
                             BalanceView(b)
                             if (b.words.isNotBlank()) {
@@ -217,12 +229,17 @@ internal fun ProgressSection(
                                 Text(b.words, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
                             }
                         }
-                        if (!privateHidden) {
+                        savedNote?.let {
+                            Gap(4)
+                            Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid, modifier = Modifier.liveStatus())
+                        }
+                        if (Progress.canEdit(privateHidden)) {
                             Gap(6)
                             Quiet(Progress.w("balance_edit"), onClick = {
                                 picks.clear()
                                 picks.addAll(Progress.picksFrom(b))
                                 said = null
+                                savedNote = null
                                 editing = true
                             })
                         }
@@ -230,6 +247,19 @@ internal fun ProgressSection(
                 }
             }
         }
+    }
+}
+
+/** A picture the PC marked private, while the lists are hidden: only its sentence and Show. */
+@Composable
+private fun HiddenLine(words: String, busy: Boolean, onShow: () -> Unit) {
+    val chrome = LocalChrome.current
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            words, style = MaterialTheme.typography.bodySmall, color = chrome.textMid,
+            modifier = Modifier.weight(1f),
+        )
+        Quiet(if (busy) "Checking…" else Progress.w("show"), enabled = !busy, onClick = onShow)
     }
 }
 
@@ -253,10 +283,9 @@ private fun ActivityGrid(h: Progress.Heat) {
                 .pointerInput(h) {
                     // Tap a day to read its words under the grid.
                     detectTapGestures { at ->
-                        val step = Progress.STEP.dp.toPx()
-                        val col = (at.x / step).toInt()
-                        val row = (at.y / step).toInt()
-                        tapped = h.days.firstOrNull { it.col == col && it.row == row }?.words
+                        val u = 1.dp.toPx()
+                        tapped = Progress.cellAt((at.x / u).toDouble(), (at.y / u).toDouble())
+                            ?.let { (col, row) -> Progress.dayWords(h, col, row) }
                     }
                 },
         ) {
@@ -275,14 +304,28 @@ private fun ActivityGrid(h: Progress.Heat) {
             }
         }
         // One focusable strip per week for TalkBack, laid over that week's column.
-        // They draw nothing and take no touch of their own.
+        // They draw nothing and take no touch of their own (a finger on the grid
+        // is the Canvas's tap, whole grid, far over 48 dp each way). Each strip
+        // reads its week, and its actions menu lists that week's days, one action
+        // per day: choosing one puts that day's words under the grid, the same as
+        // a tap does - so every day is reachable without touching the tiny cells.
         Box(Modifier.size(widthDp.dp, Progress.HEAT_HEIGHT.dp)) {
             rows.forEachIndexed { i, row ->
+                val col = h.columns.sortedBy { it.col }.getOrNull(i)?.col ?: i
+                val days = Progress.weekDays(h, col)
                 Box(
                     Modifier
-                        .offset(x = (i * Progress.STEP).dp)
+                        .offset(x = (col * Progress.STEP).dp)
                         .size(Progress.CELL.dp, Progress.HEAT_HEIGHT.dp)
-                        .semantics { contentDescription = row.text },
+                        .semantics {
+                            contentDescription = row.text
+                            customActions = days.map { (_, words) ->
+                                CustomAccessibilityAction(words) {
+                                    tapped = words
+                                    true
+                                }
+                            }
+                        },
                 )
             }
         }
@@ -349,10 +392,9 @@ private fun RadarPicture(b: Progress.Balance) {
     val chrome = LocalChrome.current
     val accent = LocalAccent.current
     val radar = remember(b) { Progress.radar(b.axes.map { it.fraction }) }
-    val labelWidth = 84
     // The contract's 260 square sits inside a wider box so the labels beside the
     // spokes have room; every label is placed from the contract's own x, y and anchor.
-    val padX = 20
+    val padX = Progress.RADAR_PAD_X
     val padY = 12
 
     Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.TopCenter) {
@@ -404,11 +446,9 @@ private fun RadarPicture(b: Progress.Balance) {
             }
             b.axes.forEachIndexed { i, a ->
                 val spot = radar.labels.getOrNull(i) ?: return@forEachIndexed
-                val left = when (spot.anchor) {
-                    "start" -> spot.x
-                    "end" -> spot.x - labelWidth
-                    else -> spot.x - labelWidth / 2.0
-                }
+                // A column that never reaches past the picture's box: narrower at 3 and 9
+                // o'clock, where a long value wraps onto more lines instead of running off.
+                val box = Progress.labelBox(spot, padX)
                 val align = when (spot.anchor) {
                     "start" -> TextAlign.Start
                     "end" -> TextAlign.End
@@ -416,8 +456,8 @@ private fun RadarPicture(b: Progress.Balance) {
                 }
                 Column(
                     Modifier
-                        .offset(x = (left + padX).dp, y = (spot.y + padY - 12).dp)
-                        .width(labelWidth.dp),
+                        .offset(x = (box.left + padX).dp, y = (spot.y + padY - 12).dp)
+                        .width(box.width.dp),
                 ) {
                     Text(
                         a.short,
@@ -433,7 +473,7 @@ private fun RadarPicture(b: Progress.Balance) {
                         style = MaterialTheme.typography.labelSmall,
                         color = chrome.textHi,
                         textAlign = align,
-                        maxLines = 2,
+                        maxLines = Progress.valueLines(spot),
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth(),
                     )
@@ -479,12 +519,10 @@ private fun BalanceEditor(
             Toggle(
                 checked = ticked,
                 onCheckedChange = { on ->
-                    val at = picks.indexOfFirst { it.kind == c.kind && it.ref == c.ref }
-                    if (on && at < 0 && Progress.canPickMore(picks.size)) {
-                        picks.add(Progress.Pick(c.kind, c.ref, ""))
-                    } else if (!on && at >= 0) {
-                        picks.removeAt(at)
-                    }
+                    // The chart keeps its order; a new tick goes after it (Progress.toggled).
+                    val next = Progress.toggled(picks.toList(), c.kind, c.ref, on)
+                    picks.clear()
+                    picks.addAll(next)
                 },
                 // The 9th cannot be ticked; a ticked one can always be unticked.
                 enabled = !busy && tickable && (ticked || Progress.canPickMore(picks.size)),

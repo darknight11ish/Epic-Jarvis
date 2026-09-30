@@ -84,7 +84,8 @@ def _setup(path: Path) -> dict:
     got = SP.read_rows(str(path), roots=[str(path.parent)])
     prop = SP.propose_layout(got["rows"], name=path.name)
     body = dict(prop["guess"], confirm=True)
-    SP.confirm(body, rows=got["rows"], name=path.name, real=got["real"])
+    body["answered"] = list(prop["questions"])
+    SP.confirm(body, rows=got["rows"], name=path.name, real=got["real"], kind=got["kind"])
     return prop
 
 

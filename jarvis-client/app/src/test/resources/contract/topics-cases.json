@@ -36,7 +36,18 @@
     "topics_are": "Your topics are: {names}.",
     "outside": "I do not change your topics after I have read outside text, like an email or a web page. Use Brain, then Memory, then Topics.",
     "missing": "Your PC's Jarvis does not have topic controls yet - run apply-patches.ps1 on the PC.",
-    "waiting": "Waiting for your approval."
+    "waiting": "Waiting for your approval.",
+    "sorting_now": "Jarvis is still sorting {n} of your facts.",
+    "pin_paused": "Paused: {name} is off",
+    "used_left_out": "A memory from a topic you have since switched off.",
+    "ask_save": "Save under Unsorted",
+    "ask_skip": "Skip it",
+    "add_title": "Add a topic",
+    "name_label": "Name",
+    "words_label": "Keywords (optional)",
+    "words_pc_only": "Keywords are set on your PC.",
+    "delete_where": "Where should its facts go?",
+    "delete_looser": "That home is more open than {name}: Jarvis may learn about or use these facts more than it does now."
   },
   "errors": {
     "bad_request": "Jarvis could not understand that request.",

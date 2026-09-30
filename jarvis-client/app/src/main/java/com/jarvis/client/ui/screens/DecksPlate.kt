@@ -79,6 +79,9 @@ internal fun DecksSection(
     var said by remember { mutableStateOf<String?>(null) }
     var perDay by remember { mutableIntStateOf(5) }
     var confirmDeck by remember { mutableStateOf<String?>(null) }
+    // The deck being renamed (Edit on its row), and the name typed so far.
+    var renaming by remember { mutableStateOf<String?>(null) }
+    var renameText by remember { mutableStateOf("") }
     var newOpen by remember { mutableStateOf(false) }
     var newName by remember { mutableStateOf("") }
     // The review in progress, if any.
@@ -247,7 +250,7 @@ internal fun DecksSection(
                             said = null
                             scope.launch {
                                 try {
-                                    val out = JarvisRuntime.reviewRate(card.id, rating)
+                                    val out = JarvisRuntime.reviewRate(card.id, rating, run.deck)
                                     val next = out.value
                                     if (out.ok && next != null) {
                                         if (next.state == "no_decks") {
@@ -259,7 +262,12 @@ internal fun DecksSection(
                                         }
                                     } else {
                                         said = out.said
-                                        if (out.code == Decks.E_CARD_NOT_FOUND) refetch(run.deck)
+                                        // The card is gone, or the PC no longer remembers that its
+                                        // back was shown (it restarted): drop the reveal and ask for
+                                        // the card again, so the answer can be shown and rated.
+                                        if (out.code == Decks.E_CARD_NOT_FOUND || out.code == Decks.E_NOT_REVEALED) {
+                                            refetch(run.deck)
+                                        }
                                     }
                                 } finally {
                                     busy = false
@@ -396,7 +404,7 @@ internal fun DecksSection(
                             Quiet(
                                 Decks.REVIEW,
                                 modifier = Modifier.semantics { contentDescription = "Review all decks" },
-                                enabled = canAct && !busy && !privateHidden,
+                                enabled = canAct && !busy && Decks.canReviewAll(shown.ready, shown.available, privateHidden),
                                 onClick = { startReview(null) },
                             )
                             if (privateHidden) {
@@ -435,6 +443,27 @@ internal fun DecksSection(
                             hidden = privateHidden,
                             enabled = canAct && !busy,
                             confirming = confirmDeck == d.id,
+                            renaming = renaming == d.id,
+                            renameText = renameText,
+                            maxName = shown.limits.name,
+                            onRenameText = { renameText = it.take(shown.limits.name) },
+                            onEdit = { renaming = d.id; renameText = d.name; confirmDeck = null },
+                            onCancelRename = { renaming = null },
+                            onSaveRename = {
+                                if (canAct && !busy && Decks.validName(renameText, shown.limits.name)) {
+                                    busy = true
+                                    said = null
+                                    scope.launch {
+                                        try {
+                                            val out = JarvisRuntime.decksRename(d.id, renameText)
+                                            if (out.ok) renaming = null else said = out.said
+                                            if (!out.ok && out.code == Decks.E_NOT_FOUND) reads += 1
+                                        } finally {
+                                            busy = false
+                                        }
+                                    }
+                                }
+                            },
                             onReview = { startReview(d.id) },
                             onTogglePause = { act(d.id, if (d.paused) "resume" else "pause") },
                             onCards = {
@@ -449,6 +478,10 @@ internal fun DecksSection(
                             onCancelDelete = { confirmDeck = null },
                             onDelete = { act(d.id, "delete") },
                         )
+                    }
+                    if (shown.decks.isNotEmpty() && Decks.perDeckNoteShown(shown)) {
+                        Gap(6)
+                        Text(Decks.PER_DECK_NOTE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                     }
                     Gap(10)
                     if (shown.available) {
@@ -538,6 +571,13 @@ private fun DeckRow(
     hidden: Boolean,
     enabled: Boolean,
     confirming: Boolean,
+    renaming: Boolean,
+    renameText: String,
+    maxName: Int,
+    onRenameText: (String) -> Unit,
+    onEdit: () -> Unit,
+    onCancelRename: () -> Unit,
+    onSaveRename: () -> Unit,
     onReview: () -> Unit,
     onTogglePause: () -> Unit,
     onCards: () -> Unit,
@@ -557,11 +597,24 @@ private fun DeckRow(
             if (deck.paused) Pill(Decks.PAUSED_TAG, color = chrome.textMid)
         }
         Text(Decks.countsLine(deck), style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+        if (renaming && !hidden) {
+            TextInput(
+                value = renameText,
+                onValueChange = onRenameText,
+                placeholder = Decks.DECK_NAME,
+                supportingText = "${renameText.length} / $maxName",
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Quiet(Decks.SAVE, enabled = enabled && Decks.validName(renameText, maxName), onClick = onSaveRename)
+                Quiet(Decks.CANCEL, onClick = onCancelRename)
+            }
+            return@Column
+        }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             Quiet(
                 Decks.REVIEW,
                 modifier = Modifier.semantics { contentDescription = "${Decks.REVIEW} $name" },
-                enabled = enabled && !hidden && !deck.paused && deck.ready > 0,
+                enabled = enabled && Decks.canReview(deck, hidden = hidden),
                 onClick = onReview,
             )
             Quiet(
@@ -577,6 +630,12 @@ private fun DeckRow(
                 modifier = Modifier.semantics { contentDescription = "${Decks.CARDS}: $name" },
                 enabled = !hidden,
                 onClick = onCards,
+            )
+            Quiet(
+                Decks.EDIT,
+                modifier = Modifier.semantics { contentDescription = "${Decks.EDIT}: $name" },
+                enabled = enabled && !hidden,
+                onClick = onEdit,
             )
             Quiet(
                 Decks.DELETE_DECK,

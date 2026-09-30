@@ -827,7 +827,12 @@ def names_for_facts(facts) -> dict:
     checked."""
     try:
         import jarvis_memory
-        view = jarvis_memory.store().entities_view(limit=500, topics="all")
+        st = jarvis_memory.store()
+        try:
+            # topics="all": only compares names, never shown to a model.
+            view = st.entities_view(limit=500, topics="all")
+        except TypeError:                # a memory from before topic controls
+            view = st.entities_view(limit=500)
         ents = view.get("entities") if isinstance(view, dict) else None
     except Exception:
         return {}

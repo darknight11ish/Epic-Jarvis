@@ -25,6 +25,12 @@
   "no_choices": "Nothing to pick from yet. Give a number a target, or accept a goal.",
   "hidden": "Hidden while memory lists and chat history are hidden.",
   "private": "Health or money: kept on screen, never read aloud or sent anywhere.",
+  "saved": "Chart saved.",
+  "cleared": "Chart cleared.",
+  "read_failed": "Could not read the Progress pictures: ",
+  "refresh": "Refresh",
+  "show": "Show",
+  "still_hidden": "Still hidden. If Jarvis is locked, unlock it first, then press Show.",
   "summary_heat": "Activity, last {weeks} weeks. {total}",
   "summary_balance": "Balance chart, {n} areas. {items} No overall score."
  },
@@ -58,13 +64,90 @@
  "shading": {
   "alpha": [
    0.0,
-   0.22,
-   0.42,
-   0.66,
-   0.92
+   0.4,
+   0.58,
+   0.79,
+   1.0
   ],
   "empty_outline": true,
-  "min_step": 0.2
+  "min_step": 0.18,
+  "require": {
+   "first_over_surface": 1.5,
+   "neighbour": 1.25,
+   "top": 4.5,
+   "phone_top": 3.9
+  },
+  "themes": {
+   "deep-space": {
+    "surface": [
+     13,
+     22,
+     31
+    ],
+    "accent": [
+     56,
+     240,
+     255
+    ],
+    "over_surface": [
+     3.06,
+     5.06,
+     8.46,
+     13.09
+    ],
+    "neighbours": [
+     1.66,
+     1.67,
+     1.55
+    ]
+   },
+   "paper": {
+    "surface": [
+     237,
+     241,
+     246
+    ],
+    "accent": [
+     0,
+     105,
+     127
+    ],
+    "over_surface": [
+     1.84,
+     2.52,
+     3.7,
+     5.56
+    ],
+    "neighbours": [
+     1.37,
+     1.47,
+     1.5
+    ]
+   },
+   "high-contrast": {
+    "surface": [
+     20,
+     20,
+     24
+    ],
+    "accent": [
+     99,
+     247,
+     255
+    ],
+    "over_surface": [
+     3.21,
+     5.44,
+     9.12,
+     14.24
+    ],
+    "neighbours": [
+     1.69,
+     1.68,
+     1.56
+    ]
+   }
+  }
  },
  "limits": {
   "weeks_default": 12,
@@ -6301,7 +6384,7 @@
      "short": "Garage",
      "name": "Insulate the garage",
      "kind": "goal",
-     "ref": "g0000000000",
+     "ref": "g0000000002",
      "project": "",
      "state": "progress",
      "value_words": "3 of 5 steps",
@@ -6363,7 +6446,7 @@
     },
     {
      "kind": "goal",
-     "ref": "g0000000000",
+     "ref": "g0000000002",
      "project": "",
      "project_name": "",
      "name": "Insulate the garage",
@@ -6561,7 +6644,7 @@
     },
     {
      "kind": "goal",
-     "ref": "g0000000000",
+     "ref": "g0000000002",
      "project": "",
      "project_name": "",
      "name": "Insulate the garage",
@@ -6765,7 +6848,7 @@
     },
     {
      "kind": "goal",
-     "ref": "g0000000000",
+     "ref": "g0000000002",
      "project": "",
      "project_name": "",
      "name": "Insulate the garage",
@@ -6918,7 +7001,7 @@
     },
     {
      "kind": "goal",
-     "ref": "g0000000000",
+     "ref": "g0000000002",
      "project": "",
      "project_name": "",
      "name": "Insulate the garage",
@@ -6977,6 +7060,153 @@
       "x": 130.0,
       "y": 234.0,
       "anchor": "middle"
+     }
+    ]
+   }
+  },
+  "after_a_goal_is_stopped": {
+   "ok": true,
+   "available": true,
+   "title": "Balance",
+   "axes": [
+    {
+     "label": "Weekly distance",
+     "short": "Weekly dist…",
+     "name": "Weekly distance",
+     "kind": "bench",
+     "ref": "00000000000000000000000000000002",
+     "project": "00000000000000000000000000000001",
+     "state": "progress",
+     "value_words": "12.5 of 20 km",
+     "fraction": 0.5,
+     "keep_on_screen": false
+    },
+    {
+     "label": "Books read",
+     "short": "Books read",
+     "name": "Books read",
+     "kind": "bench",
+     "ref": "00000000000000000000000000000003",
+     "project": "00000000000000000000000000000001",
+     "state": "progress",
+     "value_words": "6 of 12",
+     "fraction": 0.4545,
+     "keep_on_screen": false
+    },
+    {
+     "label": "Insulate the garage",
+     "short": "Insulate th…",
+     "name": "Insulate the garage",
+     "kind": "goal",
+     "ref": "g0000000003",
+     "project": "",
+     "state": "progress",
+     "value_words": "0 of 2 steps",
+     "fraction": 0.0,
+     "keep_on_screen": false
+    }
+   ],
+   "drawable": true,
+   "min": 3,
+   "max": 8,
+   "max_label": 24,
+   "words": "",
+   "summary": "Balance chart, 3 areas. Weekly distance: 12.5 of 20 km. Books read: 6 of 12. Insulate the garage: 0 of 2 steps. No overall score.",
+   "choices": [
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000002",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Weekly distance",
+     "picked": true,
+     "keep_on_screen": false
+    },
+    {
+     "kind": "bench",
+     "ref": "00000000000000000000000000000003",
+     "project": "00000000000000000000000000000001",
+     "project_name": "Life",
+     "name": "Books read",
+     "picked": true,
+     "keep_on_screen": false
+    },
+    {
+     "kind": "goal",
+     "ref": "g0000000003",
+     "project": "",
+     "project_name": "",
+     "name": "Insulate the garage",
+     "picked": true,
+     "keep_on_screen": false
+    }
+   ],
+   "keep_on_screen": false,
+   "hidden_words": "Hidden while memory lists and chat history are hidden.",
+   "radar": {
+    "size": 260,
+    "center": {
+     "x": 130.0,
+     "y": 130.0
+    },
+    "radius": 80.0,
+    "rings": [
+     20.0,
+     40.0,
+     60.0,
+     80.0
+    ],
+    "fractions": [
+     0.5,
+     0.4545,
+     0.0
+    ],
+    "spokes": [
+     {
+      "x": 130.0,
+      "y": 50.0
+     },
+     {
+      "x": 199.28,
+      "y": 170.0
+     },
+     {
+      "x": 60.72,
+      "y": 170.0
+     }
+    ],
+    "polygon": [
+     {
+      "x": 130.0,
+      "y": 90.0,
+      "dot": false
+     },
+     {
+      "x": 161.49,
+      "y": 148.18,
+      "dot": false
+     },
+     {
+      "x": 130.0,
+      "y": 130.0,
+      "dot": false
+     }
+    ],
+    "labels": [
+     {
+      "x": 130.0,
+      "y": 36.0,
+      "anchor": "middle"
+     },
+     {
+      "x": 211.41,
+      "y": 187.0,
+      "anchor": "start"
+     },
+     {
+      "x": 48.59,
+      "y": 187.0,
+      "anchor": "end"
      }
     ]
    }

@@ -5115,6 +5115,14 @@ object JarvisRuntime {
             com.jarvis.client.net.Decks.deckActPath(id), com.jarvis.client.net.Decks.deckActBody(op), "Not changed.",
         ) { com.jarvis.client.net.Decks.actedSaid(it, "Not changed.") }
 
+    /** `POST /api/decks/{id}/act`, `rename`. The desktop's Edit on a deck row does the same. */
+    suspend fun decksRename(id: String, name: String): com.jarvis.client.net.Decks.Outcome<com.jarvis.client.net.Decks.Acted> =
+        decksWrite(
+            com.jarvis.client.net.Decks.deckActPath(id),
+            if (com.jarvis.client.net.Decks.validName(name)) com.jarvis.client.net.Decks.renameBody(name) else null,
+            "Not changed.",
+        ) { com.jarvis.client.net.Decks.actedSaid(it, "Not changed.") }
+
     /** `GET /api/decks/{id}/cards`. A read. */
     suspend fun decksCards(id: String): com.jarvis.client.net.Decks.Outcome<com.jarvis.client.net.Decks.DeckCards> =
         decksRead(com.jarvis.client.net.Decks.cardsPath(id), "Not read.", com.jarvis.client.net.Decks::cardsSaid)
@@ -5154,10 +5162,19 @@ object JarvisRuntime {
         )
 
     /** `POST /api/review/rate`: the owner's own rating; the reply carries the next card. */
-    suspend fun reviewRate(card: String, rating: String): com.jarvis.client.net.Decks.Outcome<com.jarvis.client.net.Decks.Review> =
+    suspend fun reviewRate(
+        card: String,
+        rating: String,
+        deck: String?,
+    ): com.jarvis.client.net.Decks.Outcome<com.jarvis.client.net.Decks.Review> =
         decksWrite(
             "/api/review/rate",
-            if (com.jarvis.client.net.Decks.validId(card)) com.jarvis.client.net.Decks.rateBody(card, rating) else null,
+            // [deck]: the scope this screen reviews ("" = every deck), so the PC counts it in that run only.
+            if (com.jarvis.client.net.Decks.validId(card)) {
+                com.jarvis.client.net.Decks.rateBody(card, rating, deck ?: "")
+            } else {
+                null
+            },
             "Not saved.",
             com.jarvis.client.net.Decks::ratedSaid,
         )

@@ -583,17 +583,149 @@ def t_goal_axes():
     check("goal choices are listed when accepted", any(c["kind"] == "goal" and c["ref"] == g
                                                        for c in r["choices"]))
     w.g.stop(one)
-    check("a stopped goal stays on the chart with its numbers",
-          any(x["ref"] == one for x in w.bal()["axes"]))
+    r_stop = w.bal()
+    check("a stopped goal leaves the chart, like a draft (owner, 2026-09-30)",
+          not any(x["ref"] == one for x in r_stop["axes"])
+          and not any(c["ref"] == one for c in r_stop["choices"])
+          and all(a["ref"] != one for a in w.p.axes_read()))
+    check("...and a save naming it is refused in a sentence",
+          "stopped" in raises(lambda: w.set([{"kind": "goal", "ref": one}, {"kind": "goal", "ref": g},
+                                             {"kind": "bench", "ref": b1}]), PR.Refused))
     # goals unreadable: nothing is forgotten
     class Broken:
         def list(self):
             raise RuntimeError("goals.db locked")
     r2 = PR.balance(projects=w.p, goals=Broken())
     check("goals.db unreadable: goal axes are not drawn but NOT forgotten",
-          len(r2["axes"]) == 1 and len(w.p.axes_read()) == 3)
+          len(r2["axes"]) == 1 and len(w.p.axes_read()) == 2)
     a3 = PR.activity(12, now=w.clock.t, tz=NY, projects=w.p, goals=Broken())
     check("goals.db unreadable: the heatmap still draws the numbers", a3["total"] == 2)
+
+
+def t_stopping_a_goal_takes_it_off_the_chart_at_once():
+    w = World()
+    g1, g2 = w.goal("First"), w.goal("Second")
+    b = w.bench("X", "u", "higher", 10)
+    w.log(b, 1)
+    w.set([{"kind": "goal", "ref": g1}, {"kind": "goal", "ref": g2}, {"kind": "bench", "ref": b}])
+    real = P._ONE
+    P._ONE = w.p                      # the store Goals.stop() reaches for
+    try:
+        w.g.stop(g1)
+    finally:
+        P._ONE = real
+    check("Goals.stop() calls the cleanup: gone from the file before any read",
+          [a["ref"] for a in w.p.axes_read()] == [g2, b])
+
+
+def t_stopped_and_draft_activity():
+    w = World(ts(2026, 10, 14, 18))
+    live = w.goal("Live goal")
+    gone = w.goal("Stopped goal")
+    draft = w.goal("Pasted draft", accept=False)
+    w.clock.t = ts(2026, 10, 13, 9)
+    w.g.mark_step(live, 0, True)
+    w.g.mark_step(gone, 0, True)
+    w.g.mark_step(draft, 0, True)          # ticked while still a draft
+    w.clock.t = ts(2026, 10, 14, 18)
+    check("a draft's ticked step is not on the heatmap; an accepted one is",
+          day(w.act(), "2026-10-13")["count"] == 2)
+    w.g.stop(gone)
+    check("a stopped goal's ticked steps leave the heatmap too",
+          day(w.act(), "2026-10-13")["count"] == 1)
+    a = w.act()
+    check("nothing else on the map", a["total"] == 1, a["total"])
+
+
+def t_draft_done_step_is_dated_at_accept():
+    w = World(ts(2026, 10, 1, 9))
+    plan = [{"step": "Old habit", "by": "", "done": True}, {"step": "Next", "by": "", "done": False}]
+    g = w.g.create("Pasted plan", plan)
+    check("while a draft, the map does not shade its creation day",
+          w.act()["total"] == 0 and w.g.get(g["id"])["plan"][0]["done"] is True)
+    w.clock.t = ts(2026, 10, 14, 10)
+    w.g.accept(g["id"])
+    st = w.g.get(g["id"])["plan"]
+    check("accepting dates a step saved done at ACCEPT time, not creation time",
+          st[0]["done_at"] == w.clock.t and st[1]["done_at"] is None, st)
+    check("...so it shades the accept day and not the creation day",
+          day(w.act(), "2026-10-14")["count"] == 1 and day(w.act(), "2026-10-01")["count"] == 0)
+    g2 = w.g.create("Second plan", plan)
+    w.clock.t = ts(2026, 10, 15, 10)
+    w.g.accept(g2["id"], [{"step": "Old habit", "by": "", "done": True, "id": "s1"},
+                          {"step": "Next", "by": "", "done": True, "id": "s2"}])
+    st2 = w.g.get(g2["id"])["plan"]
+    check("an edit at accept time that has steps done also dates them at accept",
+          st2[0]["done_at"] == w.clock.t and st2[1]["done_at"] == w.clock.t)
+
+
+def t_picked_areas_survive_the_choice_cut():
+    w = World()
+    bs = []
+    for i in range(PR.MAX_CHOICES + 6):
+        if i % 10 == 0:
+            w.project(f"Project {i // 10}")
+        bs.append(w.bench(f"Thing {i:02d}", "u", "higher", 10))
+    pick = [bs[-1], bs[-2], bs[-3]]        # the last ones: past the cut
+    r = w.set([{"kind": "bench", "ref": b} for b in pick])
+    refs = [c["ref"] for c in r["choices"]]
+    check("more than 60 things: the picker is cut to 60 ...", len(refs) == PR.MAX_CHOICES, len(refs))
+    check("... but every picked area is still offered, and ticked",
+          all(b in refs for b in pick) and all(c["picked"] for c in r["choices"] if c["ref"] in pick))
+    check("... in the original order", refs == [b["id"] for b in w.p.progress_benchmarks() if b["id"] in set(refs)])
+    # a picked number whose target was taken away is still offered
+    w2 = World()
+    a, b2, c2 = (w2.bench(f"T{i}", "u", "higher", 10) for i in range(3))
+    for x in (a, b2, c2):
+        w2.log(x, 1)
+    w2.set([{"kind": "bench", "ref": x} for x in (a, b2, c2)])
+    with w2.p._db() as conn:
+        conn.execute("UPDATE benchmarks SET target = NULL WHERE id = ?", (a,))
+    r2 = w2.bal()
+    check("a picked number that lost its target is still in the picker (so it can be unticked)",
+          any(c["ref"] == a and c["picked"] for c in r2["choices"]))
+
+
+def t_save_and_read_do_not_undo_each_other():
+    """The read cleans up the stored chart; a save at the same moment must not be
+    overwritten by a stale copy of the old chart."""
+    import threading
+    w = World()
+    bs = [w.bench(f"Thing {i}", "u", "higher", 10) for i in range(6)]
+    for b in bs:
+        w.log(b, 1)
+    w.set([{"kind": "bench", "ref": b} for b in bs[:3]])
+    errors = []
+
+    def reader():
+        try:
+            for _ in range(60):
+                w.bal()
+        except Exception as e:                 # pragma: no cover
+            errors.append(e)
+
+    t = threading.Thread(target=reader)
+    t.start()
+    for i in range(20):
+        w.set([{"kind": "bench", "ref": b} for b in (bs[3:] if i % 2 == 0 else bs[:3])])
+    t.join()
+    last = bs[:3]
+    check("a save is the last word: the chart is exactly what the last save said",
+          not errors and [a["ref"] for a in w.p.axes_read()] == last, errors)
+    # the clean-up itself runs under the store's lock
+    seen = []
+    real = w.p.axes_write
+
+    def spy(axes):
+        seen.append(w.p._lock._is_owned())
+        return real(axes)
+
+    w.p.axes_write = spy
+    with w.p._db() as conn:       # a stray row: the read heals it, under the lock
+        conn.execute("INSERT INTO balance_axes (position, kind, project, ref, label) "
+                     "VALUES (9, 'bench', ?, ?, '')", (w.pid, "f" * 32))
+    w.bal()
+    check("the clean-up write is made while holding the store's lock", seen == [True], seen)
 
 
 def t_sensitive_axes():

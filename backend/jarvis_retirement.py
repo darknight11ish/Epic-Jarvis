@@ -40,8 +40,13 @@ THE PITFALL THIS FILE MUST NOT REPEAT
   sentinel. `test_retirement.py` keeps the regression.
 
 WHAT THE MODEL MAY DO
-  Only words. The numbers come from `run()`; a sentence the model writes is
-  kept only if every number in it is in the result (`verify_sentence`).
+  Nothing about the answer's words. The owner (2026-09-30) chose that the chat
+  door shows CODE-WRITTEN text only: the model only passes the numbers the
+  owner typed and asks for a missing one; every sentence the owner reads is
+  written here, so no model sentence is ever checked, kept or shown. (An
+  earlier `verify_sentence` only checked that each number appeared somewhere
+  in the answer, so it would have passed a sentence with a true number in a
+  false place. It was deleted rather than made cleverer.)
 
 PRIVACY (money, screen only)
   The answer is `private`, not read aloud, not remembered, not sent to a search
@@ -67,8 +72,8 @@ except Exception:  # pragma: no cover - the numbers can still be typed as number
 
 TITLE = "Retirement what-if"
 DISCLAIMER = "This is a simplified what-if, not financial advice."
-PLACEHOLDER_NOTE = ("The return figures are placeholders you can change, not a forecast. "
-                    "Real life will differ.")
+PLACEHOLDER_NOTE = ("The return, swing and inflation figures are placeholders for a mix of "
+                    "stocks and bonds, not a forecast. You can change them. Real life will differ.")
 TODAYS_MONEY = "All amounts are in today's money, so inflation is already taken out."
 DETAIL = ("Type your own numbers and Jarvis plays out 10,000 made-up futures. The answer is "
           "a range, never one exact figure. It stays on screen only: never read aloud, never "
@@ -81,9 +86,9 @@ OUTSIDE_TEXT = ("I will not run a what-if in a turn that has read an email, a we
 NOT_ENOUGH_NO_SPENDING = ("There is nothing to test: with no spending in retirement the money "
                           "cannot run out. Type what you expect to spend each year.")
 NOT_ENOUGH_NO_SPENDING_REASON = "no_spending"
-DROPPED_LINE = ("(Jarvis's own summary sentence used a figure that is not in the answer, so it "
-                "was left out.)")
-SPOKEN_LINE = "I have put it on your screen."
+SPOKEN_LINE = ("The answer is written in this chat on your screen. I have not read the numbers "
+               "out.")
+LEAVES_LITTLE = "very little"
 
 PATH_RUN = "/api/retirement/run"
 PATH_DEFAULTS = "/api/retirement/defaults"
@@ -133,13 +138,17 @@ FIELDS = (
      "help": "Leave empty to start when you stop working."},
     {"key": "expected_return_percent", "label": "Expected yearly return before inflation",
      "unit": "percent", "kind": "percent", "min": MIN_RETURN, "max": MAX_RETURN,
-     "default": 7.0, "placeholder": True, "help": "A placeholder, not advice. Change it."},
+     "default": 6.0, "placeholder": True,
+     "help": "A placeholder for a mix of stocks and bonds, not a forecast. 6% is about 3.4% a "
+             "year after the placeholder 2.5% inflation. Change it."},
     {"key": "volatility_percent", "label": "How much yearly returns swing",
      "unit": "percent", "kind": "percent", "min": MIN_SPREAD, "max": MAX_SPREAD,
-     "default": 12.0, "placeholder": True, "help": "A placeholder, not advice. Change it."},
+     "default": 12.0, "placeholder": True,
+     "help": "A placeholder for a mix of stocks and bonds, not a forecast. Change it."},
     {"key": "inflation_percent", "label": "Expected yearly inflation",
      "unit": "percent", "kind": "percent", "min": MIN_INFLATION, "max": MAX_INFLATION,
-     "default": 2.5, "placeholder": True, "help": "A placeholder, not advice. Change it."},
+     "default": 2.5, "placeholder": True,
+     "help": "A placeholder, not a forecast. Change it."},
 )
 _BY_KEY = {f["key"]: f for f in FIELDS}
 REQUIRED = tuple(f["key"] for f in FIELDS if f["default"] is None and f["key"] != "other_income_start_age")
@@ -171,7 +180,7 @@ def _range_words(f) -> str:
 
 # ------------------------------------------------------------------ reading the typed numbers
 
-_PERCENT_RE = re.compile(r"^[+-]?\d{1,4}(?:\.\d{1,6})?$")
+_PERCENT_RE = re.compile(r"^[+-]?(?:\d{1,4}(?:\.\d{0,6})?|\.\d{1,6})$")
 _INT_RE = re.compile(r"^\d{1,4}$")
 
 
@@ -517,13 +526,22 @@ def _summary(r: dict, plan: int) -> list:
     out.append(f"If yearly returns are 1 point lower, that becomes {lo['label']}; "
                f"1 point higher, {hi['label']}.")
     e = r["end_balance"]
+
+    def left(key):
+        return LEAVES_LITTLE if e[key] <= 0 else f"about {e['text'][key]}"
     if r["poor_case"]["lasts"]:
-        out.append(f"Even in a poor case (1 in 10) it lasts, leaving about {e['text']['p10']} at age {plan}.")
+        out.append(f"Even in a poor case (1 in 10) it lasts, leaving {left('p10')} at age {plan}.")
     else:
         out.append(f"In a poor case (1 in 10) the money runs out at about age {r['poor_case']['age']}.")
-    if e["p50"] > 0:
-        out.append(f"The middle case leaves about {e['text']['p50']} at age {plan}; "
-                   f"a good case (1 in 10) about {e['text']['p90']}.")
+    if r["middle_lasts_to"] >= plan:
+        # The middle case LASTED. Its balance may still round to nothing (exactly
+        # enough, or a few cents over): that is "very little", never "runs out".
+        if e["p90"] <= 0:
+            out.append(f"The middle case leaves {left('p50')} at age {plan}, and so does a good "
+                       f"case (1 in 10).")
+        else:
+            out.append(f"The middle case leaves {left('p50')} at age {plan}; "
+                       f"a good case (1 in 10) about {e['text']['p90']}.")
     else:
         out.append(f"In the middle case the money runs out at about age {r['middle_lasts_to']}.")
     if r["used"] and any(u["key"] == "other_income" for u in r["used"]):
@@ -531,100 +549,58 @@ def _summary(r: dict, plan: int) -> list:
     return out
 
 
-# ------------------------------------------------------------------ the model's words
+# ------------------------------------------------------------------ the chat's words
 
-_NUM_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
-
-
-def _numbers_in(text: str) -> set:
-    return {t.rstrip(",").replace(",", "") for t in _NUM_RE.findall(str(text))}
-
-
-def allowed_numbers(result: dict) -> set:
-    """Every number the answer itself shows: its own sentences, the inputs it
-    used, the ages and the shares. A model sentence may use only these."""
-    if not isinstance(result, dict):
-        return set()
-    bag = set()
-    for line in result.get("summary") or []:
-        bag |= _numbers_in(line)
-    for u in result.get("used") or []:
-        bag |= _numbers_in(u.get("value", ""))
-    for key in ("share",):
-        s = result.get(key)
-        if s:
-            bag.add(str(s.get("per_100")))
-    for b in (result.get("bands") or {}).values():
-        bag.add(str(b.get("per_100")))
-        bag.add(str(int(abs(b.get("points", 0)))))
-    e = result.get("end_balance")
-    if e:
-        for k in ("p10", "p50", "p90"):
-            bag.add(str(e.get(k)))
-    bag |= {"100", "10", "1", str(result.get("paths"))}
-    return bag
-
-
-def verify_sentence(sentence, result: dict, *, limit: int = 400) -> bool:
-    """True only for one plain line whose every number is in the result."""
-    if not isinstance(sentence, str):
-        return False
-    text = sentence.strip()
-    if not text or len(text) > limit or "\n" in text or "\r" in text:
-        return False
-    if result is None or result.get("state") == "not_enough_to_say":
-        return False
-    allowed = allowed_numbers(result)
-    return all(tok in allowed for tok in _numbers_in(text))
-
-
-def chat_words(result: dict, model_sentence=None, *, spoken: bool = False) -> str:
-    """What the chat shows: the model's sentence when code has verified it, else
-    the answer's first sentence, plus the disclaimer - always. A spoken question
-    gets only 'I have put it on your screen.' (nothing about money is read aloud)."""
-    if spoken:
-        return SPOKEN_LINE
-    if verify_sentence(model_sentence, result):
-        head = model_sentence.strip()
-    else:
-        head = result["summary"][0]
-        if model_sentence not in (None, ""):
-            head = head + " " + DROPPED_LINE
-    if DISCLAIMER not in head:
-        head = head + " " + DISCLAIMER
-    return head
+def chat_words(result: dict, *, spoken: bool = False) -> str:
+    """What the chat shows: the answer's own code-written text (the summary
+    sentences, then the disclaimer) - never a sentence the model wrote. A
+    spoken question gets one true line first (SPOKEN_LINE), then the same text;
+    the answer stays on screen and is not read aloud (a tool that is not on the
+    read-aloud list keeps it there), so nothing about the money is spoken."""
+    text = result["text"]
+    if DISCLAIMER not in text:
+        text = text + " " + DISCLAIMER
+    return SPOKEN_LINE + "\n\n" + text if spoken else text
 
 
 # ------------------------------------------------------------------ the chat door (tool)
 
 TOOL_NAME = "retirement_whatif"
-TOOL_DESCRIPTION = ("Play out a simplified retirement what-if from numbers the owner typed. "
-                    "Ask for any missing one; never guess it.")
+TOOL_DESCRIPTION = ("Retirement what-if from numbers the owner typed, in today's money; ages "
+                    "in years, returns in percent. Ask for any missing one; never guess. "
+                    "Code writes the answer; add nothing.")
 
 
 def tool_schema() -> dict:
-    props = {}
-    for f in FIELDS:
-        props[f["key"]] = {"type": ["number", "string"], "description": f["label"] + " (" + f["unit"] + ")"}
-    return {"type": "object", "properties": props, "required": list(REQUIRED),
-            "additionalProperties": False}
+    """Every field is a string: a number or text such as "1,250,000" or "6.5%"
+    (the reader takes both; a plain string type is the one every model
+    runner's tool format handles). The names say what each one is, so there
+    are no per-field descriptions: that keeps the tool inside the per-tool
+    token budget (test_tool_text.py) on the 8B model's small working memory."""
+    props = {f["key"]: {"type": "string"} for f in FIELDS}
+    return {"type": "object", "properties": props, "required": list(REQUIRED)}
 
 
 def tool_call(args: dict, *, tainted: bool = False, paths: int = PATHS) -> dict:
-    """The model-callable door, kept out of jarvis_agent.py until the spending
-    builder's edits settle (docs/JARVIS-API.md section 103.6). Refused after
-    outside text. Returns {ok, result} or {ok: False, error, field, message};
-    the model gets `text_for_model` (the answer's own sentences), never a
-    number to change."""
+    """The model-callable door (registered in jarvis_agent.py as
+    `retirement_whatif`). Refused after outside text. Takes the same one-run-
+    at-a-time lock as the route, or says it is busy. Returns {ok, result} or
+    {ok: False, error, field, message}. The words the owner reads are the
+    result's own (`chat_words`), never the model's."""
     if tainted:
         return {"ok": False, "error": "outside_text", "field": "", "message": OUTSIDE_TEXT}
+    if not _RUN_LOCK.acquire(blocking=False):
+        return {"ok": False, "error": "busy", "field": "", "message": BUSY}
     try:
-        res = run(args, paths=paths)
-    except InputError as e:
-        return {"ok": False, "error": e.code, "field": e.field, "message": e.message}
-    except TimeoutError:
-        return {"ok": False, "error": "too_slow", "field": "", "message": TOO_SLOW}
-    return {"ok": True, "result": res, "text_for_model": res["text"]}
+        try:
+            res = run(args, paths=paths)
+        except InputError as e:
+            return {"ok": False, "error": e.code, "field": e.field, "message": e.message}
+        except TimeoutError:
+            return {"ok": False, "error": "too_slow", "field": "", "message": TOO_SLOW}
+    finally:
+        _RUN_LOCK.release()
+    return {"ok": True, "result": res}
 
 
 # ------------------------------------------------------------------ the routes

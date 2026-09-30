@@ -16013,14 +16013,16 @@ Also since the fork audit: the desktop clears its kind, tag and search narrowing
 
 Tests: `backend/test_chat_fork.py` (now also `upto` far too large, `updated` = the fork's moment, the `erased` flag, and a "said again" count with an `at` unlike the live registry's), with `test_chat_log.py` and `test_chat_tags.py` updated for the new per-turn `idx` and the new route in the patch. Shared words and worked examples are in `history-cases.json` (`words.fork*`, `fork_labels`, `fork_error_cases`).
 
-## 103. Retirement what-if (added 2026-09-30; backend built, apps to follow)
+## 103. Retirement what-if (added 2026-09-30; backend, chat door and both apps built)
 
 The owner's decision of 2026-09-30 (`docs/BUILD-QUEUE-2026-09-30.md`, item 5; design
 `docs/FINANCE-DESIGN.md` part B; the exact shape both apps draw is its "Retirement contract
 (frozen)"). The owner types their own numbers into a small form (or gives them in chat) and the
 PC plays out 10,000 made-up futures with a fixed random seed. Backend: `jarvis_retirement.py`
 (shipped whole, plain Python, standard library only), `retirement.patch` (one install block).
-Tests: `backend/test_retirement.py` (158 checks).
+Tests: `backend/test_retirement.py` (174 checks), `backend/test_agent_retirement_wiring.py` (66).
+Both apps are tested against the same file of the real backend's answers,
+`tools/gen_retirement_cases.py` (`retirement-cases.json`, byte-identical copies).
 
 ### 103.1 The rules
 
@@ -16031,9 +16033,9 @@ Tests: `backend/test_retirement.py` (158 checks).
 - **The sentence "This is a simplified what-if, not financial advice." is added by code** to
   every result (`disclaimer`, and the last words of `text`). The made-up return figures carry a
   second fixed line (`placeholder_note`).
-- **Numbers come from code, never from the model.** The model may only word the answer; a
-  sentence it writes is kept only if every number in it is in the result
-  (`jarvis_retirement.verify_sentence`), else the answer's own first sentence is used.
+- **Numbers and words come from code, never from the model.** The chat door shows code-written text
+  only (the owner's decision of 2026-09-30): the model writes no sentence about the answer, so there is
+  nothing to check (103.6).
 - **Explicit end states.** `never_runs_out` ("In all 10,000 simulated futures your money lasts to
   age 95. That does not mean it is guaranteed.", shown as "more than 99 of 100", never 100),
   `always_runs_out`, `mixed`, and `not_enough_to_say` (no spending to test). A future that never
@@ -16047,7 +16049,8 @@ Tests: `backend/test_retirement.py` (158 checks).
 - **No card.** A pure calculation on numbers the owner typed: no file, no network. No gate line.
 - **Same answer every time.** Fixed seed (`20260930`), the same random draws for every path
   whatever the inputs, so more savings, more saving each year, less spending, more pension, a
-  higher return or a later retirement can never lower the share that lasts.
+  higher return or a later retirement did not lower the share that lasts in any of 6,450 swept cases
+  (a sweep, not a proof: 103.5).
 
 ### 103.2 The model (all in today's money)
 
@@ -16076,9 +16079,9 @@ is stopped). The message never repeats what was typed. An unknown field is refus
 
 Fields: `current_age`, `retirement_age`, `savings`, `yearly_saving`, `yearly_spending` (typed by the
 owner; asked for when missing, never guessed); `plan_to_age` (95), `other_income` (0),
-`other_income_start_age` (the retirement age), `expected_return_percent` (7.0),
-`volatility_percent` (12.0), `inflation_percent` (2.5) (defaults; the made-up ones are marked
-`assumed` in the answer). Limits: ages 18 to 100 (plan-to age to 110, and after the retirement age);
+`other_income_start_age` (the retirement age), `expected_return_percent` (6.0),
+`volatility_percent` (12.0), `inflation_percent` (2.5) (defaults: placeholders for a mix of stocks and
+bonds, not a forecast; the made-up ones are marked `assumed` in the answer). Limits: ages 18 to 100 (plan-to age to 110, and after the retirement age);
 money 0 to 1,000,000,000; return -5 to 15; spread 0 to 40; inflation 0 to 15.
 
 ### 103.4 What the tests prove
@@ -16086,25 +16089,77 @@ money 0 to 1,000,000,000; return -5 to 15; spread 0 to 40; inflation 0 to 15.
 Cases worked out on paper with no randomness (runs out at exactly 70; a pension from 67 moves it to
 71; exactly enough lasts; one cent short fails in the last year; compounding; inflation taken out);
 every bound (0, huge, negative, NaN, infinity, booleans, text, lists); the monotonic checks; the
-argmax regression; sentence verification; no print, log or file with the numbers; the time cap; the
-route wrapper and the patch on the stack.
+argmax regression; the middle case that lasts but leaves nothing ("leaving very little", never "runs
+out"; savings exactly equal to spending, or 40 cents over); the code-written chat text; the
+one-run-at-a-time lock (route and tool, two threads); no print, log or file with the numbers; the
+time cap; the route wrapper and the patch on the stack; the two apps' shared fixture is current.
 
 ### 103.5 Limits, said plainly
 
-The default return, spread and inflation are placeholders, not researched or recommended. The model is
-yearly and simple: no tax, no fees, no sequence of different spending in different years, no
-life-stage changes. The 10,000 futures are a sample: the shares move by a few points with another
-seed. Nothing was compared with monteplan or another calculator.
+The default return (6%), spread (12%) and inflation (2.5%) are **placeholders for a mix of stocks and
+bonds, not a forecast** (the return was 7% until the owner lowered it on 2026-09-30: 6% is about
+3.4% a year after 2.5% inflation); they are not researched or recommended, and every place they
+appear says so. The model is yearly and simple: no tax, no fees, no sequence of different spending in
+different years, no life-stage changes. The 10,000 futures are a sample: the shares move by a few
+points with another seed.
 
-### 103.6 The chat door (not wired yet)
+**Cross-checked, not proven.** The simulation was compared with an independent numpy
+implementation of the same model on 5 parameter sets: the shares agreed within sampling noise. It
+was not compared with monteplan or another calculator. About the "never lowers the share" wording in
+103.1: the fixed draws make the share for the same futures move the right way with more savings, more
+saving each year, less spending, more pension, a higher return and a later retirement, and in a sweep
+of 6,450 cases the share was never lowered. That is a sweep, **not a proof**, and the tests keep a
+smaller version of it.
 
-`jarvis_retirement.tool_call(args, tainted=...)`, `tool_schema()` and `chat_words()` are written and
-tested (refused after outside text; a missing number is asked for; a spoken question gets "I have put
-it on your screen."), but the `retirement_whatif` tool is **not yet registered in `jarvis_agent.py`**,
-which another builder was editing when this was built. Until it is, Jarvis in chat sends the owner to
-the form. Follow-up: register the tool (gate action decided like `calculator`, a row in `jarvis_reach.py`'s
-`TOOL_NAMES`, the `control`-style refusal after outside text through the same `tainted` flag) and hand
-the result to the apps through the existing `: jarvis-table` mechanism.
+Numbers the boxes accept (the PC reads them, both apps' early checks agree): ages as whole numbers
+(full-width digits too); money with commas or a decimal point; a percent with or without `%`,
+including `7%%`, `.5` and `5.` (`.` alone, `5.5.5` and `1e1` are refused).
+
+### 103.6 The chat door (built 2026-09-30)
+
+`retirement_whatif` is a tool in `jarvis_agent.py` (`RETIREMENT_TOOL`), enabled like `my_spending` by
+naming it in `[tools].enabled`. **The chat shows code-written text only** (the owner's decision): the
+model passes the numbers the owner typed and asks for a missing one; it writes no sentence about the
+answer.
+
+- **The fields** are strings (a bare JSON number is turned into text before the check), the five
+  required ones listed in the schema, so a missing number is refused with "'savings' is required" and
+  the model asks, never guesses; the PC's own `missing` error ("Please type in ...") is the second
+  line of defence. An unknown field is refused ("not one of the arguments here").
+- **No card.** Decided under the calculator's own gate action (`gate_lookup_name` is `calculator`, tier
+  `auto`), not in `NEEDS_A_PERSON`, not a plan step (`_PLAN_EXCLUDED_STEPS`). Its result is not
+  outside text (`_NOT_READING`) and it is left out of the chat record's `tools_ran`, so it does not
+  mark the conversation as having read outside text.
+- **Refused after outside text,** before anything is worked out (`_retirement_refusal`): any reading
+  tool ran this turn, the conversation was tainted, the message was pasted or shared, or the app
+  added text. Nothing is run and the model is told to ask the owner to type the numbers in a message
+  of their own.
+- **The answer.** A good run hands the model only `{"ok": true, "shown_on_screen": true, "note": ...}`
+  (no figure) and keeps the result in memory. Whatever the model writes in the answering round is
+  held and dropped; code emits `jarvis_retirement.chat_words(result)`: the summary sentences and "This
+  is a simplified what-if, not financial advice.", word for word. `verify_sentence` (which only
+  checked that each number appeared somewhere in the answer, so it would have passed a true number in
+  a false sentence) was deleted.
+- **A spoken question** gets one true line first, "The answer is written in this chat on your
+  screen. I have not read the numbers out.", then the same written text. The tool is not on the
+  apps' read-aloud list (`gen_private_aloud_cases.READ_ALOUD_TOOLS`), so the answer stays on screen
+  and is not read aloud, and the answer is not written to memory or learning (the learner reads the
+  owner's own words only; a money figure the owner typed is a sensitive topic and waits for a yes).
+- **Nothing typed is written down.** The gate's audit prompt is `tool retirement_whatif` (no
+  arguments), the card text is "Retirement what-if (the numbers typed are not shown here)", steps and
+  events carry the tool's name only, and nothing is printed or logged.
+- **One run at a time.** The tool takes the same lock as `POST /api/retirement/run`, or says "Another
+  what-if is still being worked out. Try again in a moment." (`busy`); a form run during a chat run
+  gets `429`.
+- **The short list.** Its own group, `retirement`, opened with `more_tools`; not in the core, and not
+  the documents group (that group is dropped while no folder is listed). A row in
+  `jarvis_reach.py`'s `TOOL_NAMES` ("A retirement what-if from numbers you type (shown on screen
+  only)") shows it on "What asks first".
+- Tests: `backend/test_agent_retirement_wiring.py` (66 checks), `test_retirement.py` (174),
+  `test_tool_text.py`, `test_short_tool_list.py`. Not run: a real model calling the tool, and Windows.
+
+The apps do not draw a chat answer's figures in a special way (there is no `: jarvis-table` block for
+this): the text is the answer.
 
 
 ## 105. Activity heatmap and balance chart (added 2026-09-30; backend built, apps to follow)
@@ -16306,7 +16361,7 @@ In `memory.db`: `topics`, `fact_topics` (fact id, topic id, second topic id, how
 * Classification accuracy on real facts: **not measured**. The made-up set is in `backend/topic_cases/`; the rules were written alongside it, so its numbers flatter them.
 * Per-chat "for this chat, leave out Work", non-English keywords, a chat's tag as a hint, and a topic filter on the briefing's other sections: later (design section 11).
 * The rest of the "what can I say" list (`jarvis_sayable`) does not yet carry the topic phrases.
-* Search time with a blocked topic was measured only on the build machine (words only, up to 1,071 facts); the 10,000-fact figure is for the owner's PC.
+* Search time with a blocked topic was measured only on the build machine, words only: with 10,071 facts and a third of them (3,362) in a topic switched off, the median search went from 1.79 ms to 3.43 ms (95th percentile 4.99 to 6.36 ms); with a small blocked topic there was no difference beyond noise. The figure for the owner's PC is not known.
 
 ### 107.9 The shared fixture
 

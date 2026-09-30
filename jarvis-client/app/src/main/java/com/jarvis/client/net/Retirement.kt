@@ -57,6 +57,9 @@ object Retirement {
     const val READING = "Reading…"
     const val GENERIC = "The PC could not work that out. Try again."
 
+    /** The link is stale (rule 4): nothing new can be worked out. The desktop says the same. */
+    const val STALE_LINE = "Waiting for the link to catch up. Nothing can be sent until it does."
+
     /** Said above the form when a box needs a look (the notes are under the boxes). */
     const val CHECK_BOXES = "Some boxes need a look. The notes are under them."
 
@@ -149,6 +152,13 @@ object Retirement {
     fun startingValues(d: Defaults): Map<String, String> =
         d.fields.filter { it.placeholder && it.default != null }.associate { it.key to it.default.orEmpty() }
 
+    /**
+     * The grey hint in an EMPTY box: the PC's default for a box that has one but
+     * does not start filled (the pension's 0). A made-up figure starts filled
+     * instead, so it has no hint. Same as the desktop's `hintText`.
+     */
+    fun hintFor(f: Field): String? = if (f.placeholder) null else f.default
+
     /** "18 to 100", "0 to 1,000,000,000", "-5 to 15": the limits, from the PC's numbers. */
     fun limitsText(f: Field): String =
         if (f.kind == "money") "${grouped(f.min)} to ${grouped(f.max)}" else "${numberText(f.min)} to ${numberText(f.max)}"
@@ -173,7 +183,8 @@ object Retirement {
     // ------------------------------------------------------------ checking a slip early
 
     private val INT_RE = Regex("^\\d{1,4}$")
-    private val PERCENT_RE = Regex("^[+-]?\\d{1,4}(?:\\.\\d{1,6})?$")
+    // The PC also takes ".5" and "5." for a percent (JARVIS-API 103.5).
+    private val PERCENT_RE = Regex("^[+-]?(?:\\d{1,4}(?:\\.\\d{0,6})?|\\.\\d{1,6})$")
     private val MONEY_RE = Regex("^\\d{1,12}(?:\\.\\d{1,2})?$")
     private val NEG_MONEY_RE = Regex("^-\\d+(?:\\.\\d+)?$")
 
@@ -196,6 +207,9 @@ object Retirement {
             return if (f.required) "Please type in \"${f.label}\". I will not guess it." else null
         }
         val msg = "${f.label} must be ${rangeWords(f)}."
+        // The PC also reads full-width digits (a phone keyboard can type them). This
+        // app only knows the plain ones, so it leaves those to the PC.
+        if (text.any { it.code > 127 && it.isDigit() }) return null
         return when (f.kind) {
             "age" -> {
                 if (!INT_RE.matches(text)) return msg

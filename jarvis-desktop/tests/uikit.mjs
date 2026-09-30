@@ -1721,22 +1721,27 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               return { available: false };
             }
             pg.calls.push({ cmd, ...(cmd === "brain_progress_balance_save" ? { axes: JSON.parse(JSON.stringify(args.axes)) } : {}) });
+            const listsHidden = (window.__security.hidden && !window.__security.revealed) || window.__appLock;
             if (cmd === "brain_progress_balance_save") {
               if (state.stale) throw new Error("the event stream is stale");
+              // Like Rust: while the lists are hidden (or App lock is locked) the chart cannot be changed.
+              if (listsHidden) throw new Error("Hidden while memory lists and chat history are hidden.");
               if (pg.saveError) throw pg.saveError;
               pg.balance = JSON.parse(JSON.stringify(pg.saved || pg.balance));
             }
             let out = JSON.parse(JSON.stringify(cmd === "brain_progress_activity" ? pg.activity : pg.balance));
-            if ((window.__security.hidden && !window.__security.revealed) || window.__appLock) {
+            if (listsHidden) {
               const anyPrivate = out.keep_on_screen === true
                 || (out.axes || []).some((a) => a.keep_on_screen === true);
               if (anyPrivate) {
                 return { ok: true, available: true, title: out.title, hidden: true, keep_on_screen: true,
+                  lists_hidden: true,
                   hidden_words: out.hidden_words || "Hidden while memory lists and chat history are hidden." };
               }
               for (const c of out.choices || []) {
                 if (c.keep_on_screen === true) Object.assign(c, { name: "", project_name: "", hidden: true });
               }
+              out.lists_hidden = true;
             }
             return out;
           }

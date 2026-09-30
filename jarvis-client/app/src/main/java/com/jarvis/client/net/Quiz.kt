@@ -17,8 +17,9 @@ import kotlinx.serialization.json.put
  * The owner pastes some text, the PC's local model writes a few questions
  * about it, the owner types an answer to each, one at a time, and the model
  * marks each answer against the passage the question came from. Nothing is
- * saved or learned and nothing leaves the PC: the whole quiz lives in the
- * PC's memory and ends on Finish, Stop, a PC restart or 60 minutes unused.
+ * saved unless the owner chooses Keep (questions go to a review deck on the
+ * PC), nothing is learned and nothing leaves the PC: the whole quiz lives in
+ * the PC's memory and ends on Finish, Stop, a PC restart or 60 minutes unused.
  * THIS PHONE KEEPS NOTHING EITHER: no file, no preference, no database -
  * the session is held in memory by [com.jarvis.client.JarvisRuntime] only.
  *
@@ -36,7 +37,7 @@ object Quiz {
     // ---- The shared words (docs/STUDY-FROM-TEXT-DESIGN.md section 11), word for word. ----
     const val TITLE = "Quiz me on a text"
     const val INTRO = "Paste some text and Jarvis writes a few questions about it. Your answers are marked by the " +
-        "model on this PC. Nothing is saved or learned, and nothing leaves this PC."
+        "model on this PC. Nothing is saved unless you choose Keep, nothing is learned, and nothing leaves this PC."
     const val START = "Write questions"
     const val ANSWER = "Check my answer"
     const val GOT_IT = "Got it"
@@ -74,7 +75,7 @@ object Quiz {
     const val SPANISH_HINT = "Paste Spanish text (optional)"
     const val EXAMPLE_LABEL = "Example sentence"
     const val ANSWER_PREFIX = "Answer: "
-    const val ACCENT_ROW_LABEL = "Accent letters"
+    const val ACCENT_ROW_LABEL = "Spanish letters"
     // Word for word the contract's line for a PC that sends no "mode" (C2).
     const val OLD_PC = "Your PC's Jarvis does not have Spanish practice yet - run apply-patches.ps1 on the PC."
     const val KEEP_OPEN = "Keep these questions"
@@ -418,7 +419,7 @@ object Quiz {
         E_ANSWERED -> "You already answered that question."
         E_ANSWER_EMPTY -> "Type an answer first."
         E_ANSWER_LONG -> "That answer is too long. Keep it under 2,000 characters."
-        E_MODEL -> "The AI model on your PC did not answer. Nothing was lost - try again in a moment."
+        E_MODEL -> "The model on this PC did not answer. Nothing was changed - try again in a moment."
         else -> null
     }
 

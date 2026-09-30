@@ -274,6 +274,42 @@ happen, write down which line and what you saw instead.
   the step and your mail provider if anything is off.
 - [ ] **Backup:** Settings → Backups → make one now. A locked file appears
   in the folder you chose, and the recovery code is shown once.
+- [ ] **Review decks and Spanish practice** (added 2026-09-30). **First run
+  `apply-patches.ps1` again** (Round 1's step 1): it copies in the new
+  `jarvis_decks.py` and `decks.patch`, and it installs **one new pinned
+  package, py-fsrs 6.3.2** (from `backend\requirements.txt`; it works out when
+  a card comes back, and Jarvis never installs its optimizer, which needs
+  torch). Without that package the decks screen says so in a red line and
+  refuses to keep anything. Then: Brain, Work, **Quiz me on a text**, answer a
+  question or two, press **Keep these questions**, write the answer in your own
+  words and press **Keep and finish** (for a Spanish quiz the sheet also shows
+  the line saying Jarvis cannot recognise a crisis message written in Spanish).
+  **My study decks** now lists the deck; press **Review** (a deck with cards
+  ready), **Show answer**, then one of the four buttons. **Review all decks**
+  (PC) and **Review** over the list (phone) do every deck in one go, and the
+  phone can now rename a deck (**Edit**). Under **Coming up** the daily job is
+  called **Card review** and has no Pause or Delete. **The decks are in the
+  locked backup**, with their own key, under the same recovery code; a restore
+  brings the decks back and the app reopens them (**nobody has restored one on
+  a real PC yet - tell us if it does not**).
+- [ ] **Retirement what-if** (PC: Brain → Work → Retirement; phone: Brain →
+  Retirement). Type: age now 40, stop working at 65, savings 100000, add 12000
+  a year, spend 30000, then press **Work it out**. You get a range ("in about
+  N of 100 simulated futures ..."), the line "This is a simplified what-if,
+  not financial advice." right under it, and a "What I used" list. The return
+  box starts at **6** and is marked "assumed" (a placeholder for a mix of
+  stocks and bonds, not a forecast); the pension box shows a grey **0**.
+  Turn on "Hide memory lists and chat history": the card shows only
+  "Retirement what-if hidden" and a **Show** button, and nothing you typed
+  comes back. Nothing is read aloud or saved. **In chat** (after you add
+  `"retirement_whatif"` to `[tools].enabled`): type "what if I retire at 65
+  with 100,000 saved, adding 12,000 a year and spending 30,000 a year?". The
+  answer is Jarvis's own fixed text with that same disclaimer, not a chatty
+  sentence, and no approval card appears. Leave out a number ("what if I retire
+  at 65?") and Jarvis asks for it instead of guessing. Ask by voice: the answer
+  is written on screen and the numbers are not read out. Ask it right after
+  Jarvis read an email in the same chat: it refuses and tells you to type the
+  numbers in a new message.
 
 ### Measurements only your PC can make
 

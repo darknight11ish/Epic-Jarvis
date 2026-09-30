@@ -1116,6 +1116,10 @@
      "name": "Searching your notes"
     },
     {
+     "id": "retirement_whatif",
+     "name": "A retirement what-if from numbers you type (shown on screen only)"
+    },
+    {
      "id": "home_read",
      "name": "Reading Home Assistant"
     },

@@ -326,7 +326,7 @@ CLASSIFICATION = {
     "/api/backup/now": ("deliberate", "\"Back up now\" writes one file into a folder already on this PC; no card, but still refused from any device but the PC. A phone backing up the PC's own files makes no sense. ARCHITECTURE.md section 8."),
     "/api/backup/list": ("deliberate", "The kept backup files, by name and date - PC-only, the same reason as the folder above: a phone has nothing to do with a list of files on the PC's disk. ARCHITECTURE.md section 8."),
     "/api/backup/restore/preview": ("deliberate", "Decrypts a backup to show counts and a date, PC-only - the backup file is on the PC's disk, and the recovery code is typed there. ARCHITECTURE.md section 8."),
-    "/api/backup/restore": ("deliberate", "Restoring replaces memory, chat history, settings and notes with an older backup: PC-only, ONE approval card that always needs Windows Hello (jarvis_owner_check.PC_ONLY_ACTIONS refuses its approval from any other device too, whatever the gate's own risk table says). ARCHITECTURE.md section 8."),
+    "/api/backup/restore": ("deliberate", "Restoring replaces memory, chat history, review decks, settings and notes with an older backup: PC-only, ONE approval card that always needs Windows Hello (jarvis_owner_check.PC_ONLY_ACTIONS refuses its approval from any other device too, whatever the gate's own risk table says). ARCHITECTURE.md section 8."),
     # Goals: a plan the owner edits, one card per acting step (the owner's
     # "build it now", 2026-09-27; JARVIS-API.md section 59; backend
     # jarvis_goals.py). Both apps: the desktop's Brain -> Work -> Goals

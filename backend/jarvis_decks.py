@@ -55,7 +55,7 @@ import threading
 import time
 import urllib.parse
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -163,6 +163,22 @@ def new_state(now: float) -> dict:
             "due": float(now), "last_review": None}
 
 
+def _calendar_due(now: float, due: float) -> float:
+    """py-fsrs counts a day as 24 hours. This PC's days are calendar days (23 or
+    25 hours twice a year), so a whole-day wait is added to the local date and
+    time instead: "3 days" from 23:30 on the evening before the clocks go
+    forward still lands on the third calendar day."""
+    days = (due - now) / 86400.0
+    n = round(days)
+    if n < 1 or abs(days - n) > 0.02:
+        return due
+    return (datetime.fromtimestamp(now) + timedelta(days=n)).timestamp()
+
+
+def _tomorrow(t: float) -> str:
+    return (datetime.fromtimestamp(t) + timedelta(days=1)).strftime("%Y-%m-%d")
+
+
 def _dt(t):
     return None if t is None else datetime.fromtimestamp(float(t), timezone.utc)
 
@@ -181,7 +197,7 @@ def review(state: dict, rating: str, now: float, fuzz: bool = True) -> dict:
             "easy": fsrs.Rating.Easy}[rating]
     out, _log = sch.review_card(card, rate, _dt(now))
     return {"state": int(out.state.value), "step": out.step, "stability": out.stability,
-            "difficulty": out.difficulty, "due": out.due.timestamp(),
+            "difficulty": out.difficulty, "due": _calendar_due(now, out.due.timestamp()),
             "last_review": out.last_review.timestamp() if out.last_review else None}
 
 
@@ -280,7 +296,7 @@ class Decks:
         self._lock = threading.RLock()
         self._aead = None
         self._revealed: dict = {}     # card id -> when its back was shown
-        self._run: Optional[dict] = None
+        self._runs: dict = {}         # scope ("" = all decks, else a deck id) -> its run
 
     # ---- plumbing ---------------------------------------------------------
 
@@ -348,9 +364,18 @@ class Decks:
         except Exception:
             raise DeckError("deck_unavailable", "A deck could not be opened, so it is not shown.")
 
+    def _need_fsrs(self) -> None:
+        if fsrs is None:
+            _scheduler(self.fuzz)      # raises deck_unavailable, in plain words
+
     def available(self) -> tuple:
         """(True, "") or (False, why in plain words). Never makes a key by
         itself when there is nothing to open."""
+        if fsrs is None:
+            try:
+                _scheduler(self.fuzz)
+            except DeckError as exc:
+                return False, exc.message
         if not self._crypto:
             try:
                 self._cipher()
@@ -430,9 +455,10 @@ class Decks:
         up = set()
         for did in paused:
             up.update(ids(offered(did)))
-        tomorrow = _day(self._clock() + 24 * 3600.0)
-        if len(news) > len(every[1]):
-            later.append(tomorrow)
+        # More new cards than today's allowance: the rest wait for tomorrow. With
+        # an allowance of 0 they are not promised at all.
+        if cap > 0 and len(news) > len(every[1]):
+            later.append(_tomorrow(self._clock()))
         return {"decks": paused, "cards": cards, "per_deck": per_deck, "queue": queue,
                 "total": len(ids(every)), "up": up, "new_left": new_left, "new_per_day": cap,
                 "next_day": min(later) if later else None,
@@ -521,6 +547,7 @@ class Decks:
 
     def create_deck(self, name) -> dict:
         name = self._name(name)
+        self._need_fsrs()
         with self._lock:
             aead = self._cipher()
             with closing(self._connect()) as c:
@@ -622,6 +649,14 @@ class Decks:
                         f = front.strip() if isinstance(front, str) else ""
                         if not f or len(f) > FRONT_MAX:
                             raise DeckError("bad_card")
+                        # the same duplicate check as keeping: no two cards in a
+                        # deck with the same question over the same passage
+                        mine = (_norm(f), _norm(self._unseal(aead, row[4], f"card|{cid}|passage")))
+                        for r in c.execute("SELECT id, front, passage FROM cards"
+                                           " WHERE deck_id=? AND id<>?", (did, cid)).fetchall():
+                            if mine == (_norm(self._unseal(aead, r[1], f"card|{r[0]}|front")),
+                                        _norm(self._unseal(aead, r[2], f"card|{r[0]}|passage"))):
+                                raise DeckError("duplicate_card")
                         c.execute("UPDATE cards SET front=? WHERE id=?",
                                   (_seal(aead, f, f"card|{cid}|front"), cid))
                     if back is not None:
@@ -644,6 +679,7 @@ class Decks:
         One transaction: a card that does not fit means none is kept."""
         if not cards:
             raise DeckError("nothing_to_keep")
+        self._need_fsrs()
         with self._lock:
             aead = self._cipher()
             now = self._clock()
@@ -697,11 +733,16 @@ class Decks:
     # ---- review -------------------------------------------------------------------
 
     def _scope_run(self, deck: Optional[str], *, fresh: bool = False) -> dict:
+        """The run for one scope. Each scope ("" for all decks, or one deck) has
+        its own, so two apps reviewing at once - one on a deck, one on all decks -
+        never count each other's cards."""
         now, scope, today = self._clock(), deck or "", self._today()
-        r = self._run
-        if (r is None or fresh or r["scope"] != scope or r["day"] != today
-                or now - r["at"] > RUN_IDLE):
-            r = self._run = {"scope": scope, "done": 0, "cap": RUN_LIMIT, "day": today, "at": now}
+        self._runs = {k: v for k, v in self._runs.items()
+                      if v["day"] == today and now - v["at"] <= RUN_IDLE}
+        r = self._runs.get(scope)
+        if r is None or fresh:
+            r = self._runs[scope] = {"scope": scope, "done": 0, "cap": RUN_LIMIT, "day": today,
+                                     "at": now}
         r["at"] = now
         return r
 
@@ -784,7 +825,10 @@ class Decks:
             self._revealed[cid] = now
             return out
 
-    def rate(self, cid, rating) -> dict:
+    def rate(self, cid, rating, deck=None) -> dict:
+        """`deck` is the scope the app is reviewing ("" or None: all decks, else a
+        deck id). If it is not one this card belongs to, the card's own deck's
+        run counts it."""
         if rating not in RATINGS:
             raise DeckError("bad_rating")
         with self._lock:
@@ -809,9 +853,12 @@ class Decks:
                           (after["state"], after["step"], after["stability"], after["difficulty"],
                            after["due"], after["last_review"], lapse, self._today(), cid))
                 self._revealed.pop(cid, None)
-                scope = (self._run or {}).get("scope") or None
-                if scope is not None and c.execute("SELECT 1 FROM decks WHERE id=?", (scope,)).fetchone() is None:
-                    scope = None
+                if isinstance(deck, str) and deck in ("", row[1]):
+                    scope = deck
+                else:       # an old app that sends none: the newest run this card belongs to
+                    live = [(v["at"], k) for k, v in self._runs.items() if k in ("", row[1])]
+                    scope = max(live)[1] if live else ""
+                scope = scope or None
                 run = self._scope_run(scope)
                 run["done"] += 1
                 view = self._review_view(c, scope)
@@ -942,7 +989,7 @@ def handle_post(route: str, body):
         if route == PATH_REVIEW + "/reveal":
             return 200, d.reveal(body.get("card"))
         if route == PATH_REVIEW + "/rate":
-            return 200, d.rate(body.get("card"), body.get("rating"))
+            return 200, d.rate(body.get("card"), body.get("rating"), body.get("deck"))
         if route == PATH_REVIEW + "/more":
             deck = body.get("deck")
             return 200, d.more(deck if isinstance(deck, str) and deck else None)
@@ -1028,6 +1075,18 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
     except Exception as exc:
         return f"  decks      NOT ON ({type(exc).__name__}) - Review decks are off"
     return f"  decks      Review decks: {n} kept" + ("" if ok else f" (cannot be opened: {why})")
+
+
+def forget_key() -> None:
+    """Drop the key the running store holds, so its next use asks Credential
+    Manager again (a restore from a backup just replaced the key and the file)."""
+    with _ONE_LOCK:
+        one = _ONE
+    if one is not None:
+        with one._lock:
+            one._aead = None
+            one._revealed.clear()
+            one._runs.clear()
 
 
 def _reset_for_tests() -> None:

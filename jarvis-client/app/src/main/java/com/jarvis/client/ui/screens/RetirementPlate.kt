@@ -209,6 +209,12 @@ internal fun RetirementSection(
                             }
                         },
                     )
+                    // The link is stale (rule 4): the button is grey, and this says why.
+                    if (!canAct) {
+                        Gap(6)
+                        Text(Retirement.STALE_LINE, style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textMid, modifier = Modifier.liveStatus())
+                    }
                     // Spoken when it appears or changes: "Working it out", or what went wrong.
                     if (busy) {
                         Gap(6)
@@ -267,6 +273,7 @@ private fun FieldBox(
             value = value,
             onValueChange = { if (enabled) onChange(it) },
             label = if (unit.isEmpty()) field.label else "${field.label} ($unit)",
+            placeholder = Retirement.hintFor(field),
             supportingText = listOf(field.help, "Limits: $limits.").filter { it.isNotEmpty() }.joinToString(" "),
             keyboardOptions = KeyboardOptions(
                 keyboardType = if (field.kind == "percent") KeyboardType.Text else KeyboardType.Number,

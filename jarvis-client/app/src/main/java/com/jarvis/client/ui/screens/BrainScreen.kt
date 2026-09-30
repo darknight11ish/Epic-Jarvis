@@ -578,7 +578,12 @@ fun BrainScreen(
             // 105): the activity grid and the balance chart (ProgressPlate.kt),
             // at the top of Projects. Nothing is kept; hidden with the lists.
             item(key = "progress") {
-                ProgressSection(canAct = canAct, privateHidden = privateHidden)
+                ProgressSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
             }
 
             // "Projects" (the owner's decision of 2026-09-28): projects,

@@ -110,7 +110,8 @@ def setup(path: Path, **overrides) -> dict:
     body = dict(prop["guess"])
     body.update(overrides)
     body["confirm"] = True
-    SP.confirm(body, rows=got["rows"], name=path.name, real=got["real"])
+    body["answered"] = list(prop["questions"])
+    SP.confirm(body, rows=got["rows"], name=path.name, real=got["real"], kind=got["kind"])
     return prop
 
 
@@ -462,7 +463,10 @@ def t_a_new_layout_waits_for_the_owner():
     raw = (CONF / "spending-profiles.json").read_text(encoding="utf-8")
     check("... and the file on disk is the same", "TESCO" not in raw and "2026-03" not in raw)
     check("the layout is keyed by a hash of the header",
-          list(SP.load_profiles()) == [SP.fingerprint(["Date", "Description", "Amount", "Balance"])])
+          list(SP.load_profiles()) == [SP.layout_key(["Date", "Description", "Amount", "Balance"], ".csv")])
+    check("... and the kind of file is part of the key: the same header in an Excel file is another layout",
+          SP.layout_key(["Date", "Description", "Amount", "Balance"], ".xlsx")
+          != SP.layout_key(["Date", "Description", "Amount", "Balance"], ".csv"))
 
 
 def t_a_header_the_words_do_not_recognise_is_named_by_the_owner():
@@ -481,6 +485,15 @@ def t_a_header_the_words_do_not_recognise_is_named_by_the_owner():
     body = {"file": str(d / "odd.csv"), "confirm": True, "header_row": 0,
             "columns": {"date": 0, "description": 1, "amount": 2}, "sign": "negative_out",
             "date_order": "ymd", "decimal": ".", "currency": "", "label": "odd"}
+    try:
+        SP.confirm(body, rows=got["rows"], name="odd.csv", real=got["real"])
+        unanswered = False
+        missing = []
+    except SP.SpendingError as exc:
+        missing = exc.extra.get("questions") or []
+        unanswered = exc.code == "unanswered" and "header_row" in missing
+    check("a question the box never answered is not an answer: confirm refuses", unanswered, missing)
+    body["answered"] = missing
     fp, prof, norm = SP.confirm(body, rows=got["rows"], name="odd.csv", real=got["real"])
     res = summary(d / "odd.csv")
     check("once the owner has named it, the file is read (the saved header row finds it)",
@@ -758,7 +771,10 @@ def t_the_sentence_is_checked_against_the_table():
     check("a wrong year is dropped", C("You spent 89.24 in 2025.") == SP.DROPPED_LINE)
     check("a made-up percentage is dropped", C("That is 45% of 89.24.") == SP.DROPPED_LINE)
     check("a sentence with no number is fine", C("Food was the biggest category.") == "Food was the biggest category.")
-    check("numbers written as words are not digits: nothing to check", C("Nearly ninety.") == "Nearly ninety.")
+    check("a hedged amount in words is dropped: nothing a digit check can see is let through",
+          C("Nearly ninety.") == SP.DROPPED_LINE)
+    check("a number word that is not an amount is fine", C("Food was the biggest of the two.")
+          == "Food was the biggest of the two.")
     check("a table of its own is dropped", C("| a | 89.24 |") == SP.DROPPED_LINE)
     check("a link is dropped", C("See http://x.example for 89.24") == SP.DROPPED_LINE)
     check("three sentences are dropped", C("One. Two. Three.") == SP.DROPPED_LINE)
@@ -768,8 +784,8 @@ def t_the_sentence_is_checked_against_the_table():
     check("nothing from the model: the plain line", C("") == SP.NO_SENTENCE_LINE and C(None) == SP.NO_SENTENCE_LINE)
     check("a spoken question gets no figures at all", C(ok, spoken=True) == SP.SPOKEN_LINE)
     check("a comma-decimal number is read as a number", SP._canon("1.234,56") == SP._canon("1,234.56"))
-    check("the table's own numbers include its caveat counts",
-          SP._canon("1") in SP.table_numbers(table))
+    check("the row counts and caveat numbers are NOT figures a sentence may quote",
+          SP._canon("1") not in SP.table_numbers(table) and SP._canon("2026") not in SP.table_numbers(table))
 
 
 # ============================================================ 7. the chat loop

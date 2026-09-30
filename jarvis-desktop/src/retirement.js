@@ -30,6 +30,13 @@ export const ASSUMED = "assumed";
 export const USED_HEADING = "What I used";
 /** Contract R4: shown alone while the private lists are hidden or App lock is on. */
 export const HIDDEN_WORDS = "Retirement what-if hidden";
+/** The hidden card's button, the same as every other hidden section (Windows Hello). */
+export const SHOW_LABEL = "Show";
+export const SHOW_TITLE =
+  "Asks Windows Hello - your PIN, fingerprint or face - then shows this card.";
+/** "Show" lifts "Hide memory lists" only: under App lock nothing changes, so say what to do. */
+export const STILL_HIDDEN =
+  "Still hidden. If Jarvis is locked, unlock it first, then press Show.";
 /** Only if a result somehow arrives without it: the disclaimer is shown every time. */
 export const DISCLAIMER = "This is a simplified what-if, not financial advice.";
 /** The desktop's own line for a PC that has no what-if yet (Rust says the same). */
@@ -300,6 +307,7 @@ export function createRetirementCard(deps) {
     line: "",
     note: "",
     focus: "",          // what should get the keyboard after the next paint
+    afterShow: false,   // "Show" was just pressed: a card still hidden says why
   };
   let staleNode = null;
   let runBtn = null;
@@ -323,6 +331,7 @@ export function createRetirementCard(deps) {
     S.line = "";
     S.note = "";
     S.focus = "";
+    S.afterShow = false;
     staleNode = runBtn = lineNode = resultBox = null;
     root.replaceChildren();
     if (titleEl) titleEl.textContent = TITLE_FALLBACK;
@@ -334,9 +343,45 @@ export function createRetirementCard(deps) {
     return t;
   }
 
-  function paintHidden(words) {
-    root.replaceChildren(el("p", "ret-hidden", words));
+  function paintHidden(words, still) {
+    const box = el("div", "ret-hidden-box");
+    box.append(el("p", "ret-hidden", words));
+    const show = el("button", "btn small", SHOW_LABEL);
+    show.type = "button";
+    show.title = SHOW_TITLE;
+    show.addEventListener("click", () => reveal());
+    box.append(show);
+    if (still) {
+      const p = el("p", "ret-line", STILL_HIDDEN);
+      p.setAttribute("role", "status");
+      box.append(p);
+      say(STILL_HIDDEN, "assertive");
+    }
+    root.replaceChildren(box);
     S.hidden = true;
+  }
+
+  /** The Show button: Windows Hello, then the form is asked for again. */
+  async function reveal() {
+    if (!deps.isTauri || S.loading) return;
+    const gen = S.gen;
+    try {
+      await deps.invoke("reveal_private_answers");
+    } catch (error) {
+      if (gen !== S.gen) return;
+      const p = el("p", "ret-line", String((error && error.message) || error));
+      p.setAttribute("role", "status");
+      const old = root.querySelector(".ret-hidden-box .ret-line");
+      if (old) old.remove();
+      const box = root.querySelector(".ret-hidden-box");
+      if (box) box.append(p);
+      say(p.textContent, "assertive");
+      return;
+    }
+    if (gen !== S.gen) return;
+    clear();
+    S.afterShow = true;
+    await load();
   }
 
   function paintNote(text) {
@@ -629,8 +674,10 @@ export function createRetirementCard(deps) {
       paintNote(NO_FORM);
       return;
     }
+    const again = S.afterShow;
+    S.afterShow = false;
     if (form.hidden) {
-      paintHidden(form.words);
+      paintHidden(form.words, again);
       return;
     }
     S.form = form;

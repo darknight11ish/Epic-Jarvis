@@ -327,35 +327,76 @@ def t_speed_and_caps():
     check("the length of the time budget is bounded", R.TIME_BUDGET <= 60 and R.PATHS <= 10_000)
 
 
-# ============================================================ 6. the model's words
+# ============================================================ 6. the chat's words (code-written only)
 
-def t_sentence_verification():
+def t_chat_words_are_code_written():
     r = R.run(base(), paths=FAST)
-    pct = r["share"]["per_100"]
-    good = f"In {r['share']['label']} simulated futures your money lasts to age 95."
-    check("a sentence whose numbers are all in the result is kept", R.verify_sentence(good, r))
-    check("a made-up percentage is dropped", not R.verify_sentence(f"About {pct + 7} of 100 futures work out.", r))
-    check("a made-up age is dropped", not R.verify_sentence("Your money lasts to age 101.", r))
-    check("an invented amount is dropped", not R.verify_sentence("You would have 1,234,567 at the end.", r))
-    check("the amount in the result is allowed", R.verify_sentence(
-        f"The middle case leaves about {r['end_balance']['text']['p50']} at age 95.", r) or r["end_balance"]["p50"] == 0)
-    check("a sentence with no numbers is allowed", R.verify_sentence("It looks fairly solid, but nothing is certain.", r))
-    check("an empty or non-string sentence is dropped", not R.verify_sentence("", r) and not R.verify_sentence(None, r)
-          and not R.verify_sentence(42, r))
-    check("a two-line or very long sentence is dropped", not R.verify_sentence("a\nb", r)
-          and not R.verify_sentence("x" * 500, r))
-    check("nothing to verify against a not-enough-to-say result", not R.verify_sentence("Fine.", R.run(base(yearly_spending=0), paths=100)))
-    check("a number hidden in a comma group is checked whole",
-          not R.verify_sentence("You keep 310,001.", r))
-    text = R.chat_words(r, good)
-    check("chat: a verified sentence is shown with the disclaimer", text.startswith(good) and text.endswith(R.DISCLAIMER))
-    text = R.chat_words(r, f"About {pct + 7} of 100 futures work.")
-    check("chat: a dropped sentence is replaced by code's own headline and the plain note",
-          r["summary"][0] in text and R.DROPPED_LINE in text and text.endswith(R.DISCLAIMER) and f"{pct + 7}" not in text, text)
-    text = R.chat_words(r, None)
-    check("chat: no model sentence gives code's headline and the disclaimer", r["summary"][0] in text and text.endswith(R.DISCLAIMER))
-    check("chat: a spoken question gets only 'I have put it on your screen.'", R.chat_words(r, good, spoken=True) == R.SPOKEN_LINE
+    typed = R.chat_words(r)
+    check("chat: the typed text is the answer's own text, ending in the disclaimer",
+          typed == r["text"] and typed.endswith(R.DISCLAIMER) and typed.startswith(r["summary"][0]))
+    spoken = R.chat_words(r, spoken=True)
+    check("chat: a spoken question gets one true line, then the same written text",
+          spoken == R.SPOKEN_LINE + "\n\n" + r["text"] and R.SPOKEN_LINE.startswith("The answer is written")
           and not any(ch.isdigit() for ch in R.SPOKEN_LINE))
+    check("the model-sentence path is gone", not any(hasattr(R, n) for n in (
+        "verify_sentence", "allowed_numbers", "_numbers_in", "DROPPED_LINE")))
+    import inspect
+    check("chat_words takes no model sentence", list(inspect.signature(R.chat_words).parameters) == ["result", "spoken"])
+    for st in (R.run(base(savings=5_000_000), paths=FAST), R.run(base(savings=0, yearly_saving=0), paths=FAST),
+               R.run(base(yearly_spending=0), paths=100)):
+        check(f"chat text in state {st['state']} ends with the disclaimer", R.chat_words(st).endswith(R.DISCLAIMER))
+
+
+def t_middle_case_words():
+    # The audit's repro: the money LASTED, but the middle balance rounds to nothing.
+    z = dict(current_age=40, retirement_age=40, plan_to_age=41, yearly_saving=0, yearly_spending=1000,
+             expected_return_percent=0, inflation_percent=0, volatility_percent=0)
+    for sav in (1000.40, 1000):
+        r = R.run(dict(z, savings=sav), paths=100)
+        text = " ".join(r["summary"])
+        check(f"savings {sav}: it lasted, so nothing says the money runs out",
+              r["state"] == "never_runs_out" and r["middle_lasts_to"] == 41 and "runs out" not in text
+              and r["runs_out_between"] is None, text)
+        check(f"savings {sav}: 'leaving very little', never 'about 0'",
+              "very little" in text and "about 0" not in text, text)
+    # A middle case that really runs out still says so; one that lasts with money says the amount.
+    r = R.run(base(savings=0, yearly_saving=0, yearly_spending=40000), paths=FAST)
+    check("middle case that runs out says so", any("In the middle case the money runs out at about age" in x
+                                                  for x in r["summary"]), r["summary"])
+    r = R.run(base(savings=5_000_000, yearly_spending=20000), paths=FAST)
+    check("middle case that lasts with money says the amount", any(
+        x.startswith("The middle case leaves about ") for x in r["summary"]), r["summary"])
+    # Never a sentence that says both "runs out" for the middle case and a lasting middle age.
+    for kw in (dict(), dict(savings=40000, yearly_saving=8000), dict(savings=250000)):
+        r = R.run(base(**kw), paths=FAST)
+        lasts = r["middle_lasts_to"] >= r["end_balance"]["age"]
+        said_out = any("In the middle case the money runs out" in x for x in r["summary"])
+        check(f"middle case wording agrees with middle_lasts_to {kw}", said_out == (not lasts), r["summary"])
+
+
+def t_percent_forms():
+    def ok(v):
+        return err(base(expected_return_percent=v)) is None
+    check("percent: '.5' and '5.' are accepted", ok(".5") and ok("5.") and ok("+.5%"))
+    check("percent: '7%%' and full-width digits are accepted", ok("7%%") and ok("\uff17"))
+    check("percent: '.' alone, '5.5.5' and '1e1' are refused", not ok(".") and not ok("5.5.5") and not ok("1e1"))
+    check("age: a full-width age is accepted, '40.5' text is not", err(base(current_age="\uff14\uff10")) is None
+          and err(base(current_age="40.5")) is not None)
+
+
+def t_placeholders_are_labelled():
+    f = {x["key"]: x for x in R.FIELDS}
+    check("the placeholder return is 6% (about 3.4% real after 2.5% inflation)",
+          f["expected_return_percent"]["default"] == 6.0 and f["volatility_percent"]["default"] == 12.0
+          and f["inflation_percent"]["default"] == 2.5 and abs((1.06 / 1.025 - 1) * 100 - 3.4) < 0.05)
+    check("the note says 'placeholders for a mix of stocks and bonds, not a forecast'",
+          "placeholders for a mix of stocks and bonds, not a forecast" in R.PLACEHOLDER_NOTE)
+    check("the return and spread help lines say it too", all(
+        "placeholder for a mix of stocks and bonds, not a forecast" in f[k]["help"]
+        for k in ("expected_return_percent", "volatility_percent")))
+    r = R.run({k: v for k, v in base().items() if k in R.REQUIRED}, paths=100)
+    check("what I used shows the 6% default as assumed", any(
+        u["key"] == "expected_return_percent" and u["value"] == "6%" and u["assumed"] for u in r["used"]))
 
 
 # ============================================================ 7. the tool door
@@ -363,16 +404,51 @@ def t_sentence_verification():
 def t_tool_door():
     out = R.tool_call(base(), paths=FAST)
     check("tool: works on typed numbers", out["ok"] and out["result"]["kind"] == "retirement"
-          and R.DISCLAIMER in out["text_for_model"])
+          and R.DISCLAIMER in out["result"]["text"] and "text_for_model" not in out)
     out = R.tool_call(base(), tainted=True, paths=FAST)
     check("tool: refused after outside text", not out["ok"] and out["error"] == "outside_text")
     out = R.tool_call({k: v for k, v in base().items() if k != "savings"}, paths=FAST)
     check("tool: a missing number is asked for", not out["ok"] and out["error"] == "missing" and out["field"] == "savings")
+    out = R.tool_call(base(favourite="x"), paths=FAST)
+    check("tool: an unknown field is refused", not out["ok"] and out["error"] == "unknown_field")
     sch = R.tool_schema()
-    check("tool schema: every field, required ones listed, nothing extra allowed",
-          set(sch["properties"]) == {f["key"] for f in R.FIELDS} and set(sch["required"]) == set(R.REQUIRED)
-          and sch["additionalProperties"] is False)
+    check("tool schema: every field, required ones listed",
+          set(sch["properties"]) == {f["key"] for f in R.FIELDS} and set(sch["required"]) == set(R.REQUIRED))
+    check("tool schema: every property is a plain string", all(p["type"] == "string" for p in sch["properties"].values()))
     check("tool description is short", len(R.TOOL_DESCRIPTION) < 200)
+    # The one-run-at-a-time lock is shared with the route.
+    R._RUN_LOCK.acquire()
+    try:
+        busy = R.tool_call(base(), paths=100)
+        code, routed = R.handle_post(R.PATH_RUN, base())
+    finally:
+        R._RUN_LOCK.release()
+    check("tool: while a run is going it says busy, and runs nothing", not busy["ok"] and busy["error"] == "busy"
+          and busy["message"] == R.BUSY and code == 429)
+    check("tool: the lock is released after a run, a bad number and a timeout", (
+        R.tool_call(base(), paths=100)["ok"], R.tool_call(base(savings=-1), paths=100)["ok"],
+        R._RUN_LOCK.acquire(blocking=False)) == (True, False, True))
+    R._RUN_LOCK.release()
+    # Two threads at once: exactly one runs while the other is told to wait.
+    import threading
+    gate, results = threading.Event(), []
+    real_run = R.run
+
+    def slow_run(*a, **k):
+        gate.wait(5)
+        return real_run(*a, **k)
+    R.run = slow_run
+    try:
+        t = threading.Thread(target=lambda: results.append(R.tool_call(base(), paths=100)))
+        t.start()
+        time.sleep(0.2)
+        second = R.tool_call(base(), paths=100)
+        gate.set()
+        t.join()
+    finally:
+        R.run = real_run
+    check("tool: a second call during a run is busy; the first still finishes",
+          second["error"] == "busy" and results and results[0]["ok"])
 
 
 # ============================================================ 8. no leaks
@@ -536,7 +612,7 @@ def t_the_patch_and_the_lists():
 
 def t_words_are_plain():
     for name in ("TITLE", "DISCLAIMER", "PLACEHOLDER_NOTE", "TODAYS_MONEY", "DETAIL", "HIDDEN", "BUSY", "TOO_SLOW",
-                 "OUTSIDE_TEXT", "NOT_ENOUGH_NO_SPENDING", "DROPPED_LINE", "SPOKEN_LINE"):
+                 "OUTSIDE_TEXT", "NOT_ENOUGH_NO_SPENDING", "SPOKEN_LINE"):
         check(f"{name} is a sentence", isinstance(getattr(R, name), str) and len(getattr(R, name)) > 3)
     check("the disclaimer is exactly the agreed sentence", R.DISCLAIMER == "This is a simplified what-if, not financial advice.")
     check("the detail says never read aloud, remembered or sent",
@@ -544,6 +620,15 @@ def t_words_are_plain():
     check("no jargon in the owner's words", not any(w in (R.DETAIL + R.NOT_ENOUGH_NO_SPENDING + R.OUTSIDE_TEXT).lower()
                                                    for w in ("monte carlo", "lognormal", "seed", "json", "api")))
     check("every field has a label and help", all(f["label"] and f["help"] for f in R.FIELDS))
+
+
+def t_fixture_copies_are_current():
+    tool = REPO / "tools" / "gen_retirement_cases.py"
+    check("tools/gen_retirement_cases.py exists", tool.is_file())
+    if tool.is_file():
+        r = subprocess.run([sys.executable, str(tool), "--check"], capture_output=True, text=True)
+        check("retirement-cases.json (desktop and phone) is what the backend says today "
+              "(python3 tools/gen_retirement_cases.py)", r.returncode == 0, r.stdout + r.stderr)
 
 
 if __name__ == "__main__":

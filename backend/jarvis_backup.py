@@ -41,9 +41,10 @@ THE FOLDER - reused exactly, "Folders Jarvis may look in"'s own picker
 WHAT IS BACKED UP - verified against this repository's real file names,
 2026-09-27 (the design doc's names had drifted: it said "history.db"; the
 real file, made by jarvis_chat_log.py, is "chat-history.db")
-  * Four SQLite databases, snapshotted with the online backup API
+  * The SQLite databases in SOURCE_DBS, snapshotted with the online backup API
     (`sqlite3.Connection.backup`, safe while Jarvis keeps them open):
-    memory.db, chat-history.db, schedule.db, feedback.db.
+    memory.db, chat-history.db, schedule.db, feedback.db, projects.db, goals.db,
+    and (2026-09-30) study.db, the review decks.
   * Every `*.json` file directly in the Jarvis settings folder (folders.
     json, asks_first.json, manner.json, and so on) - never a subfolder, so
     this glob can never reach into "voice" or "notes" by accident.
@@ -57,13 +58,20 @@ real file, made by jarvis_chat_log.py, is "chat-history.db")
     (jarvis_chat_log.CredentialKey, KEY_TARGET) and kept, base64, as ONE
     small file INSIDE the archive - which is encrypted before it ever
     touches a disk, so the key is never written out in the clear.
+  * The review decks' own key (jarvis_decks.KEY_TARGET, "Jarvis Backend/study
+    decks key"), carried the same way as secrets/study-decks-key.b64, and only
+    when study.db exists AND the key can be read: the deck words are sealed
+    under it, so a study.db without it is left out rather than carried
+    unopenable. A restore writes the file and the key back together and makes
+    the running store reopen (jarvis_decks.forget_key). Same recovery code, same
+    lock; the deck words are never in the archive in the clear.
 
 EXPLICITLY NOT BACKED UP (CLAUDE.md rule 3; the owner's own words)
   * The pairing token and every API key (Exa, Tavily, Brave, GitHub, ...):
     all of them live in Windows Credential Manager under their OWN target
     names (jarvis_token_store.py, jarvis_search.py) - never in a `*.json`
     settings file - and this module reads exactly one Credential Manager
-    entry, the chat-history key, and no other. A key that is re-entered
+    entry, the chat-history key, and the review decks' key, and no other. A key that is re-entered
     once, on the PC that needs it, is safer than one that can be dug out of
     a backup file years later.
   * Model files (large, and Ollama already keeps its own copy) and logs
@@ -235,8 +243,8 @@ LOST_CODE = ("Write this down or save it somewhere safe now - Jarvis will not sh
 ERASE_LIMIT = ("\"Erase the words\" cannot reach into an older backup: an erased fact's "
                "original words may still be readable in a backup kept from before it was "
                "erased, until that backup ages out of the last {keep} kept. A chat you "
-               "delete is the same: it can still be in an older backup until that backup "
-               "ages out.").format(keep=KEEP)
+               "delete is the same, and so is a review deck or card: it can still be in an "
+               "older backup until that backup ages out.").format(keep=KEEP)
 
 
 class WrongCode(Exception):
@@ -941,7 +949,7 @@ def restore_card(name: str, manifest: dict) -> str:
         f"Backup: {name}",
         f"Made: {when_text}",
         "",
-        "This REPLACES your memory, chat history, settings and notes with what was saved "
+        "This REPLACES your memory, chat history, review decks, settings and notes with what was saved "
         "then. It only adds and overwrites - it never deletes anything you have added "
         "since.",
         "",
@@ -1073,7 +1081,7 @@ def _decide_restore(pid: str, name: str, code: str, manifest: dict, zip_bytes: b
                     gate: Callable, tier_of: Callable, apply_fn: Callable,
                     safety_fn: Callable) -> None:
     text = restore_card(name, manifest)
-    detail = {"text": text, "what": "replace memory, chat history, settings and notes with "
+    detail = {"text": text, "what": "replace memory, chat history, review decks, settings and notes with "
                                     f"the backup {name}", "setting": "restore from backup",
               "to": name, "leaves_this_pc": False}
     try:

@@ -73,6 +73,13 @@
   font-size: var(--text-sm);
 }
 
+.ret-hidden-box {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
 .ret-hidden {
   margin: 0;
   color: var(--text-muted);

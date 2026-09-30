@@ -512,6 +512,58 @@
  {
   "type": "function",
   "function": {
+   "name": "retirement_whatif",
+   "description": "Retirement what-if from numbers the owner typed, in today's money; ages in years, returns in percent. Ask for any missing one; never guess. Code writes the answer; add nothing.",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "current_age": {
+      "type": "string"
+     },
+     "retirement_age": {
+      "type": "string"
+     },
+     "plan_to_age": {
+      "type": "string"
+     },
+     "savings": {
+      "type": "string"
+     },
+     "yearly_saving": {
+      "type": "string"
+     },
+     "yearly_spending": {
+      "type": "string"
+     },
+     "other_income": {
+      "type": "string"
+     },
+     "other_income_start_age": {
+      "type": "string"
+     },
+     "expected_return_percent": {
+      "type": "string"
+     },
+     "volatility_percent": {
+      "type": "string"
+     },
+     "inflation_percent": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "current_age",
+     "retirement_age",
+     "savings",
+     "yearly_saving",
+     "yearly_spending"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
    "name": "home_read",
    "description": "Read the state of named Home Assistant entities. Read-only. To change something, use home_control.",
    "parameters": {

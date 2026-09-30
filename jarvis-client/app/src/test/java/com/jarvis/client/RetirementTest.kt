@@ -4,7 +4,10 @@ import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.JarvisJson
 import com.jarvis.client.net.Retirement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -17,12 +20,13 @@ import java.io.File
  * Retirement what-if on the phone ([Retirement]; docs/JARVIS-API.md section
  * 103; docs/FINANCE-DESIGN.md part B and its frozen "Retirement contract").
  *
- * The fixtures below were made by the real backend code
- * (`jarvis_retirement.defaults()` and `.run()` for: 40 now, stop at 65,
- * 100,000 saved, 12,000 a year, spend 30,000, all else the defaults - the
- * contract's own example - and three other states). Nothing in this file
- * works a figure out; the rule these tests keep coming back to is that the app
- * draws the strings it is given and computes nothing.
+ * The fixtures (`contract/retirement-cases.json`, written by
+ * `tools/gen_retirement_cases.py` from the real backend code, and read by the
+ * desktop's tests too) are `jarvis_retirement.defaults()` and `.run()` for: 40
+ * now, stop at 65, 100,000 saved, 12,000 a year, spend 30,000, all else the
+ * placeholders - and three other states. Nothing in this file works a figure
+ * out or holds a copy of the PC's words; the rule these tests keep coming back
+ * to is that the app draws the strings it is given and computes nothing.
  */
 class RetirementTest {
 
@@ -90,7 +94,7 @@ class RetirementTest {
         assertNull(field("current_age").default)
         assertNull(field("other_income_start_age").default)
         assertEquals("95", field("plan_to_age").default)
-        assertEquals("7", field("expected_return_percent").default)
+        assertEquals("6", field("expected_return_percent").default)
         assertEquals("2.5", field("inflation_percent").default)
     }
 
@@ -98,7 +102,7 @@ class RetirementTest {
     fun `the boxes start with the placeholders filled in and nothing else`() {
         assertEquals(
             mapOf(
-                "plan_to_age" to "95", "expected_return_percent" to "7",
+                "plan_to_age" to "95", "expected_return_percent" to "6",
                 "volatility_percent" to "12", "inflation_percent" to "2.5",
             ),
             Retirement.startingValues(defaults),
@@ -248,39 +252,78 @@ class RetirementTest {
 
     // ------------------------------------------------------------ results ---
 
+    /** The PC's own `result` object for the mixed case, to compare what the app read against. */
+    private fun raw(json: String): JsonObject = obj(json).getValue("result").jsonObject
+
+    private fun JsonObject.str(key: String) = getValue(key).jsonPrimitive.content
+    private fun JsonObject.sub(key: String) = getValue(key).jsonObject
+
     @Test
     fun `the contract's example is read as sent`() {
         val r = result(MIXED_JSON)
+        val want = raw(MIXED_JSON)
         assertEquals("mixed", r.state)
         assertNull(r.reason)
-        assertEquals("about 71 of 100", r.share!!.label)
-        assertEquals(71, r.share!!.per100)
+        assertEquals(want.sub("share").str("label"), r.share!!.label)
+        assertEquals(want.sub("share").getValue("per_100").jsonPrimitive.int, r.share!!.per100)
+        assertTrue(r.share!!.label.matches(Regex("about \\d+ of 100")))
         assertFalse(r.share!!.all)
         assertFalse(r.share!!.none)
-        assertEquals("about 51 of 100", r.lower!!.share.label)
-        assertEquals("about 86 of 100", r.higher!!.share.label)
+        assertEquals(want.sub("bands").sub("lower").str("label"), r.lower!!.share.label)
+        assertEquals(want.sub("bands").sub("higher").str("label"), r.higher!!.share.label)
         assertEquals(-1.0, r.lower!!.points, 0.0)
         assertEquals(1.0, r.higher!!.points, 0.0)
         assertEquals(95, r.endBalance!!.age)
-        assertEquals("0", r.endBalance!!.p10)
-        assertEquals("560,000", r.endBalance!!.p50)
-        assertEquals("3,500,000", r.endBalance!!.p90)
-        assertEquals(false, r.poorCase!!.lasts)
-        assertEquals(82, r.poorCase!!.age)
-        assertEquals(81 to 89, r.runsOutBetween)
-        assertEquals(95, r.middleLastsTo)
+        val text = want.sub("end_balance").sub("text")
+        assertEquals(text.str("p10"), r.endBalance!!.p10)
+        assertEquals(text.str("p50"), r.endBalance!!.p50)
+        assertEquals(text.str("p90"), r.endBalance!!.p90)
+        assertEquals(want.sub("poor_case").getValue("lasts").jsonPrimitive.content == "true", r.poorCase!!.lasts)
         assertEquals(
-            listOf(
-                "In about 71 of 100 simulated futures your money lasts to age 95. Where it runs out, that is usually at about age 81 to 89.",
-                "If yearly returns are 1 point lower, that becomes about 51 of 100; 1 point higher, about 86 of 100.",
-                "In a poor case (1 in 10) the money runs out at about age 82.",
-                "The middle case leaves about 560,000 at age 95; a good case (1 in 10) about 3,500,000.",
-            ),
-            r.summary,
+            want.getValue("runs_out_between").jsonArray.map { it.jsonPrimitive.int },
+            r.runsOutBetween!!.toList(),
         )
+        assertEquals(want.getValue("middle_lasts_to").jsonPrimitive.int, r.middleLastsTo)
+        // Every sentence exactly as sent, in order.
+        assertEquals(want.getValue("summary").jsonArray.map { it.jsonPrimitive.content }, r.summary)
+        assertTrue(r.summary[0].startsWith("In ${r.share!!.label} simulated futures your money lasts to age 95."))
         assertEquals(Retirement.DISCLAIMER, r.disclaimer)
         assertEquals(defaults.placeholderNote, r.placeholderNote)
         assertEquals(defaults.todaysMoney, r.todaysMoney)
+    }
+
+    @Test
+    fun `the placeholders are labelled as placeholders for a mix of stocks and bonds`() {
+        assertTrue(defaults.placeholderNote.contains("placeholders for a mix of stocks and bonds, not a forecast"))
+        for (key in listOf("expected_return_percent", "volatility_percent")) {
+            assertTrue(field(key).help.contains("placeholder for a mix of stocks and bonds, not a forecast"))
+        }
+        assertEquals("6%", result(MIXED_JSON).used.first { it.key == "expected_return_percent" }.value)
+    }
+
+    @Test
+    fun `an empty box with a default that does not start filled shows it as a hint`() {
+        assertEquals("0", Retirement.hintFor(field("other_income")))
+        assertNull(Retirement.hintFor(field("expected_return_percent")))
+        assertNull(Retirement.hintFor(field("current_age")))
+        assertNull(Retirement.hintFor(field("other_income_start_age")))
+    }
+
+    @Test
+    fun `the stale-link line is the desktop's`() {
+        assertEquals("Waiting for the link to catch up. Nothing can be sent until it does.", Retirement.STALE_LINE)
+    }
+
+    @Test
+    fun `the local check leaves to the PC what only it can judge`() {
+        val f = field("expected_return_percent")
+        // ".5", "5." and "7%%" are read by the PC, so the phone must not refuse them.
+        for (ok in listOf(".5", "5.", "+.5%", "7%%", "\uFF17")) {
+            assertNull("\"$ok\" was refused", Retirement.problemFor(f, ok))
+        }
+        for (bad in listOf(".", "5.5.5", "1e1", "abc")) {
+            assertNotNull("\"$bad\" was accepted", Retirement.problemFor(f, bad))
+        }
     }
 
     @Test
@@ -352,12 +395,25 @@ class RetirementTest {
     @Test
     fun `bars and balances come only from the PC's numbers`() {
         val r = result(MIXED_JSON)
+        val want = raw(MIXED_JSON)
         val rows = Retirement.shareRows(r)
         assertEquals(listOf("Returns 1 point lower", "As typed", "Returns 1 point higher"), rows.map { it.first })
-        assertEquals(listOf(51, 71, 86), rows.map { it.second.per100 })
-        assertEquals("Money left at age 95", Retirement.balanceHeading(r))
         assertEquals(
-            listOf("Poor case (1 in 10)" to "0", "Middle case" to "560,000", "Good case (1 in 10)" to "3,500,000"),
+            listOf(
+                want.sub("bands").sub("lower").getValue("per_100").jsonPrimitive.int,
+                want.sub("share").getValue("per_100").jsonPrimitive.int,
+                want.sub("bands").sub("higher").getValue("per_100").jsonPrimitive.int,
+            ),
+            rows.map { it.second.per100 },
+        )
+        assertEquals("Money left at age 95", Retirement.balanceHeading(r))
+        val text = want.sub("end_balance").sub("text")
+        assertEquals(
+            listOf(
+                "Poor case (1 in 10)" to text.str("p10"),
+                "Middle case" to text.str("p50"),
+                "Good case (1 in 10)" to text.str("p90"),
+            ),
             Retirement.balanceRows(r),
         )
         assertEquals("1 point", Retirement.pointsText(-1.0))
@@ -511,9 +567,19 @@ class RetirementTest {
     }
 }
 
-// Made by the real backend code (see the class comment).
-private val DEFAULTS_JSON = """{"ok": true, "available": true, "title": "Retirement what-if", "detail": "Type your own numbers and Jarvis plays out 10,000 made-up futures. The answer is a range, never one exact figure. It stays on screen only: never read aloud, never remembered, never sent to a web search or a chatbot, and not saved.", "fields": [{"key": "current_age", "label": "Your age now", "unit": "years", "kind": "age", "min": 18, "max": 100, "default": null, "placeholder": false, "help": "A whole number.", "required": true}, {"key": "retirement_age", "label": "Age you stop working", "unit": "years", "kind": "age", "min": 18, "max": 100, "default": null, "placeholder": false, "help": "A whole number. If you already have, type your age now.", "required": true}, {"key": "plan_to_age", "label": "Plan the money to age", "unit": "years", "kind": "age", "min": 18, "max": 110, "default": 95, "placeholder": true, "help": "How long the money should last. Must be after the age you stop working.", "required": false}, {"key": "savings", "label": "Savings you have now", "unit": "money", "kind": "money", "min": 0, "max": 1000000000, "default": null, "placeholder": false, "help": "In today's money. Type 0 if none.", "required": true}, {"key": "yearly_saving", "label": "You add each year until you stop working", "unit": "money per year", "kind": "money", "min": 0, "max": 1000000000, "default": null, "placeholder": false, "help": "In today's money. Type 0 if none.", "required": true}, {"key": "yearly_spending", "label": "You spend each year in retirement", "unit": "money per year", "kind": "money", "min": 0, "max": 1000000000, "default": null, "placeholder": false, "help": "In today's money.", "required": true}, {"key": "other_income", "label": "Pension or other income each year (optional)", "unit": "money per year", "kind": "money", "min": 0, "max": 1000000000, "default": 0, "placeholder": false, "help": "In today's money. It only ever covers spending; extra is not saved.", "required": false}, {"key": "other_income_start_age", "label": "That income starts at age (optional)", "unit": "years", "kind": "age", "min": 18, "max": 110, "default": null, "placeholder": false, "help": "Leave empty to start when you stop working.", "required": false}, {"key": "expected_return_percent", "label": "Expected yearly return before inflation", "unit": "percent", "kind": "percent", "min": -5.0, "max": 15.0, "default": 7.0, "placeholder": true, "help": "A placeholder, not advice. Change it.", "required": false}, {"key": "volatility_percent", "label": "How much yearly returns swing", "unit": "percent", "kind": "percent", "min": 0.0, "max": 40.0, "default": 12.0, "placeholder": true, "help": "A placeholder, not advice. Change it.", "required": false}, {"key": "inflation_percent", "label": "Expected yearly inflation", "unit": "percent", "kind": "percent", "min": 0.0, "max": 15.0, "default": 2.5, "placeholder": true, "help": "A placeholder, not advice. Change it.", "required": false}], "paths": 10000, "seed": 20260930, "max_years": 90, "disclaimer": "This is a simplified what-if, not financial advice.", "placeholder_note": "The return figures are placeholders you can change, not a forecast. Real life will differ.", "todays_money": "All amounts are in today's money, so inflation is already taken out.", "band_points": 1.0, "words": {"hidden": "Retirement what-if hidden", "busy": "Another what-if is still being worked out. Try again in a moment.", "too_slow": "That took too long to work out, so it was stopped. Try again."}, "private": true, "read_aloud": false, "remember": false}"""
-private val MIXED_JSON = """{"ok": true, "result": {"kind": "retirement", "version": 1, "title": "Retirement what-if", "paths": 10000, "seed": 20260930, "used": [{"key": "current_age", "label": "Your age now", "value": "40", "assumed": false}, {"key": "retirement_age", "label": "Age you stop working", "value": "65", "assumed": false}, {"key": "plan_to_age", "label": "Plan the money to age", "value": "95", "assumed": true}, {"key": "savings", "label": "Savings you have now", "value": "100,000", "assumed": false}, {"key": "yearly_saving", "label": "You add each year until you stop working", "value": "12,000", "assumed": false}, {"key": "yearly_spending", "label": "You spend each year in retirement", "value": "30,000", "assumed": false}, {"key": "expected_return_percent", "label": "Expected yearly return before inflation", "value": "7%", "assumed": true}, {"key": "volatility_percent", "label": "How much yearly returns swing", "value": "12%", "assumed": true}, {"key": "inflation_percent", "label": "Expected yearly inflation", "value": "2.5%", "assumed": true}, {"key": "paths", "label": "Simulated futures", "value": "10,000", "assumed": false}, {"key": "seed", "label": "Random seed (the same every time)", "value": "20260930", "assumed": false}], "todays_money": "All amounts are in today's money, so inflation is already taken out.", "placeholder_note": "The return figures are placeholders you can change, not a forecast. Real life will differ.", "disclaimer": "This is a simplified what-if, not financial advice.", "private": true, "read_aloud": false, "remember": false, "words": {"hidden": "Retirement what-if hidden"}, "state": "mixed", "reason": null, "share": {"per_100": 71, "label": "about 71 of 100", "all": false, "none": false}, "bands": {"lower": {"per_100": 51, "label": "about 51 of 100", "all": false, "none": false, "points": -1.0}, "higher": {"per_100": 86, "label": "about 86 of 100", "all": false, "none": false, "points": 1.0}}, "end_balance": {"p10": 0, "p50": 560000, "p90": 3500000, "age": 95, "text": {"p10": "0", "p50": "560,000", "p90": "3,500,000"}}, "poor_case": {"lasts": false, "age": 82}, "runs_out_between": [81, 89], "middle_lasts_to": 95, "summary": ["In about 71 of 100 simulated futures your money lasts to age 95. Where it runs out, that is usually at about age 81 to 89.", "If yearly returns are 1 point lower, that becomes about 51 of 100; 1 point higher, about 86 of 100.", "In a poor case (1 in 10) the money runs out at about age 82.", "The middle case leaves about 560,000 at age 95; a good case (1 in 10) about 3,500,000."], "text": "In about 71 of 100 simulated futures your money lasts to age 95. Where it runs out, that is usually at about age 81 to 89. If yearly returns are 1 point lower, that becomes about 51 of 100; 1 point higher, about 86 of 100. In a poor case (1 in 10) the money runs out at about age 82. The middle case leaves about 560,000 at age 95; a good case (1 in 10) about 3,500,000. This is a simplified what-if, not financial advice."}}"""
-private val NEVER_JSON = """{"ok": true, "result": {"kind": "retirement", "version": 1, "title": "Retirement what-if", "paths": 10000, "seed": 20260930, "used": [{"key": "current_age", "label": "Your age now", "value": "40", "assumed": false}, {"key": "retirement_age", "label": "Age you stop working", "value": "65", "assumed": false}, {"key": "plan_to_age", "label": "Plan the money to age", "value": "95", "assumed": true}, {"key": "savings", "label": "Savings you have now", "value": "10,000,000", "assumed": false}, {"key": "yearly_saving", "label": "You add each year until you stop working", "value": "12,000", "assumed": false}, {"key": "yearly_spending", "label": "You spend each year in retirement", "value": "1,000", "assumed": false}, {"key": "expected_return_percent", "label": "Expected yearly return before inflation", "value": "7%", "assumed": true}, {"key": "volatility_percent", "label": "How much yearly returns swing", "value": "12%", "assumed": true}, {"key": "inflation_percent", "label": "Expected yearly inflation", "value": "2.5%", "assumed": true}, {"key": "paths", "label": "Simulated futures", "value": "10,000", "assumed": false}, {"key": "seed", "label": "Random seed (the same every time)", "value": "20260930", "assumed": false}], "todays_money": "All amounts are in today's money, so inflation is already taken out.", "placeholder_note": "The return figures are placeholders you can change, not a forecast. Real life will differ.", "disclaimer": "This is a simplified what-if, not financial advice.", "private": true, "read_aloud": false, "remember": false, "words": {"hidden": "Retirement what-if hidden"}, "state": "never_runs_out", "reason": null, "share": {"per_100": 99, "label": "more than 99 of 100", "all": true, "none": false}, "bands": {"lower": {"per_100": 99, "label": "more than 99 of 100", "all": true, "none": false, "points": -1.0}, "higher": {"per_100": 99, "label": "more than 99 of 100", "all": true, "none": false, "points": 1.0}}, "end_balance": {"p10": 25000000, "p50": 77000000, "p90": 230000000, "age": 95, "text": {"p10": "25,000,000", "p50": "77,000,000", "p90": "230,000,000"}}, "poor_case": {"lasts": true, "age": null}, "runs_out_between": null, "middle_lasts_to": 95, "summary": ["In all 10,000 simulated futures your money lasts to age 95. That does not mean it is guaranteed.", "If yearly returns are 1 point lower, that becomes more than 99 of 100; 1 point higher, more than 99 of 100.", "Even in a poor case (1 in 10) it lasts, leaving about 25,000,000 at age 95.", "The middle case leaves about 77,000,000 at age 95; a good case (1 in 10) about 230,000,000."], "text": "In all 10,000 simulated futures your money lasts to age 95. That does not mean it is guaranteed. If yearly returns are 1 point lower, that becomes more than 99 of 100; 1 point higher, more than 99 of 100. Even in a poor case (1 in 10) it lasts, leaving about 25,000,000 at age 95. The middle case leaves about 77,000,000 at age 95; a good case (1 in 10) about 230,000,000. This is a simplified what-if, not financial advice."}}"""
-private val ALWAYS_JSON = """{"ok": true, "result": {"kind": "retirement", "version": 1, "title": "Retirement what-if", "paths": 10000, "seed": 20260930, "used": [{"key": "current_age", "label": "Your age now", "value": "40", "assumed": false}, {"key": "retirement_age", "label": "Age you stop working", "value": "65", "assumed": false}, {"key": "plan_to_age", "label": "Plan the money to age", "value": "95", "assumed": true}, {"key": "savings", "label": "Savings you have now", "value": "0", "assumed": false}, {"key": "yearly_saving", "label": "You add each year until you stop working", "value": "0", "assumed": false}, {"key": "yearly_spending", "label": "You spend each year in retirement", "value": "60,000", "assumed": false}, {"key": "expected_return_percent", "label": "Expected yearly return before inflation", "value": "7%", "assumed": true}, {"key": "volatility_percent", "label": "How much yearly returns swing", "value": "12%", "assumed": true}, {"key": "inflation_percent", "label": "Expected yearly inflation", "value": "2.5%", "assumed": true}, {"key": "paths", "label": "Simulated futures", "value": "10,000", "assumed": false}, {"key": "seed", "label": "Random seed (the same every time)", "value": "20260930", "assumed": false}], "todays_money": "All amounts are in today's money, so inflation is already taken out.", "placeholder_note": "The return figures are placeholders you can change, not a forecast. Real life will differ.", "disclaimer": "This is a simplified what-if, not financial advice.", "private": true, "read_aloud": false, "remember": false, "words": {"hidden": "Retirement what-if hidden"}, "state": "always_runs_out", "reason": null, "share": {"per_100": 0, "label": "fewer than 1 of 100", "all": false, "none": true}, "bands": {"lower": {"per_100": 0, "label": "fewer than 1 of 100", "all": false, "none": true, "points": -1.0}, "higher": {"per_100": 0, "label": "fewer than 1 of 100", "all": false, "none": true, "points": 1.0}}, "end_balance": {"p10": 0, "p50": 0, "p90": 0, "age": 95, "text": {"p10": "0", "p50": "0", "p90": "0"}}, "poor_case": {"lasts": false, "age": 65}, "runs_out_between": [65, 65], "middle_lasts_to": 65, "summary": ["In none of the 10,000 simulated futures does your money last to age 95; it runs out at about age 65.", "If yearly returns are 1 point lower, that becomes fewer than 1 of 100; 1 point higher, fewer than 1 of 100.", "In a poor case (1 in 10) the money runs out at about age 65.", "In the middle case the money runs out at about age 65."], "text": "In none of the 10,000 simulated futures does your money last to age 95; it runs out at about age 65. If yearly returns are 1 point lower, that becomes fewer than 1 of 100; 1 point higher, fewer than 1 of 100. In a poor case (1 in 10) the money runs out at about age 65. In the middle case the money runs out at about age 65. This is a simplified what-if, not financial advice."}}"""
-private val NOT_ENOUGH_JSON = """{"ok": true, "result": {"kind": "retirement", "version": 1, "title": "Retirement what-if", "paths": 10000, "seed": 20260930, "used": [{"key": "current_age", "label": "Your age now", "value": "40", "assumed": false}, {"key": "retirement_age", "label": "Age you stop working", "value": "65", "assumed": false}, {"key": "plan_to_age", "label": "Plan the money to age", "value": "95", "assumed": true}, {"key": "savings", "label": "Savings you have now", "value": "0", "assumed": false}, {"key": "yearly_saving", "label": "You add each year until you stop working", "value": "0", "assumed": false}, {"key": "yearly_spending", "label": "You spend each year in retirement", "value": "0", "assumed": false}, {"key": "expected_return_percent", "label": "Expected yearly return before inflation", "value": "7%", "assumed": true}, {"key": "volatility_percent", "label": "How much yearly returns swing", "value": "12%", "assumed": true}, {"key": "inflation_percent", "label": "Expected yearly inflation", "value": "2.5%", "assumed": true}, {"key": "paths", "label": "Simulated futures", "value": "10,000", "assumed": false}, {"key": "seed", "label": "Random seed (the same every time)", "value": "20260930", "assumed": false}], "todays_money": "All amounts are in today's money, so inflation is already taken out.", "placeholder_note": "The return figures are placeholders you can change, not a forecast. Real life will differ.", "disclaimer": "This is a simplified what-if, not financial advice.", "private": true, "read_aloud": false, "remember": false, "words": {"hidden": "Retirement what-if hidden"}, "state": "not_enough_to_say", "reason": "no_spending", "share": null, "bands": null, "end_balance": null, "poor_case": null, "runs_out_between": null, "middle_lasts_to": null, "summary": ["There is nothing to test: with no spending in retirement the money cannot run out. Type what you expect to spend each year."], "text": "There is nothing to test: with no spending in retirement the money cannot run out. Type what you expect to spend each year. This is a simplified what-if, not financial advice."}}"""
+// What the real backend answered, from contract/retirement-cases.json (written by
+// tools/gen_retirement_cases.py; the desktop's tests read the same file). Nothing in
+// this test file holds a copy of it.
+private val CASES: JsonObject = JarvisJson.parseToJsonElement(
+    requireNotNull(RetirementTest::class.java.classLoader?.getResource("contract/retirement-cases.json")) {
+        "contract/retirement-cases.json is missing - run tools/gen_retirement_cases.py"
+    }.readText(),
+).jsonObject
+
+private fun caseBody(name: String): String = CASES.getValue(name).jsonObject.getValue("body").toString()
+
+private val DEFAULTS_JSON = caseBody("defaults")
+private val MIXED_JSON = caseBody("mixed")
+private val NEVER_JSON = caseBody("never_runs_out")
+private val ALWAYS_JSON = caseBody("always_runs_out")
+private val NOT_ENOUGH_JSON = caseBody("not_enough_to_say")

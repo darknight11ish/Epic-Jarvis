@@ -27,6 +27,8 @@ export const CARDS_READY_HEADING = "Cards ready";
 export const NOTHING_READY = "Nothing ready today";
 export const NEW_PER_DAY_LABEL = "New cards a day";
 export const REVIEW = "Review";
+/** The button over every deck at once (its visible word is "Review"; this is its name for a screen reader). */
+export const REVIEW_ALL = "Review all decks";
 export const PAUSE = "Pause";
 export const RESUME = "Resume";
 export const DELETE_DECK = "Delete this deck";
@@ -87,6 +89,12 @@ export const MISSING =
   "Your PC's Jarvis does not have study decks yet - run apply-patches.ps1 on the PC.";
 export const RATING_GROUP = "How well did you remember it?";
 export const NO_CARD_ANSWER = "(no answer written)";
+/**
+ * Under the deck list when the rows' ready counts add up to more than the total.
+ * (The phone says the same; held to tests/fixtures/decks-cases.json.)
+ */
+export const PER_DECK_NOTE =
+  "New cards a day is shared by every deck, so the decks can show more cards ready than the total above.";
 
 /** The PC's limits (JARVIS-API 102.2 `limits`), until it sends its own. */
 export const LIMITS = Object.freeze({
@@ -274,9 +282,27 @@ export function sectionTop(view) {
   return { line: view.line, empty: view.available && !view.decks.length && !view.line };
 }
 
-/** Whether "Review" can be offered for a deck row (not while hidden). */
+/**
+ * Whether "Review" can be offered for a deck row: the deck has cards ready and
+ * is not paused (never while the private lists are hidden or the decks cannot
+ * be opened). The phone has the same rule.
+ */
 export function canReview(view, deck) {
-  return Boolean(view && view.available && !view.hidden && deck && deck.cards > 0);
+  return Boolean(view && view.available && !view.hidden && deck && !deck.paused && deck.ready > 0);
+}
+
+/** Whether "Review all decks" can be offered: something is ready in a deck that is not paused. */
+export function canReviewAll(view) {
+  return Boolean(view && view.available && !view.hidden && view.ready > 0);
+}
+
+/**
+ * Whether to say why the decks' own ready counts add up to more than the total
+ * (the day's new cards are shared between decks, so each row counts what that
+ * deck alone would offer).
+ */
+export function perDeckNoteShown(view) {
+  return Boolean(view && view.decks.reduce((sum, d) => sum + d.ready, 0) > view.ready);
 }
 
 /**

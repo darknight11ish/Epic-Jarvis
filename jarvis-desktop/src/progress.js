@@ -42,6 +42,12 @@ export const WORDS = Object.freeze({
   no_choices: "Nothing to pick from yet. Give a number a target, or accept a goal.",
   hidden: "Hidden while memory lists and chat history are hidden.",
   private: "Health or money: kept on screen, never read aloud or sent anywhere.",
+  saved: "Chart saved.",
+  cleared: "Chart cleared.",
+  read_failed: "Could not read the Progress pictures: ",
+  refresh: "Refresh",
+  show: "Show",
+  still_hidden: "Still hidden. If Jarvis is locked, unlock it first, then press Show.",
   summary_heat: "Activity, last {weeks} weeks. {total}",
   summary_balance: "Balance chart, {n} areas. {items} No overall score.",
 });
@@ -49,14 +55,18 @@ export const WORDS = Object.freeze({
 /** Words only this screen uses (not part of the shared contract). */
 export const SCREEN_WORDS = Object.freeze({
   hidden_title: "Hidden",
-  show: "Show",
   show_title: "Asks Windows Hello - your PIN, fingerprint or face - then shows this picture.",
   hidden_choice: "(hidden)",
   cancel: "Cancel",
   week_col: "Week",
   days: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
-  read_failed: "Could not read the Progress pictures: ",
 });
+
+/** A failed read in one sentence, the same words as the phone: "<read_failed><why>." */
+export function readFailedLine(why) {
+  const w = String(why || "").trim();
+  return WORDS.read_failed + w + (/[.!?]$/.test(w) ? "" : ".");
+}
 
 /** Fills `{name}` holes. */
 export function fill(template, values = {}) {
@@ -74,8 +84,12 @@ export const LIMITS = Object.freeze({
 /** Heatmap cell, gap and step (contract section 3). */
 export const HEAT = Object.freeze({ cell: 14, gap: 3, step: 17, rows: 7, height: 116 });
 
-/** The accent laid over the surface at each level; level 0 has no fill. */
-export const SHADE_ALPHA = Object.freeze([0.0, 0.22, 0.42, 0.66, 0.92]);
+/**
+ * The accent laid over the surface at each level; level 0 has no fill. Held to
+ * measured contrast in every theme (shading.require in the contract): level 1
+ * at least 1.5:1 over the surface, neighbours 1.25:1, the top 4.5:1.
+ */
+export const SHADE_ALPHA = Object.freeze([0.0, 0.40, 0.58, 0.79, 1.0]);
 
 /** Radar box, centre, outer ring radius, ring shares, label offset (section 4). */
 export const RADAR = Object.freeze({
@@ -184,6 +198,7 @@ export function readActivity(raw) {
   return {
     available: a.available !== false,
     hidden: a.hidden === true,
+    listsHidden: a.lists_hidden === true,
     title: text(a.title) || WORDS.heat_title,
     weeks,
     columns: (Array.isArray(a.columns) ? a.columns : []).map((c, i) => ({
@@ -229,6 +244,7 @@ export function readBalance(raw) {
   return {
     available: b.available !== false,
     hidden: b.hidden === true,
+    listsHidden: b.lists_hidden === true,
     title: text(b.title) || WORDS.balance_title,
     axes,
     drawable: b.drawable === true,
@@ -303,13 +319,21 @@ export function saveState(pickedCount, min = LIMITS.axes_min, max = LIMITS.axes_
 }
 
 /**
- * The body of the save from the picker's ticks: in the order the rows are
- * listed, each with its typed name only if it differs from the row's name.
+ * The body of the save from the picker's ticks. The chart keeps its order: the
+ * areas that were on it stay where they were, and newly ticked ones are added
+ * after them in the order they were ticked (the phone does the same). A row
+ * carries `at` (its place on the chart now, or -1) and `tick` (when it was
+ * ticked in this edit); unticking a row clears both, so ticking it again puts
+ * it at the end. Each area has its typed name only if it differs from the
+ * row's name.
  */
 export function pickBody(rows) {
-  return (Array.isArray(rows) ? rows : [])
-    .filter((r) => r && r.picked)
-    .map((r) => {
+  const picked = (Array.isArray(rows) ? rows : []).filter((r) => r && r.picked);
+  const place = (r) => (num(r.at, -1) >= 0 ? [0, num(r.at)] : [1, num(r.tick)]);
+  return picked
+    .map((r, index) => ({ r, index, key: place(r) }))
+    .sort((a, b) => a.key[0] - b.key[0] || a.key[1] - b.key[1] || a.index - b.index)
+    .map(({ r }) => {
       const one = { kind: r.kind, ref: r.ref };
       const label = text(r.label).trim();
       if (label && label !== r.name) one.label = label;

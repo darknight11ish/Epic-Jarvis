@@ -395,9 +395,16 @@ pub async fn brain_review_rate(
     app: AppHandle,
     card: String,
     rating: String,
+    deck: Option<String>,
 ) -> Result<serde_json::Value, String> {
     require_link_live(&app)?;
     if !valid_id(&card) {
+        return Err(NO_SUCH_DECK.to_string());
+    }
+    // The scope the window is reviewing ("" = every deck): the PC counts the
+    // rating in that run only, so two windows on two scopes never cross.
+    let deck = deck.unwrap_or_default();
+    if !deck.is_empty() && !valid_id(&deck) {
         return Err(NO_SUCH_DECK.to_string());
     }
     if !RATINGS.contains(&rating.as_str()) {
@@ -409,7 +416,7 @@ pub async fn brain_review_rate(
     post(
         &app,
         "/api/review/rate",
-        serde_json::json!({ "card": card, "rating": rating }),
+        serde_json::json!({ "card": card, "rating": rating, "deck": deck }),
         Some("state"),
     )
     .await

@@ -877,9 +877,9 @@ def t_no_streak_or_guilt_words():
     bad = [s for s in _strings(HERE / "jarvis_decks.py") if BANNED.search(s)]
     check("no streak, XP, hearts, 'missed', 'overdue', 'behind', 'lost' or 'in a row' in any string of jarvis_decks.py",
           not bad, bad)
-    old = "The model on this PC did not answer in a way Jarvis could use. Nothing was lost - try again."
-    bad = [s for s in _strings(HERE / "jarvis_quiz.py", skip=(old,)) if BANNED.search(s)]
-    check("... nor in the quiz module's strings (its one old reassurance, 'Nothing was lost', aside)", not bad, bad)
+    bad = [s for s in _strings(HERE / "jarvis_quiz.py") if BANNED.search(s)]
+    check("... nor in the quiz module's strings (no exemption: the model-unavailable reassurance says "
+          "'Nothing was changed')", not bad, bad)
     pool = D.CLASSES
     check("every deck error has a plain sentence with a status",
           all(isinstance(m, str) and len(m) > 10 and isinstance(c, int) for c, m in pool.values()))
@@ -915,8 +915,8 @@ def t_purity():
             continue
         if "jarvis_decks" in f.read_text(encoding="utf-8", errors="ignore"):
             hits.append(f.name)
-    check("no other module (no model tool, no voice command, no learner) reaches the decks: only the scheduler's kind list names it",
-          set(hits) <= {"jarvis_schedule.py"}, hits)
+    check("no other module (no model tool, no voice command, no learner) reaches the decks: only the scheduler's kind list and the locked backup (for its key's name) name it",
+          set(hits) <= {"jarvis_schedule.py", "jarvis_backup.py"}, hits)
     tools = "".join(p.read_text(encoding="utf-8", errors="ignore") for p in
                     (HERE / "jarvis_agent.py", HERE / "jarvis_quick.py", HERE / "jarvis_reach.py") if p.exists())
     check("... and the model's tool list, the fast path and the 'what asks first' page know no deck action",
@@ -1030,6 +1030,174 @@ def t_the_patch_and_the_shipped_lists():
     check("jarvis_decks.py is copied in by apply-patches.ps1 and listed in _where.py",
           "'jarvis_decks.py'" in ps1 and "jarvis_decks.py" in (HERE / "_where.py").read_text())
     check("the golden file is a test fixture, not shipped", "decks_fsrs_golden" not in ps1)
+
+
+# ---------------------------------------------------------------- the audit fixes (2026-09-30)
+
+def t_without_fsrs_nothing_is_kept():
+    w = World()
+    saved = D.fsrs
+    D.fsrs = None
+    try:
+        ok, why = w.d.available()
+        check("no py-fsrs: available() says so in words", ok is False and "py-fsrs" in why, why)
+        check("... the deck list carries the same banner text",
+              w.d.list_decks()["available"] is False and "py-fsrs" in w.d.list_decks()["why"])
+        check("... keeping fails plainly (deck_unavailable), nothing is written",
+              raises(lambda: w.d.keep({"new_deck": "X"}, mkcards(1)), "deck_unavailable")
+              and not w.path.exists())
+        check("... and so does making a deck",
+              raises(lambda: w.d.create_deck("X"), "deck_unavailable"))
+    finally:
+        D.fsrs = saved
+    check("with py-fsrs back, keeping works", w.d.keep({"new_deck": "X"}, mkcards(1)) == 1)
+
+
+def t_two_apps_never_cross_runs():
+    w = World()
+    a = w.d.create_deck("A")["id"]
+    b = w.d.create_deck("B")["id"]
+    w.d.set_new_per_day(20)
+    w.d.keep({"deck": a}, mkcards(30, "A"))
+    w.d.keep({"deck": b}, mkcards(30, "B"))
+    for _ in range(3):                      # the phone reviews deck A
+        cid = w.d.review_state(a)["card"]["id"]
+        w.d.reveal(cid)
+        w.d.rate(cid, "good", a)
+    st_all = w.d.review_state()             # the desktop reviews everything, at the same time
+    check("a rating in deck A did not count in the all-decks run", st_all["run"] == {"done": 0, "limit": 20},
+          json.dumps(st_all["run"]))
+    cid = st_all["card"]["id"]
+    w.d.reveal(cid)
+    out = w.d.rate(cid, "good", "")
+    check("... the desktop's rating counts in its own run only",
+          out["run"]["done"] == 1 and w.d.review_state(a)["run"]["done"] == 3, json.dumps(out["run"]))
+    for _ in range(5):
+        cid = w.d.review_state(a)["card"]["id"]
+        w.d.reveal(cid)
+        r = w.d.rate(cid, "good", a)
+    check("five more in deck A leave the all-decks run at 1 and deck A's at 8",
+          w.d.review_state()["run"]["done"] == 1 and w.d.review_state(a)["run"]["done"] == 8)
+    cid = w.d.review_state(b)["card"]["id"]
+    w.clock.t += 1
+    w.d.review_state()                      # the all-decks view is the newest
+    w.d.reveal(cid)
+    r = w.d.rate(cid, "good")               # an old app that sends no scope
+    check("no scope sent: the newest run the card belongs to counts it (all-decks was newest)",
+          w.d.review_state()["run"]["done"] == 2 and r["ok"], json.dumps(w.d.review_state()["run"]))
+    cid = w.d.review_state(b)["card"]["id"]
+    w.d.reveal(cid)
+    w.d.rate(cid, "good", a)
+    check("a scope that is not the card's deck is ignored, not trusted (deck A's run stays at 8)",
+          w.d.review_state(a)["run"]["done"] == 8)
+
+
+def t_zero_new_cards_promises_nothing():
+    w = World()
+    v = w.d.create_deck("Z")["id"]
+    w.d.keep({"deck": v}, mkcards(5))
+    w.d.set_new_per_day(0)
+    ls = w.d.list_decks()
+    check("new cards a day = 0: nothing ready and no 'next ready day' promised",
+          ls["ready"] == 0 and ls["next_ready_day"] is None, json.dumps(ls))
+    w.d.set_new_per_day(2)
+    study(w.d, w.d.review_state()["card"]["id"])
+    study(w.d, w.d.review_state()["card"]["id"])
+    check("an allowance of 2 used up with cards waiting: tomorrow is named",
+          w.d.list_decks()["next_ready_day"] == D._tomorrow(w.clock.t), w.d.list_decks()["next_ready_day"])
+
+
+def t_days_are_calendar_days_across_dst():
+    keep_tz = os.environ.get("TZ")
+    try:
+        for tz, y, mo, d, _tomorrow in (("America/New_York", 2026, 3, 7, "2026-03-08"),
+                                       ("America/New_York", 2026, 11, 1, "2026-11-02"),
+                                       ("Pacific/Auckland", 2026, 9, 26, "2026-09-27"),
+                                       ("Pacific/Auckland", 2027, 4, 4, "2027-04-05")):
+            os.environ["TZ"] = tz
+            time.tzset()
+            for hh, mm in ((23, 30), (0, 30)):
+                now = S.wall_to_epoch(y, mo, d, hh, mm)
+                want_day = time.strftime("%Y-%m-%d", time.localtime(time.mktime((y, mo, d + 1, hh, mm, 0, 0, 0, -1))))
+                check(f"{tz} {y}-{mo:02d}-{d:02d} {hh}:{mm:02d}: tomorrow is the next calendar day",
+                      D._tomorrow(now) == want_day, (D._tomorrow(now), want_day))
+                st = D.new_state(now)
+                for rating in ("good", "easy"):
+                    out = D.review(st, rating, now, fuzz=False)
+                    got, was = time.localtime(out["due"]), time.localtime(now)
+                    days = round((out["due"] - now) / 86400)
+                    want = time.localtime(time.mktime((was.tm_year, was.tm_mon, was.tm_mday + days, was.tm_hour,
+                                                       was.tm_min, 0, 0, 0, -1)))
+                    check(f"{tz} {y}-{mo:02d}-{d:02d} {hh}:{mm:02d} rated {rating}: due is the same clock time "
+                          f"{days} calendar days on",
+                          (got.tm_year, got.tm_mon, got.tm_mday, got.tm_hour, got.tm_min)
+                          == (want.tm_year, want.tm_mon, want.tm_mday, want.tm_hour, want.tm_min), (got, want))
+        os.environ["TZ"] = "America/New_York"
+        time.tzset()
+        now = S.wall_to_epoch(2026, 3, 7, 23, 30)
+        out = D.review(D.new_state(now), "again", now, fuzz=False)
+        check("'Didn't remember' in New York on 7 March evening comes back on 8 March, not the 9th",
+              time.strftime("%Y-%m-%d", time.localtime(out["due"])) == "2026-03-08",
+              time.strftime("%Y-%m-%d %H:%M", time.localtime(out["due"])))
+    finally:
+        os.environ["TZ"] = keep_tz or "UTC"
+        time.tzset()
+
+
+def t_a_card_front_edit_reruns_the_duplicate_check():
+    w = World()
+    v = w.d.create_deck("Dup")["id"]
+    same_passage = mkcards(2)
+    for c in same_passage:
+        c["passage"] = "One shared passage."
+    w.d.keep({"deck": v}, same_passage)
+    cards = w.d.deck_cards(v)["cards"]
+    dup_front = cards[0]["front"]
+    check("editing a front to another card's question (same passage) -> duplicate_card",
+          raises(lambda: w.d.card_act(v, cards[1]["id"], "edit", front=dup_front), "duplicate_card"))
+    same = w.d.card_act(v, cards[0]["id"], "edit", front=dup_front + " ")["card"]
+    check("... but saving a card's own front again is fine", same["front"] == dup_front)
+    check("... and a new, different front is fine",
+          w.d.card_act(v, cards[1]["id"], "edit", front="A different question?")["card"]["front"]
+          == "A different question?")
+
+
+def t_keep_with_a_non_text_deck_is_bad_request():
+    m, w = quiz_world()
+    qid = new_quiz()
+    for bad in (5, ["x"], {"a": 1}, True):
+        code, out = Q.handle_post(f"/api/quiz/{qid}/finish", {"keep": {"deck": bad, "cards": [{"n": 1, "answer": "a"}]}})
+        check(f"keep.deck = {bad!r} -> 400 bad_request, the quiz stays open",
+              code == 400 and out["error"] == "bad_request" and open_quiz(qid), json.dumps(out))
+    code, out = Q.handle_post(f"/api/quiz/{qid}/finish", {"keep": {"new_deck": 7, "cards": [{"n": 1, "answer": "a"}]}})
+    check("keep.new_deck that is not text -> 400 bad_request", code == 400 and out["error"] == "bad_request")
+
+
+def t_long_blank_sentences_and_decomposed_text():
+    import unicodedata
+    long_sentence = ("La casa " + "muy grande y bonita " * 40 + "tiene una cocina pequena donde mi madre prepara "
+                     "la cena cada noche " + "y otra parte mas " * 20).strip()
+    cut = Q._cut_blank(long_sentence, "cocina")
+    prompt = Q._window(cut[0], Q.PROMPT_MAX)
+    check("a sentence over 500 characters: the window is at most 500 and keeps the blank",
+          len(long_sentence) > 500 and len(prompt) <= Q.PROMPT_MAX and Q.BLANK in prompt, (len(prompt), prompt[:80]))
+    check("a short sentence is left exactly as it is", Q._window("Yo _____ hoy.", 500) == "Yo _____ hoy.")
+    nfd = unicodedata.normalize("NFD", "El niño está en la habitación pequeña.")
+    cut = Q._cut_blank(nfd, unicodedata.normalize("NFD", "habitación"))
+    check("pasted text with separate accent marks (NFD) still gives a blank item",
+          cut is not None and Q.BLANK in cut[0] and cut[1] == unicodedata.normalize("NFC", "habitación"), cut)
+    check("... and the passage check matches NFD text against the model's NFC copy",
+          Q._norm(nfd) == Q._norm(unicodedata.normalize("NFC", nfd)))
+    # end to end through write_spanish: an NFD text, the model's NFC answer
+    text = unicodedata.normalize("NFD", "El niño está en la habitación pequeña. " * 10)
+    reply = json.dumps({"items": [{"kind": "blank", "prompt": "", "passage": "El niño está en la habitación pequeña.",
+                                   "word": "habitación", "accepted": []}]})
+    Q.configure(call=lambda system, user, schema, num_predict: reply)
+    items = Q.write_spanish(text, "A2", "blank", "", 1)
+    check("write_spanish keeps a blank item from NFD-decomposed pasted text",
+          len(items) == 1 and Q.BLANK in items[0]["prompt"], items)
+    Q._reset_for_tests()
+
 
 
 def main() -> int:

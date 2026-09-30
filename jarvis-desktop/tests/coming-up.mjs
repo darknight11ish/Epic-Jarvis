@@ -708,6 +708,18 @@ await check("CONTROL: toasts on fired only, words by id, lock-screen words while
   assert.match(lib, /winrt_toast::snooze_at_startup\(&handle\)/);
 });
 
+await check("the review decks' daily job is named plainly and offers no Pause or Delete", async () => {
+  const job = readSchedule({ jobs: [{ id: "s00000000c1", kind: "review", text: "", state: "active",
+    repeats: true, repeat: "every day at 04:00", note: "3 cards ready" }], todo: [] }).jobs[0];
+  assert.deepEqual(actionsOf(job), []);
+  assert.equal(tagOf(job), "card review, repeats");
+  assert.equal(titleOf(job), "Card review");
+  assert.ok(metaOf(job).includes("3 cards ready"));
+  // the phone says the same
+  const kt = readRepo("jarvis-client/app/src/main/java/com/jarvis/client/net/Schedule.kt");
+  assert.ok(kt.includes('"review" -> "card review"') && kt.includes('REVIEW_JOB_TITLE = "Card review"'));
+});
+
 await browser.close();
 close();
 console.log(fails.length ? `\n${fails.length} failed: ${fails.join(", ")}`

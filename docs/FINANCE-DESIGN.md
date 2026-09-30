@@ -749,10 +749,14 @@ something here is wrong, say so and the backend changes first. Where this differ
 above (the design), this section wins: it says what was built.
 
 Built and tested: `backend/jarvis_retirement.py` (shipped whole, plain Python, no numpy),
-`backend/retirement.patch` (one install block), `backend/test_retirement.py` (158 checks).
-Not built: the `retirement_whatif` chat tool (JARVIS-API 103.6: written and tested as
-`jarvis_retirement.tool_call`, not yet registered in `jarvis_agent.py`, so **the apps must not
-wait for it**: the form is the whole first slice), any app.
+`backend/retirement.patch` (one install block), `backend/test_retirement.py` (174 checks).
+Also built (audit fixes, 2026-09-30): the `retirement_whatif` chat tool, registered in
+`jarvis_agent.py` (JARVIS-API 103.6; tests in `backend/test_agent_retirement_wiring.py`), which
+shows **code-written text only** (the model writes no sentence about the answer), and both apps'
+cards. The placeholder return was lowered from 7% to 6% (about 3.4% a year after the 2.5%
+placeholder inflation) and every placeholder is now labelled "placeholders for a mix of stocks and
+bonds, not a forecast". Both apps are tested against ONE file of the real backend's answers,
+`tools/gen_retirement_cases.py` (`python3 tools/gen_retirement_cases.py --check`).
 
 ### R1. Where it lives, and what the two apps build
 
@@ -792,16 +796,17 @@ percent with or without `%`):
 | `yearly_spending` | You spend each year in retirement | money per year | 0 to 1,000,000,000 | **none: required** |
 | `other_income` | Pension or other income each year (optional) | money per year | 0 to 1,000,000,000 | 0 |
 | `other_income_start_age` | That income starts at age (optional) | years | whole 18 to 110 | empty = the retirement age |
-| `expected_return_percent` | Expected yearly return before inflation | percent | -5 to 15 | 7.0 (placeholder) |
+| `expected_return_percent` | Expected yearly return before inflation | percent | -5 to 15 | 6.0 (placeholder; about 3.4% after the 2.5% inflation) |
 | `volatility_percent` | How much yearly returns swing | percent | 0 to 40 | 12.0 (placeholder) |
 | `inflation_percent` | Expected yearly inflation | percent | 0 to 15 | 2.5 (placeholder) |
 
 The form shows the labels, `help` lines and limits **from the response, not from its own copy**.
 The three return-related boxes start filled with their placeholder defaults and show
-`placeholder_note` beside them ("The return figures are placeholders you can change, not a
-forecast. Real life will differ."); the required boxes start empty (the form never keeps numbers
-between visits: nothing is saved, no "Keep these numbers"). `todays_money` is shown once above the
-form. Money has no currency sign: the owner's own currency, in today's money.
+`placeholder_note` beside them ("The return, swing and inflation figures are placeholders for a mix of
+stocks and bonds, not a forecast. You can change them. Real life will differ."); the required boxes
+start empty (the form never keeps numbers between visits: nothing is saved, no "Keep these
+numbers"). An optional box that has a default but does not start filled (the pension's 0) shows it as
+a grey hint in the empty box, in BOTH apps. `todays_money` is shown once above the form. Money has no currency sign: the owner's own currency, in today's money.
 
 ### R3. `POST /api/retirement/run`
 
@@ -814,13 +819,13 @@ empty or missing optional fields take their default. Any other key is refused. R
   "state": "mixed" | "never_runs_out" | "always_runs_out" | "not_enough_to_say",
   "reason": null | "no_spending",
   "paths": 10000, "seed": 20260930,
-  "share": null | {"per_100": 71, "label": "about 71 of 100", "all": false, "none": false},
+  "share": null | {"per_100": 51, "label": "about 51 of 100", "all": false, "none": false},
   "bands": null | {"lower":  {"per_100", "label", "all", "none", "points": -1.0},
                    "higher": {"per_100", "label", "all", "none", "points":  1.0}},
-  "end_balance": null | {"p10": 0, "p50": 560000, "p90": 3500000, "age": 95,
-                         "text": {"p10": "0", "p50": "560,000", "p90": "3,500,000"}},
-  "poor_case": null | {"lasts": false, "age": 82},
-  "runs_out_between": null | [81, 89],
+  "end_balance": null | {"p10": 0, "p50": 12000, "p90": 1800000, "age": 95,
+                         "text": {"p10": "0", "p50": "12,000", "p90": "1,800,000"}},
+  "poor_case": null | {"lasts": false, "age": 78},
+  "runs_out_between": null | [79, 88],
   "middle_lasts_to": null | 95,
   "summary": [<sentence>, ...],
   "text": "<summary joined, then the disclaimer>",
@@ -832,14 +837,16 @@ empty or missing optional fields take their default. Any other key is refused. R
 ```
 
 An example made by the real code (40 now, stop at 65, 100,000 saved, 12,000 a year, spend 30,000; all
-else the defaults): `state` "mixed", `share.label` "about 71 of 100", `bands.lower.label` "about 51
-of 100", `bands.higher.label` "about 86 of 100", `end_balance` p10 0 / p50 560000 / p90 3500000,
-`poor_case` `{"lasts": false, "age": 82}`, `runs_out_between` [81, 89] and `summary`:
+else the placeholders, so a 6% return): `state` "mixed", `share.label` "about 51 of 100",
+`bands.lower.label` "about 31 of 100", `bands.higher.label` "about 71 of 100", `end_balance` p10 0 /
+p50 12000 / p90 1800000, `poor_case` `{"lasts": false, "age": 78}`, `runs_out_between` [79, 88] and
+`summary` (the real file is `tests/fixtures/retirement-cases.json`, made by
+`tools/gen_retirement_cases.py`):
 
-1. In about 71 of 100 simulated futures your money lasts to age 95. Where it runs out, that is usually at about age 81 to 89.
-2. If yearly returns are 1 point lower, that becomes about 51 of 100; 1 point higher, about 86 of 100.
-3. In a poor case (1 in 10) the money runs out at about age 82.
-4. The middle case leaves about 560,000 at age 95; a good case (1 in 10) about 3,500,000.
+1. In about 51 of 100 simulated futures your money lasts to age 95. Where it runs out, that is usually at about age 79 to 88.
+2. If yearly returns are 1 point lower, that becomes about 31 of 100; 1 point higher, about 71 of 100.
+3. In a poor case (1 in 10) the money runs out at about age 78.
+4. The middle case leaves about 12,000 at age 95; a good case (1 in 10) about 1,800,000.
 
 **What the app draws, in this order:** the `summary` sentences as a short list or paragraph
 (exactly as sent, the app never edits, rounds or re-words a figure); the `disclaimer` on its own
@@ -861,8 +868,10 @@ lone number.
 | `not_enough_to_say` | yearly spending is 0 | "There is nothing to test: with no spending in retirement the money cannot run out. Type what you expect to spend each year." | `share`, `bands`, `end_balance`, `poor_case`, `runs_out_between`, `middle_lasts_to` are all null |
 
 Other sentences the backend may add, all fixed: "Even in a poor case (1 in 10) it lasts, leaving about
-N at age A." (poor case lasts); "In the middle case the money runs out at about age A." (the middle
-case is empty); "Other income only covers spending; any extra is not saved." (when other income was
+N at age A." (poor case lasts; "leaving very little" when that rounds to nothing); "In the middle
+case the money runs out at about age A." (the middle case did NOT last to the plan-to age; a middle
+case that lasted but leaves nothing says "The middle case leaves very little at age A, and so does a
+good case (1 in 10)." or "...very little at age A; a good case (1 in 10) about N."); "Other income only covers spending; any extra is not saved." (when other income was
 typed). The run-out age is **never** shown as 0 or as the starting age for a future that does not run
 out (the argmax pitfall): a null `runs_out_between` means there is nothing to say, the app draws no
 "runs out" line.
@@ -885,19 +894,26 @@ field named in `field`, and never repeats what was typed):
 (one run at a time; the app tries once more after a second, then shows the message);
 `503 {"error": "too_slow", "message": "That took too long to work out, so it was stopped. Try again."}`.
 A run normally takes 1 to 3 seconds on the PC, so both apps show a plain "Working it out" state and
-disable the button while waiting. A stale link (rule 4) greys the button like every other action; a
-result already on screen stays but the card says nothing new is possible.
+disable the button while waiting. A stale link (rule 4) greys the button like every other action and
+BOTH apps say why ("Waiting for the link to catch up. Nothing can be sent until it does."); a result
+already on screen stays. Percent boxes also take ".5" and "5." and "7%%" (the phone's early check
+accepts them too, and leaves full-width digits to the PC).
 
 ### R4. Hidden-lists behaviour, and what is never done
 
 - Under "Hide memory lists and chat history" (both apps) the card shows only `words.hidden`, "Retirement
-  what-if hidden", and no result or form value; the form's boxes are emptied when hidden. The desktop
-  also needs the app unlocked while App lock is on (the same rule as the spending table); the phone
-  already blocks screenshots in both states.
+  what-if hidden", and a **Show** button (both apps, like every hidden section), and no result or form
+  value; the form's boxes are emptied when hidden. On the desktop Show asks Windows Hello
+  (`reveal_private_answers`) and brings back an EMPTY form; under App lock it cannot lift the lock and
+  says "Still hidden. If Jarvis is locked, unlock it first, then press Show.". The desktop also needs
+  the app unlocked while App lock is on (the same rule as the spending table); the phone already
+  blocks screenshots in both states. The numbers are wiped when the card scrolls away or the window is
+  minimised (the owner kept this, 2026-09-30).
 - The numbers are never written by an app: not to disk, not to a store, not to a log, not to chat
   history, not to a widget or a notification. The result lives in memory while the card is on
   screen and goes when the owner leaves it. The backend keeps nothing either.
-- Never read aloud. Never sent to a web search, a chatbot or any cloud lane. Never remembered as a fact
+- Never read aloud (in chat too: the tool is not on the read-aloud list, so a spoken question still
+  gets its answer on screen only). Never sent to a web search, a chatbot or any cloud lane. Never remembered as a fact
   and never offered to Goals or Projects as a number to track (the owner types those themselves).
 - No card, no Windows Hello: this is a calculation on numbers the owner typed.
 - Nothing computed on the phone. The phone builds no simulation.
@@ -910,9 +926,11 @@ comes from the backend.
 
 ### R6. Not verified
 
-- No app draws it yet; no real model wrote a sentence round a result (the tests script the sentence
-  check); nothing was run on Windows or the phone.
-- The default return, spread and inflation are placeholders, not researched. The share moves by a few
-  points with another random seed, and the answer says "about".
+- Nothing was run on Windows or the phone; no real model has called the chat tool (the tests script
+  the model). The phone's Compose screen was read by eye, not compiled here; its logic
+  (`net/Retirement.kt`, `RetirementTest`) was compiled and run.
+- The default return (6%), spread (12%) and inflation (2.5%) are placeholders for a mix of stocks and
+  bonds, not researched and not a forecast. The share moves by a few points with another random seed,
+  and the answer says "about".
 - Whether a 30-year-old with 90 years to plan and 10,000 futures stays under the 30-second cap on the
   owner's slowest PC was measured only on this container (about 1 second warm).

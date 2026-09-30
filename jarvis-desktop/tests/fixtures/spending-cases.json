@@ -54,7 +54,7 @@
    "title": "Spending by category, March 2026",
    "period": "March 2026",
    "sources": [
-    "a_signed.csv"
+    "a_signed.csv (layout: Saved layout)"
    ],
    "columns": [
     {
@@ -166,7 +166,7 @@
    "title": "Spending by month",
    "period": "2026-03-01 to 2026-04-02",
    "sources": [
-    "a_signed.csv"
+    "a_signed.csv (layout: Saved layout)"
    ],
    "columns": [
     {
@@ -263,7 +263,7 @@
    "title": "Spending by category and month",
    "period": "2026-03-01 to 2026-04-02",
    "sources": [
-    "a_signed.csv"
+    "a_signed.csv (layout: Saved layout)"
    ],
    "columns": [
     {
@@ -398,10 +398,10 @@
    "title": "Spending by category",
    "period": "2026-01-05 to 2026-04-02",
    "sources": [
-    "a_signed.csv",
-    "g_overlap_1.csv",
-    "g_overlap_2.csv",
-    "multi.csv"
+    "a_signed.csv (layout: Saved layout)",
+    "g_overlap_1.csv (layout: Saved layout)",
+    "g_overlap_2.csv (layout: Saved layout)",
+    "multi.csv (layout: Saved layout)"
    ],
    "columns": [
     {
@@ -583,6 +583,7 @@
     "2 rows were in more than one file and were counted once.",
     "Added up from 4 files.",
     "A bank that changes a shop's name between a pending and a posted export can make one row count twice.",
+    "These files use different saved layouts, so they are treated as different accounts and their rows are never matched with each other.",
     "This file has more than one currency. Each is added up on its own and nothing is converted.",
     "Uncategorised: 1 row, 20.00. Add a word for it in Settings, Spending.",
     "Refunds are already taken off the categories above.",
@@ -601,7 +602,7 @@
    "title": "Spending by category",
    "period": "2026-02-01 to 2026-02-04",
    "sources": [
-    "multi.csv"
+    "multi.csv (layout: Saved layout)"
    ],
    "columns": [
     {
@@ -713,7 +714,7 @@
    "title": "Spending on Food and groceries",
    "period": "2026-03-01 to 2026-04-02",
    "sources": [
-    "a_signed.csv"
+    "a_signed.csv (layout: Saved layout)"
    ],
    "columns": [
     {
@@ -903,7 +904,33 @@
    "drcr": "Rows marked Dr will be counted as money spent, and rows marked Cr as money in."
   },
   "needs_setup": "Open Jarvis on the PC to check the columns of this bank file (Settings, Spending). It takes a minute and is remembered.",
-  "table_hidden": "Spending table hidden"
+  "table_hidden": "Spending table hidden",
+  "bank_files": [
+   {
+    "name": "a_signed.csv",
+    "path": "/tmp/jarvis-spending-cases-2k_7r5fu/home/Views/a_signed.csv",
+    "kind": "csv",
+    "layout_id": null,
+    "checked": true,
+    "waiting": false
+   },
+   {
+    "name": "b_debit_credit.csv",
+    "path": "/tmp/jarvis-spending-cases-2k_7r5fu/home/Views/b_debit_credit.csv",
+    "kind": "csv",
+    "layout_id": null,
+    "checked": true,
+    "waiting": false
+   },
+   {
+    "name": "h_ambiguous.csv",
+    "path": "/tmp/jarvis-spending-cases-2k_7r5fu/home/Views/h_ambiguous.csv",
+    "kind": "csv",
+    "layout_id": null,
+    "checked": true,
+    "waiting": false
+   }
+  ]
  },
  "view_phone_nothing_saved": {
   "available": true,
@@ -1045,7 +1072,7 @@
  "proposal_date_order_unsettled": {
   "ok": true,
   "known": false,
-  "fingerprint": "9bcfe1f64b691063",
+  "fingerprint": "99a99abee47ef83d",
   "header_row": 0,
   "header": [
    "Date",
@@ -1091,7 +1118,8 @@
    "date_order": null,
    "decimal": ".",
    "currency": "",
-   "label": "h_ambiguous.csv"
+   "label": "",
+   "date_serial": false
   },
   "questions": [
    "date_order"
@@ -1249,7 +1277,33 @@
    "drcr": "Rows marked Dr will be counted as money spent, and rows marked Cr as money in."
   },
   "needs_setup": "Open Jarvis on the PC to check the columns of this bank file (Settings, Spending). It takes a minute and is remembered.",
-  "table_hidden": "Spending table hidden"
+  "table_hidden": "Spending table hidden",
+  "bank_files": [
+   {
+    "name": "a_signed.csv",
+    "path": "C:\\Users\\owner\\Bank\\a_signed.csv",
+    "kind": "csv",
+    "layout_id": null,
+    "checked": true,
+    "waiting": false
+   },
+   {
+    "name": "b_debit_credit.csv",
+    "path": "C:\\Users\\owner\\Bank\\b_debit_credit.csv",
+    "kind": "csv",
+    "layout_id": null,
+    "checked": true,
+    "waiting": true
+   },
+   {
+    "name": "h_ambiguous.csv",
+    "path": "C:\\Users\\owner\\Bank\\h_ambiguous.csv",
+    "kind": "csv",
+    "layout_id": null,
+    "checked": true,
+    "waiting": false
+   }
+  ]
  },
  "view_phone_file_waiting": {
   "available": true,
@@ -1395,7 +1449,7 @@
  "proposal_signed_amount": {
   "ok": true,
   "known": false,
-  "fingerprint": "5360792149f409f0",
+  "fingerprint": "c26d88dbb7e6cfb3",
   "header_row": 0,
   "header": [
    "Date",
@@ -1458,12 +1512,11 @@
    "date_order": "ymd",
    "decimal": ".",
    "currency": "",
-   "label": "a_signed.csv"
+   "label": "",
+   "date_serial": false
   },
   "questions": [],
-  "warnings": [
-   "A bank that changes a shop's name between a pending and a posted export can make one row count twice."
-  ],
+  "warnings": [],
   "sentences": {
    "sign": "Rows like 'SHOP -45.10' will be counted as money spent."
   },
@@ -1472,7 +1525,16 @@
    "positive_out": "Rows like 'SHOP 45.10' will be counted as money spent, and a minus sign as money coming in.",
    "debit_credit": "Amounts in the Debit column will be counted as money spent, and the Credit column as money in.",
    "drcr": "Rows marked Dr will be counted as money spent, and rows marked Cr as money in."
-  }
+  },
+  "ready": true,
+  "counts": {
+   "out": 8,
+   "in": 2,
+   "rows": 10,
+   "unread": 0
+  },
+  "line": "With these choices, 8 rows count as money out and 2 as money in.",
+  "problems": []
  },
  "view_pc_one_layout": {
   "available": true,
@@ -1482,8 +1544,8 @@
   "pc_only": "Set up on the PC: Settings, Spending. The columns of a new bank file are checked there, once.",
   "profiles": [
    {
-    "id": "5360792149f409f0",
-    "label": "a_signed.csv",
+    "id": "c26d88dbb7e6cfb3",
+    "label": "Saved layout",
     "columns": [
      "Date",
      "Description",
@@ -1628,7 +1690,33 @@
    "drcr": "Rows marked Dr will be counted as money spent, and rows marked Cr as money in."
   },
   "needs_setup": "Open Jarvis on the PC to check the columns of this bank file (Settings, Spending). It takes a minute and is remembered.",
-  "table_hidden": "Spending table hidden"
+  "table_hidden": "Spending table hidden",
+  "bank_files": [
+   {
+    "name": "a_signed.csv",
+    "path": "C:\\Users\\owner\\Bank\\a_signed.csv",
+    "kind": "csv",
+    "layout_id": "c26d88dbb7e6cfb3",
+    "checked": true,
+    "waiting": false
+   },
+   {
+    "name": "b_debit_credit.csv",
+    "path": "C:\\Users\\owner\\Bank\\b_debit_credit.csv",
+    "kind": "csv",
+    "layout_id": null,
+    "checked": true,
+    "waiting": true
+   },
+   {
+    "name": "h_ambiguous.csv",
+    "path": "C:\\Users\\owner\\Bank\\h_ambiguous.csv",
+    "kind": "csv",
+    "layout_id": null,
+    "checked": true,
+    "waiting": false
+   }
+  ]
  },
  "view_phone_one_layout": {
   "available": true,
@@ -1638,8 +1726,8 @@
   "pc_only": "Set up on the PC: Settings, Spending. The columns of a new bank file are checked there, once.",
   "profiles": [
    {
-    "id": "5360792149f409f0",
-    "label": "a_signed.csv",
+    "id": "c26d88dbb7e6cfb3",
+    "label": "Saved layout",
     "columns": [
      "Date",
      "Description",

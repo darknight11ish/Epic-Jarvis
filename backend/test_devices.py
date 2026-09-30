@@ -421,15 +421,19 @@ def t_the_hunk_comes_before_every_token_ok():
     # quiz.patch and decks.patch go last (2026-09-30): each is one startup block
     # anchored on the block before it (browser-engine.patch's, then quiz.patch's)
     # and touches no gate list. spending.patch goes after decks.patch (2026-09-30)
-    # on the same terms.
+    # on the same terms, then retirement.patch and progress.patch, and
+    # topics.patch last (its gate lines sit on browser-engine.patch's own last
+    # lines and leave devices.patch's alone).
     check("devices.patch is in apply-patches.ps1's list, and only "
           "apps-in-projects.patch (which builds on its lines), inbox-tidy.patch, "
-          "screen.patch, screen-picture.patch, browser-engine.patch, quiz.patch, decks.patch and "
-          "spending.patch (which leave them alone) come after it",
+          "screen.patch, screen-picture.patch, browser-engine.patch, quiz.patch, decks.patch, "
+          "spending.patch, retirement.patch, progress.patch and topics.patch (which leave them "
+          "alone) come after it",
           after_it is not None
           and set(after_it) <= {"apps-in-projects.patch", "inbox-tidy.patch", "screen.patch",
                                 "screen-picture.patch", "browser-engine.patch", "quiz.patch",
-                                "decks.patch", "spending.patch"}
+                                "decks.patch", "spending.patch", "retirement.patch",
+                                "progress.patch", "topics.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")
     check("the stacked jarvis_hud.py builds", text is not None, "\n".join(log[-3:]))

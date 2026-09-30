@@ -87,7 +87,7 @@ await check("the shared words, word for word, in the page", async () => {
   assert.equal(GUESS_LABEL, "Jarvis's guess");
   assert.deepEqual(LEVEL_LABELS, { got_it: "Got it", partly: "Partly", not_yet: "Not yet" });
   assert.equal(QUIZ_INTRO,
-    "Paste some text and Jarvis writes a few questions about it. Your answers are marked by the model on this PC. Nothing is saved or learned, and nothing leaves this PC.");
+    "Paste some text and Jarvis writes a few questions about it. Your answers are marked by the model on this PC. Nothing is saved unless you choose Keep, nothing is learned, and nothing leaves this PC.");
   assert.equal(OUTSIDE_LINE,
     "This text is treated as outside text: Jarvis never learns facts from it.");
   const html = read("src/brain.html");
@@ -105,7 +105,7 @@ await check("every error code of the contract has a plain sentence", async () =>
     assert.doesNotMatch(ERROR_WORDS[c], /_|\{|\}|error|HTTP/i, `${c} is not plain words`);
     assert.equal(errorWords({ ok: false, error: c, message: "x" }), ERROR_WORDS[c]);
   }
-  assert.match(ERROR_WORDS.model_unavailable, /Nothing was lost/);
+  assert.match(ERROR_WORDS.model_unavailable, /Nothing was changed/);
   assert.equal(errorWords({ ok: false, error: "brand_new", message: "The PC says so." }), "The PC says so.");
   assert.match(errorWords(null), /could not/);
 });

@@ -18,7 +18,7 @@
 export const QUIZ_TITLE = "Quiz me on a text";
 export const QUIZ_INTRO =
   "Paste some text and Jarvis writes a few questions about it. Your answers are marked by the model " +
-  "on this PC. Nothing is saved or learned, and nothing leaves this PC.";
+  "on this PC. Nothing is saved unless you choose Keep, nothing is learned, and nothing leaves this PC.";
 export const START_LABEL = "Write questions";
 export const ANSWER_LABEL = "Check my answer";
 export const FINISH_LABEL = "Finish";
@@ -85,7 +85,7 @@ export const ACCENTS = Object.freeze(["á", "é", "í", "ó", "ú", "ñ", "ü", 
 export const SPANISH_WRITING = "Writing Spanish questions on this PC. This can take a little while.";
 export const SPANISH_INTRO =
   "Type your answers in Spanish. Paste some Spanish text of your own and the questions come from it, " +
-  "or leave the box empty and Jarvis writes the sentences. Nothing is saved or learned, and nothing leaves this PC.";
+  "or leave the box empty and Jarvis writes the sentences. Nothing is saved unless you choose Keep, nothing is learned, and nothing leaves this PC.";
 export const OLD_PC_SPANISH =
   "Your PC's Jarvis does not have Spanish practice yet - run apply-patches.ps1 on the PC.";
 export const ACCENT_ROW_LABEL = "Spanish letters";
@@ -172,7 +172,7 @@ export const ERROR_WORDS = Object.freeze({
   answer_empty: "Type an answer first.",
   answer_too_long: "That answer is too long. Keep it to 2,000 characters or fewer.",
   model_unavailable:
-    "The model on this PC did not answer. Nothing was lost - try again in a moment.",
+    "The model on this PC did not answer. Nothing was changed - try again in a moment.",
 });
 
 /** The words to show for a refusal `{ok:false, error, message}`. */

@@ -54,6 +54,7 @@ the PC run above.
 | 2026-09-27 | The memory review's fixes (docs/MEMORY-REVIEW-2026-09-27.md: bugs B1-B15 and B17; improvements I1, I3-I7, I12, I13 kept, I2 not kept) | build machine, words only | **80.9%** (79.8-77.7% at 171-1,071 facts) | **7/10** | **10/10 (0 wrong)** - wrong now also counts a newer fact handed over unlabelled: 3 before the fixes | **80/80** (27 new cases; 60/80 before the fixes) |
 | 2026-09-27 | Re-run after the later learning and memory changes: "passing moods are not facts" in the learner's instructions (I154), crisis messages never learned (I151), "Between us" and the "From now on" / humour settings (docs/QUALITY-AUDIT-2026-09-27.md, section 8) | build machine, words only | 80.9% (unchanged) | 7/10 (unchanged) | 10/10, 0 wrong (unchanged) | 80/80 (unchanged) |
 | 2026-09-28 | Smarter memory dates: "true until" end dates (a label, never a hide), "Where did I put ...?" (a newer place replaces the older one; answered without the model), "put / placed / stored ..." read as a change by "true from", and the overnight tidy's "Which is true now?" finder (docs/JARVIS-API.md sections 77-79) | build machine, words only | 80.9% (unchanged; 79.8-77.7% at 171-1,071, unchanged) | 7/10 (unchanged) | 10/10, 0 wrong (unchanged) | 80/80 of the old cases (unchanged) **+10/10 "things that move" +12/12 "true until"** |
+| 2026-09-30 | Topic controls (docs/TOPIC-CONTROLS-DESIGN.md, JARVIS-API section 107): a mode per topic, kept out of the search itself; every topic on "Learn and use" | build machine, words only | 80.9% (unchanged; 79.8-77.7% at 171-1,071, unchanged) | 7/10 (unchanged) | 10/10, 0 wrong (unchanged) | 103/103 of the old cases (unchanged) **+13/13 "topic" cases** |
 
 The 2026-09-28 row, in words: every number the self-test compares was the
 same before and after (the run with `--against` the one before: 110 numbers
@@ -123,6 +124,53 @@ What is not known yet, and waits for the PC run:
 - **How well the real 8B model picks facts out of a conversation.** The
   learner cases above use a stand-in for the model's one judgement call (is
   this a sensitive topic?). `--learner-model` runs the real one.
+
+
+### Topic controls, 2026-09-30 (memory change: kept only because no number moved)
+
+The rule (CLAUDE.md, 2026-09-26): a memory change is kept only if it does not make the numbers worse.
+This change puts a filter inside the search (`MemoryStore.search(topics="use")`, the default), so it had
+to be proved harmless when nothing is switched off, and proved to work when something is.
+
+**With every topic on "Learn and use"** (how it ships; `eval_memory.py --words-only --sizes 0,100,1000`,
+before and after): every level of the main self-test is identical - recall@1 / recall@5 (73.4 / 72.3 /
+72.3 % neutral, 73.4 / 71.3 / 70.2 % same-topic, with the word floor; 80.9 / 79.8 / 79.8 and 80.9 / 78.7
+/ 77.7 % with the entity layer), MRR, "replaced came back", past / as-of found, the bigger test (7/10
+two-fact, 10/10 or 9/10 time, 0 wrong versions), don't-know numbers, the floor sweeps, the "where did I
+put" and tidy parts, and all 103 older learner cases (the run with `--against` the earlier one reports
+nothing worse). The new part (`backend/eval_topics.py`) also checks, at every size, that the facts a
+chat turn recalls with topics seeded and every topic on are **exactly** those of a memory with no topic
+tables: same facts, same order, same scores.
+
+**With Work switched off, and with Work on "Learn, but don't use"** (made-up person, Work = 8 of the 71
+facts; the run with Work on shows 35 Work facts reaching answers, so a zero is not a test that cannot
+fail):
+
+| Filler | Facts | Work facts in answers, Work on | Leaks, Work off | Leaks, Work "don't use" | Pinned Work fact leaks | Recall@5 on questions about topics that stay on (117) | Work-only questions with no Work fact back |
+|---|---|---|---|---|---|---|---|
+| 0 | 71 | 35 | **0** | **0** | no | 100 -> 100 | 11/11 |
+| 100 | 171 | 35 | **0** | **0** | no | 98 -> 98 | 11/11 |
+| 1,000 | 1,071 | 35 | **0** | **0** | no | 97 -> 97 | 11/11 |
+
+Search time (p50, ms), Work off, Work only 8 facts: 1.43 -> 1.44 at 71 facts, 1.41 -> 1.37 at 171,
+1.77 -> 1.62 at 1,071, 2.00 -> 2.19 at 10,071 (p95 6.05 -> 6.49) - inside the run-to-run noise. With a
+BIG blocked topic (a third of 10,071 facts, 3,362, filed under Work and switched off) the search costs
+more: p50 1.79 -> 3.43 ms, p95 4.99 -> 6.36 ms (words only, one build-machine run). That is the price of
+working out which facts are blocked on every search; it is a few milliseconds, not measured on the
+owner's PC, and a cache of the blocked set is the obvious next step if it ever matters.
+
+**The learner** (`eval/learner_cases.jsonl`, kind `topic`): 13/13 - a fact sure to belong to a topic set
+to "don't learn" is dropped before the queue and nothing is saved; a fact that only might belong to it
+is a card with the reason; `Remember:` on it asks first; a topic on "Learn, but don't use" still
+learns; with no topic switched off nothing differs; the sensitive gate still applies in every mode.
+Older learner kinds: 6/6, 4/4, 8/8, 37/37, 14/14, 12/12, 10/10, 12/12 (unchanged).
+
+**Not measured, said plainly.** How well the sorting rules guess on REAL facts: the made-up set
+(`backend/topic_cases/`, 94 facts, and the 33 labelled facts of the self-test) is small, English, and
+was written alongside the rules, so its numbers flatter them (Work, Family, Money, Projects filed right
+in every case; Hobbies 9/14, Ideas 3/8, Health 11/12 - the misses are left Unsorted or filed under a
+neighbour). Run `tools/topic_accuracy.py` on the PC, with your own lines added. The real embedding
+model, the real re-ranker and the real learner model were not used (words only).
 
 ### LoCoMo "link two facts" questions (milestone 13, added 2026-09-28)
 

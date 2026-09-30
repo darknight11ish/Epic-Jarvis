@@ -1740,6 +1740,9 @@ class MemoryStore:
         text = " ".join(str(text).split())
         if not text:
             raise ValueError("refusing to store an empty fact")
+        # Kept under its own name: the code below reuses `topic` for the
+        # sensitive-topic label a held-back card carried.
+        file_under = topic
         now = time.time()
         meta = dict(meta or {})
         said = None
@@ -1870,7 +1873,7 @@ class MemoryStore:
             # older news: it is history from the start, like a retired fact.
             if older_than is None:
                 self._link_safely(c, fid, text)
-            self._file_topic_safely(c, fid, text, meta, topic, supersedes)
+            self._file_topic_safely(c, fid, text, meta, file_under, supersedes)
             c.commit()
             try:
                 waiting = c.execute("SELECT 1 FROM entity_merge_asks"

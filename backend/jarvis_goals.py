@@ -463,6 +463,17 @@ def _read_bench(project: str, bench: str):
     return jarvis_projects.get().results(project, bench, 1)
 
 
+def _leave_balance_chart(goal_id: str) -> None:
+    """A stopped goal leaves the owner's balance chart (JARVIS-API section
+    105.2). Best effort: the chart also drops it the next time it is read, so
+    a failure here loses nothing."""
+    try:
+        import jarvis_projects
+        jarvis_projects.get().axes_drop_goal(goal_id)
+    except Exception:
+        pass
+
+
 class Goals:
     """CRUD for goals, plus the weekly check-in's on_fire. `path`, `clock`
     and `scheduler` are replaceable for the tests - no test needs a real
@@ -590,6 +601,13 @@ class Goals:
             goal_text = row["text"]
         clean = (clean_plan(plan, current_plan, self.now(), self._check_measure)
                  if plan is not None else current_plan)
+        # A step saved already done in the draft was "done" when the draft was
+        # made, not when the owner accepted it. It is dated at accept time - the
+        # moment the owner took the plan on (design "Audit amendments") - so a
+        # pasted or suggested draft never carries a creation-day date onto the
+        # activity heatmap (which counts only accepted goals).
+        stamp = self.now()
+        clean = [dict(st, done_at=(stamp if st.get("done") else None)) for st in clean]
         if self._scheduler is None:
             raise RuntimeError("the scheduler is not available")
         # has_text=True: the job's own text is the goal's own words (never a
@@ -663,6 +681,7 @@ class Goals:
             except Exception:
                 pass
         self._audit("goals.stop", {"id": goal_id})
+        _leave_balance_chart(goal_id)
         return self.get(goal_id)
 
     # ---- the weekly check-in -------------------------------------------------

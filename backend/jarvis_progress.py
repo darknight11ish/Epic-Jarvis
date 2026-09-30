@@ -41,6 +41,7 @@ choice, like sorting a list: no approval card. The audit log gets counts only.
 """
 from __future__ import annotations
 
+import contextlib
 import datetime as _dt
 import json
 import math
@@ -108,6 +109,13 @@ WORDS = {
     "no_choices": "Nothing to pick from yet. Give a number a target, or accept a goal.",
     "hidden": "Hidden while memory lists and chat history are hidden.",
     "private": "Health or money: kept on screen, never read aloud or sent anywhere.",
+    # The screens' own lines (the PC never sends them; both apps carry them word for word).
+    "saved": "Chart saved.",
+    "cleared": "Chart cleared.",
+    "read_failed": "Could not read the Progress pictures: ",
+    "refresh": "Refresh",
+    "show": "Show",
+    "still_hidden": "Still hidden. If Jarvis is locked, unlock it first, then press Show.",
     "summary_heat": "Activity, last {weeks} weeks. {total}",
     "summary_balance": "Balance chart, {n} areas. {items} No overall score.",
 }
@@ -261,6 +269,8 @@ def activity(weeks=WEEKS_DEFAULT, *, now: float, tz=None, projects=None, goals=N
         private = private or bool(sensitive)
 
     for goal in _goal_list(goals):
+        if goal.get("status") != "active":
+            continue          # a draft or a stopped goal counts nothing (design, audit amendments)
         for st in goal.get("plan") or []:
             if not st.get("done"):
                 continue
@@ -406,8 +416,8 @@ def _resolve(a: dict, p, goals_by_id: dict) -> Optional[dict]:
         core = _bench_axis(b)
     else:
         g = goals_by_id.get(a["ref"])
-        if g is None or g.get("status") == "draft":
-            return None
+        if g is None or g.get("status") != "active":
+            return None       # gone, still a draft, or stopped: it leaves the chart
         core = _goal_axis(g)
     label = _short(a.get("label") or core["default_name"], MAX_LABEL)
     return {"label": label, "short": _short(label, MAX_SHORT), "name": _short(core["default_name"], 60), "kind": a["kind"],
@@ -416,7 +426,17 @@ def _resolve(a: dict, p, goals_by_id: dict) -> Optional[dict]:
             "keep_on_screen": core["keep_on_screen"]}
 
 
-def choices(p, goals_list: list, picked: set) -> list:
+def _pickable_goal(g: dict) -> bool:
+    """A goal the chart can follow: accepted (active) and with steps. The one
+    rule for the picker and for a save."""
+    return g.get("status") == "active" and bool(g.get("plan"))
+
+
+def choices(p, goals_list: list, picked: set, axes=()) -> list:
+    """What the picker offers. Past MAX_CHOICES the list is cut, but an area
+    already on the chart is never cut (it is always offered, so the owner can
+    always untick it); a picked number that has lost its target is offered
+    too, so it does not vanish from the picker while it is still drawn."""
     out = []
     for b in p.progress_benchmarks():
         out.append({"kind": "bench", "ref": b["id"], "project": b["project"],
@@ -424,13 +444,42 @@ def choices(p, goals_list: list, picked: set) -> list:
                     "picked": ("bench", b["id"]) in picked,
                     "keep_on_screen": bool(b["sensitive"])})
     for g in goals_list:
-        if g.get("status") != "active" or not g.get("plan"):
+        if not _pickable_goal(g):
             continue
         out.append({"kind": "goal", "ref": g["id"], "project": "", "project_name": "",
                     "name": _short(g.get("text", ""), 60),
                     "picked": ("goal", g["id"]) in picked,
                     "keep_on_screen": _goal_axis(g)["keep_on_screen"]})
-    return out[:MAX_CHOICES]
+    have = {(c["kind"], c["ref"]) for c in out}
+    for a in axes:
+        if (a["kind"], a["ref"]) in have:
+            continue
+        pn = ""
+        if a["kind"] == "bench":
+            b = p.progress_bench(a["ref"])
+            pn = b["project_name"] if b else ""
+        out.append({"kind": a["kind"], "ref": a["ref"], "project": a.get("project", ""),
+                    "project_name": pn, "name": a["name"], "picked": True,
+                    "keep_on_screen": bool(a["keep_on_screen"])})
+    if len(out) <= MAX_CHOICES:
+        return out
+    room = MAX_CHOICES - sum(1 for c in out if c["picked"])
+    kept = []
+    for c in out:
+        if c["picked"]:
+            kept.append(c)
+        elif room > 0:
+            kept.append(c)
+            room -= 1
+    return kept
+
+
+def _store_lock(p):
+    """The projects store's own lock, so reading the chart, closing its gaps
+    and writing it back cannot interleave with a save. A stand-in without one
+    gets no lock."""
+    lock = getattr(p, "_lock", None)
+    return lock if lock is not None else contextlib.nullcontext()
 
 
 def balance(*, projects=None, goals=None) -> dict:
@@ -438,20 +487,25 @@ def balance(*, projects=None, goals=None) -> dict:
     is gone are dropped from the stored chart here (and there), so a
     deleted thing never leaves a hollow spoke."""
     p = projects if projects is not None else _projects()
+    # The goals are read BEFORE the projects lock is taken (the goals store
+    # takes the projects store's lock while it works, never the other way round).
     goals_list, goals_ok = _goal_state(goals)
     by_id = {g["id"]: g for g in goals_list}
-    stored = p.axes_read()
     axes, keep = [], []
-    for a in stored:
-        if a["kind"] == "goal" and not goals_ok:
-            continue          # cannot tell: leave it stored, do not draw it
-        r = _resolve(a, p, by_id)
-        if r is None:
-            continue
-        axes.append(r)
-        keep.append(a)
-    if goals_ok and len(keep) != len(stored):
-        p.axes_write(keep)
+    with _store_lock(p):
+        # Read, filter and write back under the one lock a save takes, so a
+        # save that lands in between is never undone by this clean-up.
+        stored = p.axes_read()
+        for a in stored:
+            if a["kind"] == "goal" and not goals_ok:
+                continue          # cannot tell: leave it stored, do not draw it
+            r = _resolve(a, p, by_id)
+            if r is None:
+                continue
+            axes.append(r)
+            keep.append(a)
+        if goals_ok and len(keep) != len(stored):
+            p.axes_write(keep)
     picked = {(a["kind"], a["ref"]) for a in axes}
     drawable = len(axes) >= MIN_AXES
     items = " ".join(f"{a['label']}: {a['value_words']}." for a in axes)
@@ -466,7 +520,7 @@ def balance(*, projects=None, goals=None) -> dict:
         "axes": axes, "drawable": drawable, "min": MIN_AXES, "max": MAX_AXES,
         "max_label": MAX_LABEL, "words": line,
         "summary": (WORDS["summary_balance"].format(n=len(axes), items=items) if axes else line),
-        "choices": choices(p, goals_list, picked),
+        "choices": choices(p, goals_list, picked, axes),
         "keep_on_screen": any(a["keep_on_screen"] for a in axes),
         "hidden_words": WORDS["hidden"],
     }
@@ -493,32 +547,33 @@ def set_balance(body, *, projects=None, goals=None) -> dict:
     if len(raw) and not MIN_AXES <= len(raw) <= MAX_AXES:
         raise Refused(WORDS["balance_limit"])
     p = projects if projects is not None else _projects()
-    by_id = {g["id"]: g for g in _goal_list(goals)}
+    by_id = {g["id"]: g for g in _goal_list(goals)}       # before the lock, as in balance()
     seen, keep = set(), []
-    for item in raw:
-        if not isinstance(item, dict):
-            raise Refused("each area is an object with a kind and a ref")
-        kind, ref = item.get("kind"), item.get("ref")
-        if kind not in ("bench", "goal") or not isinstance(ref, str):
-            raise Refused('each area is {"kind": "bench" or "goal", "ref": its id}')
-        if (kind, ref) in seen:
-            raise Refused("Each area can be on the chart once.")
-        seen.add((kind, ref))
-        label = _label(item.get("label"))
-        if kind == "bench":
-            b = p.progress_bench(ref) if _ID.fullmatch(ref) else None
-            if b is None:
-                raise Refused("One of those numbers is gone.")
-            if not (_finite(b["target"]) and b["better"] in ("higher", "lower")):
-                raise Refused(f'Give "{_short(b["name"], 40)}" a target and say which way is '
-                              "better first - the chart measures each area against its target.")
-            keep.append({"kind": "bench", "project": b["project"], "ref": ref, "label": label})
-        else:
-            g = by_id.get(ref) if _GOAL.fullmatch(ref) else None
-            if g is None or g.get("status") != "active":
-                raise Refused("One of those goals is gone or not accepted yet.")
-            keep.append({"kind": "goal", "project": "", "ref": ref, "label": label})
-    p.axes_write(keep)
+    with _store_lock(p):
+        for item in raw:
+            if not isinstance(item, dict):
+                raise Refused("each area is an object with a kind and a ref")
+            kind, ref = item.get("kind"), item.get("ref")
+            if kind not in ("bench", "goal") or not isinstance(ref, str):
+                raise Refused('each area is {"kind": "bench" or "goal", "ref": its id}')
+            if (kind, ref) in seen:
+                raise Refused("Each area can be on the chart once.")
+            seen.add((kind, ref))
+            label = _label(item.get("label"))
+            if kind == "bench":
+                b = p.progress_bench(ref) if _ID.fullmatch(ref) else None
+                if b is None:
+                    raise Refused("One of those numbers is gone.")
+                if not (_finite(b["target"]) and b["better"] in ("higher", "lower")):
+                    raise Refused(f'Give "{_short(b["name"], 40)}" a target and say which way is '
+                                  "better first - the chart measures each area against its target.")
+                keep.append({"kind": "bench", "project": b["project"], "ref": ref, "label": label})
+            else:
+                g = by_id.get(ref) if _GOAL.fullmatch(ref) else None
+                if g is None or not _pickable_goal(g):
+                    raise Refused("One of those goals is gone, stopped or not accepted yet.")
+                keep.append({"kind": "goal", "project": "", "ref": ref, "label": label})
+        p.axes_write(keep)
     return balance(projects=p, goals=goals)
 
 

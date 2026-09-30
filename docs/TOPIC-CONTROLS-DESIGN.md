@@ -1,11 +1,13 @@
 # Topic controls: include or exclude topics in Jarvis's brain (design, 2026-09-30)
 
-Status: **designed, not built.** The owner asked (2026-09-30): "add the ability
-to adjust the brain of Jarvis to include or exclude different topics". Nothing
-here is a decision to build; section 12 lists what the owner must still answer.
-No code was written or run for this document. Everything below about existing
-code was read in the files named, on 2026-09-30; what was not checked is in
-section 13.
+Status: **backend built 2026-09-30; the two apps are next.** The owner asked
+(2026-09-30): "add the ability to adjust the brain of Jarvis to include or exclude
+different topics". The backend (JARVIS-API section 107) is built and tested; the
+last section of this file, **"Slice contract (frozen)"**, is what the apps are
+built against and wins over anything above it where they differ (its last part
+lists the differences). Everything below about existing code was read in the files
+named, on 2026-09-30; what was not checked is in section 13, and what the build
+found is at the end of the contract.
 
 ## In short
 
@@ -575,3 +577,185 @@ Ask two at a time; recommendation first.
   merge cards was reasoned from the code and the architecture notes, not run.
 - `JARVIS-API` §107 is reserved by the request; I did not check other open
   branches for a clash beyond `docs/BUILD-QUEUE-2026-09-30.md`.
+
+
+## Slice contract (frozen)
+
+Written 2026-09-30, after the backend was built. **This is what the two apps are built against.** It describes what the backend does today (`backend/jarvis_topics.py`, the rebuilt `jarvis_memory.py`, `topics.patch`; `docs/JARVIS-API.md` section 107 has the same shapes in prose). Where it differs from the design above, this section wins; the differences are listed at the end. A shape changes only together with the backend, `tools/gen_topics_cases.py` (which writes the shared fixture `topics-cases.json` into both apps) and this section.
+
+### C1. Who builds what
+
+| Piece | Backend (done) | Desktop app | Phone app |
+|---|---|---|---|
+| Brain -> Memory -> **Topics** section: rows, the four-choice picker, "Check these", "Show them", add / rename / colour / reorder / delete | routes below | `topics.js`, `brain.html` / `brain.js` / `brain.css` (Memory tab), `src-tauri/src/brain/topics.rs` (+ `routes.rs` allowlist, `capabilities/brain.json`, `permissions/*.toml`) | `net/Topics.kt`, `ui/screens/TopicsPlate.kt` (with `AutoLearnPlate` / `MemoryCountsPlate`), `net/JarvisApi.kt`, `JarvisRuntime.kt` |
+| "Left out N facts because of your topic settings" in the "Used" area, from `topics_left_out` in the chat route header | `X-Jarvis-Route` field | reader in `commands.rs` (route keys + its test) | `net/ChatSession.kt` |
+| The picker opened by asking Jarvis ("switch off my work topic") | `open_brain: "topics"`, `topic_id` in the route header | same whitelist as above | same reader as above |
+| A topic-question card ("This might be about Work, which you set to not learn.") | pending row gains `topic_ask: true` | relabel its two buttons | relabel its two buttons |
+| Lists: the "not used in answers" tag, pins "paused", "Used" for a switched-off topic, `topics_hidden` | fields below | the existing lists | the existing lists |
+| Keyword editing (`words`) | route takes it | **yes** (add / edit dialog) | **no**: shows `Keywords are set on your PC.` (deep configuration; ARCHITECTURE.md section 8) |
+| The Galaxy | `GET /api/memory/entities` already leaves out people linked only to an Off topic's facts | nothing to do | **none** (standing rule) |
+| Tests | `test_topics.py`, `test_topics_leaks.py`, `eval_topics.py`, learner cases | `tests/topics.mjs` reading `tests/fixtures/topics-cases.json`; Rust unit tests | `TopicsContractTest.kt` reading `contract/topics-cases.json` |
+| `tools/check_parity.py` | the seven `/api/topics*` rows are `planned` | each app that calls a route lets its row become `ported` | same |
+
+Every phone Kotlin change is unverified until CI compiles it (no local Android build here).
+
+### C2. Shapes (exact)
+
+`Topic` (a row of `topics`):
+
+```json
+{"id": 2, "name": "Work", "colour": 0, "icon": "briefcase", "mode": "both",
+ "private": false, "words": ["standup"], "ord": 1, "system": false, "created": 1790000000.0,
+ "facts": 41, "unchecked": 3, "hidden": false, "skipped_week": 0}
+```
+
+`mode` is one of `both`, `use_only`, `learn_only`, `off`. `hidden` is true exactly when `mode` is `off`. `facts` counts facts in use (a Forgotten or erased one is not counted); `unchecked` is how many of them Jarvis sorted by guessing and the owner has not checked (always 0 for Unsorted); `skipped_week` is how many new things were not saved for this topic in the last 7 days (a count - never words). Unsorted is `{"id": 1, "system": true, "name": "Unsorted", ...}` and is always first; the others follow in `ord`.
+
+`GET /api/topics` -> `200`:
+
+```json
+{"ok": true, "topics": [Topic, ...], "unchecked": 38, "facts": 230, "sorted": 212,
+ "model_help": false, "backfill": {"done": true, "remaining": 0},
+ "limits": {"max_topics": 16, "name_max": 24, "words_max": 20, "batch": 10, "colours": 8,
+            "icons": ["briefcase", "book", "home", "folder", "lightbulb", "star", "flag", "wrench", "leaf", "music", "heart", "coin", "people"]},
+ "modes": [{"id": "both", "name": "Learn and use", "sentence": "..."}, ...],
+ "waiting": null,
+ "last": null}
+```
+
+`waiting` is `{"topic": <id>, "kind": "mode" | "private_clear" | "delete" | "file"}` while one approval card is up, else `null`. `last` is `{"outcome": "applied" | "denied" | "timed_out" | "refused" | "withdrawn" | "failed", "why": str, "at": float, "message": str}` for the most recent card, else `null`; show `message` (it is the PC's own sentence). `unchecked` is the sum over topics other than Unsorted; `sorted` is `facts` minus Unsorted's.
+
+Every successful write answers `200` with the same body as `GET /api/topics` plus `"id"` (the topic touched) and, per route: `"changed": bool` (mode), `"deleted": id`, `"filed": n`, `"confirmed": n`. A write that raised a card answers **`202 {"ok": true, "waiting": true, "id": <topic>, "kind": <kind>, "message": "Waiting for your approval."}`**: nothing has changed yet. After a 202 the app shows `words.waiting` on that topic, then reads `GET /api/topics` every 2 seconds (and whenever its approvals list changes) until `waiting` is `null`, shows `last.message`, and redraws.
+
+Requests (all JSON, all `POST` are held on a stale link):
+
+| route | body | notes |
+|---|---|---|
+| `POST /api/topics` | `{"op": "add", "name": str, "colour"?: 0-7, "icon"?: str, "words"?: [str], "private"?: bool}` | 200 with `"id"` = the new topic. Colour defaults to the next slot, icon to `folder`. |
+| | `{"op": "rename", "id", "name"}` | |
+| | `{"op": "style", "id", "colour"?, "icon"?}` | |
+| | `{"op": "move", "id", "before": id \| null}` | reorder; `null` = last |
+| | `{"op": "words", "id", "words": [str]}` | desktop only |
+| | `{"op": "private", "id", "private": bool}` | `true` at once; `false` -> 202 + card |
+| | `{"op": "delete", "id", "move_to": id}` | its facts move to `move_to`, none are deleted. 202 + card when `move_to` is looser than the deleted topic AND the deleted topic is private |
+| `POST /api/topics/mode` | `{"id": int, "mode": str}` | 200 or 202 as above |
+| `POST /api/topics/file` | `{"ids": [int] (1..200), "topic_id": int}` | file by the owner's tap. A batch of MORE THAN ONE leaving a private topic for a looser one -> 202 + card |
+| | `{"ids": [int], "confirm": true}` | "These are right" |
+| `POST /api/topics/settings` | `{"model_help": bool}` | the "Let Jarvis's local model help sort" switch; no card |
+| `GET /api/topics/preview` | `?id=<int>&mode=<mode>` | below |
+| `GET /api/topics/review` | `?after=<cursor>&limit=10` | below |
+| `GET /api/topics/hidden` | `?id=<int>&after=<fact id>&limit=100` | below |
+
+`GET /api/topics/preview` -> `{"ok": true, "id", "mode", "affected": int, "pinned": int, "stops_learning": bool, "loosens": bool, "needs_card": bool, "private": bool, "line": str, "card_line": str}`. `line` is the sentence to show under the picker (built by the PC: "12 things Jarvis knows about Work will be left out of answers." plus, when they apply, "Jarvis will stop saving new things about Work." and "1 pinned fact about Work will pause until you switch it back on."); `card_line` is `"This will ask for your OK first."` when `needs_card`, else `""`. Show `line`, then `card_line` on its own line. Read it again each time the selection in the picker changes.
+
+`GET /api/topics/review` -> `{"ok": true, "facts": [{"id", "text", "saved_at", "topic": <suggested topic id>, "alt": id \| null, "how": "rule" \| "model", "checked": false, "held_back": bool}], "next": "<cursor>" \| null, "total": int, "batch": 10}`, ordered by `topic` then `id`, so the app groups by consecutive `topic`. `held_back` is true when the suggested topic may not be used in answers (so the fact is already being left out). Pass `next` as `after` for the next batch.
+
+`GET /api/topics/hidden` -> `{"ok": true, "id", "mode", "facts": [{"id", "text", "saved_at", "topic", "alt", "how", "checked", "held_back"}], "next": <fact id> \| null}` - the facts of one topic (used for "Show them" on an Off topic; any topic works).
+
+Errors: `{"ok": false, "error": <code>, "message": <sentence>}`. Show `message`; the app never invents its own sentence for a code (the sentences are also in the fixture, `errors`). `400`: `bad_request`, `bad_name`, `bad_colour`, `bad_icon`, `bad_words`, `bad_mode`, `needs_destination`, `bad_destination`; `404`: `topic_not_found`, `no_such_fact` (and an unknown route: the PC has no topic controls yet -> `words.missing`); `409`: `name_taken`, `too_many_topics`, `no_delete_unsorted`, `no_rename_unsorted`; `503`: `unavailable`, `gate_not_ask`, `no_card` (show the message).
+
+Other routes that change (all additive):
+
+| route | change |
+|---|---|
+| `GET /api/memory/facts` | facts of an **Off** topic are left out; each fact gains `"topic": <id>`; the reply gains `"topics_hidden": n` when n > 0 |
+| `GET /api/memory/export` | every fact gains `"topic"`; the reply gains `"topics": [{"id", "name", "mode", "private"}]` |
+| `GET /api/memory/auto` ("Saved automatically") | facts of an Off topic are left out |
+| `GET /api/memory/profile` (pins) | a pinned fact in a topic that may not be used gains `"paused": true` (still listed, not read with questions) |
+| `GET /api/memory/used?ids=` | a fact whose topic was switched off since has `"text": ""` and `"left_out": true` |
+| `GET /api/memory/pending` | a card asking "might be about a topic you set to not learn" gains `"topic_ask": true` |
+| `POST /api/chat` (`X-Jarvis-Route`) | gains `"topics_left_out": int`; a spoken "switch off my work topic" adds `"open_brain": "topics"` and `"topic_id": int` (nothing has changed) |
+
+### C3. States, per topic row
+
+| State | When | The row shows |
+|---|---|---|
+| Normal | `mode` `both` or `use_only`, not private | swatch + icon, name, `"{n} facts"`, the mode's name as a button |
+| Private | `private` | the same, plus `words.private_tag` ("Private") |
+| Not used | `mode` `learn_only` | plus `words.not_used_tag` ("not used in answers") |
+| Off | `mode` `off` (`hidden`) | plus `words.kept_hidden` ("{n} facts kept, hidden") and a `words.show_them` button that reads `/api/topics/hidden` |
+| Skipping | `skipped_week > 0` | `words.skipped` ("{n} new things not saved this week") |
+| Waiting | `waiting.topic == id` | `words.waiting` in place of the mode button's action; the picker cannot be reopened for this topic until it clears |
+| Lists hidden | "Hide memory lists and chat history" or App lock is on | see C5 |
+| Not available | the route is missing (older PC), or `503 unavailable` | one line, `words.missing`; no rows |
+| Sorting | `backfill.remaining > 0` | a line above the rows: `words.sorting_now` ({n}) |
+| To check | `unchecked > 0` | a line: `words.sorted_guess` (n = `unchecked`, total = `facts`) and the button `words.check_button` ({n} = `unchecked`) |
+
+Unsorted is a row like the others (fixed name, no rename / delete / private / keywords), listed first.
+
+### C4. The screens
+
+**Placement.** Brain -> Memory, a new "Topics" section beside "What Jarvis remembers" and "Saved automatically". Heading `words.title`, then `words.intro`.
+
+**The picker (the four choices, offered every time the owner changes a mode).** Tapping a row's mode button opens a small dialog: the topic's name, a radio list of the four `modes` (name as the label, `sentence` as its description), the current one selected. Choosing a different one reads `GET /api/topics/preview` and shows `line` and `card_line`. A **Change** button sends `POST /api/topics/mode`; **Cancel** does nothing. `200`: close and redraw. `202`: close, show the waiting state. An error: `message` in the dialog. Nothing is sent until Change is tapped. The picker always lists all four choices, in the order `both`, `use_only`, `learn_only`, `off`.
+
+**"Check these".** The `words.check_button`. Opens the review list: `GET /api/topics/review`, ten at a time, grouped under the suggested topic's name. Each fact shows its words, the tag `words.check_guessed` when `how` is `model`, and the line `words.check_held` (name = the suggested topic) when `held_back`. Two actions: **`words.check_right`** for the whole batch shown (`POST /api/topics/file {ids, confirm: true}`; no card) and, per fact, **File under...** (a list of the topics; `POST /api/topics/file {ids:[id], topic_id}`; at once). Then load the next batch with `next`. Empty: "Nothing to check." (app wording).
+
+**Show them.** On an Off topic: the facts of that topic (`/api/topics/hidden`), read-only, greyed with the label "Hidden from answers" (app wording), each with the app's existing Forget and "Erase the words" controls. Forget and Erase work on them.
+
+**Add a topic.** `words.add_button` opens `words.add_title`: name (`words.name_label`, at most `limits.name_max`), a colour from the palette, an icon from `icons`; on the desktop also `words.words_label`. The button is off at `limits.max_topics` topics of the owner's own (not counting Unsorted). The row menu holds Rename, Colour and icon, Move up / Move down, Mark private / Not private (Not private asks: `202`), Keywords (desktop only), and Delete.
+
+**Delete.** A confirm dialog with `words.confirm_delete` and `words.delete_where`: a radio list of the other topics (Unsorted included). For a destination whose mode is looser than the deleted topic's (compare with the `mode_cases` in the fixture, `loosens`) show `words.delete_looser` under it. `POST /api/topics {op: "delete", id, move_to}`.
+
+**The model switch.** A plain switch `words.model_help` with `words.model_help_note`; `POST /api/topics/settings {model_help}`; no card.
+
+**The chat.** When an answer's route header has `topics_left_out` > 0, add to the "Used" area (with "Used 2 memories"): `words.left_out` ({n}), or `words.left_out_one`. When the header has `open_brain: "topics"`: open Brain -> Memory -> Topics; with `topic_id`, open that topic's picker (changing nothing). "Left out" is a count, so it is not hidden by the lock settings.
+
+**Lists elsewhere.** In "What Jarvis knows about you" and "Saved automatically": a fact whose topic (its `topic` id, looked up in the topics view) is `learn_only` carries the small tag `words.not_used_tag`. `topics_hidden` > 0 adds a line `words.kept_hidden` ({n}) with a link to Topics. A paused pin shows `words.pin_paused` ({name}). A "Used" fact with `left_out: true` shows `words.used_left_out` instead of words. A pending card with `topic_ask: true` labels its Accept button `words.ask_save` and its Decline button `words.ask_skip`.
+
+**Screen reader.** A row's mode button reads `words.screen_reader` ("Work, 41 facts, Use but don't learn, button: change mode"). The picker is a radio group whose descriptions are the mode sentences. Never colour alone: the icon and the name always show.
+
+### C5. Hiding: "Hide memory lists and chat history", and App lock
+
+Topic **names are the owner's words**, so they are hidden with the other memory lists (desktop: the Rust side calls `lock::private_hidden`, as tags do; phone: the same setting). While hidden: each row shows `words.hidden_row` with `index` = its 1-based position among the owner's own topics (Unsorted keeps its fixed name), the count and the mode (`Topic 1, 41 facts, Use but don't learn`); the modes and the picker still work; "Check these", "Show them", the review list and the fact tags are **not shown at all**; the model switch stays. The phone's screenshots are already blocked while either setting is on.
+
+### C6. Words
+
+Every word is in the fixture, `words` (and `errors`, `modes`, `last_words`): `title`, `intro`, `sorted_guess`, `check_button`, `check_right`, `check_held`, `check_guessed`, `add_button`, `add_title`, `name_label`, `words_label`, `words_pc_only`, `private_tag`, `private_asks`, `unsorted_name`, `kept_hidden`, `show_them`, `not_used_tag`, `skipped`, `left_out`, `left_out_one`, `preview_*`, `help_plain`, `model_help`, `model_help_note`, `confirm_delete`, `delete_where`, `delete_looser`, `screen_reader`, `hidden_row`, `moved_line`, `pick_line`, `no_such_topic`, `topics_are`, `outside`, `missing`, `waiting`, `sorting_now`, `pin_paused`, `used_left_out`, `ask_save`, `ask_skip`. The four modes, exactly:
+
+| id | Name | Sentence |
+|---|---|---|
+| `both` | Learn and use | Jarvis remembers new things about this and uses them in answers. |
+| `use_only` | Use, but don't learn | Jarvis keeps what it knows and uses it, but saves nothing new. |
+| `learn_only` | Learn, but don't use | Jarvis keeps learning quietly, but leaves this out of its answers. |
+| `off` | Off | Jarvis neither learns nor uses this. What it knows is kept, not deleted, and comes back when you switch it on. |
+
+`help_plain` (shown in the section's help): "Topic names and facts are stored in the same plain file on this PC. Jarvis's sorting is a guess from the words, in English only; check it." Nothing in the apps says "classifier".
+
+### C7. The card (exact wording; the PC writes it, the apps show it word for word)
+
+The card is the PC's ordinary approval card, action `topic_loosen`, decided by tapping on either device (never by voice; no Windows Hello). Example, Health from "Learn, but don't use" to "Learn and use":
+
+```
+Turn Health back on for answers? Jarvis will use your Health facts again.
+
+Facts that count as sensitive are still kept on screen and not read aloud, and new ones still wait for your yes unless "Also remember sensitive topics automatically" is on.
+
+Health would become: Learn and use.
+If you say no: nothing about your topics changes.
+```
+
+A card that came from a change asked after Jarvis read outside text adds: `This was asked after Jarvis read outside text (an email, a web page, a file). Only say yes if it is what you want.` The card's title in "What asks first" comes from `jarvis_card_words.TITLES["topic_loosen"]`: "turn a private topic back on, or let it learn or be used again". When it ends, `GET /api/topics` `last.message` is one of `last_words` (in the fixture). The card is in "What asks first" (group "Jarvis's own settings, memory and voice"); it is **not** on the short list an app may loosen.
+
+### C8. Rules the apps must keep
+
+1. Stricter is at once, looser on a private topic is a card: **do not compute this in the app for anything but the label** "This will ask for your OK first." (the `mode_cases` in the fixture give the same answer as `preview.needs_card`); the PC decides.
+2. Every `POST` is held on a stale link (rule 4); the reads are not.
+3. Names and fact words are memory lists: hidden as in C5. A count is not.
+4. Never a bulk "make every topic ..." control; never a control that approves a card; the picker sends one topic at a time.
+5. The phone does not edit keywords and has no graph.
+6. The app never sends a topic's name anywhere but this PC; `topics_left_out` and `topic_id` are ids and counts.
+
+### C9. Tests each app adds
+
+Desktop `tests/topics.mjs` and the phone's `TopicsContractTest.kt`, both reading `topics-cases.json`: the four mode names and sentences; every `errors` code has its sentence; `mode_cases` (which changes show `card_line`); `name_cases` (the same name rule before sending); `words_cases` (desktop); `screen_reader_cases`, `hidden_row_cases`, `preview_cases`; and that the section is not drawn (names replaced) while lists are hidden. Rust unit tests for the new commands' allowlist and hidden-list rule.
+
+### C10. Where this differs from the design above
+
+* `POST /api/topics` `op: "move"` is **reorder** (`before`), and there is an `op: "words"`; filing facts is `POST /api/topics/file`. Two routes were added: `GET /api/topics/hidden` ("Show them") and `POST /api/topics/settings` (the model switch).
+* "Save under Unsorted" / "Skip it" are the existing card's Accept and Decline, relabelled by `topic_ask`; there is no separate card action.
+* Labelling the facts already saved is a quiet hourly `topic_sort` step on the one scheduler (`jarvis_schedule`), not a separate thread; it labels only.
+* `topics_left_out` counts the recall before the answer; a `memory_search` the model makes later is filtered the same way but not counted.
+* A change asked from outside text is a card even for a normal topic (`outside`); the voice door refuses outside text before it gets that far.
+* Not built: per-chat "leave out Work"; the topic phrases in the "what can I say" list (`jarvis_sayable`); non-English keywords; the topic-aware overnight tidy card.
+* **Not measured:** how well the sorting guesses on real facts (`tools/topic_accuracy.py` is the script; `backend/topic_cases/` the small made-up set); search time with a blocked topic on the owner's PC (on the build machine, with 10,071 facts and a third of them blocked, the median search went from 1.79 to 3.43 ms); the real embedding model, re-ranker and learner model were not used. Nothing ran on Windows or on a phone.

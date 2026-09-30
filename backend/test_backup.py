@@ -57,7 +57,8 @@ REPO = HERE.parent
 sys.path.insert(0, str(HERE))
 from _where import require_shipped  # noqa: E402
 require_shipped("jarvis_backup.py", "jarvis_documents.py", "jarvis_owner_check.py",
-                "jarvis_chat_log.py", "jarvis_token_store.py", "jarvis_card_words.py")
+                "jarvis_chat_log.py", "jarvis_token_store.py", "jarvis_card_words.py",
+                "jarvis_decks.py")
 sys.path.append(str(HERE / "rebuilt"))
 import _stack  # noqa: E402
 import jarvis_backup as B  # noqa: E402
@@ -292,15 +293,14 @@ def t_what_is_backed_up_and_what_is_excluded():
             continue
         opened |= set(_re.findall(r"[\"']([A-Za-z0-9_-]+\.db)[\"']",
                                   mod.read_text(encoding="utf-8")))
-    # Written down here on purpose: study.db (jarvis_decks.py, review decks,
-    # 2026-09-30) is NOT backed up yet. Its words are sealed under a Credential
-    # Manager key of their own, and QUIZ-DECKS-DESIGN.md section 4 leaves whether
-    # decks join the locked backup to the owner, when the backup is next touched.
-    NOT_BACKED_UP = {"study.db"}
+    # Nothing is written down as "not backed up" any more: study.db (review decks,
+    # jarvis_decks.py) joined the locked backup on 2026-09-30, the owner's decision,
+    # with its own key carried the way the chat-history key is.
+    NOT_BACKED_UP = set()
     check("every .db a backend module names is backed up (or written down here)",
           opened - NOT_BACKED_UP <= set(B.SOURCE_DBS), sorted(opened - NOT_BACKED_UP - set(B.SOURCE_DBS)))
-    check("... and the one written down here is really not on the list",
-          not (NOT_BACKED_UP & set(B.SOURCE_DBS)))
+    check("study.db (review decks) is on the list of databases backed up",
+          "study.db" in B.SOURCE_DBS and "study.db" in opened)
     check("the settings JSON is in", "settings/folders.json" in names)
     check("notes are in", "notes/todo.md" in names
           and zf_read(zip_bytes, "notes/todo.md") == b"buy milk")
@@ -325,15 +325,20 @@ def t_what_is_backed_up_and_what_is_excluded():
     # phrase in a comment or docstring, which may legitimately explain WHY
     # the pairing token and search keys are excluded.
     targets = re.findall(r"WindowsStore\(target=([\w.]+)\)", src)
-    check("the ONLY Credential Manager target this module ever opens is jarvis_chat_log's "
-          "own KEY_TARGET (never the pairing token's or a search provider's key)",
-          targets == ["jarvis_chat_log.KEY_TARGET"], targets)
+    check("the ONLY Credential Manager targets this module ever opens are jarvis_chat_log's "
+          "and jarvis_decks's own KEY_TARGET (never the pairing token's or a search provider's key)",
+          targets == ["jarvis_chat_log.KEY_TARGET", "jarvis_decks.KEY_TARGET"], targets)
+    import jarvis_decks
+    check("jarvis_decks.KEY_TARGET really is the study decks' own key, not the chat-history one",
+          jarvis_decks.KEY_TARGET == "Jarvis Backend/study decks key"
+          and jarvis_decks.KEY_TARGET != jarvis_chat_log.KEY_TARGET)
     check("jarvis_chat_log.KEY_TARGET really is the chat-history key, not some other secret",
           jarvis_chat_log.KEY_TARGET == "Jarvis Backend/chat history key")
-    check("CredentialKey() (used to READ the key for backup) is jarvis_chat_log's own class, "
-          "which only ever opens its own KEY_TARGET - never called with any other target here",
-          "jarvis_chat_log.CredentialKey()" in src and "CredentialKey(" not in src.replace(
-              "jarvis_chat_log.CredentialKey(", ""))
+    reads = re.findall(r"jarvis_chat_log\.CredentialKey\(([^)]*)\)", src)
+    check("CredentialKey (used to READ a key for backup) is jarvis_chat_log's own class, called "
+          "with no target (the chat-history key) or with jarvis_decks.KEY_TARGET - no other target",
+          sorted(reads) == ["", "jarvis_decks.KEY_TARGET"] and "CredentialKey(" not in src.replace(
+              "jarvis_chat_log.CredentialKey(", ""), reads)
 
 
 def zf_read(zip_bytes: bytes, name: str) -> bytes:
@@ -361,6 +366,180 @@ def t_the_chat_history_key_is_carried_but_only_inside_the_lock():
     import base64
     check("it decodes back to the 32 bytes, base64 only inside the (soon encrypted) zip",
           base64.b64decode(raw) == b"\x01" * 32)
+
+
+# ======================================================== 4b. the review decks travel with the backup
+
+class _FakeCredentials:
+    """Stands in for Windows Credential Manager: one dict of target -> text, for
+    the read side (jarvis_chat_log.CredentialKey) and the write side
+    (jarvis_token_store.WindowsStore)."""
+
+    def __init__(self):
+        self.items = {}
+        self.reads = []
+        self.fail_writes = False
+
+    def __enter__(self):
+        import base64
+        import jarvis_chat_log
+        import jarvis_token_store as ts
+        self._real = (jarvis_chat_log.CredentialKey, ts.WindowsStore)
+        me = self
+
+        def credential_key(target=jarvis_chat_log.KEY_TARGET, store_factory=None):
+            def read():
+                me.reads.append(target)
+                if target not in me.items:
+                    raise RuntimeError("no such key")
+                return base64.b64decode(me.items[target])
+            return read
+
+        class Store:
+            def __init__(self, target):
+                self.target = target
+
+            def write(self, text):
+                if me.fail_writes:
+                    raise RuntimeError("Credential Manager refused")
+                me.items[self.target] = text
+
+        jarvis_chat_log.CredentialKey = credential_key
+        ts.WindowsStore = lambda target=None: Store(target)
+        return self
+
+    def __exit__(self, *a):
+        import jarvis_chat_log
+        import jarvis_token_store as ts
+        jarvis_chat_log.CredentialKey, ts.WindowsStore = self._real
+
+
+def _make_deck(conf: Path, key: bytes, name="Plants", front="What absorbs sunlight?"):
+    import jarvis_decks as DK
+    d = DK.Decks(conf / "study.db", lambda: key, scheduler=types.SimpleNamespace(
+        jobs_of=lambda kind: [], act=lambda *a: None, add_repeat=lambda *a, **k: None))
+    v = d.create_deck(name)
+    d.keep({"deck": v["id"]}, [{"n": 1, "front": front, "back": "chlorophyll",
+                                "passage": "Chlorophyll absorbs sunlight.", "kind": "recall"}])
+    return d, v["id"]
+
+
+def t_the_study_decks_are_backed_up_with_their_own_key():
+    import base64
+    import jarvis_decks as DK
+    conf, backups = fresh_conf()
+    make_memory_db(conf)
+    key = b"\x07" * 32
+    _make_deck(conf, key)
+    with _FakeCredentials() as cm:
+        cm.items[DK.KEY_TARGET] = base64.b64encode(key).decode()
+        cm.items["Jarvis Backend/chat history key"] = base64.b64encode(b"\x01" * 32).decode()
+        zip_bytes, manifest = B.build_archive()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = zf.namelist()
+    check("study.db and the decks' own key are in the archive; the manifest says so",
+          "db/study.db" in names and "secrets/study-decks-key.b64" in names
+          and manifest["study_decks_key"] is True and "cards" in manifest["databases"]["study.db"], manifest)
+    check("the key file holds the decks' key, not the chat-history key",
+          base64.b64decode(zf_read(zip_bytes, "secrets/study-decks-key.b64")) == key)
+    check("the words in the archived study.db are still sealed (no plain question in it)",
+          b"absorbs sunlight" not in zf_read(zip_bytes, "db/study.db")
+          and b"Plants" not in zf_read(zip_bytes, "db/study.db"))
+
+    # no study.db: no key is read for it (a backup never makes a key for decks nobody has)
+    conf2, _b2 = fresh_conf()
+    make_memory_db(conf2)
+    with _FakeCredentials() as cm:
+        cm.items["Jarvis Backend/chat history key"] = base64.b64encode(b"\x01" * 32).decode()
+        zb, man = B.build_archive()
+        asked = list(cm.reads)
+    check("no study.db: nothing about decks in the archive and the decks' key was never asked for",
+          "db/study.db" not in zipfile.ZipFile(io.BytesIO(zb)).namelist() and man["study_decks_key"] is False
+          and DK.KEY_TARGET not in asked, asked)
+
+    # study.db present but its key cannot be read: the file is left out, not carried unopenable
+    conf3, _b3 = fresh_conf()
+    make_memory_db(conf3)
+    _make_deck(conf3, key)
+    with _FakeCredentials() as cm:
+        zb, man = B.build_archive()
+    check("study.db without a readable key is not archived (a restore would replace a working file with an unopenable one)",
+          "db/study.db" not in zipfile.ZipFile(io.BytesIO(zb)).namelist() and man["study_decks_key"] is False)
+
+
+def t_a_restore_reopens_the_decks():
+    import base64
+    import jarvis_decks as DK
+    conf, backups = fresh_conf()
+    make_memory_db(conf)
+    key = b"\x09" * 32
+    _make_deck(conf, key, name="Espanol", front="Que es la casa?")
+    with _FakeCredentials() as cm:
+        cm.items[DK.KEY_TARGET] = base64.b64encode(key).decode()
+        out = B.backup_now(str(backups))
+        code = out["recovery_code"]
+        blob = (backups / out["name"]).read_bytes()
+    check("the backup file itself holds neither the deck's name nor its question",
+          b"Espanol" not in blob and b"la casa" not in blob)
+    # the PC is replaced: no study.db, no key
+    (conf / "study.db").unlink()
+    with _FakeCredentials() as cm:
+        zip_bytes = B.decrypt_blob(blob, code)
+        applied = B._apply_restore(zip_bytes)
+        restored_key = cm.items.get(DK.KEY_TARGET)
+        provider = lambda: base64.b64decode(cm.items[DK.KEY_TARGET])
+    check("restore wrote study.db back and the key to the decks' own Credential Manager entry",
+          applied["study_decks_key"] is True and (conf / "study.db").is_file()
+          and restored_key == base64.b64encode(key).decode(), applied)
+    d2 = DK.Decks(conf / "study.db", provider, scheduler=types.SimpleNamespace(
+        jobs_of=lambda kind: [], act=lambda *a: None, add_repeat=lambda *a, **k: None))
+    ok, why = d2.available()
+    ls = d2.list_decks()
+    cards = d2.deck_cards(ls["decks"][0]["id"])["cards"] if ls["decks"] else []
+    check("the restored decks open with the restored key: name, question and answer all back",
+          ok and ls["decks"][0]["name"] == "Espanol" and cards and cards[0]["front"] == "Que es la casa?"
+          and cards[0]["back"] == "chlorophyll", (ok, why))
+    # the wrong key: the file restored, the key write refused -> plainly unavailable, nothing overwritten silently
+    (conf / "study.db").unlink()
+    with _FakeCredentials() as cm:
+        cm.fail_writes = True
+        cm.items[DK.KEY_TARGET] = base64.b64encode(b"\x0a" * 32).decode()
+        applied = B._apply_restore(B.decrypt_blob(blob, code))
+        other = lambda: base64.b64decode(cm.items[DK.KEY_TARGET])
+    d3 = DK.Decks(conf / "study.db", other, scheduler=types.SimpleNamespace(
+        jobs_of=lambda kind: [], act=lambda *a: None, add_repeat=lambda *a, **k: None))
+    ok, why = d3.available()
+    check("a restore whose key could not be written leaves decks that say plainly the key does not open them",
+          applied["study_decks_key"] is False and ok is False and "does not open" in why, (applied, ok, why))
+    check("... and nothing new is kept into them meanwhile",
+          not _keeps(d3))
+    check("the wrong recovery code opens nothing of the decks either",
+          _wrong_code_fails(blob))
+    # a running store that held the old key drops it after a restore
+    DK._reset_for_tests()
+    one = DK.get()
+    one._aead = object()
+    one._revealed["c1"] = 1.0
+    DK.forget_key()
+    check("forget_key() makes the running store reopen with the restored key",
+          one._aead is None and not one._revealed)
+    DK._reset_for_tests()
+
+
+def _keeps(d) -> bool:
+    try:
+        d.keep({"new_deck": "New"}, [{"front": "x", "back": "", "passage": ""}])
+        return True
+    except Exception:
+        return False
+
+
+def _wrong_code_fails(blob: bytes) -> bool:
+    try:
+        B.decrypt_blob(blob, "AAAAA-AAAAA-AAAAA-AAAAA")
+    except B.WrongCode:
+        return True
+    return False
 
 
 # ======================================================== 5. retention

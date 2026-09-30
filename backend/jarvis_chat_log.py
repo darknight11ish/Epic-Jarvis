@@ -777,6 +777,12 @@ class ChatLog:
         # before the owner Forgot or Erased a fact of the chat, so the
         # learner must never learn from them again (jarvis_auto_learn.hushed).
         self._hush_floor: dict = {}
+        # Conversations in which the owner's bank spending was added up
+        # (my_spending; docs/ARCHITECTURE.md section 5, "money-sensitive
+        # conversation"): cid -> True (marked) / False (looked up, not marked).
+        # The mark is also kept in `meta` ("money:<cid>", no words), so it
+        # survives a restart, "Continue this chat" and a fork.
+        self._money: "OrderedDict" = OrderedDict()
         self._schema_ok = False       # _migrate has run on this file (kind, project)
 
     # -- settings ---------------------------------------------------------
@@ -964,7 +970,9 @@ class ChatLog:
             c.execute("DELETE FROM turns WHERE conversation_id=?", (cid,))
             c.execute("DELETE FROM conversations WHERE id=?", (cid,))
             c.execute("DELETE FROM meta WHERE k=?", (self._hush_key(cid),))
+            c.execute("DELETE FROM meta WHERE k=?", (self._money_key(cid),))
             self._hush_floor.pop(cid, None)
+            self._money.pop(cid, None)
 
     def sweep(self) -> int:
         """Delete conversations whose last turn is older than keep_days.
@@ -1218,6 +1226,57 @@ class ChatLog:
     def _hush_key(cid: str) -> str:
         return "hush:" + cid
 
+    @staticmethod
+    def _money_key(cid: str) -> str:
+        return "money:" + cid
+
+    # -- the money-sensitive mark -------------------------------------------
+    def note_money(self, cid) -> None:
+        """This conversation added up the owner's bank spending: from now on a
+        web search asks first and a chatbot is not started from it. Marked in
+        memory at once (a temporary chat, history off) and in `meta` when the
+        history file exists, so a restart, Continue and a fork keep it."""
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)):
+            return
+        with self._lock:
+            self._money.pop(cid, None)
+            self._money[cid] = True
+            while len(self._money) > 2000:
+                self._money.popitem(last=False)
+        try:
+            if not self.db_path.exists():
+                return
+            with self._lock, closing(self._connect()) as c:
+                with c:
+                    c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
+                              (self._money_key(cid), b"1"))
+        except Exception:
+            pass            # the in-memory mark still holds for this run
+
+    def conversation_money(self, conversation_id, messages=None) -> bool:
+        """Did any turn of this conversation add up the owner's bank spending?
+        Read from memory, else from the history file's `meta` (plain, no key
+        needed). False when there is no usable id or nothing says so."""
+        cid = conversation_id
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)):
+            return False
+        with self._lock:
+            if cid in self._money:
+                return bool(self._money[cid])
+        marked = False
+        try:
+            if self.db_path.exists():
+                with closing(self._connect()) as c:
+                    marked = c.execute("SELECT 1 FROM meta WHERE k=?",
+                                       (self._money_key(cid),)).fetchone() is not None
+        except Exception:
+            marked = False
+        with self._lock:
+            self._money[cid] = marked
+            while len(self._money) > 2000:
+                self._money.popitem(last=False)
+        return marked
+
     def _hush_read(self, c, cid: str):
         """{"upto": last turn number, "erased": bool} or None."""
         row = c.execute("SELECT v FROM meta WHERE k=?", (self._hush_key(cid),)).fetchone()
@@ -1385,6 +1444,8 @@ class ChatLog:
         with self._lock:
             self._seed(cid, body.get("messages"))
         self._note_live(cid, rows, device, read_outside, now)
+        if turn and turn.get("money") is True:
+            self.note_money(cid)
         if side_talk:
             return {"recorded": False, "why": SIDE_TALK_WHY}
         if temporary:
@@ -2187,6 +2248,13 @@ class ChatLog:
                     c.execute(f"INSERT INTO turns ({self._TURN_COLS}) VALUES ({marks})", row)
                     if row[ix["role"]] == "user":
                         last_user = n
+                if c.execute("SELECT 1 FROM meta WHERE k=?",
+                             (self._money_key(cid),)).fetchone() is not None:
+                    # The fork of a chat that added up bank spending is money-
+                    # sensitive too (a web search asks, a chatbot is refused).
+                    c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
+                              (self._money_key(new), b"1"))
+                    self._money[new] = True
                 if last_user >= 0:
                     c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
                               (self._hush_key(new),
@@ -2352,6 +2420,9 @@ class ChatLog:
                                      (self._hush_key(cid),)).fetchone()
                     if hush is not None:
                         held[cid]["hush"] = bytes(hush[0])
+                    if c.execute("SELECT 1 FROM meta WHERE k=?",
+                                 (self._money_key(cid),)).fetchone() is not None:
+                        held[cid]["money"] = True
                     self._drop(c, [cid])
         if held:
             self._deleted()
@@ -2384,6 +2455,10 @@ class ChatLog:
     def _put_one(self, c, cid: str, h: dict) -> None:
         conv = h["conversation"]
         turns = h["turns"]
+        if h.get("money") is True:
+            c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
+                      (self._money_key(cid), b"1"))
+            self._money[cid] = True
         if isinstance(h.get("hush"), (bytes, bytearray)):
             # "Already learned from before a Forget" goes back with the chat.
             c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
@@ -2491,6 +2566,17 @@ def conversation_tainted(conversation_id, messages=None) -> bool:
     outside text? `messages`: the request's, as they arrived. Fails closed
     for a conversation this process has not met (G1)."""
     return _log().conversation_tainted(conversation_id, messages)
+
+
+def conversation_money(conversation_id, messages=None) -> bool:
+    """For jarvis_agent: did an earlier turn of this conversation add up the
+    owner's bank spending (my_spending)? A web search then asks first and a
+    chatbot is not started from it. Not a taint: nothing else changes."""
+    return _log().conversation_money(conversation_id, messages)
+
+
+def note_money(conversation_id) -> None:
+    _log().note_money(conversation_id)
 
 
 def delete(conversation_id) -> bool:

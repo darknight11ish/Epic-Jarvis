@@ -18013,16 +18013,22 @@ What is here:
 - `jarvis_retirement.py` (shipped whole): plain Python (no numpy, no scipy, no monteplan: the
   backend still supports Python 3.10 and starts without numpy), a fixed random seed so the same
   numbers always give the same answer, every input checked and bounded, the routes, and the
-  model-callable door (`tool_call`, not yet wired into `jarvis_agent.py`; see section 103.6).
+  model-callable door (`tool_call`, wired into `jarvis_agent.py` as `retirement_whatif`; section
+  103.6: the chat shows code-written text only, and the tool is opt-in like `my_spending`: add
+  `retirement_whatif` to `[tools].enabled`).
 - `retirement.patch`: the one install block.
-- `test_retirement.py` (158 checks): paper-worked cases, every bound, "more savings never lowers
-  the share", the argmax pitfall, the sentence check, no leaks, the time cap, the patch.
+- `test_retirement.py` (174 checks): paper-worked cases, every bound, "more savings never lowers
+  the share", the argmax pitfall, the middle-case wording, the code-written chat text, no leaks, the
+  time cap, the one-run lock, the patch. `test_agent_retirement_wiring.py` (66): the tool in the chat
+  loop. `tools/gen_retirement_cases.py` writes both apps' fixture.
 
 Owner steps: `apply-patches.ps1`. Nothing to switch on. The forms in the two apps are separate
 work against the "Retirement contract (frozen)" in `docs/FINANCE-DESIGN.md`.
 
-Not checked, said plainly: the default return figures are placeholders, not researched; nothing
-was compared with monteplan or another calculator; no app draws the form yet.
+Not checked, said plainly: the default return (6%), spread and inflation are placeholders for a mix of
+stocks and bonds, not researched; the simulation agreed with an independent numpy version on 5
+parameter sets but was not compared with monteplan; no real model has called the chat tool; nothing
+was run on Windows or the phone.
 
 Test it:
 

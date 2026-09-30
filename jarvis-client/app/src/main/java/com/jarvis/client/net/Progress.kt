@@ -70,6 +70,12 @@ object Progress {
         "no_choices" to "Nothing to pick from yet. Give a number a target, or accept a goal.",
         "hidden" to "Hidden while memory lists and chat history are hidden.",
         "private" to "Health or money: kept on screen, never read aloud or sent anywhere.",
+        "saved" to "Chart saved.",
+        "cleared" to "Chart cleared.",
+        "read_failed" to "Could not read the Progress pictures: ",
+        "refresh" to "Refresh",
+        "show" to "Show",
+        "still_hidden" to "Still hidden. If Jarvis is locked, unlock it first, then press Show.",
         "summary_heat" to "Activity, last {weeks} weeks. {total}",
         "summary_balance" to "Balance chart, {n} areas. {items} No overall score.",
     )
@@ -99,9 +105,11 @@ object Progress {
     /**
      * How strongly the accent lies over the surface at each level 0..4
      * (the contract's `shading.alpha`). Level 0 has no fill at all - only the
-     * neutral outline - so its 0 is never drawn.
+     * neutral outline - so its 0 is never drawn. Level 4 is the accent itself.
+     * The ladder is held to measured contrast: [ProgressTest] works the worst
+     * case over the whole accent palette in every phone theme.
      */
-    val ALPHAS: List<Float> = listOf(0.0f, 0.22f, 0.42f, 0.66f, 0.92f)
+    val ALPHAS: List<Float> = listOf(0.0f, 0.40f, 0.58f, 0.79f, 1.0f)
 
     /** The alpha for a level, kept to 0..4. */
     fun alphaFor(level: Int): Float = ALPHAS[level.coerceIn(0, ALPHAS.size - 1)]
@@ -115,6 +123,18 @@ object Progress {
     /** Every day's square: `x = col * 17`, `y = row * 17`, size 14, in the answer's order. */
     fun heatRects(days: List<Day>): List<Rect> =
         days.map { Rect(it.date, it.col * STEP, it.row * STEP, CELL, it.level) }
+
+    /**
+     * The grid cell under a touch at ([x], [y]) dp inside the grid (17 dp per cell,
+     * the 3 dp gap belongs to the cell before it): its column and row, or null
+     * outside the 7 rows.
+     */
+    fun cellAt(x: Double, y: Double): Pair<Int, Int>? {
+        if (x < 0 || y < 0) return null
+        val col = (x / STEP).toInt()
+        val row = (y / STEP).toInt()
+        return if (row in 0..6) col to row else null
+    }
 
     // ------------------------------------------------------ radar geometry ---
 
@@ -130,6 +150,67 @@ object Progress {
 
     /** Where a spoke's label sits; [anchor] is "start", "middle" or "end". */
     data class LabelSpot(val x: Double, val y: Double, val anchor: String)
+
+    /** The room the radar's picture leaves either side of the 260 square, in dp. */
+    const val RADAR_PAD_X = 20
+
+    /** The widest a label column is ever made, in dp. */
+    const val LABEL_MAX_WIDTH = 84.0
+
+    /** Kept clear between a label column and the edge of the picture's box, in dp (none: the box is the plate's own width). */
+    const val LABEL_EDGE = 0.0
+
+    /** The most lines a value may take beside a spoke at the side (4: the 56 dp columns at 3 and 9 o'clock) or above and below (2). */
+    const val LABEL_VALUE_LINES_SIDE = 4
+    const val LABEL_VALUE_LINES_END = 2
+
+    /** A label column: where it starts (in the 260 square's own coordinates) and how wide it is, in dp. */
+    data class LabelBox(val left: Double, val width: Double)
+
+    /**
+     * The column a spoke's label is written in. It is [LABEL_MAX_WIDTH] wide when
+     * there is room, but never reaches past the picture's box ([RADAR_SIZE] plus
+     * [RADAR_PAD_X] each side, less [LABEL_EDGE]): at 3 and 9 o'clock the label sits
+     * 94 from the middle, which leaves only 56 dp, so a long value there is
+     * narrower and wraps onto more lines instead of running off the plate.
+     */
+    fun labelBox(spot: LabelSpot, pad: Int = RADAR_PAD_X): LabelBox {
+        val lo = -pad + LABEL_EDGE
+        val hi = RADAR_SIZE + pad - LABEL_EDGE
+        return when (spot.anchor) {
+            "start" -> LabelBox(spot.x, minOf(LABEL_MAX_WIDTH, hi - spot.x))
+            "end" -> {
+                val w = minOf(LABEL_MAX_WIDTH, spot.x - lo)
+                LabelBox(spot.x - w, w)
+            }
+            else -> {
+                val w = minOf(LABEL_MAX_WIDTH, 2 * minOf(spot.x - lo, hi - spot.x))
+                LabelBox(spot.x - w / 2.0, w)
+            }
+        }
+    }
+
+    /** How many lines [text] needs in a column [width] dp wide, at about [charDp] per character. */
+    fun linesNeeded(text: String, width: Double, charDp: Double = 6.0): Int {
+        val perLine = maxOf(1, (width / charDp).toInt())
+        var lines = 1
+        var used = 0
+        for (word in text.trim().split(' ').filter { it.isNotEmpty() }) {
+            var w = word
+            while (w.length > perLine) {          // a word longer than a line breaks anywhere
+                if (used > 0) { lines += 1; used = 0 }
+                w = w.substring(perLine)
+                lines += 1
+            }
+            val need = if (used == 0) w.length else used + 1 + w.length
+            if (need > perLine) { lines += 1; used = w.length } else used = need
+        }
+        return lines
+    }
+
+    /** The lines a value may take beside this label: 3 at the side, 2 above and below. */
+    fun valueLines(spot: LabelSpot): Int =
+        if (spot.anchor == "middle") LABEL_VALUE_LINES_END else LABEL_VALUE_LINES_SIDE
 
     data class Radar(
         val size: Int,
@@ -355,6 +436,14 @@ object Progress {
             WeekRow(c.label, if (words.isEmpty()) c.label else c.label + ": " + words.joinToString(". "))
         }
 
+    /** One day's own words, or null for a day the PC did not send (after today). */
+    fun dayWords(h: Heat, col: Int, row: Int): String? =
+        h.days.firstOrNull { it.col == col && it.row == row }?.words
+
+    /** One week's days as (row, words), Monday first: the actions TalkBack offers on the week's strip. */
+    fun weekDays(h: Heat, col: Int): List<Pair<Int, String>> =
+        h.days.filter { it.col == col }.sortedBy { it.row }.map { it.row to it.words }
+
     /** The line for one axis in the list under the picture: "Running: 12.5 of 20 km". */
     fun axisLine(a: Axis): String = when {
         a.valueWords.isNotBlank() -> a.label + ": " + a.valueWords
@@ -394,6 +483,17 @@ object Progress {
     /** A picker row that is hidden cannot be ticked. */
     fun choiceTickable(c: Choice): Boolean = c.name != HIDDEN_NAME
 
+    /**
+     * The ONE rule for hidden lists, the same on both apps: with "Hide memory
+     * lists and chat history" on, a picture the PC marks `keep_on_screen` is
+     * replaced by its hidden sentence and a Show button, and nothing on this
+     * section can be changed (no picker, a save refused).
+     */
+    fun hiddenOnly(privateHidden: Boolean, keepOnScreen: Boolean): Boolean = privateHidden && keepOnScreen
+
+    /** No picker, and no save, while the lists are hidden. */
+    fun canEdit(privateHidden: Boolean): Boolean = !privateHidden
+
     // ---------------------------------------------------------- the picker ---
 
     /** One area the owner has ticked, and the name they gave it on the chart. */
@@ -414,6 +514,30 @@ object Progress {
 
     /** The typed name, cut to the most the PC takes. */
     fun clipLabel(text: String): String = text.take(LABEL_MAX)
+
+    /**
+     * Ticking or unticking an area, on the list the picker keeps. The chart keeps
+     * its order: the areas already on it stay where they are and a new tick goes
+     * after them, in the order ticked (the desktop does the same). Unticking gives
+     * up the place, so ticking it again puts it at the end. The 9th tick is not taken.
+     */
+    fun toggled(picks: List<Pick>, kind: String, ref: String, on: Boolean): List<Pick> {
+        val at = picks.indexOfFirst { it.kind == kind && it.ref == ref }
+        return when {
+            on && at < 0 && canPickMore(picks.size) -> picks + Pick(kind, ref, "")
+            !on && at >= 0 -> picks.filterIndexed { i, _ -> i != at }
+            else -> picks
+        }
+    }
+
+    /** What the phone says after a save: the same words as the desktop. */
+    fun savedLine(count: Int): String = if (count == 0) w("cleared") else w("saved")
+
+    /** A read that failed, in the same words as the desktop: "Could not read the Progress pictures: <why>." */
+    fun readFailedLine(problem: String): String {
+        val why = problem.trim()
+        return w("read_failed") + why + if (why.endsWith(".") || why.endsWith("!") || why.endsWith("?")) "" else "."
+    }
 
     /**
      * `POST /api/progress/balance` body: `{"axes": [{"kind", "ref", "label"?}]}`.

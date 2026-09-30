@@ -629,6 +629,12 @@ def t_the_lock_applies_on_the_tick_route_only():
     check("a draft step saved done with unmet needs is kept done, with the accept-time stamp",
           p[1]["done"] is True and p[1]["done_at"] == w.clock.t and p[1]["state"] == "done"
           and p[1]["lock_words"] == 'after: "first" (open again)', p[1])
+    created_at = w.clock.t
+    w.clock.t = created_at + 86400 * 3
+    acc = w.g.accept(goal["id"])["plan"]
+    check("accepting re-dates a step saved done to the ACCEPT time (creation day is not shaded)",
+          acc[1]["done"] is True and acc[1]["done_at"] == w.clock.t and acc[1]["done_at"] != created_at
+          and acc[0]["done_at"] is None, acc)
 
 
 def t_old_plans_load_with_defaults_and_get_ids_on_the_next_save():

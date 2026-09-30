@@ -173,6 +173,9 @@ export const LOCK_SCREEN = Object.freeze({
   tellme: TELLME_LOCK_SCREEN,
 });
 
+/** The title of the review decks' own daily job. */
+export const REVIEW_JOB_TITLE = "Card review";
+
 /** The tag on a row, by kind. */
 export const KIND_TAGS = Object.freeze({
   timer: "timer",
@@ -184,6 +187,9 @@ export const KIND_TAGS = Object.freeze({
   tellme: "tell me when",
   nexttime: "next time",
   today: "today card",
+  // Review decks' own daily job (backend jarvis_decks.KIND): Decks owns it,
+  // so it is named plainly and offers no Pause or Delete here.
+  review: "card review",
 });
 
 /** A snoozed copy's tag ends with this ("alarm, snoozed"). */
@@ -349,6 +355,8 @@ export function tagOf(job) {
 /** A row's title: the owner's words, or what kind of thing it is. */
 export function titleOf(job) {
   if (job.kind === "standby") return STANDBY_TITLE;
+  // Review decks' daily job has no words of its own; its note ("3 cards ready") is the meta line.
+  if (job.kind === "review") return REVIEW_JOB_TITLE;
   const words = job.hidden ? HIDDEN_TEXT : job.text;
   if (job.kind === "timer") {
     return words ? `${words} timer` : `${lengthWords(job.duration || 0)} timer`;
@@ -428,6 +436,8 @@ export const WENT_OFF_ACTIONS = Object.freeze(["snooze"]);
 
 /** The buttons one row offers, as action names, in order. Never "all". */
 export function actionsOf(job) {
+  // The review decks' daily job goes away with the last deck; Decks owns it.
+  if (job.kind === "review") return [];
   if (job.kind === "todo") return ["done", "delete"];
   if (job.state === "waiting") return ["delete"];
   // A reminder for next time has no time of its own to pause.

@@ -35,6 +35,8 @@ object Decks {
     const val NOTHING_READY = "Nothing ready today"
     const val NEW_PER_DAY = "New cards a day"
     const val REVIEW = "Review"
+    /** The name of the button over every deck at once; its visible word is [REVIEW]. */
+    const val REVIEW_ALL = "Review all decks"
     const val PAUSE = "Pause"
     const val RESUME = "Resume"
     const val DELETE_DECK = "Delete this deck"
@@ -77,6 +79,9 @@ object Decks {
     const val LOADING_CARD = "Getting the next card…"
     const val MISSING = "Your PC's Jarvis does not have study decks yet - run apply-patches.ps1 on the PC."
     const val UNREADABLE = "Your PC sent something this phone could not read."
+    /** Under the deck list when the rows' ready counts add up to more than the total (the desktop says the same). */
+    const val PER_DECK_NOTE =
+        "New cards a day is shared by every deck, so the decks can show more cards ready than the total above."
 
     const val MAX_NEW_PER_DAY = 20
     const val DEFAULT_MAX_NAME = 60
@@ -348,10 +353,17 @@ object Decks {
 
     fun revealBody(card: String): String = buildJsonObject { put("card", card) }.toString()
 
-    fun rateBody(card: String, rating: String): String? =
-        if (validRating(rating)) buildJsonObject {
+    /**
+     * `POST /api/review/rate`. [deck] is the scope this screen is reviewing (a
+     * deck id, or "" for every deck): the PC counts the rating in that run only,
+     * so two screens on two scopes never cross. Null sends none (an older PC
+     * ignores the key either way).
+     */
+    fun rateBody(card: String, rating: String, deck: String? = null): String? =
+        if (validRating(rating) && (deck == null || deck.isEmpty() || validId(deck))) buildJsonObject {
             put("card", card)
             put("rating", rating)
+            if (deck != null) put("deck", deck)
         }.toString() else null
 
     /** `POST /api/review/more`: `{}` for every deck, or one deck. */
@@ -538,6 +550,21 @@ object Decks {
     /** "Comes back on 3 Oct 2026", or "" when the PC gave no day. */
     fun comesBackLine(day: String?): String =
         if (day.isNullOrEmpty()) "" else "Comes back on ${dayLabel(day)}"
+
+    /**
+     * Whether a deck row may start a review: cards are ready and it is not paused
+     * (never while the private lists are hidden or the decks cannot be opened).
+     * The desktop has the same rule.
+     */
+    fun canReview(deck: Deck, available: Boolean = true, hidden: Boolean = false): Boolean =
+        available && !hidden && !deck.paused && deck.ready > 0
+
+    /** Whether "Review all decks" may start: something is ready in a deck that is not paused. */
+    fun canReviewAll(ready: Int, available: Boolean = true, hidden: Boolean = false): Boolean =
+        available && !hidden && ready > 0
+
+    /** Whether to say why the rows' ready counts add up to more than the total (new cards are shared between decks). */
+    fun perDeckNoteShown(v: DeckList): Boolean = v.decks.sumOf { it.ready } > v.ready
 
     /** The heading over a revealed passage: the model's own sentence is said to be one. */
     fun passageHeading(keyLabel: String?): String = if (keyLabel != null) EXAMPLE_SENTENCE else FROM_TEXT
