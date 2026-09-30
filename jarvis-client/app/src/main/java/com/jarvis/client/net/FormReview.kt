@@ -60,12 +60,13 @@ object FormReview {
      * lists, so it is not fetched or drawn until the setting is off.
      */
     const val HIDDEN_BY_SETTING =
-        "The picture of the form is hidden because \"Hide memory lists and chat history\" is on. " +
+        "The picture shows your name, phone and email, so it is hidden while " +
+            "\"Hide memory lists and chat history\" is on. " +
             "Turn that off in Security to see it, or read the details below before you approve."
 
     /** The PC no longer has it (card decided or timed out, or the picture was dropped). */
     const val GONE =
-        "The picture of the form is no longer available. Read the details below before you approve."
+        "The picture of the form is gone. The card may have timed out. Read the details below before you approve."
 
     /**
      * The picture id in a row's raw `detail`: an object, or a JSON string of
@@ -77,13 +78,17 @@ object FormReview {
             is JsonObject -> rawDetail
             is JsonPrimitive -> {
                 if (!rawDetail.isString) return null
+                // Text the gate cut short no longer parses: read the id from it
+                // the way the desktop does, so both apps still find the picture.
                 runCatching { JarvisJson.parseToJsonElement(rawDetail.content) as? JsonObject }.getOrNull()
-                    ?: return null
+                    ?: return CUT_SHORT_ID.find(rawDetail.content)?.groupValues?.get(1)?.let { cleanId(it) }
             }
             else -> return null
         }
         return cleanId(idOf(obj["picture"]))
     }
+
+    private val CUT_SHORT_ID = Regex("\"picture\"\\s*:\\s*\"([A-Za-z0-9_-]{1,64})\"")
 
     private fun cleanId(raw: String?): String? {
         val t = raw?.trim() ?: return null

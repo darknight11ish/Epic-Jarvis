@@ -66,14 +66,19 @@ is sent
   "<base64>", "width", "height"}`; 404 `{"ok": false}` when gone. Token +
   origin like every route; a read, so it is not held on a stale link. Only
   answers for an id that belongs to a card still waiting.
-* **Apps.** Both show the picture on the card in full-size view (tap to
-  enlarge), fetching it when `detail.picture` is set. Not on the desktop's
-  widget, not in a notification, not on the phone's home-screen widget (those
-  stay title-only, as for every card). While App lock is on, the picture shows
-  only inside the unlocked app. The phone blocks screenshots of Jarvis while
-  it shows. If the picture cannot be fetched the card says so in words and
-  Approve stays available only if the owner reads the text values (never
-  silently approved without either).
+* **Apps.** Both show the picture on the card - small, click or tap to
+  enlarge - fetching it when `detail.picture` is set (the id is also found in
+  a `detail` the gate cut short). Not on the desktop's widget, toasts or the
+  HUD page, not in a notification, not on the phone's home-screen widget
+  (those stay title-only, as for every card). **Hidden under App lock AND
+  under "Hide memory lists and chat history"** (owner, 2026-09-30): nothing is
+  fetched and one line says why (the picture shows your name, phone and
+  email). The phone blocks screenshots of Jarvis while it shows. If the picture
+  cannot be loaded, or is gone, the card says so in words and points at the
+  written details below it. Approve and Deny are not changed: neither app
+  blocks Approve because a picture is missing - the text values on the card
+  are what the owner reads then. The two apps use the same words (see
+  `form-review.js` and `net/FormReview.kt`).
 
 ## Rules check
 

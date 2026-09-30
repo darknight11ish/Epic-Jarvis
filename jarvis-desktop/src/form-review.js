@@ -26,13 +26,16 @@
 export const WORDS = Object.freeze({
   alt: "The form as Jarvis filled it in",
   enlarge: "Enlarge the picture of the form",
-  close: "Close the picture",
+  close: "Close",
+  heading: "The form as Jarvis filled it in",
+  hint: "Click the picture to see it bigger.",
+  gone: "The picture of the form is gone. The card may have timed out. Read the details below before you approve.",
   loading: "Loading the picture of the form...",
   failed:
     "Jarvis could not load the picture of the form. Read the details below before you approve.",
   hidden:
-    'The picture of the form is hidden because "Hide memory lists and chat history" is on. ' +
-    "Turn that off in Settings to see it, or read the details below before you approve.",
+    'The picture shows your name, phone and email, so it is hidden while "Hide memory lists and chat history" is on. ' +
+    "Turn that off in Settings, under Security, to see it, or read the details below before you approve.",
 });
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -147,7 +150,13 @@ export function mountFormReview(box, { invoke, onChange = () => {}, announce = (
     img.src = src;
     button.append(img);
     button.addEventListener("click", () => openOverlay(src));
-    box.replaceChildren(button);
+    const heading = document.createElement("p");
+    heading.className = "form-review-heading";
+    heading.textContent = WORDS.heading;
+    const hint = document.createElement("p");
+    hint.className = "form-review-note";
+    hint.textContent = WORDS.hint;
+    box.replaceChildren(heading, button, hint);
     onChange();
   }
 
@@ -191,6 +200,14 @@ export function mountFormReview(box, { invoke, onChange = () => {}, announce = (
       key = null;
       say(WORDS.hidden);
       announce(WORDS.hidden);
+      onChange();
+      return;
+    }
+    if (answer && answer.ok === false && !answer.error) {
+      // A plain "no" from the PC: the picture is gone (the card was decided or
+      // timed out). Anything that threw, or carried an error, is "could not load".
+      say(WORDS.gone);
+      announce(WORDS.gone);
       onChange();
       return;
     }

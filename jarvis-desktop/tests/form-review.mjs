@@ -84,7 +84,7 @@ function mount(invoke) {
   return { box, view, calls, keys, announced };
 }
 const ok = async () => ({ ok: true, jpeg: JPEG, width: 800, height: 600 });
-const imgOf = (box) => box.children[0].children[0];
+const imgOf = (box) => box.children[1].children[0];
 
 await check("the row's picture id is read from an object, JSON text or cut-off text", () => {
   assert.equal(pictureId(row()), ID);
@@ -116,32 +116,34 @@ await check("the picture shows small, with its plain alt text, and enlarges on a
   const t = mount(ok);
   await t.view.show(row());
   assert.equal(t.box.hidden, false);
-  const thumb = t.box.children[0];
+  const thumb = t.box.children[1];
+  assert.equal(t.box.children[0].textContent, WORDS.heading);
+  assert.equal(t.box.children[2].textContent, WORDS.hint);
   assert.equal(thumb.tag, "button");
   assert.equal(thumb.attrs["aria-label"], WORDS.enlarge);
   const img = imgOf(t.box);
   assert.equal(img.alt, "The form as Jarvis filled it in");
   assert.equal(img.src, `data:image/jpeg;base64,${JPEG}`);
   thumb.click();
-  const overlay = t.box.children[1];
+  const overlay = t.box.children[3];
   assert.equal(overlay.attrs.role, "dialog");
   assert.equal(overlay.children[0].alt, WORDS.alt);
   assert.ok(t.keys.keydown, "Escape is caught while the picture is big");
   let stopped = false;
   t.keys.keydown({ key: "Escape", preventDefault() {}, stopPropagation() { stopped = true; } });
   assert.equal(stopped, true, "Escape closes the picture, not the whole card");
-  assert.equal(t.box.children.length, 1);
+  assert.equal(t.box.children.length, 3);
   assert.equal(t.keys.keydown, undefined);
   thumb.click();
-  t.box.children[1].click(); // a click anywhere closes it
-  assert.equal(t.box.children.length, 1);
+  t.box.children[3].click(); // a click anywhere closes it
+  assert.equal(t.box.children.length, 3);
 });
 
 await check("the picture is dropped when the card goes, and a late answer is dropped too", async () => {
   const t = mount(ok);
   await t.view.show(row());
   const img = imgOf(t.box);
-  t.box.children[0].click();
+  t.box.children[1].click();
   t.view.clear();
   assert.equal(t.box.hidden, true);
   assert.equal(t.box.children.length, 0);
@@ -169,11 +171,11 @@ await check("a picture that cannot be loaded says one plain sentence", async () 
     "Jarvis could not load the picture of the form. Read the details below before you approve.");
   for (const fn of [
     async () => { throw new Error("offline"); },
-    async () => ({ ok: false }),
     async () => ({ ok: true, jpeg: "" }),
     async () => ({ ok: true, jpeg: "<script>alert(1)</script>" }),
     async () => ({ ok: true }),
     async () => null,
+    async () => ({ ok: false, error: "The PC answered with an error." }),
   ]) {
     const t = mount(fn);
     await t.view.show(row());
@@ -182,6 +184,11 @@ await check("a picture that cannot be loaded says one plain sentence", async () 
     assert.equal(t.box.children[0].textContent, WORDS.failed);
     assert.deepEqual(t.announced, [WORDS.failed]);
   }
+  // A plain "no" from the PC means the picture is gone (card decided or timed out).
+  const gone = mount(async () => ({ ok: false }));
+  await gone.view.show(row());
+  assert.equal(gone.box.children[0].textContent, WORDS.gone);
+  assert.deepEqual(gone.announced, [WORDS.gone]);
   // The module knows nothing about Approve or Deny.
   const code = read("src/form-review.js").replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "")
     .replace(/before you approve/g, "");
@@ -202,8 +209,8 @@ await check("while App lock is on nothing is shown, and it asks again after the 
 
 await check('"Hide memory lists and chat history": no picture, one plain line, asked again once it is off', async () => {
   assert.equal(WORDS.hidden,
-    'The picture of the form is hidden because "Hide memory lists and chat history" is on. ' +
-    "Turn that off in Settings to see it, or read the details below before you approve.");
+    'The picture shows your name, phone and email, so it is hidden while "Hide memory lists and chat history" is on. ' +
+    "Turn that off in Settings, under Security, to see it, or read the details below before you approve.");
   let hidden = true;
   const t = mount(async () => (hidden ? { ok: false, hidden: true } : { ok: true, jpeg: JPEG }));
   await t.view.show(row());

@@ -1499,6 +1499,12 @@ html[data-state="error"] .pulse {
   color: var(--text-muted);
 }
 
+.form-review-heading {
+  margin: 0 0 var(--space-1, 4px);
+  font-size: var(--text-sm);
+  color: var(--text);
+}
+
 .form-review-thumb {
   display: block;
   padding: 0;

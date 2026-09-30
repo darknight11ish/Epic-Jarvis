@@ -45,6 +45,13 @@ class FormReviewTest {
     }
 
     @Test
+    fun `picture id is still found in a detail the gate cut short`() {
+        val cut = JsonPrimitive("""{"site":"x.com","picture":"p77","values":["Name: Jo""")
+        assertEquals("p77", FormReview.pictureIdOf(cut))
+        assertNull(FormReview.pictureIdOf(JsonPrimitive("""{"site":"x.com","values":["Na""")))
+    }
+
+    @Test
     fun `no picture means null`() {
         assertNull(FormReview.pictureIdOf(null))
         assertNull(FormReview.pictureIdOf(obj("""{"site":"x.com"}""")))
