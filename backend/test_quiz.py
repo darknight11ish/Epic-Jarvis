@@ -108,8 +108,11 @@ def t_start_shape_and_limits():
     code, out = new_quiz()
     q = out["quiz"]
     check("start answers 200 ok with a quiz", code == 200 and out["ok"] is True)
-    check("the quiz has id, title, grader_verified, questions, answered",
-          set(q) == {"id", "title", "grader_verified", "questions", "answered"}, sorted(q))
+    check("the quiz has id, title, grader_verified, questions, answered (+ mode, level, key_source: JARVIS-API 102)",
+          set(q) == {"id", "title", "grader_verified", "questions", "answered",
+                     "mode", "level", "key_source"}, sorted(q))
+    check("a text quiz says mode text with no level and no key source",
+          q["mode"] == "text" and q["level"] is None and q["key_source"] is None)
     check("questions are numbered from 1 with kind, prompt and a null mark and NO passage",
           [x["n"] for x in q["questions"]] == [1, 2, 3]
           and all(set(x) == {"n", "kind", "prompt", "mark"} and x["mark"] is None
@@ -180,8 +183,9 @@ def t_answer_hides_then_shows_the_passage():
     code, out = Q.handle_post(f"/api/quiz/{qid}/answer", {"n": 2, "answer": "  oxygen  "})
     check("answering gives ok, a mark, and the quiz", code == 200 and out["ok"]
           and set(out) == {"ok", "mark", "quiz"})
-    check("the mark has level, comment and the passage",
-          out["mark"] == {"level": "partly", "comment": "You have half of it.", "passage": P2}, out["mark"])
+    check("the mark has level, comment and the passage (+ marked_by model, no expected, no key label)",
+          out["mark"] == {"level": "partly", "comment": "You have half of it.", "passage": P2,
+                          "marked_by": "model", "expected": None, "key_label": None}, out["mark"])
     q2 = out["quiz"]["questions"][1]
     check("that question now carries its mark; the others still hide their passage",
           q2["mark"]["passage"] == P2 and out["quiz"]["answered"] == 1
@@ -461,7 +465,8 @@ def t_no_disk_no_learner():
     imports = sorted(l.strip() for l in code_lines if l.startswith(("import ", "from ")))
     check("the module imports only the standard library and jarvis_local_http",
           all(i.split()[1].split(".")[0] in {"__future__", "json", "os", "re", "secrets", "threading",
-                                             "time", "urllib", "pathlib", "typing", "jarvis_local_http"}
+                                             "time", "urllib", "pathlib", "typing", "unicodedata",
+                                             "jarvis_local_http"}
               for i in imports), imports)
     banned = ("jarvis_learner", "jarvis_memory", "jarvis_auto_learn", "jarvis_extract", "jarvis_gate",
               "jarvis_history", "jarvis_chat_history", "jarvis_agent", "jarvis_facts", "sqlite3",

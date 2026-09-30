@@ -30,9 +30,12 @@ export const BANNER_CANCEL = "Cancel";
 
 /** Section header: `{name} ({count})`. */
 export const headerText = (name, count) => `${name} (${count})`;
-/** The screen-reader form: `{name}, {count} chats, collapsed|expanded`. */
+/** The screen-reader form the phone speaks: `{name}, {count} chats, collapsed|expanded`. */
 export const sectionSpeech = (name, count, open) =>
   `${name}, ${count} chats, ${open ? "expanded" : "collapsed"}`;
+/** The desktop's accessible name for a section header: the state rides on
+ *  `aria-expanded`, so it is not said twice (`{name}, {count} chats`). */
+export const sectionLabel = (name, count) => `${name}, ${count} chats`;
 /** Delete confirm. */
 export const deleteConfirm = (name, count) =>
   `Delete the tag ${name}? Its ${count} chats become untagged.`;
@@ -57,7 +60,7 @@ export const TAGS_HIDDEN_LINE =
 
 /** One plain sentence per error code the PC answers with. */
 export const TAG_ERRORS = Object.freeze({
-  bad_name: "A tag name needs 1 to 24 letters or numbers.",
+  bad_name: "A tag name needs 1 to 24 characters, with at least one letter, number or symbol it can show.",
   name_taken: "You already have a tag with that name.",
   too_many_tags: "You can have up to 12 tags. Delete one to make room.",
   bad_colour: "That colour is not one of the eight.",
@@ -67,12 +70,46 @@ export const TAG_ERRORS = Object.freeze({
   bad_request: "That request was not understood.",
 });
 
+export const TAG_ERROR_FALLBACK = "Your PC did not make that change.";
+
+/**
+ * The one sentence a refusal shows (identical to the phone's
+ * `ChatTags.errorSentence`): a code this app has a sentence for wins, except
+ * `bad_request`, a catch-all whose real reason is in the PC's own `message`
+ * ("Chat history is off..."); then the PC's message; then `bad_request`'s
+ * sentence; then the fallback.
+ */
 export function errorWords(answer) {
   const a = answer && typeof answer === "object" ? answer : {};
   const code = typeof a.error === "string" ? a.error : "";
-  return TAG_ERRORS[code] || (typeof a.message === "string" && a.message.trim()) ||
-    TAG_ERRORS.bad_request;
+  const message = typeof a.message === "string" ? a.message.trim() : "";
+  if (code !== "bad_request" && Object.hasOwn(TAG_ERRORS, code)) return TAG_ERRORS[code];
+  if (message) return message;
+  return code === "bad_request" ? TAG_ERRORS.bad_request : TAG_ERROR_FALLBACK;
 }
+
+/** Characters that take room but show nothing. */
+const BLANKS = new Set([0x3164, 0x115f, 0x1160, 0xffa0, 0x2800]);
+const VISIBLE = /[\p{L}\p{N}\p{M}\p{P}\p{S}]/u;
+
+/** Code points, not UTF-16 units: an emoji is one. */
+export const codePointLength = (s) => Array.from(s).length;
+
+/** The name as the PC would take it (NFC, trimmed, 1-24 code points, at least
+ *  one character it can show), or null. Same rule as the phone's `validName`. */
+export function validTagName(raw) {
+  if (typeof raw !== "string") return null;
+  const n = raw.normalize("NFC").trim();
+  const len = codePointLength(n);
+  if (len < 1 || len > NAME_MAX) return null;
+  for (const ch of n) {
+    if (!BLANKS.has(ch.codePointAt(0)) && VISIBLE.test(ch)) return n;
+  }
+  return null;
+}
+
+/** An <input>'s value cut to the name limit in code points, never inside a pair. */
+export const clipTagName = (s) => Array.from(String(s)).slice(0, NAME_MAX).join("");
 
 export const filedWords = (name) => `Filed under ${name}.`;
 export const UNFILED_WORDS = "Tag taken off.";
@@ -232,7 +269,8 @@ export function readTagId(value) {
 /**
  * The loaded chats in sections: one per tag in the tags' own order, newest
  * chat first inside (the list is already newest first and its order is
- * kept), "Untagged" last. A chat whose tag is not in the registry (deleted
+ * kept), "Untagged" last. With no tags at all it returns [] (the list is
+ * then flat). A chat whose tag is not in the registry (deleted
  * elsewhere a moment ago) falls under Untagged. A tag with no chats and no
  * count is left out - an empty header says nothing.
  *
@@ -242,6 +280,8 @@ export function readTagId(value) {
  */
 export function groupRows(rows, view, { exact = true } = {}) {
   const tags = view && view.available ? view.tags : [];
+  // No tags at all (the owner deleted every one): the caller draws a flat list.
+  if (!tags.length) return [];
   const known = new Set(tags.map((t) => t.id));
   const byTag = new Map(tags.map((t) => [t.id, []]));
   const loose = [];

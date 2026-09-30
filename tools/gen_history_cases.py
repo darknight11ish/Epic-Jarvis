@@ -175,6 +175,12 @@ WORDS = {
     "tag_move_placeholder": "Move to\u2026",
     "tag_file_under": "File under {name}",
     "tag_errors": dict(H.TAG_MESSAGES),
+    # Said when the PC named no code the app knows and sent no sentence.
+    "tag_error_fallback": "Your PC did not make that change.",
+    # The desktop's accessible name for a section header: the open/closed state
+    # rides on aria-expanded, so the label does not repeat it (the phone's
+    # merged description uses "tag_section_sr", which does).
+    "tag_section_label": "{name}, {count} chats",
 }
 
 # The eight colour slots (contrast 4.5:1 or better against both themes, checked
@@ -203,6 +209,84 @@ def tag_section_sr(name: str, count: int, expanded: bool) -> str:
 
 
 TAG_CASES = [("Work", 12, False), ("Learning", 1, True), ("Untagged", 0, False)]
+
+
+def tag_section_label(name: str, count: int) -> str:
+    return WORDS["tag_section_label"].format(name=name, count=count)
+
+
+def tag_error_words(answer: dict) -> str:
+    """The one sentence a refusal shows, identical in both apps: a code the
+    apps have a sentence for wins (bad_request is a catch-all, so it does
+    not); else the PC's own `message`; else bad_request's sentence for
+    bad_request; else the fallback."""
+    code = answer.get("error") if isinstance(answer.get("error"), str) else ""
+    msg = answer.get("message").strip() if isinstance(answer.get("message"), str) else ""
+    if code in H.TAG_MESSAGES and code != "bad_request":
+        return H.TAG_MESSAGES[code]
+    if msg:
+        return msg
+    if code == "bad_request":
+        return H.TAG_MESSAGES["bad_request"]
+    return WORDS["tag_error_fallback"]
+
+
+TAG_ERROR_CASES = [
+    {"error": "name_taken"},
+    {"error": "name_taken", "message": "Something else."},
+    {"error": "bad_request", "message": "Chat history is off. Tags are not changed."},
+    {"error": "bad_request", "message": "  "},
+    {"error": "bad_request"},
+    {"error": "weird", "message": "Try later."},
+    {"error": "weird"},
+    {},
+]
+
+# Names as typed, and whether the PC would take them (1-24 CODE POINTS once
+# trimmed, at least one character it can show). Each app checks before it sends.
+_FAMILY = "\U0001F468\u200d\U0001F469\u200d\U0001F467\u200d\U0001F466"
+TAG_NAME_CASES = ["Work", "  Work ", "", "   ", "\u3164", "\u200d\u200d", "  \u3164 ",
+                  "\U0001F600" * 24, "\U0001F600" * 25, "a" * 24, "a" * 25,
+                  _FAMILY, "Cafe\u0301", "\u2800"]
+
+# Grouping worked cases: rows are newest first (`updated` falls), `tag` is a tag
+# id or None. `exact` is true when nothing narrows the list (no Show kind, no
+# title words); then a header's count is the PC's own, else the rows shown.
+_GT = [{"id": 1, "name": "Work", "count": 12}, {"id": 2, "name": "Learning", "count": 1},
+       {"id": 3, "name": "Personal", "count": 0}]
+_GROWS = [{"id": "u1", "tag": None, "updated": 90}, {"id": "w1", "tag": 1, "updated": 80},
+          {"id": "l1", "tag": 2, "updated": 70}, {"id": "gone", "tag": 99, "updated": 60}]
+
+
+def group_reference(tags, untagged, rows, exact):
+    """The sections an app draws: one per tag in order, then Untagged; a row
+    whose tag is unknown is untagged; a section with no rows shown and no
+    count is left out. With no tags at all the list is flat."""
+    if not tags:
+        return {"flat": True, "sections": []}
+    known = {t["id"] for t in tags}
+    out = []
+    for t in tags:
+        mine = [r["id"] for r in rows if r["tag"] == t["id"]]
+        count = max(t["count"], len(mine)) if exact else len(mine)
+        if mine or count:
+            out.append({"key": str(t["id"]), "count": count, "rows": mine})
+    loose = [r["id"] for r in rows if r["tag"] is None or r["tag"] not in known]
+    count = max(untagged, len(loose)) if exact else len(loose)
+    if loose or count:
+        out.append({"key": "none", "count": count, "rows": loose})
+    return {"flat": False, "sections": out}
+
+
+GROUP_CASES = [
+    ("nothing narrows: the PC's counts, an unloaded tag still listed", _GT, 2, _GROWS, True),
+    ("a Show or title filter narrows: counts are the rows shown, empty sections go", _GT, 2, _GROWS, False),
+    ("a tag with chats the page has not loaded shows its count", _GT + [{"id": 4, "name": "Ideas", "count": 4}], 0,
+     _GROWS[:2], True),
+    ("...but not when narrowed", _GT + [{"id": 4, "name": "Ideas", "count": 4}], 0, _GROWS[:2], False),
+    ("no Untagged section when none are loaded or counted", _GT, 0, _GROWS[1:3], True),
+    ("no tags at all: a flat list, no sections", [], 5, _GROWS, True),
+]
 
 # ----------------------------------------------------------------- rules --
 
@@ -447,7 +531,14 @@ def build() -> dict:
         "tag_error_codes": list(H.TAG_MESSAGES),
         "tag_section_cases": [{"name": n, "count": c, "expanded": e,
                                "header": tag_section_line(n, c),
-                               "sr": tag_section_sr(n, c, e)} for n, c, e in TAG_CASES],
+                               "sr": tag_section_sr(n, c, e),
+                               "label": tag_section_label(n, c)} for n, c, e in TAG_CASES],
+        "tag_error_cases": [{"answer": a, "expect": tag_error_words(a)} for a in TAG_ERROR_CASES],
+        "tag_name_cases": [{"name": n, "valid": H._clean_tag_name(n) is not None}
+                           for n in TAG_NAME_CASES],
+        "tag_group_cases": [{"name": n, "tags": t, "untagged": u, "rows": r, "exact": e,
+                             "expect": group_reference(t, u, r, e)}
+                            for n, t, u, r, e in GROUP_CASES],
         "tag_delete_cases": [{"name": "Work", "count": 3,
                               "expect": WORDS["tag_delete_confirm"].format(name="Work", count=3)}],
     }

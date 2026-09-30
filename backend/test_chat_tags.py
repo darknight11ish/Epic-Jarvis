@@ -684,11 +684,15 @@ def t_quick_guards():
         r = Q.answer_turn(body, sched=Sched(), now=1_790_000_000.0)
         check("no conversation id: it cannot tell which chat", r is not None
               and "cannot tell which chat" in r.reply, r and r.reply)
-        # History off: the refusal is in words.
+        # History off: a chat already saved can still be filed (owner, 2026-09-30).
         log.set_enabled(False)
         r = ask("label this chat Work", cid="conv-g-000001")
-        check("history off: a plain refusal, nothing filed", r is not None
-              and "off" in r.reply.lower() and log.get("conv-g-000001")["tag_id"] == 2, r and r.reply)
+        check("history off: a saved chat is filed", r is not None
+              and "filed under Work" in r.reply and log.get("conv-g-000001")["tag_id"] == 1,
+              r and r.reply)
+        r = ask("label this chat Work", cid="conv-g-000099")
+        check("history off: a chat never saved still says so", r is not None
+              and "not been saved yet" in r.reply, r and r.reply)
     finally:
         H.use(None)
 
