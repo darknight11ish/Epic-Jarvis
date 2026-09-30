@@ -64,6 +64,9 @@ object WebSearch {
         "Not offered: its own README says it no longer returns results, since Google blocked searching without JavaScript in 2025."
     const val DEFAULT_WHY =
         "SearXNG is the default because it costs nothing, needs no key or account, and runs on this PC, so no single search company keeps a record of your searches."
+    const val ENABLED_LABEL = "Web search"
+    const val ENABLED_DETAIL =
+        "On (the default): Jarvis may search the web when it needs to, with the search you chose below. Off: Jarvis searches nothing and the AI model is not offered the search at all. Turning it off is immediate; turning it back on asks you with an approval card."
     const val ASK_LABEL = "Ask before every web search"
     const val ASK_DETAIL =
         "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes or other outside text, when the search words repeat something you told it, or when it used a sensitive saved fact - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card."
@@ -100,6 +103,7 @@ object WebSearch {
     const val READY = "Ready."
     const val CHOSEN = "In use."
     const val WAITING_CARD = "Waiting for your approval card."
+    const val OFF_LINE = "Web search is off, so Jarvis searches nothing until you turn it back on."
     const val STALE =
         "Not connected to the desktop, so changes and the test wait until the link is back."
 
@@ -125,6 +129,13 @@ object WebSearch {
         val leftOut: List<LeftOut>,
         val address: String,
         val askEveryTime: Boolean,
+        /** The on/off switch (an older PC has none: read as on). */
+        val enabled: Boolean,
+        val enabledLabel: String,
+        val enabledDetail: String,
+        /** A card to turn web search back on is waiting / how the last one ended. */
+        val enableWaiting: Boolean,
+        val enableLast: String,
         val askLabel: String,
         val askDetail: String,
         val keyEntry: String,
@@ -163,6 +174,11 @@ object WebSearch {
             leftOut = leftOut,
             address = body.text("searxng_url") ?: DEFAULT_ADDRESS,
             askEveryTime = body.flag("ask_every_time") == true,
+            enabled = body.flag("enabled") != false,
+            enabledLabel = ENABLED_LABEL,
+            enabledDetail = ENABLED_DETAIL,
+            enableWaiting = body.flag("enable_waiting") == true,
+            enableLast = (body["enable_last"] as? JsonObject)?.text("message") ?: "",
             askLabel = body.text("ask_every_time_label") ?: ASK_LABEL,
             askDetail = body.text("ask_every_time_detail") ?: ASK_DETAIL,
             keyEntry = body.text("key_entry") ?: KEY_ENTRY,
@@ -199,6 +215,9 @@ object WebSearch {
         if (u.length > 200) return null
         return JsonObject(mapOf("searxng_url" to JsonPrimitive(u))).toString()
     }
+
+    /** ONE change: the web search switch. Off at once; back on raises ONE card on the PC. */
+    fun enabledBody(on: Boolean): String = JsonObject(mapOf("enabled" to JsonPrimitive(on))).toString()
 
     /** ONE change: "Ask before every web search". Off raises a card on the PC. */
     fun askBody(on: Boolean): String = JsonObject(mapOf("ask_every_time" to JsonPrimitive(on))).toString()

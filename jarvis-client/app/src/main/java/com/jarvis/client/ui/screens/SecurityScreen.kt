@@ -9,9 +9,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
@@ -59,13 +61,34 @@ fun SecurityScreen(
     /** Open Android's own screen-lock settings. */
     onOpenLockSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
+    /**
+     * A section to bring into view once: only "look" (the Looking at your screen
+     * switch, opened from Settings, Picture mode). Anything else is a no-op.
+     */
+    initialSection: String? = null,
+    onSectionConsumed: () -> Unit = {},
 ) {
     val chrome = LocalChrome.current
+    val listState = rememberLazyListState()
+    // The rows above "look" that are always there are app-lock, live-end,
+    // approvals and private (see the item keys below); a notice and the
+    // no-check warning are the two that may or may not be.
+    val showNoCheck = availability != CheckAvailability.READY && availability != CheckAvailability.NOT_NOW
+    LaunchedEffect(initialSection) {
+        val section = initialSection ?: return@LaunchedEffect
+        if (section == "look") {
+            listState.animateScrollToItem(
+                4 + (if (notice != null) 1 else 0) + (if (showNoCheck) 1 else 0),
+            )
+        }
+        onSectionConsumed()
+    }
     Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding()) {
         TopBar("Security", onBack, subtitle = "Lock and fingerprint, on this phone only")
 
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
+            state = listState,
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
@@ -78,7 +101,7 @@ fun SecurityScreen(
             // every lock off too, since 2026-09-25: a phone with no screen
             // lock refuses risky approvals whatever the settings say (the
             // owner's "no lock, no risky approval").
-            if (availability != CheckAvailability.READY && availability != CheckAvailability.NOT_NOW) {
+            if (showNoCheck) {
                 item(key = "no-check") {
                     // Not a Notice: that has a Dismiss, and this cannot be
                     // dismissed - it is true until the phone is set up.

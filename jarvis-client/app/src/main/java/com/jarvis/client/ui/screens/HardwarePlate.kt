@@ -283,6 +283,11 @@ internal fun HardwareSection(canAct: Boolean, onOpenApprovals: ((cardId: String?
                     onClick = { act("measure") { JarvisRuntime.measureHardware() } },
                 )
 
+                if (!canAct) {
+                    Gap(8)
+                    Text(Hardware.STALE, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                }
+
                 Gap(10)
                 Text(
                     "Nothing changes until you pick a setup, and then each step asks with its own " +

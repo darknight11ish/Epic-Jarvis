@@ -31,6 +31,7 @@ ON_EARLIER_LINES = (
     "devices.patch",
     "apps-in-projects.patch",
     "screen-picture.patch",
+    "web-search-switch.patch",
 )
 
 failures = 0

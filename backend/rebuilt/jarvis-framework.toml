@@ -269,6 +269,10 @@ search_the_web            = "ask"
 # Turning "Ask before every web search" OFF is one card (turning it on is
 # immediate). Must stay "ask": anything else and the setting stays on.
 stop_asking_before_every_web_search       = "ask"
+# Turning web search back ON, after the owner switched it off in Settings, Web
+# search, is one card (turning it off is immediate). Must stay "ask": anything
+# else and the switch stays off.
+web_search_enable                         = "ask"
 
 # --- Power: turning the assistant down, at two depths --------------------
 # Putting Jarvis into quiet/standby, or waking it, is the safe direction

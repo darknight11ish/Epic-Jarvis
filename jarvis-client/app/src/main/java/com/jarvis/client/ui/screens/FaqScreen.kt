@@ -87,8 +87,8 @@ private val FAQS = listOf(
     ),
     Faq(
         "How do I use \"hey Jarvis\"?",
-        "It is off until you turn it on, in two steps. First, on Platform " +
-            "checks, tap Turn on \"hey Jarvis\" and approve the card that " +
+        "It is off until you turn it on, in two steps. First, in Settings, " +
+            "under Voice, tap Turn on \"hey Jarvis\" and approve the card that " +
             "appears - that lets your desktop accept it. Then tap Listen on " +
             "this phone. While that is on, the microphone stays open (Android " +
             "shows its microphone dot and a notification), a small model on " +

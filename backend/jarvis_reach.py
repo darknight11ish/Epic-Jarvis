@@ -161,7 +161,12 @@ def _tools_enabled() -> set:
     fw = _fw()
     try:
         cfg = fw.load_framework() if fw is not None else {}
-        return set((cfg.get("tools") or {}).get("enabled") or [])
+        names = set((cfg.get("tools") or {}).get("enabled") or [])
+        # An older build saved the email row's action name ("email_read") for
+        # the tool "email_check": read it as the tool (jarvis_asks_first).
+        if "email_read" in names:
+            names.add("email_check")
+        return names
     except Exception:
         return set()
 
@@ -388,31 +393,60 @@ def _tool_row(id_: str, name: str, tool: str, ctx: Ctx, *, configured: bool,
 def _tool_switchable(tool: str) -> bool:
     """Can this tool be offered to the model from an app at all - the owner's
     answer of 2026-09-27 ("Reading tools ... can be switched on from the PC
-    app") - or is it file-only, like every other tool?"""
+    app") - or only in the settings file, like every other tool? `tool` is the
+    TOOL's name ("email_check"), not the gate action's ("email_read")."""
     try:
         import jarvis_asks_first
-        return tool in jarvis_asks_first.TOOLS_SWITCHABLE
+        return tool in jarvis_asks_first.SWITCHABLE_TOOL_NAMES
     except Exception:
         return False
 
 
+#: What each tool that is not switched on from an app CAN DO - the reason it
+#: stays a deliberate step in the settings file. Plain words, for the owner.
+_CAN_DO = {
+    "send_email": "send email from your account",
+    "draft_email": "save drafts into your mailbox",
+    "tidy_inbox": "change your mailbox (archive, star, move to Trash)",
+    "home_control": "change things in your home, such as lights and locks",
+    "github_search": "send search words to GitHub",
+    "browser_control": "open web pages and click and type in them",
+    "web_search": "send search words to the internet",
+    "control_computer": "click and type in other programs on this PC",
+    "control_phone": "tap and type on your phone",
+    "shell_exec": "run commands on this PC",
+    "append_obsidian_daily": "write into your notes",
+    "append_logseq_journal": "write into your notes",
+    "create_joplin_note": "write into your notes",
+}
+
+
+def _only_in_file(tool: str) -> str:
+    """The plain sentence for a tool the apps cannot switch on: where it is
+    switched on, and why only there (the owner's choice of 2026-09-27: only
+    reading tools - calendar, email, notes, home status - switch on from an
+    app; the rest can act, so they stay a deliberate step on the PC)."""
+    what = _CAN_DO.get(tool, "act for you")
+    return (f"It can only be switched on in the settings file on your PC "
+            f"(jarvis-framework.toml: add \"{tool}\" to the [tools] enabled list). You "
+            f"chose that only reading tools (calendar, email, notes, home status) can be "
+            f"switched on from an app; this one can {what}, so it stays a step you take "
+            f"on the PC.")
+
+
 def _enable_line(tool: str) -> str:
     if _tool_switchable(tool):
-        return (f"Set up on this PC, but the AI model is not offered it yet: switch it on in "
-                f"Settings, \"What asks first\" (one approval card and Windows Hello), or add "
-                f"\"{tool}\" to [tools].enabled in jarvis-framework.toml by hand.")
-    return (f"Set up on this PC, but the AI model is not offered it: \"{tool}\" is not in "
-            f"[tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be "
-            f"switched on from either app.")
+        return ("Set up on this PC, but the AI model is not offered it yet. Switch it on in "
+                "Settings, \"What asks first\", on your PC (one approval card and Windows "
+                "Hello).")
+    return "Set up on this PC, but the AI model is not offered it. " + _only_in_file(tool)
 
 
 def _off_line(tool: str) -> str:
     if _tool_switchable(tool):
-        return (f"Off: switch it on in Settings, \"What asks first\" (one approval card and "
-                f"Windows Hello), or add \"{tool}\" to [tools].enabled in jarvis-framework.toml "
-                f"by hand.")
-    return (f"Off: \"{tool}\" is not in [tools].enabled in jarvis-framework.toml. This one is "
-            f"file-only - it cannot be switched on from either app.")
+        return ("Off. Switch it on in Settings, \"What asks first\", on your PC (one "
+                "approval card and Windows Hello).")
+    return "Off. " + _only_in_file(tool)
 
 
 def _join(items: list) -> str:
@@ -469,8 +503,15 @@ def _web_search(ctx: Ctx) -> dict:
                     "Web search is not installed on this PC.")
     s = ctx.search if ctx.search is not None else WS.settings()
     provider = s.get("provider")
+    if s.get("enabled", True) is not True:
+        return _row("web_search", name, "off", "", ASK_NA,
+                    "Off: you switched web search off. Turn it back on in Settings, Web "
+                    "search (a card asks you first).")
     if "web_search" not in ctx.enabled:
-        return _row("web_search", name, "off", "", ASK_NA, _off_line("web_search"))
+        return _row("web_search", name, "off", "", ASK_NA,
+                    "Off: \"web_search\" is missing from the tool list in the settings file "
+                    "on your PC (jarvis-framework.toml, [tools] enabled), so the AI model is "
+                    "not offered it. Adding it back is done in that file on the PC.")
     if provider is None:
         return _row("web_search", name, "blocked", "", ASK_NA,
                     "Its settings file is damaged, so Jarvis searches nothing until it is "

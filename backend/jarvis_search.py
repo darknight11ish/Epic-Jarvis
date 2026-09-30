@@ -219,6 +219,20 @@ ACTION_ASK_LESS = "stop_asking_before_every_web_search"
 #: The gate action a search is asked under, when it asks (jarvis_agent.py).
 ACTION_SEARCH = "search_the_web"
 
+#: The gate action for turning web search back ON after the owner switched it
+#: off (settings audit 2026-09-30). OFF is instant, like every narrowing.
+ACTION_ENABLE = "web_search_enable"
+
+#: The on/off switch itself. Web search ships ON (the owner, 2026-09-25).
+ENABLED_LABEL = "Web search"
+ENABLED_DETAIL = (
+    "On (the default): Jarvis may search the web when it needs to, with the "
+    "search you chose below. Off: Jarvis searches nothing and the AI model is not "
+    "offered the search at all. Turning it off is immediate; turning it back on "
+    "asks you with an approval card.")
+OFF_SAID = ("Web search is switched off, so nothing was searched. Turn it on in "
+            "Settings, Web search (a card asks you first), or say \"turn on web search\".")
+
 ASK_EVERY_TIME_LABEL = "Ask before every web search"
 ASK_EVERY_TIME_DETAIL = (
     "Off (the default): Jarvis asks first only when private things could slip "
@@ -232,7 +246,8 @@ ASK_EVERY_TIME_DETAIL = (
 #: the code is for them to pick an icon or a button.
 STATES = ("works", "not_running", "json_off", "key_missing", "key_refused",
           "quota_used", "rate_limited", "not_installed", "no_results", "timeout",
-          "not_allowed", "blocked", "failed", "secret", "settings_damaged", "empty")
+          "not_allowed", "blocked", "failed", "secret", "settings_damaged", "empty",
+          "turned_off")
 
 
 # --------------------------------------------------------------------------
@@ -270,7 +285,7 @@ _DAMAGED = ("the web search settings file is damaged, so Jarvis does not know wh
 
 
 def settings() -> dict:
-    """{"provider", "searxng_url", "ask_every_time", "why"}.
+    """{"provider", "searxng_url", "ask_every_time", "enabled", "why"}.
 
     No file: the owner's defaults (SearXNG on this PC, asking only when
     private things could slip in). A damaged file fails CLOSED, both ways:
@@ -280,10 +295,10 @@ def settings() -> dict:
         raw = settings_path().read_text(encoding="utf-8")
     except FileNotFoundError:
         return {"provider": DEFAULT_PROVIDER, "searxng_url": DEFAULT_SEARXNG_URL,
-                "ask_every_time": False, "why": ""}
+                "ask_every_time": False, "enabled": True, "why": ""}
     except OSError as exc:
         return {"provider": None, "searxng_url": DEFAULT_SEARXNG_URL,
-                "ask_every_time": True,
+                "ask_every_time": True, "enabled": True,
                 "why": f"the web search settings file could not be read "
                        f"({type(exc).__name__}), so Jarvis searches nothing"}
     try:
@@ -292,10 +307,11 @@ def settings() -> dict:
             raise ValueError
     except Exception:
         return {"provider": None, "searxng_url": DEFAULT_SEARXNG_URL,
-                "ask_every_time": True, "why": _DAMAGED}
+                "ask_every_time": True, "enabled": True, "why": _DAMAGED}
     provider = doc.get("provider", DEFAULT_PROVIDER)
     url = doc.get("searxng_url", DEFAULT_SEARXNG_URL)
     ask = doc.get("ask_every_time", False)
+    enabled = doc.get("enabled", True)
     why = ""
     if provider not in PROVIDERS:
         provider, why = None, _DAMAGED
@@ -305,7 +321,11 @@ def settings() -> dict:
             provider = None
     if not isinstance(ask, bool):
         ask, why = True, why or _DAMAGED
-    return {"provider": provider, "searxng_url": url, "ask_every_time": ask, "why": why}
+    if not isinstance(enabled, bool):
+        # Fails closed: a switch nobody can read is treated as off.
+        enabled, why = False, why or _DAMAGED
+    return {"provider": provider, "searxng_url": url, "ask_every_time": ask,
+            "enabled": enabled, "why": why}
 
 
 def _save(**changes) -> dict:
@@ -315,7 +335,8 @@ def _save(**changes) -> dict:
         # chooses one: changing another setting must not quietly pick one.
         new = {"provider": cur["provider"],
                "searxng_url": cur["searxng_url"],
-               "ask_every_time": cur["ask_every_time"]}
+               "ask_every_time": cur["ask_every_time"],
+               "enabled": cur["enabled"]}
         new.update(changes)
         new["changed"] = time.time()
         p = settings_path()
@@ -594,6 +615,11 @@ def plan(query, *, s: Optional[dict] = None) -> Plan:
     p = Plan(query=q, provider=provider, label=LABEL.get(provider or "", "no search"),
              host=host, keyed=provider in NEEDS_KEY,
              searxng_url=(s.get("searxng_url") or "") if provider == "searxng" else "")
+    if s.get("enabled", True) is not True:
+        # Read at use time, from the file: every path that searches (the chat
+        # tool, "tell me when", the tests' direct calls) plans here first.
+        p.state, p.problem = "turned_off", OFF_SAID
+        return p
     if not q:
         p.state, p.problem = "empty", "There were no search words, so nothing was searched."
         return p
@@ -1214,6 +1240,8 @@ def run(p: Plan, *, approved: bool = False) -> dict:
     # SearXNG address are the ones the card named. If settings changed in
     # between, this is not the plan that was allowed.
     now = settings()
+    if now.get("enabled", True) is not True:
+        return {"ok": False, "state": "turned_off", "error": OFF_SAID}
     if now.get("provider") != p.provider or (
             p.provider == "searxng" and now.get("searxng_url") != p.searxng_url):
         return {"ok": False, "state": "failed",
@@ -1280,6 +1308,10 @@ def view() -> dict:
         "left_out": [dict(x) for x in LEFT_OUT],
         "searxng_url": s["searxng_url"],
         "searxng_default": DEFAULT_SEARXNG_URL,
+        "enabled": s["enabled"],
+        "enabled_label": ENABLED_LABEL,
+        "enabled_detail": ENABLED_DETAIL,
+        **enable_card_state(),
         "ask_every_time": s["ask_every_time"],
         "ask_every_time_label": ASK_EVERY_TIME_LABEL,
         "ask_every_time_detail": ASK_EVERY_TIME_DETAIL,
@@ -1298,14 +1330,21 @@ def handle_settings(body) -> tuple:
        {"provider": id}            immediate
        {"searxng_url": address}    immediate; "" puts the default back
        {"ask_every_time": true}    immediate (stricter)
-       {"ask_every_time": false}   202, ONE approval card (ACTION_ASK_LESS)"""
+       {"ask_every_time": false}   202, ONE approval card (ACTION_ASK_LESS)
+       {"enabled": false}          immediate (web search off)
+       {"enabled": true}           202, ONE approval card (ACTION_ENABLE)"""
     if not isinstance(body, dict):
         return 400, {"ok": False, "error": "the request must be a JSON object"}
-    keys = [k for k in ("provider", "searxng_url", "ask_every_time") if k in body]
+    keys = [k for k in ("provider", "searxng_url", "ask_every_time", "enabled") if k in body]
     if len(keys) != 1:
         return 400, {"ok": False, "error": ('send exactly one of {"provider": ...}, '
-                                            '{"searxng_url": ...} or {"ask_every_time": ...}')}
+                                            '{"searxng_url": ...}, {"ask_every_time": ...} '
+                                            'or {"enabled": ...}')}
     k = keys[0]
+    if k == "enabled":
+        if not isinstance(body["enabled"], bool):
+            return 400, {"ok": False, "error": "enabled must be true or false"}
+        return request_enabled(body["enabled"])
     if k == "provider":
         pid = body["provider"]
         if pid not in PROVIDERS:
@@ -1516,12 +1555,152 @@ def request_ask_every_time(on: bool, *, gate: Optional[Callable] = None,
                          "search until you approve the card, on your PC or phone."}
 
 
+# --------------------------------------------------------------------------
+#   The on/off switch. OFF at once; back ON is ONE approval card.
+# --------------------------------------------------------------------------
+
+ENABLE_CARD_TEXT = "\n".join([
+    "Turn web search back on?",
+    "",
+    "Jarvis may search the web again, with the search you chose in Settings, Web "
+    "search. The rules for when a search asks first are unchanged: a search shows "
+    "its exact words on a card after Jarvis has read your email, files, notes or "
+    "other outside text, when the words repeat something you told it, or when a "
+    "sensitive saved fact was used - and always, if \"Ask before every web "
+    "search\" is on.",
+    "",
+    "Nothing is searched by this change. You can turn web search off again at any "
+    "time, from either app, and that is instant.",
+    "",
+    "If you say no: web search stays off.",
+])
+
+ENABLE_LAST_WORDS = {
+    "changed": "You approved the card, so web search is on again.",
+    "denied": "The card was turned down, so web search stays off.",
+    "timed_out": "Nobody answered the card in time, so web search stays off.",
+    "refused": "Your PC's settings do not let this be approved, so web search stays off.",
+    "withdrawn": "You turned web search off again while the card waited, so approving it "
+                 "changed nothing.",
+    "failed": "It was approved, but the setting could not be saved, so web search stays off.",
+}
+
+_E_PENDING: dict = {}
+_E_WITHDRAWN: set = set()
+_E_LAST: dict = {}
+_E_LATEST: dict = {}
+
+
+def enable_card_state() -> dict:
+    with _LOCK:
+        return {"enable_waiting": bool(_E_PENDING), "enable_last": dict(_E_LAST) or None}
+
+
+def _e_finish(pid: str, outcome: str, why: str = "") -> None:
+    with _LOCK:
+        if _E_PENDING.get("id") == pid:
+            _E_PENDING.clear()
+        _E_WITHDRAWN.discard(pid)
+        if _E_LATEST.get("id") not in (None, pid):
+            return
+        _E_LAST.clear()
+        _E_LAST.update(outcome=outcome, why=why, at=time.time(),
+                       message=ENABLE_LAST_WORDS.get(outcome, ""))
+    _audit("web_search.enable_card", {"outcome": outcome})
+
+
+def _e_decide(pid: str, gate: Callable, tier_of: Callable[[str], str]) -> None:
+    try:
+        v = gate(ACTION_ENABLE, {"text": ENABLE_CARD_TEXT, "what": "turn web search back on",
+                                 "leaves_this_pc": False}, ENABLE_CARD_TEXT)
+    except Exception as exc:
+        return _e_finish(pid, "refused", f"the approval gate failed ({type(exc).__name__})")
+    vtier = getattr(v, "tier", "unknown")
+    allowed = getattr(v, "allowed", False) is True
+    outcome = getattr(v, "outcome", None)
+    if outcome is None:
+        outcome = "approved" if (allowed and vtier == "ask") else "refused"
+    if vtier != "ask" or tier_of(ACTION_ENABLE) != "ask":
+        return _e_finish(pid, "refused",
+                         f"the gate answered at tier {vtier!r}, which is not a person saying yes")
+    if not (allowed and outcome == "approved"):
+        if outcome in ("denied", "timed_out"):
+            return _e_finish(pid, outcome)
+        return _e_finish(pid, "refused", str(getattr(v, "reason", "refused")))
+    with _SWITCH:
+        with _LOCK:
+            withdrawn = pid in _E_WITHDRAWN
+        if withdrawn:
+            return _e_finish(pid, "withdrawn")
+        try:
+            _save(enabled=True)
+        except Exception as exc:
+            return _e_finish(pid, "failed", type(exc).__name__)
+        _e_finish(pid, "changed")
+
+
+def request_enabled(on: bool, *, gate: Optional[Callable] = None,
+                    tier_of: Optional[Callable[[str], str]] = None,
+                    spawn: Optional[Callable] = None) -> tuple:
+    """OFF: at once, from either app, never a card (it only narrows what Jarvis
+    does), and a waiting ON card is withdrawn. ON: ONE approval card, and only a
+    person's yes writes it."""
+    gate = gate or _gate
+    tier_of = tier_of or _tier
+    spawn = spawn or _spawn
+    if not on:
+        with _SWITCH:
+            with _LOCK:
+                if _E_PENDING:
+                    _E_WITHDRAWN.add(_E_PENDING["id"])
+                    _E_PENDING.clear()
+            if settings()["enabled"] is False:
+                return 200, {"ok": True, "waiting": False,
+                             "said": "Web search is already off.", **view()}
+            try:
+                _save(enabled=False)
+            except Exception as exc:
+                return 500, {"ok": False, "error": f"could not save ({type(exc).__name__})"}
+        _audit("web_search.enabled", {"on": False})
+        return 200, {"ok": True, "waiting": False,
+                     "said": "Web search is off. Jarvis searches nothing.", **view()}
+    if settings()["enabled"] is True:
+        return 200, {"ok": True, "waiting": False, "said": "Web search is already on.",
+                     **view()}
+    tier = tier_of(ACTION_ENABLE)
+    if tier != "ask":
+        return 503, {"ok": False, "error": (
+            f"{ACTION_ENABLE} is tier {tier!r} in jarvis-framework.toml; turning web search "
+            f"back on needs a person to say yes, so it must be 'ask'")}
+    with _LOCK:
+        if _E_PENDING:
+            return 202, {"ok": True, "waiting": True,
+                         "said": "A card to turn web search back on is already waiting for "
+                                 "your approval."}
+        pid = _uuid.uuid4().hex
+        _E_PENDING.update(id=pid, since=time.time())
+        _E_LATEST["id"] = pid
+    try:
+        spawn(lambda: _e_decide(pid, gate, tier_of))
+    except Exception:
+        with _LOCK:
+            _E_PENDING.clear()
+        return 503, {"ok": False, "error": "could not raise the approval card"}
+    return 202, {"ok": True, "waiting": True,
+                 "said": "Waiting for your approval. Web search stays off until you approve "
+                         "the card, on your PC or phone."}
+
+
 def _reset_for_tests() -> None:
     with _LOCK:
         _PENDING.clear()
         _WITHDRAWN.clear()
         _LAST.clear()
         _LATEST.clear()
+        _E_PENDING.clear()
+        _E_WITHDRAWN.clear()
+        _E_LAST.clear()
+        _E_LATEST.clear()
     _DDG_LAST[0] = 0.0
 
 

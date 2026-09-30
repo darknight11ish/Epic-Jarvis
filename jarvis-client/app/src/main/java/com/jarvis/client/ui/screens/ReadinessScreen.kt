@@ -48,10 +48,6 @@ import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.ageText
 import com.jarvis.client.ui.parts.rememberTickingNow
 import com.jarvis.client.ui.theme.LocalChrome
-import com.jarvis.client.voice.BargeIn
-import com.jarvis.client.voice.HeardSound
-import com.jarvis.client.voice.LiveRules
-import com.jarvis.client.voice.OneMoment
 import com.jarvis.client.voice.StrictVoice
 import com.jarvis.client.voice.VoiceTraining
 import kotlinx.coroutines.delay
@@ -107,36 +103,16 @@ fun ReadinessScreen(
     onRequestAssistantRole: (() -> Unit)? = null,
     /** The desktop's wake word, as three states — never as a boolean. */
     wakeWord: WakeWord = WakeWord.UNKNOWN,
-    /** Turns the desktop's wake word off. Null hides the control entirely. */
-    onWakeWordOff: (() -> Unit)? = null,
-    onRecheckWakeWord: (() -> Unit)? = null,
-    /** Asks the desktop to turn the wake word on - an approval card. Null hides it. */
-    onWakeWordOn: (() -> Unit)? = null,
     /** A card to turn it on is waiting for the owner. */
     wakeWordPending: Boolean = false,
     /** What this phone's own "hey Jarvis" listener is doing. */
     phoneListening: WakeListen = WakeListen.Off,
-    /** Starts (true) or stops (false) this phone's listener. Null hides it. */
-    onPhoneListening: ((Boolean) -> Unit)? = null,
-    /** Set while the change is in flight, so the button cannot be double-sent. */
-    wakeWordBusy: Boolean = false,
-    /** What went wrong, or what the desktop said afterwards. */
-    wakeWordNotice: String? = null,
     /**
-     * "Interrupting Jarvis" on this phone (LiveRules.INTERRUPT): ONE setting
-     * for Jarvis Live and ordinary replies (the owner's answer of
-     * 2026-09-28). Null hides it.
+     * Opens Settings, Voice, where the switches (turn "hey Jarvis" on or off,
+     * Listen on this phone, interrupting, "One moment", the "I heard you"
+     * sound) now are. Null hides the button.
      */
-    interrupt: String? = null,
-    /** Whether this phone has an echo canceller (the default follows it). */
-    bargeInEchoCanceller: Boolean = false,
-    onInterrupt: ((String) -> Unit)? = null,
-    /** "Say 'One moment' if I'm kept waiting" on this phone (OneMoment). Null hides the switch. */
-    oneMoment: Boolean? = null,
-    onOneMoment: ((Boolean) -> Unit)? = null,
-    /** "Play a short sound when I finish speaking" on this phone (HeardSound). Null hides the switch. */
-    heardSound: Boolean? = null,
-    onHeardSound: ((Boolean) -> Unit)? = null,
+    onOpenVoiceSettings: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     /** The link, for the Connection card. Null hides the card. */
     connection: ConnectionInfo? = null,
@@ -250,23 +226,11 @@ fun ReadinessScreen(
                 }
             }
             item(key = "wake-word") {
-                WakeWordCard(
+                WakeWordSummaryCard(
                     state = wakeWord,
-                    busy = wakeWordBusy,
-                    notice = wakeWordNotice,
-                    onTurnOff = onWakeWordOff,
-                    onRecheck = onRecheckWakeWord,
-                    onTurnOn = onWakeWordOn,
                     pending = wakeWordPending,
                     phone = phoneListening,
-                    onPhone = onPhoneListening,
-                    interrupt = interrupt,
-                    bargeInEchoCanceller = bargeInEchoCanceller,
-                    onInterrupt = onInterrupt,
-                    oneMoment = oneMoment,
-                    onOneMoment = onOneMoment,
-                    heardSound = heardSound,
-                    onHeardSound = onHeardSound,
+                    onOpenVoiceSettings = onOpenVoiceSettings,
                 )
             }
             if (securitySummary != null) {
@@ -530,42 +494,16 @@ private fun YourVoiceCard(
 }
 
 /**
- * "Hey Jarvis": the desktop's switch, and this phone's own listening.
- *
- * Two switches, on purpose, because they are two different things.
- *
- * THE DESKTOP'S SWITCH says whether Jarvis takes wake-word clips at all.
- * Turning it on is a change to where Jarvis listens, so it is an approval
- * card (`change_own_config`), never a toggle that flips here: "Turn on"
- * asks, and the card is where the owner decides. Off is immediate.
- *
- * THIS PHONE'S LISTENING is the microphone on this handset, open for as long
- * as it is on (`WakeWordService`, with a notification and Android's
- * microphone dot the whole time). It can only be switched on while the
- * desktop's switch is on, and it is never on by default or after a restart.
- *
- * Three states for the desktop, not a checkbox, because [WakeWord.UNKNOWN]
- * must never render as off - see that type. And the state shown is always the
- * one the desktop last reported, never the one just requested.
+ * "Wake word - hey Jarvis" on Platform checks: only the STATUS (a check), and a
+ * button to Settings, Voice, where the switches now are ([WakeWordSwitchesCard]).
+ * Nothing here changes anything.
  */
 @Composable
-private fun WakeWordCard(
+private fun WakeWordSummaryCard(
     state: WakeWord,
-    busy: Boolean,
-    notice: String?,
-    onTurnOff: (() -> Unit)?,
-    onRecheck: (() -> Unit)?,
-    onTurnOn: (() -> Unit)?,
     pending: Boolean,
     phone: WakeListen,
-    onPhone: ((Boolean) -> Unit)?,
-    interrupt: String? = null,
-    bargeInEchoCanceller: Boolean = false,
-    onInterrupt: ((String) -> Unit)? = null,
-    oneMoment: Boolean? = null,
-    onOneMoment: ((Boolean) -> Unit)? = null,
-    heardSound: Boolean? = null,
-    onHeardSound: ((Boolean) -> Unit)? = null,
+    onOpenVoiceSettings: (() -> Unit)?,
 ) {
     val chrome = LocalChrome.current
     val tint = when {
@@ -592,192 +530,25 @@ private fun WakeWordCard(
             )
         }
         Gap(6)
+        val desktopLine = when {
+            state == WakeWord.ON -> "Your desktop takes \"hey Jarvis\"."
+            state == WakeWord.OFF && pending -> "A card to turn it on is waiting on your PC."
+            state == WakeWord.OFF -> "Off. Nothing can wake Jarvis by speaking a phrase; the talk button still works."
+            else -> "The desktop has not answered, so this is not known."
+        }
+        val phoneLine = if (phone.on) "This phone is listening." else "This phone is not listening."
         Text(
-            when {
-                state == WakeWord.ON ->
-                    "Your desktop takes \"hey Jarvis\". It checks the phrase and your voice " +
-                        "again before it writes down a word."
-                state == WakeWord.OFF && pending ->
-                    "A card to turn it on is waiting. ${com.jarvis.client.net.Approvals.WHERE} " +
-                        "Nothing listens until you do."
-                state == WakeWord.OFF ->
-                    "Off. Nothing can wake Jarvis by speaking a phrase; the talk button still works."
-                else ->
-                    "The desktop has not answered, so this is not known. It is not being " +
-                        "reported as off, because \"off\" and \"could not ask\" are not the " +
-                        "same thing and only one of them is safe to believe."
-            },
+            "$desktopLine $phoneLine",
             style = MaterialTheme.typography.bodySmall,
             color = chrome.textMid,
         )
-
-        Gap(8)
-        Text(
-            // True whatever the desktop says: this handset listens only while
-            // its own switch below is on.
-            when (phone) {
-                WakeListen.Off ->
-                    "This phone is not listening. Its microphone opens only while you hold " +
-                        "the talk button, or while \"Listen on this phone\" is on."
-                WakeListen.Starting -> "This phone is starting to listen…"
-                WakeListen.Listening ->
-                    "This phone is listening. The microphone stays open - Android shows its " +
-                        "microphone dot and a notification the whole time - but nothing leaves " +
-                        "the phone until it hears \"hey Jarvis\". It also uses some battery."
-                WakeListen.Heard -> "Heard \"hey Jarvis\" - listening to what you say next."
-                WakeListen.Paused -> "Paused while the talk button has the microphone."
-                is WakeListen.Failed -> "This phone stopped listening: ${phone.why}"
-            },
-            style = MaterialTheme.typography.bodySmall,
-            color = if (phone is WakeListen.Failed) chrome.warnInk else chrome.textMid,
-        )
-
-        if (notice != null) {
-            Gap(8)
-            Text(notice, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
-        }
-
-        if (onPhone != null && phone.on) {
-            Gap(12)
+        if (onOpenVoiceSettings != null) {
+            Gap(10)
             Secondary(
-                text = "Stop listening on this phone",
+                text = "Turn it on or off, listening and interrupting: Settings, Voice",
                 enabled = true,
                 modifier = Modifier.fillMaxWidth(),
-                onClick = { onPhone(false) },
-            )
-        } else if (onPhone != null && state == WakeWord.ON) {
-            Gap(12)
-            Primary(
-                text = "Listen on this phone",
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { onPhone(true) },
-            )
-            Gap(4)
-            Text(
-                "Keeps the microphone open until you stop it, restart the phone, or " +
-                    "Android closes Jarvis. Off by default, and never turns itself on.",
-                style = MaterialTheme.typography.labelSmall,
-                color = chrome.textMid,
-            )
-        }
-
-        // "Interrupting Jarvis": ONE setting, for "hey Jarvis" replies and
-        // Jarvis Live alike (the owner's answer of 2026-09-28 merged "Interrupt
-        // Jarvis while it talks" and "Interrupting Jarvis in Live"). Shown
-        // whether or not "hey Jarvis" is on - it matters in Live too. This
-        // phone's own; no card either way.
-        if (interrupt != null && onInterrupt != null) {
-            Gap(12)
-            Text(
-                LiveRules.INTERRUPT_TITLE,
-                style = MaterialTheme.typography.labelLarge,
-                color = chrome.textHi,
-            )
-            LiveRules.INTERRUPT.forEach { c ->
-                Gap(6)
-                OptionChip(
-                    label = if (c.recommended) "${c.label} (recommended)" else c.label,
-                    isSelected = interrupt == c.id,
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { onInterrupt(c.id) },
-                )
-                Gap(4)
-                Text(c.detail, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
-            }
-            if (interrupt == LiveRules.INTERRUPT_VOICE && !bargeInEchoCanceller) {
-                Gap(4)
-                Text(
-                    BargeIn.describe(true, echoCancellerAvailable = false),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = chrome.warnInk,
-                )
-            }
-        }
-
-        // Not tied to "hey Jarvis": it is about any spoken question, the
-        // talk button's too. This phone's own switch; the desktop has its own.
-        if (oneMoment != null && onOneMoment != null) {
-            Gap(12)
-            Text(
-                OneMoment.NAME,
-                style = MaterialTheme.typography.labelLarge,
-                color = chrome.textHi,
-            )
-            Gap(4)
-            Text(
-                OneMoment.describe(oneMoment),
-                style = MaterialTheme.typography.bodySmall,
-                color = chrome.textMid,
-            )
-            Gap(6)
-            Secondary(
-                text = if (oneMoment) "Stay quiet while I wait" else "Say \"One moment\"",
-                enabled = true,
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { onOneMoment(!oneMoment) },
-            )
-        }
-
-        // Beside "One moment", and like it about any spoken question (the
-        // talk button's too). This phone's own; the desktop has its own.
-        if (heardSound != null && onHeardSound != null) {
-            Gap(12)
-            Text(
-                HeardSound.NAME,
-                style = MaterialTheme.typography.labelLarge,
-                color = chrome.textHi,
-            )
-            Gap(4)
-            Text(
-                HeardSound.describe(heardSound),
-                style = MaterialTheme.typography.bodySmall,
-                color = chrome.textMid,
-            )
-            Gap(6)
-            Secondary(
-                text = if (heardSound) "No sound when I finish" else "Play the sound",
-                enabled = true,
-                modifier = Modifier.fillMaxWidth(),
-                onClick = { onHeardSound(!heardSound) },
-            )
-        }
-
-        if (state == WakeWord.ON && onTurnOff != null) {
-            Gap(12)
-            Primary(
-                text = if (busy) "Turning it off…" else "Turn the wake word off",
-                color = chrome.warnInk,
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onTurnOff,
-            )
-        }
-
-        if (state == WakeWord.OFF && !pending && onTurnOn != null) {
-            Gap(12)
-            Primary(
-                text = if (busy) "Asking…" else "Turn on \"hey Jarvis\"",
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onTurnOn,
-            )
-            Gap(4)
-            Text(
-                "This raises an approval card. Nothing changes until you approve it, " +
-                    "and then nothing listens until you switch listening on here or on the desktop.",
-                style = MaterialTheme.typography.labelSmall,
-                color = chrome.textMid,
-            )
-        }
-
-        if ((state == WakeWord.UNKNOWN || pending) && onRecheck != null) {
-            Gap(12)
-            Secondary(
-                text = if (busy) "Asking…" else "Ask the desktop again",
-                enabled = !busy,
-                modifier = Modifier.fillMaxWidth(),
-                onClick = onRecheck,
+                onClick = onOpenVoiceSettings,
             )
         }
     }

@@ -5517,7 +5517,7 @@ Every route needs the pairing token and passes the origin check.
 | Route | Body | Answers | Notes |
 |---|---|---|---|
 | `GET /api/search` | - | 200 view (below); 503 `{"available": false, "error": <exception name>}` without `jarvis_search.py` | A read. |
-| `POST /api/search/settings` | exactly ONE of `{"provider": id}`, `{"searxng_url": address}` (`""` = the default), `{"ask_every_time": bool}` | 200 `{"ok": true, "said", ...view}`; **202** `{"ok": true, "waiting": true, "said"}` for `ask_every_time: false` (ONE card); 400 `{"ok": false, "error"}` (two fields, an unknown provider, an address outside the owner's networks); 503 when `stop_asking_before_every_web_search` is not tier `ask` | Held on a stale link in both apps. There is **no field and no route for a key**. |
+| `POST /api/search/settings` | exactly ONE of `{"provider": id}`, `{"searxng_url": address}` (`""` = the default), `{"ask_every_time": bool}`, `{"enabled": bool}` (the on/off switch, 23.6) | 200 `{"ok": true, "said", ...view}`; **202** `{"ok": true, "waiting": true, "said"}` for `ask_every_time: false` (ONE card, `stop_asking_before_every_web_search`) and for `enabled: true` after it was switched off (ONE card, `web_search_enable`); 400 `{"ok": false, "error"}` (two fields, an unknown provider, an address outside the owner's networks); 503 when `stop_asking_before_every_web_search` is not tier `ask` | Held on a stale link in both apps. There is **no field and no route for a key**. |
 | `POST /api/search/test` | `{}` | 200 `{"ok", "state", "said", "provider", "offer"?, "results"?: n}` | ONE search for the fixed word `wikipedia` through the chosen provider; no card (fixed words, the owner pressed the button). A real search: one Tavily credit, or a little of Exa's free credit. Held on a stale link in both apps. |
 
 The view:
@@ -5528,7 +5528,8 @@ The view:
  "providers": [{"id", "label", "why", "needs_key", "key_saved": bool | null,
                 "key_where", "needs_docker", "ready", "state", "said"}],
  "left_out": [{"id": "whoogle", "label", "why"}],
- "searxng_url", "searxng_default", "ask_every_time", "ask_every_time_label",
+ "searxng_url", "searxng_default", "enabled", "enabled_label", "enabled_detail",
+ "enable_waiting", "enable_last", "ask_every_time", "ask_every_time_label",
  "ask_every_time_detail", "key_entry", "test_query": "wikipedia",
  "waiting": bool, "last": {"outcome", "why", "at", "message"} | null}
 ```
@@ -5662,6 +5663,43 @@ says only `key_saved: true|false`.
   `memory_search`); an earlier turn's recalled facts are not tracked, so a
   later search in the same conversation that has read nothing else runs
   without a card.
+
+
+### 23.6 The on/off switch (added 2026-09-30, the settings audit)
+
+Web search ships **on** (the owner, 2026-09-25) but had no way to be switched
+off short of editing `jarvis-framework.toml` by hand. Both apps' Settings, Web
+search now open with a switch, "Web search":
+
+- **Off is instant**, from either app, never a card (it only narrows what
+  Jarvis does): `{"enabled": false}` writes `"enabled": false` into
+  `web-search.json`, and withdraws a waiting "turn it back on" card.
+- **Back on is ONE approval card**, gate action **`web_search_enable`**
+  (tier `ask`, must stay `ask`; `web-search-switch.patch` adds its `_RISK`
+  line and its place in the "a no is not a standing rule" list, and the
+  shipped toml its `ask` line). The change itself sends nothing; every search
+  keeps the rules it had. The card can be decided on the PC or the phone, like
+  `stop_asking_before_every_web_search`. Until a person says yes the switch
+  stays off, and both apps show it off (never "on before the card").
+- **Read at use time, not just shown.** `jarvis_search.plan()` refuses with
+  state `turned_off` and the plain sentence "Web search is switched off ... Turn
+  it on in Settings, Web search (a card asks you first)"; `run()` re-checks, so a
+  plan made while on is stopped if it was switched off before it ran; and
+  `jarvis_agent.offered_tools()` does not offer `web_search` to the AI model at
+  all while it is off. Every path that searches (the chat tool, "tell me when",
+  the tests' direct calls) goes through `plan()`.
+- A `web-search.json` whose `enabled` is not true/false fails **closed** (off).
+- The second door: "turn off web search" / "turn on web search"
+  (`jarvis_settings_registry` BoolSetting `web_search`, calling
+  `jarvis_search.request_enabled`), by voice or chat.
+- The reach list ("What Jarvis can reach", section 24) says "Off: you switched web
+  search off. Turn it back on in Settings, Web search (a card asks you first)"
+  or, when `web_search` is missing from the settings file's tool list, says so
+  in plain words.
+- Held on a stale link in both apps, with the reason shown: the desktop greys
+  the switch with the "Waiting for the link to catch up" title (as the other
+  controls there); the phone's plate already ended with "Not connected to the
+  desktop, so changes ... wait until the link is back."
 
 ## 24. What Jarvis can reach (added 2026-09-25)
 
@@ -8150,6 +8188,7 @@ the phone) - see `docs/ARCHITECTURE.md` section 8.
 | Route | Body | Answers | Notes |
 |---|---|---|---|
 | `POST /api/asks_first/tools` | `{"tool", "enabled": true}` | **202** `{"ok", "waiting": true, "message", "tools"}` while its card waits; 200 `changed: false` if already offered; **403** `{"error", "pc_only": true}` from any device but this PC; **403** for a tool off the four; **503** the backend cannot ask Windows Hello itself, or `enable_reading_tool` is not tier `ask` | **ON**: the PC only, held on a stale link. ONE approval card, action **`enable_reading_tool`** (§43.2). Only a person's "approved" adds the tool to `[tools].enabled`. |
+| (both) | **The row id is the GATE ACTION's name, not the tool's.** The four rows are `calendar_read`, `email_read`, `notes_search`, `home_read`; the tool the model is offered for the second is **`email_check`** (`jarvis_agent.TOOLS`). Until 2026-09-30 the switch wrote `"email_read"` into `[tools].enabled`, which offered nothing (the page said On, "What Jarvis can reach" said Off, and the tool was not there). Now `jarvis_asks_first.TOOL_NAME` maps each row to its tool, the file gets the tool's name, an old `"email_read"` entry is read as `email_check` (and removed when the switch is turned off), and `test_settings_switches.py` proves it end to end for all four rows | |
 | `POST /api/asks_first/tools` | `{"tool", "enabled": false}` | 200 `{"ok": true, "changed", "message", "tools"}` | **OFF**: at once, from either app (Rust still refuses it on the phone - no screen calls it there), never held: it only narrows what the model may be offered. |
 
 Its state rides on `GET /api/asks_first` (§32.2), which now also carries:
@@ -9621,6 +9660,27 @@ smoothed over: "appearance" on the phone is `SECTIONS`' `"appearance-card"`
 maps the wire id to that item's position, so the mismatch in NAME never
 becomes a mismatch in behaviour.
 
+**The phone's Settings screen (2026-09-30, the settings audit)** opens with a
+"Jump to:" list of every section (`ui/SettingsJump.kt`, held to the screen's
+real rows by `SettingsJumpTest`), which moved every row down by one in
+`SETTINGS_ITEM_INDEX`. The "hey Jarvis" switches (turn it on or off, Listen on
+this phone, interrupting, "One moment", the "I heard you" sound) moved from
+Platform checks to **Settings, Voice**, matching the desktop's `#voice`;
+Checks keeps a status card with a "Settings, Voice" button. Picture mode has a
+button to the Security screen's "Looking at your screen" switch, which the
+Security screen scrolls to.
+
+**Added 2026-09-30 (the settings audit):** `SECTIONS` was missing two real
+cards - `devices` (both apps: the desktop's `<section id="devices">`, the
+phone's `item(key = "devices")`) and `crash-notes` (the desktop's "Hang and
+crash notes", inside More options; **desktop only**, and `OpenPlace.PC_ONLY`
+says so on the phone, whose only crash screen appears after a crash) - plus
+the phone's `quick-tiles` row (phone only). `screen-look` also answers "open
+look at this" and "open watch with me". A new test
+(`t_every_real_settings_card_is_listed`) holds it the other way round too:
+every desktop card and every phone Settings row is in `SECTIONS` or one of a
+few named spacers, so a card can no longer be added without a name.
+
 The answer is `"Opening <name> in Settings."`; `X-Jarvis-Route` carries
 `"open_settings": "<section id>"` alongside the usual `"quick"` field -
 additive only, so an app that does not read this key is unaffected, same as
@@ -9695,7 +9755,7 @@ at - "turn off my calendar" and "turn on the special mode" are not real
 settings and go to the model, same as "ask, don't guess"
 (`docs/CUTTING-EDGE-2026-09-26-round2-tools.md`'s principle, reused here).
 
-Eleven settings are covered - the ones that already sit behind a single
+Twelve settings are covered (web search on/off joined 2026-09-30, 23.6) - the ones that already sit behind a single
 proven `handle_*`/`request_*` entry point this file can call exactly as
 the REST route does, never a copy of its logic:
 

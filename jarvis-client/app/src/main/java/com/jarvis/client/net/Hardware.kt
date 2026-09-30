@@ -43,6 +43,10 @@ import kotlinx.serialization.json.put
  * writes for both apps (HardwareContractTest).
  */
 object Hardware {
+    /** Why the buttons are greyed while the link is stale (settings audit 2026-09-30). */
+    const val STALE =
+        "Not connected to the desktop, so choosing a setup, its steps and Measure wait until the link is back."
+
 
     const val PATH = "/api/hardware"
     const val APPLY_PATH = "/api/hardware/apply"
