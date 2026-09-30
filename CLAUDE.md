@@ -1681,7 +1681,18 @@ job, one permission model, named elements only):
   chat history"**, on both apps (owner, 2026-09-30); a plain line says why.
 - **Built before the second card is installed** (owner: "build it now"); the
   form driver itself still needs the 2060 and its "Browser control" switch.
-  **No pull request to `main` until the owner asks.**
+  **No pull request to `main` until the owner asks.** Built 2026-09-30
+  (JARVIS-API §98, `backend/jarvis_form_review.py`, `form-review.patch`); not
+  tried against a real browser or the owner's real gate.
+- **The form page Jarvis opened itself does not count as "outside text" for
+  the Submit click** (owner, 2026-09-30, "ignore the form page itself"). Email,
+  files, notes, web searches, memories and **a different website read earlier
+  in the same turn** still refuse it, as does a model that is not on this PC.
+  Known limit, said plainly: an earlier TURN of the same conversation that
+  used any tool still taints the conversation, so a form must be opened and
+  filled in one turn (the normal flow).
+- **Pillow is a named requirement** (owner, 2026-09-30) so a very tall form
+  still gets a picture; it was already in `requirements.lock`.
 - **Model advice stays as it is** (owner, 2026-09-30, "improve what exists"):
   Jarvis already offers the bigger model when it struggles or is corrected
   twice; better signals are added to that, only after the 2060 is measured. No

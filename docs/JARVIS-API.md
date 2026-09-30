@@ -15546,3 +15546,112 @@ The first line of the plan card always names the engine and why (`Browser: no wi
 The switch, the default and the install status are decided on the PC like every approval-card switch, and both apps read and set them (`tools/check_parity.py`: `ported`). Neither app runs a browser, sees a web page or has a proxy or address field. Desktop: Settings, "Browser without a window (Obscura)" (`browser_engine.rs` `browser_engine`: `read`, `on`, `off`, `mode`; `on` and `mode` are held on a stale link, `off` never; `browser-engine.js`, `browser-engine-rules.js`). Phone: Settings, "Browser without a window (Obscura)" (`net/BrowserEngine.kt`, `BrowserEnginePlate.kt`). The words are the PC's (`WORDS` in `jarvis_browser_engine.py`) and both apps' tests hold to them and to `panel()`'s cases in `contract/browser-engine-cases.json` (`tools/gen_browser_cases.py`). "What asks first" lists `obscura_enable` (must stay `ask`, never loosened from an app; in `HARD_LIMITS` and `MUST_ASK`); "What Jarvis can reach" says which browsers the browser tool can use (`jarvis_reach._browser`); the card's words are in `jarvis_card_words.py`.
 
 Tests: `backend/test_obscura.py` (the command line and environment, the tool allow-list and the one fixed-argument tool, one process at a time, the start gate, every limit, the watchdog, a quiet restart after idle, a state read that never waits, a write cut off, install state, the install line - one named release, checksums printed, nothing run, parsed as PowerShell - and the owner's check against a stand-in program), `backend/test_browser_engine.py` (off by default, ON is one card and changes nothing until yes, OFF is immediate, the mode rule, no action outside an approved plan, a whole headless plan end to end, the switch re-checked on every call, the fence before a click (backslashes, name@host, `<base href>`, `role=button` with an address, `formaction`, `form=`, unreadable replies, a click that must land on the approved box, no fence means refuse), a redirect and a self-moving page pinned as after-the-load, hidden text kept from the model, own-network addresses refused, captcha and sign-in hand-over (more wording, an unlabelled password box, email-first), sign-in wording in four languages, rule 1 for typed words and addresses, secrets and message lists refused, the chatbot files' imports, the visible browser's second-card rule, outside text, the agent's tool, the routes, no proxy anywhere), `jarvis-desktop/tests/browser-engine.mjs`, `BrowserEngineTest.kt`. The stand-in for Obscura is `backend/_fake_obscura.py`.
+
+## 98. Fill a form, see it, then send it: the picture and the second card (added 2026-09-30)
+
+The owner's decision (CLAUDE.md, "Decided 2026-09-30"; `docs/FORM-REVIEW-DESIGN.md`):
+Jarvis fills a web form, stops before the click that sends it, shows the owner
+**a picture of the filled form exactly as the page shows it**, and raises a
+**second card just for that click**. The rules are `jarvis_browser_control.py`'s
+(`final`, `run()`'s `review`, `snapshot` and `fingerprint` hooks) and
+`jarvis_form_review.py`'s; `form-review.patch` adds the gate action and one
+`install()` call. **It needs the same second-card "Browser control" switch as the
+rest of browser control (§12) for the visible browser - built before the card is
+installed, not switched on by it.**
+
+### 98.1 The request, the second card, the result
+
+* **`final`.** A `browser_control` request may carry `"final": true`: the click that
+  sends the form. Only a `click`, at most one per plan, and it must be the last step,
+  else that request is reported unmatched in words (two finals: none is kept). A
+  final click is always marked heavy. A plan with no final step behaves exactly as
+  before. The plan card says plainly that the last step waits for a SECOND card.
+* **The stop.** `run()` does the earlier steps, then re-reads the page, takes its
+  fingerprint and one picture (visible browser only), re-reads again (a page that
+  moved while the picture was taken stops the run), and calls the review hook. Any
+  answer but an approval stops the run: no hook, a hook that raises, a fingerprint
+  that cannot be read, or a Stop that arrived while the card waited. After a yes it
+  re-reads once more and clicks only if the address, the button (still one, still
+  enabled) and the fingerprint are the same as when the owner looked.
+* **The second card: gate action `browser_form_submit`**, tier **ask** only (never
+  `auto` or `notify`), a **risky** approval (no swipe, no Approve from a
+  notification, Windows Hello on the PC / the screen lock on the phone, like every
+  risky card), never an "always allow", decided by tapping only. `detail` is
+  `{"text": "<card>", "picture": "<id>"}`; `picture` is present only when one exists
+  and the plan card never carries it. The text names the site, every step done with
+  the words typed or chosen (a saved secret only as `(saved secret 'name', typed and
+  shown as dots)`), and ends `Jarvis will now click button "Submit". It cannot be
+  undone.` With no picture it says why ("No picture - this browser has no window.",
+  or the picture was too big to send) and to read the words above carefully. A card
+  that would not fit the gate's detail limit is refused, never cut.
+* **The result** carries `submitted` (false on every refusal, stop and denial) and
+  `form_review: {"shown": bool, "approved": bool}` when there was a final step. After
+  a denial or stop the model is told `ok: false`, `submitted: false` and a reason
+  containing "nothing was sent".
+* **When it is refused outright**, before the page is read and before any card: the
+  turn or conversation read outside text through any tool other than
+  `browser_control` (email, files, notes, a web search, memory), the conversation is
+  tainted, the newest message was pasted or shared, the app added text of its own,
+  the turn's model is not on this PC (rule 1), or this turn read a **different
+  website** earlier (`FORM_REVIEW_OTHER_SITE`; hosts only). **The form page Jarvis
+  opened itself does not count** (owner, 2026-09-30): opening a form and filling it
+  are two calls in one turn. A conversation that read outside text in an EARLIER turn
+  still counts (`jarvis_chat_log.conversation_tainted` has no "browser only"
+  exception) - ask again in a new message you type yourself. A form that ends in a
+  final click cannot be a step of a `propose_plan` plan. If the plan card is already
+  the fifth card of the turn the second is refused: the form stays filled, unsent.
+
+### 98.2 The picture
+
+| Route | Answers |
+|---|---|
+| `GET /api/form-review/picture?id=<id>` | 200 `{"ok": true, "jpeg": "<base64>", "width": int, "height": int}`; 404 exactly `{"ok": false}` for a wrong, guessed, malformed, expired or already-decided id; 401 / 403 are the server's own (bad token, cross-origin) |
+
+A read: not held on a stale link. The id is 16 to 64 characters of `[A-Za-z0-9_-]`.
+
+* **Visible browser only** (Playwright's own `page.screenshot`, the whole page, JPEG).
+  The headless browser has no pixels, so its second card is text only.
+* **Kept in memory only**, in `jarvis_form_review.py`, keyed by a random id: never on
+  disk, never logged, never in an event, status or audit line, **never given to any
+  model**. One at a time (a new review drops the old id); dropped when the card is
+  decided, when it runs out of time, or after ten minutes. Scaled to at most 1,600 px
+  on its longest side, JPEG quality 70, at most 1.5 MiB - with **Pillow**
+  (`backend/requirements.txt`, already in `requirements.lock`); with no Pillow a
+  picture over a cap is not sent and the card says so in words.
+* **It is NOT run through `jarvis_screen.clean_picture`** - the one screen picture that
+  is not (owner's answer, 2026-09-30): the owner has to read their own name, phone and
+  email to check them, and it never reaches a model, a notification, a widget or
+  another device's storage. Everything else that shows a picture of a screen still
+  goes through that door (§62.13).
+
+### 98.3 What the apps do
+
+* **Desktop** (`src-tauri/src/brain/form_review.rs` `form_review_picture`,
+  `src/form-review.js`): the Jarvis bar's full card only (its quickbar window alone
+  holds the command). Small thumbnail, a click opens a larger view, Escape closes just
+  the picture. Fetched once per card, only while the card is showing; held in memory
+  only. **Hidden under App lock and under "Hide memory lists and chat history"**:
+  Rust checks both before asking the PC and again after the answer, and one line says
+  why. Never in the widget, a toast or the HUD page.
+* **Phone** (`net/FormReview.kt`, `ui/approval/FormPicture.kt`, `ApprovalCard.kt`):
+  the picture id is read from `detail.picture` (an object, JSON text, or text the gate
+  cut short); a small image that opens full screen on tap; fetched only while the card
+  is on screen, the app is in front and unlocked; screenshots of Jarvis blocked while
+  it shows (`SecurityRules.blockScreenCapture(formPictureShown)`); hidden, with the
+  same one line, while "Hide memory lists and chat history" is on. Never in a
+  notification or either widget.
+* **Both:** if the picture cannot be loaded, or is gone, one plain sentence says so and
+  points at the written details below it. **Neither app changes how a card is
+  decided** - Approve and Deny keep every rule they had; a missing picture never
+  blocks Approve (the text values on the card are what the owner reads then).
+* `tools/check_parity.py` lists `/api/form-review/picture` as `ported` (both apps read
+  it). The widget, notifications and the phone's home-screen widget are title-only on
+  purpose (`docs/ARCHITECTURE.md` §8, "One-sided on purpose").
+
+Tests: `backend/test_form_review.py` (156), `backend/test_browser_control.py`,
+`backend/test_gate_stack_clean.py`, the contract fixtures
+(`test_approval_contract.py`, `test_card_words.py`, `test_asks_first.py`); the
+desktop's `tests/form-review.mjs`; the phone's `FormReviewTest.kt` (unverified until
+CI compiles it). **Not tried for real:** nothing ran against a live Playwright page, a
+real Windows install or the owner's real `jarvis_gate.py` and `jarvis_hud.py`; the
+patch's line numbers are estimates that `git apply` tolerates.
