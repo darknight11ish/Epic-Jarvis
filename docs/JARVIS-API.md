@@ -16071,3 +16071,111 @@ which another builder was editing when this was built. Until it is, Jarvis in ch
 the form. Follow-up: register the tool (gate action decided like `calculator`, a row in `jarvis_reach.py`'s
 `TOOL_NAMES`, the `control`-style refusal after outside text through the same `tainted` flag) and hand
 the result to the apps through the existing `: jarvis-table` mechanism.
+
+
+## 105. Activity heatmap and balance chart (added 2026-09-30; backend built, apps to follow)
+
+The owner ticked this on 2026-09-30 (`docs/BUILD-QUEUE-2026-09-30.md` item 7;
+`docs/GOALS-PROGRESS-DESIGN.md` part C and its "Progress contract (frozen)").
+Two small pictures for Brain -> Projects, drawn by both apps from what this
+section sends. Backend: `backend/jarvis_progress.py` (shipped whole),
+`progress.patch` (one install block, right after `retirement.patch`'s),
+`backend/test_progress.py`, `tools/gen_progress_cases.py`
+(`progress-cases.json`, desktop and phone, byte-identical).
+
+Every number and sentence comes from code; no model is asked. **Nothing here
+is a model tool, is spoken, goes into a web search or a chatbot's text, or is
+put in a notification.** `test_progress.py` fails if any other backend module
+starts to mention `jarvis_progress`. Routes take the token and origin checks
+like the others. No card and no gate line: nothing acts, and choosing the chart's
+areas is the owner's own display choice (like sorting a list).
+
+### 105.1 `GET /api/progress/activity?weeks=12`
+
+`weeks` is 4 to 26 (12 if left out or not a number). Days are the owner's own
+LOCAL days on the PC (its time zone and daylight saving for that date, not a
+fixed offset). Answers:
+
+```
+{"ok": true, "available": true, "title": "Activity", "weeks": 12,
+ "from": "2026-07-27", "to": "2026-10-14", "today": "2026-10-14",
+ "columns": [{"col": 0, "label": "Week of 27 Jul"}, ...],        // one per week
+ "days": [{"date": "2026-10-12", "col": 11, "row": 0, "count": 1, "level": 1,
+           "words": "1 thing on 12 Oct"}, ...],                  // Monday first; none in the future
+ "total": 1, "days_active": 1, "empty": false,
+ "words": "Last 12 weeks: 1 thing on 1 day.",                     // or the empty sentence
+ "note": "Steps ticked before this was added have no date, so they are not shown.",
+ "summary": "Activity, last 12 weeks. Last 12 weeks: ...",       // the screen-reader text of the grid
+ "levels": [{"level": 0, "min": 0, "max": 0}, ... {"level": 4, "min": 5, "max": null}],
+ "keep_on_screen": false, "hidden_words": "Hidden while memory lists and chat history are hidden."}
+```
+
+A day's `count` is goal steps ticked that day (`done_at`) plus numbers logged
+for that day (the date the number is FOR, so a backfilled number lands on its
+own date). Levels: 0, 1, 2, 3 to 4, 5 or more. An empty day has `level` 0 and
+the neutral words "Nothing on 12 Oct". There is **no streak, no "longest run",
+no percentage, no "missed"** in any key or sentence.
+
+**Health and money.** The answer holds dates and counts only, so a private
+number (the same marks as Projects: `auto_sensitive`, or the owner's mark, or
+a step about health or money) shades its day and is never named. When any
+private item is counted in the window, `keep_on_screen` is `true` and the apps
+hide the whole picture under "Hide memory lists and chat history".
+
+### 105.2 `GET /api/progress/balance`
+
+```
+{"ok": true, "available": true, "title": "Balance",
+ "axes": [{"label": "Body weight", "name": "Body weight", "kind": "bench", "ref": "<id>",
+           "project": "<id>", "state": "progress", "value_words": "72.5 of 70 kg",
+           "fraction": 0.75, "keep_on_screen": true}, ...],
+ "drawable": true, "min": 3, "max": 8, "max_label": 24, "words": "",
+ "summary": "Balance chart, 3 areas. Body weight: 72.5 of 70 kg. ... No overall score.",
+ "choices": [{"kind": "bench"|"goal", "ref", "project", "project_name", "name", "picked", "keep_on_screen"}],
+ "keep_on_screen": true, "hidden_words": "..."}
+```
+
+Each area is a number or goal the owner picked. `fraction` is how far the
+latest number is from the FIRST number logged to the target, 0 to 1 (1 = the
+target reached or passed, for "higher" and for "lower is better"; 0 if it has
+moved away, never negative). `null` = nothing to measure (`state` `no_numbers`,
+`no_target`, `no_steps`): drawn as a dot in the middle, never as a zero.
+`state` is `progress`, `reached`, `no_numbers`, `no_target` or `no_steps`.
+`value_words` is the value printed at the spoke ("72.5 of 70 kg", "$400 of
+$1000", "3 of 5 steps"). A goal area is steps done out of steps. **There is no
+overall score, average or area anywhere.** `choices` lists the numbers with a
+target and a direction, and the accepted goals, each with `picked` and its own
+`keep_on_screen`. Areas whose number or goal was deleted drop off (a deleted
+benchmark or project takes its area with it; the order closes up); fewer than 3
+left keeps them stored, `drawable` false and `words` "Pick at least 3 to see the
+chart."
+
+### 105.3 `POST /api/progress/balance`
+
+Body `{"axes": [{"kind": "bench"|"goal", "ref": "<id>", "label": "Fitness"?}, ...]}`.
+3 to 8 areas replace the whole chart; an empty list clears it. No card. A
+refusal is `400 {"ok": false, "error": <a sentence>}` and stores nothing:
+fewer than 3 or more than 8, the same area twice, a number that is gone, a
+number with no target or no direction, a goal that is gone or not accepted yet,
+a name over 24 characters. Success answers like the GET. The audit log gets
+the count only, never a name or a number.
+
+### 105.4 Storage
+
+One small table in `projects.db`, made if missing: `balance_axes (position,
+kind, project, ref, label)`, at most 8 rows, no numbers and no words of a
+benchmark. `results_by_at` is a new index on `results (at)` so the heatmap read is fast (48,000
+numbers over 26 weeks: well under a second in the test).
+
+### 105.5 What the tests prove, and what they do not
+
+`test_progress.py`: empty data, one day, the level steps, the Monday-first grid,
+no future day, bounded weeks, steps plus numbers, unticking, spring-forward and
+fall-back weekends in a real zone (local days, not UTC days), private numbers
+shading without a name, no streak/percent/average/"missed" word anywhere, the
+3 to 8 limits, a deleted benchmark or project, a target already reached, lower
+and higher, NaN/infinity/huge stored numbers, a goals file that cannot be read
+(nothing is forgotten), the routes, `install()`, the patch on the stack, and
+that no backend module reaches `jarvis_progress`. **Not tried:** a real PC's
+`datetime.fromtimestamp` in a zone other than the one it runs in (the tests pass
+a zone in); both apps' screens (not built yet).

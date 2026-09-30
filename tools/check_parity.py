@@ -354,7 +354,7 @@ CLASSIFICATION = {
     "/api/decks/settings": ("ported", "New cards a day, 0 to 20 (default 5). A setting the owner changes; no card. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
     "/api/decks/{id}/act": ("ported", "Rename, pause, resume or delete one deck; delete asks \"are you sure?\" in the app and is immediate. No card. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
     "/api/decks/{id}/cards": ("ported", "One deck's cards (front, back, passage) for managing them; hidden by both apps under Hide memory lists and chat history. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
-    "/api/decks/{id}/cards/{cid}/act": ("ported", "Edit a card's front or back, or delete the card (\"are you sure?\" in the app). No card. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
+    "/api/decks/{id}/cards/{id}/act": ("ported", "Edit a card's front or back, or delete the card (\"are you sure?\" in the app). No card. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
     "/api/review": ("ported", "The next card to review, the ready count and the run's progress (at most 20 at a time). Reviewing calls no model. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
     "/api/review/reveal": ("ported", "Show a card's back (the answer and its source passage, with the label for a model-written key). A card can be rated only after this. Desktop: brain/decks.rs. Phone: net/Decks.kt."),
     "/api/review/rate": ("ported", "The owner's own rating (Didn't remember / Remembered, with effort / Remembered / Easy); py-fsrs works out when the card comes back. Held on a stale link. Desktop: brain/decks.rs. Phone: net/Decks.kt."),

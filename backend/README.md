@@ -167,6 +167,7 @@ on a throwaway copy instead.
 | `decks.patch` | `jarvis_hud.py` | **"Review decks"** (the owner's decision of 2026-09-30; `docs/QUIZ-DECKS-DESIGN.md`, `docs/JARVIS-API.md` section 102). ONE install block, `jarvis_decks.install(Handler, ...)`, right after `quiz.patch`'s own (so it goes after it, last before `_loopback_companion`). Answers `GET`/`POST /api/decks`, `POST /api/decks/settings`, `POST /api/decks/<id>/act`, `GET /api/decks/<id>/cards`, `POST /api/decks/<id>/cards/<cid>/act`, `GET /api/review` and `POST /api/review/reveal`\|`rate`\|`more`, and hands the quiz the function that keeps chosen questions in a deck (`jarvis_quiz.configure(keep=...)`; the quiz module itself imports no deck code). A finished quiz's `POST /api/quiz/<id>/finish` may carry a `keep` body: the server takes each question's prompt and passage from its own open quiz, the app sends only the question number and the owner's words for the back, all or nothing, and the quiz stays open on any failure. Cards are **sealed** (AES-256-GCM, the chat-history scheme, its own Credential Manager key "Jarvis Backend/study decks key") in `study.db`; no key or no `cryptography` means nothing is kept, with the reason in words. **py-fsrs 6.3.2** (pinned in `requirements.txt` and `requirements.lock`, never its optimizer/torch extra) works out when a card comes back; the owner rates each card themselves and **review calls no model**. New cards a day: 5 (0-20); a run shows at most 20 cards, "Do 10 more" adds 10. One quiet scheduler kind, `review` (`jarvis_schedule.KIND_MODULES` imports `jarvis_decks`), exists only while a deck does and gives the "N cards ready" line under Coming up; no card, no notification. The quiz also gained **typed Spanish practice** (`mode: "spanish"`; blanks cut and marked by code, translations and sentence endings marked by the local model, model-written answer keys labelled "Answer key written by the model"). No card anywhere in this feature. Needs `jarvis_decks.py` and the `fsrs` package (`py -3 -m pip install -r backend\requirements.txt`); without them, or on any error, the banner says "decks NOT ON" and the routes are not there. See `test_decks.py` (and the Spanish parts of `test_quiz.py`); `decks_fsrs_golden.json` is made by `tools/gen_decks_golden.py`. |
 | `spending.patch` | `jarvis_hud.py` | **"Spending summaries"** (the owner's decision of 2026-09-30; `docs/FINANCE-DESIGN.md` part A, `docs/JARVIS-API.md` section 100). ONE install block, `jarvis_spending.install(Handler, ...)`, right after `decks.patch`'s own, answering `GET /api/spending`, `GET`/`POST /api/spending/profile`, `POST /api/spending/profile/delete`, `/categories`, `/suggest` (this PC only) and `GET /api/chat/table?id=<id>`. No card and no gate line: the `my_spending` tool in `jarvis_agent.py` is decided under `file_read`'s action, and it reads a file in a folder the owner already listed. Needs `jarvis_spending.py` and `jarvis_money_parse.py`; without them, or on any error, the banner says so and the routes are simply not there. Last in the list. See "Spending summaries", at the very end. |
 | `retirement.patch` | `jarvis_hud.py` | **"Retirement what-if"** (the owner's decision of 2026-09-30; `docs/FINANCE-DESIGN.md` part B, `docs/JARVIS-API.md` section 103). ONE install block, `jarvis_retirement.install(Handler, ...)`, right after `spending.patch`'s own, answering `GET /api/retirement/defaults` and `POST /api/retirement/run` on any paired device. A pure calculation on numbers the owner typed: no file, no network, nothing stored, no card and no gate line. Needs `jarvis_retirement.py` (plain Python, no numpy); without it, or on any error, the banner says so and the routes are simply not there. Last in the list. See "Retirement what-if", at the very end. |
+| `progress.patch` | `jarvis_hud.py` | **"Activity heatmap and balance chart"** (the owner's decision of 2026-09-30; `docs/GOALS-PROGRESS-DESIGN.md` part C, `docs/JARVIS-API.md` section 105). ONE install block, `jarvis_progress.install(Handler, ...)`, right after `retirement.patch`'s own, answering `GET /api/progress/activity`, `GET` and `POST /api/progress/balance`. Reads the owner's ticked goal steps and logged numbers; the only thing kept is the owner's choice of chart areas (a small table in `projects.db`; no card, no gate line). Health and money numbers only shade a day and are never named. NOT a model tool: a test fails if any other module mentions it. Needs `jarvis_progress.py` (and `jarvis_projects.py`, `jarvis_goals.py`); without it, or on any error, the banner says so and the routes are simply not there. Last in the list. See "Activity heatmap and balance chart", at the very end. |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 
 ## All but two of the patches apply, and that is correct
@@ -18026,6 +18027,43 @@ Test it:
 
 ```
 python3 backend/test_retirement.py
+python3 backend/test_shipped_modules.py
+python3 backend/test_patch_history.py
+```
+
+## Activity heatmap and balance chart (2026-09-30, JARVIS-API section 105)
+
+Two small pictures for Brain -> Projects: 12 weeks of days shaded by what was done (steps ticked and
+numbers logged), and a radar of 3 to 8 areas the owner picks, each against its own target. No streak,
+no percentage, no red, no overall score; every number and sentence comes from code.
+
+What is here:
+
+- `jarvis_progress.py` (shipped whole): the counting (local days, daylight-saving safe), the chart
+  maths, the routes and `install()`. Reads `projects.db` and `goals.db` through their own classes.
+  Imports nothing that reaches a model, a speaker or the network.
+- `jarvis_projects.py` gained the `balance_axes` table, an index on `results (at)` and small read
+  methods; deleting a benchmark or a project removes its chart areas.
+- `progress.patch`: the one install block.
+- `test_progress.py` (119 checks), `tools/gen_progress_cases.py` (`progress-cases.json` for both apps,
+  with the reference grid and radar geometry).
+
+Health and money: a private number shades its day and is never named; the answer says
+`keep_on_screen` so the apps hide the picture under "Hide memory lists and chat history". Nothing here
+is a model tool, is spoken, searched or sent (`test_progress.py` checks that no backend module reaches
+it).
+
+Owner steps: `apply-patches.ps1`. Nothing to switch on. The screens in the two apps are separate work
+against the "Progress contract (frozen)" in `docs/GOALS-PROGRESS-DESIGN.md`.
+
+Not checked, said plainly: no app draws either picture yet; nothing ran on the owner's PC (its time zone
+and daylight saving are tested by passing a zone in).
+
+Test it:
+
+```
+python3 backend/test_progress.py
+python3 tools/gen_progress_cases.py --check
 python3 backend/test_shipped_modules.py
 python3 backend/test_patch_history.py
 ```
