@@ -39,7 +39,8 @@
       "time": "the time was up",
       "locked": "Windows was locked",
       "slept": "the PC slept",
-      "stop_all": "you pressed Stop everything"
+      "stop_all": "you pressed Stop everything",
+      "no_heartbeat": "the Jarvis window stopped answering"
     },
     "marks": [
       "look",

@@ -594,7 +594,11 @@ def _expire(now: float) -> None:
     """The lazy half of the ten-minute limit (the timer is the other)."""
     with _LOCK:
         u = _STATE["undo"]
-        token = u["token"] if u and u["until"] <= now else None
+        # `until` is a wall-clock time (shown to the apps); `mono_until` is the same
+        # ten minutes on the MONOTONIC clock, so a clock set back while the Undo
+        # is open cannot stretch it past ten real minutes (time audit, 2026-09-30).
+        token = u["token"] if u and (u["until"] <= now or (
+            u.get("mono_until") is not None and time.monotonic() >= u["mono_until"])) else None
         a = _STATE["asked"]
         if a and a["at"] + ASKED_SECONDS <= now:
             _STATE["asked"] = None
@@ -841,6 +845,7 @@ def apply(job: dict, *, mem=None, chats=None, now: Optional[float] = None,
             now = _now() if now is None else now
             with _LOCK:
                 _STATE["undo"] = {"token": token, "until": now + UNDO_SECONDS,
+                                  "mono_until": time.monotonic() + UNDO_SECONDS,
                                   "facts": held_facts, "chats": held_chats,
                                   "frame": frame.said}
                 p = _STATE["pending"]
@@ -1113,7 +1118,15 @@ def _time_of(t: str, now: float) -> Optional[tuple]:
             raise _Ask(f"There is no {da_} {_MONTHS[ma - 1].capitalize()}. Which day did you "
                        f"mean?")
         if start > end and ya is None:
-            start = start.replace(year=end.year - 1)
+            try:
+                start = start.replace(year=end.year - 1)
+            except ValueError:
+                # "29 February to 15 January" said in a leap year: the day before
+                # it is a year with no 29 February, so there is no first day.
+                raise _Ask(f"I could not work out which days you mean by {da_} "
+                           f"{_MONTHS[ma - 1].capitalize()} to {db_} "
+                           f"{_MONTHS[mb - 1].capitalize()}. Say the two dates with their "
+                           f"years, like \"1 September 2026 to 15 September 2026\".")
         if start > end:
             raise _Ask("The first day is after the last one. Which days did you mean?")
         return span(start, end)

@@ -1,4 +1,4 @@
-# `cargo deny check licenses advisories`, run in CI.
+# `cargo deny check licenses advisories sources`, run in CI.
 #
 # The licence list is an allowlist on purpose: the point is that a copyleft
 # dependency cannot arrive unnoticed in a closed binary, not that today's tree
@@ -34,3 +34,16 @@ ignore = [
   "RUSTSEC-2025-0098",  # unic-ucd-version, unmaintained
   "RUSTSEC-2025-0100",  # unic-ucd-ident, unmaintained
 ]
+
+[sources]
+# A crate that comes from anywhere but crates.io - an unknown registry, or a
+# git address - fails CI instead of arriving unnoticed (supply-chain audit,
+# 2026-09-30). Cargo.lock today names crates.io only (0 git sources), so this
+# changes nothing now; it is a fence for the next dependency someone adds.
+# Written from memory of cargo-deny's [sources] keys (unknown-registry,
+# unknown-git, allow-registry, allow-git) and NOT run here: cargo-deny is not
+# installed in the environment this was written in, so the first CI run is the
+# check. `allow-registry` is spelled out; crates.io is also cargo-deny's default.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

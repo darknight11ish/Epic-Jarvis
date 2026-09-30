@@ -143,7 +143,12 @@ jobs:
       - uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
         with:
           python-version: "3.12"
-      - run: python -m pip install --disable-pip-version-check numpy sherpa-onnx onnxruntime cryptography
+      # Exact versions, the ones backend/requirements.lock pins for Python 3.12
+      # (numpy 2.5.3 and onnxruntime 1.30.0 are that file's picks for 3.12; the
+      # lock is hash-checked, this line is not - so at least the version is fixed,
+      # and a new release cannot change what CI tests overnight). Update these
+      # together with the lock. Supply-chain audit, 2026-09-30.
+      - run: python -m pip install --disable-pip-version-check numpy==2.5.3 sherpa-onnx==1.13.8 onnxruntime==1.30.0 cryptography==50.0.1
       - name: Backend suites (the ones that need no file from the owner's PC)
         run: python backend/run_suites.py
       # Desktop and phone call the same backend; a route one calls and the
@@ -511,7 +516,7 @@ jobs:
       - uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2.87.20
         with:
           tool: cargo-deny
-      - run: cargo deny check licenses advisories
+      - run: cargo deny check licenses advisories sources
       # THIRD-PARTY-NOTICES.txt must name every Rust library the Windows
       # build ships, with its copyright lines (DEPS audit B-22). After adding
       # or updating a crate: python3 tools/gen_notices.py, and commit the file.

@@ -683,8 +683,13 @@ onnxruntime itself: `jarvis_wakeword.py`, `jarvis_turn.py`, and
 Kokoro, the voice check) carries its own copy of ONNX Runtime with no switch
 Jarvis can reach. For that copy, Windows' own setting (Settings → Privacy &
 security → Diagnostics & feedback → "Send optional diagnostic data" off) is
-the control. The Hugging Face download library's reports are already off
-(`HF_HUB_DISABLE_TELEMETRY`, `jarvis_voices.py`).
+the control. The Hugging Face download library's reports are off
+(`HF_HUB_DISABLE_TELEMETRY`), and so are the shared "do not track" switch and
+`ANONYMIZED_TELEMETRY` (2026-09-30): `jarvis_child_env.py` sets all three in
+Jarvis's own process when it is imported, adds them to the environment of every
+program Jarvis starts (`inherited`), and `docs/INSTALL.md`'s start line sets
+them before any library loads. Only those three names: a library with a switch
+of another name still reports.
 
 **The sun, the moon and the weather behind the animals, in one sentence each**
 (the owner's decisions of 2026-09-28, `CLAUDE.md`; docs/JARVIS-API.md section

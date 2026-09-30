@@ -914,6 +914,78 @@ def t_a_failed_phone_read_drops_the_screen_parts():
     check("...and the turn is not marked read", info["read"] is False)
 
 
+def _engine(w, mono):
+    return SC.Screen(clock=w.clock, front_reader=w.front, capture=w.capture, ocr=w.ocr,
+                     ui_text=w.ui, never=w.never, publish=w.publish, run_loop=False, mono=mono)
+
+
+def t_heartbeat_ends_a_watch_whose_window_is_gone():
+    w = World()
+    mono = Clock(5000.0)
+    e = _engine(w, mono)
+    e.start(30, source="desktop")
+    for _ in range(4):                       # 4 x 40 s of pings: never 45 s without one
+        mono.t += 40
+        w.clock.t += 1
+        check("a ping keeps the session going", e.heartbeat() == {"ok": True, "watching": True})
+        e.tick()
+        check("... still watching after 40 s", e.status()["state"] == "watching", e.status())
+    mono.t += SC.HEARTBEAT_LOST_S - 1
+    w.clock.t += 1
+    e.tick()
+    check("44 s of silence is not yet enough", e.status()["state"] == "watching", e.status())
+    mono.t += 2
+    w.clock.t += 1
+    e.tick()
+    st = e.status()
+    check("45 s of silence ends it: 'the Jarvis window stopped answering'",
+          st["state"] == "ended" and st["ended"] == "no_heartbeat"
+          and st["ended_words"] == "the Jarvis window stopped answering", st)
+    check("... and the ping now says it is over", e.heartbeat() == {"ok": True, "watching": False})
+    check("the reason is a fixed word both apps can show",
+          SC.END_WORDS["no_heartbeat"] == "the Jarvis window stopped answering")
+    e.start(30, source="desktop")
+    w.clock.t += 60                          # the PC's clock jumps; pings keep coming
+    mono.t += 10
+    e.heartbeat()
+    e.tick()
+    check("a session with steady pings survives", e.status()["state"] == "watching", e.status())
+    # A session with no heartbeat client (any other start) is never ended for silence.
+    e2 = _engine(w, mono)
+    e2.start(30)
+    mono.t += 3600
+    w.clock.t += 5
+    e2.tick()
+    check("a session not started by the desktop app is NOT ended for silence",
+          e2.status()["state"] == "watching", e2.status())
+    e2.start(30, source="phone")
+    mono.t += 3600
+    w.clock.t += 5
+    e2.tick()
+    check("... nor one started with some other 'from'", e2.status()["state"] == "watching")
+    code, out = SC.handle_post(SC.ROUTE, {"do": "heartbeat"}, True)
+    check("the route accepts a heartbeat from this PC", code == 200 and out.get("ok") is True
+          and "watching" in out, (code, out))
+    code, out = SC.handle_post(SC.ROUTE, {"do": "heartbeat"}, False)
+    check("... and refuses one from another device, like the other screen verbs", code == 403)
+
+
+def t_ask_racing_stop_stores_no_look():
+    w = World()
+    e = w.engine
+    e.start(30)
+    real = e.capture
+
+    def stop_during_capture(s, whole):
+        e.stop()                             # the owner presses Stop while the picture is taken
+        return real(s, whole)
+    e.capture = stop_during_capture
+    out = e.ask()
+    check("a look taken while Stop arrives is not stored", e._look is None, out)
+    check("... and the answer says nothing was looked at", out.get("looked") is False, out)
+    check("... the session stays ended", e.status()["state"] == "ended", e.status())
+
+
 if __name__ == "__main__":
     for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):

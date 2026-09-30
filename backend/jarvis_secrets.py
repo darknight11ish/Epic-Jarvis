@@ -83,13 +83,18 @@ HIDDEN = "[hidden]"
 #: owner asked for "anything that looks like a key, card number or password"
 #: and a screen full of them is rarely what a question is about. To leave
 #: them visible, take "email" and "ip" out of this tuple.)
-PII_KINDS = ("card", "crypto", "iban", "email", "ip")
+PII_KINDS = ("card", "crypto", "iban", "email", "ip", "ssn")
 
 #: The most text that is checked in one go. More than this cannot be checked
 #: in reasonable time, so it is refused (fail closed), not skipped.
-MAX_SCAN_CHARS = 80_000
-#: Seconds the whole check may take before it gives up (fail closed).
-BUDGET_S = 10.0
+#: Was 80,000: on 70,000 characters of dense text (hex, base58, digits) the
+#: check took 8-13 seconds, and a regular expression holds Python's lock while
+#: it runs, so the event stream and the approval queue froze and the phone saw a
+#: stale link. 25,000 keeps a dense screen to about three seconds.
+MAX_SCAN_CHARS = 25_000
+#: Seconds the whole check may take before it gives up (fail closed). The clock
+#: is looked at between every rule AND every so many matches inside a rule.
+BUDGET_S = 6.0
 #: How far a box is grown past the reader's tight word rectangle, in pixels
 #: (plus a tenth of its height), so an edge of a letter is never left out.
 PAD_PX = 3
@@ -178,6 +183,12 @@ def _allowed(rule: dict, allow: list, glob, text: str, m, secret: str) -> bool:
     return False
 
 
+def _tick(deadline: float) -> None:
+    """Give up (fail closed) when the time limit has passed."""
+    if time.monotonic() > deadline:
+        raise Unchecked("checking took too long")
+
+
 def _gitleaks_spans(text: str, deadline: float) -> list:
     """[(start, end, rule id)] for every gitleaks rule match in `text`."""
     out = []
@@ -187,9 +198,11 @@ def _gitleaks_spans(text: str, deadline: float) -> list:
     # second), and it would let a token through whose vendor's name is not
     # on the screen.
     for rule, rx, allow in _load_rules():
-        if time.monotonic() > deadline:
-            raise Unchecked("checking took too long")
-        for m in rx.finditer(text):
+        _tick(deadline)
+        time.sleep(0)                       # let the event stream's threads run
+        for i, m in enumerate(rx.finditer(text)):
+            if i % 32 == 0:
+                _tick(deadline)
             g = _secret_group(m, rule["group"])
             s, e = m.span(g)
             if e <= s:
@@ -316,18 +329,30 @@ def _ip_ok(v: str) -> bool:
         return False
 
 
-def _pii_spans(text: str, kinds: Iterable[str]) -> list:
+#: A US social security number, 123-45-6789. Area 000, 666 and 9xx and group 00
+#: or serial 0000 are never issued, so they are left alone; a date (2026-09-29),
+#: a phone number (555-123-4567) and a longer digit run do not fit the shape.
+_SSN = re.compile(r"(?<![\d-])(?!000|666|9\d\d)\d{3}-(?!00)\d{2}-(?!0000)\d{4}(?![\d-])")
+
+
+def _pii_spans(text: str, kinds: Iterable[str], deadline: float = float("inf")) -> list:
     out = []
     kinds = set(kinds)
+    _tick(deadline)
+    if "ssn" in kinds:
+        for m in _SSN.finditer(text):
+            out.append((m.start(), m.end(), "ssn"))
     if "card" in kinds:
         for m in _CARD.finditer(text):
             if luhn_ok(re.sub(r"[- ]", "", m.group(0))):
                 out.append((m.start(), m.end(), "card"))
     if "crypto" in kinds:
+        _tick(deadline)
         for m in _CRYPTO.finditer(text):
             if crypto_ok(m.group(0)):
                 out.append((m.start(), m.end(), "crypto"))
     if "iban" in kinds:
+        _tick(deadline)
         for m in _IBAN.finditer(text):
             g1, g2, g3 = m.group(1), m.group(2), m.group(3)
             # Longest first, then shorter, as Presidio does.
@@ -336,11 +361,13 @@ def _pii_spans(text: str, kinds: Iterable[str]) -> list:
                     out.append((m.start(), m.start() + len(cand), "iban"))
                     break
     if "email" in kinds:
+        _tick(deadline)
         for m in _EMAIL.finditer(text):
             if _email_ok(m.group(0)):
                 out.append((m.start(), m.end(), "email"))
     if "ip" in kinds:
         for rx in (_IPV4, _IPV6):
+            _tick(deadline)
             for m in rx.finditer(text):
                 if _ip_ok(m.group(0)):
                     out.append((m.start(), m.end(), "ip"))
@@ -354,17 +381,44 @@ def _pii_spans(text: str, kinds: Iterable[str]) -> list:
 #: A value written right after the word password / passcode / PIN / secret and
 #: a colon or equals sign: "Password: hunter2", "PIN = 4821". gitleaks's broad
 #: rule needs 10 characters or more; a real password is often shorter.
+_LABELS = (r"(?:pass(?:word|wd|code|phrase)?|pwd|pin|secret|passwort|kennwort|"
+           r"mot[ \t]+de[ \t]+passe|contrase[nñ]a)")
+#: Before the label there must be no letter or digit (so "spin" is not "pin"),
+#: but an underscore is fine: DB_PASSWORD=..., API_SECRET_KEY=... After it a
+#: "_SUFFIX" is allowed for the same reason.
 _LABELLED = re.compile(
     # The value may sit on the next line (a form's label above its box), after
     # "is" ("your password is ..."), and a passphrase runs on for a few words.
-    r"\b(?:pass(?:word|wd|code|phrase)?|pwd|pin|secret)\b[ \t]*(?:[:=]|\bis\b)\s{0,3}"
+    r"(?<![A-Za-z0-9])" + _LABELS + r"(?:_[A-Za-z0-9_]{0,40})?(?![A-Za-z0-9])[ \t]*"
+    r"(?:[:=]|\bis\b|\bist\b)\s{0,3}"
     r"([^\s]{3,64}(?:[ \t]+[^\s]{1,64}){0,5})", re.I)
+#: "password hunter2" with no colon, or a label alone on its line with the value
+#: on the next. Only the password words (not "pin", "secret" or a bare "pass"),
+#: and only a value with a digit in it, so "password reset", "password manager"
+#: and "Forgot password?" are left alone.
+_BARE_LABEL = r"(?:pass(?:word|wd|code|phrase)|pwd|passwort|kennwort|contrase[nñ]a)"
+_LABELLED_BARE = re.compile(
+    r"(?<![A-Za-z0-9])" + _BARE_LABEL + r"(?![A-Za-z0-9_])[ \t]*(?:[ \t]|\n[ \t]*)"
+    r"((?=[^\s]*\d)[^\s:]{5,64})(?![\w])", re.I)
 #: Codes: "PIN 4821", "CVV: 123", "Your verification code is 482913", a code
 #: on the line under its label. Digits only, so ordinary words are not caught.
 _CODE = re.compile(
     r"\b(?:cvv2?|cvc2?|otp|pin|(?:verification|security|confirmation|one[- ]time|login|"
-    r"auth(?:entication)?|access)[ \t]+(?:code|pin))\b[ \t]*(?:[:=]|\bis\b)?\s{0,3}"
+    r"auth(?:entication)?|access)[ \t]+(?:code|pin)|(?:your|the)[ \t]+(?:code|passcode))\b"
+    r"[ \t]*(?:[:=]|\bis\b)?\s{0,3}"
     r"(\d(?:[ -]?\d){2,7})(?!\d)", re.I)
+#: The code BEFORE its label: "482913 is your verification code", "G-482913 is
+#: your Google verification code", "123456 is your PIN".
+_CODE_FIRST = re.compile(
+    r"(?<!\d)(\d(?:[ -]?\d){3,7})(?!\d)[ \t]+(?:is|=)[ \t]+(?:your|the|my)\b[^\n.]{0,40}?"
+    r"\b(?:code|pin|otp|passcode|password)\b", re.I)
+#: A login header: "Authorization: Bearer eyJ...", "Authorization: Basic dXNl...",
+#: or a bare "Bearer <token>". At least 20 characters, and (bare) a digit in them.
+_TOKEN_CHARS = r"[A-Za-z0-9._~+/=-]"
+_AUTH_HEADER = re.compile(
+    r"authorization[ \t]*[:=][ \t]*(?:(?:bearer|basic|token|digest)[ \t]+)?(" + _TOKEN_CHARS
+    + r"{20,})", re.I)
+_BEARER = re.compile(r"\bbearer[ \t]+((?=" + _TOKEN_CHARS + r"*\d)" + _TOKEN_CHARS + r"{20,})", re.I)
 #: What is not a password after such a label: dots or stars (the box shows
 #: nothing readable), or the plain words a form puts there.
 _MASK = re.compile(r"^[●•·*xX.\-_]+$")
@@ -379,16 +433,29 @@ _PEM_OPEN = re.compile(
     r"(?:-----END[ A-Z]{0,30}PRIVATE KEY(?: BLOCK)?-----|\Z)")
 
 
-def _own_spans(text: str) -> list:
+def _own_spans(text: str, deadline: float = float("inf")) -> list:
     out = []
+    _tick(deadline)
     for m in _LABELLED.finditer(text):
         v = m.group(1)
         first = v.split()[0]
         if _MASK.match(first) or first.lower().strip(".,;") in _NOT_A_VALUE:
             continue
         out.append((m.start(1), m.end(1), "labelled-password"))
+    for m in _LABELLED_BARE.finditer(text):
+        v = m.group(1)
+        if _MASK.match(v) or v.lower().strip(".,;") in _NOT_A_VALUE:
+            continue
+        out.append((m.start(1), m.end(1), "labelled-password"))
+    _tick(deadline)
     for m in _CODE.finditer(text):
         out.append((m.start(1), m.end(1), "labelled-code"))
+    for m in _CODE_FIRST.finditer(text):
+        out.append((m.start(1), m.end(1), "labelled-code"))
+    for rx in (_AUTH_HEADER, _BEARER):
+        for m in rx.finditer(text):
+            out.append((m.start(1), m.end(1), "login-header"))
+    _tick(deadline)
     for m in _PEM_OPEN.finditer(text):
         out.append((m.start(), m.end(), "private-key-open"))
     return out
@@ -475,7 +542,8 @@ def _find(text: str, kinds: Iterable[str], deadline: float) -> list:
         # secret patterns take seconds on it, so it is "cannot check" at once.
         raise Unchecked("there is a very long run of characters with no spaces in it, "
                         "which cannot be checked quickly")
-    return _gitleaks_spans(text, deadline) + _pii_spans(text, kinds) + _own_spans(text)
+    return (_gitleaks_spans(text, deadline) + _pii_spans(text, kinds, deadline)
+            + _own_spans(text, deadline))
 
 
 def _overlapping(spans: list, s: int, e: int) -> list:

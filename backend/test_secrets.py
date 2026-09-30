@@ -293,11 +293,11 @@ def t_many():
           S._overlapping(spans, 25, 47) == [(0, 2), (0, 3), (0, 4)]
           and S._overlapping(spans, 8, 10) == [] and S._overlapping(spans, 0, 1) == [(0, 0)]
           and S._overlapping(spans, 9995, 12000) == [(0, 999)])
-    lines = screen(*[" ".join(f"user{i}@example.com" for i in range(6)) for _ in range(300)])
+    lines = screen(*[" ".join(f"user{i}@example.com" for i in range(6)) for _ in range(200)])
     t0 = time.time()
     r = S.check(lines)
-    check("a screen of 1,800 email addresses is checked in a few seconds, all hidden",
-          r.hidden >= 300 and "@" not in r.text and time.time() - t0 < 20, f"{time.time() - t0:.1f}s")
+    check("a screen of 1,200 email addresses is checked in a few seconds, all hidden",
+          r.hidden >= 200 and "@" not in r.text and time.time() - t0 < 20, f"{time.time() - t0:.1f}s")
 
 
 def t_hygiene():
@@ -335,8 +335,88 @@ def t_screen_audit_fixes():
         check("a 9,000-character unbroken run is 'cannot check', at once", time.monotonic() - t0 < 1.0)
 
 
+def t_audit_2026_09_30():
+    import random
+    import threading
+    random.seed(7)
+    # 1. A dense 70,000-character screen used to take 8-13 s holding the lock.
+    dense = " ".join("".join(random.choice("1234567890abcdef-") for _ in range(random.randint(20, 60)))
+                     for _ in range(2000))[:70_000]
+    t0 = time.monotonic()
+    try:
+        S.redact(dense)
+        ok = False
+    except S.Unchecked:
+        ok = True
+    check("a dense 70,000-character screen fails closed at once (under a second)",
+          ok and time.monotonic() - t0 < 1.0, f"{time.monotonic() - t0:.2f}s")
+    check("the scan limit is 25,000 characters", S.MAX_SCAN_CHARS <= 25_000)
+    # ... and a big-but-allowed one does not stall another thread for long.
+    body = dense[:S.MAX_SCAN_CHARS - 10]
+    gaps, stop = [], threading.Event()
+
+    def ticker():
+        last = time.monotonic()
+        while not stop.is_set():
+            time.sleep(0.005)
+            now = time.monotonic()
+            gaps.append(now - last)
+            last = now
+    th = threading.Thread(target=ticker, daemon=True)
+    th.start()
+    time.sleep(0.05)
+    try:
+        S.redact(body)
+    except S.Unchecked:
+        pass
+    stop.set()
+    th.join(2)
+    check("a 25,000-character dense screen does not stall another thread for long",
+          max(gaps or [0]) < 0.75, f"longest stall {max(gaps or [0]):.2f}s")
+    old = S.BUDGET_S
+    S.BUDGET_S = 0.0
+    try:
+        S.redact(body)
+        ok = False
+    except S.Unchecked:
+        ok = True
+    finally:
+        S.BUDGET_S = old
+    check("an over-budget scan fails closed (the clock is read inside the rules too)", ok)
+
+    # 2. Pattern misses.
+    for line, secret in (
+            ("DB_PASSWORD=Sup3rS3cret!", "Sup3rS3cret"), ("API_SECRET_KEY=abc123xyz", "abc123xyz"),
+            ("export MY_PIN=8213x", "8213x"),
+            ("Authorization: Bearer abcdefghij1234567890XYZ", "abcdefghij1234567890XYZ"),
+            ("curl -H Bearer abcdefghijklmnop1234567", "abcdefghijklmnop1234567"),
+            ("SSN 123-45-6789 on file", "123-45-6789"),
+            ("482913 is your verification code", "482913"), ("Your code is 482913", "482913"),
+            ("G-482913 is your Google verification code", "482913"),
+            ("password hunter2", "hunter2"), ("Passwort: Geheim99", "Geheim99"),
+            ("Kennwort = Geheim99", "Geheim99")):
+        r = hidden(line)
+        check(f"{line!r}: the secret is hidden", secret not in r.text and r.hidden >= 1, r.text)
+    r = hidden("Password", "hunter22x")
+    check("a value on the line under a bare label is hidden", "hunter22x" not in r.text, r.text)
+    for line in ("Call +1 555 010 0199 or 555-123-4567", "On 2026-09-29 at 14:05 total 12,345.67 USD",
+                 "password reset", "Forgot password?", "I use a password manager",
+                 "The passage of time", "spin: 12345678", "Area code is 415", "Zip code: 12345",
+                 "ref 123-45-678", "order 900-12-3456", "5 is your lucky number",
+                 "Your code was sent", "password policy 2026", "Bearer of bad news is here",
+                 "Authorization: required"):
+        r = hidden(line)
+        check(f"{line!r}: ordinary text is left alone", r.hidden == 0 and r.text == line, r.text)
+    r = hidden("Forgot password?", "Sign in")
+    check("a plain form label with no value under it is left alone", r.hidden == 0, r.text)
+    r = hidden("Card 4111 1111 1111 1111 and ghp_" + "aB3dE5gH7jK9mN1pQ3sT5vW7yZ9bC1eF3hJ5"
+               + " and AKIA" + "IOSFODNN7EXAMPLQ" + " postgres://bob:pw123@db.example.com/x")
+    check("cards, GitHub tokens, AWS keys and connection strings are still hidden",
+          "4111" not in r.text and "ghp_" not in r.text and "pw123" not in r.text, r.text)
+
+
 def main():
-    for fn in (t_screen_audit_fixes, t_found, t_left_alone, t_lines, t_words, t_boxes, t_input_shapes, t_text,
+    for fn in (t_audit_2026_09_30, t_screen_audit_fixes, t_found, t_left_alone, t_lines, t_words, t_boxes, t_input_shapes, t_text,
                t_fail_closed, t_many, t_hygiene):
         try:
             fn()

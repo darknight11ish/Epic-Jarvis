@@ -356,6 +356,39 @@ def t_one_at_a_time():
                   enroll=Enrol(), spawn=run_sync)[0] == 202)
 
 
+def t_a_waiting_cards_time_left_ignores_a_clock_change():
+    import time
+    fresh()
+    gate = HeldGate(Verdict(False, outcome="denied"))
+    code, _ = E.stage(body(five()), gate=gate, tier_of=ask, enroll=Enrol())
+    gate.asked.wait(5)
+    check("the waiting card carries a monotonic start", "since_m" in (E._PENDING or {}))
+    real = time.time
+    time.time = lambda: real() + 7200               # the PC's clock jumped forward two hours
+    try:
+        code2, out2 = E.stage(body(five()), gate=Gate(Verdict(True, outcome="approved")),
+                              tier_of=ask, enroll=Enrol(), spawn=run_sync)
+    finally:
+        time.time = real
+    check("a clock jump does not shorten the card's time left (it was 0 before)",
+          code2 == 409 and out2.get("expires_in", 0) > 0, f"{code2} {out2}")
+    gate.release.set()
+    for _ in range(100):
+        if E._PENDING is None:
+            break
+        threading.Event().wait(0.05)
+    # the same helper in the two other modules that keep a waiting card
+    import jarvis_speech as SP
+    import jarvis_voices as VS
+    for mod in (E, SP, VS):
+        rec = {"since": time.time() - 100000, "since_m": time.monotonic() - 10, "timeout": 300}
+        check(f"{mod.__name__}: the time left comes from the monotonic clock",
+              abs(mod._left_s(rec) - 290) < 2, mod._left_s(rec))
+        old = {"since": time.time() - 10, "timeout": 300}
+        check(f"{mod.__name__}: a record with no monotonic start falls back to the wall clock",
+              abs(mod._left_s(old) - 290) < 2)
+
+
 def t_nothing_logs_audio_or_tokens():
     fresh()
     clips = five()
