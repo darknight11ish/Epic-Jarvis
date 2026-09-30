@@ -54,6 +54,15 @@ object FormReview {
     const val COULD_NOT_LOAD =
         "Jarvis could not load the picture of the form. Read the details below before you approve."
 
+    /**
+     * "Hide memory lists and chat history" is on (the owner, 2026-09-30): the
+     * picture shows the owner's name, phone and email, as private as those
+     * lists, so it is not fetched or drawn until the setting is off.
+     */
+    const val HIDDEN_BY_SETTING =
+        "The picture of the form is hidden because \"Hide memory lists and chat history\" is on. " +
+            "Turn that off in Security to see it, or read the details below before you approve."
+
     /** The PC no longer has it (card decided or timed out, or the picture was dropped). */
     const val GONE =
         "The picture of the form is no longer available. Read the details below before you approve."

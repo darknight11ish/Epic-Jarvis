@@ -456,14 +456,84 @@ def _prepare_browser_control(args: dict):
     return p, B.describe(p)
 
 
-def _run_browser_control(args: dict, plan_obj, *, announce=None, checkpoint=None) -> dict:
+def _run_browser_control(args: dict, plan_obj, *, announce=None, checkpoint=None,
+                         checker=None, watch=None, out=None) -> dict:
     if plan_obj is None:
         return {"ok": False, "error": "browser control is not available here"}
     if isinstance(plan_obj, _NoBrowser):
         return {"ok": False, "error": plan_obj.problem}
     import jarvis_browser_control as B
+    review = snapshot = fingerprint = None
+    if any(getattr(st, "final", False) for st in getattr(plan_obj, "steps", [])):
+        # A plan that ends in the click that sends a form: the SECOND card
+        # (browser_form_submit) is raised from inside the run, after the fields
+        # are filled and before that click (jarvis_form_review.py). Anything
+        # missing here - the gate wiring, the module - leaves `review` None,
+        # and run() then stops before the click: nothing is sent.
+        try:
+            import jarvis_form_review as FR
+            if checker is not None:
+                review = FR.make_review(
+                    checker, tier_of=_tier_of,
+                    cannot_ask=(lambda: CARD_LIMIT_ERROR.format(n=CARDS_PER_TURN)
+                                if watch is not None and watch.cards >= CARDS_PER_TURN
+                                else ""),
+                    set_status=(out.set_status if out is not None else None),
+                    card_answered=(out.card_answered if out is not None else None),
+                    card_shown=(_count_card(watch) if watch is not None else None))
+                if getattr(plan_obj, "engine", "visible") == "visible":
+                    snapshot, fingerprint = FR.capture, FR.fingerprint
+        except Exception:
+            review = snapshot = fingerprint = None
     return B.run(plan_obj, announce=announce, checkpoint=checkpoint,
-                 approved=True)
+                 approved=True, review=review, snapshot=snapshot,
+                 fingerprint=fingerprint)
+
+
+def _count_card(watch: "_TurnWatch"):
+    """A `card_shown` hook: counts a card that really reached a person toward
+    this turn's card limit, like every other card."""
+    def count(verdict) -> None:
+        if _a_card_was_shown(verdict):
+            watch.cards += 1
+    return count
+
+
+#: "Fill it in, show me, then send it" (jarvis_form_review.py, the owner's
+#: decision of 2026-09-30): a browser plan may mark ONE final click. It is
+#: refused outright - before the page is even read - on a turn that read
+#: outside text, where the message was pasted or shared, or where the app
+#: added text of its own: the values the form would send could be someone
+#: else's words, which is what send_email refuses for too. And only a model
+#: on this PC may write them (rule 1), the same check.
+FORM_REVIEW_OUTSIDE = ("refused: this plan ends in a click that sends a form, and Jarvis read "
+                       "outside text in this conversation (or your newest message was pasted "
+                       "or added by the app), so the words it would type could be someone "
+                       "else's. Nothing was opened and nobody was asked. Ask for it again in "
+                       "a new message you type yourself.")
+FORM_REVIEW_NOT_LOCAL = ("refused: a form may only be filled in by the model on this PC (rule "
+                         "1), and this turn's model is not on this PC. Nothing was opened and "
+                         "nobody was asked.")
+FORM_REVIEW_IN_PLAN = ("a form that ends in a final click cannot be a step of a plan - ask for "
+                       "the form on its own instead.")
+
+
+def _has_final_request(args) -> bool:
+    """True when a browser_control call asks for a final (form-sending) click."""
+    reqs = args.get("requests") if isinstance(args, dict) else None
+    return any(isinstance(r, dict) and r.get("final") for r in (reqs or []))
+
+
+def _form_review_refusal(args: dict, watch: "_TurnWatch") -> str:
+    """Why this browser call may not end in a form-sending click, or ""."""
+    if not _has_final_request(args):
+        return ""
+    if watch.tainted or watch.read or watch.provenance or watch.app_context:
+        return FORM_REVIEW_OUTSIDE
+    lane = getattr(watch, "lane", None)
+    if not isinstance(lane, dict) or local_model_refusal(lane.get("url"), lane.get("model")):
+        return FORM_REVIEW_NOT_LOCAL
+    return ""
 
 
 #: The headless browser (jarvis_browser_engine.py; JARVIS-API 97.3): rule 1 for what
@@ -1011,6 +1081,8 @@ def _plan_step_dispatch(tools: dict, names: list, checker, watch: "_TurnWatch",
         checked_args, problem = check_call(step.tool, step.args, names, tools)
         if problem is not None:
             return refuse(problem)
+        if step.tool == "browser_control" and _has_final_request(checked_args):
+            return refuse(FORM_REVIEW_IN_PLAN)
         if (step.tool == FILES_TOOL
                 and str(checked_args.get("action") or "").strip().lower() == "read"):
             if watch.file_parts >= FILES_PARTS_PER_TURN:
@@ -1266,11 +1338,15 @@ TOOLS: dict = {
                 "irreversible": {"type": "boolean"},
                 "leaves_machine": {"type": "boolean",
                     "description": "true for nearly every browser step"},
+                "final": {"type": "boolean",
+                    "description": "the LAST click that sends a form: the owner is shown "
+                        "the form first"},
             }}}},
          "required": ["goal", "session", "requests"]},
         _prepare_browser_control,
-        lambda args, state, **kw: _run_browser_control(args, state, announce=kw.get("announce"),
-                                                checkpoint=kw.get("checkpoint")),
+        lambda args, state, **kw: _run_browser_control(
+            args, state, announce=kw.get("announce"), checkpoint=kw.get("checkpoint"),
+            checker=kw.get("checker"), watch=kw.get("watch"), out=kw.get("out")),
         needs_announce=True,
         # New action name, same reason control_phone is: no existing
         # jarvis_gate tier fits a browser step - see browser-control-wiring
@@ -6737,6 +6813,16 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
             say_step("tool_refused", name)
             return
+    if name == "browser_control":
+        # A plan that ends in a form-sending click is refused before the page
+        # is read when outside text shaped the turn - see FORM_REVIEW_*.
+        why = _form_review_refusal(args, watch)
+        if why:
+            convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
+                          "content": _tool_content({"ok": False, "error": why})})
+            steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})
+            say_step("tool_refused", name)
+            return
     if name == FILES_TOOL and str(args.get("action") or "").strip().lower() == "read":
         # Refused before the gate: what fits in the model's working memory
         # (FILES_PARTS_PER_TURN). The model is told plainly, once per call.
@@ -7001,6 +7087,13 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
             # anything (jarvis_mcp.Bridge.run: a person's yes, for this
             # action, used once).
             kwargs["verdict"] = verdict
+        if name == "browser_control":
+            # The second card of a plan that ends in a form-sending click is
+            # raised from INSIDE its run (jarvis_form_review.make_review), so
+            # this one tool gets the gate wiring too. Nothing else does.
+            kwargs["checker"] = checker
+            kwargs["watch"] = watch
+            kwargs["out"] = out
         if name == "propose_plan":
             # The extra context this ONE tool's execute() needs to dispatch
             # each of its own steps through the exact same per-tool
