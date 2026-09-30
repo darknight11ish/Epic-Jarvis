@@ -467,14 +467,47 @@ def _tag_fail(code: str, message: str = "") -> dict:
     return _tag_err(code, message or TAG_MESSAGES.get(code, ""))
 
 
+def _has_visible_char(n: str) -> bool:
+    """True when the name has at least one character a person can see: a
+    letter, number, mark, punctuation or symbol. Spaces, control and format
+    characters (zero-width joiner...), and blank fillers such as U+3164
+    (Hangul filler, category Lo but drawn empty) do not count."""
+    for ch in n:
+        if ch in "\u3164\u115f\u1160\uffa0\u2800":
+            continue
+        if unicodedata.category(ch)[0] in "LNMPS":
+            return True
+    return False
+
+
 def _clean_tag_name(v):
-    """The trimmed name, or None if it is not 1-24 printable characters."""
+    """The trimmed, NFC-normalised name, or None if it is not 1-24 code
+    points of printable characters with at least one visible one."""
     if not isinstance(v, str):
         return None
-    n = v.strip()
+    n = unicodedata.normalize("NFC", v).strip()
     if not (1 <= len(n) <= TAG_NAME_MAX) or not n.isprintable():
         return None
+    if not _has_visible_char(n):
+        return None
     return n
+
+
+def _tag_key(n: str) -> str:
+    """What "the same name" means: NFC, then casefold, then NFC again."""
+    return unicodedata.normalize("NFC", unicodedata.normalize("NFC", n).casefold())
+
+
+def _tag_cipher(self):
+    """(aead or None, why). Tags are the owner's own labels on chats already
+    saved, so they work while chat history is switched OFF (owner,
+    2026-09-30); only a missing or wrong key stops them (fail closed)."""
+    try:
+        return self._cipher(), ""
+    except KeyUnavailable as exc:
+        return None, str(exc)
+    except Exception as exc:
+        return None, f"the chat history could not be opened ({type(exc).__name__})"
 
 
 def _off_message(why: str, tail: str) -> str:

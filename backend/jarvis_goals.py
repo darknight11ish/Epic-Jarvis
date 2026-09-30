@@ -430,16 +430,35 @@ def _default_plan(text: str) -> list:
 #   The store
 # --------------------------------------------------------------------------
 
+def _with_unit(v, unit: str) -> str:
+    """The number the way jarvis_projects writes it (72.5 kg, $200, 5)."""
+    try:
+        import jarvis_projects
+        return jarvis_projects._with_unit(float(v), unit or "")
+    except Exception:
+        return f"{v} {unit}".strip()
+
+
+def _read_bench(project: str, bench: str):
+    """The default reader: the benchmark as jarvis_projects answers it
+    (a chart-less read, one point). Raises when it does not exist."""
+    import jarvis_projects
+    return jarvis_projects.get().results(project, bench, 1)
+
+
 class Goals:
     """CRUD for goals, plus the weekly check-in's on_fire. `path`, `clock`
     and `scheduler` are replaceable for the tests - no test needs a real
     scheduler or a real model."""
 
     def __init__(self, path: Optional[Path] = None, *, clock: Callable[[], float] = time.time,
-                 scheduler=None):
+                 scheduler=None, bench_reader=None):
         self.path = Path(path) if path else db_path()
         self.now = clock
         self._scheduler = scheduler
+        # (project id, benchmark id) -> the benchmark as jarvis_projects
+        # answers it (latest, target, better, forecast ...), or raises.
+        self._bench_reader = bench_reader or _read_bench
         self._lock = threading.RLock()
         with self._db() as c:
             c.executescript(_SCHEMA)
@@ -457,12 +476,48 @@ class Goals:
     def _row(self, c, goal_id: str):
         return c.execute("SELECT * FROM goals WHERE id = ?", (str(goal_id),)).fetchone()
 
-    @staticmethod
-    def _view(row) -> dict:
+    def _view(self, row) -> dict:
+        plan = load_plan(row["plan"])
+        states = step_states(plan, self._bench_reader)
+        names = {st["id"]: st["step"] for st in plan}
+        steps = []
+        for st, info in zip(plan, states):
+            b = info["bench"]
+            v = dict(st, state=info["state"], waiting_on=info["waiting_on"], reached=info["reached"])
+            after = ", ".join('"' + _short(names.get(n, n)) + '"' for n in info["waiting_on"])
+            if not info["waiting_on"]:
+                v["lock_words"] = ""
+            elif info["state"] == "done":
+                v["lock_words"] = WORDS["after_open_again"].format(steps=after)
+            else:
+                v["lock_words"] = WORDS["after"].format(steps=after)
+            v["measure_name"] = b.get("name", "") if b else ""
+            v["measure_gone"] = bool(st["measure"]) and b is None
+            v["measure_sensitive"] = bool(b and b.get("sensitive"))
+            v["reached_words"] = ""
+            if info["reached"]:
+                unit = b.get("unit", "")
+                v["reached_words"] = WORDS["reached"].format(
+                    latest=_with_unit(b["latest"]["value"], unit),
+                    target=_with_unit(b["target"], unit))
+            steps.append(v)
         return {
-            "id": row["id"], "text": row["text"], "plan": json.loads(row["plan"]),
+            "id": row["id"], "text": row["text"], "plan": steps,
             "status": row["status"], "created": row["created"], "changed": row["changed"],
         }
+
+    def _check_measure(self, project: str, bench: str, step: str) -> str:
+        """"" when the benchmark exists and has a target and a direction
+        (a step cannot follow a number that has no finish line)."""
+        try:
+            b = self._bench_reader(project, bench)
+        except Exception:
+            b = None
+        if not isinstance(b, dict):
+            return WORDS["no_such_benchmark"].format(step=step)
+        if b.get("target") is None or b.get("better") not in ("higher", "lower"):
+            return WORDS["no_target"].format(step=step, name=_short(b.get("name", "")))
+        return ""
 
     # ---- reading ------------------------------------------------------------
 
@@ -486,7 +541,8 @@ class Goals:
         Calls no gate and raises no card: a draft is content, not action,
         exactly like an email draft (JARVIS-API.md section 40)."""
         text = _clean_text(text, MAX_TEXT, "a goal")
-        clean = clean_plan(plan) if plan is not None else _default_plan(text)
+        clean = (clean_plan(plan, None, self.now(), self._check_measure) if plan is not None
+                 else _default_plan(text))
         with self._lock, self._db() as c:
             if self._count_open(c) >= MAX_GOALS:
                 raise OverflowError(f"there are already {MAX_GOALS} goals - "
@@ -513,9 +569,10 @@ class Goals:
                 raise KeyError("no such goal")
             if row["status"] != "draft":
                 raise ValueError("that goal is not waiting to be accepted")
-            current_plan = json.loads(row["plan"])
+            current_plan = load_plan(row["plan"])
             goal_text = row["text"]
-        clean = clean_plan(plan) if plan is not None else current_plan
+        clean = (clean_plan(plan, current_plan, self.now(), self._check_measure)
+                 if plan is not None else current_plan)
         if self._scheduler is None:
             raise RuntimeError("the scheduler is not available")
         # has_text=True: the job's own text is the goal's own words (never a
@@ -538,15 +595,34 @@ class Goals:
 
     # ---- everyday changes: no card, like ticking off a to-do ----------------
 
-    def mark_step(self, goal_id: str, index: int, done: bool) -> dict:
+    def mark_step(self, goal_id: str, index, done: bool, *, step_id=None) -> dict:
+        """Tick or untick one step (by position, or by `step_id`). No card,
+        immediate. Ticking a step that is still locked is refused (Locked);
+        unticking clears `done_at` and touches no other step."""
         with self._lock, self._db() as c:
             row = self._row(c, goal_id)
             if row is None:
                 raise KeyError("no such goal")
-            plan = json.loads(row["plan"])
+            plan = load_plan(row["plan"])
+            if step_id is not None and index is None:
+                hits = [i for i, st in enumerate(plan) if st["id"] == step_id]
+                if not hits:
+                    raise ValueError("that is not one of this goal's steps")
+                index = hits[0]
             if not isinstance(index, int) or isinstance(index, bool) or not 0 <= index < len(plan):
                 raise ValueError("that is not one of this goal's steps")
-            plan[index]["done"] = bool(done)
+            step = plan[index]
+            if bool(done) and not step["done"]:
+                info = step_states(plan, self._bench_reader)[index]
+                if info["state"] == "locked":
+                    names = {st["id"]: st["step"] for st in plan}
+                    raise Locked(WORDS["locked_refusal"].format(
+                        step=_short(names.get(info["waiting_on"][0], ""))), info["waiting_on"])
+            if bool(done):
+                if not step["done"]:
+                    step["done"], step["done_at"] = True, self.now()
+            else:
+                step["done"], step["done_at"] = False, None
             now = self.now()
             c.execute("UPDATE goals SET plan = ?, changed = ? WHERE id = ?",
                       (json.dumps(plan), now, goal_id))
@@ -584,26 +660,73 @@ class Goals:
         return str(row["id"]) if row is not None else ""
 
     def next_open_step(self, goal_id: str) -> Optional[dict]:
+        """The first step, in the owner's order, that is not met and not
+        locked (or met by its number but not ticked yet). None when every
+        step is done or every open one is locked."""
         row = self.get(goal_id)
         if row is None:
             return None
         for i, step in enumerate(row["plan"]):
-            if not step.get("done"):
+            if step["state"] in ("open", "met_by_number"):
                 return {"index": i, **step}
         return None
+
+    def _waiting_on(self, plan: list) -> Optional[dict]:
+        """When every unmet step is locked: the first prerequisite that is
+        itself open (following the chain), else the first locked step."""
+        by_id = {st["id"]: st for st in plan}
+        seen = set()
+        cur = next((st for st in plan if st["state"] == "locked"), None)
+        while cur is not None and cur["id"] not in seen:
+            seen.add(cur["id"])
+            nxt = next((by_id[n] for n in cur["waiting_on"] if n in by_id
+                        and by_id[n]["state"] in ("open", "locked")), None)
+            if nxt is None:
+                break
+            if nxt["state"] == "open":
+                return nxt
+            cur = nxt
+        return cur
 
     def checkin_note(self, goal_id: str) -> str:
         """The scheduler's `note(job_id)` hook reads this by the goal id the
         job's own `text` field carries. Deterministic - no model, no tool -
-        so a check-in is cheap and never wrong about what it read."""
+        so a check-in is cheap and never wrong about what it read. One
+        neutral pace line ("About 6 to 9 weeks at this pace.") may follow
+        for a step that follows a NON-private benchmark; a health or money
+        benchmark's range stays on its screen (the note shows in Coming up)."""
         row = self.get(goal_id)
         if row is None or row["status"] != "active":
             return ""
         nxt = self.next_open_step(goal_id)
         if nxt is None:
+            if any(st["state"] == "locked" for st in row["plan"]):
+                wait = self._waiting_on(row["plan"])
+                return f'"{row["text"]}": ' + WORDS["waiting_on"].format(step=_short(wait["step"]))
             return f'"{row["text"]}" - every step is marked done.'
+        if nxt["state"] == "met_by_number":
+            return f'"{row["text"]}": ' + WORDS["reached_tick"].format(step=_short(nxt["step"]))
         by = f" ({nxt['by']})" if nxt["by"] else ""
-        return f'"{row["text"]}": still on track for "{nxt["step"]}"{by}?'
+        note = f'"{row["text"]}": still on track for "{nxt["step"]}"{by}?'
+        pace = self._pace_line(nxt)
+        return f"{note} {pace}" if pace else note
+
+    def _pace_line(self, step: dict) -> str:
+        """The forecast's own words, or "" - only for a step that follows a
+        benchmark that is not health or money, and only for a real range."""
+        m = step.get("measure")
+        if not m:
+            return ""
+        try:
+            b = self._bench_reader(m["project"], m["bench"])
+        except Exception:
+            return ""
+        if not isinstance(b, dict) or b.get("sensitive") or b.get("keep_on_screen"):
+            return ""
+        f = b.get("forecast")
+        if isinstance(f, dict) and f.get("state") == "range":
+            return str(f.get("words") or "")
+        return ""
 
     def on_checkin(self, goal_id: str) -> None:
         """register_kind's on_fire for KIND. Calls no model, no tool, and
@@ -690,6 +813,9 @@ def _goal_route(route: str):
 def _err(exc) -> tuple:
     """(http_status, body) for one of the plain exceptions the store raises
     - never a stack trace reaching an app."""
+    if isinstance(exc, Locked):
+        return 409, {"ok": False, "error": str(exc), "locked": True,
+                     "waiting_on": exc.waiting_on}
     if isinstance(exc, KeyError):
         return 404, {"ok": False, "error": "no such goal"}
     if isinstance(exc, ValueError):
@@ -705,7 +831,8 @@ def handle_get(route: str) -> tuple:
     if route == PATH:
         return 200, {"ok": True, "goals": get().list(),
                      "limits": {"text": MAX_TEXT, "steps": MAX_STEPS, "goals": MAX_GOALS,
-                               "by": MAX_BY}}
+                               "by": MAX_BY, "needs": MAX_NEEDS},
+                     "words": dict(WORDS)}
     hit = _goal_route(route)
     if hit is None or hit[1] != "":
         return 404, {"ok": False, "error": "no such goal"}
@@ -733,7 +860,10 @@ def handle_post(route: str, body) -> tuple:
             goal = get().accept(goal_id, body.get("plan"))
         elif tail == "step":
             index, done = body.get("index"), body.get("done")
-            goal = get().mark_step(goal_id, index, done)
+            sid = body.get("id")
+            if sid is not None and not isinstance(sid, str):
+                raise ValueError("that is not one of this goal's steps")
+            goal = get().mark_step(goal_id, index, done, step_id=sid)
         elif tail == "stop":
             goal = get().stop(goal_id)
         else:
