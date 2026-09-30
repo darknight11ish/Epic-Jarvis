@@ -213,8 +213,15 @@ CODE_GROUPS, CODE_GROUP_LEN = 4, 5
 #: audit: schedule.db WAS backed up, and it holds each goal's weekly check-in
 #: job, so a restore brought back check-ins whose goals were gone - and Stop
 #: tracking (the only way to remove one) needs the goal.
+#: study.db (jarvis_decks.py, review decks) joined on 2026-09-30, the owner's
+#: decision after the decks audit: same recovery code, same lock. Its words are
+#: sealed under a Credential Manager key of their own, so that key travels the
+#: way the chat-history key does (secrets/study-decks-key.b64) - and a study.db
+#: is only written into an archive together with its key, never without.
 SOURCE_DBS = ("memory.db", "chat-history.db", "schedule.db", "feedback.db", "projects.db",
-              "goals.db")
+              "goals.db", "study.db")
+
+STUDY_DB = "study.db"
 
 MISSING = "backup.py could not be reached - run apply-patches.ps1 on this PC"
 NO_CRYPTO = ("Backing up needs the `cryptography` package, which is not installed on this "
@@ -476,6 +483,20 @@ def _chat_history_key_b64() -> Optional[str]:
         return None
 
 
+def _study_decks_key_b64() -> Optional[str]:
+    """The review decks' own encryption key, base64, or None when it cannot
+    be read. Read the SAME way jarvis_decks.py reads it (its own Credential
+    Manager entry, "Jarvis Backend/study decks key"), and only called when
+    study.db exists, so a backup never makes a key for decks nobody has."""
+    try:
+        import jarvis_chat_log
+        import jarvis_decks
+        key = jarvis_chat_log.CredentialKey(jarvis_decks.KEY_TARGET)()
+        return base64.b64encode(key).decode("ascii")
+    except Exception:
+        return None
+
+
 def _toml_source() -> Optional[Path]:
     try:
         if fw is not None:
@@ -501,17 +522,29 @@ def build_archive() -> tuple:
     conf = _config_dir()
     manifest = {"created_at": time.time(), "databases": {}, "settings_files": 0,
                 "notes_files": 0, "voice_files": 0, "chat_history_key": False,
-                "framework_toml": False}
+                "study_decks_key": False, "framework_toml": False}
     buf = io.BytesIO()
     with tempfile.TemporaryDirectory(prefix="jarvis-backup-") as tmp:
         tmp_path = Path(tmp)
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            study_key_b64 = None
             for name in SOURCE_DBS:
                 src = conf / name
                 dest = tmp_path / name
+                if name == STUDY_DB:
+                    # Sealed words are useless (and a restore of them would
+                    # replace a working file) without their key: no key, no file.
+                    if not src.is_file():
+                        continue
+                    study_key_b64 = _study_decks_key_b64()
+                    if not study_key_b64:
+                        continue
                 if _snapshot_db(src, dest):
                     manifest["databases"][name] = _table_counts(dest)
                     zf.write(dest, arcname=f"db/{name}")
+                    if name == STUDY_DB:
+                        zf.writestr("secrets/study-decks-key.b64", study_key_b64)
+                        manifest["study_decks_key"] = True
             for jf in sorted(conf.glob("*.json")):
                 if jf.name == settings_path().name:
                     continue  # backup.json names only a folder - never useful inside itself
@@ -980,7 +1013,8 @@ def _apply_restore(zip_bytes: bytes) -> dict:
     conf = _config_dir()
     conf.mkdir(parents=True, exist_ok=True)
     applied = {"databases": 0, "settings_files": 0, "notes_files": 0, "voice_files": 0,
-              "framework_toml": False, "chat_history_key": False, "skipped": 0}
+              "framework_toml": False, "chat_history_key": False, "study_decks_key": False,
+              "skipped": 0}
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         for info in zf.infolist():
             name = info.filename
@@ -1013,6 +1047,16 @@ def _apply_restore(zip_bytes: bytes) -> dict:
                     ts.WindowsStore(target=jarvis_chat_log.KEY_TARGET).write(
                         data.decode("ascii"))
                     applied["chat_history_key"] = True
+                except Exception:
+                    pass
+                continue
+            elif name == "secrets/study-decks-key.b64":
+                try:
+                    import jarvis_token_store as ts
+                    import jarvis_decks
+                    ts.WindowsStore(target=jarvis_decks.KEY_TARGET).write(data.decode("ascii"))
+                    applied["study_decks_key"] = True
+                    jarvis_decks.forget_key()   # the running store must reopen with this key
                 except Exception:
                     pass
                 continue
