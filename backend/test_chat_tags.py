@@ -518,10 +518,11 @@ def t_routes():
 
 def t_the_patch_whitelists_the_routes():
     patch = (HERE / "chat-history.patch").read_text(encoding="utf-8")
-    check("chat-history.patch routes GET /api/history/tags", '"/api/history/tags"):' in patch)
+    check("chat-history.patch routes GET /api/history/tags",
+          '"/api/history/tags", "/api/history/tags/suggest"):' in patch)
     check("chat-history.patch routes POST /api/history/tags and /tag",
-          '"/api/history/tags", "/api/history/tag",' in patch
-          and '"/api/history/fork"):' in patch)
+          '"/api/history/tags", "/api/history/tags/suggest", "/api/history/tag",' in patch
+          and '"/api/history/fork", "/api/history/mark"):' in patch)
     check("the routes still sit behind the token and origin checks",
           patch.count("_origin_ok(self)") >= 2 and patch.count("_token_ok(self)") >= 2)
 
