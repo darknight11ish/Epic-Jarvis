@@ -883,6 +883,59 @@ def t_a_tainted_turn_reaches_no_page_and_no_card():
     check("the step log says refused", stp[-1]["outcome"] == "refused" and stp[-1]["ran"] is False)
 
 
+def t_reading_the_forms_own_page_does_not_block_submit_but_other_reads_do():
+    """The owner's answer of 2026-09-30: the booking page Jarvis opened itself is
+    not 'outside text' for the final click. Email, files, notes, other sites and
+    memories still are."""
+    AG = _agent()
+    args = {"goal": "book", "session": "s", "requests": [dict(r) for r in REQS]}
+    w = _watch(AG)
+    w.read["browser_control"] = 2
+    check("reads by browser_control alone do not refuse a final step",
+          AG._form_review_refusal(args, w) == "")
+    w.read["web_search"] = 1
+    check("a web search as well: refused", AG._form_review_refusal(args, w) == AG.FORM_REVIEW_OUTSIDE)
+    w = _watch(AG)
+    w.read["browser_control"] = 1
+    w.read["read_email"] = 1
+    check("an email read as well: refused", AG._form_review_refusal(args, w) == AG.FORM_REVIEW_OUTSIDE)
+    w = _watch(AG, tainted=True)
+    w.read["browser_control"] = 1
+    check("an earlier conversation that read outside text: still refused",
+          AG._form_review_refusal(args, w) == AG.FORM_REVIEW_OUTSIDE)
+    # took_in remembers the sites browser_control read, hosts only.
+    w = _watch(AG)
+    w.took_in("browser_control", {"ok": True, "done": [
+        {"action": "navigate", "url": "about:blank", "value": "https://clinic.example/book?name=Jo"},
+        {"action": "click", "url": "https://clinic.example/book"}], "not_run": []})
+    check("took_in records host names only", w.browser_hosts == {"clinic.example"}, repr(w.browser_hosts))
+    check("...and counts as a browser read", w.read.get("browser_control") == 1)
+
+
+def t_a_different_site_read_earlier_in_the_turn_refuses_the_form():
+    AG = _agent()
+    FR._reset_for_tests()
+    seen = {}
+    real_run = B.run
+    B.run = lambda plan, **kw: seen.update(kw) or {"ok": True}
+    try:
+        f = Form()
+        p = make_plan(f)
+        same = _watch(AG)
+        same.browser_hosts = {"clinic.example"}
+        out = AG._run_browser_control({}, p, checker=lambda *a: Verdict(True), watch=same, out=None)
+        check("only the form's own site read earlier: it runs", out == {"ok": True} and "review" in seen)
+        seen.clear()
+        other = _watch(AG)
+        other.browser_hosts = {"clinic.example", "news.example"}
+        out = AG._run_browser_control({}, p, checker=lambda *a: Verdict(True), watch=other, out=None)
+        check("another site read earlier: refused in words, nothing run",
+              out.get("ok") is False and out.get("submitted") is False
+              and out.get("error") == AG.FORM_REVIEW_OTHER_SITE and not seen, repr(out))
+    finally:
+        B.run = real_run
+
+
 def t_the_headless_browser_gets_no_picture_hooks_but_still_the_second_card():
     AG = _agent()
     FR._reset_for_tests()

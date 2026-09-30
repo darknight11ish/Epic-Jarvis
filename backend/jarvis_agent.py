@@ -456,6 +456,30 @@ def _prepare_browser_control(args: dict):
     return p, B.describe(p)
 
 
+def _hosts_of_browser_result(result) -> set:
+    """The host names a browser_control result touched: each step's page and
+    each navigate target. Host names only - never a path or a query."""
+    from urllib.parse import urlparse
+    hosts: set = set()
+    if not isinstance(result, dict):
+        return hosts
+    for key in ("done", "not_run"):
+        for st in result.get(key) or []:
+            if not isinstance(st, dict):
+                continue
+            urls = [st.get("url")]
+            if st.get("action") == "navigate":
+                urls.append(st.get("value"))
+            for u in urls:
+                try:
+                    h = (urlparse(str(u or "")).hostname or "").lower()
+                except Exception:
+                    h = ""
+                if h:
+                    hosts.add(h)
+    return hosts
+
+
 def _run_browser_control(args: dict, plan_obj, *, announce=None, checkpoint=None,
                          checker=None, watch=None, out=None) -> dict:
     if plan_obj is None:
@@ -465,6 +489,11 @@ def _run_browser_control(args: dict, plan_obj, *, announce=None, checkpoint=None
     import jarvis_browser_control as B
     review = snapshot = fingerprint = None
     if any(getattr(st, "final", False) for st in getattr(plan_obj, "steps", [])):
+        # Earlier in this turn Jarvis read only THIS form's own site, or the
+        # form is refused: a different site's words could end up in the form.
+        earlier = getattr(watch, "browser_hosts", None) or set()
+        if earlier and not earlier <= set(B._plan_hosts(plan_obj)):
+            return {"ok": False, "submitted": False, "error": FORM_REVIEW_OTHER_SITE}
         # A plan that ends in the click that sends a form: the SECOND card
         # (browser_form_submit) is raised from inside the run, after the fields
         # are filled and before that click (jarvis_form_review.py). Anything
@@ -514,6 +543,10 @@ FORM_REVIEW_OUTSIDE = ("refused: this plan ends in a click that sends a form, an
 FORM_REVIEW_NOT_LOCAL = ("refused: a form may only be filled in by the model on this PC (rule "
                          "1), and this turn's model is not on this PC. Nothing was opened and "
                          "nobody was asked.")
+FORM_REVIEW_OTHER_SITE = ("refused: Jarvis read a different website earlier in this turn, so the "
+                          "words this form would send could have come from it. Nothing was "
+                          "sent and nobody was asked. Ask for the form again in a new message "
+                          "you type yourself.")
 FORM_REVIEW_IN_PLAN = ("a form that ends in a final click cannot be a step of a plan - ask for "
                        "the form on its own instead.")
 
@@ -528,7 +561,12 @@ def _form_review_refusal(args: dict, watch: "_TurnWatch") -> str:
     """Why this browser call may not end in a form-sending click, or ""."""
     if not _has_final_request(args):
         return ""
-    if watch.tainted or watch.read or watch.provenance or watch.app_context:
+    # The form page Jarvis itself opened is not "outside text" for this rule
+    # (the owner, 2026-09-30): opening a form and filling it are two calls in
+    # one turn. Any OTHER tool's read still blocks it, and so does a read of a
+    # different website (FORM_REVIEW_OTHER_SITE, checked once the plan is made).
+    other_reads = any(n != "browser_control" for n in watch.read)
+    if watch.tainted or other_reads or watch.provenance or watch.app_context:
         return FORM_REVIEW_OUTSIDE
     lane = getattr(watch, "lane", None)
     if not isinstance(lane, dict) or local_model_refusal(lane.get("url"), lane.get("model")):
@@ -3582,6 +3620,9 @@ class _TurnWatch:
         self.cards = 0               # approval cards this turn (CARDS_PER_TURN)
         self.file_parts = 0          # document parts read this turn (FILES_PARTS_PER_TURN)
         self.secrets: list = []      # KINDS of password or key read, never values
+        # The websites (host names) browser_control read this turn, for the
+        # form-review rule "only the form's own site" (FORM_REVIEW_OTHER_SITE).
+        self.browser_hosts: set = set()
         # "Where this came from" (I42, jarvis_sources.py): each reading
         # tool's own result, by reference only - a note's ref, a wiki page's
         # path, a web result's url, a file's path. Built in took_in(), from
@@ -3693,6 +3734,8 @@ class _TurnWatch:
             return result
         if name not in _NOT_READING:
             self.read[name] = self.read.get(name, 0) + 1
+            if name == "browser_control":
+                self.browser_hosts |= _hosts_of_browser_result(result)
             pieces = _strings_in(result, [])
             self.outside.append("\n".join(pieces)[:_MAX_SCAN_CHARS])
             # Each field on its own - a sender's address in one field and
