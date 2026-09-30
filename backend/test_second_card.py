@@ -1878,6 +1878,13 @@ def t_study_call_routes_to_the_lane():
               and body["messages"][1] == {"role": "user", "content": "usr"}, body)
         check("the model that answered is recorded for the grader check",
               call.active_model() == "qwen3:8b")
+        check("... and rides on the reply itself (per call, not a shared global)",
+              getattr(out, "model", None) == "qwen3:8b")
+        import threading as _th
+        seen_other = []
+        _th.Thread(target=lambda: seen_other.append(call.active_model())).start()
+        time.sleep(0.2)
+        check("another thread's call never sees this thread's model", seen_other == [""], str(seen_other))
         # The lane does not answer: fall back to today's behaviour, this call only.
         def broken(url, payload=None, timeout=2.0):
             if url.endswith("/api/chat"):
