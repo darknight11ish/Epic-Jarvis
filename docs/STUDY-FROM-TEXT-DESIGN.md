@@ -307,3 +307,24 @@ like `goals.patch`; then run `python3 tools/build_patch_history.py` after `git f
 `src-tauri/src/brain/quiz.rs`, `tests/quiz.mjs`. Phone: `net/Quiz.kt`,
 `ui/screens/QuizPlate.kt`, `QuizTest.kt`. One builder owns each group; builders do
 not edit each other's files, and do not run `git commit`.
+
+## 12. Third Gemini list, checked (2026-09-30)
+
+All five repos exist (shallow clones read; star counts unverified).
+
+| Project | Licence | Verdict |
+|---|---|---|
+| educhain | MIT | **Skip the library**: installing it resolves 181 packages (chromadb, playwright, kubernetes...). Its prompt templates and question schemas may be copied with the notice. |
+| substudy | Apache-2.0 | Skip: last commit 2024-05, a command-line tool (not a library), needs ffmpeg, its transcribe/translate call OpenAI. Slicing audio by subtitle timing is easy to write ourselves if ever wanted, in the backend, never in the Rust shell. |
+| freelingo | **AGPL-3.0** | Ideas only (no code). Docker + Postgres + Redis; SM-2, not FSRS; has streaks (refused). |
+| mispronunciation repo | Apache-2.0 | Ideas only. **English only** (not Spanish); uses Modal, HuggingFace and Groq clouds; weights not included. espeak/phonemizer is GPL-3 (run as a separate program only). |
+| repeater | Apache-2.0 | Best fit, but not run beside Jarvis (a second scheduler; it checks GitHub for updates daily). Its `Q:` / `A:` / `C:` Markdown card format and the `fsrs` idea inform milestone 3. |
+
+False claims in the pasted list: educhain uses LangChain's parser, not
+"Instructor"; there is no ChatOllama in it (you add it yourself);
+`difficulty_level` is not a parameter of the method shown; freelingo has no top
+`src/`; repeater is Rust only (no Go); the pronunciation repo is not
+fine-tuned by its author and is not Spanish.
+
+The pasted "pipeline assembly" was pasted twice; its download steps
+(yt-dlp, faster-whisper on a downloaded stream) stay refused (section 7).
