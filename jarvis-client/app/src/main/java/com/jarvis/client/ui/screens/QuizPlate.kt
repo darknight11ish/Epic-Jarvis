@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.Decks
 import com.jarvis.client.net.Quiz
+import com.jarvis.client.net.QuizCloud
 import com.jarvis.client.net.Youtube
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
@@ -159,6 +160,24 @@ internal fun QuizSection(
         if (open == null) {
             answers = emptyMap()
             keeping = false
+        }
+    }
+
+    val cloudInfo by JarvisRuntime.quizCloudInfo.collectAsState()
+    val cloudReq by JarvisRuntime.quizCloud.collectAsState()
+
+    LaunchedEffect(Unit) {
+        JarvisRuntime.refreshQuizCloud()
+    }
+
+    val cloudPolling = cloudReq?.let { QuizCloud.keepPolling(it.phase) } == true
+    LaunchedEffect(cloudPolling) {
+        if (!cloudPolling) return@LaunchedEffect
+        while (true) {
+            kotlinx.coroutines.delay(QuizCloud.POLL_SECONDS * 1000L)
+            val poll = JarvisRuntime.pollQuizCloud()
+            if (poll.said != null) said = poll.said
+            if (poll.done) break
         }
     }
 
@@ -450,6 +469,47 @@ internal fun QuizSection(
                                     }
                                 },
                             )
+                            if (open?.mode != Quiz.MODE_SPANISH && answeredQs.isNotEmpty() && cloudInfo?.available == true) {
+                                val isWaiting = cloudReq?.phase == QuizCloud.Phase.WAITING
+                                val isWorking = cloudReq?.phase == QuizCloud.Phase.WORKING
+                                if (isWaiting) {
+                                    Quiet(
+                                        QuizCloud.CANCEL,
+                                        color = chrome.badInk,
+                                        enabled = !busy,
+                                        onClick = {
+                                            busy = true
+                                            scope.launch {
+                                                try {
+                                                    val res = JarvisRuntime.cancelQuizCloud()
+                                                    if (res.isNotEmpty()) said = res
+                                                } finally {
+                                                    busy = false
+                                                }
+                                            }
+                                        },
+                                    )
+                                } else if (!isWorking) {
+                                    val canGrade = cloudInfo?.ready == true
+                                    Quiet(
+                                        QuizCloud.BUTTON,
+                                        enabled = canAct && !busy && canGrade,
+                                        onClick = {
+                                            if (canGrade) {
+                                                busy = true
+                                                scope.launch {
+                                                    try {
+                                                        val (ok, sentence) = JarvisRuntime.startQuizCloud(open!!.id)
+                                                        if (sentence.isNotEmpty()) said = sentence
+                                                    } finally {
+                                                        busy = false
+                                                    }
+                                                }
+                                            }
+                                        },
+                                    )
+                                }
+                            }
                             if (open?.provenance != "outside") {
                                 Quiet(
                                     Quiz.KEEP_OPEN,
@@ -480,6 +540,9 @@ internal fun QuizSection(
                                     }
                                 },
                             )
+                        }
+                        if (open?.mode != Quiz.MODE_SPANISH && answeredQs.isNotEmpty() && cloudInfo?.available == true) {
+                            Text(QuizCloud.LEAVES, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
                         }
                         if (privateHidden && answeredQs.isNotEmpty()) {
                             Text(Quiz.KEEP_HIDDEN, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)

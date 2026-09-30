@@ -817,8 +817,8 @@ def _rehearse():
             return None, "; ".join(log)
         d = Path(tempfile.mkdtemp(prefix="jarvis-qc-patch-"))
         try:
-            (d / target).write_text(text, encoding="utf-8", newline="\n")
-            (d / "p.patch").write_text(patch, encoding="utf-8", newline="\n")
+            (d / target).write_text(text, encoding="utf-8")
+            (d / "p.patch").write_text(patch, encoding="utf-8")
             res = subprocess.run([git, "apply", "--include", target, "p.patch"], cwd=d,
                                  capture_output=True, text=True)
             if res.returncode != 0:
@@ -883,7 +883,10 @@ def t_the_tables_and_docs():
           and any(act in g[1] for g in A.GROUPS))
     check("card words: a plain title", W.TITLES.get(act, "").startswith("send a quiz to a cloud AI service"))
     toml = (HERE / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8")
-    import tomllib
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib
     check("jarvis-framework.toml: tier ask, and it still parses",
           re.search(r'^quiz_cloud_grade\s*=\s*"ask"', toml, re.M) is not None
           and tomllib.loads(toml)["autonomy"]["tiers"][act] == "ask")
@@ -915,8 +918,8 @@ def t_the_tables_and_docs():
           all(w in design for w in (QC.BUTTON, QC.INTRO, QC.LEAVES)),
           [w for w in (QC.BUTTON, QC.INTRO, QC.LEAVES) if w not in design])
     parity = (HERE.parent / "tools" / "check_parity.py").read_text(encoding="utf-8")
-    check("check_parity lists the four routes as planned",
-          all(re.search(r"""['"]%s['"]: \(['"]planned['"]""" % re.escape(p), parity) for p in
+    check("check_parity lists the four routes as planned or ported",
+          all(re.search(r"""['"]%s['"]: \(['"](?:planned|ported)['"]""" % re.escape(p), parity) for p in
               ("/api/quiz-cloud", "/api/quiz-cloud/grade", "/api/quiz-cloud/{id}",
                "/api/quiz-cloud/{id}/cancel")))
     for f in ("jarvis-desktop/tests/fixtures/asks-first-cases.json",

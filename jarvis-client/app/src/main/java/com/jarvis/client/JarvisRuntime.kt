@@ -5293,6 +5293,124 @@ object JarvisRuntime {
         }
     }
 
+    // ---------------------------------------------------- Cloud quiz grading ----
+    // "Grade this better" (docs/STUDY-FROM-TEXT-DESIGN.md section 15, JARVIS-API 113)
+    // see [com.jarvis.client.net.QuizCloud].
+
+    private val _quizCloudInfo = MutableStateFlow<com.jarvis.client.net.QuizCloud.Info?>(null)
+    val quizCloudInfo: StateFlow<com.jarvis.client.net.QuizCloud.Info?> = _quizCloudInfo.asStateFlow()
+
+    private val _quizCloud = MutableStateFlow<com.jarvis.client.net.QuizCloud.Request?>(null)
+    val quizCloud: StateFlow<com.jarvis.client.net.QuizCloud.Request?> = _quizCloud.asStateFlow()
+
+    private var quizCloudUnknownSince: Long? = null
+
+    data class QuizCloudPoll(val done: Boolean, val said: String?)
+
+    suspend fun refreshQuizCloud() {
+        when (val r = api.quizCall(com.jarvis.client.net.QuizCloud.PATH, null)) {
+            is ApiResult.Ok -> {
+                if (!com.jarvis.client.net.QuizCloud.missing(r.value)) {
+                    val info = r.value.body?.let(com.jarvis.client.net.QuizCloud::parseInfo)
+                    _quizCloudInfo.value = info
+                    info?.latest?.let { l ->
+                        if (com.jarvis.client.net.QuizCloud.keepPolling(l.phase)) {
+                            _quizCloud.value = l
+                        }
+                    }
+                }
+            }
+            is ApiResult.Failed -> Unit
+        }
+    }
+
+    private fun endQuizCloud() {
+        _quizCloud.value = null
+        quizCloudUnknownSince = null
+    }
+
+    suspend fun startQuizCloud(quizId: String): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val body = com.jarvis.client.net.QuizCloud.gradeBody(quizId)
+        val out = when (val r = api.quizCall(com.jarvis.client.net.QuizCloud.GRADE_PATH, body)) {
+            is ApiResult.Ok -> com.jarvis.client.net.QuizCloud.requestSaid(r.value, "Not started.")
+            is ApiResult.Failed -> return false to ("Not started. " + describe(r.error))
+        }
+        val req = out.request
+        if (out.ok && req != null) {
+            quizCloudUnknownSince = null
+            _quizCloud.value = req
+            return true to out.said
+        }
+        return false to out.said
+    }
+
+    suspend fun pollQuizCloud(): QuizCloudPoll {
+        val cur = _quizCloud.value ?: return QuizCloudPoll(true, null)
+        if (!com.jarvis.client.net.QuizCloud.validId(cur.id)) {
+            endQuizCloud()
+            return QuizCloudPoll(true, null)
+        }
+        val r = api.quizCall("${com.jarvis.client.net.QuizCloud.PATH}/${cur.id}", null)
+        if (r is ApiResult.Failed) return QuizCloudPoll(false, noticeFor(r.error))
+        val out = com.jarvis.client.net.QuizCloud.requestSaid((r as ApiResult.Ok).value, "Not read.")
+        val req = out.request
+        if (!out.ok || req == null) {
+            if (out.gone || req != null) {
+                endQuizCloud()
+                return QuizCloudPoll(true, out.said)
+            }
+            return QuizCloudPoll(false, out.said)
+        }
+        when (req.phase) {
+            com.jarvis.client.net.QuizCloud.Phase.READY -> {
+                val quiz = req.quiz
+                endQuizCloud()
+                if (quiz != null) {
+                    adoptQuiz(quiz)
+                } else {
+                    pollQuiz()
+                }
+                return QuizCloudPoll(true, out.said)
+            }
+            com.jarvis.client.net.QuizCloud.Phase.ENDED -> {
+                endQuizCloud()
+                return QuizCloudPoll(true, out.said)
+            }
+            else -> {
+                _quizCloud.value = req
+                if (com.jarvis.client.net.QuizCloud.isKnown(req.state)) {
+                    quizCloudUnknownSince = null
+                } else {
+                    val now = android.os.SystemClock.elapsedRealtime()
+                    val since = quizCloudUnknownSince ?: now
+                    quizCloudUnknownSince = since
+                    if (com.jarvis.client.net.QuizCloud.giveUpOnUnknown(since, now)) {
+                        endQuizCloud()
+                        return QuizCloudPoll(true, out.said)
+                    }
+                }
+                return QuizCloudPoll(false, null)
+            }
+        }
+    }
+
+    suspend fun cancelQuizCloud(): String {
+        val cur = _quizCloud.value ?: return ""
+        if (!com.jarvis.client.net.QuizCloud.validId(cur.id)) {
+            endQuizCloud()
+            return ""
+        }
+        val r = api.quizCall("${com.jarvis.client.net.QuizCloud.PATH}/${cur.id}/cancel", com.jarvis.client.net.QuizCloud.EMPTY_BODY)
+        if (r is ApiResult.Failed) return noticeFor(r.error)
+        val out = com.jarvis.client.net.QuizCloud.requestSaid((r as ApiResult.Ok).value, "Not cancelled.")
+        if (out.request != null) {
+            if (out.request.phase == com.jarvis.client.net.QuizCloud.Phase.ENDED) endQuizCloud()
+            else _quizCloud.value = out.request
+        }
+        return out.said
+    }
+
     // ------------------------------------------------------- Study decks ----
     // "My study decks" (docs/QUIZ-DECKS-DESIGN.md, contract C1-C6) - see
     // [com.jarvis.client.net.Decks] and ui/screens/DecksPlate.kt. The PC keeps

@@ -223,6 +223,18 @@ import {
   YT_LABEL,
   YT_OUTSIDE,
   ytFromCaptions,
+  QC_BUTTON,
+  QC_CANCEL,
+  QC_INTRO,
+  QC_LEAVES,
+  QC_POLL_SECONDS,
+  QC_SENDING,
+  QC_CANCELLING,
+  qcGiveUpOnUnknown,
+  qcIsKnown,
+  qcKeepPolling,
+  qcOutcome,
+  qcReadInfo,
 } from "./quiz.js";
 import { createYoutubeBlock } from "./youtube.js";
 import * as Decks from "./decks.js";
@@ -9141,6 +9153,9 @@ const qz = { quiz: null, summary: null, shown: null, busy: "", error: "", last: 
   ytNote: null,
   // The Keep sheet (decks.js keepRows) while it is open, and the count kept.
   keep: null, kept: null,
+  // Cloud grading (QC_*, JARVIS-API 113)
+  cloudInfo: null, cloudRequest: null, cloudUnknownSince: null, cloudTimer: null,
+  cloudGen: 0, cloudSaid: "",
   // The control that should have the keyboard after the next paint, and the
   // last one that had it (trackFkeys).
   focusNext: "", lastFocus: "" };
@@ -9157,6 +9172,11 @@ function quizReset() {
   qz.keep = null;
   qz.kept = null;
   qz.ytNote = null;
+  if (qz.cloudTimer) clearTimeout(qz.cloudTimer);
+  qz.cloudTimer = null;
+  qz.cloudRequest = null;
+  qz.cloudUnknownSince = null;
+  qz.cloudSaid = "";
 }
 
 /** "Quiz me on a YouTube video" under the paste box (youtube.js, JARVIS-API 112). */
@@ -9444,6 +9464,141 @@ async function stopQuiz() {
   paintQuiz();
 }
 
+/* ── Grade this better (docs/STUDY-FROM-TEXT-DESIGN.md §15, JARVIS-API 113) ── */
+
+async function loadQuizCloudInfo() {
+  try {
+    const res = await invoke("brain_quiz_cloud_info");
+    qz.cloudInfo = qcReadInfo(res);
+    paintQuiz();
+  } catch (_) {
+    qz.cloudInfo = null;
+  }
+}
+
+async function startQuizCloud() {
+  const q = qz.quiz;
+  if (!q || qz.busy || q.mode === "spanish") return;
+  if (!qz.cloudInfo || !qz.cloudInfo.ready) return;
+  qz.busy = QC_SENDING;
+  qz.cloudSaid = "";
+  qz.error = "";
+  paintQuiz();
+  try {
+    const res = await invoke("brain_quiz_cloud_start", { quizId: q.id });
+    if (res && res.ok === false) {
+      qz.error = qcOutcome(res, "Refused.").said;
+      qz.busy = "";
+      paintQuiz();
+      return;
+    }
+    const out = qcOutcome(res, "Not started.");
+    if (!out.ok || !out.request) {
+      qz.error = out.said;
+      qz.busy = "";
+      paintQuiz();
+      return;
+    }
+    qz.cloudRequest = out.request;
+    qz.busy = "";
+    qz.cloudSaid = out.said;
+    qz.cloudGen++;
+    paintQuiz();
+    pollQuizCloud();
+  } catch (e) {
+    qz.error = errorText(e);
+    qz.busy = "";
+    paintQuiz();
+  }
+}
+
+async function cancelQuizCloud() {
+  const r = qz.cloudRequest;
+  if (!r) return;
+  qz.busy = QC_CANCELLING;
+  paintQuiz();
+  try {
+    const res = await invoke("brain_quiz_cloud_cancel", { id: r.id });
+    const out = qcOutcome(res, "Not cancelled.");
+    if (out.request) {
+      qz.cloudRequest = out.request;
+      qz.cloudSaid = out.said;
+    }
+  } catch (e) {
+    qz.cloudSaid = errorText(e);
+  } finally {
+    qz.busy = "";
+    paintQuiz();
+  }
+}
+
+async function pollQuizCloud() {
+  if (qz.cloudTimer) {
+    clearTimeout(qz.cloudTimer);
+    qz.cloudTimer = null;
+  }
+  const cur = qz.cloudRequest;
+  if (!cur || !qcKeepPolling(cur.phase)) return;
+  const gen = qz.cloudGen;
+  let answer;
+  try {
+    answer = await invoke("brain_quiz_cloud_get", { id: cur.id });
+  } catch (e) {
+    if (gen !== qz.cloudGen) return;
+    qz.cloudSaid = errorText(e);
+    paintQuiz();
+    scheduleQuizCloudPoll();
+    return;
+  }
+  if (gen !== qz.cloudGen) return;
+  const out = qcOutcome(answer, "Not read.");
+  if (!out.ok || !out.request) {
+    qz.cloudRequest = null;
+    qz.cloudSaid = out.said;
+    paintQuiz();
+    return;
+  }
+  const req = out.request;
+  qz.cloudRequest = req;
+  qz.cloudSaid = out.said;
+  if (req.phase === "ready") {
+    if (req.quiz) {
+      takeQuiz(req.quiz);
+    } else {
+      try {
+        const q = await invoke("brain_quiz_get", { id: cur.quizId });
+        if (q && q.quiz) takeQuiz(q.quiz);
+      } catch (_) {}
+    }
+    qz.cloudRequest = null;
+    paintQuiz();
+    return;
+  }
+  if (req.phase === "ended") {
+    qz.cloudRequest = null;
+    paintQuiz();
+    return;
+  }
+  if (qcIsKnown(req.state)) {
+    qz.cloudUnknownSince = null;
+  } else {
+    const now = Date.now();
+    qz.cloudUnknownSince = qz.cloudUnknownSince == null ? now : qz.cloudUnknownSince;
+    if (qcGiveUpOnUnknown(qz.cloudUnknownSince, now)) {
+      qz.cloudRequest = null;
+      paintQuiz();
+      return;
+    }
+  }
+  paintQuiz();
+  scheduleQuizCloudPoll();
+}
+
+function scheduleQuizCloudPoll() {
+  if (qz.cloudTimer) clearTimeout(qz.cloudTimer);
+  qz.cloudTimer = setTimeout(pollQuizCloud, QC_POLL_SECONDS * 1000);
+}
+
 /* The Keep sheet (docs/QUIZ-DECKS-DESIGN.md C3): every answered question with
    a tick, its passage and a box for the back. Nothing is sent until "Keep and
    finish"; the PC takes each question's own words and passage from its open
@@ -9670,6 +9825,7 @@ function markBlock(mark, quiz) {
   const box = el("div", "quiz-mark");
   const head = el("div", "goal-head");
   head.append(el("span", "goal-title", quizLevelLabel(mark.level)));
+  if (lines.cloudLabel) head.append(el("span", "row-tag", lines.cloudLabel));
   if (lines.showGuess) head.append(el("span", "row-tag", QUIZ_GUESS));
   box.append(head);
   if (mark.comment) box.append(el("p", "", mark.comment));
@@ -9833,6 +9989,26 @@ function paintQuiz() {
     const foot = el("div", "goal-actions");
     // Finish and Stop reveal nothing (numbers only), so both stay while hidden.
     foot.append(button(QUIZ_FINISH, finishQuiz, { live: true }));
+    // Cloud "Grade this better" button (docs/STUDY-FROM-TEXT-DESIGN.md §15)
+    // Shown once at least one question is answered and the quiz is a text quiz. Beside Finish.
+    if (q.mode !== "spanish" && q.questions.some((x) => x.mark) && qz.cloudInfo && qz.cloudInfo.available) {
+      const isWaiting = qz.cloudRequest && qz.cloudRequest.phase === "waiting";
+      const isWorking = qz.cloudRequest && qz.cloudRequest.phase === "working";
+      if (isWaiting) {
+        const cancelBtn = button(QC_CANCEL, cancelQuizCloud, { danger: true });
+        cancelBtn.dataset.fkey = "qc-cancel";
+        foot.append(cancelBtn);
+      } else if (!isWorking) {
+        const canGrade = qz.cloudInfo.ready;
+        const gradeBtn = button(QC_BUTTON, startQuizCloud, { live: true });
+        gradeBtn.dataset.fkey = "qc-grade";
+        if (!canGrade) {
+          gradeBtn.disabled = true;
+          gradeBtn.title = QC_INTRO;
+        }
+        foot.append(gradeBtn);
+      }
+    }
     // Keep lists the owner's words, so it is never offered while they are hidden,
     // and quizzes made from outside text (like YouTube) cannot be saved to review decks.
     if (q.provenance !== "outside") {
@@ -9844,6 +10020,12 @@ function paintQuiz() {
     }
     foot.append(button(QUIZ_STOP, stopQuiz, { live: true, danger: true }));
     block.append(foot);
+    if (qz.cloudSaid) {
+      block.append(el("p", "note", qz.cloudSaid));
+    }
+    if (q.mode !== "spanish" && q.questions.some((x) => x.mark) && qz.cloudInfo && qz.cloudInfo.available) {
+      block.append(el("p", "note", QC_LEAVES));
+    }
     if (q.hidden && q.provenance !== "outside") block.append(el("p", "note", Decks.KEEP_HIDDEN));
     parts.push(block);
   }
@@ -9897,6 +10079,7 @@ function renderQuiz() {
   paintTopicCount();
   paintQuiz();
   youtubeBlock.enter();
+  loadQuizCloudInfo();
 }
 
 if (dom.quizMode) {

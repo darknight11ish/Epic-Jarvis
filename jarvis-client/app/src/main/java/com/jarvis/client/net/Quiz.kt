@@ -143,6 +143,7 @@ object Quiz {
         val markedBy: String = "model",
         val expected: String? = null,
         val keyLabel: String? = null,
+        val service: String? = null,
     )
 
     data class Question(val n: Int, val kind: String, val prompt: String, val mark: Mark?)
@@ -203,11 +204,17 @@ object Quiz {
         val o = el as? JsonObject ?: return null
         val level = o.text("level") ?: return null
         if (level != "got_it" && level != "partly" && level != "not_yet") return null
+        val markedBy = when (o.text("marked_by")) {
+            "code" -> "code"
+            "cloud" -> "cloud"
+            else -> "model"
+        }
         return Mark(
             level, o.text("comment").orEmpty(), o.text("passage").orEmpty(),
-            markedBy = if (o.text("marked_by") == "code") "code" else "model",
+            markedBy = markedBy,
             expected = o.text("expected"),
             keyLabel = o.text("key_label"),
+            service = o.text("service"),
         )
     }
 
@@ -604,8 +611,12 @@ object Quiz {
      * model marked it and the grader has not been measured on this PC. A mark
      * made by code (a Spanish fill-the-blank) never carries the label.
      */
-    fun markLine(mark: Mark, verified: Boolean): String =
-        levelWords(mark.level) + if (verified || mark.markedBy == "code") "" else " - $GUESS"
+    fun markLine(mark: Mark, verified: Boolean): String {
+        val base = levelWords(mark.level)
+        val cloud = if (mark.markedBy == "cloud" && !mark.service.isNullOrEmpty()) " · Marked by ${mark.service}" else ""
+        val guess = if (verified || mark.markedBy == "code") "" else " - $GUESS"
+        return base + cloud + guess
+    }
 
     /** The quiz with every question's words and marks replaced, for while the lists are hidden. */
     fun hide(q: Session): Session = q.copy(

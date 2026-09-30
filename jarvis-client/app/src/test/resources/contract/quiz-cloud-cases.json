@@ -1,0 +1,448 @@
+{
+ "about": "The shared words and small rules of \"Grade this better\" (docs/STUDY-FROM-TEXT-DESIGN.md section 15, JARVIS-API section 113), word for word, plus sample replies of the frozen shapes. Written by tools/gen_quiz_cloud_cases.py: both apps' tests read this file.",
+ "failures": {
+  "cloud_failed": "The cloud service could not mark the quiz. Your marks were not changed.",
+  "cloud_timeout": "The cloud service took too long to answer. Your marks were not changed.",
+  "cloud_unreadable": "The service answered, but not with one mark for each question, so Jarvis used none of it. Your marks were not changed.",
+  "quiz_changed": "The quiz changed after the card was shown (an answer was added or it went private), so nothing was sent. Start again to see a new card.",
+  "quiz_closed": "The quiz was closed before anything was sent. Nothing was sent.",
+  "service_missing": "This PC's Jarvis does not have the cloud services set up (jarvis_chatbot_api.py) - run apply-patches.ps1 on the PC. Nothing was sent."
+ },
+ "payload_max": 60000,
+ "phases": {
+  "denied": "ended",
+  "failed": "ended",
+  "ready": "ready",
+  "refused": "ended",
+  "sending": "working",
+  "timed_out": "ended",
+  "waiting": "waiting",
+  "withdrawn": "ended"
+ },
+ "poll_seconds": 2,
+ "refusals": {
+  "after_crisis": {
+   "message": "This quiz stays on this PC.",
+   "status": 409
+  },
+  "already_started": {
+   "message": "It is already being sent and can no longer be cancelled.",
+   "status": 409
+  },
+  "bad_request": {
+   "message": "That request was not understood. Nothing was sent.",
+   "status": 400
+  },
+  "bad_service": {
+   "message": "There is no such service. Leave it empty and Jarvis picks the cheapest one that is set up.",
+   "status": 400
+  },
+  "card_unavailable": {
+   "message": "Jarvis could not raise the approval card. Nothing was sent.",
+   "status": 503
+  },
+  "no_service": {
+   "message": "No cloud service is set up for this yet. A service needs a saved key AND a monthly money limit, both set on this PC. {how}",
+   "status": 409
+  },
+  "not_text_quiz": {
+   "message": "Only a quiz on a text can be marked by a cloud service, not Spanish practice. Its marks stay on this PC.",
+   "status": 409
+  },
+  "nothing_answered": {
+   "message": "Answer at least one question first.",
+   "status": 409
+  },
+  "outside_source_refused": {
+   "message": "This quiz was made from text Jarvis did not write or receive from you, other than YouTube captions, so it stays on this PC.",
+   "status": 409
+  },
+  "outside_text_turn": {
+   "message": "Jarvis has just read outside text or private things in this conversation, so it will not send a quiz anywhere now. Start from the Quiz page.",
+   "status": 409
+  },
+  "private_material": {
+   "message": "This quiz touches money, health, a password, an account or ID number, or another private thing, so it stays on this PC.",
+   "status": 409
+  },
+  "private_unchecked": {
+   "message": "Jarvis could not check whether this quiz has private things in it, so it stays on this PC.",
+   "status": 409
+  },
+  "quiz_not_found": {
+   "message": "That quiz is not open any more (it may have ended or timed out).",
+   "status": 404
+  },
+  "quiz_private": {
+   "message": "This quiz is marked private, so it stays on this PC.",
+   "status": 409
+  },
+  "request_not_found": {
+   "message": "That grading request is not open any more. Start a new one.",
+   "status": 404
+  },
+  "request_waiting": {
+   "message": "A grading card is already waiting. Answer it first.",
+   "status": 409
+  },
+  "service_not_ready": {
+   "message": "That service cannot be used yet. {why}",
+   "status": 409
+  },
+  "tier_not_ask": {
+   "message": "This needs your yes every time, but the settings file says otherwise, so it is switched off.",
+   "status": 503
+  },
+  "too_big": {
+   "message": "This quiz is too big to send in one go. Its marks stay on this PC.",
+   "status": 409
+  }
+ },
+ "samples": {
+  "denied": {
+   "body": {
+    "ok": true,
+    "request": {
+     "chars": 1200,
+     "cost": "$0.001",
+     "error": null,
+     "host": "api.mistral.ai",
+     "id": "0123456789ab",
+     "marks": null,
+     "message": "You said no, so nothing was sent.",
+     "model": "mistral-small-latest",
+     "quiz": null,
+     "quiz_id": "q1a2b3c4d5e6",
+     "service": "Mistral",
+     "state": "denied"
+    }
+   },
+   "expect": {
+    "ok": true,
+    "phase": "ended",
+    "shown": "You said no, so nothing was sent."
+   },
+   "status": 200
+  },
+  "failed_cloud_timeout": {
+   "body": {
+    "ok": true,
+    "request": {
+     "chars": 1200,
+     "cost": "$0.001",
+     "error": "cloud_timeout",
+     "host": "api.mistral.ai",
+     "id": "0123456789ab",
+     "marks": null,
+     "message": "The cloud service took too long to answer. Your marks were not changed.",
+     "model": "mistral-small-latest",
+     "quiz": null,
+     "quiz_id": "q1a2b3c4d5e6",
+     "service": "Mistral",
+     "state": "failed"
+    }
+   },
+   "expect": {
+    "ok": true,
+    "phase": "ended",
+    "shown": "The cloud service took too long to answer. Your marks were not changed."
+   },
+   "status": 200
+  },
+  "info_not_ready": {
+   "body": {
+    "available": true,
+    "button": "Grade this better",
+    "cheapest": null,
+    "intro": "Send this quiz to a cloud AI service that marks it more carefully than the model on this PC. It asks with a card first, every time, and the card lists exactly what would leave this PC.",
+    "latest": null,
+    "leaves": "This sends your questions, your answers and the passages to an outside company. It costs a little money and is kept under that company's own terms. Nothing private is ever sent.",
+    "ok": true,
+    "ready": false,
+    "services": [],
+    "title": "Grade this better"
+   },
+   "expect": {
+    "available": true,
+    "cheapest": null,
+    "ready": false,
+    "service_count": 0
+   },
+   "status": 200
+  },
+  "info_ready": {
+   "body": {
+    "available": true,
+    "button": "Grade this better",
+    "cheapest": "Mistral",
+    "intro": "Send this quiz to a cloud AI service that marks it more carefully than the model on this PC. It asks with a card first, every time, and the card lists exactly what would leave this PC.",
+    "latest": null,
+    "leaves": "This sends your questions, your answers and the passages to an outside company. It costs a little money and is kept under that company's own terms. Nothing private is ever sent.",
+    "ok": true,
+    "ready": true,
+    "services": [
+     {
+      "host": "api.mistral.ai",
+      "id": "mistral",
+      "model": "mistral-small-latest",
+      "money": "$0.10 spent this month (limit $5.00)",
+      "name": "Mistral",
+      "ready": true,
+      "short": "Mistral",
+      "why": ""
+     }
+    ],
+    "title": "Grade this better"
+   },
+   "expect": {
+    "available": true,
+    "cheapest": "Mistral",
+    "ready": true,
+    "service_count": 1
+   },
+   "status": 200
+  },
+  "ready": {
+   "body": {
+    "ok": true,
+    "request": {
+     "chars": 1200,
+     "cost": "$0.001",
+     "error": null,
+     "host": "api.mistral.ai",
+     "id": "0123456789ab",
+     "marks": null,
+     "message": "Ready.",
+     "model": "mistral-small-latest",
+     "quiz": {
+      "answered": 2,
+      "grader_verified": false,
+      "id": "q1a2b3c4d5e6",
+      "mode": "",
+      "questions": [
+       {
+        "kind": "recall",
+        "mark": {
+         "comment": "Clear and correct.",
+         "level": "got_it",
+         "marked_by": "cloud",
+         "passage": "Plants absorb light.",
+         "service": "Mistral"
+        },
+        "n": 1,
+        "prompt": "What do plants absorb?"
+       },
+       {
+        "kind": "explain",
+        "mark": {
+         "comment": "Mention light absorption.",
+         "level": "partly",
+         "marked_by": "cloud",
+         "passage": "Chlorophyll reflects green light.",
+         "service": "Mistral"
+        },
+        "n": 2,
+        "prompt": "Why is chlorophyll green?"
+       }
+      ],
+      "title": "Photosynthesis"
+     },
+     "quiz_id": "q1a2b3c4d5e6",
+     "service": "Mistral",
+     "state": "ready"
+    }
+   },
+   "expect": {
+    "ok": true,
+    "phase": "ready",
+    "questions": 2,
+    "quiz_id": "q1a2b3c4d5e6",
+    "shown": "Ready."
+   },
+   "status": 200
+  },
+  "refused_no_service": {
+   "body": {
+    "error": "no_service",
+    "message": "No cloud service is set up for this yet. A service needs a saved key AND a monthly money limit, both set on this PC. {how}",
+    "ok": false
+   },
+   "expect": {
+    "code": "no_service",
+    "ok": false
+   },
+   "status": 409
+  },
+  "refused_not_text_quiz": {
+   "body": {
+    "error": "not_text_quiz",
+    "message": "Only a quiz on a text can be marked by a cloud service, not Spanish practice. Its marks stay on this PC.",
+    "ok": false
+   },
+   "expect": {
+    "code": "not_text_quiz",
+    "ok": false
+   },
+   "status": 409
+  },
+  "refused_request_waiting": {
+   "body": {
+    "error": "request_waiting",
+    "message": "A grading card is already waiting. Answer it first.",
+    "ok": false
+   },
+   "expect": {
+    "code": "request_waiting",
+    "ok": false
+   },
+   "status": 409
+  },
+  "sending": {
+   "body": {
+    "ok": true,
+    "request": {
+     "chars": 1200,
+     "cost": "$0.001",
+     "error": null,
+     "host": "api.mistral.ai",
+     "id": "0123456789ab",
+     "marks": null,
+     "message": "Sending the quiz to be marked...",
+     "model": "mistral-small-latest",
+     "quiz": null,
+     "quiz_id": "q1a2b3c4d5e6",
+     "service": "Mistral",
+     "state": "sending"
+    }
+   },
+   "expect": {
+    "ok": true,
+    "phase": "working",
+    "shown": "Sending the quiz to be marked..."
+   },
+   "status": 200
+  },
+  "started": {
+   "body": {
+    "message": "Waiting for your yes on the approval card.",
+    "ok": true,
+    "request": {
+     "chars": 1200,
+     "cost": "$0.001",
+     "error": null,
+     "host": "api.mistral.ai",
+     "id": "0123456789ab",
+     "marks": null,
+     "message": "Waiting for your yes on the approval card.",
+     "model": "mistral-small-latest",
+     "quiz": null,
+     "quiz_id": "q1a2b3c4d5e6",
+     "service": "Mistral",
+     "state": "waiting"
+    },
+    "waiting": true
+   },
+   "expect": {
+    "ok": true,
+    "phase": "waiting",
+    "shown": "Waiting for your yes on the approval card."
+   },
+   "status": 202
+  },
+  "timed_out": {
+   "body": {
+    "ok": true,
+    "request": {
+     "chars": 1200,
+     "cost": "$0.001",
+     "error": null,
+     "host": "api.mistral.ai",
+     "id": "0123456789ab",
+     "marks": null,
+     "message": "Nobody answered the card in time, so nothing was sent.",
+     "model": "mistral-small-latest",
+     "quiz": null,
+     "quiz_id": "q1a2b3c4d5e6",
+     "service": "Mistral",
+     "state": "timed_out"
+    }
+   },
+   "expect": {
+    "ok": true,
+    "phase": "ended",
+    "shown": "Nobody answered the card in time, so nothing was sent."
+   },
+   "status": 200
+  },
+  "unknown_state_with_extra_keys": {
+   "body": {
+    "ok": true,
+    "request": {
+     "chars": 1200,
+     "cost": "$0.001",
+     "error": null,
+     "extra_field": 42,
+     "host": "api.mistral.ai",
+     "id": "0123456789ab",
+     "marks": null,
+     "message": "Evaluating on cloud...",
+     "model": "mistral-small-latest",
+     "quiz": null,
+     "quiz_id": "q1a2b3c4d5e6",
+     "service": "Mistral",
+     "state": "evaluating"
+    }
+   },
+   "expect": {
+    "ok": true,
+    "phase": "working",
+    "shown": "Evaluating on cloud..."
+   },
+   "status": 200
+  },
+  "withdrawn": {
+   "body": {
+    "ok": true,
+    "request": {
+     "chars": 1200,
+     "cost": "$0.001",
+     "error": null,
+     "host": "api.mistral.ai",
+     "id": "0123456789ab",
+     "marks": null,
+     "message": "You cancelled before the card was answered, so nothing was sent.",
+     "model": "mistral-small-latest",
+     "quiz": null,
+     "quiz_id": "q1a2b3c4d5e6",
+     "service": "Mistral",
+     "state": "withdrawn"
+    }
+   },
+   "expect": {
+    "ok": true,
+    "phase": "ended",
+    "shown": "You cancelled before the card was answered, so nothing was sent."
+   },
+   "status": 200
+  }
+ },
+ "state_words": {
+  "denied": "You said no, so nothing was sent.",
+  "failed": "The quiz could not be marked by the cloud service. Your marks were not changed.",
+  "ready": "Ready.",
+  "refused": "The card could not be answered, so nothing was sent.",
+  "sending": "Sending the quiz to be marked...",
+  "timed_out": "Nobody answered the card in time, so nothing was sent.",
+  "waiting": "Waiting for your yes on the approval card.",
+  "withdrawn": "You cancelled before the card was answered, so nothing was sent."
+ },
+ "unknown_state_limit_seconds": 180,
+ "words": {
+  "button": "Grade this better",
+  "cancel": "Cancel",
+  "intro": "Send this quiz to a cloud AI service that marks it more carefully than the model on this PC. It asks with a card first, every time, and the card lists exactly what would leave this PC.",
+  "leaves": "This sends your questions, your answers and the passages to an outside company. It costs a little money and is kept under that company's own terms. Nothing private is ever sent.",
+  "mark_label_prefix": "Marked by ",
+  "title": "Grade this better"
+ }
+}

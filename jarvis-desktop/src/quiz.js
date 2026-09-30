@@ -144,11 +144,13 @@ export function spanishStartArgs({ text, level, exercise, topic }) {
 export function markLines(mark, quiz) {
   const m = mark || {};
   const q = quiz || {};
+  const cloudLabel = m.markedBy === "cloud" && m.service ? `Marked by ${m.service}` : "";
   return {
     answerLine: typeof m.expected === "string" && m.expected ? `Answer: ${m.expected}` : "",
     keyLabel: typeof m.keyLabel === "string" ? m.keyLabel : "",
     passageHeading: q.keySource === "model" ? EXAMPLE_HEADING : SOURCE_LABEL,
-    showGuess: m.markedBy === "model" && q.verified !== true,
+    showGuess: (m.markedBy === "model" || m.markedBy === "cloud") && q.verified !== true,
+    cloudLabel,
   };
 }
 
@@ -229,9 +231,11 @@ export function crisisParagraphs(message) {
  */
 export function readMark(m) {
   if (!m || typeof m !== "object" || !LEVELS.includes(m.level)) return null;
+  const markedBy = m.marked_by === "code" ? "code" : m.marked_by === "cloud" ? "cloud" : "model";
   return {
     level: m.level, comment: text(m.comment), passage: text(m.passage),
-    markedBy: m.marked_by === "code" ? "code" : "model",
+    markedBy,
+    service: typeof m.service === "string" ? m.service : null,
     expected: typeof m.expected === "string" ? m.expected : null,
     keyLabel: typeof m.key_label === "string" && m.key_label ? m.key_label : null,
   };
@@ -503,3 +507,126 @@ export function ytOutcome(answer, lead) {
 export function ytFromCaptions(quiz) {
   return Boolean(quiz && quiz.source === "youtube");
 }
+
+/* ── Grade this better (docs/STUDY-FROM-TEXT-DESIGN.md section 15,
+      JARVIS-API.md section 113; quiz-cloud.js draws it; brain/quiz_cloud.rs) ── */
+
+export const QC_BUTTON = "Grade this better";
+export const QC_TITLE = "Grade this better";
+export const QC_INTRO =
+  "Send this quiz to a cloud AI service that marks it more carefully than the model on " +
+  "this PC. It asks with a card first, every time, and the card lists exactly what " +
+  "would leave this PC.";
+export const QC_LEAVES =
+  "This sends your questions, your answers and the passages to an outside company. It " +
+  "costs a little money and is kept under that company's own terms. Nothing private " +
+  "is ever sent.";
+export const QC_CANCEL = "Cancel";
+export const QC_MARK_PREFIX = "Marked by ";
+export const QC_MISSING =
+  "Your PC's Jarvis does not have cloud quiz grading yet - run apply-patches.ps1 on the PC.";
+
+export const QC_POLL_SECONDS = 2;
+export const QC_UNKNOWN_LIMIT_SECONDS = 180;
+export const QC_PAYLOAD_MAX = 60000;
+
+export const QC_SENDING = "Asking…";
+export const QC_CANCELLING = "Cancelling…";
+export const QC_UNREADABLE = "Your PC sent something this app could not read.";
+
+const QC_PHASES = Object.freeze({
+  waiting: "waiting",
+  sending: "working",
+  ready: "ready",
+  denied: "ended",
+  timed_out: "ended",
+  withdrawn: "ended",
+  refused: "ended",
+  failed: "ended",
+});
+
+const QC_STATE_WORDS = Object.freeze({
+  waiting: "Waiting for your yes on the approval card.",
+  sending: "Sending the quiz to be marked...",
+  ready: "Ready.",
+  denied: "You said no, so nothing was sent.",
+  timed_out: "Nobody answered the card in time, so nothing was sent.",
+  withdrawn: "You cancelled before the card was answered, so nothing was sent.",
+  refused: "The card could not be answered, so nothing was sent.",
+  failed: "The quiz could not be marked by the cloud service. Your marks were not changed.",
+});
+
+export function qcPhase(state) {
+  return Object.prototype.hasOwnProperty.call(QC_PHASES, state) ? QC_PHASES[state] : "working";
+}
+
+export function qcIsKnown(state) {
+  return Object.prototype.hasOwnProperty.call(QC_PHASES, state);
+}
+
+export function qcKeepPolling(phase) {
+  return phase === "waiting" || phase === "working";
+}
+
+export function qcGiveUpOnUnknown(sinceMs, nowMs) {
+  return Number.isFinite(sinceMs) && nowMs - sinceMs >= QC_UNKNOWN_LIMIT_SECONDS * 1000;
+}
+
+const QC_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+export function qcValidId(id) {
+  return typeof id === "string" && QC_ID.test(id);
+}
+
+export function qcShown(request) {
+  return request.message || QC_STATE_WORDS[request.state] || "";
+}
+
+export function qcReadRequest(o) {
+  if (!o || typeof o !== "object") return null;
+  const id = typeof o.id === "string" ? o.id.trim() : "";
+  const state = typeof o.state === "string" ? o.state.trim() : "";
+  if (!qcValidId(id) || !state) return null;
+  const message = typeof o.message === "string" ? o.message.trim() : "";
+  const service = typeof o.service === "string" ? o.service.trim() : "";
+  return {
+    id, state, message, service,
+    quizId: typeof o.quiz_id === "string" ? o.quiz_id : "",
+    chars: Number.isInteger(o.chars) ? o.chars : 0,
+    cost: typeof o.cost === "string" ? o.cost : null,
+    error: typeof o.error === "string" && o.error ? o.error : null,
+    quiz: readQuiz(o.quiz),
+    phase: qcPhase(state),
+  };
+}
+
+export function qcReadInfo(answer) {
+  if (!answer || typeof answer !== "object" || typeof answer.available !== "boolean") return null;
+  const services = Array.isArray(answer.services) ? answer.services : [];
+  return {
+    available: answer.available,
+    ready: answer.ready === true,
+    cheapest: typeof answer.cheapest === "string" ? answer.cheapest : null,
+    services,
+    latest: qcReadRequest(answer.latest),
+    hidden: answer.hidden === true,
+  };
+}
+
+export function qcOutcome(answer, lead) {
+  if (!answer || typeof answer !== "object") {
+    return { ok: false, request: null, said: `${lead} ${QC_UNREADABLE}`, code: null, gone: false };
+  }
+  if (answer.ok === false) {
+    const code = typeof answer.error === "string" && answer.error ? answer.error : null;
+    const own = typeof answer.message === "string" ? answer.message.trim() : "";
+    return {
+      ok: false, request: null, code, gone: code === "request_not_found",
+      said: own || `${lead} Your PC's Jarvis cannot do this right now.`,
+    };
+  }
+  const request = qcReadRequest(answer.request);
+  if (!request) return { ok: false, request: null, said: `${lead} ${QC_UNREADABLE}`, code: null, gone: false };
+  return { ok: true, request, said: qcShown(request), code: null, gone: false };
+}
+

@@ -52,6 +52,7 @@ pub mod profile;
 pub mod progress;
 pub mod projects;
 pub mod quiz;
+pub mod quiz_cloud;
 pub mod retirement;
 mod routes;
 pub mod schedule;
