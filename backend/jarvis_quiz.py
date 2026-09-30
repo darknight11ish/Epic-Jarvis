@@ -35,6 +35,25 @@ THE RULES IT KEEPS (each one has a test in test_quiz.py)
     `model_unavailable` error and nothing changes: an unanswered question stays
     unanswered. It never raises out of a route.
 
+SPANISH PRACTICE AND KEEPING QUESTIONS (2026-09-30, docs/QUIZ-DECKS-DESIGN.md,
+JARVIS-API section 102)
+  * `mode: "spanish"` makes the same quiz a typed Spanish exercise: translate,
+    fill the blank, finish the sentence (or a mix), at a "roughly" A1-C2 level.
+    A blank is cut out of a sentence by CODE and marked by CODE (exact = got it;
+    right letters with the wrong accents, capitals or punctuation = partly; n and
+    n-with-a-tilde are different letters), so no model ever reads a blank's
+    answer and words in it cannot steer the mark. Translate and finish-the-
+    sentence are marked by the local model. With no text of the owner's, the
+    local model writes the sentences AND the key, and every such key is labelled
+    KEY_LABEL. No word list is shipped; nothing here is copied from another
+    project's prompts.
+  * `finish` may carry `keep`: the chosen questions go to a review deck through
+    the function injected by `configure(keep=...)` (jarvis_decks.py). The
+    prompt and passage come from THIS module's own open quiz, never from the
+    app; all or nothing; if the deck cannot be saved the quiz stays open. This
+    module still imports no deck, memory or store code: the deck store is
+    handed in.
+
 WHY THERE IS NO LANGCHAIN, EDUCHAIN OR DEEPEVAL
 One structured /api/chat call with a JSON-schema "format" is all it takes, done
 with the standard library the way jarvis_wiki.py does it.
@@ -72,6 +91,23 @@ EXPIRY_SECONDS = 60 * 60
 TITLE_MAX = 80
 DEFAULT_TITLE = "Quiz on your text"
 KINDS = ("recall", "explain", "apply")
+MODES = ("text", "spanish")
+CEFR_LEVELS = ("A1", "A2", "B1", "B2", "C1", "C2")
+EXERCISES = ("translate", "blank", "complete", "mixed")
+SPANISH_KINDS = ("translate", "blank", "complete")
+ALL_KINDS = KINDS + SPANISH_KINDS
+LEVEL_DEFAULT, EXERCISE_DEFAULT = "A2", "mixed"
+TOPIC_MAX = 60
+DEFAULT_TITLE_SPANISH = "Spanish practice"
+WORD_MAX = 40
+ACCEPTED_MAX = 3
+BLANK = "_____"
+#: Shown beside every answer key the local model wrote itself (owner-visible,
+#: word for word in both apps).
+KEY_LABEL = "Answer key written by the model"
+#: The crisis check knows English only (JARVIS-API 98.4); the Spanish page says so.
+SPANISH_NOTICE = ("Jarvis cannot recognise a crisis message written in Spanish. "
+                  "If you are in danger, call or text 988, or 911.")
 LEVELS = ("got_it", "partly", "not_yet")
 PROMPT_MAX = 500
 PASSAGE_MAX = 800
@@ -91,6 +127,9 @@ CLASSES = {
     "text_too_long": (400, "That text is too long for one quiz. Paste at most 20,000 characters, "
                            "or split it in parts."),
     "bad_count": (400, "Ask for between 1 and 10 questions."),
+    "bad_mode": (400, "The quiz mode is either text or Spanish practice."),
+    "bad_level": (400, "Pick a level from A1 to C2."),
+    "bad_exercise": (400, "Pick translate, fill the blank, finish the sentence, or mixed."),
     "too_many_quizzes": (409, "Three quizzes are already open. Finish or stop one first."),
     "not_found": (404, "That quiz is not open any more (it may have ended or timed out). "
                        "Start a new one."),
@@ -121,13 +160,29 @@ def _err(code: str, message: str = "") -> tuple:
 # reply's JSON text (or the parsed object). It raises on any failure. Tests
 # pass a stub; `default_call` is the one real one.
 
-_STATE = {"call": None, "ollama_url": None, "model": None}
+_STATE = {"call": None, "ollama_url": None, "model": None, "keep": None}
+_UNSET = object()
 
 
 def configure(*, call: Optional[Callable] = None, ollama_url: Optional[str] = None,
-              model: Optional[str] = None) -> None:
-    """Inject the model call and/or the lane it talks to (like jarvis_wiki)."""
+              model: Optional[str] = None, keep=_UNSET) -> None:
+    """Inject the model call and/or the lane it talks to (like jarvis_wiki), and
+    `keep(spec, cards) -> int`, the function that saves chosen questions into a
+    review deck (jarvis_decks.py hands it in; None means decks are not set up).
+
+    Passing only `keep` changes only `keep`. Passing anything else sets the
+    model call, lane and model as before (what is not passed goes back to its
+    default); `keep` is left alone unless it is passed. No arguments at all
+    puts everything back to the defaults."""
+    nothing_else = call is None and ollama_url is None and model is None
+    if keep is not _UNSET and nothing_else:
+        _STATE["keep"] = keep
+        return
     _STATE["call"], _STATE["ollama_url"], _STATE["model"] = call, ollama_url, model
+    if keep is not _UNSET:
+        _STATE["keep"] = keep
+    elif nothing_else:
+        _STATE["keep"] = None
 
 
 def _lane() -> tuple:
