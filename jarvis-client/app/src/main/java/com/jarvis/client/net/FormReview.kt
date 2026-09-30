@@ -114,7 +114,7 @@ object FormReview {
 
     /** The JPEG's bytes, or null when the text is not valid base64 (never throws). */
     fun decodeBytes(base64: String): ByteArray? =
-        runCatching { java.util.Base64.getMimeDecoder().decode(base64) }
+        runCatching { java.util.Base64.getDecoder().decode(base64.trim()) }
             .getOrNull()
             ?.takeIf { it.isNotEmpty() }
 
