@@ -341,9 +341,9 @@ def clean_plan(plan, previous=None, now: float = 0.0, check_measure=None) -> lis
         needs = item.get("needs") or []
         if not isinstance(needs, list) or any(not isinstance(n, str) for n in needs):
             raise ValueError("what a step waits on is a list of step ids")
+        needs = list(dict.fromkeys(needs))            # repeats first, then the limit
         if len(needs) > MAX_NEEDS:
             raise ValueError(WORDS["too_many_needs"].format(step=_short(step)))
-        needs = list(dict.fromkeys(needs))
         measure = item.get("measure")
         if measure is not None:
             if (not isinstance(measure, dict) or not isinstance(measure.get("project"), str)
@@ -364,7 +364,9 @@ def clean_plan(plan, previous=None, now: float = 0.0, check_measure=None) -> lis
 
 def bench_reached(view) -> bool:
     """Has this benchmark's latest number reached its own target? `view` is
-    what jarvis_projects answers for a benchmark (or None: gone)."""
+    what jarvis_projects answers for a benchmark (or None: gone). The
+    comparison itself is jarvis_forecast.better_reached - the one place
+    "reached" is decided."""
     if not isinstance(view, dict):
         return False
     latest, target, better = view.get("latest"), view.get("target"), view.get("better")
@@ -373,7 +375,8 @@ def bench_reached(view) -> bool:
     v = latest.get("value")
     if isinstance(v, bool) or not isinstance(v, (int, float)):
         return False
-    return (v >= target) if better == "higher" else (v <= target)
+    import jarvis_forecast
+    return jarvis_forecast.better_reached(v, target, better)
 
 
 def step_states(plan: list, read_bench=None) -> list:
@@ -385,23 +388,37 @@ def step_states(plan: list, read_bench=None) -> list:
                     it then reads "after X (open again)")
         reached     the benchmark reached its target (ticked or not)
         bench       the benchmark view read for it (None: none, or gone)
-    `read_bench(project, bench)` returns a benchmark view or None."""
+        unknown     the reader failed for some reason other than "not found":
+                    the step is neither gone nor reached, and counts as met
+                    for the steps that wait on it (never re-locks them)
+    `read_bench(project, bench)` returns a benchmark view, or raises
+    KeyError (LookupError) when the benchmark is really gone."""
     cache = {}
+    unknown = set()
 
     def bench_of(m):
         key = (m["project"], m["bench"])
         if key not in cache:
             try:
                 cache[key] = read_bench(*key) if read_bench is not None else None
-            except Exception:
+            except LookupError:               # KeyError: the benchmark is really gone
                 cache[key] = None
+            except Exception:                 # the reader broke: we do not know
+                cache[key] = None
+                unknown.add(key)
         return cache[key]
 
     info = []
     for st in plan:
-        b = bench_of(st["measure"]) if st.get("measure") else None
-        info.append({"bench": b, "reached": bench_reached(b)})
-    met = {st["id"]: bool(st["done"]) or info[i]["reached"] for i, st in enumerate(plan)}
+        m = st.get("measure")
+        b = bench_of(m) if m else None
+        info.append({"bench": b, "reached": bench_reached(b),
+                     "unknown": bool(m) and (m["project"], m["bench"]) in unknown})
+    # A step whose number could not be read is not "gone" and never locks
+    # anyone: for a step that waits on it, it counts as met (the owner can
+    # always tick by hand; a broken reader must not re-lock a whole plan).
+    met = {st["id"]: bool(st["done"]) or info[i]["reached"] or info[i]["unknown"]
+           for i, st in enumerate(plan)}
     out = []
     for i, st in enumerate(plan):
         waiting = [n for n in st.get("needs", []) if not met.get(n, False)]
@@ -414,7 +431,7 @@ def step_states(plan: list, read_bench=None) -> list:
         else:
             state = "open"
         out.append({"state": state, "waiting_on": waiting, "reached": info[i]["reached"],
-                    "bench": info[i]["bench"]})
+                    "bench": info[i]["bench"], "unknown": info[i]["unknown"]})
     return out
 
 
@@ -492,7 +509,7 @@ class Goals:
             else:
                 v["lock_words"] = WORDS["after"].format(steps=after)
             v["measure_name"] = b.get("name", "") if b else ""
-            v["measure_gone"] = bool(st["measure"]) and b is None
+            v["measure_gone"] = bool(st["measure"]) and b is None and not info["unknown"]
             v["measure_sensitive"] = bool(b and b.get("sensitive"))
             v["reached_words"] = ""
             if info["reached"]:

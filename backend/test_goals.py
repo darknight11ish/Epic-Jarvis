@@ -579,6 +579,58 @@ def t_a_measure_must_follow_a_real_benchmark_with_a_target():
           accepted["status"] == "active")
 
 
+def t_a_broken_reader_is_not_a_gone_benchmark_and_does_not_relock():
+    w = World()
+    w.benches[(PROJ, BENCH)] = bench(latest=29.5)
+    goal = w.g.create("race", plan=[
+        {"id": "s1", "step": "get the 5k under 30", "measure": {"project": PROJ, "bench": BENCH}},
+        {"id": "s2", "step": "enter the race", "needs": ["s1"]}])
+    check("reader fine, target reached: step two open",
+          [s["state"] for s in w.g.get(goal["id"])["plan"]] == ["met_by_number", "open"])
+    real = w.read_bench
+
+    def broken(project, bench_id):
+        raise RuntimeError("database is locked")
+    w.g._bench_reader = broken
+    p = w.g.get(goal["id"])["plan"]
+    check("a reader that raises something else: the step is NOT 'measure_gone'",
+          p[0]["measure_gone"] is False and p[0]["reached"] is False, p[0])
+    check("...its own state is not a tick and not locked", p[0]["state"] == "open", p[0]["state"])
+    check("...and the step that waits on it is not re-locked", p[1]["state"] == "open"
+          and p[1]["waiting_on"] == [], p[1])
+    w.g._bench_reader = real
+    w.benches.clear()
+    p = w.g.get(goal["id"])["plan"]
+    check("a real KeyError is still 'measure_gone'", p[0]["measure_gone"] is True, p[0])
+    check("...and a gone number no longer meets the step, so its dependant waits again",
+          p[1]["state"] == "locked", p[1]["state"])
+
+
+def t_repeated_needs_are_deduped_before_the_limit():
+    w = World()
+    plan = [{"id": "s1", "step": "a"}, {"id": "s2", "step": "b"}, {"id": "s3", "step": "c"},
+            {"id": "s4", "step": "d"},
+            {"id": "s5", "step": "e", "needs": ["s1", "s1", "s2", "s2", "s3", "s3"]}]
+    goal = w.g.create("dupes", plan=plan)
+    check("s1,s1,s2,s2,s3,s3 is three needs, not six: saved once each",
+          goal["plan"][4]["needs"] == ["s1", "s2", "s3"], goal["plan"][4]["needs"])
+    check("four different needs are still refused",
+          refused(w, [dict(plan[0]), dict(plan[1]), dict(plan[2]), dict(plan[3]),
+                      {"id": "s5", "step": "e", "needs": ["s1", "s2", "s3", "s4", "s1"]}],
+                  "at most 3"))
+
+
+def t_the_lock_applies_on_the_tick_route_only():
+    w = World()
+    goal = w.g.create("draft done", plan=[
+        {"id": "s1", "step": "first"},
+        {"id": "s2", "step": "second", "done": True, "needs": ["s1"]}])
+    p = goal["plan"]
+    check("a draft step saved done with unmet needs is kept done, with the accept-time stamp",
+          p[1]["done"] is True and p[1]["done_at"] == w.clock.t and p[1]["state"] == "done"
+          and p[1]["lock_words"] == 'after: "first" (open again)', p[1])
+
+
 def t_old_plans_load_with_defaults_and_get_ids_on_the_next_save():
     import sqlite3
     w = World()

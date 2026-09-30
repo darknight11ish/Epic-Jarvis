@@ -54,7 +54,103 @@ export const LEVEL_LABELS = Object.freeze({
 
 export const KIND_LABELS = Object.freeze({
   recall: "Remember", explain: "Explain why", apply: "Apply",
+  // Spanish practice (JARVIS-API section 102.4); the shared words.
+  translate: "Translate", blank: "Fill the blank", complete: "Finish the sentence",
 });
+
+/* ── Spanish practice (docs/QUIZ-DECKS-DESIGN.md, Slice contract C2 and C5) ── */
+
+export const MODE_TEXT = "Text";
+export const MODE_SPANISH = "Spanish practice";
+export const MODES = Object.freeze([
+  { id: "text", label: MODE_TEXT },
+  { id: "spanish", label: MODE_SPANISH },
+]);
+export const LEVEL_HEADING = "Level (roughly)";
+export const LEVEL_IDS = Object.freeze(["A1", "A2", "B1", "B2", "C1", "C2"]);
+export const DEFAULT_LEVEL = "A2";
+export const EXERCISES = Object.freeze([
+  { id: "translate", label: "Translate" },
+  { id: "blank", label: "Fill the blank" },
+  { id: "complete", label: "Finish the sentence" },
+  { id: "mixed", label: "Mixed" },
+]);
+export const DEFAULT_EXERCISE = "mixed";
+export const TOPIC_LABEL = "Topic (optional)";
+export const TOPIC_MAX = 60;
+export const SPANISH_TEXT_PLACEHOLDER = "Paste Spanish text (optional)";
+export const EXAMPLE_HEADING = "Example sentence";
+export const ACCENTS = Object.freeze(["á", "é", "í", "ó", "ú", "ñ", "ü", "¿", "¡"]);
+/** Desktop's own words (not in the shared list). */
+export const SPANISH_WRITING = "Writing Spanish questions on this PC. This can take a little while.";
+export const SPANISH_INTRO =
+  "Type your answers in Spanish. Paste some Spanish text of your own and the questions come from it, " +
+  "or leave the box empty and Jarvis writes the sentences. Nothing is saved or learned, and nothing leaves this PC.";
+export const OLD_PC_SPANISH =
+  "Your PC's Jarvis does not have Spanish practice yet - run apply-patches.ps1 on the PC.";
+export const ACCENT_ROW_LABEL = "Spanish letters";
+
+/** "Level B1 (roughly)". Empty for no level. */
+export function levelLine(level) {
+  return LEVEL_IDS.includes(level) ? `Level ${level} (roughly)` : "";
+}
+
+/** The live count under the topic box: "0 / 60". */
+export function topicCount(value) {
+  const n = String(value || "").length;
+  return { n, ok: n <= TOPIC_MAX, note: `${n} / ${TOPIC_MAX}` };
+}
+
+/**
+ * Puts `ch` into `value` where the cursor (or selection) is. Returns the new
+ * value and where the cursor goes; a value that would pass `max` characters
+ * is left as it is.
+ */
+export function insertAtCursor(value, start, end, ch, max = 2000) {
+  const v = String(value || "");
+  const a = Number.isInteger(start) ? Math.max(0, Math.min(start, v.length)) : v.length;
+  const b = Number.isInteger(end) ? Math.max(a, Math.min(end, v.length)) : a;
+  const next = v.slice(0, a) + ch + v.slice(b);
+  if (next.length > max) return { value: v, caret: a };
+  return { value: next, caret: a + ch.length };
+}
+
+/**
+ * The choices for `POST /api/quiz` in Spanish practice. Text may be empty (the
+ * model then writes the sentences). Returns `{args}` or `{error}`.
+ */
+export function spanishStartArgs({ text, level, exercise, topic }) {
+  const t = String(text || "").trim();
+  if (t) {
+    const c = textCount(t);
+    if (!c.ok) return { error: errorWords({ error: c.n < LIMITS.textMin ? "text_too_short" : "text_too_long" }) };
+  }
+  if (!topicCount(topic).ok) return { error: "Keep the topic to 60 characters or fewer." };
+  const args = { mode: "spanish", level: LEVEL_IDS.includes(level) ? level : DEFAULT_LEVEL,
+    exercise: EXERCISES.some((e) => e.id === exercise) ? exercise : DEFAULT_EXERCISE };
+  if (t) args.text = String(text);
+  const tp = String(topic || "").trim();
+  if (tp) args.topic = tp;
+  return { args };
+}
+
+/**
+ * What to show under a mark after the answer (contract C2): the key line
+ * "Answer: <expected>" and the backend's own `key_label` under it, the
+ * passage's heading (`From the text` when the key is the owner's own text or
+ * in Text mode, `Example sentence` when the model wrote it), and whether
+ * "Jarvis's guess" shows (only a model-marked, unverified mark).
+ */
+export function markLines(mark, quiz) {
+  const m = mark || {};
+  const q = quiz || {};
+  return {
+    answerLine: typeof m.expected === "string" && m.expected ? `Answer: ${m.expected}` : "",
+    keyLabel: typeof m.keyLabel === "string" ? m.keyLabel : "",
+    passageHeading: q.keySource === "model" ? EXAMPLE_HEADING : SOURCE_LABEL,
+    showGuess: m.markedBy === "model" && q.verified !== true,
+  };
+}
 
 export function levelLabel(level) {
   return LEVEL_LABELS[level] || "";
@@ -89,6 +185,7 @@ export function errorWords(refusal) {
 
 const LEVELS = Object.keys(LEVEL_LABELS);
 const KINDS = Object.keys(KIND_LABELS);
+const MODE_IDS = MODES.map((m) => m.id);
 const text = (v) => (typeof v === "string" ? v : "");
 const count = (v) => (Number.isInteger(v) && v >= 0 ? v : 0);
 
@@ -123,10 +220,19 @@ export function crisisParagraphs(message) {
     p.split("**").map((t, i) => ({ text: t, bold: i % 2 === 1 })).filter((r) => r.text));
 }
 
-/** `{level, comment, passage}`, or null when it is not a real mark. */
+/**
+ * `{level, comment, passage, markedBy, expected, keyLabel}`, or null when it
+ * is not a real mark. An older PC sends no `marked_by`: its marks are the
+ * model's, so `markedBy` is "model" then (the guess label stays, as before).
+ */
 export function readMark(m) {
   if (!m || typeof m !== "object" || !LEVELS.includes(m.level)) return null;
-  return { level: m.level, comment: text(m.comment), passage: text(m.passage) };
+  return {
+    level: m.level, comment: text(m.comment), passage: text(m.passage),
+    markedBy: m.marked_by === "code" ? "code" : "model",
+    expected: typeof m.expected === "string" ? m.expected : null,
+    keyLabel: typeof m.key_label === "string" && m.key_label ? m.key_label : null,
+  };
 }
 
 /**
@@ -151,6 +257,13 @@ export function readQuiz(q) {
     questions,
     answered: count(q.answered),
     hidden: q.hidden === true,
+    // An older PC sends no `mode` (JARVIS-API 102.4): `mode` is then "" and the
+    // page says so and offers Text mode only.
+    mode: MODE_IDS.includes(q.mode) ? q.mode : "",
+    level: LEVEL_IDS.includes(q.level) ? q.level : null,
+    keySource: q.key_source === "text" || q.key_source === "model" ? q.key_source : null,
+    // The PC's own words about Spanish crisis phrases - never copied here.
+    notice: typeof q.notice === "string" ? q.notice : "",
   };
 }
 

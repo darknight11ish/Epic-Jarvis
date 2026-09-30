@@ -190,6 +190,41 @@ def t_very_slow_and_huge_values():
           r["state"] == "range" and r["low_weeks"] >= 1, r)
 
 
+def t_absurd_numbers_never_raise():
+    good = weekly([80, 79, 78, 77, 76])
+    inf, nan = float("inf"), float("nan")
+    cases = {
+        "1e300 values": [(a, v * 1e300) for a, v in good],
+        "1e300 timestamps": [(a * 1e300, v) for a, v in good],
+        "inf value": good[:-1] + [(good[-1][0], inf)],
+        "nan value": good[:-1] + [(good[-1][0], nan)],
+        "nan timestamp": good[:-1] + [(nan, 76.0)],
+        "inf timestamp": good[:-1] + [(inf, 76.0)],
+    }
+    for name, pts in cases.items():
+        try:
+            r = fc(pts)
+        except Exception as exc:
+            check(f"{name}: does not raise", False, repr(exc))
+            continue
+        check(f"{name}: the not_enough state, nothing drawn",
+              r["state"] == "not_enough" and r["line"] is None and r["band"] is None, r)
+    for name, target in (("1e300 target", 1e300), ("inf target", inf), ("nan target", nan)):
+        try:
+            r = fc(good, target=target)
+        except Exception as exc:
+            check(f"{name}: does not raise", False, repr(exc))
+            continue
+        check(f"{name}: a real state, never 'reached' by accident from a bad number",
+              r["state"] in F.STATES and (target == 1e300 or r["state"] == "not_enough"), r)
+    r = fc(good, target=1e300, better="higher")
+    check("1e300 target, higher is better: no crash, a real state", r["state"] in F.STATES, r)
+    r = fc(good, now=nan)
+    check("nan clock: not_enough", r["state"] == "not_enough", r)
+    r = fc(weekly([80, 79, 78, 77, 76]))
+    check("a normal answer is unchanged by the guard", r["state"] == "range", r)
+
+
 def t_duplicate_timestamps():
     pts = weekly([80, 79, 78, 77, 76])
     dup = pts + [pts[-1]]                       # the same number logged twice at the same instant

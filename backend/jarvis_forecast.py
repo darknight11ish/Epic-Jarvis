@@ -123,15 +123,50 @@ def _local_day(at: float, tz) -> tuple:
     return (d.year, d.month, d.day)
 
 
+def _cannot_say() -> dict:
+    """Absurd input (a huge, infinite or not-a-number time or value): no
+    honest pace can be drawn from it, so it reads as "not enough numbers"
+    rather than raising."""
+    return _blank("not_enough", WORDS["not_enough_count"].format(more=MIN_USED),
+                  used=0, needed=MIN_USED)
+
+
 def forecast(points, target, better, now: float, *, tz=None) -> dict:
     """`points` is a list of (at_seconds, value), any order - the caller may
     pass all of a benchmark's recent numbers; this picks the last up to 12
     from the last 90 days. `tz` decides what "a different day" means
-    (None = this PC's own clock; the tests pass a fixed zone)."""
+    (None = this PC's own clock; the tests pass a fixed zone). Never raises
+    for absurd numbers (1e300, inf, NaN): those give `not_enough`."""
     if target is None or better not in ("higher", "lower"):
         return _blank("no_target", WORDS["no_target"])
+    try:
+        out = _forecast(points, target, better, now, tz=tz)
+    except (OverflowError, ValueError, ZeroDivisionError, OSError, TypeError):
+        return _cannot_say()
+    if not _finite_answer(out):
+        return _cannot_say()
+    return out
+
+
+def _finite_answer(out: dict) -> bool:
+    """True when every number the answer carries is a real number."""
+    def ok(v):
+        if isinstance(v, bool) or v is None:
+            return True
+        if isinstance(v, (int, float)):
+            return math.isfinite(v)
+        if isinstance(v, dict):
+            return all(ok(x) for x in v.values())
+        return True
+    return ok(out)
+
+
+def _forecast(points, target, better, now: float, *, tz=None) -> dict:
     target = float(target)
     rows = sorted(((float(a), float(v)) for a, v in points), key=lambda p: p[0])
+    if not math.isfinite(target) or not math.isfinite(float(now)) or any(
+            not (math.isfinite(a) and math.isfinite(v)) for a, v in rows):
+        return _cannot_say()
     if rows and better_reached(rows[-1][1], target, better):
         return _blank("reached", WORDS["reached"])
 

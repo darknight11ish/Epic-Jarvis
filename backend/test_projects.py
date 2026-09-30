@@ -1202,6 +1202,23 @@ def t_a_benchmark_read_carries_the_finish_time_range():
     check("GET .../benchmarks/<id> sends `forecast` with state, words and the week numbers",
           code == 200 and {"state", "words", "low_weeks", "high_weeks"} <= set(body["benchmark"]["forecast"]),
           body["benchmark"].get("forecast"))
+    # a forecast that blows up must not break the benchmark read
+    real = P.Projects._forecast
+
+    def boom(self, c, b):
+        raise RuntimeError("the forecast broke")
+    P.Projects._forecast = boom
+    try:
+        broken = s.results(pid, five, 365)
+    except Exception as exc:
+        broken = None
+        check("a forecast that raises does not break the benchmark read", False, repr(exc))
+    finally:
+        P.Projects._forecast = real
+    if broken is not None:
+        check("a forecast that raises does not break the benchmark read: the read is whole, "
+              "with no forecast", "forecast" not in broken and broken.get("points")
+              and broken.get("name") == "5k time", sorted(broken))
     src = (HERE / "jarvis_forecast.py").read_text(encoding="utf-8")
     check("jarvis_forecast.py is shipped beside it (apply-patches.ps1 and _where.SHIPPED)",
           "'jarvis_forecast.py'" in (REPO / "scripts" / "apply-patches.ps1").read_text(encoding="utf-8")
