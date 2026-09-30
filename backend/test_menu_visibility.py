@@ -175,7 +175,7 @@ def t_markup_matches():
             check(f"{m.id} is a real Settings card", card in ids_in_settings or card in pending_on_desktop)
     # Every registry section is a menu, or is inside one.
     import jarvis_settings_registry as R
-    inside = {"start-jarvis"}                       # inside #more-options
+    inside = {"start-jarvis", "crash-notes"}       # inside #more-options
     for s in R.SECTIONS:
         check(f"registry section {s.id} has a menu", M.menu("settings." + s.id) is not None or s.id in inside)
 

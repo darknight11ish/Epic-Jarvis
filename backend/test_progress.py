@@ -36,7 +36,10 @@ import tempfile
 import time
 import types
 from pathlib import Path
-from zoneinfo import ZoneInfo
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from dateutil.tz import gettz as ZoneInfo
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
