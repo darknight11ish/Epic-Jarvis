@@ -498,7 +498,7 @@ export const UPDATE_NONE = {
 };
 
 export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks, topics,
-  folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement }) {
+  folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement, youtube }) {
   const listeners = {};
   window.__calls = [];
   // animal.rs: GET /api/animal's answer (a scenario's, else a PC nobody has
@@ -1900,6 +1900,50 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             z.quiz.answered += 1;
             return { ok: true, mark: JSON.parse(JSON.stringify(item.mark)), quiz: view() };
           }
+          case "brain_youtube_info":
+          case "brain_youtube_start":
+          case "brain_youtube_get":
+          case "brain_youtube_cancel": {
+            const y = window.__youtube;
+            if (!y) {
+              if (cmd === "brain_youtube_info") return { ok: true, available: false };
+              throw new Error("Your PC's Jarvis does not have YouTube quizzes yet - run apply-patches.ps1 on the PC.");
+            }
+            y.calls.push({ cmd, ...args });
+            if (cmd === "brain_youtube_start" && state.stale) throw new Error("the event stream is stale");
+            if (y.throws && y.throws[cmd]) throw new Error(y.throws[cmd]);
+            const hideIt = () => window.__security.hidden && !window.__security.revealed;
+            const redact = (a) => {
+              a = JSON.parse(JSON.stringify(a));
+              if (!hideIt() || a.ok !== true) return a;
+              for (const k of ["request", "latest"]) {
+                const r = a[k];
+                if (!r) continue;
+                if (typeof r.link === "string") r.link = null;
+                if (r.quiz) {
+                  r.quiz.title = ""; r.quiz.hidden = true;
+                  for (const x of r.quiz.questions) x.prompt = "";
+                }
+                r.hidden = true;
+              }
+              a.hidden = true;
+              return a;
+            };
+            let body;
+            if (cmd === "brain_youtube_info") {
+              body = y.info || { ok: true, available: true, latest: null, limits: { link: 300 } };
+            } else if (cmd === "brain_youtube_start") {
+              body = y.start;
+            } else if (cmd === "brain_youtube_get") {
+              y.reads += 1;
+              body = y.script.length > 1 ? y.script.shift() : y.script[0];
+              if (body && body.__throw) throw new Error(body.__throw);
+            } else {
+              body = y.cancel;
+            }
+            if (y.delayMs) await new Promise((r) => setTimeout(r, y.delayMs));
+            return redact(body);
+          }
           // brain/decks.rs (Review decks). `window.__decks` is null - a PC
           // without decks, which Rust answers with the "run apply-patches.ps1"
           // sentence - unless the scenario names `decks: {...}`. It behaves like
@@ -3197,6 +3241,14 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__retirement = retirement ? JSON.parse(JSON.stringify({ calls: [], form: null, script: [], delayMs: 0, ...retirement })) : null;
   window.__progress = progress ? JSON.parse(JSON.stringify({ calls: [], ...progress })) : null;
   window.__quiz = quiz ? JSON.parse(JSON.stringify({ calls: [], quiz: null, ...quiz })) : null;
+  // brain/youtube.rs (Quiz me on a YouTube video). `window.__youtube` is null - a
+  // PC without it, which answers info `{available:false}` and the rest with the
+  // "run apply-patches.ps1" sentence - unless the scenario names `youtube: {...}`.
+  // The scenario's `info`, `start`, `script` (the answers to successive reads;
+  // the last one repeats) and `cancel` are the PC's own bodies (fixtures/
+  // youtube-cases.json samples); this only records the calls and does what
+  // brain/youtube.rs redact_answer does while the private lists are hidden.
+  window.__youtube = youtube ? JSON.parse(JSON.stringify({ calls: [], reads: 0, ...youtube })) : null;
   window.__spending = spending ? JSON.parse(JSON.stringify({
     calls: [], tables: {}, hidden: false, proposals: {}, suggestions: [], fails: null,
     saved: [], deleted: [], categoriesSaved: [], resets: 0, previews: [], againProposals: {},

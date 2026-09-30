@@ -902,6 +902,24 @@ permissions = [
   "allow-brain-quiz-stop",
 ]
 
+# Quiz me on a YouTube video (docs/STUDY-FROM-TEXT-DESIGN.md section 14;
+# brain/youtube.rs, backend jarvis_youtube.py; JARVIS-API.md section 112). The
+# owner pastes a YouTube link; the PC raises ONE approval card (a risky
+# approval, decided in the ordinary approval screens), and only after a yes
+# reads the video's caption text and writes questions. The link is sent once,
+# in a request body, and kept nowhere by the app; the start is held on a stale
+# link, polling and Cancel never; the link and the quiz's words are hidden
+# with the private lists.
+[[set]]
+identifier = "brain-youtube"
+description = "Ask whether the PC has YouTube quizzes, send a pasted video link (the PC raises one approval card), poll the request, and cancel it while its card waits - the link is kept nowhere, the start held on a stale link."
+permissions = [
+  "allow-brain-youtube-info",
+  "allow-brain-youtube-start",
+  "allow-brain-youtube-get",
+  "allow-brain-youtube-cancel",
+]
+
 # Retirement what-if (docs/FINANCE-DESIGN.md part B; brain/retirement.rs,
 # backend jarvis_retirement.py; JARVIS-API.md section 103). The owner types a
 # few numbers, the PC plays out 10,000 made-up futures and answers with ranges.

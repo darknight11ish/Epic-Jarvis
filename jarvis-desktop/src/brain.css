@@ -1547,6 +1547,29 @@ body {
   min-width: 2.2em;
 }
 
+/* Quiz me on a YouTube video (youtube.js): a second block under the paste box.
+   Tokens only; no motion. */
+.yt-block {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: var(--stroke-hair) solid var(--border);
+}
+
+.yt-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.yt-status {
+  margin: 6px 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.yt-link {
+  overflow-wrap: anywhere;
+}
+
 .keep-row {
   padding: 8px 0;
   border-top: var(--stroke-hair) solid var(--border);

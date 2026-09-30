@@ -425,19 +425,20 @@ def t_the_hunk_comes_before_every_token_ok():
     # topics.patch (its gate lines sit on browser-engine.patch's own last
     # lines and leave devices.patch's alone), and referee.patch last of all
     # (2026-09-30: its gate lines sit on topics.patch's own last lines), then
-    # tag-suggest.patch and youtube.patch (2026-09-30: each adds gate lines and
-    # one startup block after the one before it; neither touches devices.patch's).
+    # tag-suggest.patch, youtube.patch and quiz-cloud.patch (2026-09-30: each adds
+    # gate lines and one startup block after the one before it; none touches
+    # devices.patch's).
     check("devices.patch is in apply-patches.ps1's list, and only "
           "apps-in-projects.patch (which builds on its lines), inbox-tidy.patch, "
           "screen.patch, screen-picture.patch, browser-engine.patch, quiz.patch, decks.patch, "
           "spending.patch, retirement.patch, progress.patch, topics.patch, referee.patch, "
-          "tag-suggest.patch and youtube.patch (which leave them alone) come after it",
+          "tag-suggest.patch, youtube.patch and quiz-cloud.patch (which leave them alone) come after it",
           after_it is not None
           and set(after_it) <= {"apps-in-projects.patch", "inbox-tidy.patch", "screen.patch",
                                 "screen-picture.patch", "browser-engine.patch", "quiz.patch",
                                 "decks.patch", "spending.patch", "retirement.patch",
                                 "progress.patch", "topics.patch", "referee.patch",
-                                "tag-suggest.patch", "youtube.patch"}
+                                "tag-suggest.patch", "youtube.patch", "quiz-cloud.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")
     check("the stacked jarvis_hud.py builds", text is not None, "\n".join(log[-3:]))

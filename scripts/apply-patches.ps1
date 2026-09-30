@@ -1226,6 +1226,8 @@ $SHIPPED = @(
     'jarvis_youtube.py'          # youtube.patch: ONE card per YouTube link (youtube_captions_read), then the caption text only is fetched (youtube-transcript-api) and quizzed on as outside text; breaks YouTube's terms, may be blocked; never video or audio
     # --- "Grade this better" (2026-09-30, quiz-cloud.patch) ---
     'jarvis_quiz_cloud.py'       # quiz-cloud.patch: ONE card per request (quiz_cloud_grade) listing exactly what leaves the PC, then one message to the cheapest set-up cloud service (jarvis_chatbot_api.py); never for a private quiz or after a crisis answer
+    # --- "Show or hide menus" (2026-09-30, no patch) ---
+    'jarvis_menus.py'            # the menus both apps may hide or fold, the feature groups, the never-hideable list and the words; jarvis_quick.py (already SHIPPED) calls it for "hide the finance menu" - no patch, no route, no card
 )
 
 # The settings file. Installed only where none exists; never overwritten.

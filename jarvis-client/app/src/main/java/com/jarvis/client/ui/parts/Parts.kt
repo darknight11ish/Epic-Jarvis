@@ -26,7 +26,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +44,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.LinkState
+import com.jarvis.client.net.MenuWords
 import com.jarvis.client.ui.theme.LocalAccent
 import com.jarvis.client.ui.theme.LocalChrome
 import com.jarvis.client.ui.theme.LocalMotion
@@ -65,6 +68,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import com.jarvis.client.ui.theme.LocalPlateEdges
 import com.jarvis.client.ui.theme.LocalSpacing
 import com.jarvis.client.ui.theme.PlateEdges
@@ -910,6 +914,15 @@ fun Rule(modifier: Modifier = Modifier) {
 @Composable
 fun Gap(dp: Int = 12) = Spacer(Modifier.height(LocalSpacing.current.gap(dp)))
 
+/**
+ * "Show or hide menus" (docs/JARVIS-API.md section 109): set by the screen around a menu that can
+ * be folded, read by the FIRST [Section] inside it. Null everywhere else, so a Section that is
+ * not the head of a foldable menu draws exactly as it always did.
+ */
+class MenuFold(val folded: Boolean, val onToggle: () -> Unit)
+
+val LocalMenuFold = compositionLocalOf<MenuFold?> { null }
+
 /** A titled group of fields. */
 @Composable
 fun Section(
@@ -918,6 +931,8 @@ fun Section(
     trailing: (@Composable RowScope.() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // Only the head Section of a foldable menu takes this; anything inside it draws as normal.
+    val fold = LocalMenuFold.current
     Column(modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth(),
@@ -930,11 +945,31 @@ fun Section(
             // in Kicker, because a Kicker is also a field label and a "Jarvis"
             // tag on a reply, and those are not headings.
             Kicker(title, Modifier.semantics { heading() })
-            if (trailing != null) {
-                Row(verticalAlignment = Alignment.CenterVertically, content = trailing)
+            if (trailing != null || fold != null) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (trailing != null && (fold == null || !fold.folded)) trailing()
+                    if (fold != null) {
+                        Quiet(
+                            if (fold.folded) MenuWords.EXPAND else MenuWords.COLLAPSE,
+                            modifier = Modifier.semantics {
+                                stateDescription =
+                                    if (fold.folded) MenuWords.STATE_COLLAPSED else MenuWords.STATE_EXPANDED
+                            },
+                            onClick = fold.onToggle,
+                        )
+                    }
+                }
             }
         }
-        Gap(8)
-        content()
+        if (fold != null && fold.folded) {
+            Text(
+                MenuWords.FOLDED_LINE,
+                style = MaterialTheme.typography.labelSmall,
+                color = LocalChrome.current.textLo,
+            )
+        } else {
+            Gap(8)
+            CompositionLocalProvider(LocalMenuFold provides null) { content() }
+        }
     }
 }

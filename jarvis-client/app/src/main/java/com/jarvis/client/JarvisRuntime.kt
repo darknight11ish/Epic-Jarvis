@@ -263,6 +263,13 @@ object JarvisRuntime {
         private set
 
     /**
+     * Which menus are hidden or folded on THIS phone ("Show or hide menus",
+     * docs/JARVIS-API.md section 109). Per device; never sent anywhere; hiding only tidies.
+     */
+    lateinit var menus: com.jarvis.client.data.MenuPrefs
+        private set
+
+    /**
      * "A newer version is available": one GET to GitHub's public release
      * page for this app, never to the PC. See [UpdateChecker].
      */
@@ -743,6 +750,7 @@ object JarvisRuntime {
         tokens = tokenStore
         api = jarvisApi
         appearance = AppearanceStore(app)
+        menus = com.jarvis.client.data.MenuPrefs(app)
         modelsCacheStore = modelsStore
         // Read once, at startup - so a cold start with Jarvis off has
         // something to paint at once instead of a blank screen while the

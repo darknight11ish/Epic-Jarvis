@@ -61,6 +61,7 @@ pub mod support;
 pub mod topics;
 pub mod used;
 pub mod widgets;
+pub mod youtube;
 use routes::{first_line, route_for};
 
 /// Reads are small JSON. The graph (`/api/graph`), which walks several SQLite

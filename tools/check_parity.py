@@ -551,6 +551,51 @@ def apply_allowlists(found, allow):
     return unused
 
 
+# X-Jarvis-Route FIELDS the apps read (not HTTP routes: the scan above cannot see
+# them). name -> (desktop status, phone status, why). "ported": the app's source must
+# mention the field. "planned": built on the backend, not in that app yet; a warning
+# says to reclassify it once the app reads it.
+ROUTE_FIELDS = {
+    "menu_visibility": (
+        "planned", "ported",
+        "\"Show or hide menus\" by asking Jarvis (2026-09-30; JARVIS-API section 109; "
+        "backend jarvis_menus.py + jarvis_quick.py; docs/MENU-VISIBILITY-DESIGN.md). "
+        "{\"action\", \"target\"}: each app applies it to its OWN per-device list - there is "
+        "no HTTP route and no card. Phone: net/MenuVisibility.kt, ChatSession. Desktop: a "
+        "later build (menu-visibility.js, the chat handler that reads the route)."),
+}
+
+
+def _mentions(dirs, word):
+    for rel, exts in dirs:
+        base = os.path.join(ROOT, rel)
+        for dirpath, _, names in os.walk(base):
+            if "node_modules" in dirpath:
+                continue
+            for n in names:
+                if os.path.splitext(n)[1] not in exts:
+                    continue
+                with open(os.path.join(dirpath, n), encoding="utf-8", errors="replace") as fh:
+                    if word in strip_comments(fh.read(), os.path.splitext(n)[1]):
+                        return True
+    return False
+
+
+def check_route_fields(problems, warnings):
+    for name, (d_status, p_status, _) in ROUTE_FIELDS.items():
+        in_desk = _mentions(DESKTOP_DIRS, name)
+        in_phone = _mentions(PHONE_DIRS, name)
+        if p_status == "ported" and not in_phone:
+            problems.append(f"route field {name} is classified 'ported' on the phone but no "
+                            "phone source mentions it.")
+        if d_status == "ported" and not in_desk:
+            problems.append(f"route field {name} is classified 'ported' on the desktop but no "
+                            "desktop source mentions it.")
+        if d_status == "planned" and in_desk:
+            warnings.append(f"route field {name} is 'planned' for the desktop but its sources "
+                            "now mention it - reclassify it as 'ported'.")
+
+
 def main():
     allow = {}
     desk_at = scan(DESKTOP_DIRS, allow)
@@ -608,6 +653,8 @@ def main():
         problems.append(
             f"{r} is in PHONE_ONLY but the desktop calls it now "
             f"({', '.join(sorted(desk_at[r]))}). Move it to CLASSIFICATION.")
+
+    check_route_fields(problems, warnings)
 
     todo, no = sorted(by("todo")), sorted(by("deliberate"))
     print(f"desktop: {len(desk)} routes   phone: {len(phone)}   "

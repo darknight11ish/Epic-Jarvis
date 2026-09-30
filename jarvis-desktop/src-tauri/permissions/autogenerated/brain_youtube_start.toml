@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-youtube-start"
+description = "Enables the brain_youtube_start command without any pre-configured scope."
+commands.allow = ["brain_youtube_start"]
+
+[[permission]]
+identifier = "deny-brain-youtube-start"
+description = "Denies the brain_youtube_start command without any pre-configured scope."
+commands.deny = ["brain_youtube_start"]

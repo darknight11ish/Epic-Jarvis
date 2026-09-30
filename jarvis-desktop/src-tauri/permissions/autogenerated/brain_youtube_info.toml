@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-youtube-info"
+description = "Enables the brain_youtube_info command without any pre-configured scope."
+commands.allow = ["brain_youtube_info"]
+
+[[permission]]
+identifier = "deny-brain-youtube-info"
+description = "Denies the brain_youtube_info command without any pre-configured scope."
+commands.deny = ["brain_youtube_info"]

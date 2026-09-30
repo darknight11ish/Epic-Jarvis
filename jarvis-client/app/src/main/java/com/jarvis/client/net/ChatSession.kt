@@ -332,6 +332,20 @@ class ChatSession(
      */
     val topicsLeftOut: StateFlow<Int> = _topicsLeftOut.asStateFlow()
 
+    private val _menuChange = MutableStateFlow<MenuRoute?>(null)
+
+    /**
+     * "Hide the finance menu" by voice or chat (docs/JARVIS-API.md section 109.2): the change
+     * the answer's `X-Jarvis-Route` named ([MenuRoute.fromRoute]), or null. The PC cannot know
+     * which app asked, so `MainActivity` applies it to this phone's own list once, then calls
+     * [consumeMenuChange]. Hiding only tidies: no card, nothing asked, nothing turned off.
+     */
+    val menuChange: StateFlow<MenuRoute?> = _menuChange.asStateFlow()
+
+    fun consumeMenuChange() {
+        _menuChange.value = null
+    }
+
     private val _faceTuningChange = MutableStateFlow<String?>(null)
 
     /**
@@ -538,6 +552,7 @@ class ChatSession(
         _usedIds.value = emptyList()
         _crisis.value = false
         _openSettings.value = null
+        _menuChange.value = null
         _fileUnder.value = null
         _topicPick.value = null
         _topicsLeftOut.value = 0
@@ -746,6 +761,8 @@ class ChatSession(
                         _fileUnder.value = ChatTags.fileUnderFromRoute(routeHeader)
                         // Sharpness or frame rate, for this phone only.
                         _faceTuningChange.value = AnimalOptions.fromRoute(routeHeader)
+                        // "Hide the finance menu": this phone's own list (MenuRoute).
+                        _menuChange.value = MenuRoute.fromRoute(routeHeader)
                         // "A cloud model could give this one a second
                         // look." (jarvis_router.choose(), gate "offer"):
                         // read the same way as [crisis] and [usedIds]
@@ -1031,6 +1048,7 @@ class ChatSession(
         _usedIds.value = emptyList()
         _crisis.value = false
         _openSettings.value = null
+        _menuChange.value = null
         _fileUnder.value = null
         _topicPick.value = null
         _topicsLeftOut.value = 0

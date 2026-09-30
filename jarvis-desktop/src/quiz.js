@@ -264,6 +264,9 @@ export function readQuiz(q) {
     keySource: q.key_source === "text" || q.key_source === "model" ? q.key_source : null,
     // The PC's own words about Spanish crisis phrases - never copied here.
     notice: typeof q.notice === "string" ? q.notice : "",
+    // A quiz made from a video's captions carries `source: "youtube"` (JARVIS-API
+    // 112); a text or Spanish quiz has neither key.
+    source: q.source === "youtube" ? "youtube" : "",
   };
 }
 
@@ -322,4 +325,178 @@ export function answerCount(value) {
 export function countsLine(summary) {
   const c = summary.counts;
   return `${c.got_it} ${LEVEL_LABELS.got_it} · ${c.partly} ${LEVEL_LABELS.partly} · ${c.not_yet} ${LEVEL_LABELS.not_yet}`;
+}
+
+/* ── Quiz me on a YouTube video (docs/STUDY-FROM-TEXT-DESIGN.md section 14,
+      JARVIS-API.md section 112; youtube.js draws it; brain/youtube.rs) ───────
+
+   The owner pastes a link; the PC raises ONE approval card for it and, after a
+   yes, reads the video's CAPTION TEXT and writes questions. Nothing here is
+   stored, and the link is never kept: not in a draft, a log, a notification
+   or an error sentence. Every refusal and failure sentence is the PC's own,
+   shown as it came - this file writes none of its own for the YouTube part
+   (the contract's one missing-feature line, and the few below, aside). These
+   words and rules are held to tests/fixtures/youtube-cases.json, which the
+   phone reads too. */
+
+export const YT_TITLE = "Quiz me on a YouTube video";
+export const YT_INTRO =
+  "Paste a YouTube link and Jarvis reads the video's captions (the words shown as subtitles), " +
+  "then quizzes you on them. It asks with a card first, every time.";
+export const YT_TERMS =
+  "This breaks YouTube's terms and may be blocked. Only the caption text is fetched - " +
+  "never the video or its sound. The link tells YouTube which video you are studying.";
+export const YT_OUTSIDE =
+  "The captions are treated as outside text: Jarvis never learns facts from them. " +
+  "Your answers are marked by the model on this PC.";
+export const YT_PLACEHOLDER = "Paste a YouTube video link";
+export const YT_START = "Read the captions and write questions";
+export const YT_CANCEL = "Cancel";
+export const YT_LABEL = "From YouTube captions";
+export const YT_MISSING =
+  "Your PC's Jarvis does not have YouTube quizzes yet - run apply-patches.ps1 on the PC.";
+
+/** The desktop's own words (the phone says the same). */
+export const YT_STARTING = "Asking…";
+export const YT_CANCELLING = "Cancelling…";
+export const YT_UNREADABLE = "Your PC sent something this app could not read.";
+export const YT_NO_LINK = "Paste a video link first.";
+
+export const YT_POLL_SECONDS = 2;
+export const YT_UNKNOWN_LIMIT_SECONDS = 180;
+export const YT_LINK_MAX = 300;
+/** The question count sent with a link (the phone's default too). */
+export const YT_COUNT = 5;
+
+/** The state words the PC sends, and what an app does with each. */
+const YT_PHASES = Object.freeze({
+  waiting: "waiting", fetching: "working", writing: "working", ready: "ready",
+  denied: "ended", timed_out: "ended", withdrawn: "ended", refused: "ended", failed: "ended",
+});
+
+/** When the PC's message is empty, its state's reference words (an end must never be blank). */
+const YT_STATE_WORDS = Object.freeze({
+  waiting: "Waiting for your yes on the approval card.",
+  fetching: "Reading the captions from YouTube...",
+  writing: "Writing the questions...",
+  ready: "Ready.",
+  denied: "You said no, so nothing was fetched.",
+  timed_out: "Nobody answered the card in time, so nothing was fetched.",
+  withdrawn: "You cancelled before the card was answered, so nothing was fetched.",
+  refused: "The card could not be answered, so nothing was fetched.",
+  failed: "Could not make a quiz from that video.",
+});
+
+/**
+ * "waiting" (also offers Cancel), "working", "ready" or "ended". An unknown
+ * word is still "working" (decode leniently); ytIsKnown tells the caller so it
+ * can stop after YT_UNKNOWN_LIMIT_SECONDS with the PC's last message.
+ */
+export function ytPhase(state) {
+  return Object.prototype.hasOwnProperty.call(YT_PHASES, state) ? YT_PHASES[state] : "working";
+}
+
+export function ytIsKnown(state) {
+  return Object.prototype.hasOwnProperty.call(YT_PHASES, state);
+}
+
+/** Whether polling goes on for this phase. */
+export function ytKeepPolling(phase) {
+  return phase === "waiting" || phase === "working";
+}
+
+/** True once a state this app does not know has been seen for the limit. `sinceMs` is null when known. */
+export function ytGiveUpOnUnknown(sinceMs, nowMs) {
+  return Number.isFinite(sinceMs) && nowMs - sinceMs >= YT_UNKNOWN_LIMIT_SECONDS * 1000;
+}
+
+const YT_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** Whether an id is safe to put in a route. */
+export function ytValidId(id) {
+  return typeof id === "string" && YT_ID.test(id);
+}
+
+/** Whether the field holds something to send. The app does not judge the link itself. */
+export function ytCanStart(link) {
+  return String(link || "").trim().length > 0;
+}
+
+/**
+ * One request as the PC describes it, or null with no usable id or state.
+ * Unknown keys are ignored; a `quiz` that cannot be read leaves `quiz` null.
+ */
+export function ytReadRequest(o) {
+  if (!o || typeof o !== "object") return null;
+  const id = typeof o.id === "string" ? o.id.trim() : "";
+  const state = typeof o.state === "string" ? o.state.trim() : "";
+  if (!ytValidId(id) || !state) return null;
+  const minutes = Number.isInteger(o.minutes) && o.minutes >= 1 ? o.minutes : null;
+  const message = typeof o.message === "string" ? o.message.trim() : "";
+  const link = typeof o.link === "string" && o.link.trim() ? o.link.trim() : null;
+  return {
+    id, state, message, link,
+    truncated: o.truncated === true,
+    minutes,
+    error: typeof o.error === "string" && o.error ? o.error : null,
+    quiz: readQuiz(o.quiz),
+    phase: ytPhase(state),
+  };
+}
+
+/** `GET /api/youtube`: whether the feature is there, the link limit and the newest request. */
+export function ytReadInfo(answer) {
+  if (!answer || typeof answer !== "object" || typeof answer.available !== "boolean") return null;
+  const limits = answer.limits && typeof answer.limits === "object" ? answer.limits : {};
+  const linkMax = Number.isInteger(limits.link) && limits.link >= 1 && limits.link <= 10000
+    ? limits.link : YT_LINK_MAX;
+  return {
+    available: answer.available,
+    linkMax,
+    latest: ytReadRequest(answer.latest),
+    hidden: answer.hidden === true,
+  };
+}
+
+/** What to show for a request: the PC's message, else its state's reference words. */
+export function ytShown(request) {
+  return request.message || YT_STATE_WORDS[request.state] || "";
+}
+
+/** The line above the questions of a captions quiz that covers only the first part, else null. */
+export function ytTruncatedNote(request) {
+  return request.truncated ? ytShown(request) : null;
+}
+
+/**
+ * What to make of the answer to a start, a read or a cancel. `lead` is the
+ * short opening of the app's own sentences ("Not started."), used only when
+ * the PC gave no words. Returns `{ok, request, said, code, gone}`:
+ * a refusal shows the PC's `message` word for word; `gone` means the PC no
+ * longer has the request.
+ */
+export function ytOutcome(answer, lead) {
+  if (!answer || typeof answer !== "object") {
+    return { ok: false, request: null, said: `${lead} ${YT_UNREADABLE}`, code: null, gone: false };
+  }
+  if (answer.ok === false) {
+    const code = typeof answer.error === "string" && answer.error ? answer.error : null;
+    const own = typeof answer.message === "string" ? answer.message.trim() : "";
+    return {
+      ok: false, request: null, code, gone: code === "not_found",
+      said: own || `${lead} Your PC's Jarvis cannot do this right now.`,
+    };
+  }
+  const request = ytReadRequest(answer.request);
+  if (!request) return { ok: false, request: null, said: `${lead} ${YT_UNREADABLE}`, code: null, gone: false };
+  // A "ready" with no readable quiz is not a quiz: say so rather than open nothing.
+  if (request.phase === "ready" && (!request.quiz || !request.quiz.questions.length)) {
+    return { ok: false, request, said: `${lead} ${YT_UNREADABLE}`, code: null, gone: false };
+  }
+  return { ok: true, request, said: ytShown(request), code: null, gone: false };
+}
+
+/** Whether a read quiz came from YouTube captions. */
+export function ytFromCaptions(quiz) {
+  return Boolean(quiz && quiz.source === "youtube");
 }

@@ -589,9 +589,10 @@ def t_enabled_follows_the_second_card_switch():
 def t_the_patch_and_the_lists():
     import _stack
     order = _stack.order()
-    # tag-suggest.patch (2026-09-30) goes after it, on lines referee.patch wrote.
-    check("referee.patch is the last patch in apply-patches.ps1's list, bar tag-suggest.patch",
-          [n for n in order if n != "tag-suggest.patch"][-1] == "referee.patch", order[-3:])
+    # tag-suggest.patch, youtube.patch and quiz-cloud.patch (2026-09-30) go after it.
+    later = {"tag-suggest.patch", "youtube.patch", "quiz-cloud.patch"}
+    check("referee.patch is the last patch in apply-patches.ps1's list, bar the ones written after it",
+          [n for n in order if n not in later][-1] == "referee.patch", order[-3:])
     gate, log = _stack.stand_in("jarvis_gate.py")
     hud, hlog = _stack.stand_in("jarvis_hud.py")
     check("the stacked jarvis_gate.py builds, and referee.patch's hunks applied to real context",

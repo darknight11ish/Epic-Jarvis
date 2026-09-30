@@ -398,6 +398,9 @@ SHIPPED = (
     # "Grade this better" (2026-09-30; quiz-cloud.patch): one card per request,
     # the whole message shown, the cheapest set-up cloud service; never private.
     "jarvis_quiz_cloud.py",
+    # "Show or hide menus" (2026-09-30): the list of menus, the groups, the
+    # never-hideable list and the words; jarvis_quick.py calls it (no patch, no route).
+    "jarvis_menus.py",
 )
 
 

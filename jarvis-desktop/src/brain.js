@@ -217,7 +217,12 @@ import {
   SPANISH_WRITING as QUIZ_SPANISH_WRITING,
   spanishStartArgs as quizSpanishStartArgs,
   topicCount as quizTopicCount,
+  OUTSIDE_LINE as QUIZ_OUTSIDE_LINE,
+  YT_LABEL,
+  YT_OUTSIDE,
+  ytFromCaptions,
 } from "./quiz.js";
+import { createYoutubeBlock } from "./youtube.js";
 import * as Decks from "./decks.js";
 import * as Topics from "./topics.js";
 import { createRetirementCard } from "./retirement.js";
@@ -717,6 +722,7 @@ const dom = {
   quizTopic: $("quiz-topic"),
   quizTopicCount: $("quiz-topic-count"),
   quizIntro: $("quiz-intro"),
+  quizOutside: $("quiz-outside"),
   decksIntro: $("decks-intro"),
   decksBody: $("decks-body"),
   today: $("today"),
@@ -9126,6 +9132,9 @@ const qz = { quiz: null, summary: null, shown: null, busy: "", error: "", last: 
   // only, until the quiz ends - it fills the Keep sheet's backs for a "Got it"
   // mark. Never a crisis answer, never stored anywhere.
   answers: new Map(),
+  // The PC's sentence above a captions quiz that covers only the first part
+  // ({id, note}); the YouTube block hands it over (youtube.js).
+  ytNote: null,
   // The Keep sheet (decks.js keepRows) while it is open, and the count kept.
   keep: null, kept: null,
   // The control that should have the keyboard after the next paint, and the
@@ -9143,7 +9152,36 @@ function quizReset() {
   qz.answers = new Map();
   qz.keep = null;
   qz.kept = null;
+  qz.ytNote = null;
 }
+
+/** "Quiz me on a YouTube video" under the paste box (youtube.js, JARVIS-API 112). */
+const youtubeBlock = createYoutubeBlock({
+  root: document.getElementById("youtube-block"),
+  invoke,
+  canAct: () => linkWords(currentLink()).canAct,
+  staleLine: STALE_TITLE,
+  live: { add: (b) => { liveButtons.add(b); syncLiveButton(b); }, sync: (b) => syncLiveButton(b) },
+  listen: IS_TAURI && TAURI.event && TAURI.event.listen ? (name, fn) => TAURI.event.listen(name, fn) : null,
+  view: () => state.view,
+  covered: () => Boolean(qz.quiz || qz.summary),
+  spanish: () => qz.mode === "spanish",
+  errorText: (error) => errorText(error),
+  hiddenNode: () => hiddenNode(0, "words"),
+  announce: (words, mode) => announce(words, mode),
+  adopt: (quiz, note) => {
+    takeQuiz(quiz);
+    qz.summary = null;
+    qz.shown = null;
+    qz.answers = new Map();
+    qz.keep = null;
+    qz.kept = null;
+    qz.error = "";
+    qz.crisis = "";
+    qz.ytNote = note ? { id: quiz.id, note } : null;
+    paintQuiz();
+  },
+});
 
 /** The keyboard's place (a `data-fkey`) inside `root`, noted just before a repaint.
  *  A button that greys itself while it works drops the keyboard, so the last
@@ -9254,6 +9292,7 @@ function setQuizMode(mode) {
   if (dom.quizIntro) dom.quizIntro.textContent = spanish ? QUIZ_SPANISH_INTRO : QUIZ_INTRO_TEXT;
   paintQuizNotice();
   paintQuizCount();
+  youtubeBlock.sync();
 }
 
 /** The PC's own Spanish notice under the mode chooser, once it has been seen. */
@@ -9687,6 +9726,8 @@ function paintQuiz() {
   const typing = run.querySelector(".quiz-answer");
   const typed = typing ? { n: typing.dataset.n, value: typing.value } : null;
   if (dom.quizStartForm) dom.quizStartForm.hidden = Boolean(qz.quiz || qz.summary);
+  // A quiz made from a video's captions has its own outside-text line.
+  if (dom.quizOutside) dom.quizOutside.textContent = ytFromCaptions(qz.quiz) ? YT_OUTSIDE : QUIZ_OUTSIDE_LINE;
   const parts = [];
   if (qz.busy) parts.push(el("p", "note", qz.busy));
   if (qz.error) parts.push(el("p", "empty failed", qz.error));
@@ -9730,6 +9771,10 @@ function paintQuiz() {
     parts.push(keepSheet(q));
   } else if (q) {
     const block = el("div", "goal-block");
+    if (ytFromCaptions(q)) {
+      block.append(el("p", "goal-note", YT_LABEL));
+      if (qz.ytNote && qz.ytNote.id === q.id) block.append(el("p", "goal-note", qz.ytNote.note));
+    }
     if (!q.hidden) block.append(el("p", "goal-note", quizProgressLine(q)));
     if (q.mode === "spanish" && q.level) block.append(el("p", "goal-note", quizLevelLine(q.level)));
     if (q.hidden) {
@@ -9797,6 +9842,7 @@ function paintQuiz() {
   }
   run.replaceChildren(...parts);
   fkeyAfter(run, focusKey);
+  youtubeBlock.sync();
 }
 
 /** A hidden quiz read again after Show (or a setting change): Rust decides
@@ -9843,6 +9889,7 @@ function renderQuiz() {
   setQuizMode(qz.mode);
   paintTopicCount();
   paintQuiz();
+  youtubeBlock.enter();
 }
 
 if (dom.quizMode) {
@@ -12625,6 +12672,7 @@ onLink((link) => {
   dom.linkPill.title = link.error || `${link.base} · last event ${link.lastId}`;
   dom.reconnectLink.hidden = link.connected;
   syncLiveButtons();
+  youtubeBlock.linkChanged();
   retirementCard.sync();
   if (historyImport) historyImport.sync();
   paintFreshness();

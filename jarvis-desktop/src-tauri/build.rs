@@ -500,6 +500,16 @@ fn main() {
             "brain_quiz_answer",
             "brain_quiz_finish",
             "brain_quiz_stop",
+            // Quiz me on a YouTube video (docs/STUDY-FROM-TEXT-DESIGN.md
+            // section 14, JARVIS-API.md section 112): ask whether the PC has it,
+            // send the pasted link (ONE approval card on the PC), poll the
+            // request, cancel it while its card waits. The link is sent once
+            // and kept nowhere; the start held on a stale link, cancel never.
+            // Brain only.
+            "brain_youtube_info",
+            "brain_youtube_start",
+            "brain_youtube_get",
+            "brain_youtube_cancel",
             // Retirement what-if (docs/FINANCE-DESIGN.md part B, JARVIS-API.md
             // section 103): read the form, play out the typed numbers. No card,
             // nothing saved; the run held on a stale link; nothing asked or sent

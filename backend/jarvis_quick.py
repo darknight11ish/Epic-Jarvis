@@ -821,6 +821,13 @@ def _match(text, now: float) -> Optional[Intent]:
                     r"|(?:clear|empty|delete)\s+(?:my|the)\s+todo\s+list", s):
         return Intent("bulk")
 
+    # --- "hide the finance menu" (menu visibility, 2026-09-30) -------------------
+    # Before the settings block below: "show the voice menu" is about the menu
+    # list, while "show me the voice settings" still opens Settings.
+    got = _menu_visibility(s)
+    if got is not None:
+        return got
+
     # --- "label this chat Work" (chat tags, 2026-09-30) --------------------------
     got = _chat_tag(s)
     if got is not None:
@@ -2532,6 +2539,52 @@ def _from_now_on(s: str) -> Optional[Intent]:
 
 
 # --------------------------------------------------------------------------
+#   Show or hide menus (jarvis_menus.py; docs/MENU-VISIBILITY-DESIGN.md, the
+#   owner's decision of 2026-09-30; docs/JARVIS-API.md section 109). "hide the
+#   finance menu", "show the quiz menu", "collapse the goals menu", "show
+#   everything". Hiding only tidies: nothing is turned off, nothing asks, and the
+#   gate is never involved. Per device - the PC cannot know which app asked, so
+#   the answer says "on the devices that are open" and X-Jarvis-Route carries
+#   `menu_visibility: {"action", "target"}` for each app to apply to itself.
+#   Never-hideable menus (security, what asks first, approvals, ...) are refused
+#   here too, belt and braces. A `show` whose name is no menu falls through
+#   ("show me the dinner menu" is not ours); hide/collapse/expand of an unknown
+#   name is answered, never guessed.
+# --------------------------------------------------------------------------
+
+_MENU_ONE = re.compile(
+    r"(hide|unhide|show|collapse|expand)\s+(?:me\s+)?(?:the\s+|my\s+)?(.+?)\s+(menu|menus|section)")
+_MENU_VERB = {"hide": "hide", "unhide": "show", "show": "show", "collapse": "collapse",
+              "expand": "expand"}
+
+
+def _menu_visibility(s: str) -> Optional[Intent]:
+    try:
+        import jarvis_menus as MV
+    except Exception:
+        return None
+    if MV.ALL_MENUS_PHRASES.fullmatch(s):
+        return Intent("menu_visibility", {"action": "reset", "name": ""})
+    m = _MENU_ONE.fullmatch(s)
+    if not m:
+        return None
+    verb, name, suffix = m.group(1), m.group(2), m.group(3)
+    action = _MENU_VERB[verb]
+    known = MV.resolve(name) is not None
+    if action == "show" and not known:
+        return None
+    if verb == "show" and suffix == "section":
+        # "show the voice section" still opens Settings there (the older meaning).
+        try:
+            import jarvis_settings_registry as R
+            if R.find_section(name) is not None:
+                return None
+        except Exception:
+            pass
+    return Intent("menu_visibility", {"action": action, "name": name})
+
+
+# --------------------------------------------------------------------------
 #   Any setting, by name (jarvis_settings_registry.py, the owner's decision
 #   of 2026-09-27): "open <a settings section>" is pure navigation; "turn
 #   on/off <a setting>" calls straight into the exact function the matching
@@ -3383,6 +3436,9 @@ class Result:
     # the section id both apps already use for their own settings screen, so
     # they can jump there. None for every other answer made here.
     open_settings: Optional[str] = None
+    # "hide the finance menu" (jarvis_menus.py, 2026-09-30): {"action", "target"}
+    # each app applies to its OWN menu list. None for every other answer.
+    menu_visibility: Optional[dict] = None
     # Sharpness or frame rate asked for by voice or chat (2026-09-28): one of
     # jarvis_animal.DEVICE_CHANGES. Per device, so the PC changes nothing -
     # the app that asked applies it to itself (jarvis_animal.step_device).
@@ -3492,6 +3548,14 @@ def _run_settings_open(f: dict) -> Result:
     return Result(f"Opening {name} in Settings.", "settings_open", open_settings=f["id"])
 
 
+def _run_menu_visibility(f: dict) -> Result:
+    """"Hide the finance menu": no state here, no gate, no model. The reply is the
+    same for every device; the route field tells each app what to apply."""
+    import jarvis_menus as MV
+    reply, route = MV.voice_change(f["action"], f.get("name") or "")
+    return Result(reply, "menu_visibility", menu_visibility=route)
+
+
 def _run_settings_bool(f: dict, peer, local) -> Result:
     import jarvis_settings_registry as R
     setting = next((b for b in R.BOOL_SETTINGS if b.key == f["key"]), None)
@@ -3573,6 +3637,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     import jarvis_schedule as S
     if n == "settings_open":
         return _run_settings_open(f)
+    if n == "menu_visibility":
+        return _run_menu_visibility(f)
     if n == "settings_bool":
         return _run_settings_bool(f, peer, local)
     if n == "settings_asks_first":
@@ -4441,6 +4507,11 @@ def route_fields(res: Result) -> dict:
         # existing reader of X-Jarvis-Route that does not look for this key
         # is unaffected, exactly like `gate` above.
         out["open_settings"] = res.open_settings
+    if res.menu_visibility:
+        # "Hide the finance menu" (jarvis_menus.py, 2026-09-30): per device, so each
+        # app that hears this applies it to its own menu list. Additive, like
+        # open_settings; only present when there is something to apply.
+        out["menu_visibility"] = dict(res.menu_visibility)
     if res.face_tuning:
         # Sharpness or frame rate (jarvis_animal.DEVICE_CHANGES, 2026-09-28):
         # per device, so the app that asked applies it to itself - the same

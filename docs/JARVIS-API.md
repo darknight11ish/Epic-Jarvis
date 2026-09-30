@@ -16695,6 +16695,60 @@ line is `("yes", "local", ...)`, so it is not a risky approval (no Windows Hello
 its eight cases; `tools/gen_asks_first_cases.py` and `tools/gen_card_words_cases.py` carry the `referee_tick`
 row and words. All three changes are additions.
 
+## 109. Show or hide menus (added 2026-09-30; backend and phone built, desktop planned)
+
+The owner's decision (2026-09-30, `docs/MENU-VISIBILITY-DESIGN.md`, `docs/BUILD-QUEUE-2026-09-30.md` item 11): the owner may **hide** a menu (gone from the list, the rail and the jump links) or **fold** it (its title stays, its body folds to one line), and bring it back easily. **Hiding only tidies.** Nothing is turned off, no approval card is raised either way, Windows Hello and the screen lock are never asked, and the gate (`jarvis_gate.py`) is never involved. A hidden Quiz menu does not stop a quiz reminder; a hidden Goals plate does not stop a goal's weekly check-in.
+
+**There is no HTTP route.** The choice is **per device**: the desktop keeps its own set in `localStorage`, the phone keeps its own in `SharedPreferences` (`data/MenuPrefs.kt`). Nothing about menus is sent anywhere. The one thing that crosses the wire is a field in `X-Jarvis-Route`, below. `tools/check_parity.py` therefore has rows for the *field* (planned/ported), not a route; section number **109** is used for that field only (108 is the second-card switches, 110 Fork a chat, 111 GitHub tools, 112 YouTube, 113 grade this better).
+
+### 109.1 The list, the groups and the never-hideable list
+
+`backend/jarvis_menus.py` is the ONE source (shipped whole, no patch): every menu id, its title and one-line description, which apps have it, where it lives, its feature group, its parent, whether it can be hidden, whether it can be folded, and (for a menu that stays visible) why. `tools/gen_menu_cases.py` writes it as `menu-cases.json` for both apps (byte-identical, `--check`).
+
+* **Ids** are lower-case, dotted, **never reused and never renamed**: `settings.<registry id>`, `brain.tab.<view>`, `brain.<view>.<name>`, `entry.<name>`, `safety.<name>`, and `group.<id>` for a feature group. (The design wrote "dot-free" and then gave dotted examples; the examples are followed because the desktop's `brain.html` already carries `data-menu-id="brain.memory.topics"`, `"brain.work.retirement"` and `"brain.projects.progress"`.) **One id is one feature** across both apps: the phone's Second graphics card is a Brain plate but keeps `settings.second-card`; `apps` says which app has it.
+* **Feature groups** (`group.study`, `group.goals-projects`, `group.graphics-cards`, `group.chatbots`, `group.finance`, `group.home`): one switch hides a family. Hiding a group stores the **group id** (so a member added later is hidden too); showing it clears the group id and every member id. A group with no member in an app is not listed there; `group.home` has no member anywhere today, so "hide the home menu" answers "There is no Home menu yet." `group.finance` has members today (Spending, Retirement).
+* **Never hideable** (`NEVER_HIDE`, with a reason each): approvals, Security and App lock, What asks first, the connection and the stale-link banner (rule 4), crisis help, Stop everything (and Jarvis Live's Stop), Settings and Help themselves, "Show or hide menus", Trust and Watch on the Brain rail, and a few that would strand something if hidden: Devices (removing a lost phone), the Undo shelf (its 10-minute Undo), Coming up (a reminder that is due), facts waiting for a yes, the attention budget and the rush banner. A test in each app fails the build if one is ever on the hideable list; a stored hidden id in that list is ignored.
+* **Folding** is offered on cards and plates only; a card whose body can hold a warning (the connection, Security, What asks first) cannot be folded.
+
+### 109.2 Asking Jarvis (`jarvis_quick.py`, no model, no card)
+
+Fixed grammar: `hide | unhide | show | collapse | expand  (the | my)? <name>  (menu | menus | section)`, and `show everything`, `show all my menus`, `show every menu`, `unhide my menus`, `show my hidden menus`, `reset my menus`. Names resolve through the alias table in `jarvis_menus.py` (`finance`, `study`, `quiz`, `decks`, `retirement`, `spending`, `goals`, `progress`, `topics`, `people and things`, `tag suggestions`, `second graphics card`, `study helper`, `referee`, `galaxy`, ...). Rules:
+
+* **Never guess.** An unknown name to hide/collapse/expand answers "I don't know a menu called that." A `show` whose name is no menu is **not ours** and goes on as before ("show me the dinner menu" is a question for the model). "show me the voice settings" and "show the voice section" still **open Settings** (`open_settings`); only "... menu" (and, for a name that is no Settings section, "... section") is a menu change.
+* **A never-hideable menu is refused** in the backend too: "That one stays visible so you can always reach it." (showing one: "That one is always visible."). Belt and braces: each app refuses it as well.
+* **The backend does not know which app asked.** The reply is the same for every device: `Done. On the devices that are open, the Finance menu is hidden. Nothing is turned off. Say "show the Finance menu" to bring it back.` (it uses the owner's own word for the menu). A device that is off or disconnected does not change; the Show-or-hide screen's help line says "Asking Jarvis to hide or show a menu changes every device that hears it."
+* Immediate; no card; not held on a stale link (it changes only what the app draws). It works in any conversation, including after outside text: it can only tidy, and only the newest typed or said words match.
+
+The answer's `X-Jarvis-Route` gains, **only when there is something to apply**:
+
+```
+"menu_visibility": {"action": "hide" | "show" | "collapse" | "expand" | "reset",
+                    "target": "<menu id>" | "group.<id>" | "all"}
+```
+
+`reset` always has `"target": "all"` ("show everything": clears both the hidden and the folded set). Additive, like `open_settings`: a reader that does not look for the key is unaffected. Each app reads it where it reads `open_settings` and applies it to its own store; an id the app does not have is ignored; a group the app has no member of is ignored; a never-hideable id is ignored. The phone reads it in `ChatSession` (`net/MenuVisibility.kt`, `MenuRoute.fromRoute`).
+
+The "Things you can say" list is **not** changed (the owner's Q3 answer: no; `jarvis_sayable.SENTENCES` is at its limit of 10). The phrase is documented in the Show-or-hide screen's own help line.
+
+### 109.3 What each app does (design sections 6 to 9)
+
+* **Storage** (per device): a set of hidden ids and a set of folded ids, plus a version (`1`). Desktop `jarvis.menus.hidden`, `jarvis.menus.collapsed`, `jarvis.menus.v`; phone `SharedPreferences` file `jarvis_menus`. Everything visible and unfolded by default. Nothing to migrate from. A stored id that no longer exists (or is another app's, or is never-hideable) is ignored and dropped on the next save. A version other than 1 reads as empty. Unreadable storage shows everything.
+* **The list**: "Show or hide menus" in Settings, in the Everyday group (Q2's recommendation; on the phone, near the top of Settings), a switch per menu, groups as one switch with the members under it, "Show everything" at the bottom, and the line "This hides menus on this device only." Where hidden menus were: "N hidden - Show" (a real button, "3 menus hidden. Show or hide menus.").
+* **Deep links** (`open_settings`, `open_brain`, the phone's `OpenPlace`): a link to a hidden menu shows it **for that visit only** (its group stays hidden) with the banner "Shown for now. Keep it visible | Hide again"; a folded target opens for the visit. Nothing is announced or asked.
+* **The tray** is left alone in v1 ("The system-tray menu is not affected."); the desktop has one, the phone does not (`docs/ARCHITECTURE.md` section 8).
+* **Desktop**: planned (a later build; `jarvis-desktop/src/menu-visibility.js` reads `menu-cases.json`). **Phone**: built, see `docs/ARCHITECTURE.md` section 8.
+
+### 109.4 The shared fixture
+
+`tools/gen_menu_cases.py` writes `jarvis-desktop/tests/fixtures/menu-cases.json` and `jarvis-client/app/src/test/resources/contract/menu-cases.json` (byte-identical; `python3 tools/gen_menu_cases.py --check`): `words`, `replies`, `actions`, `menus`, `groups` (members per app, and whether each app lists them), `never_hide`, `aliases`, `defaults` (with each app's storage keys), `migration` rules, `state_cases` (worked cases of hide/show/fold/groups/parents/visits/counts, outputs made by the real reference code), `sanitize_cases`, `route_cases` (header strings and what an app must read from them) and `voice_cases`. The phone's `MenuVisibilityTest.kt` and the backend's `test_menu_visibility.py` read it; the desktop's `tests/menu-visibility.mjs` must.
+
+### 109.5 Not built, or not measured
+
+* The desktop half (the list card, `menu-visibility.js`, the rail's roving tabindex over visible tabs, badge folding for hidden tabs, Work-card hiding, jump-link filtering, `goToPlace`).
+* Hiding tray items (design section 9, v2): only if the owner wants it.
+* The phone's Jetpack Compose code has not been compiled here (no Android build in this container); its pure logic (`data/MenuState.kt`, `net/MenuVisibility.kt`) was compiled and its unit tests run with Kotlin 2.0.21 (see `docs/ARCHITECTURE.md` section 8). Nothing was run on a phone or in CI.
+* Hiding a whole Work tab on the desktop also hides the Undo shelf (the tab contains it); the design accepted this with the "N hidden (needs you)" count on the "N hidden - Show" line.
+
 ## 112. Quiz me on a YouTube video (added 2026-09-30; backend built and tested, apps planned)
 
 The owner's decision (2026-09-30, `docs/STUDY-FROM-TEXT-DESIGN.md` sections 5, 7 and 14): Jarvis may read a YouTube video's **caption text** for a quiz, **one approval card per link**. Caption text only: never the video, never its sound, never comments. **It breaks YouTube's terms and may be blocked**; the owner accepted that, and the card says so every time. Backend: `backend/jarvis_youtube.py` (the whole feature), `backend/youtube.patch` (the gate action and ONE install block in `jarvis_hud.py`), `backend/jarvis_quiz.py` (`start_outside`, the hook), `backend/test_youtube.py`. Numbers 109 and 111 were reserved by the build queue, 110 is taken, so this is 112. **Not tried against the real site** (the build container's network policy blocked it): `youtube-transcript-api` is unofficial, YouTube changes, and it often blocks data-centre addresses.
