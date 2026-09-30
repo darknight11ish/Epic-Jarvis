@@ -1256,7 +1256,7 @@ def t_the_words_are_plain_and_complete():
 
 
 if __name__ == "__main__":
-        for name, fn in list(globals().items()):
+    for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
             print(f"\n--- {name} ---")
             try:
