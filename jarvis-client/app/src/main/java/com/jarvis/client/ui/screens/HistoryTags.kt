@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -261,6 +262,8 @@ internal fun TagsEditor(
     canAct: Boolean = true,
 ) {
     val chrome = LocalChrome.current
+    // "Show or hide menus" (docs/JARVIS-API.md section 109): the owner may hide the last row.
+    val menus by JarvisRuntime.menus.view.collectAsState()
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
@@ -471,7 +474,7 @@ internal fun TagsEditor(
             }
         }
         // The last row: "Suggest tags overnight" (docs/JARVIS-API.md section 104).
-        item(key = "suggest") { SuggestTagsRow(canAct = canAct) }
+        if (menus.shows("brain.history.tag-suggestions")) item(key = "suggest") { SuggestTagsRow(canAct = canAct) }
         item(key = "tail") { Gap(24) }
     }
 }

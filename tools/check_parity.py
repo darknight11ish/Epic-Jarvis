@@ -345,10 +345,10 @@ CLASSIFICATION = {
     "/api/quiz/{id}/answer": ("ported", "Mark one typed answer against that question's passage only (Got it / Partly / Not yet plus one sentence); no card. Desktop: brain/quiz.rs. Phone: net/Quiz.kt."),
     "/api/quiz/{id}/finish": ("ported", "End the quiz with the short \"look at these again\" summary; the quiz is forgotten. Desktop: brain/quiz.rs. Phone: net/Quiz.kt."),
     "/api/quiz/{id}/stop": ("ported", "Stop and forget the quiz at once, no summary. Desktop: brain/quiz.rs. Phone: net/Quiz.kt."),
-    "/api/youtube": ("planned", "\"Quiz me on a YouTube video\" (the owner's decision of 2026-09-30; backend/jarvis_youtube.py, backend/youtube.patch; docs/JARVIS-API.md section 112; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 14). GET: whether the PC has the feature, its fixed words and limits, and the newest request (or null). A read; also how an app finds out the PC does not have it yet (a 404). Desktop and phone: a YouTube part of the Quiz page, not built yet."),
-    "/api/youtube/quiz": ("planned", "\"Quiz me on a YouTube video\" (the owner's decision of 2026-09-30; backend/jarvis_youtube.py, backend/youtube.patch; docs/JARVIS-API.md section 112; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 14). POST {url, count?, title?, language?}: checks the link's shape, raises ONE approval card for that link (gate action youtube_captions_read, tier ask, a risky approval; it breaks YouTube's terms and may be blocked), and answers 202 with a request. Nothing is fetched before a yes. Held on a stale link in both apps. Not built in either app yet."),
-    "/api/youtube/{id}": ("planned", "\"Quiz me on a YouTube video\" (the owner's decision of 2026-09-30; backend/jarvis_youtube.py, backend/youtube.patch; docs/JARVIS-API.md section 112; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 14). GET one request: waiting / fetching / writing / ready (with the ordinary quiz, marked provenance outside) / denied / timed_out / withdrawn / refused / failed (with a plain message). Polled about every 2 seconds while the card is open. A read, not held on a stale link. Not built in either app yet."),
-    "/api/youtube/{id}/cancel": ("planned", "\"Quiz me on a YouTube video\" (the owner's decision of 2026-09-30; backend/jarvis_youtube.py, backend/youtube.patch; docs/JARVIS-API.md section 112; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 14). POST: withdraw a request whose card has not been answered; a yes that arrives later fetches nothing. Refused once the captions are being read. Not held on a stale link (it only ever makes things safer). Not built in either app yet."),
+    "/api/youtube": ("ported", "\"Quiz me on a YouTube video\" (the owner's decision of 2026-09-30; backend/jarvis_youtube.py, backend/youtube.patch; docs/JARVIS-API.md section 112; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 14). GET: whether the PC has the feature, its fixed words and limits, and the newest request (or null). A read; also how an app finds out the PC does not have it yet (a 404). Desktop: brain/youtube.rs (brain_youtube_info). Phone: net/Youtube.kt."),
+    "/api/youtube/quiz": ("ported", "\"Quiz me on a YouTube video\" (the owner's decision of 2026-09-30; backend/jarvis_youtube.py, backend/youtube.patch; docs/JARVIS-API.md section 112; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 14). POST {url, count?, title?, language?}: checks the link's shape, raises ONE approval card for that link (gate action youtube_captions_read, tier ask, a risky approval; it breaks YouTube's terms and may be blocked), and answers 202 with a request. Nothing is fetched before a yes. Held on a stale link in both apps. Desktop: brain/youtube.rs (brain_youtube_start). Phone: net/Youtube.kt."),
+    "/api/youtube/{id}": ("ported", "\"Quiz me on a YouTube video\" (the owner's decision of 2026-09-30; backend/jarvis_youtube.py, backend/youtube.patch; docs/JARVIS-API.md section 112; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 14). GET one request: waiting / fetching / writing / ready (with the ordinary quiz, marked provenance outside) / denied / timed_out / withdrawn / refused / failed (with a plain message). Polled about every 2 seconds while the card is open. A read, not held on a stale link. Desktop: brain/youtube.rs (brain_youtube_get). Phone: net/Youtube.kt."),
+    "/api/youtube/{id}/cancel": ("ported", "\"Quiz me on a YouTube video\" (the owner's decision of 2026-09-30; backend/jarvis_youtube.py, backend/youtube.patch; docs/JARVIS-API.md section 112; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 14). POST: withdraw a request whose card has not been answered; a yes that arrives later fetches nothing. Refused once the captions are being read. Not held on a stale link (it only ever makes things safer). Desktop: brain/youtube.rs (brain_youtube_cancel). Phone: net/Youtube.kt."),
     '/api/quiz-cloud': ("planned", '"Grade this better" (the owner\'s decision of 2026-09-30; backend/jarvis_quiz_cloud.py, backend/quiz-cloud.patch; docs/JARVIS-API.md section 113; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 15). GET: whether the PC has the feature, its fixed words, which cloud services are set up (no key), and the newest request (or null). A read; a 404 means the PC does not have it yet. Desktop and phone: a button on the quiz screen, not built yet.'),
     '/api/quiz-cloud/grade': ("planned", '"Grade this better" (the owner\'s decision of 2026-09-30; backend/jarvis_quiz_cloud.py, backend/quiz-cloud.patch; docs/JARVIS-API.md section 113; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 15). POST {quiz_id, service?}: checks the quiz (text quiz, answered, no crisis answer, nothing private), picks the cheapest set-up cloud service and raises ONE approval card (gate action quiz_cloud_grade, tier ask, a risky approval) listing exactly what would leave the PC; answers 202 with a request. Nothing is sent before a yes. Held on a stale link in both apps. Not built in either app yet.'),
     '/api/quiz-cloud/{id}': ("planned", '"Grade this better" (the owner\'s decision of 2026-09-30; backend/jarvis_quiz_cloud.py, backend/quiz-cloud.patch; docs/JARVIS-API.md section 113; the frozen contract is docs/STUDY-FROM-TEXT-DESIGN.md section 15). GET one request: waiting / sending / ready (with the new marks and the quiz) / denied / timed_out / withdrawn / refused / failed (with a plain message). Polled about every 2 seconds while the card is open. A read, not held on a stale link. Not built in either app yet.'),
@@ -581,6 +581,30 @@ def _mentions(dirs, word):
     return False
 
 
+# Routes the phone builds from a constant (`"${Youtube.PATH}/${cur.id}"`), so no
+# full `/api/...` literal exists for `scan` to find. Each is counted as called by
+# the phone ONLY while the named file still contains the named text; delete the
+# entry if the call goes.
+PHONE_BUILT_ROUTES = {
+    "/api/youtube/{id}": ("jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt",
+                          '"${com.jarvis.client.net.Youtube.PATH}/${cur.id}"'),
+    "/api/youtube/{id}/cancel": ("jarvis-client/app/src/main/java/com/jarvis/client/JarvisRuntime.kt",
+                                 '"${com.jarvis.client.net.Youtube.PATH}/${cur.id}/cancel"'),
+}
+
+
+def phone_built_routes():
+    found = {}
+    for route, (rel, needle) in PHONE_BUILT_ROUTES.items():
+        try:
+            with open(os.path.join(ROOT, rel), encoding="utf-8", errors="replace") as fh:
+                if needle in strip_comments(fh.read(), os.path.splitext(rel)[1]):
+                    found[route] = {rel}
+        except OSError:
+            pass
+    return found
+
+
 def check_route_fields(problems, warnings):
     for name, (d_status, p_status, _) in ROUTE_FIELDS.items():
         in_desk = _mentions(DESKTOP_DIRS, name)
@@ -601,6 +625,8 @@ def main():
     desk_at = scan(DESKTOP_DIRS, allow)
     unused_allow = apply_allowlists(desk_at, allow)
     phone_at = scan(PHONE_DIRS)
+    for route, files in phone_built_routes().items():
+        phone_at.setdefault(route, set()).update(files)
     desk, phone = set(desk_at), set(phone_at)
     problems, warnings = [], []
 

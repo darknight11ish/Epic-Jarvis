@@ -100,6 +100,9 @@ internal fun QuizSection(
     val rememberedNotice by JarvisRuntime.spanishNotice.collectAsState()
     val youtubeNote by JarvisRuntime.youtubeNote.collectAsState()
     val youtubeOpen by JarvisRuntime.youtube.collectAsState()
+    // "Show or hide menus" (docs/JARVIS-API.md section 109): the owner may hide the YouTube link
+    // block. A request already open on the PC keeps its block (so Cancel is never lost).
+    val menus by JarvisRuntime.menus.view.collectAsState()
     var pasted by remember { mutableStateOf("") }
     // Spanish practice's start form (the level and exercise are requests; the PC's default otherwise).
     var mode by remember { mutableStateOf(Quiz.MODE_TEXT) }
@@ -484,7 +487,7 @@ internal fun QuizSection(
                 open != null -> Unit
                 else -> {
                     // A request already open on the PC keeps its block in either mode.
-                    val showYoutube = mode == Quiz.MODE_TEXT || youtubeOpen != null
+                    val showYoutube = (mode == Quiz.MODE_TEXT && menus.shows("brain.work.quiz.youtube")) || youtubeOpen != null
                     if (!privateHidden) {
                         StartForm(
                             mode = mode,

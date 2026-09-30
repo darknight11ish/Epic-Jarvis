@@ -1602,6 +1602,7 @@ private fun NavToggle(shown: Boolean, onToggle: (Boolean) -> Unit) {
 @Composable
 private fun NavRow(state: HomeState, actions: HomeActions) {
     val chrome = LocalChrome.current
+    val menus by com.jarvis.client.JarvisRuntime.menus.view.collectAsState()
     // UI-AUDIT-2026-09-18 choice A1: icons + words, status separated
     // from navigation by a rule, Brain gets a real button, "Look"
     // becomes "Appearance". Four destinations, evenly weighted so the
@@ -1628,12 +1629,16 @@ private fun NavRow(state: HomeState, actions: HomeActions) {
                 onClick = actions.onOpenLive,
                 modifier = Modifier.weight(1f),
             )
-            NavItem(
-                icon = { AppearanceIcon(chrome.textMid) },
-                label = "Appearance",
-                onClick = actions.onOpenAppearance,
-                modifier = Modifier.weight(1f),
-            )
+            // "Show or hide menus" (docs/JARVIS-API.md section 109): the owner may hide this button;
+            // Appearance itself is still in Settings and "open appearance" still works.
+            if (menus.shows("entry.appearance")) {
+                NavItem(
+                    icon = { AppearanceIcon(chrome.textMid) },
+                    label = "Appearance",
+                    onClick = actions.onOpenAppearance,
+                    modifier = Modifier.weight(1f),
+                )
+            }
             NavItem(
                 icon = { HelpIcon(chrome.textMid) },
                 label = "Help",

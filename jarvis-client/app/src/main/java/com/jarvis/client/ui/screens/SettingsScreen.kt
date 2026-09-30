@@ -12,6 +12,13 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import com.jarvis.client.JarvisRuntime
+import com.jarvis.client.ui.MenuPlaces
+import com.jarvis.client.ui.parts.ScrollToKeyOnce
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
@@ -72,27 +79,34 @@ import com.jarvis.client.ui.theme.LocalChrome
  * combined both pieces of work was a clean auto-merge with no text
  * conflict here. Fixed by re-reading the real `item(key = ...)` order
  * below rather than hand-adjusting the old numbers.
+ *
+ * Since "Show or hide menus" (2026-09-30) the screen no longer scrolls by these
+ * positions: a hidden menu (or the "N hidden - Show" line at the top) shifts every item below
+ * it, so it scrolls BY KEY ([MenuPlaces.SETTINGS]). This map is the layout with nothing hidden,
+ * kept so OpenPlaceTest can still check each target against a real row.
  */
 private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
     "voice" to 0,
     "security" to 1,
-    "appearance-card" to 2,
+    // "Show or hide menus" (docs/JARVIS-API.md section 109) sits right after Security.
+    "menu-visibility" to 2,
+    "appearance-card" to 3,
     // "Animal options" lives inside Appearance on the phone (2026-09-28):
     // the Appearance row, whose button opens it.
-    "animal-options" to 2,
-    "manner" to 4,
-    "web-search" to 5,
-    "asks-first" to 6,
-    "reach" to 7,
-    "email-sending" to 8,
-    "folders" to 9,
-    "backup" to 10,
-    "watch-notify" to 11,
-    "phone-notify" to 12,
-    "screen-look" to 13,
-    "browser-engine" to 14,
-    "devices" to 15,
-    "quick-tiles" to 16,
+    "animal-options" to 3,
+    "manner" to 5,
+    "web-search" to 6,
+    "asks-first" to 7,
+    "reach" to 8,
+    "email-sending" to 9,
+    "folders" to 10,
+    "backup" to 11,
+    "watch-notify" to 12,
+    "phone-notify" to 13,
+    "screen-look" to 14,
+    "browser-engine" to 15,
+    "devices" to 16,
+    "quick-tiles" to 17,
 )
 
 /**
@@ -181,16 +195,26 @@ fun SettingsScreen(
     // (Manner/WebSearch/AsksFirst/WatchNotify all take it) - rule 4.
     val canAct = link == LinkState.CONNECTED && !stale
     val listState = rememberLazyListState()
+    // Which menus this phone has hidden or folded ("Show or hide menus"). A link that opened a
+    // hidden one shows it for THIS visit only; leaving the screen ends the visit.
+    val menus by JarvisRuntime.menus.view.collectAsState()
+    DisposableEffect(Unit) { onDispose { JarvisRuntime.menus.endVisit() } }
 
     Column(modifier.fillMaxSize().background(chrome.surface0).navigationBarsPadding()) {
         TopBar("Settings", onBack)
 
-        LaunchedEffect(initialSection) {
-            val section = initialSection ?: return@LaunchedEffect
-            val index = SETTINGS_ITEM_INDEX[section]
-            if (index != null) listState.animateScrollToItem(index)
-            onSectionConsumed()
+        // Scrolls BY KEY, not by position: a hidden menu (docs/JARVIS-API.md section 109) moves
+        // every item below it, so SETTINGS_ITEM_INDEX above is only the map OpenPlaceTest reads.
+        val target = initialSection?.let { MenuPlaces.SETTINGS_ALIAS[it] ?: it }
+        val known = target != null && target in MenuPlaces.SETTINGS.keys
+        ScrollToKeyOnce(listState, if (known) target else null, onSectionConsumed)
+        LaunchedEffect(initialSection, known) {
+            // An id newer than this app has no row here: nothing to scroll to, but it is done.
+            if (initialSection != null && !known) onSectionConsumed()
         }
+        // "3 hidden - Show" jumps to the list below.
+        var jumpTo by remember { mutableStateOf<String?>(null) }
+        ScrollToKeyOnce(listState, jumpTo) { jumpTo = null }
 
         LazyColumn(
             Modifier.weight(1f).fillMaxWidth(),
@@ -198,50 +222,60 @@ fun SettingsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            item(key = "voice") {
-                Section("Voice") {
-                    Plate {
-                        Text(
-                            "Whether Jarvis knows your voice, how strict that check is, and " +
-                                "the voice Jarvis answers in.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = chrome.textMid,
-                        )
-                        val any = onTrainVoice != null || onVoiceCheck != null || onVoices != null
-                        if (any) Gap(10)
-                        onTrainVoice?.let {
-                            Secondary("Train my voice", modifier = Modifier.fillMaxWidth(), onClick = it)
-                            Gap(8)
-                        }
-                        onVoiceCheck?.let {
-                            Secondary(
-                                "Voice check: how strict, private answers",
-                                modifier = Modifier.fillMaxWidth(),
-                                onClick = it,
-                            )
-                            Gap(8)
-                        }
-                        onVoices?.let {
-                            Secondary("Jarvis's voice", modifier = Modifier.fillMaxWidth(), onClick = it)
-                        }
-                        if (!any) {
-                            Gap(6)
+            // "3 hidden - Show": where hidden menus used to be (the list is just below).
+            if (menus.hiddenCount > 0) {
+                item(key = "menus-hidden") { HiddenMenusLine(menus.hiddenCount) { jumpTo = "menu-visibility" } }
+            }
+
+            if (menus.shows("settings.voice")) item(key = "voice") {
+                MenuFrame(menus, "settings.voice") {
+                    Section("Voice") {
+                        Plate {
                             Text(
-                                "Pair with your desktop first - these settings live on it.",
+                                "Whether Jarvis knows your voice, how strict that check is, and " +
+                                    "the voice Jarvis answers in.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = chrome.textMid,
+                            )
+                            val voiceCheck = onVoiceCheck?.takeIf { menus.shows("entry.voice-check") }
+                            val voices = onVoices?.takeIf { menus.shows("entry.voices") }
+                            val any = onTrainVoice != null || voiceCheck != null || voices != null
+                            if (any) Gap(10)
+                            onTrainVoice?.let {
+                                Secondary("Train my voice", modifier = Modifier.fillMaxWidth(), onClick = it)
+                                Gap(8)
+                            }
+                            voiceCheck?.let {
+                                Secondary(
+                                    "Voice check: how strict, private answers",
+                                    modifier = Modifier.fillMaxWidth(),
+                                    onClick = it,
+                                )
+                                Gap(8)
+                            }
+                            voices?.let {
+                                Secondary("Jarvis's voice", modifier = Modifier.fillMaxWidth(), onClick = it)
+                            }
+                            // Not "paired": a row the owner hid is not the same as no desktop.
+                            if (onTrainVoice == null && onVoiceCheck == null && onVoices == null) {
+                                Gap(6)
+                                Text(
+                                    "Pair with your desktop first - these settings live on it.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = chrome.textLo,
+                                )
+                            }
+                            Gap(8)
+                            // Android 17 (docs/JARVIS-API.md section 81.3): Jarvis
+                            // already plays its answers as assistant sound
+                            // (audio/Speaker.kt, USAGE_ASSISTANT), which Android 17
+                            // gives its own volume slider. Nothing to switch on.
+                            Text(
+                                ASSISTANT_VOLUME_LINE,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = chrome.textLo,
                             )
                         }
-                        Gap(8)
-                        // Android 17 (docs/JARVIS-API.md section 81.3): Jarvis
-                        // already plays its answers as assistant sound
-                        // (audio/Speaker.kt, USAGE_ASSISTANT), which Android 17
-                        // gives its own volume slider. Nothing to switch on.
-                        Text(
-                            ASSISTANT_VOLUME_LINE,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = chrome.textLo,
-                        )
                     }
                 }
             }
@@ -260,87 +294,100 @@ fun SettingsScreen(
                 }
             }
 
-            item(key = "appearance") {
-                Section("Appearance") {
-                    Plate {
-                        Text(
-                            "Theme, the reactor's face, the animal options, and how it all looks.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = chrome.textMid,
-                        )
-                        Gap(10)
-                        val openAppearance = onOpenAppearance
-                        if (openAppearance != null) {
-                            Secondary("Appearance", modifier = Modifier.fillMaxWidth(), onClick = openAppearance)
-                        } else {
+// "Show or hide menus" (docs/JARVIS-API.md section 109): never hideable itself.
+            item(key = "menu-visibility") { MenuVisibilitySection() }
+
+                        if (menus.shows("settings.appearance-card")) item(key = "appearance") {
+                MenuFrame(menus, "settings.appearance-card") {
+                    Section("Appearance") {
+                        Plate {
                             Text(
-                                "Pair with your desktop first - Appearance shares the face and " +
-                                    "colours with it.",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = chrome.textLo,
+                                "Theme, the reactor's face, the animal options, and how it all looks.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = chrome.textMid,
                             )
+                            Gap(10)
+                            val openAppearance = onOpenAppearance
+                            if (openAppearance != null) {
+                                Secondary("Appearance", modifier = Modifier.fillMaxWidth(), onClick = openAppearance)
+                            } else {
+                                Text(
+                                    "Pair with your desktop first - Appearance shares the face and " +
+                                        "colours with it.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = chrome.textLo,
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            item(key = "floating-avatar") {
-                FloatingAvatarSection(
-                    mode = floatingAvatar,
-                    onModeChange = onFloatingAvatarChange,
-                    overlayGranted = overlayGranted,
-                    onRequestOverlay = onRequestOverlay,
-                    onOpenBubbleSettings = onOpenBubbleSettings,
-                )
+            if (menus.shows("settings.floating-avatar")) item(key = "floating-avatar") {
+                MenuFrame(menus, "settings.floating-avatar") {
+                    FloatingAvatarSection(
+                        mode = floatingAvatar,
+                        onModeChange = onFloatingAvatarChange,
+                        overlayGranted = overlayGranted,
+                        onRequestOverlay = onRequestOverlay,
+                        onOpenBubbleSettings = onOpenBubbleSettings,
+                    )
+                }
             }
 
             // The seven sections moved whole from Brain's old "Settings"
             // group - see this file's own doc comment.
-            item(key = "manner") { MannerSection(canAct = canAct) }
-            item(key = "web-search") { WebSearchSection(canAct = canAct) }
+            if (menus.shows("settings.manner")) item(key = "manner") { MenuFrame(menus, "settings.manner") { MannerSection(canAct = canAct) } }
+            if (menus.shows("settings.web-search")) item(key = "web-search") { MenuFrame(menus, "settings.web-search") { WebSearchSection(canAct = canAct) } }
             item(key = "asks-first") { AsksFirstSection(canAct = canAct) }
-            item(key = "reach") { ReachSection() }
-            item(key = "email-sending") { EmailSendingSection() }
-            item(key = "folders") { FoldersSection() }
-            item(key = "backup") { BackupSection() }
-            item(key = "watch-notify") { WatchNotifySection(canAct = canAct) }
-            item(key = "phone-notify") {
-                PhoneNotificationsSection(
-                    canAct = canAct,
-                    notificationAccessGranted = notificationAccessGranted,
-                    onOpenNotificationAccess = onOpenNotificationAccess,
-                )
+            if (menus.shows("settings.reach")) item(key = "reach") { MenuFrame(menus, "settings.reach") { ReachSection() } }
+            if (menus.shows("settings.email-sending")) item(key = "email-sending") { MenuFrame(menus, "settings.email-sending") { EmailSendingSection() } }
+            if (menus.shows("settings.folders")) item(key = "folders") { MenuFrame(menus, "settings.folders") { FoldersSection() } }
+            if (menus.shows("settings.backup")) item(key = "backup") { MenuFrame(menus, "settings.backup") { BackupSection() } }
+            if (menus.shows("settings.watch-notify")) item(key = "watch-notify") { MenuFrame(menus, "settings.watch-notify") { WatchNotifySection(canAct = canAct) } }
+            if (menus.shows("settings.phone-notify")) item(key = "phone-notify") {
+                MenuFrame(menus, "settings.phone-notify") {
+                    PhoneNotificationsSection(
+                        canAct = canAct,
+                        notificationAccessGranted = notificationAccessGranted,
+                        onOpenNotificationAccess = onOpenNotificationAccess,
+                    )
+                }
             }
 
             // Picture mode for "Look at this" and "Watch with me" (the owner's
             // decision of 2026-09-29): a slow picture model on the PC's processor.
-            item(key = "screen-look") { ScreenPictureSection(canAct = canAct) }
+            if (menus.shows("settings.screen-look")) item(key = "screen-look") { MenuFrame(menus, "settings.screen-look") { ScreenPictureSection(canAct = canAct) } }
 
             // The headless browser, Obscura (the owner's decision of 2026-09-29):
             // Jarvis may choose a browser with no window for plain reading.
-            item(key = "browser-engine") { BrowserEngineSection(canAct = canAct) }
+            if (menus.shows("settings.browser-engine")) item(key = "browser-engine") { MenuFrame(menus, "settings.browser-engine") { BrowserEngineSection(canAct = canAct) } }
 
             // Every device with its own key (docs/PAIRING-DESIGN.md section 7.2),
             // shown only when the PC reports pairing (section 5.5).
-            item(key = "devices") {
-                val version by com.jarvis.client.JarvisRuntime.version.collectAsState()
-                if (version?.can("pairing") == true) {
-                    DevicesSection()
-                } else {
-                    Section("Devices") {
-                        Plate {
-                            Text(
-                                com.jarvis.client.net.Devices.MISSING,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = chrome.textLo,
-                            )
+            if (menus.shows("settings.devices")) item(key = "devices") {
+                MenuFrame(menus, "settings.devices") {
+                    val version by com.jarvis.client.JarvisRuntime.version.collectAsState()
+                    if (version?.can("pairing") == true) {
+                        DevicesSection()
+                    } else {
+                        Section("Devices") {
+                            Plate {
+                                Text(
+                                    com.jarvis.client.net.Devices.MISSING,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = chrome.textLo,
+                                )
+                            }
                         }
                     }
                 }
             }
 
-            item(key = "quick-tiles") {
-                QuickTilesSection(tiles = quickTiles, onChange = onQuickTileChange)
+            if (menus.shows("settings.quick-tiles")) item(key = "quick-tiles") {
+                MenuFrame(menus, "settings.quick-tiles") {
+                    QuickTilesSection(tiles = quickTiles, onChange = onQuickTileChange)
+                }
             }
 
             item(key = "tail") { Gap(24) }

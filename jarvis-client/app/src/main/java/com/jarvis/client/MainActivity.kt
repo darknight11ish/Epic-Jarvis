@@ -1176,6 +1176,10 @@ class MainActivity : FragmentActivity() {
             val target = openSettingsTarget ?: return@LaunchedEffect
             when (val where = OpenPlace.whereFor(target)) {
                 is OpenPlace.Where.Go -> {
+                    // A link to a menu the owner hid ("Show or hide menus") opens it for THIS visit
+                    // only, before the screen is drawn; the screen ends the visit when it is left.
+                    com.jarvis.client.ui.MenuPlaces.menuFor(where.screen.name, where.section)
+                        ?.let { JarvisRuntime.menus.showForVisit(it) }
                     pendingSection = where.section
                     pendingSectionScreen = where.screen.name
                     nav.go(where.screen)
@@ -1183,6 +1187,17 @@ class MainActivity : FragmentActivity() {
                 is OpenPlace.Where.OnPc -> JarvisRuntime.setNotice(where.notice)
             }
             chat.consumeOpenSettings()
+        }
+        // "Hide the finance menu" by voice or chat (X-Jarvis-Route `menu_visibility`,
+        // docs/JARVIS-API.md section 109.2): per device, so the PC changed nothing and this phone
+        // applies it to its own list - once, then it is consumed, like face_tuning below. Hiding
+        // only tidies: no card, nothing turned off. A menu this phone does not have, and a
+        // never-hideable one, are ignored (MenuLogic); the answer already said what was done.
+        val menuChangeTarget by chat.menuChange.collectAsState()
+        LaunchedEffect(menuChangeTarget) {
+            val change = menuChangeTarget ?: return@LaunchedEffect
+            JarvisRuntime.menus.apply(change.action, change.target)
+            chat.consumeMenuChange()
         }
         // "Make the animal sharper" by voice or chat (X-Jarvis-Route
         // `face_tuning`, 2026-09-28): per device, so the PC changed nothing
@@ -1232,6 +1247,7 @@ class MainActivity : FragmentActivity() {
         LaunchedEffect(openTileSettingsRequested.value) {
             if (!openTileSettingsRequested.value) return@LaunchedEffect
             openTileSettingsRequested.value = false
+            JarvisRuntime.menus.showForVisit("settings.quick-tiles")
             pendingSection = QUICK_TILES_SECTION
             pendingSectionScreen = Screen.SETTINGS.name
             nav.resetTo(Screen.HOME)
@@ -2386,6 +2402,13 @@ class MainActivity : FragmentActivity() {
                             // voice or chat (OpenPlace).
                             initialSection = sectionFor(Screen.BRAIN),
                             onSectionConsumed = sectionConsumed,
+                            // "3 hidden - Show" at the bottom of Brain: Settings, at the
+                            // "Show or hide menus" list.
+                            onOpenMenuList = {
+                                pendingSection = "menu-visibility"
+                                pendingSectionScreen = Screen.SETTINGS.name
+                                nav.go(Screen.SETTINGS)
+                            },
                         )
                     }
 
@@ -2410,6 +2433,7 @@ class MainActivity : FragmentActivity() {
                         // Brain's plate, as "forget what you learned last
                         // week" opens it (OpenPlace).
                         onOpenForgetRange = {
+                            JarvisRuntime.menus.showForVisit("brain.history.forget-range")
                             pendingSection = "forget-range"
                             pendingSectionScreen = Screen.BRAIN.name
                             nav.go(Screen.BRAIN)
