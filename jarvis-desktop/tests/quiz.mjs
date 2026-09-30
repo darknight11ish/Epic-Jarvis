@@ -256,7 +256,7 @@ await check("one question at a time: Check my answer sends ONE answer, then the 
   assert.match(text, /Partly/);
   assert.match(text, /The passage says otherwise\./);
   assert.match(text, /SOURCE PASSAGE 1/);
-  assert.match(text, new RegExp(GUESS_LABEL), "Jarvis's guess is missing while the grader is not verified");
+  assert.match(text, new RegExp(GUESS_LABEL, "i"), "Jarvis's guess is missing while the grader is not verified");
   assert.doesNotMatch(text, /\d+ ?%|streak|score/i);
 });
 
@@ -282,7 +282,7 @@ await check("a crisis answer shows the PC's words calmly, no mark, keeps the que
   assert.match(text, /STAND-IN HELP WORDS\./);
   assert.deepEqual(bold, ["988"]);
   assert.doesNotMatch(text, /Not yet|Got it|Partly/);
-  assert.doesNotMatch(text, new RegExp(GUESS_LABEL));
+  assert.doesNotMatch(text, new RegExp(GUESS_LABEL, "i"));
   assert.ok(stillQ1, "the quiz did not stay on question 1");
   assert.equal(left, "", "the typed words stayed in the answer box");
   assert.doesNotMatch(html, /HELPME|feel awful|color: ?red/);
@@ -300,7 +300,7 @@ await check("\"Jarvis's guess\" is gone once the grader is verified", async () =
   const text = await page.locator("#quiz-run").innerText();
   await page.close();
   assert.match(text, /Got it/);
-  assert.doesNotMatch(text, new RegExp(GUESS_LABEL));
+  assert.doesNotMatch(text, new RegExp(GUESS_LABEL, "i"));
 });
 
 await check("an empty answer is refused in plain words and nothing is sent", async () => {
@@ -330,7 +330,7 @@ await check("Next question, then Finish shows \"Look at these again\" with the q
   const text = await page.locator("#quiz-run").innerText();
   await page.close();
   assert.match(progress, /Not yet/);
-  assert.match(text, new RegExp(AGAIN_HEADING));
+  assert.match(text, new RegExp(AGAIN_HEADING, "i"));
   assert.match(text, /1 Got it · 0 Partly · 1 Not yet/);
   assert.match(text, /2\. Question text number 2\?/, "the summary does not list the question's words");
   assert.match(text, /^Close$/m);
@@ -437,9 +437,12 @@ await check("nothing is stored: no text, answer, mark or draft in localStorage o
     Object.entries(localStorage), Object.entries(sessionStorage)]));
   await page.close();
   assert.doesNotMatch(stored, /SECRET ANSWER|Bread is made|SOURCE PASSAGE|already|Question text/);
-  const src = read("src/quiz.js") + read("src/brain.js").split("Quiz me on a text (the owner")[1]
+  // The section starts inside its banner comment, so it is put back in one.
+  const src = read("src/quiz.js") + "\n/*" + read("src/brain.js").split("Quiz me on a text (the owner")[1]
     .split("// Private answers turned on or off")[0];
-  assert.doesNotMatch(src, /localStorage|sessionStorage|indexedDB/i);
+  // The code, not the comments that say where nothing is kept.
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'\\])\/\/[^\n]*/g, "$1");
+  assert.doesNotMatch(code, /localStorage|sessionStorage|indexedDB/i);
 });
 
 await check("the words are hidden with the private lists and come back after Show", async () => {

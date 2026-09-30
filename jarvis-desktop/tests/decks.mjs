@@ -514,7 +514,7 @@ if (K) {
     assert.match(first, /3 cards/);
     assert.match(first, /2 ready/);
     assert.match(second, /1 card\b/);
-    assert.match(second, /Paused/);
+    assert.match(second, /Paused/i);
     assert.deepEqual(btns1, [W.review, W.pause, W.cards_link, W.edit, W.delete_deck]);
     assert.deepEqual(btns2, [W.review, W.resume, W.cards_link, W.edit, W.delete_deck]);
     assert.match(body, new RegExp(W.new_per_day));
@@ -567,7 +567,7 @@ if (K) {
     const focused = await page.evaluate(() => document.activeElement && document.activeElement.dataset.fkey);
     await page.close();
     assert.deepEqual(calls.map((c) => [c.id, c.action]), [["d1a2b3c4d5e6", "pause"]]);
-    assert.match(row, /Paused/);
+    assert.match(row, /Paused/i);
     assert.equal(focused, "pause:d1a2b3c4d5e6");
   });
 
@@ -687,7 +687,7 @@ if (K) {
     assert.match(next, /Where does it happen\?/);
     assert.ok(comes, `the date the PC gave is shown: ${next}`);
     assert.deepEqual(calls.map((c) => c.rating), ["good", "again"]);
-    assert.ok(done.includes(W.nothing_ready));
+    assert.ok(done.toLowerCase().includes(W.nothing_ready.toLowerCase()));
     assert.ok(done.includes("Next cards ready on 3 Oct 2026"), done);
     assert.equal(banned(done).length, 0);
   });
@@ -709,7 +709,7 @@ if (K) {
     const back = await text(page, "#decks-card");
     const calls = (await dcalls(page)).filter((c) => c.cmd === "brain_review_more");
     await page.close();
-    assert.ok(enough.includes(W.enough));
+    assert.ok(enough.toLowerCase().includes(W.enough.toLowerCase()));
     assert.ok(enough.includes(W.more) && enough.includes(W.stop));
     assert.match(more, /Where does it happen\?/);
     assert.equal(calls.length, 1);
@@ -723,7 +723,7 @@ if (K) {
     await settle(page, 500);
     const one = await text(page, "#decks-body");
     await page.close();
-    assert.match(one, /This deck is paused/);
+    assert.match(one, /This deck is paused/i);
     const both = await workTab({ decks: { decks: [{ ...PLANTS(), paused: true }, VERBOS()] } });
     await both.locator("#decks-card").getByRole("button", { name: /^Review/ }).first().click();
     await settle(both, 500);
@@ -880,7 +880,7 @@ if (K) {
     assert.match(run, /Level B1 \(roughly\)/);
     assert.ok(run.includes("THE PC'S OWN SPANISH NOTICE"), "the notice is the PC's, above the answer box");
     assert.deepEqual(accents, FIX.accents);
-    assert.equal(kind, W.kind_blank);
+    assert.equal(kind.toLowerCase(), W.kind_blank.toLowerCase());
   });
 
   await check("an accent button puts its letter at the cursor and the count line follows", async () => {
@@ -919,17 +919,26 @@ if (K) {
   });
 
   await check("a PC without Spanish practice says so, and Text mode is all that is offered afterwards", async () => {
-    const page = await workTab({ quiz: { noMode: true } });
-    await startSpanish(page, {});
-    const run = await text(page, "#quiz-run");
-    const disabled = await page.locator('input[name="quiz-mode"][value="spanish"]').isDisabled();
-    const checked = await page.locator('input[name="quiz-mode"][value="text"]').isChecked();
-    const formShown = await page.locator("#quiz-start-form").isVisible();
-    await page.close();
+    // Pasting Spanish text: the older PC answers with a quiz that has no mode.
+    const withText = await workTab({ quiz: { noMode: true } });
+    await startSpanish(withText, { text: PASTE });
+    const run = await text(withText, "#quiz-run");
+    const disabled = await withText.locator('input[name="quiz-mode"][value="spanish"]').isDisabled();
+    const checked = await withText.locator('input[name="quiz-mode"][value="text"]').isChecked();
+    const formShown = await withText.locator("#quiz-start-form").isVisible();
+    const stopped = (await qcalls(withText)).some((c) => c.cmd === "brain_quiz_stop");
+    await withText.close();
     assert.ok(run.includes(Q.OLD_PC_SPANISH));
     assert.equal(disabled, true);
     assert.equal(checked, true);
     assert.equal(formShown, true);
+    assert.equal(stopped, true, "the quiz the older PC made was let go");
+    // No text at all: the older PC says "too short", which a PC with Spanish never does.
+    const none = await workTab({ quiz: { noMode: true } });
+    await startSpanish(none, {});
+    const words = await text(none, "#quiz-run");
+    await none.close();
+    assert.ok(words.includes(Q.OLD_PC_SPANISH), words);
   });
 
   await check("Keep: every answered question is a row, ticked for Partly and Not yet, the back prefilled only for Got it", async () => {

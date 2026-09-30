@@ -307,3 +307,234 @@
   white-space: pre;
   overflow: auto;
 }
+
+/* ── Progress: the activity heatmap and the balance chart ─────────────────
+   (progress-panel.js; docs/GOALS-PROGRESS-DESIGN.md part C). Existing theme
+   tokens only, so Reactor, Daylight and High Contrast each keep the app's own
+   accent contrast. No red anywhere: a quiet day is a plain outline, the
+   balance target is the amber dashed line the benchmark chart uses. */
+
+#progress-root {
+  padding-bottom: 0;
+}
+
+#progress-root[hidden] {
+  display: none;
+}
+
+.pg-card .pg-block {
+  margin: 0 0 16px;
+}
+
+.pg-figure {
+  margin: 6px 0;
+}
+
+.pg-grid {
+  display: block;
+  overflow: visible;
+  margin: 2px 0 8px;
+}
+
+.pg-legend {
+  display: block;
+  overflow: visible;
+  margin: 0 0 4px;
+}
+
+/* Level 0: no fill, a one pixel outline. Levels 1 to 4: the accent laid over
+   the panel surface at 0.22, 0.42, 0.66 and 0.92. */
+.pg-base {
+  fill: var(--surface-2);
+}
+
+.pg-cell {
+  stroke: none;
+}
+
+.pg-l0 {
+  fill: none;
+  stroke: var(--border-strong);
+  stroke-width: 1;
+}
+
+.pg-l1 {
+  fill: rgb(var(--accent-rgb) / 0.22);
+}
+
+.pg-l2 {
+  fill: rgb(var(--accent-rgb) / 0.42);
+}
+
+.pg-l3 {
+  fill: rgb(var(--accent-rgb) / 0.66);
+}
+
+.pg-l4 {
+  fill: rgb(var(--accent-rgb) / 0.92);
+}
+
+.pg-words {
+  margin: 0 0 4px;
+  color: var(--text);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+
+.pg-undated {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--text-2xs);
+}
+
+.pg-said {
+  min-height: 1.2em;
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.pg-said[data-tone="bad"] {
+  color: var(--bad-text);
+}
+
+.pg-radar {
+  display: block;
+  width: 100%;
+  max-width: 380px;
+  height: auto;
+  overflow: visible;
+}
+
+.pg-ring {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.pg-ring.pg-target {
+  stroke: var(--warn);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+}
+
+.pg-spoke {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.pg-shape {
+  fill: rgb(var(--accent-rgb) / 0.2);
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.pg-vertex {
+  fill: var(--accent);
+}
+
+.pg-empty-dot {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.pg-label {
+  fill: var(--text-muted);
+  font-size: 11px;
+}
+
+.pg-value {
+  fill: var(--text);
+  font-size: 10px;
+}
+
+.pg-list {
+  list-style: none;
+  margin: 6px 0 10px;
+  padding: 0;
+}
+
+.pg-item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  align-items: baseline;
+  padding: 3px 0;
+  border-bottom: var(--stroke-hair) solid var(--border);
+  font-size: var(--text-sm);
+}
+
+.pg-item-label {
+  color: var(--text);
+}
+
+.pg-item-value {
+  color: var(--text-muted);
+}
+
+.pg-private {
+  color: var(--text-faint);
+  font-size: var(--text-2xs);
+}
+
+.pg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+
+.pg-editor {
+  margin: 8px 0 0;
+}
+
+.pg-picks {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0;
+}
+
+.pg-pick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+}
+
+.pg-pick-label {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 14em;
+  font-size: var(--text-sm);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.pg-pick-words {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0 8px;
+}
+
+.pg-pick-project {
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+}
+
+.pg-rename {
+  max-width: 16em;
+}
+
+.pg-rename[hidden] {
+  display: none;
+}
+
+.pg-edit-error {
+  min-height: 1.2em;
+  margin: 6px 0 0;
+  color: var(--bad-text);
+  font-size: var(--text-xs);
+}

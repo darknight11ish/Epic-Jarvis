@@ -838,6 +838,15 @@
        "title": "Start reading notifications from apps you choose on your phone"
       },
       {
+       "action": "topic_loosen",
+       "fixed": false,
+       "id": "topic_loosen",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn a private topic back on, or let it learn or be used again"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -1832,6 +1841,15 @@
        "title": "Start reading notifications from apps you choose on your phone"
       },
       {
+       "action": "topic_loosen",
+       "fixed": false,
+       "id": "topic_loosen",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn a private topic back on, or let it learn or be used again"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -2821,6 +2839,15 @@
        "title": "Start reading notifications from apps you choose on your phone"
       },
       {
+       "action": "topic_loosen",
+       "fixed": false,
+       "id": "topic_loosen",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn a private topic back on, or let it learn or be used again"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -3805,6 +3832,15 @@
        "title": "Start reading notifications from apps you choose on your phone"
       },
       {
+       "action": "topic_loosen",
+       "fixed": false,
+       "id": "topic_loosen",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn a private topic back on, or let it learn or be used again"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -4787,6 +4823,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
+       "action": "topic_loosen",
+       "fixed": false,
+       "id": "topic_loosen",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn a private topic back on, or let it learn or be used again"
       },
       {
        "action": "modify_own_code",
@@ -5787,6 +5832,15 @@
        "title": "Start reading notifications from apps you choose on your phone"
       },
       {
+       "action": "topic_loosen",
+       "fixed": false,
+       "id": "topic_loosen",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn a private topic back on, or let it learn or be used again"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -6774,6 +6828,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Start reading notifications from apps you choose on your phone"
+      },
+      {
+       "action": "topic_loosen",
+       "fixed": false,
+       "id": "topic_loosen",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn a private topic back on, or let it learn or be used again"
       },
       {
        "action": "modify_own_code",

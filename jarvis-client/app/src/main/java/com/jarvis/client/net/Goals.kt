@@ -118,15 +118,11 @@ object Goals {
     // Steps that wait on other steps, and follow a number (docs/JARVIS-API.md
     // section 101; docs/GOALS-PROGRESS-DESIGN.md "Slice contract (frozen)").
     const val DO_FIRST = "Do these first"
-    const val DO_FIRST_UNDER = "This step stays locked until the ones you pick are done. Pick up to 3."
     const val FOLLOWS = "Follows a number"
-    const val FOLLOWS_NONE = "No number"
-    const val FOLLOWS_EMPTY = "No number with a target yet. Set a target on a benchmark in Projects first."
-    const val FOLLOWS_UNDER =
-        "The step shows \"reached\" when that number reaches its target. You still tick it yourself."
     const val FOLLOWS_LABEL = "Follows"
     const val UNDO = "Undo"
-    const val DROPPED_NEEDS = "Removed. It was also taken off what other steps wait on."
+    /** Shown when a tick is taken back while the private lists are hidden (no step words then). */
+    const val TICKED_GENERIC = "Ticked a step."
 
     /** The PC's own limit on what one step can wait on (`limits.needs`). */
     const val MAX_NEEDS = 3
@@ -139,26 +135,46 @@ object Goals {
      * `goal_words`). The PC fills the `{...}` in and sends the finished
      * sentence (`lock_words`, `reached_words`, `error`), so this app shows
      * those as sent and needs only [w]("locked") and [w]("measure_gone").
+     * Some keys (`follows_*`, `needs_*`, `reached_tag`, `ticked`, `unticked`) are
+     * the screens' own sentences: the PC never sends them, and
+     * tools/gen_projects_cases.py adds them to `goal_words` so both apps say
+     * them word for word.
      */
     val WORDS: Map<String, String> = mapOf(
         "after" to "after: {steps}",
         "after_open_again" to "after: {steps} (open again)",
         "circle" to "These steps wait on each other in a circle: {steps}.",
+        "follows_empty" to "No number with a target yet. Set a target on a benchmark in Projects first.",
+        "follows_none" to "No number",
+        "follows_under" to
+            "The step shows \"reached\" when that number reaches its target. You still tick it yourself.",
         "locked" to "locked",
         "locked_refusal" to "Do \"{step}\" first, or tick it if it is already done.",
         "measure_gone" to "The number this step follows is gone - tick it by hand.",
+        "needs_cleaned" to "Removed \"{step}\" - the steps that waited on it no longer do.",
+        "needs_limit" to "At most {max} steps can come first.",
+        "needs_none" to "Nothing - this step can start now",
+        "needs_under" to "This step stays locked until the ones you pick are done. Pick up to 3.",
         "no_such_benchmark" to "\"{step}\" follows a number that does not exist any more.",
         "no_target" to "\"{step}\" follows \"{name}\", which has no target yet - set one first.",
         "reached" to "The number reached its target: {latest} (target {target}).",
+        "reached_tag" to "number reached",
         "reached_tick" to "{step}: the number reached its target - tick it when you are ready.",
         "self_wait" to "\"{step}\" cannot wait on itself.",
+        "ticked" to "Ticked \"{step}\".",
         "too_many_needs" to "\"{step}\" can wait on at most 3 other steps.",
         "unknown_wait" to "\"{step}\" waits on a step that is not in this plan.",
+        "unticked" to "Unticked \"{step}\".",
         "waiting_on" to "Waiting on \"{step}\".",
     )
 
-    /** One of [WORDS]. */
-    fun w(key: String): String = WORDS.getValue(key)
+    /** One of [WORDS], with its `{step}` and `{max}` filled in when given. */
+    fun w(key: String, step: String? = null, max: Int? = null): String {
+        var out = WORDS.getValue(key)
+        if (step != null) out = out.replace("{step}", step)
+        if (max != null) out = out.replace("{max}", max.toString())
+        return out
+    }
 
     /**
      * The PC's own numbers (`backend/jarvis_goals.py` MAX_TEXT / MAX_STEPS /
@@ -353,9 +369,13 @@ object Goals {
         if (plan != null) put("plan", planJson(plan))
     }.toString()
 
-    /** The body of `.../step`: one step, marked done or not. */
-    fun stepBody(index: Int, done: Boolean): String = buildJsonObject {
-        put("index", index)
+    /**
+     * The body of `.../step`: one step, marked done or not. By the step's id
+     * when the PC gave it one (it stays put when steps move), else by
+     * position - an older PC's plan has no ids.
+     */
+    fun stepBody(stepId: String, index: Int, done: Boolean): String = buildJsonObject {
+        if (stepId.isNotEmpty()) put("id", stepId) else put("index", index)
         put("done", done)
     }.toString()
 
@@ -386,8 +406,8 @@ object Goals {
             reply.code == 404 && error == "no such goal" -> gone
             reply.code == 404 || reply.code == 501 -> TOO_OLD
             reply.code == 503 -> NOT_AVAILABLE
-            reply.code == 409 || reply.code == 400 ->
-                "Not changed. " + (error?.replaceFirstChar { it.uppercase() } ?: "Your PC said no, without a reason.")
+            // The PC's own sentence, as sent - no prefix, no rewording (same as the desktop).
+            reply.code == 409 || reply.code == 400 -> error ?: "Not changed. Your PC said no, without a reason."
             else -> "Not changed. Your PC answered ${reply.code}." + (error?.let { " $it" } ?: "")
         }
     }
@@ -439,14 +459,12 @@ object Goals {
             g.copy(
                 text = HIDDEN_TEXT,
                 plan = g.plan.map { s ->
-                    // lock_words repeat other steps' own words, so they go too;
-                    // a health or money number's name and value go with them.
-                    // The state stays: it is not a word, and it still drives the UI blind.
-                    s.copy(
-                        step = "", by = "", lockWords = "",
-                        reachedWords = if (s.measureSensitive) "" else s.reachedWords,
-                        measureName = if (s.measureSensitive) "" else s.measureName,
-                    )
+                    // lock_words repeat other steps' own words, and a followed number's
+                    // name and value are the owner's own: all three go for EVERY step,
+                    // exactly as the desktop does (goals.rs redact_goals), not only
+                    // for a health or money number. The state stays: it is not a word,
+                    // and it still drives the UI blind.
+                    s.copy(step = "", by = "", lockWords = "", reachedWords = "", measureName = "")
                 },
             )
         },

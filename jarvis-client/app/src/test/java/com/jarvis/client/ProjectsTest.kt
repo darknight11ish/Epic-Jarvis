@@ -16,6 +16,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.File
 
 /**
  * Projects on the phone (the owner's decision of 2026-09-28), read from what
@@ -361,5 +362,41 @@ class ProjectsTest {
         assertFalse(odd.drawable)
         // A bench read without `forecast` at all still reads.
         assertNull(Projects.parseBench(cases["bench_run"]!!.jsonObject["benchmark"]!!.jsonObject)!!.forecast)
+    }
+
+    @Test
+    fun `a forecast with blank words is still drawn, and only its words line is left out`() {
+        val steady = forecastCases.first { it["name"]!!.jsonPrimitive.content == "steady_fall" }
+        val want = steady["forecast"]!!.jsonObject
+        val blank = JsonObject(want + ("words" to kotlinx.serialization.json.JsonPrimitive("")))
+        val f = Projects.parseForecast(blank)!!
+        assertEquals("", f.words)
+        assertTrue("the drawing survives blank words", f.drawable)
+        assertNotNull(Projects.forecastGeometry(pointsOf(steady), f, targetOf(steady), 300f, 96f, 8f))
+        // The summary for a screen reader adds nothing after the chart's own sentence.
+        assertEquals("5 numbers. Latest: 76 min.", Projects.chartSummary(benchOf(steady).copy(forecast = f)))
+    }
+
+    @Test
+    fun `the chart is drawn by the same rule as the desktop's`() {
+        // docs/GOALS-PROGRESS-DESIGN.md "Forecast drawing rule": the trend line and the band's
+        // edge in the accent colour, dashed; the trend line under the numbers; the arrow is an
+        // open chevron with its tip at the clip point. Read from the source - Compose cannot draw here.
+        var dir: File? = File(System.getProperty("user.dir") ?: ".").absoluteFile
+        var src: String? = null
+        while (dir != null && src == null) {
+            val f = File(dir, "jarvis-client/app/src/main/java/com/jarvis/client/ui/screens/ProjectsPlate.kt")
+            if (f.isFile) src = f.readText()
+            dir = dir.parentFile
+        }
+        val plate = src ?: error("ProjectsPlate.kt not found")
+        val chart = plate.substring(plate.indexOf("private fun Chart("), plate.indexOf("private fun AddBench"))
+        assertTrue("an open chevron, not a filled triangle", chart.contains("drawChevron") && !chart.contains("drawArrow"))
+        val trend = chart.indexOf("fore.lineFrom.x")
+        val numbers = chart.indexOf("for (pt in placed) drawCircle")
+        assertTrue("the trend line is drawn under the numbers", trend in 0 until numbers)
+        assertTrue("the band's edge is the accent colour", chart.contains("band, accent.copy(alpha = 0.7f)"))
+        assertTrue("the trend line is the accent colour", chart.contains("accent, Offset(fore.lineFrom.x"))
+        assertFalse("no grey trend colour any more", chart.contains("val trend = chrome.textMid"))
     }
 }

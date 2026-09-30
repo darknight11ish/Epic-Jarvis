@@ -497,7 +497,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, decks,
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, progress, decks,
   folders, animal, chatbot, support, historyImport, widgets, devices, screen, spending, retirement }) {
   const listeners = {};
   window.__calls = [];
@@ -1702,6 +1702,44 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             return { ok: true, goal: { ...goal } };
           }
+          // brain/progress.rs (Activity heatmap and balance chart, JARVIS-API 105).
+          // `window.__progress` is null - an older PC with no such route, which
+          // Rust answers `{available: false}` - unless the scenario names
+          // `progress: {activity, balance, saved?, saveError?}`: the PC's answers
+          // as in tests/fixtures/progress-cases.json. Like Rust, an answer with
+          // `keep_on_screen` is replaced by the hidden words while the private
+          // lists are hidden or App lock is on, and a private picker row loses
+          // its name. A save is held on a stale link, recorded in `calls` (the
+          // axes exactly as sent) and answers `saved` (or the balance again), or
+          // throws `saveError` - the PC's sentence as sent.
+          case "brain_progress_activity":
+          case "brain_progress_balance":
+          case "brain_progress_balance_save": {
+            const pg = window.__progress;
+            if (!pg) {
+              if (cmd === "brain_progress_balance_save") throw new Error("Your PC's Jarvis does not have the Progress pictures yet - run apply-patches.ps1 on the PC.");
+              return { available: false };
+            }
+            pg.calls.push({ cmd, ...(cmd === "brain_progress_balance_save" ? { axes: JSON.parse(JSON.stringify(args.axes)) } : {}) });
+            if (cmd === "brain_progress_balance_save") {
+              if (state.stale) throw new Error("the event stream is stale");
+              if (pg.saveError) throw pg.saveError;
+              pg.balance = JSON.parse(JSON.stringify(pg.saved || pg.balance));
+            }
+            let out = JSON.parse(JSON.stringify(cmd === "brain_progress_activity" ? pg.activity : pg.balance));
+            if ((window.__security.hidden && !window.__security.revealed) || window.__appLock) {
+              const anyPrivate = out.keep_on_screen === true
+                || (out.axes || []).some((a) => a.keep_on_screen === true);
+              if (anyPrivate) {
+                return { ok: true, available: true, title: out.title, hidden: true, keep_on_screen: true,
+                  hidden_words: out.hidden_words || "Hidden while memory lists and chat history are hidden." };
+              }
+              for (const c of out.choices || []) {
+                if (c.keep_on_screen === true) Object.assign(c, { name: "", project_name: "", hidden: true });
+              }
+            }
+            return out;
+          }
           // brain/retirement.rs (the retirement what-if). `window.__retirement` is
           // null - a PC without it, which Rust answers with the "run
           // apply-patches.ps1" sentence - unless the scenario names
@@ -2417,7 +2455,8 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             (h.tagEdits = h.tagEdits || []).push({ ...args });
             const sec = window.__security;
             if (sec.hidden && !sec.revealed) throw new Error("Your chat history is hidden, and so are your tag names.");
-            const fail = (error) => ({ ok: false, error, message: error });
+            const say = { bad_name: "A tag name needs 1 to 24 characters, with at least one letter, number or symbol it can show.", name_taken: "You already have a tag with that name.", too_many_tags: "You can have up to 12 tags. Delete one to make room.", bad_colour: "That colour is not one of the eight.", bad_icon: "That icon is not on the list.", tag_not_found: "That tag is gone. Reload History to see your tags.", not_found: "That chat is gone - it may have been deleted.", bad_request: "That request was not understood." };
+            const fail = (error) => ({ ok: false, error, message: say[error] || error }); // the PC always sends a sentence (H.TAG_MESSAGES)
             const find = (id) => h.tags.find((t) => t.id === id);
             const nameTaken = (name, except) => h.tags.some((t) =>
               t.id !== except && t.name.toLowerCase() === name.toLowerCase());
@@ -2462,9 +2501,9 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const sec = window.__security;
             if (sec.hidden && !sec.revealed) throw new Error("Your chat history is hidden, and so are your tag names.");
             const c = h.conversations.find((x) => x.id === args.id);
-            if (!c) return { ok: false, error: "not_found", message: "not_found" };
+            if (!c) return { ok: false, error: "not_found", message: "That chat is gone - it may have been deleted." };
             if (args.tagId != null && !(h.tags || []).some((t) => t.id === args.tagId)) {
-              return { ok: false, error: "tag_not_found", message: "tag_not_found" };
+              return { ok: false, error: "tag_not_found", message: "That tag is gone. Reload History to see your tags." };
             }
             c.tag_id = args.tagId ?? null;
             return { ok: true, id: args.id, tag_id: c.tag_id };
@@ -2480,7 +2519,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             if (h.forkRefuse) return JSON.parse(JSON.stringify(h.forkRefuse));
             const src = h.transcripts[args.id];
             const row = h.conversations.find((x) => x.id === args.id);
-            if (!src || !row) return { ok: false, error: "not_found", message: "not_found" };
+            if (!src || !row) return { ok: false, error: "not_found", message: "That chat is not kept any more, so it was not forked." };
             const id = `${args.id}-fork`;
             const turns = src.turns.filter((t) => t.idx <= args.upto).map((t, i) => ({ ...t, idx: i }));
             const title = `Fork of ${row.title}`;
@@ -2946,6 +2985,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
     goals: [], reads: 0, fails: null, checkinByGoal: {}, ...goals })) : null;
   window.__goalsCalls = [];
   window.__retirement = retirement ? JSON.parse(JSON.stringify({ calls: [], form: null, script: [], delayMs: 0, ...retirement })) : null;
+  window.__progress = progress ? JSON.parse(JSON.stringify({ calls: [], ...progress })) : null;
   window.__quiz = quiz ? JSON.parse(JSON.stringify({ calls: [], quiz: null, ...quiz })) : null;
   window.__spending = spending ? JSON.parse(JSON.stringify({
     calls: [], tables: {}, hidden: false, proposals: {}, suggestions: [], fails: null,

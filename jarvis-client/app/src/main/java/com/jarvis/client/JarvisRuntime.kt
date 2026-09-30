@@ -4756,18 +4756,20 @@ object JarvisRuntime {
 
     /**
      * Marks one step of an active goal done or not - no card, the same
-     * shape as ticking off a to-do item. Held on a stale link. @return
+     * shape as ticking off a to-do item. Sent by the step's [stepId] when
+     * the PC gave it one, else by [index]. Held on a stale link. @return
      * whether it changed, the updated goal if so, and the sentence to show.
      */
     suspend fun setGoalStep(
         id: String,
+        stepId: String,
         index: Int,
         done: Boolean,
     ): Triple<Boolean, com.jarvis.client.net.Goals.Goal?, String> {
         actionBlocker()?.let { return Triple(false, null, it) }
         if (!com.jarvis.client.net.Goals.validId(id)) return Triple(false, null, "That is not one of your goals.")
         val result = when (val r = api.goalsWrite("/api/goals/$id/step",
-            com.jarvis.client.net.Goals.stepBody(index, done))) {
+            com.jarvis.client.net.Goals.stepBody(stepId, index, done))) {
             is ApiResult.Ok -> com.jarvis.client.net.Goals.changedSaid(r.value, doneWord = if (done) "Done." else "Unticked.")
             is ApiResult.Failed -> Triple(false, null, "Not changed. " + describe(r.error))
         }
@@ -6744,6 +6746,39 @@ object JarvisRuntime {
                 _projectsLast.value = r.value
             }
             is ApiResult.Failed -> com.jarvis.client.net.Projects.Outcome(false, false, "Not changed. " + describe(r.error))
+        }
+    }
+
+    // ---------------------------------------- activity heatmap and balance ----
+    // docs/JARVIS-API.md section 105 (the owner's tick of 2026-09-30) - see
+    // [com.jarvis.client.net.Progress] and ui/screens/ProgressPlate.kt. Read
+    // when Brain opens and after this phone's own save; nothing is kept, spoken
+    // or put in a notification.
+
+    /** The activity heatmap for [weeks] weeks (4..26). A read; never held. */
+    suspend fun progressActivity(weeks: Int): ApiResult<com.jarvis.client.net.Progress.Reply> =
+        api.progressActivity(weeks)
+
+    /** The balance chart and what can be picked for it. A read; never held. */
+    suspend fun progressBalance(): ApiResult<com.jarvis.client.net.Progress.Reply> =
+        api.progressBalance()
+
+    /**
+     * Saves the balance chart's areas (3 to 8, or none to clear). No card, but
+     * held on a stale link (rule 4) and refused while "Hide memory lists and
+     * chat history" is on, since the picker's names are hidden then. The PC's
+     * own refusal sentence comes back as sent.
+     */
+    suspend fun progressBalanceSave(json: String): com.jarvis.client.net.Progress.Outcome {
+        if (privateListsHidden) {
+            return com.jarvis.client.net.Progress.Outcome(false, com.jarvis.client.net.Progress.w("hidden"), null)
+        }
+        actionBlocker()?.let { return com.jarvis.client.net.Progress.Outcome(false, it, null) }
+        return when (val r = api.progressBalanceSave(json)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Progress.saved(r.value)
+            is ApiResult.Failed -> com.jarvis.client.net.Progress.Outcome(
+                false, "Not changed. " + describe(r.error), null,
+            )
         }
     }
 

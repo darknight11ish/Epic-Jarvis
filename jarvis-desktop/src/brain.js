@@ -7902,15 +7902,16 @@ if (dom.goalsNewAdd) {
 const qz = { quiz: null, summary: null, shown: null, busy: "", error: "", last: null, crisis: "",
   // Spanish practice (JARVIS-API 102.4): the chosen mode, the PC's own Spanish
   // notice once it has been seen, and whether the PC is too old for Spanish.
-  mode: "text", notice: "", textOnly: false,
+  mode: "text", notice: "", textOnly: false, refusal: "",
   // What the owner typed for each answered question, in this window's memory
   // only, until the quiz ends - it fills the Keep sheet's backs for a "Got it"
   // mark. Never a crisis answer, never stored anywhere.
   answers: new Map(),
   // The Keep sheet (decks.js keepRows) while it is open, and the count kept.
   keep: null, kept: null,
-  // The control that should have the keyboard after the next paint.
-  focusNext: "" };
+  // The control that should have the keyboard after the next paint, and the
+  // last one that had it (trackFkeys).
+  focusNext: "", lastFocus: "" };
 
 function quizReset() {
   qz.quiz = null;
@@ -7925,10 +7926,29 @@ function quizReset() {
   qz.kept = null;
 }
 
-/** The keyboard's place (a `data-fkey`) inside `root`, noted just before a repaint. */
-function fkeyBefore(root) {
+/** The keyboard's place (a `data-fkey`) inside `root`, noted just before a repaint.
+ *  A button that greys itself while it works drops the keyboard, so the last
+ *  place noted by `trackFkeys` counts when nothing has it. */
+function fkeyBefore(root, holder) {
   const a = document.activeElement;
-  return a && root && root.contains(a) && a.dataset && a.dataset.fkey ? a.dataset.fkey : "";
+  if (a && root && root.contains(a) && a.dataset && a.dataset.fkey) return a.dataset.fkey;
+  return holder && (!a || a === document.body) ? holder.lastFocus || "" : "";
+}
+
+/** Remembers which `data-fkey` control inside `root` had the keyboard last, until
+ *  the keyboard or a click goes somewhere else. */
+function trackFkeys(root, holder) {
+  if (!root) return;
+  root.addEventListener("focusin", (event) => {
+    const key = event.target && event.target.dataset && event.target.dataset.fkey;
+    if (key) holder.lastFocus = key;
+  });
+  document.addEventListener("focusin", (event) => {
+    if (!root.contains(event.target)) holder.lastFocus = "";
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (!root.contains(event.target)) holder.lastFocus = "";
+  }, true);
 }
 
 /** Puts the keyboard back on the control with that `data-fkey` after a repaint. */
@@ -7955,6 +7975,7 @@ function takeQuiz(quiz) {
 function quizProblem(out) {
   if (isRefusal(out)) {
     qz.error = quizErrorWords(out);
+    qz.refusal = out.error || "";
     if (out.error === "not_found") {
       qz.quiz = null;
       qz.summary = null;
@@ -8051,8 +8072,19 @@ async function startQuiz() {
     }
     args = { text: value };
   }
+  qz.refusal = "";
   const out = await quizCall("brain_quiz_start", args, spanish ? QUIZ_SPANISH_WRITING : QUIZ_WRITING);
-  if (!out) return;
+  if (!out) {
+    // A PC with Spanish practice never says "too short" to a Spanish start with
+    // no text at all (the model writes the sentences): this one is an older PC.
+    if (spanish && !args.text && qz.refusal === "text_too_short") {
+      qz.textOnly = true;
+      qz.error = QUIZ_OLD_PC_SPANISH;
+      setQuizMode("text");
+      paintQuiz();
+    }
+    return;
+  }
   const quiz = readQuiz(out.quiz);
   if (!quiz) {
     qz.error = "Jarvis answered, but not with a quiz this app can read.";
@@ -8100,7 +8132,11 @@ async function checkAnswer(question, box) {
   if (quizIsCrisis(out)) {
     // A crisis answer is not marked (JARVIS-API 98.4): show the PC's own help
     // words calmly, keep the question open, and let go of what was typed.
+    // (The busy repaint made a new box that carries the typed words over, so
+    // that one is emptied too.)
     box.value = "";
+    const liveBox = dom.quizRun ? dom.quizRun.querySelector(".quiz-answer") : null;
+    if (liveBox) liveBox.value = "";
     qz.answers.delete(question.n);
     qz.crisis = quizReadCrisis(out);
     if (!qz.crisis) qz.error = "Jarvis answered, but not with words this app can read.";
@@ -8421,7 +8457,7 @@ function accentRow(answer, count) {
 function paintQuiz() {
   const run = dom.quizRun;
   if (!run) return;
-  const focusKey = qz.focusNext || fkeyBefore(run);
+  const focusKey = qz.focusNext || fkeyBefore(run, qz);
   qz.focusNext = "";
   // A repaint from elsewhere (the tab shown again, a link change) must not
   // wipe an answer being typed: carry it over to the same question. It stays
@@ -8630,8 +8666,9 @@ const dk = {
   renaming: "", editing: "", confirm: "", adding: false,
   // The review session: null when not reviewing.
   review: null,
-  // The control that should have the keyboard after the next paint.
-  focusNext: "",
+  // The control that should have the keyboard after the next paint, and the
+  // last one that had it (trackFkeys).
+  focusNext: "", lastFocus: "",
 };
 const DECKS_READ_MS = 20000;
 
@@ -9248,7 +9285,7 @@ function cardsBox(deck) {
 function paintDecks() {
   const box = dom.decksBody;
   if (!box) return;
-  const focusKey = dk.focusNext || fkeyBefore(box);
+  const focusKey = dk.focusNext || fkeyBefore(box, dk);
   dk.focusNext = "";
   const parts = [];
   const view = dk.view;
@@ -9341,6 +9378,9 @@ function rereadDecks() {
   dk.at = 0;
   if (state.view === "work") loadDecks();
 }
+
+trackFkeys(dom.decksBody, dk);
+trackFkeys(dom.quizRun, qz);
 
 // Private answers turned on or off, or a Show ran out: read it again - Rust
 // decides whether the words come back.

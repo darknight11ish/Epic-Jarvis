@@ -229,7 +229,7 @@ if (browser) {
   };
   const calls = (page, cmd) => page.evaluate((c) => window.__calls.filter((x) => x[0] === c).map((x) => x[1]), cmd);
   const openChat = async (page, id) => {
-    await page.locator(`.row-item[data-id="${id}"]`).click({ position: { x: 20, y: 10 } });
+    await page.locator(`.row-item[data-id="${id}"] button[data-fkey="open:${id}"]`).click();
     await page.waitForTimeout(350);
   };
 

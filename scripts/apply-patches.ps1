@@ -938,6 +938,17 @@ $PATCHES = @(
     # card, no gate line). Not a model tool. Needs jarvis_progress.py (and jarvis_projects.py, jarvis_goals.py)
     # copied in; without them, or on any error, the banner says so and the routes are simply not there.
     'progress.patch'
+    # "Topic controls" (the owner's decision of 2026-09-30; docs/TOPIC-CONTROLS-DESIGN.md, JARVIS-API section
+    # 107): GET/POST /api/topics, /api/topics/mode|file|settings, GET /api/topics/preview|review|hidden, the
+    # owner's memory lists with the topic filter applied, and the count `topics_left_out` in the chat route's
+    # header. THREE hunks: in jarvis_gate.py the new action `topic_loosen` joins the "acts only on tier ask"
+    # set and gets its _RISK line (both right after browser-engine.patch's own last lines, so it goes after it);
+    # in jarvis_hud.py ONE install block right after progress.patch's own (the last one before
+    # `_loopback_companion`) and ONE line after auto-learn.patch's `injected_sensitive` line. Needs
+    # jarvis_topics.py copied in, and the rebuilt jarvis_memory.py (its tables and the search filter); without
+    # them, or on any error, the banner says so and the routes are simply not there - and with every topic on
+    # "Learn and use" nothing about learning or answers changes at all.
+    'topics.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1166,6 +1177,8 @@ $SHIPPED = @(
     'jarvis_retirement.py'       # retirement.patch: a simplified what-if from numbers the owner typed - 10,000 made-up futures with a fixed seed, answered only as ranges, the disclaimer added by code; plain Python, no numpy; screen-only money
     # --- "Activity heatmap and balance chart" (2026-09-30, progress.patch) ---
     'jarvis_progress.py'         # progress.patch: 12 weeks of days shaded by steps ticked and numbers logged, and a 3-to-8 area balance chart the owner picks; every number from code, no streak, no total score; NOT a model tool (a test fails if anything imports it)
+    # --- "Topic controls" (2026-09-30, topics.patch) ---
+    'jarvis_topics.py'           # topics.patch: per-topic mode (Learn and use / Use but don't learn / Learn but don't use / Off) - tables in memory.db, sorting by fixed rules with the local model only as an opt-in suggestion, one card (topic_loosen) for turning a private topic back on; the filter itself lives in the rebuilt jarvis_memory.py
 )
 
 # The settings file. Installed only where none exists; never overwritten.

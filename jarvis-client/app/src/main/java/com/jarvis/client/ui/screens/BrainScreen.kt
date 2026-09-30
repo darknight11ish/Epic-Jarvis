@@ -574,6 +574,13 @@ fun BrainScreen(
                 )
             }
 
+            // "Progress" (the owner's tick of 2026-09-30, JARVIS-API section
+            // 105): the activity grid and the balance chart (ProgressPlate.kt),
+            // at the top of Projects. Nothing is kept; hidden with the lists.
+            item(key = "progress") {
+                ProgressSection(canAct = canAct, privateHidden = privateHidden)
+            }
+
             // "Projects" (the owner's decision of 2026-09-28): projects,
             // their notes and benchmarks with a chart (ProjectsPlate.kt) -
             // the desktop's Brain -> Projects. It reads and acts through

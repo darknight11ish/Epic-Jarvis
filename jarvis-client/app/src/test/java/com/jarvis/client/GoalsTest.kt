@@ -107,9 +107,15 @@ class GoalsTest {
         val acceptStep = obj(Goals.acceptBody(listOf(Goals.Step("a", "", true))))["plan"]!!
             .jsonArray.single().jsonObject
         assertTrue(acceptStep["done"]!!.jsonPrimitive.boolean)
-        val stepBody = obj(Goals.stepBody(1, true))
-        assertEquals(1, stepBody["index"]!!.jsonPrimitive.int)
-        assertTrue(stepBody["done"]!!.jsonPrimitive.boolean)
+        // By the step's id when it has one; by position only for an older PC's plan.
+        val byId = obj(Goals.stepBody("s2", 1, true))
+        assertEquals("s2", byId["id"]!!.jsonPrimitive.content)
+        assertFalse("an id and no index", byId.containsKey("index"))
+        assertTrue(byId["done"]!!.jsonPrimitive.boolean)
+        val byIndex = obj(Goals.stepBody("", 1, false))
+        assertEquals(1, byIndex["index"]!!.jsonPrimitive.int)
+        assertFalse(byIndex.containsKey("id"))
+        assertFalse(byIndex["done"]!!.jsonPrimitive.boolean)
         assertEquals("{}", Goals.STOP_BODY)
     }
 
@@ -145,7 +151,8 @@ class GoalsTest {
         val (ok2, goal2, said2) = Goals.createdSaid(overflow)
         assertFalse(ok2)
         assertNull(goal2)
-        assertEquals("Not changed. There are already 20 goals - stop tracking one before adding another", said2)
+        // The PC's sentence exactly as sent - no prefix, no new capital.
+        assertEquals("there are already 20 goals - stop tracking one before adding another", said2)
         val old = Goals.createdSaid(Goals.Reply(404, null))
         assertFalse(old.first)
         assertEquals(Goals.TOO_OLD, old.third)
@@ -165,7 +172,7 @@ class GoalsTest {
         val notADraft = Goals.Reply(400, obj("""{"ok":false,"error":"that goal is not waiting to be accepted"}"""))
         val (ok2, _, said2) = Goals.acceptedSaid(notADraft)
         assertFalse(ok2)
-        assertEquals("Not changed. That goal is not waiting to be accepted", said2)
+        assertEquals("that goal is not waiting to be accepted", said2)
         val noScheduler = Goals.Reply(503, obj("""{"ok":false,"error":"the scheduler is not available"}"""))
         assertEquals(Goals.NOT_AVAILABLE, Goals.acceptedSaid(noScheduler).third)
         val gone = Goals.Reply(404, obj("""{"ok":false,"error":"no such goal"}"""))
@@ -212,6 +219,24 @@ class GoalsTest {
         fun bare(id: String, status: String) = Goals.Goal(id, "x", listOf(Goals.Step("a", "", false)), status, 1.0, 1.0)
         val mixed = Goals.View(listOf(bare("g1", "stopped"), bare("g2", "active"), bare("g3", "draft")), null)
         assertEquals(listOf("g2", "g3", "g1"), Goals.ordered(mixed).map { it.id })
+    }
+
+    @Test
+    fun hidingBlanksEveryStepsNumberWordsLikeTheDesktop() {
+        // The desktop (goals.rs redact_goals) blanks lock_words, reached_words and
+        // measure_name for EVERY step; the phone does the same, not only for a
+        // health or money number.
+        val plain = Goals.Step(
+            "x", "", false, state = "locked", lockWords = "after: \"Y\"", reached = true,
+            reachedWords = "29.5 min (target 30 min)", measureName = "5k time", measureSensitive = false,
+        )
+        val g = Goals.Goal("g0000000001", "t", listOf(plain), "active", 1.0, 1.0)
+        val h = Goals.hide(Goals.View(listOf(g), null)).goals.single().plan.single()
+        assertEquals("", h.lockWords)
+        assertEquals("", h.reachedWords)
+        assertEquals("", h.measureName)
+        assertEquals("locked", h.state)
+        assertTrue(h.reached)
     }
 
     @Test
@@ -318,8 +343,19 @@ class GoalsTest {
         assertEquals(limits["needs"]!!.jsonPrimitive.int, Goals.MAX_NEEDS)
         assertEquals(limits["steps"]!!.jsonPrimitive.int, Goals.MAX_STEPS)
         assertEquals(limits["step_ids"]!!.jsonArray.map { it.jsonPrimitive.content }, Goals.STEP_IDS)
-        // The list read carries the same words and limits.
-        assertEquals(fixture["goal_words"], answer("list")["words"])
+        // The list read carries the PC's own words (the fixture's, minus the screens' own
+        // sentences the PC never sends) and the same limits.
+        val sent = answer("list")["words"]!!.jsonObject
+        assertTrue(sent.isNotEmpty() && words.keys.containsAll(sent.keys))
+        for ((k, v) in sent) assertEquals(k, words[k], v)
+        for (k in listOf("follows_none", "follows_under", "follows_empty", "needs_cleaned", "needs_limit",
+            "needs_none", "needs_under", "reached_tag", "ticked", "unticked")) {
+            assertTrue("$k is the screens' own", k in words.keys && k !in sent.keys)
+        }
+        assertEquals("No number", Goals.w("follows_none"))
+        assertEquals("At most 3 steps can come first.", Goals.w("needs_limit", max = 3))
+        assertEquals("Ticked \"Get quotes\".", Goals.w("ticked", step = "Get quotes"))
+        assertEquals("number reached", Goals.w("reached_tag"))
         assertEquals(Goals.MAX_NEEDS, Goals.parse(answer("list"))!!.limits!!.needs)
     }
 
@@ -372,12 +408,12 @@ class GoalsTest {
         assertNull(goal)
         assertEquals(tick.body!!["error"]!!.jsonPrimitive.content, said)
         assertEquals("Do \"Get the 5k under 30\" first, or tick it if it is already done.", said)
-        // Saving a plan: the PC's sentence after "Not changed.", nothing altered.
+        // Saving a plan: the PC's sentence as sent, no prefix, nothing altered.
         for (name in listOf("refuse_cycle", "refuse_self", "refuse_too_many", "refuse_unknown")) {
             val r = refusal(name)
             val err = r.body!!["error"]!!.jsonPrimitive.content
-            assertEquals(name, "Not changed. $err", Goals.acceptedSaid(r).third)
-            assertEquals(name, "Not changed. $err", Goals.createdSaid(r).third)
+            assertEquals(name, err, Goals.acceptedSaid(r).third)
+            assertEquals(name, err, Goals.createdSaid(r).third)
         }
         assertTrue(Goals.acceptedSaid(refusal("refuse_cycle")).third.contains("in a circle"))
     }

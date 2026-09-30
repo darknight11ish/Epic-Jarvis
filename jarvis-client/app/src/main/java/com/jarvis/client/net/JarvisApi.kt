@@ -1312,6 +1312,50 @@ class JarvisApi(
         }
 
     /**
+     * The activity heatmap (docs/JARVIS-API.md section 105.1): a GET of
+     * `/api/progress/activity`, [weeks] kept to 4..26. The status and body come
+     * back whole ([Progress.Reply]) - a 404 from a PC without the route means
+     * "draw nothing". A read; nothing is kept.
+     */
+    suspend fun progressActivity(weeks: Int): ApiResult<Progress.Reply> =
+        progressCall("/api/progress/activity?weeks=" + weeks.coerceIn(4, 26), null)
+
+    /** The balance chart and its picker (section 105.2): a GET of `/api/progress/balance`. */
+    suspend fun progressBalance(): ApiResult<Progress.Reply> =
+        progressCall("/api/progress/balance", null)
+
+    /**
+     * Replaces the balance chart's areas (section 105.3): a POST of
+     * `/api/progress/balance` with [Progress.saveBody]. No card. A refusal comes
+     * back as a 400 whose sentence is shown as sent.
+     */
+    suspend fun progressBalanceSave(json: String): ApiResult<Progress.Reply> =
+        progressCall("/api/progress/balance", json)
+
+    private suspend fun progressCall(path: String, json: String?): ApiResult<Progress.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val builder = Request.Builder().url(target)
+            if (json == null) {
+                builder.get()
+            } else {
+                builder.post(json.toRequestBody("application/json".toMediaType()))
+            }
+            val req = builder.authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Progress.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `POST /api/memory/shared`: tag or untag ONE fact "Between us" (the
      * owner's decision, 2026-09-27). The status and body come back whole
      * ([MemoryShared.Reply]), like [pinFact]: a 404 that says "no such

@@ -383,6 +383,10 @@ SHIPPED = (
     # "Activity heatmap and balance chart" (2026-09-30; progress.patch): the
     # heatmap and the owner's balance chart. Not reachable from any model.
     "jarvis_progress.py",
+    # "Topic controls" (2026-09-30; topics.patch): a mode per topic (learn /
+    # use), the sorting, the one card. The search filter is in the rebuilt
+    # jarvis_memory.py; test_topics_leaks.py lists every reader of facts.
+    "jarvis_topics.py",
 )
 
 

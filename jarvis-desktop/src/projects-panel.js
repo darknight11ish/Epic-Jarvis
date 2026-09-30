@@ -32,6 +32,7 @@
  */
 
 import { announce, currentLink, linkWords, onLink, onQueue } from "./jarvis-link.js";
+import { refreshProgress, setProgressVisible } from "./progress-panel.js";
 import {
   APP_WORDS,
   appProjectBody,
@@ -248,6 +249,10 @@ export async function showProjects() {
     state.reading = false;
   }
   paint();
+  // The Progress pictures (progress-panel.js) sit above the list, not inside
+  // a project; they read on their own and never block this page.
+  setProgressVisible(!state.open);
+  if (!state.open) refreshProgress();
   if (state.again) {
     state.again = false;
     await showProjects();

@@ -660,6 +660,64 @@ The activity heatmap and the balance chart (part C, queue item 7, section
 weekly check-in is the PC's and needs no screen.
 
 
+### 5. Audit amendments (2026-09-30; the owner took the recommended answers)
+
+Where these differ from sections 1 to 3 above, these win.
+
+- **Hidden lists.** While "Hide memory lists and chat history" is on, BOTH
+  apps blank `lock_words`, `reached_words` and `measure_name` for EVERY step
+  (not only a `measure_sensitive` one), along with the step and goal words.
+  State, ids and ticks stay, so the screen still works blind. Desktop:
+  `goals.rs redact_goals`; phone: `Goals.hide`.
+- **"Follows a number" offers life AND coding number benchmarks** that have a
+  target and a direction (the PC accepts both), on both apps. A command
+  benchmark is never offered. At most 20 projects are read for the list.
+- **One wording set.** The screens' own sentences are keys of `goal_words`
+  (added by `tools/gen_projects_cases.py`, `GOAL_UI_WORDS`; the PC never sends
+  them): `follows_none` "No number", `follows_under`, `follows_empty`,
+  `needs_none`, `needs_under` (shown whenever there are other steps to pick),
+  `needs_limit` ("At most {max} steps can come first." - shown when the
+  picker is full; both lines exist on both apps), `needs_cleaned`,
+  `reached_tag` ("number reached" - a small tag on both apps for a step whose
+  number reached the target and that is not ticked), `ticked` / `unticked`.
+  Each app's list equals `goal_words` key for key, word for word; the PC's
+  own `words` in a goals answer are the subset it sends.
+- **Ticks and Undo.** A tick is sent by the step's id (the index only for an
+  older PC's plan). After a tick both apps say `ticked` with the step's name
+  ("Ticked a step." while the private lists are hidden) and offer Undo; an
+  Undo says `unticked`. No card.
+- **Refusals are shown as sent.** The PC's sentence, no prefix, no new
+  capital letter - the 409 lock sentence bare too. (Only a network failure or
+  a PC that gave no sentence gets the app's own line.)
+- **The lock applies on the tick route only.** `POST /api/goals/<id>/step`
+  refuses a tick on a locked step. A draft saved with a step already `done`
+  whose needs are not met is kept as sent: it reads `done` with
+  `after: "..." (open again)`. Nothing else enforces a lock.
+- **`done_at`.** `null` means "unknown" (not done, or done before `done_at`
+  existed). A draft step saved with `done: true` gets `done_at` = the time it
+  was saved (accept time), not a date the app chose. The heatmap (part C)
+  counts only a non-null `done_at`.
+- **Forecast drawing rule (both apps look alike).** Order, bottom to top:
+  axis, target line, then the guess - the band (a soft accent-coloured
+  triangle whose edge is the accent colour, dashed 3/3), the trend line
+  (accent colour, dashed 2/3, round caps), the bracket on the target level,
+  the arrows - and only then the numbers' line and dots, so the guess is
+  always UNDER the numbers. An arrow is an **open chevron** (two short
+  strokes, 5 by 4) whose tip is exactly the clip point; two ends on the same
+  spot get one chevron. Bracket and chevrons use the text colour. A forecast
+  whose `words` are blank is still drawn; only the words line is left out.
+- **The forecast never raises.** `jarvis_forecast.forecast` answers
+  `not_enough` for absurd input (a huge, infinite or not-a-number time,
+  value, target or clock); `jarvis_projects` calls it in a try/except, so a
+  broken forecast leaves the benchmark read whole, without `forecast`.
+- **A reader that breaks is not a deleted number.** `step_states` treats only
+  a real "not found" (`KeyError`) as `measure_gone`. Any other exception from
+  the benchmark reader leaves that step neither gone nor reached, and it never
+  locks the steps that wait on it.
+- `clean_plan` removes repeated ids in `needs` BEFORE applying the "at most
+  3" rule; `bench_reached` uses `jarvis_forecast.better_reached`, the one
+  place "reached" is decided.
+
 ## Progress contract (frozen)
 
 Written 2026-09-30, after the backend for part C was built and tested

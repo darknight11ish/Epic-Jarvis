@@ -172,6 +172,18 @@ the answer sets `open_brain: "history"`, `file_under: <tag id>` and
 `history_q: <search words>` in X-Jarvis-Route, History shows the matches, and
 nothing is filed until the owner taps one.
 
+"TOPIC CONTROLS" (the owner's decision of 2026-09-30, JARVIS-API section 107) are
+here too: "stop using my work topic" (Learn, but don't use), "don't learn about
+money" (Use, but don't learn), "use my health topic again", and the ambiguous
+"switch off / pause / hide my work topic", which OPENS the four-choice picker
+(`open_brain: "topics"` and `topic_id` in X-Jarvis-Route) and changes nothing
+until the owner taps. A clear phrase that makes a topic STRICTER applies at
+once; a looser one goes through the exact function the picker calls, so a
+private topic still raises its one card. Only the owner's newest typed or said
+words, and never in a conversation that has read outside text. A name that is
+not one of the owner's topics is answered with the topics that exist (with the
+word "topic" in the sentence) or left to the model (without it).
+
 WHERE THE IDEA COMES FROM
 Home Assistant's `prefer_local_intents` - try the built-in sentence matcher
 before the conversation agent - and the set of timer handlers in its
@@ -209,6 +221,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -810,6 +823,11 @@ def _match(text, now: float) -> Optional[Intent]:
 
     # --- "label this chat Work" (chat tags, 2026-09-30) --------------------------
     got = _chat_tag(s)
+    if got is not None:
+        return got
+
+    # --- "stop using my work topic" (topic controls, 2026-09-30) -----------------
+    got = _topic_mode(s)
     if got is not None:
         return got
 
@@ -3107,6 +3125,111 @@ def _run_chat_tag(f: dict, conversation, temporary: bool, messages) -> Result:
                   private=True)
 
 
+# --- "stop using my work topic" (topic controls, 2026-09-30) ------------------
+_TOPIC_THE = r"(?:(?:my|the)\s+)?"
+_TOPIC_NAME = r"(?P<n>[^\s].{0,23}?)"
+_TOPIC_NO_USE = re.compile(
+    r"(?:stop\s+using|don'?t\s+use|do\s+not\s+use)\s+" + _TOPIC_THE + _TOPIC_NAME
+    + r"(?P<t>\s+topic)?")
+_TOPIC_NO_LEARN = re.compile(
+    r"(?:stop\s+learning(?:\s+about)?|don'?t\s+learn(?:\s+about)?|do\s+not\s+learn(?:\s+about)?)"
+    r"\s+" + _TOPIC_THE + _TOPIC_NAME + r"(?P<t>\s+topic)?")
+_TOPIC_PICK = re.compile(
+    r"(?:(?:switch|turn)\s+off|pause|hide|mute|silence|change)\s+" + _TOPIC_THE
+    + r"(?P<n>[^\s].{0,23}?)\s+topic")
+_TOPIC_ON_USE = re.compile(
+    r"(?:use|start\s+using|resume\s+using)\s+" + _TOPIC_THE + _TOPIC_NAME
+    + r"\s+topic\s+again")
+_TOPIC_ON_LEARN = re.compile(
+    r"(?:start\s+learning(?:\s+about)?|learn\s+about)\s+" + _TOPIC_THE + _TOPIC_NAME
+    + r"(?:\s+topic)?\s+again")
+_TOPIC_ON_BOTH = re.compile(r"(?:turn|switch)\s+on\s+" + _TOPIC_THE + _TOPIC_NAME + r"\s+topic")
+_TOPIC_OPEN = re.compile(r"(?:open|show)\s+(?:me\s+)?(?:my\s+|the\s+)?topics")
+
+
+def _topic_names() -> list:
+    """The names of the owner's topics, or [] - a bare name in a sentence is
+    ours only when it IS a topic."""
+    if sys.modules.get("jarvis_memory") is None:
+        return []           # a store is borrowed, never created by a sentence
+    try:
+        import jarvis_topics
+        with jarvis_topics._db() as c:
+            return [t["name"] for t in jarvis_topics.topics_of(c)]
+    except Exception:
+        return []
+
+
+def _topic_mode(s: str) -> Optional[Intent]:
+    if _TOPIC_OPEN.fullmatch(s):
+        return Intent("topic_mode", {"op": "open", "text": ""})
+    for rx, op in ((_TOPIC_PICK, "pick"), (_TOPIC_ON_USE, "on_use"),
+                   (_TOPIC_ON_BOTH, "on_both"), (_TOPIC_ON_LEARN, "on_learn"),
+                   (_TOPIC_NO_USE, "no_use"), (_TOPIC_NO_LEARN, "no_learn")):
+        m = rx.fullmatch(s)
+        if not m:
+            continue
+        name = m.group("n").strip()
+        said_topic = "t" in rx.groupindex and bool(m.group("t")) or op in (
+            "pick", "on_use", "on_both")
+        if not said_topic:
+            # No word "topic": ours only if the name IS one of the owner's topics.
+            if name.casefold() not in {n.casefold() for n in _topic_names()}:
+                return None
+        return Intent("topic_mode", {"op": op, "text": name})
+    return None
+
+
+def _run_topic_mode(f: dict, conversation, temporary: bool, messages) -> Optional[Result]:
+    n = "topic_mode"
+    try:
+        import jarvis_topics as T
+        import jarvis_settings_registry as R
+    except Exception:
+        return Result(T_MISSING, n)
+    if _chat_tainted(conversation, messages):
+        return Result(T.WORDS["outside"], n)
+    op = f.get("op")
+    if op == "open":
+        return Result("Opening your topics.", n, private=True, open_brain="topics")
+    want = str(f.get("text") or "").strip()
+    names = _topic_names()
+    hit = next((x for x in names if x.casefold() == want.casefold()), None)
+    if hit is None:
+        if not names:
+            return None
+        return Result(T.WORDS["no_such_topic"].format(name=want) + " "
+                      + T.WORDS["topics_are"].format(names=", ".join(names)), n, private=True)
+    found = R.find_topic(hit)
+    if found is None:
+        return None
+    if op == "pick":
+        return Result(T.WORDS["pick_line"].format(name=hit), n, private=True,
+                      open_brain="topics", topic_id=int(found["id"]))
+    learn, use = T.mode_flags(found["mode"])
+    if op == "no_use":
+        use = False
+    elif op == "no_learn":
+        learn = False
+    elif op == "on_use":
+        use = True
+    elif op == "on_learn":
+        learn = True
+    else:                                                   # on_both
+        learn = use = True
+    mode = {(True, True): "both", (False, True): "use_only",
+            (True, False): "learn_only", (False, False): "off"}[(learn, use)]
+    if mode == found["mode"]:
+        return Result(f"{hit} is already {T.MODE_NAME[mode]}. You can change it in Brain.", n,
+                      private=True)
+    out = R.set_topic_mode(int(found["id"]), mode)
+    return Result(out.said, n, private=True)
+
+
+T_MISSING = ("Your PC's Jarvis does not have topic controls yet - run apply-patches.ps1 on "
+             "the PC.")
+
+
 def _project_log(s: str) -> Optional[Intent]:
     """"log 5 km run", "I ran 5 km": ours only when a life project has a
     benchmark it fits (jarvis_projects.quick_match). Without
@@ -3273,6 +3396,10 @@ class Result:
     # should search for. Additive, like open_brain; both None otherwise.
     file_under: Optional[int] = None
     history_q: Optional[str] = None
+    # "Switch off my work topic" (topic controls, 2026-09-30): which topic the
+    # four-choice picker should open on, next to open_brain "topics". An id,
+    # never the owner's word. None otherwise.
+    topic_id: Optional[int] = None
     # "Where did I put ...?" (2026-09-28): the saved facts the answer quotes,
     # by id, and how many of them are sensitive - so X-Jarvis-Route says the
     # answer used memory, both apps show "Used 1 memory" with Forget, and a
@@ -3461,6 +3588,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
                       "here or under Coming up.", n)
     if n == "chat_tag":
         return _run_chat_tag(f, conversation, temporary, messages)
+    if n == "topic_mode":
+        return _run_topic_mode(f, conversation, temporary, messages)
     if n == "forget_range":
         return _run_forget_range(f, now)
     if n == "missed":
@@ -4322,6 +4451,10 @@ def route_fields(res: Result) -> dict:
         # Brain place both apps open, with the list already filled in.
         # Additive, like open_settings.
         out["open_brain"] = res.open_brain
+    if res.topic_id is not None:
+        # Topic controls (2026-09-30): the picker opens on this topic; nothing
+        # has changed yet. Additive, like file_under.
+        out["topic_id"] = int(res.topic_id)
     if res.file_under is not None:
         # Chat tags (2026-09-30): "file under <tag id>" with the search words.
         # The apps show the matches and the banner; nothing is filed until

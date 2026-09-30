@@ -380,18 +380,14 @@ object Progress {
      * `keep_on_screen` the name becomes "(hidden)" and it cannot be ticked
      * ([choiceTickable]).
      */
-    fun blankedBalance(b: Balance): Balance =
-        if (b.keepOnScreen) {
-            b.copy(
-                axes = emptyList(), drawable = false, words = "", summary = b.hiddenWords,
-                choices = b.choices.map { hideChoice(it) },
-            )
+    fun blankedBalance(b: Balance): Balance {
+        val choices = b.choices.map { if (it.keepOnScreen) hideChoice(it) else it }
+        return if (b.keepOnScreen) {
+            b.copy(axes = emptyList(), drawable = false, words = "", summary = b.hiddenWords, choices = choices)
         } else {
-            b.copy(
-                axes = b.axes.filter { !it.keepOnScreen },
-                choices = b.choices.map { if (it.keepOnScreen) hideChoice(it) else it },
-            )
+            b.copy(axes = b.axes.filter { !it.keepOnScreen }, choices = choices)
         }
+    }
 
     private fun hideChoice(c: Choice): Choice = c.copy(name = HIDDEN_NAME, projectName = "")
 

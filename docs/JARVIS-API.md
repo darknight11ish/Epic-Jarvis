@@ -15880,6 +15880,32 @@ answers in `forecast_cases` (numbers in, `forecast`, chart `extent` and screen
 reader `summary` out) and `goal_cases` (real route answers). The forecast's
 `words` are sent whole: an app shows them, it never builds them.
 
+### 101.5a Later amendments (2026-09-30 audit)
+
+- **The lock is enforced on the tick route only.** A draft saved
+  (`POST /api/goals`, `.../accept`) with a step already `done: true` whose
+  `needs` are not met is kept as sent: `state` `done`, `waiting_on` set and
+  `lock_words` `after: "..." (open again)`. Only `POST .../step` refuses a
+  tick on a locked step.
+- **`done_at` is `null` for "unknown"** (not done, or done before the field
+  existed). A draft step saved `done: true` gets `done_at` = the save
+  (accept) time, set by the PC. A consumer such as the activity heatmap
+  (section 105) counts a step only when `done_at` is not null.
+- `needs` are de-duplicated first, then the limit of 3 is applied
+  (`s1, s1, s2, s2, s3, s3` is three needs).
+- `measure_gone` is true only when the benchmark reader reports it is not
+  found (`KeyError`). Any other reader failure leaves the step's state as if
+  it followed no number (neither gone nor reached) and never locks the steps
+  that wait on it.
+- `jarvis_forecast.forecast` never raises: a huge, infinite or not-a-number
+  time, value, target or clock answers `not_enough`. The benchmark read calls
+  it inside a try/except; if it ever fails the read is whole, without
+  `forecast`.
+- `goal_words` in the contract file also carries the two apps' own screen
+  sentences (`follows_*`, `needs_*`, `reached_tag`, `ticked`, `unticked`);
+  the PC's `words` in an answer are the subset it sends. See
+  `docs/GOALS-PROGRESS-DESIGN.md`, "Audit amendments".
+
 ### 101.6 Limits, said plainly
 
 Nothing has run on the owner's PC with real logged numbers: the t-table and
