@@ -187,6 +187,7 @@ on a real page raises `AttributeError: 'Page' object has no attribute
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from dataclasses import dataclass, field, asdict, replace
@@ -241,6 +242,12 @@ class Step:
     # see plan()'s "within". Re-verified by run() like the role and name.
     within_role: str = ""
     within_name: str = ""
+    # The ONE click that sends a filled-in form (the owner's decision of
+    # 2026-09-30, docs/FORM-REVIEW-DESIGN.md). run() stops BEFORE it, shows
+    # the owner the form (a picture and every typed value) on a SECOND card,
+    # and clicks only after a yes and a last check that the page is the one
+    # they looked at. plan() allows at most one, only a click, only last.
+    final: bool = False
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -1634,6 +1641,12 @@ def plan(goal: str, session: str, requests: list, *,
     only accepts such a placeholder - a literal password in a request would
     already have passed through the model and would be printed on the card.
 
+    `"final": true` marks the ONE click that sends a filled-in form (docs/
+    FORM-REVIEW-DESIGN.md). Only a click can be final, a plan has at most
+    one, and it must be the last step - otherwise that request is reported
+    unmatched, in words. run() stops before it and asks a second question
+    (see `run`'s `review`).
+
     A `navigate` request is checked against `_ALLOWED_SCHEMES` and
     `allowed_domains`, never against the current page - there may not be one
     yet. Every other request is checked against the CURRENT page right now;
@@ -1653,9 +1666,18 @@ def plan(goal: str, session: str, requests: list, *,
         notices.append(f"this page has {omitted} more element(s) than Jarvis reads at once "
                        f"(the limit is {_MAX_ELEMENTS}); those cannot be steps")
     steps, unmatched = [], []
+    origin: list = []      # the request each step came from, in step order
     for r in requests:
         action = str(r.get("action", "")).strip()
         heavy = bool(r.get(IRREVERSIBLE_HINT)) or bool(r.get(LEAVES_MACHINE_HINT))
+        final = r.get("final")
+        if final is not None and not isinstance(final, bool):
+            unmatched.append({**r, "reason": '"final" must be true or false'})
+            continue
+        if final and action != "click":
+            unmatched.append({**r, "reason": "only a click can be the final step (the one "
+                                              "that sends the form)"})
+            continue
         value = r.get("value")
         secret_names = _secret_names(value)
         no = _engine_reject(engine, r)
@@ -1691,6 +1713,7 @@ def plan(goal: str, session: str, requests: list, *,
             steps.append(Step(session=session, url=url, role="", name="",
                                action="navigate", value=target,
                                why=str(r.get("why", "")), heavy=heavy))
+            origin.append(r)
             continue
         if action == "read_page":
             try:
@@ -1701,6 +1724,7 @@ def plan(goal: str, session: str, requests: list, *,
             steps.append(Step(session=session, url=url, role="", name="",
                                action="read_page", value=str(offset),
                                why=str(r.get("why", "")), heavy=heavy))
+            origin.append(r)
             continue
         role = str(r.get("role", "")).strip()
         name = _norm(r.get("name", ""))
@@ -1742,9 +1766,21 @@ def plan(goal: str, session: str, requests: list, *,
             heavy = True
         steps.append(Step(
             session=session, url=url, role=role, name=name, action=action,
-            value=value, why=str(r.get("why", "")), heavy=heavy,
+            value=value, why=str(r.get("why", "")), heavy=heavy or bool(final),
             within_role=str(e.get("within_role", "")) if within else "",
-            within_name=within))
+            within_name=within, final=bool(final)))
+        origin.append(r)
+    # The final step: at most one, and it must be the last step. Anything
+    # else is put in `unmatched` in words - never quietly reordered or
+    # trusted - so the card says what will not happen. With more than one,
+    # none is kept: there is no telling which click was meant.
+    finals = [i for i, st in enumerate(steps) if st.final]
+    if finals and (len(finals) > 1 or finals[0] != len(steps) - 1):
+        why = ("only one step may be the final one" if len(finals) > 1 else
+               "the final step (the click that sends the form) must be the LAST step")
+        for i in reversed(finals):
+            unmatched.append({**origin[i], "reason": why + " - not guessing"})
+            del steps[i]
     return Plan(
         goal=str(goal), session=str(session), steps=steps, unmatched=unmatched,
         if_refused="nothing on this page changes; the goal is not attempted",
@@ -1777,6 +1813,12 @@ CARD_WEIGHT_LINE = (
     "is safe.")
 
 
+#: The line a plan's card carries when its last step is a `final` one.
+FINAL_CARD_LINE = ("The last step sends a form. Jarvis fills in the earlier steps, then STOPS, "
+                   "shows you the form and asks a SECOND time - nothing is sent unless you "
+                   "approve that second card as well.")
+
+
 def describe(p: Plan) -> str:
     """The card text. Every step in full, in the order it would run."""
     lines = [f'Jarvis would like to do this in the browser session "{p.session}": {p.goal}',
@@ -1788,6 +1830,9 @@ def describe(p: Plan) -> str:
         except Exception:
             lines += [f"Browser: {p.engine.upper()}.", ""]
     lines.append(f"{len(p.steps)} step(s), {CARD_WEIGHT_LINE}")
+    has_final = any(s.final for s in p.steps)
+    if has_final:
+        lines.append(FINAL_CARD_LINE)
     if p.steps:
         if p.allowed_domains:
             lines.append("Allowed sites: " + ", ".join(p.allowed_domains)
@@ -1818,6 +1863,10 @@ def describe(p: Plan) -> str:
             detail = f" = {s.value!r}" if s.value is not None else ""
             lines += [f'  {i}. {s.action} {s.role} "{s.name}"{inside}{detail}{heavy_note}',
                       f"     why: {s.why}"]
+            if s.final:
+                lines.append("     FINAL STEP: Jarvis stops before this click and asks you again "
+                             "on a second card, with a picture of the filled-in form and every "
+                             "word it typed. Nothing is sent unless you approve that card too.")
             if _secret_names(s.value):
                 uses_secret = True
                 lines.append("     (the <secret> part is filled in from your saved secrets "
@@ -1901,7 +1950,10 @@ def run(p: Plan, *, read: Optional[Callable[[str], dict]] = None,
         checkpoint: Optional[Callable[[], Optional[str]]] = None,
         observe: Optional[Callable[[str], dict]] = None,
         secrets: Optional[Callable[[str, str], Optional[str]]] = None,
-        approved: bool = False) -> dict:
+        approved: bool = False,
+        review: Optional[Callable[[dict], dict]] = None,
+        snapshot: Optional[Callable[[str], Optional[dict]]] = None,
+        fingerprint: Optional[Callable[[str], Optional[str]]] = None) -> dict:
     """Execute an approved plan, one step at a time.
 
     `approved` has no default of True, same reason as jarvis_ui_control.py: a
@@ -1935,10 +1987,45 @@ def run(p: Plan, *, read: Optional[Callable[[str], dict]] = None,
     `checkpoint()` is the same pause/stop hook as jarvis_ui_control.run -
     see that module's own docstring for the exact contract and why this one
     imports nothing to use it.
+
+    THE FINAL STEP (docs/FORM-REVIEW-DESIGN.md, the owner's decision of
+    2026-09-30). A plan's last step may be marked `final`: the click that
+    sends a filled-in form. run() does every earlier step, then STOPS before
+    it and, in this order:
+
+      1. re-reads the page and takes its field fingerprint;
+      2. `snapshot(session)`, if given, takes ONE picture of the page (a
+         dict, or None - a headless browser has no pixels); the page is read
+         and fingerprinted again, and if it moved while the picture was
+         taken the run stops;
+      3. `review(info)` shows it to the owner and returns {"approved": bool,
+         "reason": str}. `info` holds the site, every step already done with
+         the words typed (a saved secret only by NAME), the final step's
+         label and the picture. NO `review`, or one that raises, or one that
+         returns anything but approved=True, means the form is NOT sent
+         (fail closed) - the tab is left open for the owner;
+      4. after a yes, re-reads the page once more and requires the same
+         address, the same target (still exactly one, still enabled) and the
+         same field fingerprint as when the picture was taken - a page that
+         changed after the owner looked stops the run - and reads
+         `checkpoint()` once more (a Stop that arrived while the card waited
+         wins over the yes).
+
+    `fingerprint(session)` may add to the fingerprint (the visible browser
+    adds a hash of every field's real content, which the page's accessibility
+    tree cannot show); without it the fingerprint is of what the page reader
+    returned. The picture is only ever handed to `review`; this module never
+    stores, logs or writes it. A plan with no final step ignores all three.
     """
     if not approved:
         return {"ok": False, "reason": "not approved; nothing was done",
                 "plan": p.as_dict()}
+    finals = [i for i, st in enumerate(p.steps) if st.final]
+    if finals and (len(finals) > 1 or finals[0] != len(p.steps) - 1):
+        # plan() never makes such a plan; a hand-built one is refused whole.
+        return {"ok": False, "reason": "a plan may have one final step, and it must be the "
+                                       "last - nothing was done", "done": [],
+                "not_run": [s.as_dict() for s in p.steps]}
     try:
         hooks = _engine_hooks(p.engine) if act is None else None
     except RuntimeError as exc:
@@ -1960,7 +2047,8 @@ def run(p: Plan, *, read: Optional[Callable[[str], dict]] = None,
         # it checks a link's or a form's address itself BEFORE a click.
         hooks.set_fence(allowed)
     try:
-        return _run_steps(p, getter, actor, looker, allowed, announce, checkpoint, secrets)
+        return _run_steps(p, getter, actor, looker, allowed, announce, checkpoint, secrets,
+                          review, snapshot, fingerprint)
     finally:
         if hooks is not None and hasattr(hooks, "set_fence"):
             hooks.set_fence(None)
@@ -1969,13 +2057,52 @@ def run(p: Plan, *, read: Optional[Callable[[str], dict]] = None,
                 _disarm_fence(name)
 
 
-def _run_steps(p, getter, actor, looker, allowed, announce, checkpoint, secrets) -> dict:
+def page_fingerprint(look: dict) -> str:
+    """A short hash of what a page reader returned: the address (without its
+    fragment) and every element's role, name, shown text, state and
+    container. Two looks with the same fingerprint show the same form; a
+    field that was edited, added, removed or disabled changes it. Nothing
+    reads this back - it is only compared."""
+    rows = sorted(
+        [str(e.get("role", "")), _norm(e.get("name")), _norm(e.get("text")),
+         bool(e.get("enabled", True)), _norm(e.get("within_name")),
+         bool(e.get("sensitive"))]
+        for e in (look.get("elements") or []))
+    blob = json.dumps([_without_fragment(str(look.get("url") or "")), rows],
+                      ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _secret_words(value) -> str:
+    """A typed value as the owner is shown it: a saved secret only by name."""
+    text = "" if value is None else str(value)
+    return _SECRET_RE.sub(lambda m: f"(saved secret {m.group(1)!r}, typed and shown as dots)",
+                          text)
+
+
+def _steps_for_review(done: list) -> list:
+    """The steps already done, as the second card lists them: words typed or
+    chosen, clicks by name, pages opened. Reads are left out."""
+    out = []
+    for s in done:
+        if s.action not in ("navigate", "click", "type", "select"):
+            continue
+        out.append({"action": s.action, "role": s.role, "name": s.name,
+                    "within": s.within_name,
+                    "value": _secret_words(s.value) if s.action in ("type", "select", "navigate")
+                    else ""})
+    return out
+
+
+def _run_steps(p, getter, actor, looker, allowed, announce, checkpoint, secrets,
+               review=None, snapshot=None, fingerprint=None) -> dict:
     tell = announce or (lambda _text: None)
     check = checkpoint or (lambda: None)
     used: dict = {}        # secret name -> value, for redaction only
     notes: list = []
     done: list = []
     expected_url: Optional[str] = None
+    reviewed: dict = {}    # filled in when a final step was shown to the owner
 
     def stopped(reason: str, first_not_run: int, **extra) -> dict:
         out = {"ok": False, "reason": _redact(reason, used),
@@ -1985,6 +2112,102 @@ def _run_steps(p, getter, actor, looker, allowed, announce, checkpoint, secrets)
             out["notes"] = [_redact(n, used) for n in notes]
         out.update(extra)
         return out
+
+    def _fp(session: str, look: dict) -> Optional[str]:
+        """The page's fingerprint, or None when the deeper look that was
+        given cannot be taken - which the callers treat as a stop, never as
+        "nothing changed"."""
+        extra = ""
+        if fingerprint is not None:
+            try:
+                extra = str(fingerprint(session) or "")
+            except Exception:
+                return None
+        return page_fingerprint(look) + "|" + extra
+
+    def _review_final(step, i: int, label: str, current: dict):
+        """Everything between the last field and the click that sends the
+        form. Returns None to go ahead and click, else the stopped result.
+        Every way out but an explicit yes plus an unchanged page is a stop."""
+        def no(reason: str, **extra):
+            reviewed.update(extra)
+            return stopped(reason, i - 1, submitted=False,
+                           form_review={"shown": bool(reviewed.get("shown")),
+                                        "approved": bool(reviewed.get("approved"))})
+        if review is None:
+            return no(f"step {i} ({label}) sends the form, and there is no way here to show "
+                      "you the filled-in form and ask you again - nothing was sent. The "
+                      "fields Jarvis filled in are still on the page")
+        first_url = str(current.get("url") or "")
+        seen_fp = _fp(step.session, current)
+        if seen_fp is None:
+            return no("the form's fields could not be checked before showing it to you - "
+                      "nothing was sent")
+        picture, no_picture = None, ""
+        if snapshot is not None:
+            try:
+                picture = snapshot(step.session)
+            except Exception as exc:
+                # `plain` is a reason already written for the owner (see
+                # jarvis_form_review.NoPicture); any other error is named by
+                # its type only - never its text, which could hold page words.
+                picture, no_picture = None, (
+                    str(getattr(exc, "plain", "") or "")
+                    or f"the picture could not be taken ({type(exc).__name__})")
+            if picture is None and not no_picture:
+                no_picture = "the picture could not be taken"
+        else:
+            no_picture = "no picture - this browser has no window"
+        # The page must be the same after the picture as before it.
+        try:
+            look = getter(step.session) or {}
+        except Exception as exc:
+            return no(f"before the final step: the page could not be read "
+                      f"({type(exc).__name__}: {exc}) - nothing was sent")
+        problem = _page_problem(look, allowed, first_url, notes)
+        if problem or _fp(step.session, look) != seen_fp:   # None (unreadable) != a hash
+            return no("the page changed while Jarvis was preparing to show it to you"
+                      + (f" ({problem})" if problem else "") + " - nothing was sent")
+        info = {"site": (urlparse(first_url).hostname or "").lower(),
+                "goal": p.goal, "engine": p.engine,
+                "steps": _steps_for_review(done),
+                "final": {"role": step.role, "name": step.name,
+                          "within": step.within_name, "why": step.why},
+                "picture": picture, "no_picture": "" if picture else no_picture}
+        reviewed["shown"] = True
+        try:
+            verdict = review(info)
+        except Exception as exc:
+            return no(f"the form could not be put to you ({type(exc).__name__}) - nothing "
+                      "was sent")
+        finally:
+            info = picture = None      # nothing here keeps the picture
+        if not isinstance(verdict, dict) or verdict.get("approved") is not True:
+            why = str((verdict or {}).get("reason") or "") if isinstance(verdict, dict) else ""
+            return no("you did not approve sending the form" + (f" ({why})" if why else "")
+                      + " - nothing was sent. The filled-in form is still open in the browser "
+                      "for you", approved=False)
+        reviewed["approved"] = True
+        signal = check()
+        if signal in ("stop", "pause"):
+            return no("stopped by request while the form waited for you - nothing was sent")
+        # The last check: the page must be the one the owner looked at.
+        try:
+            look = getter(step.session) or {}
+        except Exception as exc:
+            return no(f"after your yes: the page could not be read ({type(exc).__name__}: "
+                      f"{exc}) - nothing was sent")
+        problem = _page_problem(look, allowed, first_url, notes)
+        if problem:
+            return no(f"the page changed after you looked at it ({problem}) - nothing was sent")
+        found = _candidates(look.get("elements") or [], step.role, _norm(step.name),
+                            _norm(step.within_name))
+        if len(found) != 1 or not found[0].get("enabled", True):
+            return no("the page changed after you looked at it: the button to send the form "
+                      "is no longer there exactly once and ready - nothing was sent")
+        if _fp(step.session, look) != seen_fp:   # None (unreadable) != a hash
+            return no("the page changed after you looked at it - nothing was sent")
+        return None
 
     _STEP_WORD = {"navigate": "opening a page", "read_page": "reading the page",
                   "click": "a click", "type": "typing", "select": "a selection",
@@ -2039,6 +2262,11 @@ def _run_steps(p, getter, actor, looker, allowed, announce, checkpoint, secrets)
                                    f"{step.session}) no longer matches what "
                                    f"was planned{extra} - stopping rather than guessing",
                                    i - 1)
+
+        if step.final:
+            blocked = _review_final(step, i, label, current)
+            if blocked is not None:
+                return blocked
 
         to_act = step
         names = _secret_names(step.value) if step.action == "type" else []
@@ -2098,6 +2326,9 @@ def _run_steps(p, getter, actor, looker, allowed, announce, checkpoint, secrets)
     # a stop that missed its run from stopping the next one instead.
     late = check()
     out = {"ok": True, "done": [s.as_dict() for s in done], "not_run": []}
+    if reviewed:
+        out["form_review"] = {"shown": bool(reviewed.get("shown")),
+                              "approved": bool(reviewed.get("approved"))}
     if notes:
         out["notes"] = [_redact(n, used) for n in notes]
     if late in ("stop", "pause"):

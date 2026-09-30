@@ -1690,6 +1690,32 @@ class JarvisApi(
             }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
         }
 
+    /**
+     * `GET /api/form-review/picture?id=` - the screenshot of a web form Jarvis
+     * filled in, for the card that asks to submit it (FormReview). A read: not
+     * held on a stale link. The token and the base64 are never logged. A 404
+     * (the card is decided or gone) comes back as [ApiError.NotFound].
+     */
+    suspend fun formPicture(id: String): ApiResult<Chatbot.Reply> =
+        withContext(Dispatchers.IO) {
+            val path = FormReview.pathFor(id)
+                ?: return@withContext ApiResult.Failed(ApiError.Malformed("not a form picture"))
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val req = Request.Builder().url(target).get().authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    when (resp.code) {
+                        401, 403 -> ApiResult.Failed(ApiError.BadToken)
+                        404 -> ApiResult.Failed(ApiError.NotFound)
+                        else -> ApiResult.Ok(Chatbot.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
     /** One POST whose status and body come back whole - for [supportWrite]. */
     private suspend fun rawPost(path: String, json: String): ApiResult<Chatbot.Reply> =
         withContext(Dispatchers.IO) {

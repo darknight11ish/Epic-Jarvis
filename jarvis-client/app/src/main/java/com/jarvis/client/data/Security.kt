@@ -316,9 +316,18 @@ object SecurityRules {
      * [handoffShown]: "Solve it here" shows a live picture of the PC's
      * browser window (the owner's decision of 2026-09-28: never saved on
      * either side), so it cannot be captured either while it shows.
+     *
+     * [formPictureShown]: an approval card shows the picture of a web form
+     * Jarvis filled in (the owner's decision of 2026-09-30, FormReview; never
+     * saved, not cleaned), so same rule while it shows.
      */
-    fun blockScreenCapture(s: Security, keyShown: Boolean = false, handoffShown: Boolean = false): Boolean =
-        s.appLock || s.privateLists || keyShown || handoffShown
+    fun blockScreenCapture(
+        s: Security,
+        keyShown: Boolean = false,
+        handoffShown: Boolean = false,
+        formPictureShown: Boolean = false,
+    ): Boolean =
+        s.appLock || s.privateLists || keyShown || handoffShown || formPictureShown
 
     /**
      * True when going from [from] to [to] weakens anything. Any one field is
