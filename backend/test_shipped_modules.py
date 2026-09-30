@@ -131,6 +131,8 @@ NOT_SHIPPED = {
     "eval_learner.py": "the memory self-test's learner half, run by eval_memory.py",
     "eval_tidy.py": "the memory self-test's \"where did I put\" and overnight-tidy half, "
                     "run by eval_memory.py",
+    "eval_topics.py": "the memory self-test's topic-controls half (leaks, parity, sorting), "
+                      "run by eval_memory.py",
     "grade-peers.py": "a research tool, not part of the backend",
     "_ollama_wire.py": "test fixture: Ollama's real /v1 stream format, for the chat tests",
     "_voice_test.py": "test plumbing: a stand-in speaker model for the voice suites",

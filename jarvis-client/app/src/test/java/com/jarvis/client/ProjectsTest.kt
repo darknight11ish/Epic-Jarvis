@@ -104,7 +104,10 @@ class ProjectsTest {
         assertEquals(3, run.points!!.size)
         assertEquals(21.1, run.target!!, 1e-9)
         assertEquals("Better than last time (up 1.5).", run.said)
-        assertEquals("3 numbers. Latest: 12 km.", Projects.chartSummary(run))
+        // The real read carries the finish-time range too (3 numbers: 2 more needed), so the
+        // spoken chart text is the numbers sentence, a space, then the PC's words as sent.
+        assertEquals("not_enough", run.forecast!!.state)
+        assertEquals("3 numbers. Latest: 12 km. Not enough numbers yet - 2 more needed.", Projects.chartSummary(run))
         val empty = Projects.parseBench(cases["bench_empty"]!!.jsonObject["benchmark"]!!.jsonObject)!!
         assertEquals(Projects.w("chart_empty"), Projects.chartSummary(empty))
     }
@@ -360,8 +363,10 @@ class ProjectsTest {
         val odd = parse("""{"state":"soon","words":"Soon.","line":{"from":{"at":1,"value":2},"to":{"at":3,"value":4}}}""")!!
         assertEquals("Soon.", odd.words)
         assertFalse(odd.drawable)
-        // A bench read without `forecast` at all still reads.
-        assertNull(Projects.parseBench(cases["bench_run"]!!.jsonObject["benchmark"]!!.jsonObject)!!.forecast)
+        // A bench read without `forecast` at all still reads (the real read has one; take it out).
+        val real = cases["bench_run"]!!.jsonObject["benchmark"]!!.jsonObject
+        assertNotNull(Projects.parseBench(real)!!.forecast)
+        assertNull(Projects.parseBench(JsonObject(real - "forecast"))!!.forecast)
     }
 
     @Test

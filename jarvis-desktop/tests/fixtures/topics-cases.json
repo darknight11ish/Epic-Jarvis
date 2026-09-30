@@ -1,0 +1,564 @@
+{
+  "schema": 1,
+  "words": {
+    "title": "Topics",
+    "intro": "A topic is a folder for things Jarvis knows. Pick what Jarvis may do with each folder.",
+    "sorted_guess": "Jarvis sorted {n} of your {total} facts by guessing from the words. Check them so switching a topic off works as you expect.",
+    "check_button": "Check these ({n})",
+    "check_right": "These are right",
+    "check_held": "Held back: might be about {name}",
+    "check_guessed": "Jarvis guessed",
+    "add_button": "Add a topic",
+    "private_tag": "Private",
+    "private_asks": "This will ask for your OK first.",
+    "unsorted_name": "Unsorted",
+    "kept_hidden": "{n} facts kept, hidden",
+    "show_them": "Show them",
+    "not_used_tag": "not used in answers",
+    "skipped": "{n} new things not saved this week",
+    "left_out": "Left out {n} facts because of your topic settings",
+    "left_out_one": "Left out 1 fact because of your topic settings",
+    "preview_left_out": "{n} things Jarvis knows about {name} will be left out of answers.",
+    "preview_left_out_one": "1 thing Jarvis knows about {name} will be left out of answers.",
+    "preview_none": "Nothing Jarvis knows about {name} will change in answers.",
+    "preview_stop_learning": "Jarvis will stop saving new things about {name}.",
+    "preview_pinned": "{n} pinned facts about {name} will pause until you switch it back on.",
+    "preview_pinned_one": "1 pinned fact about {name} will pause until you switch it back on.",
+    "help_plain": "Topic names and facts are stored in the same plain file on this PC. Jarvis's sorting is a guess from the words, in English only; check it.",
+    "model_help": "Let Jarvis's local model help sort",
+    "model_help_note": "Uses the model on this PC, never a cloud one, on up to 20 facts a night. It only suggests; you check.",
+    "confirm_delete": "Delete this topic? Its facts are kept; pick where they go.",
+    "screen_reader": "{name}, {n} facts, {mode}, button: change mode",
+    "hidden_row": "Topic {index}, {n} facts, {mode}",
+    "moved_line": "Done: {name} is now {mode}. You can change it in Brain.",
+    "pick_line": "Pick what Jarvis may do with {name}.",
+    "no_such_topic": "I do not have a topic called {name}.",
+    "topics_are": "Your topics are: {names}.",
+    "outside": "I do not change your topics after I have read outside text, like an email or a web page. Use Brain, then Memory, then Topics.",
+    "missing": "Your PC's Jarvis does not have topic controls yet - run apply-patches.ps1 on the PC.",
+    "waiting": "Waiting for your approval."
+  },
+  "errors": {
+    "bad_request": "Jarvis could not understand that request.",
+    "bad_name": "A topic needs a name of 1 to 24 letters or numbers.",
+    "name_taken": "You already have a topic with that name.",
+    "too_many_topics": "You can have up to 16 topics of your own. Delete one first.",
+    "bad_colour": "That colour is not one of the eight to pick from.",
+    "bad_icon": "That picture is not one of the ones to pick from.",
+    "bad_words": "Keywords are short words or phrases, up to 20 of them.",
+    "topic_not_found": "That topic is not there any more.",
+    "bad_mode": "That is not one of the four choices.",
+    "no_delete_unsorted": "Unsorted cannot be deleted.",
+    "no_rename_unsorted": "Unsorted cannot be renamed.",
+    "needs_destination": "Pick a topic for its facts to move to first.",
+    "bad_destination": "Pick a different topic for its facts to move to.",
+    "no_such_fact": "One of those facts is not there any more.",
+    "unavailable": "Topics are not available on this PC yet."
+  },
+  "last_words": {
+    "applied": "You approved the card, so the change was made.",
+    "denied": "The card was turned down, so nothing about your topics changed.",
+    "timed_out": "Nobody answered the card in time, so nothing about your topics changed.",
+    "refused": "Your PC's settings do not let this be approved, so nothing changed.",
+    "withdrawn": "You changed this again while the card waited, so approving it changed nothing.",
+    "failed": "It was approved, but the change could not be saved, so nothing changed."
+  },
+  "gate_failed": "The approval card could not be raised, so nothing changed.",
+  "modes": [
+    {
+      "id": "both",
+      "name": "Learn and use",
+      "sentence": "Jarvis remembers new things about this and uses them in answers."
+    },
+    {
+      "id": "use_only",
+      "name": "Use, but don't learn",
+      "sentence": "Jarvis keeps what it knows and uses it, but saves nothing new."
+    },
+    {
+      "id": "learn_only",
+      "name": "Learn, but don't use",
+      "sentence": "Jarvis keeps learning quietly, but leaves this out of its answers."
+    },
+    {
+      "id": "off",
+      "name": "Off",
+      "sentence": "Jarvis neither learns nor uses this. What it knows is kept, not deleted, and comes back when you switch it on."
+    }
+  ],
+  "limits": {
+    "max_topics": 16,
+    "name_max": 24,
+    "words_max": 20,
+    "batch": 10,
+    "colours": 8,
+    "unsorted_id": 1
+  },
+  "icons": [
+    "briefcase",
+    "book",
+    "home",
+    "folder",
+    "lightbulb",
+    "star",
+    "flag",
+    "wrench",
+    "leaf",
+    "music",
+    "heart",
+    "coin",
+    "people"
+  ],
+  "palette": [
+    {
+      "slot": 0,
+      "name": "blue",
+      "light": "#1d4ed8",
+      "dark": "#93b4ff"
+    },
+    {
+      "slot": 1,
+      "name": "green",
+      "light": "#146c36",
+      "dark": "#86e0a6"
+    },
+    {
+      "slot": 2,
+      "name": "amber",
+      "light": "#8a5300",
+      "dark": "#f5c26b"
+    },
+    {
+      "slot": 3,
+      "name": "violet",
+      "light": "#6d28d9",
+      "dark": "#c4a8ff"
+    },
+    {
+      "slot": 4,
+      "name": "teal",
+      "light": "#0f766e",
+      "dark": "#7adfd3"
+    },
+    {
+      "slot": 5,
+      "name": "rose",
+      "light": "#be123c",
+      "dark": "#ff9ab5"
+    },
+    {
+      "slot": 6,
+      "name": "slate",
+      "light": "#475569",
+      "dark": "#b6c2d1"
+    },
+    {
+      "slot": 7,
+      "name": "orange",
+      "light": "#b43a00",
+      "dark": "#ffb385"
+    }
+  ],
+  "starters": [
+    {
+      "name": "Work",
+      "colour": 0,
+      "icon": "briefcase",
+      "private": false
+    },
+    {
+      "name": "Health",
+      "colour": 5,
+      "icon": "heart",
+      "private": true
+    },
+    {
+      "name": "Money",
+      "colour": 2,
+      "icon": "coin",
+      "private": true
+    },
+    {
+      "name": "Family",
+      "colour": 4,
+      "icon": "people",
+      "private": false
+    },
+    {
+      "name": "Hobbies",
+      "colour": 1,
+      "icon": "music",
+      "private": false
+    },
+    {
+      "name": "Projects",
+      "colour": 3,
+      "icon": "folder",
+      "private": false
+    },
+    {
+      "name": "Ideas",
+      "colour": 4,
+      "icon": "lightbulb",
+      "private": false
+    }
+  ],
+  "unsorted": {
+    "name": "Unsorted",
+    "colour": 6,
+    "icon": "flag"
+  },
+  "mode_cases": [
+    {
+      "old": "both",
+      "new": "both",
+      "private": false,
+      "loosens": false,
+      "needs_card": false
+    },
+    {
+      "old": "both",
+      "new": "both",
+      "private": true,
+      "loosens": false,
+      "needs_card": false
+    },
+    {
+      "old": "both",
+      "new": "use_only",
+      "private": false,
+      "loosens": false,
+      "needs_card": false
+    },
+    {
+      "old": "both",
+      "new": "use_only",
+      "private": true,
+      "loosens": false,
+      "needs_card": false
+    },
+    {
+      "old": "both",
+      "new": "learn_only",
+      "private": false,
+      "loosens": false,
+      "needs_card": false
+    },
+    {
+      "old": "both",
+      "new": "learn_only",
+      "private": true,
+      "loosens": false,
+      "needs_card": false
+    },
+    {
+      "old": "both",
+      "new": "off",
+      "private": false,
+      "loosens": false,
+      "needs_card": false
+    },
+    {
+      "old": "both",
+      "new": "off",
+      "private": true,
+      "loosens": false,
+      "needs_card": false
+    },
+    {
+      "old": "use_only",
+      "new": "both",
+      "private": false,
+      "loosens": true,
+      "needs_card": false
+    },
+    {
+      "old": "use_only",
+      "new": "both",
+      "private": true,
+      "loosens": true,
+      "needs_card": true
+    },
+    {
+      "old": "use_only",
+      "new": "use_only",
+      "private": false,
+      "loosens": false,
+      "needs_card": false
+    },
+    {
+      "old": "use_only",
+      "new": "use_only",
+      "private": true,
+      "loosens": false,
+      "needs_card": false
+    },
+    {
+      "old": "use_only",
+      "new": "learn_only",
+      "private": false,
+      "loosens": true,
+      "needs_card": false
+    },
+    {
+      "old": "use_only",
+      "new": "learn_only",
+      "private": true,
+      "loosens": true,
+      "needs_card": true
+    },
+    {
+      "old": "use_only",
+      "new": "off",
+      "private": false,
+      "loosens": false,
+      "needs_card": false
+    },
+    {
+      "old": "use_only",
+      "new": "off",
+      "private": true,
+      "loosens": false,
+      "needs_card": false
+    },
+    {
+      "old": "learn_only",
+      "new": "both",
+      "private": false,
+      "loosens": true,
+      "needs_card": false
+    },
+    {
+      "old": "learn_only",
+      "new": "both",
+      "private": true,
+      "loosens": true,
+      "needs_card": true
+    },
+    {
+      "old": "learn_only",
+      "new": "use_only",
+      "private": false,
+      "loosens": true,
+      "needs_card": false
+    },
+    {
+      "old": "learn_only",
+      "new": "use_only",
+      "private": true,
+      "loosens": true,
+      "needs_card": true
+    },
+    {
+      "old": "learn_only",
+      "new": "learn_only",
+      "private": false,
+      "loosens": false,
+      "needs_card": false
+    },
+    {
+      "old": "learn_only",
+      "new": "learn_only",
+      "private": true,
+      "loosens": false,
+      "needs_card": false
+    },
+    {
+      "old": "learn_only",
+      "new": "off",
+      "private": false,
+      "loosens": false,
+      "needs_card": false
+    },
+    {
+      "old": "learn_only",
+      "new": "off",
+      "private": true,
+      "loosens": false,
+      "needs_card": false
+    },
+    {
+      "old": "off",
+      "new": "both",
+      "private": false,
+      "loosens": true,
+      "needs_card": false
+    },
+    {
+      "old": "off",
+      "new": "both",
+      "private": true,
+      "loosens": true,
+      "needs_card": true
+    },
+    {
+      "old": "off",
+      "new": "use_only",
+      "private": false,
+      "loosens": true,
+      "needs_card": false
+    },
+    {
+      "old": "off",
+      "new": "use_only",
+      "private": true,
+      "loosens": true,
+      "needs_card": true
+    },
+    {
+      "old": "off",
+      "new": "learn_only",
+      "private": false,
+      "loosens": true,
+      "needs_card": false
+    },
+    {
+      "old": "off",
+      "new": "learn_only",
+      "private": true,
+      "loosens": true,
+      "needs_card": true
+    },
+    {
+      "old": "off",
+      "new": "off",
+      "private": false,
+      "loosens": false,
+      "needs_card": false
+    },
+    {
+      "old": "off",
+      "new": "off",
+      "private": true,
+      "loosens": false,
+      "needs_card": false
+    }
+  ],
+  "name_cases": [
+    {
+      "raw": "Work",
+      "clean": "Work"
+    },
+    {
+      "raw": "  Garden   plans ",
+      "clean": "Garden plans"
+    },
+    {
+      "raw": "",
+      "clean": null
+    },
+    {
+      "raw": "xxxxxxxxxxxxxxxxxxxxxxxx",
+      "clean": "xxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+      "raw": "xxxxxxxxxxxxxxxxxxxxxxxxx",
+      "clean": null
+    },
+    {
+      "raw": "Tab\there",
+      "clean": "Tab here"
+    },
+    {
+      "raw": "Unsorted",
+      "clean": "Unsorted"
+    }
+  ],
+  "words_cases": [
+    {
+      "raw": [
+        "boiler",
+        "central heating"
+      ],
+      "clean": [
+        "boiler",
+        "central heating"
+      ]
+    },
+    {
+      "raw": [
+        "a"
+      ],
+      "clean": null
+    },
+    {
+      "raw": [
+        "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      ],
+      "clean": null
+    },
+    {
+      "raw": [
+        "fine",
+        "fine"
+      ],
+      "clean": [
+        "fine"
+      ]
+    },
+    {
+      "raw": [
+        3
+      ],
+      "clean": null
+    },
+    {
+      "raw": "one, two\nthree",
+      "clean": [
+        "one",
+        "two",
+        "three"
+      ]
+    },
+    {
+      "raw": null,
+      "clean": []
+    }
+  ],
+  "screen_reader_cases": [
+    {
+      "name": "Work",
+      "facts": 41,
+      "mode": "use_only",
+      "expect": "Work, 41 facts, Use, but don't learn, button: change mode"
+    }
+  ],
+  "hidden_row_cases": [
+    {
+      "index": 1,
+      "facts": 41,
+      "mode": "use_only",
+      "expect": "Topic 1, 41 facts, Use, but don't learn"
+    }
+  ],
+  "preview_cases": [
+    {
+      "name": "Work",
+      "n": 12,
+      "expect": "12 things Jarvis knows about Work will be left out of answers."
+    },
+    {
+      "name": "Work",
+      "n": 1,
+      "expect": "1 thing Jarvis knows about Work will be left out of answers."
+    }
+  ],
+  "card_cases": [
+    {
+      "name": "Health",
+      "old": "learn_only",
+      "new": "both",
+      "private": true,
+      "outside": false,
+      "text": "Turn Health back on for answers? Jarvis will use your Health facts again.\n\nFacts that count as sensitive are still kept on screen and not read aloud, and new ones still wait for your yes unless \"Also remember sensitive topics automatically\" is on.\n\nHealth would become: Learn and use.\nIf you say no: nothing about your topics changes."
+    },
+    {
+      "name": "Money",
+      "old": "off",
+      "new": "use_only",
+      "private": true,
+      "outside": true,
+      "text": "Turn Money back on for answers? Jarvis will use your Money facts again.\n\nFacts that count as sensitive are still kept on screen and not read aloud, and new ones still wait for your yes unless \"Also remember sensitive topics automatically\" is on.\n\nThis was asked after Jarvis read outside text (an email, a web page, a file). Only say yes if it is what you want.\n\nMoney would become: Use, but don't learn.\nIf you say no: nothing about your topics changes."
+    }
+  ]
+}
