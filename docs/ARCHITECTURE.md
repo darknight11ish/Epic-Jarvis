@@ -2184,7 +2184,8 @@ they landed):
 
 - **The second graphics card** (added 2026-09-24), built and ALL OFF.
   `jarvis_second_card.py` detects a capable second card (Turing or newer,
-  10 GB or more), and five switches - longer conversations, pictures,
+  8 GB or more since 2026-09-30, 10 GB before; an 8 GB card runs three of the
+  five, see docs/SECOND-CARD.md), and five switches - longer conversations, pictures,
   background learning, browser control, the wiki builder - each turned
   on by one approval card (`second_card_enable`, the same four steps as
   section 3) and only while that card is detected. When one is on, a second

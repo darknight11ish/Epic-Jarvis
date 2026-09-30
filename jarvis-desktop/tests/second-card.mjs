@@ -107,7 +107,7 @@ await check("one card (today's PC): found in words, every switch shown and none 
   assert.match(s.cards[0], /NVIDIA GeForce RTX 2080 SUPER \(8 GB\)/);
   assert.match(s.cards[0], /The one chat runs on\. Everyday chat runs here: a monitor is plugged into it\./);
   assert.equal(s.blockedHidden, false);
-  assert.match(s.blocked, /10 GB or more\): only one graphics card found \(the NVIDIA GeForce RTX 2080 SUPER\)\. /);
+  assert.match(s.blocked, /8 GB or more\): only one graphics card found \(the NVIDIA GeForce RTX 2080 SUPER\)\. /);
   // The master switch and all five features, in the backend's order.
   assert.deepEqual(s.rows.map((r) => r.id),
     ["master", ...SC.one_card.features.map((f) => f.id)]);
