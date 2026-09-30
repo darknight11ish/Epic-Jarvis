@@ -16485,7 +16485,7 @@ The apps do not draw a chat answer's figures in a special way (there is no `: ja
 this): the text is the answer.
 
 
-## 104. Overnight suggested tags (added 2026-09-30; backend built and tested, apps planned)
+## 104. Overnight suggested tags (added 2026-09-30; backend and both apps built)
 
 The owner's decision (2026-09-30, `docs/OVERNIGHT-TAGS-DESIGN.md`; build queue item 6, which reversed "no automatic tagging" to "no tagging without a tap"; the owner's answer: **up to 3 cards a night**): while the owner sleeps, Jarvis's model **on this PC** may look at a few untagged chats and **suggest** a tag. Each suggestion is a card. Nothing is filed until a person taps Approve. Built in `backend/jarvis_tag_suggest.py` (shipped whole), `ChatLog.suggest_candidates` and the `meta` accessors in `jarvis_chat_log.py`, `tag-suggest.patch` (two gate lines, one startup block) and the route names in `chat-history.patch`. **This moves a written rule** (ARCHITECTURE section 5, "Overnight suggested tags: the ONE way past chat words reach a model"); nothing else about "no index, ever" changed.
 
@@ -16680,7 +16680,7 @@ it runs in (the tests pass a zone in); the phone's Compose screens (no local
 Android build; `ProgressTest` runs the pure Kotlin only, and CI compiles the
 rest).
 
-## 106. New section here (added 2026-09-30; backend built and tested, apps planned)
+## 106. New section here (added 2026-09-30; backend and both apps built)
 
 The owner's decision (2026-09-30, `docs/OVERNIGHT-TAGS-DESIGN.md` section 5; shared with the Galaxy panel, `docs/GALAXY-PANEL-DESIGN.md`): in an opened chat in History, once it has **10 or more turns**, every message the owner sent gets a **New section here** button that draws a divider above it. **The owner's answer: it is only a divider** - Jarvis still reads the whole chat the same way; nothing about what it reads or remembers changes, and a marker reaches no model, learner, memory or index. No card (the owner's own layout of a chat already kept); held on a stale link.
 
@@ -16946,7 +16946,7 @@ line is `("yes", "local", ...)`, so it is not a risky approval (no Windows Hello
 its eight cases; `tools/gen_asks_first_cases.py` and `tools/gen_card_words_cases.py` carry the `referee_tick`
 row and words. All three changes are additions.
 
-## 109. Show or hide menus (added 2026-09-30; backend and phone built, desktop planned)
+## 109. Show or hide menus (added 2026-09-30; backend and both apps built)
 
 The owner's decision (2026-09-30, `docs/MENU-VISIBILITY-DESIGN.md`, `docs/BUILD-QUEUE-2026-09-30.md` item 11): the owner may **hide** a menu (gone from the list, the rail and the jump links) or **fold** it (its title stays, its body folds to one line), and bring it back easily. **Hiding only tidies.** Nothing is turned off, no approval card is raised either way, Windows Hello and the screen lock are never asked, and the gate (`jarvis_gate.py`) is never involved. A hidden Quiz menu does not stop a quiz reminder; a hidden Goals plate does not stop a goal's weekly check-in.
 
@@ -17000,7 +17000,7 @@ The "Things you can say" list is **not** changed (the owner's Q3 answer: no; `ja
 * The phone's Jetpack Compose code has not been compiled here (no Android build in this container); its pure logic (`data/MenuState.kt`, `net/MenuVisibility.kt`) was compiled and its unit tests run with Kotlin 2.0.21 (see `docs/ARCHITECTURE.md` section 8). Nothing was run on a phone or in CI.
 * Hiding a whole Work tab on the desktop also hides the Undo shelf (the tab contains it); the design accepted this with the "N hidden (needs you)" count on the "N hidden - Show" line.
 
-## 112. Quiz me on a YouTube video (added 2026-09-30; backend built and tested, apps planned)
+## 112. Quiz me on a YouTube video (added 2026-09-30; backend and both apps built)
 
 The owner's decision (2026-09-30, `docs/STUDY-FROM-TEXT-DESIGN.md` sections 5, 7 and 14): Jarvis may read a YouTube video's **caption text** for a quiz, **one approval card per link**. Caption text only: never the video, never its sound, never comments. **It breaks YouTube's terms and may be blocked**; the owner accepted that, and the card says so every time. Backend: `backend/jarvis_youtube.py` (the whole feature), `backend/youtube.patch` (the gate action and ONE install block in `jarvis_hud.py`), `backend/jarvis_quiz.py` (`start_outside`, the hook), `backend/test_youtube.py`. Numbers 109 and 111 were reserved by the build queue, 110 is taken, so this is 112. **Not tried against the real site** (the build container's network policy blocked it): `youtube-transcript-api` is unofficial, YouTube changes, and it often blocks data-centre addresses.
 
@@ -17054,7 +17054,7 @@ A request that **fails after a yes** is a normal answer (status 200) with `state
 
 Tests: `backend/test_youtube.py` (the link forms, refusals, the card's words, the gate order, cancel, cleaning and the cap, every error mapped to plain words, the real transport's call, the quiz hook, crisis, injection, no learner or disk, the routes, the patch on the stack, every table and doc).
 
-## 113. Grade this better: send one quiz to a cloud AI service (added 2026-09-30; backend built and tested, apps planned)
+## 113. Grade this better: send one quiz to a cloud AI service (added 2026-09-30; backend and both apps built)
 
 The owner's decision (2026-09-30, `docs/STUDY-FROM-TEXT-DESIGN.md` sections 7 and 15): the local model marks a quiz by default; a **"Grade this better" button may send that one quiz to a cloud model, one approval card per request**, and the card lists exactly what leaves the PC. This bends rule 1 for that one quiz only. Cloud keys follow rule 3. Backend: `backend/jarvis_quiz_cloud.py` (the whole feature), `backend/quiz-cloud.patch` (the gate action and ONE install block in `jarvis_hud.py`), `backend/jarvis_quiz.py` (the owner's typed answers are now kept in the open quiz's memory so the card can list them; `cloud_export`, `apply_cloud_marks`, `mark_private`), `backend/test_quiz_cloud.py`. It reuses the chatbot driver's API adapters and monthly money limit (`backend/jarvis_chatbot_api.py`; section 87) and does not copy them. **Never run against a real provider** (no network in the build container).
 
