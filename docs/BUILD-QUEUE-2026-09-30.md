@@ -101,3 +101,14 @@ When ALL current work is finished and nothing needs the owner's opinion:
    this one PR). Follow the repo's PR template if it has one. Do not merge on red checks.
 3. Then run a **full bug audit only on the recent changes from these 3 PRs** (#38, #39 and this one).
 4. The cohesiveness audit (item 12) still runs when nothing needs the owner.
+
+## GitHub tools: update and add (owner, 2026-09-30)
+
+The owner asked whether Jarvis could use the local models to update GitHub tools
+already integrated, or add new repos after testing them first. Chose **"Full: add
+and update"**. Not built. Design first (`docs/GITHUB-TOOLS-DESIGN.md`), brought back
+before building. Ground rules for the design: nothing installs without a card showing
+exactly what changes plus test results; tests run in a throwaway copy first; licence
+and maintenance are checked by code, not only by the model; the fetch is a named way
+out of the PC carrying no private data (rule 1); the coding step waits for the 12 GB
+card. Queued after menu visibility.
