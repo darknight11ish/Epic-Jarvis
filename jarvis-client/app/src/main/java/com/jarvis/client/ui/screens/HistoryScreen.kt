@@ -227,7 +227,8 @@ fun HistoryScreen(
                     tagView = v
                     tagsOld = false
                     // A tag deleted elsewhere: its chip goes back to All.
-                    if (tagFilter.isNotEmpty() && v.tags.none { it.id.toString() == tagFilter }) tagFilter = ""
+                    if (tagFilter.isNotEmpty() && tagFilter != ChatTags.NONE_FILTER &&
+                        v.tags.none { it.id.toString() == tagFilter }) tagFilter = ""
                 }
             }
             is ApiResult.Failed -> if (r.error == ApiError.NotFound) {
@@ -292,7 +293,7 @@ fun HistoryScreen(
                 }
                 moveFor = null
                 val name = tagView?.tags?.firstOrNull { it.id == tagId }?.name
-                listSaid = if (name != null) "Filed under $name." else "Tag removed."
+                listSaid = if (name != null) ChatTags.filed(name) else ChatTags.UNFILED
                 tagReads += 1
                 if (fromBanner) {
                     filing = null
@@ -323,6 +324,14 @@ fun HistoryScreen(
                     id = open,
                     initialFind = findFirst,
                     onContinue = onContinue,
+                    tags = tagView?.tags.orEmpty(),
+                    onTagged = { id, tagId ->
+                        rows = rows?.map { if (it.id == id) it.copy(tagId = tagId) else it }
+                        found = found?.let { f ->
+                            f.copy(found = f.found.map { h -> if (h.row.id == id) h.copy(row = h.row.copy(tagId = tagId)) else h })
+                        }
+                        tagReads += 1
+                    },
                     modifier = Modifier.weight(1f),
                     onDeleted = { id, sentence ->
                         rows = rows?.filterNot { it.id == id }
@@ -482,7 +491,7 @@ fun HistoryScreen(
                         // "All" and one chip per tag: shows one tag's chats.
                         if (view != null && groupedTags) {
                             Gap(2)
-                            TagFilterChips(view.tags, tagFilter, onPick = { picked ->
+                            TagFilterChips(view.tags, view.untagged, tagFilter, onPick = { picked ->
                                 if (picked != tagFilter) {
                                     tagFilter = picked
                                     rows = null
@@ -565,7 +574,11 @@ fun HistoryScreen(
                     val f = found
                     if (f != null && f.queryOk) {
                         // A tag chosen narrows the words too (the PC's search takes no tag).
-                        val hits = tagFilter.toIntOrNull()?.let { t -> f.found.filter { it.row.tagId == t } } ?: f.found
+                        val hits = when (val key = ChatTags.filterKey(tagFilter)) {
+                            null -> f.found
+                            ChatTags.UNTAGGED_KEY -> f.found.filter { it.row.tagId == null }
+                            else -> f.found.filter { it.row.tagId == key }
+                        }
                         items(hits, key = { "f-" + it.row.id }) { hit ->
                             FoundRow(
                                 hit,
@@ -612,7 +625,7 @@ fun HistoryScreen(
                         // Sections, one per tag in the owner's order, newest
                         // first inside, Untagged last. Each header says its
                         // name, icon and count, and folds shut.
-                        val sections = ChatTags.group(visible, view.tags, view.untagged, tagFilter.toIntOrNull())
+                        val sections = ChatTags.group(visible, view.tags, view.untagged, ChatTags.filterKey(tagFilter))
                         sections.forEach { sec ->
                             val isOpen = sec.key !in closed
                             val count = ChatTags.countOf(sec, view.untagged)
@@ -924,6 +937,8 @@ private fun Conversation(
     id: String,
     initialFind: String,
     onContinue: suspend (String) -> String?,
+    tags: List<ChatTags.Tag>,
+    onTagged: (id: String, tagId: Int?) -> Unit,
     modifier: Modifier,
     onDeleted: (id: String, sentence: String) -> Unit,
 ) {
@@ -937,6 +952,11 @@ private fun Conversation(
     val zone = remember { ZoneId.systemDefault() }
     val today = LocalDate.now(zone)
     var loaded by remember(id) { mutableStateOf<ChatLog.Transcript?>(null) }
+    // This chat's tag: the PC's answer when it opened, then whatever the owner
+    // moved it to. A tag the list no longer has shows as no tag.
+    var chatTagId by remember(id) { mutableStateOf<Int?>(null) }
+    var moveOpen by remember(id) { mutableStateOf(false) }
+    var tagSaid by remember(id) { mutableStateOf<String?>(null) }
     var err by remember(id) { mutableStateOf<String?>(null) }
     var confirm by remember(id) { mutableStateOf(false) }
     var busy by remember(id) { mutableStateOf(false) }
@@ -981,7 +1001,10 @@ private fun Conversation(
         when (val r = JarvisRuntime.historyConversation(id)) {
             is ApiResult.Ok -> {
                 val t = ChatLog.transcript(r.value)
-                if (t == null) err = "Your PC sent something this app could not read." else loaded = t
+                if (t == null) err = "Your PC sent something this app could not read." else {
+                    loaded = t
+                    chatTagId = t.tagId
+                }
             }
             is ApiResult.Failed -> err = ChatLog.failure(r.error) ?: JarvisRuntime.noticeFor(r.error)
         }
@@ -1028,6 +1051,40 @@ private fun Conversation(
                     Gap(4)
                     Text(ChatLog.KIND_TITLE[t.kind].orEmpty(), style = MaterialTheme.typography.labelSmall,
                         color = chrome.textMid)
+                }
+                // The chat's tag and "Move to" (docs/CHAT-TAGS-DESIGN.md section 10),
+                // the same list the rows have. Only when the PC has tags.
+                if (t != null && tags.isNotEmpty()) {
+                    Gap(6)
+                    tags.firstOrNull { it.id == chatTagId }?.let { TagChip(it) }
+                    Quiet(
+                        if (moveOpen) ChatTags.CANCEL else ChatTags.MOVE_TO,
+                        color = chrome.textMid,
+                        modifier = Modifier.semantics {
+                            contentDescription = (if (moveOpen) "Close move list for " else "${ChatTags.MOVE_TO}: ") + t.title
+                        },
+                        onClick = { moveOpen = !moveOpen },
+                    )
+                    if (moveOpen) {
+                        MoveToList(tags, chatTagId, onPick = { picked ->
+                            scope.launch {
+                                val w = JarvisRuntime.fileChat(id, picked)
+                                if (w.ok) {
+                                    chatTagId = picked
+                                    moveOpen = false
+                                    val name = tags.firstOrNull { it.id == picked }?.name
+                                    tagSaid = if (name != null) ChatTags.filed(name) else ChatTags.UNFILED
+                                    onTagged(id, picked)
+                                } else {
+                                    tagSaid = w.said
+                                }
+                            }
+                        })
+                    }
+                    tagSaid?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
+                            modifier = Modifier.liveStatus())
+                    }
                 }
                 // "Continue this chat" (the owner's decision, 2026-09-28): Home
                 // carries it on - the same conversation, the newest kept

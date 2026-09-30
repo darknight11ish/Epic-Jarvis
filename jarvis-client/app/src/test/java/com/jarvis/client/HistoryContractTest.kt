@@ -8,7 +8,6 @@ import com.jarvis.client.net.MemoryErase
 import com.jarvis.client.net.Projects
 import com.jarvis.client.net.TemporaryChat
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -17,7 +16,6 @@ import kotlinx.serialization.json.long
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
 import java.time.Instant
@@ -80,53 +78,113 @@ class HistoryContractTest {
     }
 
     /**
-     * Chat tags (docs/CHAT-TAGS-DESIGN.md section 10). The backend builder's
-     * tools/gen_history_cases.py adds the tag words, palette and icon list to
-     * this fixture; its key names were not fixed when this test was written,
-     * so it looks for an object under `tags` (with any of `words`, `palette`,
-     * `icons`, `max_tags`, `name_max`) and checks whatever is there, word for
-     * word against [ChatTags]. With no such key it is skipped - the same values
-     * are held to section 10 directly by TagsTest.
+     * Chat tags (docs/CHAT-TAGS-DESIGN.md section 10), held to the fixture's
+     * real keys (tools/gen_history_cases.py): words.tag_*, tag_limits,
+     * tag_icons, tag_palette, tag_starters, tag_error_codes,
+     * tag_section_cases, tag_delete_cases.
      */
+    private fun hex(o: JsonObject, key: String): Int = o[key]!!.jsonPrimitive.content.removePrefix("#").toInt(16)
+
     @Test
-    fun `tag words, palette and icons are the fixture's when it carries them`() {
-        val tags = doc["tags"] as? JsonObject
-        assumeTrue("history-cases.json has no 'tags' object yet", tags != null)
-        tags!!
-        (tags["words"] as? JsonObject)?.let { tw ->
-            val mine = mapOf(
-                "untagged" to ChatTags.UNTAGGED,
-                "all" to ChatTags.ALL,
-                "editor_title" to ChatTags.EDITOR_TITLE,
-                "add" to ChatTags.ADD,
-                "rename" to ChatTags.RENAME,
-                "delete" to ChatTags.DELETE,
-                "move_to" to ChatTags.MOVE_TO,
-                "no_tag" to ChatTags.NO_TAG,
+    fun `tag words are the fixture's, word for word`() {
+        assertEquals(w("tag_untagged"), ChatTags.UNTAGGED)
+        assertEquals(w("tag_all"), ChatTags.ALL)
+        assertEquals(w("tag_editor_title"), ChatTags.EDITOR_TITLE)
+        assertEquals(w("tag_add"), ChatTags.ADD)
+        assertEquals(w("tag_rename"), ChatTags.RENAME)
+        assertEquals(w("tag_delete"), ChatTags.DELETE)
+        assertEquals(w("tag_move_to"), ChatTags.MOVE_TO)
+        assertEquals(w("tag_none"), ChatTags.NO_TAG)
+        assertEquals(w("tag_banner").replace("{name}", "Home"), ChatTags.banner("Home"))
+        assertEquals(w("tag_filed").replace("{name}", "Home"), ChatTags.filed("Home"))
+        assertEquals(w("tag_unfiled"), ChatTags.UNFILED)
+        assertEquals(w("tag_move_placeholder"), ChatTags.MOVE_PLACEHOLDER)
+        assertEquals(w("tag_file_under").replace("{name}", "Home"), ChatTags.fileUnder("Home"))
+    }
+
+    @Test
+    fun `the phone's own error sentences are the fixture's, one per code`() {
+        val codes = doc["tag_error_codes"]!!.jsonArray.map { it.jsonPrimitive.content }
+        val theirs = map("tag_errors")
+        assertEquals(codes, theirs.keys.toList())
+        assertEquals(codes.toSet(), ChatTags.ERRORS.keys)
+        for (c in codes) {
+            assertEquals("error $c", theirs[c], ChatTags.ERRORS[c])
+            // With no message from the PC, the fixture's sentence is what shows.
+            assertEquals("fallback $c", theirs[c], ChatTags.errorSentence(c))
+        }
+    }
+
+    @Test
+    fun `limits, icons, palette, tint and starters are the fixture's`() {
+        val limits = doc["tag_limits"]!!.jsonObject
+        assertEquals(limits["max_tags"]!!.jsonPrimitive.content.toInt(), ChatTags.MAX_TAGS)
+        assertEquals(limits["name_max"]!!.jsonPrimitive.content.toInt(), ChatTags.NAME_MAX)
+        assertEquals(limits["colours"]!!.jsonPrimitive.content.toInt(), ChatTags.COLOUR_NAMES.size)
+        assertEquals(doc["tag_icons"]!!.jsonArray.map { it.jsonPrimitive.content }, ChatTags.ICONS)
+        val palette = doc["tag_palette"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(ChatTags.COLOUR_NAMES.size, palette.size)
+        palette.forEachIndexed { i, o ->
+            assertEquals(i, o["slot"]!!.jsonPrimitive.content.toInt())
+            assertEquals("name $i", o["name"]!!.jsonPrimitive.content, ChatTags.COLOUR_NAMES[i])
+            assertEquals("light ink $i", hex(o, "light"), ChatTags.INK_LIGHT[i])
+            assertEquals("dark ink $i", hex(o, "dark"), ChatTags.INK_DARK[i])
+        }
+        val tint = doc["tag_tint"]!!.jsonObject
+        assertEquals(tint["light"]!!.jsonPrimitive.content.toFloat(), ChatTags.TINT_LIGHT, 0f)
+        assertEquals(tint["dark"]!!.jsonPrimitive.content.toFloat(), ChatTags.TINT_DARK, 0f)
+        val starters = doc["tag_starters"]!!.jsonArray.map { it.jsonObject }
+        assertEquals(starters.size, ChatTags.STARTER.size)
+        starters.forEachIndexed { i, o ->
+            val mine = ChatTags.STARTER[i]
+            assertEquals(o["id"]!!.jsonPrimitive.content.toInt(), mine.id)
+            assertEquals(o["name"]!!.jsonPrimitive.content, mine.name)
+            assertEquals(o["colour"]!!.jsonPrimitive.content.toInt(), mine.colour)
+            assertEquals(o["icon"]!!.jsonPrimitive.content, mine.icon)
+            assertEquals(o["order"]!!.jsonPrimitive.content.toInt(), mine.order)
+        }
+    }
+
+    @Test
+    fun `section headers, the spoken form and the delete question follow the cases`() {
+        for (el in doc["tag_section_cases"]!!.jsonArray) {
+            val c = el.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val count = c["count"]!!.jsonPrimitive.content.toInt()
+            val expanded = c["expanded"]!!.jsonPrimitive.content.toBoolean()
+            assertEquals(c["header"]!!.jsonPrimitive.content, ChatTags.header(name, count))
+            assertEquals(c["sr"]!!.jsonPrimitive.content, ChatTags.headerSpoken(name, count, expanded))
+        }
+        for (el in doc["tag_delete_cases"]!!.jsonArray) {
+            val c = el.jsonObject
+            assertEquals(
+                c["expect"]!!.jsonPrimitive.content,
+                ChatTags.deleteConfirm(c["name"]!!.jsonPrimitive.content, c["count"]!!.jsonPrimitive.content.toInt()),
             )
-            for ((key, expect) in mine) {
-                val theirs = (tw[key] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: continue
-                assertEquals("tag word $key", theirs, expect)
-            }
         }
-        (tags["icons"] as? JsonArray)?.let { arr ->
-            assertEquals(arr.map { it.jsonPrimitive.content }, ChatTags.ICONS)
-        }
-        (tags["max_tags"] as? kotlinx.serialization.json.JsonPrimitive)?.let {
-            assertEquals(it.content.toInt(), ChatTags.MAX_TAGS)
-        }
-        (tags["name_max"] as? kotlinx.serialization.json.JsonPrimitive)?.let {
-            assertEquals(it.content.toInt(), ChatTags.NAME_MAX)
-        }
-        (tags["palette"] as? JsonArray)?.let { arr ->
-            assertEquals(ChatTags.COLOUR_NAMES.size, arr.size)
-            arr.forEachIndexed { i, el ->
-                val o = el as? JsonObject ?: return@forEachIndexed
-                fun hex(key: String): Int? = (o[key] as? kotlinx.serialization.json.JsonPrimitive)?.content
-                    ?.removePrefix("#")?.toIntOrNull(16)
-                hex("light")?.let { assertEquals("light ink $i", it, ChatTags.INK_LIGHT[i]) }
-                hex("dark")?.let { assertEquals("dark ink $i", it, ChatTags.INK_DARK[i]) }
-            }
+    }
+
+    @Test
+    fun `a section's count goes through group and countOf`() {
+        // Twelve Work chats loaded, none elsewhere: the header says 12 either way.
+        val work = ChatTags.STARTER[0].copy(count = 12)
+        val learning = ChatTags.STARTER[1].copy(count = 1)
+        fun row(i: Int, tag: Int?) = ChatLog.Summary(
+            id = "c$i", title = "t$i", started = i.toLong(), updated = i.toLong(), turns = 2, device = null,
+            hasVoice = false, tainted = false, tagId = tag,
+        )
+        val rows = (1..12).map { row(it, work.id) } + row(13, learning.id)
+        val sections = ChatTags.group(rows, listOf(work, learning), untagged = 0)
+        assertEquals(listOf("Work", "Learning"), sections.map { it.tag?.name })
+        assertEquals(12, ChatTags.countOf(sections[0], 0))
+        assertEquals(1, ChatTags.countOf(sections[1], 0))
+        for (el in doc["tag_section_cases"]!!.jsonArray) {
+            val c = el.jsonObject
+            val name = c["name"]!!.jsonPrimitive.content
+            val count = c["count"]!!.jsonPrimitive.content.toInt()
+            val sec = sections.firstOrNull { it.tag?.name == name } ?: continue
+            assertEquals(count, ChatTags.countOf(sec, 0))
+            assertEquals(c["header"]!!.jsonPrimitive.content, ChatTags.header(name, ChatTags.countOf(sec, 0)))
         }
     }
 

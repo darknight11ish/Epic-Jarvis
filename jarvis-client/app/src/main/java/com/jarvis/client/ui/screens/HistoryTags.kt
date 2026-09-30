@@ -129,11 +129,16 @@ internal fun TagSectionHeader(
     }
 }
 
-/** "All" and one chip per tag: filters the list to one tag; "All" clears it. */
+/**
+ * "All", one chip per tag, then "Untagged" (the PC takes `tag=none`; both apps
+ * show it, docs/CHAT-TAGS-DESIGN.md section 10): filters the list to one tag;
+ * "All" clears it.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun TagFilterChips(
     tags: List<ChatTags.Tag>,
+    untagged: Int,
     selected: String,
     onPick: (String) -> Unit,
 ) {
@@ -174,6 +179,15 @@ internal fun TagFilterChips(
                 )
             }
         }
+        val noneOn = selected == ChatTags.NONE_FILTER
+        Quiet(
+            (if (noneOn) "• " else "") + ChatTags.UNTAGGED + " ($untagged)",
+            color = if (noneOn) chrome.textHi else chrome.textMid,
+            modifier = Modifier.semantics {
+                contentDescription = "Tag filter: ${ChatTags.UNTAGGED}" + if (noneOn) ", chosen" else ""
+            },
+            onClick = { onPick(ChatTags.NONE_FILTER) },
+        )
     }
 }
 

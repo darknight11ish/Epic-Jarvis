@@ -170,6 +170,10 @@ WORDS = {
     "tag_section_sr": "{name}, {count} chats, {state}",
     "tag_delete_confirm": "Delete the tag {name}? Its {count} chats become untagged.",
     "tag_banner": "Tap the chat to file it under {name}.",
+    "tag_filed": "Filed under {name}.",
+    "tag_unfiled": "Tag taken off.",
+    "tag_move_placeholder": "Move to\u2026",
+    "tag_file_under": "File under {name}",
     "tag_errors": dict(H.TAG_MESSAGES),
 }
 

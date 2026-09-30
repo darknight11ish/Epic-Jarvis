@@ -76,6 +76,8 @@ export function errorWords(answer) {
 
 export const filedWords = (name) => `Filed under ${name}.`;
 export const UNFILED_WORDS = "Tag taken off.";
+/** The banner's button on a chat row while an older chat is being found. */
+export const fileUnderWords = (name) => `File under ${name}`;
 
 /* ── The contract's numbers ────────────────────────────────────────────── */
 

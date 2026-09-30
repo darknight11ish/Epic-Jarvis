@@ -99,6 +99,16 @@ object ChatTags {
     fun deleteConfirm(name: String, count: Int): String =
         "Delete the tag $name? Its $count chats become untagged."
 
+    /** The status line after filing one chat, or taking its tag off. */
+    fun filed(name: String): String = "Filed under $name."
+    const val UNFILED = "Tag taken off."
+
+    /** The banner's button on a row while an older chat is being found. */
+    fun fileUnder(name: String): String = "File under $name"
+
+    /** The placeholder of the move list on the desktop; here the button reads [MOVE_TO]. */
+    const val MOVE_PLACEHOLDER = "Move to\u2026"
+
     /** The banner while History waits for a tap on an older chat. */
     fun banner(name: String): String = "Tap the chat to file it under $name."
 
@@ -119,14 +129,14 @@ object ChatTags {
 
     /** One plain sentence per error code (section 10), used when the PC sent none. */
     val ERRORS = mapOf(
-        "bad_name" to "A tag's name needs 1 to 24 letters or numbers.",
+        "bad_name" to "A tag name needs 1 to 24 letters or numbers.",
         "name_taken" to "You already have a tag with that name.",
-        "too_many_tags" to "You can have up to 12 tags. Delete one first.",
-        "bad_colour" to "That colour is not one of the eight this app offers.",
-        "bad_icon" to "That icon is not one this app offers.",
-        "tag_not_found" to "That tag is not on your PC any more. It may have been deleted.",
-        "not_found" to "That chat is not on your PC any more.",
-        "bad_request" to "Your PC could not read that change. Nothing was changed.",
+        "too_many_tags" to "You can have up to 12 tags. Delete one to make room.",
+        "bad_colour" to "That colour is not one of the eight.",
+        "bad_icon" to "That icon is not on the list.",
+        "tag_not_found" to "That tag is gone. Reload History to see your tags.",
+        "not_found" to "That chat is gone - it may have been deleted.",
+        "bad_request" to "That request was not understood.",
     )
 
     // ---------------------------------------------------------- reading ---
@@ -287,6 +297,19 @@ object ChatTags {
     data class Section(val tag: Tag?, val rows: List<ChatLog.Summary>) {
         /** The key open/closed is remembered under: the tag id, or [UNTAGGED_KEY]. */
         val key: Int get() = tag?.id ?: UNTAGGED_KEY
+    }
+
+    /** The filter chip's value for "Untagged" (`GET /api/history?tag=none`). */
+    const val NONE_FILTER = "none"
+
+    /**
+     * A filter chip's value as the key [group] narrows to: null for All (""),
+     * [UNTAGGED_KEY] for "none", else the tag id (null when it is not a number).
+     */
+    fun filterKey(filter: String): Int? = when {
+        filter.isEmpty() -> null
+        filter == NONE_FILTER -> UNTAGGED_KEY
+        else -> filter.toIntOrNull()
     }
 
     /** The open/closed flag key of the Untagged section (a tag id is never negative). */

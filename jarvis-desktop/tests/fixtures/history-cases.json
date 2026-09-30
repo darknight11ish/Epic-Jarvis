@@ -125,6 +125,10 @@
     "tag_section_sr": "{name}, {count} chats, {state}",
     "tag_delete_confirm": "Delete the tag {name}? Its {count} chats become untagged.",
     "tag_banner": "Tap the chat to file it under {name}.",
+    "tag_filed": "Filed under {name}.",
+    "tag_unfiled": "Tag taken off.",
+    "tag_move_placeholder": "Move to…",
+    "tag_file_under": "File under {name}",
     "tag_errors": {
       "bad_name": "A tag name needs 1 to 24 letters or numbers.",
       "name_taken": "You already have a tag with that name.",

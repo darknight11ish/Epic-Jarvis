@@ -62,6 +62,10 @@ await check("the shared words are the fixture's, word for word", () => {
   assert.equal(T.MOVE_TO, w.tag_move_to);
   assert.equal(T.NO_TAG, w.tag_none);
   assert.equal(T.bannerText("Home"), w.tag_banner.replace("{name}", "Home"));
+  assert.equal(T.filedWords("Home"), w.tag_filed.replace("{name}", "Home"));
+  assert.equal(T.UNFILED_WORDS, w.tag_unfiled);
+  assert.equal(T.MOVE_PLACEHOLDER, w.tag_move_placeholder);
+  assert.equal(T.fileUnderWords("Home"), w.tag_file_under.replace("{name}", "Home"));
   assert.deepEqual({ ...T.TAG_ERRORS }, w.tag_errors);
   assert.deepEqual(Object.keys(T.TAG_ERRORS), CASES.tag_error_codes);
 });

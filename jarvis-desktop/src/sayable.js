@@ -49,6 +49,7 @@ export const SENTENCES = Object.freeze([
   "Remind me to call Mom at 6pm.",
   "Add milk to the shopping list.",
   "Brief me now.",
+  "Label this chat Work.",
 ]);
 
 /** Three of the list, for the walkthrough's screen 2 only (never screen 1

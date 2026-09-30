@@ -311,6 +311,7 @@ import {
   DELETE_TAG,
   errorWords as tagErrorWords,
   filedWords,
+  fileUnderWords,
   groupRows,
   headerText as tagHeaderText,
   iconNode,
@@ -3620,7 +3621,7 @@ function conversationRow(c, { needle = "", snippet = null } = {}) {
   if (tagOf) main.append(tagPillNode(tagOf));
   const actionsBox = item.querySelector(".row-actions");
   if (chats.filing && tagView) {
-    const go = button(`File under ${chats.filing.name}`, () => fileChat(c.id, chats.filing.tagId),
+    const go = button(fileUnderWords(chats.filing.name), () => fileChat(c.id, chats.filing.tagId),
       { live: true, title: tagBannerText(chats.filing.name) });
     go.classList.add("history-file-here");
     go.setAttribute("aria-label", `File ${named} under ${chats.filing.name}`);

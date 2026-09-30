@@ -207,6 +207,15 @@ collapsed|expanded`, delete confirm `Delete the tag {name}? Its {count} chats
 become untagged.`, banner `Tap the chat to file it under {name}.`, editor errors
 one plain sentence per code above.
 
+**Filter chips.** Both apps show the chip row as `All`, then one chip per tag
+in the owner's order, then `Untagged` (the backend takes `tag=none`). Decided
+2026-09-30 so the two apps behave the same; the PC and the phone both show the
+count on the Untagged chip. Also shared, word for word: `Filed under {name}.`,
+`Tag taken off.`, `Move to…` (the desktop's list placeholder) and the
+banner button `File under {name}` (fixture keys `tag_filed`, `tag_unfiled`,
+`tag_move_placeholder`, `tag_file_under`). An opened conversation shows its tag
+and the same "Move to" list on both apps.
+
 **Owned files.** Backend: `jarvis_chat_log.py`, `chat-history.patch`,
 `jarvis_quick.py` grammar (+ `tools/gen_sayable_cases.py`), `test_chat_tags.py`,
 fixes to `test_chat_kinds.py`/`test_forget_range.py`, `tools/gen_history_cases.py`

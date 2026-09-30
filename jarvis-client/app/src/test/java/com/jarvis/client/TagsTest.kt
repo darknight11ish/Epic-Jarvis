@@ -136,6 +136,18 @@ class TagsTest {
     }
 
     @Test
+    fun `the filter chip values: All, Untagged and a tag id`() {
+        assertNull(ChatTags.filterKey(""))
+        assertEquals(ChatTags.UNTAGGED_KEY, ChatTags.filterKey(ChatTags.NONE_FILTER))
+        assertEquals(3, ChatTags.filterKey("3"))
+        assertNull(ChatTags.filterKey("x"))
+        val rows = listOf(row("a", 2L, null), row("b", 1L, 3))
+        val only = ChatTags.group(rows, ChatTags.STARTER, untagged = 1, only = ChatTags.filterKey("none"))
+        assertEquals(listOf<Int?>(null), only.map { it.tag?.id })
+        assertEquals(listOf("a"), only[0].rows.map { it.id })
+    }
+
+    @Test
     fun `each error code has one plain sentence, and the PC's own wins`() {
         val codes = listOf(
             "bad_name", "name_taken", "too_many_tags", "bad_colour", "bad_icon", "tag_not_found", "not_found", "bad_request",
