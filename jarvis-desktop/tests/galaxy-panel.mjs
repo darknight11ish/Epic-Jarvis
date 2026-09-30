@@ -164,7 +164,7 @@ const reads = (page) => page.evaluate(() => window.__usedReads || []);
 await check("picking a dot lists its newest 20 facts, with the heading count from the list", async () => {
   const page = await galaxy();
   await pick(page);
-  const heading = await page.locator("#galaxy-facts-title").innerText();
+  const heading = await page.locator("#galaxy-facts-title").textContent();
   const items = await page.locator("#galaxy-facts-list li").allInnerTexts();
   const count = await page.locator("#galaxy-facts-count").innerText();
   const region = await page.getByRole("region", { name: heading }).count();
@@ -217,7 +217,7 @@ await check("only Open in Memory per row; it opens the same About page", async (
   assert.deepEqual(names, [W.galaxy_panel_open]);
   assert.ok(others.includes(W.galaxy_panel_more));
   assert.equal(view, true);
-  assert.match(title, /Priya/);
+  assert.match(title, /Priya/i);
   assert.deepEqual(writes, [], "the panel changed something");
 });
 
@@ -258,7 +258,7 @@ await check("a dot with 3 facts: no Show more; another dot resets the list", asy
   const page = await galaxy();
   await pick(page);
   await pick(page, "Lisbon");
-  const heading = await page.locator("#galaxy-facts-title").innerText();
+  const heading = await page.locator("#galaxy-facts-title").textContent();
   const count = await page.locator("#galaxy-facts-count").innerText();
   const more = await page.getByRole("button", { name: W.galaxy_panel_more }).count();
   const items = await page.locator("#galaxy-facts-list li").count();
@@ -297,12 +297,12 @@ await check("a failed read says so with Try again, and a retry works", async () 
   await page.getByRole("button", { name: W.galaxy_panel_retry }).click();
   await page.waitForTimeout(400);
   const items = await page.locator("#galaxy-facts-list li").count();
-  const note = await page.locator("#galaxy-facts-note").isHidden().catch(() => false);
+  const retryLeft = await page.getByRole("button", { name: W.galaxy_panel_retry }).count();
   await page.close();
   assert.match(msg, new RegExp(W.galaxy_panel_failed.replace(/\./g, "\\.")));
   assert.match(msg, new RegExp(W.galaxy_panel_retry));
   assert.ok(items > 0);
-  assert.equal(note === true || note === false, true);
+  assert.equal(retryLeft, 0, "Try again stayed after it worked");
 });
 
 await check("an empty dot says there is nothing to show", async () => {
