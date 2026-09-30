@@ -75,10 +75,25 @@ answers both. A step is free text plus a free-text rough date/label ("before
 winter", "by Friday", or "") - never a strict calendar date, since the goal
 is a nudge, not a scheduler entry of its own.
 
+STEP LOCKS, DONE DATES AND THE PACE LINE (2026-09-30, JARVIS-API section 101,
+docs/GOALS-PROGRESS-DESIGN.md parts A and B). A step also has a stable `id`
+("s1".."s9", given by the PC, so reordering the steps never re-points a
+lock), `done_at` (when the owner ticked it; null = unknown, for a step
+ticked before this existed), `needs` (up to 3 step ids that must be met
+first) and `measure` ({"project", "bench"}: the step is met when that
+benchmark's latest number reaches its target). Met = ticked by hand OR its
+number reached the target; reaching a target NEVER ticks the step - only the
+owner's tap writes a tick. Locked = not met while a `needs` step is not met.
+A hand tick on a locked step is refused (Locked, HTTP 409); an untick
+clears `done_at` and never cascades. Cycles, unknown ids, a step waiting on
+itself and more than 3 `needs` are refused on save by plain code (a
+depth-first walk); nothing is stored as SQL. Old plans load with defaults
+and get their ids the next time they are saved.
+
 THE WEEKLY CHECK-IN
 `on_checkin(goal_id)` is the scheduler's on_fire for kind "goal_checkin". It
-looks at the goal's own already-stored plan and picks the first step not
-yet marked done, so the nudge is entirely deterministic and cheap - no
+looks at the goal's own already-stored plan and picks the first step that
+is not met and not locked ("Waiting on X" when every open step is locked), so the nudge is entirely deterministic and cheap - no
 model call, no tool call, nothing that could reach outside this file. The
 nudge line is kept as the job's `note()` (shown under it in both apps'
 Coming up) - never learned as a fact, never counted as an offer
@@ -89,6 +104,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import threading
 import time
@@ -109,6 +125,9 @@ MAX_TEXT = 300           # a goal's own words, and a step's
 MAX_STEPS = 7            # "keep plans short" (idea 3's own risk mitigation)
 MAX_GOALS = 20           # active + draft goals together
 MAX_BY = 40              # a step's rough date/label ("before winter")
+MAX_NEEDS = 3            # a step may wait on at most 3 other steps
+STEP_IDS = tuple(f"s{i}" for i in range(1, 10))     # "s1".."s9"
+_BENCH_ID = re.compile(r"[0-9a-f]{32}")
 
 #: The scheduler kind this module registers on jarvis_schedule.py.
 KIND = "goal_checkin"
@@ -166,17 +185,143 @@ def _clean_text(text, limit: int, what: str) -> str:
     return t
 
 
-def clean_plan(plan) -> list:
-    """A plan as the owner may set it: a list of {"step", "by", "done"},
-    1-MAX_STEPS long, each step non-empty and short. ValueError, with a
-    plain sentence, for anything else - never a stack trace reaching an app."""
+#: The sentences both apps show for a step's lock, word for word
+#: (tools/gen_projects_cases.py carries them in the contract file). `{step}`
+#: and `{steps}` are step words the PC fills in (shortened to 40 characters).
+WORDS = {
+    "locked": "locked",
+    "after": "after: {steps}",
+    "after_open_again": "after: {steps} (open again)",
+    "reached": "The number reached its target: {latest} (target {target}).",
+    "reached_tick": "{step}: the number reached its target - tick it when you are ready.",
+    "waiting_on": "Waiting on \"{step}\".",
+    "measure_gone": "The number this step follows is gone - tick it by hand.",
+    "locked_refusal": "Do \"{step}\" first, or tick it if it is already done.",
+    "self_wait": "\"{step}\" cannot wait on itself.",
+    "unknown_wait": "\"{step}\" waits on a step that is not in this plan.",
+    "too_many_needs": "\"{step}\" can wait on at most 3 other steps.",
+    "circle": "These steps wait on each other in a circle: {steps}.",
+    "no_such_benchmark": "\"{step}\" follows a number that does not exist any more.",
+    "no_target": "\"{step}\" follows \"{name}\", which has no target yet - set one first.",
+}
+
+
+def _short(text, n: int = 40) -> str:
+    t = " ".join(str(text or "").split())
+    return t if len(t) <= n else t[: n - 1].rstrip() + "…"
+
+
+class Locked(Exception):
+    """A tick on a step that is still waiting for another. `waiting_on` are
+    the step ids it waits on (HTTP 409, with the sentence)."""
+
+    def __init__(self, message: str, waiting_on=()):
+        super().__init__(message)
+        self.waiting_on = list(waiting_on)
+
+
+def _free_id(taken: set, prefer: str) -> str:
+    if prefer in STEP_IDS and prefer not in taken:
+        return prefer
+    for sid in STEP_IDS:
+        if sid not in taken:
+            return sid
+    raise ValueError(f"a plan can have at most {MAX_STEPS} steps")     # unreachable: 9 ids > 7
+
+
+def load_plan(raw) -> list:
+    """A stored plan (JSON text or list) with every field present: an old
+    plan without ids gets s1, s2 ... by position, done_at null, needs [],
+    measure null. Nothing is written - ids are kept the next time the plan
+    is saved."""
+    plan = json.loads(raw) if isinstance(raw, str) else list(raw or [])
+    taken = set()
+    ids = []
+    for st in plan:
+        sid = st.get("id") if isinstance(st, dict) else None
+        if sid in STEP_IDS and sid not in taken:
+            taken.add(sid)
+            ids.append(sid)
+        else:
+            ids.append(None)
+    out = []
+    for i, st in enumerate(plan):
+        sid = ids[i] or _free_id(taken, f"s{i + 1}")
+        taken.add(sid)
+        needs = [n for n in (st.get("needs") or []) if isinstance(n, str)]
+        m = st.get("measure")
+        measure = ({"project": str(m.get("project")), "bench": str(m.get("bench"))}
+                   if isinstance(m, dict) and m.get("project") and m.get("bench") else None)
+        done_at = st.get("done_at")
+        out.append({"id": sid, "step": st.get("step", ""), "by": st.get("by", ""),
+                    "done": bool(st.get("done")),
+                    "done_at": (float(done_at) if isinstance(done_at, (int, float))
+                                and not isinstance(done_at, bool) and st.get("done") else None),
+                    "needs": needs, "measure": measure})
+    return out
+
+
+def check_cycles(steps: list) -> None:
+    """ValueError, in a plain sentence naming the steps, for a step that
+    waits on itself, on a step that is not in the plan, on more than
+    MAX_NEEDS steps, or a loop (s1 waits on s2, s2 waits on s1). Plain
+    depth-first walk over at most 7 steps - no stored query, nothing run."""
+    by_id = {st["id"]: st for st in steps}
+    for st in steps:
+        needs = st.get("needs") or []
+        if len(needs) > MAX_NEEDS:
+            raise ValueError(WORDS["too_many_needs"].format(step=_short(st["step"])))
+        for n in needs:
+            if n == st["id"]:
+                raise ValueError(WORDS["self_wait"].format(step=_short(st["step"])))
+            if n not in by_id:
+                raise ValueError(WORDS["unknown_wait"].format(step=_short(st["step"])))
+    state = {}                                  # id -> 1 (on the path now) or 2 (finished)
+    path = []
+
+    def walk(sid):
+        state[sid] = 1
+        path.append(sid)
+        for n in by_id[sid]["needs"]:
+            if state.get(n) == 1:
+                loop = path[path.index(n):] + [n]
+                names = " -> ".join('"' + _short(by_id[x]["step"], 24) + '"' for x in loop)
+                raise ValueError(WORDS["circle"].format(steps=names))
+            if n not in state:
+                walk(n)
+        path.pop()
+        state[sid] = 2
+
+    for st in steps:
+        if st["id"] not in state:
+            walk(st["id"])
+
+
+def clean_plan(plan, previous=None, now: float = 0.0, check_measure=None) -> list:
+    """A plan as the owner may set it: a list of {"step", "by", "done"} and,
+    optionally, "id", "needs" (step ids) and "measure" ({"project",
+    "bench"}); 1-MAX_STEPS long, each step non-empty and short. `previous`
+    is the plan as stored (so a step keeps its `done_at`, and a measure
+    that did not change is not re-checked); `check_measure(project, bench)`
+    returns a sentence, or "" when the benchmark exists and has a target.
+    ValueError, with a plain sentence, for anything else - never a stack
+    trace reaching an app. `done_at` is never taken from the caller."""
     if not isinstance(plan, list) or not plan:
         raise ValueError("a plan needs at least one step")
     if len(plan) > MAX_STEPS:
         raise ValueError(f"a plan can have at most {MAX_STEPS} steps - "
                          "keep the big ones and drop the rest")
-    out = []
+    before = {st["id"]: st for st in (previous or [])}
+    taken, given = set(), []
     for item in plan:
+        sid = item.get("id") if isinstance(item, dict) else None
+        if sid in STEP_IDS and sid not in taken:
+            taken.add(sid)
+            given.append(sid)
+        else:
+            given.append(None)
+    out = []
+    for i, item in enumerate(plan):
         if not isinstance(item, dict):
             raise ValueError("each step is its own step, with its own words")
         step = _clean_text(item.get("step"), MAX_TEXT, "a step")
@@ -184,7 +329,92 @@ def clean_plan(plan) -> list:
         if len(by) > MAX_BY:
             raise ValueError(f"a step's rough date is longer than {MAX_BY} characters")
         done = bool(item.get("done"))
-        out.append({"step": step, "by": by, "done": done})
+        sid = given[i] or _free_id(taken, f"s{i + 1}")
+        taken.add(sid)
+        old = before.get(sid)
+        if not done:
+            done_at = None
+        elif old is not None and old["done"]:
+            done_at = old["done_at"]          # ticked before: keep when (or that it is unknown)
+        else:
+            done_at = float(now)
+        needs = item.get("needs") or []
+        if not isinstance(needs, list) or any(not isinstance(n, str) for n in needs):
+            raise ValueError("what a step waits on is a list of step ids")
+        if len(needs) > MAX_NEEDS:
+            raise ValueError(WORDS["too_many_needs"].format(step=_short(step)))
+        needs = list(dict.fromkeys(needs))
+        measure = item.get("measure")
+        if measure is not None:
+            if (not isinstance(measure, dict) or not isinstance(measure.get("project"), str)
+                    or not isinstance(measure.get("bench"), str)
+                    or not _BENCH_ID.fullmatch(measure["project"])
+                    or not _BENCH_ID.fullmatch(measure["bench"])):
+                raise ValueError(WORDS["no_such_benchmark"].format(step=_short(step)))
+            measure = {"project": measure["project"], "bench": measure["bench"]}
+            if check_measure is not None and (old is None or old["measure"] != measure):
+                why = check_measure(measure["project"], measure["bench"], _short(step))
+                if why:
+                    raise ValueError(why)
+        out.append({"id": sid, "step": step, "by": by, "done": done, "done_at": done_at,
+                    "needs": needs, "measure": measure})
+    check_cycles(out)
+    return out
+
+
+def bench_reached(view) -> bool:
+    """Has this benchmark's latest number reached its own target? `view` is
+    what jarvis_projects answers for a benchmark (or None: gone)."""
+    if not isinstance(view, dict):
+        return False
+    latest, target, better = view.get("latest"), view.get("target"), view.get("better")
+    if not isinstance(latest, dict) or target is None or better not in ("higher", "lower"):
+        return False
+    v = latest.get("value")
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return False
+    return (v >= target) if better == "higher" else (v <= target)
+
+
+def step_states(plan: list, read_bench=None) -> list:
+    """One dict per step, in order - plain code, no model, no stored query:
+        state       "done" (ticked), "met_by_number" (not ticked, but its
+                    benchmark reached its target), "locked" (not met while
+                    a step it needs is not met), or "open"
+        waiting_on  ids of the needs that are not met (also on a done step:
+                    it then reads "after X (open again)")
+        reached     the benchmark reached its target (ticked or not)
+        bench       the benchmark view read for it (None: none, or gone)
+    `read_bench(project, bench)` returns a benchmark view or None."""
+    cache = {}
+
+    def bench_of(m):
+        key = (m["project"], m["bench"])
+        if key not in cache:
+            try:
+                cache[key] = read_bench(*key) if read_bench is not None else None
+            except Exception:
+                cache[key] = None
+        return cache[key]
+
+    info = []
+    for st in plan:
+        b = bench_of(st["measure"]) if st.get("measure") else None
+        info.append({"bench": b, "reached": bench_reached(b)})
+    met = {st["id"]: bool(st["done"]) or info[i]["reached"] for i, st in enumerate(plan)}
+    out = []
+    for i, st in enumerate(plan):
+        waiting = [n for n in st.get("needs", []) if not met.get(n, False)]
+        if st["done"]:
+            state = "done"
+        elif info[i]["reached"]:
+            state = "met_by_number"
+        elif waiting:
+            state = "locked"
+        else:
+            state = "open"
+        out.append({"state": state, "waiting_on": waiting, "reached": info[i]["reached"],
+                    "bench": info[i]["bench"]})
     return out
 
 
@@ -192,7 +422,8 @@ def _default_plan(text: str) -> list:
     """No plan given yet: the goal's own words are step one, so a goal can
     always be created with zero extra effort and refined into real steps
     later, in the same edit the owner would use to accept it."""
-    return [{"step": text, "by": "", "done": False}]
+    return [{"id": "s1", "step": text, "by": "", "done": False, "done_at": None,
+             "needs": [], "measure": None}]
 
 
 # --------------------------------------------------------------------------
