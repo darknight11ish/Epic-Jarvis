@@ -53,8 +53,11 @@ import re
 import socket
 import sys
 import tempfile
-import tomllib
 import traceback
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 import types
 from pathlib import Path
 

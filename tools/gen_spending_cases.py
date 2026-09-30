@@ -67,7 +67,7 @@ def _work(name: str, *fixtures, text: dict = None) -> Path:
     for f in fixtures:
         shutil.copy(FIX / f, p / f)
     for n, body in (text or {}).items():
-        (p / n).write_text(body, encoding="utf-8", newline="\n")
+        (p / n).write_text(body, encoding="utf-8")
     return p
 
 
@@ -187,7 +187,7 @@ def main(argv) -> int:
         return 0
     for c in COPIES:
         c.parent.mkdir(parents=True, exist_ok=True)
-        c.write_text(text, encoding="utf-8", newline="\n")
+        c.write_text(text, encoding="utf-8")
         print("wrote", c.relative_to(ROOT))
     return 0
 

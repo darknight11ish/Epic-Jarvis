@@ -37,7 +37,10 @@ import sys
 import tempfile
 import types
 from pathlib import Path
-from zoneinfo import ZoneInfo
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from dateutil.tz import gettz as ZoneInfo
 
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"

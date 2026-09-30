@@ -735,7 +735,7 @@ def main(argv) -> int:
         return 0
     for path in COPIES:
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(text, encoding="utf-8", newline="\n")
+        path.write_text(text, encoding="utf-8")
         print(f"wrote {path.relative_to(ROOT)}")
     return 0
 

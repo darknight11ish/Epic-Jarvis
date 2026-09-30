@@ -116,7 +116,8 @@ def ctx(enabled=(), tiers=None, **kw):
                 search={"provider": "searxng", "searxng_url": "http://127.0.0.1:8888",
                         "ask_every_time": False, "why": ""},
                 key_saved=lambda p: None, second_card={"master": False, "features": {}},
-                big_model={"master": False}, gate_action=lambda lookup: None)
+                big_model={"master": False}, gate_action=lambda lookup: None,
+                youtube={"ready": None})
     base.update(kw)
     return R.Ctx(**base)
 

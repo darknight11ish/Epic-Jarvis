@@ -35,7 +35,10 @@ import json
 import re
 import sys
 import tempfile
-import tomllib
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
 import traceback
 import types
 from pathlib import Path
