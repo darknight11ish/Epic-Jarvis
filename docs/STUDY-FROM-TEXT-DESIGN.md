@@ -160,18 +160,27 @@ How it would follow the rules if allowed:
   `youtube-transcript-api`; whether `youtube-transcript-api` works from the
   owner's own PC today.
 
-## 7. Questions for the owner
+## 7. Owner's answers (2026-09-30)
 
-1. **Slice A first, with the grader tested before it is trusted?**
-   Recommended: yes. (Slice B would then wait for Q2.)
-2. **Reopen the 2026-09-26 "left out" decision for a YouTube caption fetch,**
-   knowing it is against YouTube's terms, needs its own card per address, and may
-   simply be blocked? Options: *yes, build Slice B after Slice A*; *no, keep
-   YouTube out and use pasted transcripts only*.
-3. **Should saved review decks (milestone 3) share the same quiz screen,** so
-   there is one quiz system? Recommended: yes.
+The owner said any rule can change if the change is worth it, and answered:
 
-## 8. Not decided
+1. **YouTube captions: allowed, one card per link.** Built after Slice A. The
+   owner accepts that it breaks YouTube's terms and may be blocked. This
+   reverses the 2026-09-26 "left out" decision for caption text only (never
+   video or audio downloads).
+2. **Grading: local first, cloud on request.** The local model grades by
+   default. A "grade this better" button may send that one quiz to a cloud
+   model, only after a card lists exactly what leaves the PC (the questions,
+   the owner's answers, the source passages). This bends rule 1 for that card
+   only, the way the locked backup and the app builder's cloud-help offer do.
+   Never with email, files, credentials or memory in it; never after the
+   quiz was built from such text. Cloud keys follow rule 3.
 
-Nothing above changes `CLAUDE.md`. If the owner answers Q1 and Q2, record the
-decision there and in `docs/AUDIT-2026-09-28-REPO-REFS.md` §6.
+Still open, and small: whether saved review decks (milestone 3) share this
+quiz screen (recommended: yes), and the cloud grader's monthly money limit
+(reuse the chatbot driver's per-service limit).
+
+## 8. Next step
+
+Build Slice A, then Slice B, then the cloud button, each with its own feature
+audit. Nothing is built yet.

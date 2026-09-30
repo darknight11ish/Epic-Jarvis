@@ -1661,6 +1661,17 @@ the rule blocking it"):
   stealth lives in its own files (`backend/jarvis_browser_engine*.py`), not
   in the chatbot driver's.
 
+Decided 2026-09-30, after checking an outside list of learning repos
+(`docs/STUDY-FROM-TEXT-DESIGN.md`): the owner said **any rule can change if
+the change is worth it**, and chose:
+- **A quiz on text the owner pastes or opens**, marked by the local model,
+  in a temporary chat, first.
+- **Reading a YouTube video's captions is allowed, one card per link**
+  (caption text only). This reverses the 2026-09-26 "left out" decision; the
+  owner accepts that it breaks YouTube's terms and may be blocked.
+- **Grading is local first, cloud on request:** a card lists exactly what goes,
+  bending rule 1 for that one quiz. Nothing is built yet.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
