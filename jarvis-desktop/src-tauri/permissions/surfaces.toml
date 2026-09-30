@@ -885,6 +885,27 @@ permissions = [
   "allow-brain-quiz-stop",
 ]
 
+# Review decks (docs/QUIZ-DECKS-DESIGN.md; brain/decks.rs, backend
+# jarvis_decks.py; JARVIS-API.md section 102). Questions the owner kept from a
+# quiz, asked again on a schedule the PC works out. No approval card: the
+# owner's own tap saves the owner's own words on the PC. Every change held on
+# a stale link; the words hidden with the private lists.
+[[set]]
+identifier = "brain-decks"
+description = "Read and manage the owner's study decks and cards, and run a review session - no card, nothing leaves the PC, every change held on a stale link."
+permissions = [
+  "allow-brain-decks",
+  "allow-brain-decks-create",
+  "allow-brain-decks-settings",
+  "allow-brain-decks-act",
+  "allow-brain-decks-cards",
+  "allow-brain-decks-card-act",
+  "allow-brain-review",
+  "allow-brain-review-reveal",
+  "allow-brain-review-rate",
+  "allow-brain-review-more",
+]
+
 # "Widgets you describe" (the owner's choice of 2026-09-28, the SAFE
 # version; brain/widgets.rs, backend jarvis_widgets.py; JARVIS-API.md section
 # 87). The Brain lists the widgets, asks the PC for a PREVIEW from the

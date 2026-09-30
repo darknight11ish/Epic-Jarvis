@@ -471,6 +471,19 @@ fn main() {
             "brain_quiz_answer",
             "brain_quiz_finish",
             "brain_quiz_stop",
+            // Review decks (JARVIS-API section 102): the owner's kept questions,
+            // asked again on a schedule the PC works out. No card; every write
+            // held on a stale link; words hidden with the private lists. Brain only.
+            "brain_decks",
+            "brain_decks_create",
+            "brain_decks_settings",
+            "brain_decks_act",
+            "brain_decks_cards",
+            "brain_decks_card_act",
+            "brain_review",
+            "brain_review_reveal",
+            "brain_review_rate",
+            "brain_review_more",
             // "Photo to reminder" (photo-reminder.patch, 2026-09-28): the
             // dates in a picture, read on the PC and PROPOSED (a scan sets
             // nothing up), and the owner's tap adding ONE reminder - no

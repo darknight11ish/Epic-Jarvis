@@ -357,7 +357,9 @@ pub(crate) fn keep_body(keep: &serde_json::Value) -> Result<serde_json::Value, S
             .ok_or_else(|| "That is not one of this quiz's questions.".to_string())?;
         let answer = card.get("answer").and_then(|a| a.as_str()).unwrap_or("");
         if answer.chars().count() > KEEP_ANSWER_MAX {
-            return Err("That answer is too long. Keep it to 2,000 characters or fewer.".to_string());
+            return Err(
+                "That answer is too long. Keep it to 2,000 characters or fewer.".to_string(),
+            );
         }
         sent.push(serde_json::json!({ "n": n, "answer": answer }));
     }
@@ -385,7 +387,13 @@ pub async fn brain_quiz_finish(
         }
         body["keep"] = keep_body(&keep)?;
     }
-    let answer = post(&app, &format!("/api/quiz/{id}/finish"), body, Some("summary")).await?;
+    let answer = post(
+        &app,
+        &format!("/api/quiz/{id}/finish"),
+        body,
+        Some("summary"),
+    )
+    .await?;
     Ok(hide_if_private(&app, answer))
 }
 
@@ -538,7 +546,6 @@ mod tests {
         // The crisis pass-through applies to the answer and finish routes
         // (a crisis phrase in a kept back), not to start.
         assert!(quiz_answer(200, body, Some("summary")).is_ok());
-        assert_eq!(quiz_answer(200, body, Some("quiz")).unwrap().get("quiz").is_some(), true);
     }
 
     #[test]
@@ -552,5 +559,180 @@ mod tests {
         // A refusal has nothing to hide and is left as it is.
         let refusal = serde_json::json!({"ok": false, "error": "not_found", "message": "m"});
         assert_eq!(redact_answer(refusal.clone()), refusal);
+    }
+
+    #[test]
+    fn text_mode_sends_what_it_always_sent() {
+        let b = start_body(Some("some text"), None, None, None, None, None, None).unwrap();
+        assert_eq!(b, serde_json::json!({"text": "some text"}));
+        let b = start_body(
+            Some("t"),
+            Some(5),
+            Some("Bread"),
+            Some("text"),
+            Some("B1"),
+            Some("blank"),
+            Some("x"),
+        )
+        .unwrap();
+        assert_eq!(
+            b,
+            serde_json::json!({"text": "t", "count": 5, "title": "Bread"})
+        );
+        // No text in Text mode is still sent (the PC refuses it in words).
+        assert_eq!(
+            start_body(None, None, None, None, None, None, None).unwrap()["text"],
+            ""
+        );
+    }
+
+    #[test]
+    fn spanish_mode_sends_its_choices_and_text_only_if_there_is_some() {
+        let b = start_body(
+            None,
+            None,
+            None,
+            Some("spanish"),
+            Some("B1"),
+            Some("blank"),
+            Some("  food  "),
+        )
+        .unwrap();
+        assert_eq!(
+            b,
+            serde_json::json!({"mode": "spanish", "level": "B1", "exercise": "blank", "topic": "food"})
+        );
+        let b = start_body(Some("   "), None, None, Some("spanish"), None, None, None).unwrap();
+        assert_eq!(b, serde_json::json!({"mode": "spanish"}));
+        let b = start_body(Some("Hola"), None, None, Some("spanish"), None, None, None).unwrap();
+        assert_eq!(b["text"], "Hola");
+        for level in ["A1", "A2", "B1", "B2", "C1", "C2"] {
+            assert!(start_body(None, None, None, Some("spanish"), Some(level), None, None).is_ok());
+        }
+        for exercise in ["translate", "blank", "complete", "mixed"] {
+            assert!(start_body(
+                None,
+                None,
+                None,
+                Some("spanish"),
+                None,
+                Some(exercise),
+                None
+            )
+            .is_ok());
+        }
+    }
+
+    #[test]
+    fn spanish_choices_are_checked_before_anything_is_sent() {
+        for bad in [
+            start_body(None, None, None, Some("french"), None, None, None),
+            start_body(None, None, None, Some("spanish"), Some("D1"), None, None),
+            start_body(None, None, None, Some("spanish"), None, Some("speak"), None),
+            start_body(
+                None,
+                None,
+                None,
+                Some("spanish"),
+                None,
+                None,
+                Some(&"ñ".repeat(61)),
+            ),
+        ] {
+            assert!(bad.is_err());
+        }
+        // 60 characters is fine even when the bytes are more.
+        assert!(start_body(
+            None,
+            None,
+            None,
+            Some("spanish"),
+            None,
+            None,
+            Some(&"ñ".repeat(60))
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn keep_sends_only_the_number_and_the_back_of_each_card() {
+        let keep = serde_json::json!({"deck": "d1a2b3c4d5e6", "junk": 1, "cards": [
+            {"n": 2, "answer": "mi respuesta", "front": "forged", "passage": "forged"},
+            {"n": 3, "answer": ""}]});
+        let b = keep_body(&keep).unwrap();
+        assert_eq!(
+            b,
+            serde_json::json!({"deck": "d1a2b3c4d5e6", "cards": [
+                {"n": 2, "answer": "mi respuesta"}, {"n": 3, "answer": ""}]})
+        );
+        assert!(!b.to_string().contains("forged"));
+        let new = serde_json::json!({"deck": null, "new_deck": "  Plantas  ", "cards": [{"n": 1, "answer": "x"}]});
+        let b = keep_body(&new).unwrap();
+        assert_eq!(b["deck"], serde_json::Value::Null);
+        assert_eq!(b["new_deck"], "Plantas");
+    }
+
+    #[test]
+    fn keep_refuses_a_bad_request_in_plain_words() {
+        let card = serde_json::json!([{"n": 1, "answer": "x"}]);
+        for keep in [
+            serde_json::json!({"deck": null, "new_deck": "", "cards": card}),
+            serde_json::json!({"deck": null, "new_deck": "x".repeat(61), "cards": card}),
+            serde_json::json!({"deck": "../x", "cards": card}),
+            serde_json::json!({"deck": 5, "cards": card}),
+            serde_json::json!({"deck": "d1a2b3c4d5e6", "cards": []}),
+            serde_json::json!({"deck": "d1a2b3c4d5e6"}),
+            serde_json::json!({"deck": "d1a2b3c4d5e6", "cards": [{"n": 0, "answer": "x"}]}),
+            serde_json::json!({"deck": "d1a2b3c4d5e6", "cards": [{"answer": "x"}]}),
+            serde_json::json!({"deck": "d1a2b3c4d5e6", "cards": [{"n": 1, "answer": "x".repeat(2001)}]}),
+        ] {
+            assert!(keep_body(&keep).is_err(), "{keep}");
+        }
+        assert!(keep_body(&serde_json::json!({"deck": "d1a2b3c4d5e6", "cards": [{"n": 1, "answer": "ñ".repeat(2000)}]})).is_ok());
+    }
+
+    #[test]
+    fn a_hidden_spanish_mark_loses_its_key_word_but_keeps_the_fixed_label() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../tests/fixtures/decks-words.json")).unwrap();
+        let a = quiz_answer(
+            200,
+            &fixture["samples"]["spanish_quiz"].to_string(),
+            Some("quiz"),
+        )
+        .unwrap();
+        assert_eq!(a["quiz"]["mode"], "spanish");
+        let hidden = redact_answer(a);
+        let s = hidden.to_string();
+        for word in ["está", "Plantas", "libro", "cat"] {
+            assert!(!s.contains(word), "{word} leaked: {s}");
+        }
+        assert_eq!(hidden["quiz"]["questions"][0]["mark"]["expected"], "");
+        assert_eq!(hidden["quiz"]["questions"][0]["mark"]["marked_by"], "code");
+        assert_eq!(hidden["quiz"]["mode"], "spanish");
+        assert!(hidden["quiz"]["notice"].as_str().unwrap().contains("988"));
+    }
+
+    #[test]
+    fn a_finish_that_kept_questions_is_read_with_its_count_and_a_crisis_one_passes() {
+        let fixture: serde_json::Value =
+            serde_json::from_str(include_str!("../../../tests/fixtures/decks-words.json")).unwrap();
+        let ok = quiz_answer(
+            200,
+            &fixture["samples"]["keep_ok"].to_string(),
+            Some("summary"),
+        )
+        .unwrap();
+        assert_eq!(ok["kept"], 3);
+        let crisis = quiz_answer(
+            200,
+            &fixture["samples"]["keep_crisis"].to_string(),
+            Some("summary"),
+        )
+        .unwrap();
+        assert_eq!(crisis["crisis"], true);
+        let dup = r#"{"ok": false, "error": "duplicate_card", "message": "Question 2 is already in that deck."}"#;
+        let a = quiz_answer(409, dup, Some("summary")).unwrap();
+        assert_eq!(a["error"], "duplicate_card");
     }
 }

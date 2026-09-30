@@ -352,7 +352,10 @@ pub async fn brain_decks_card_act(
 
 /// The next card to review. A read. Not asked of the PC while hidden.
 #[tauri::command]
-pub async fn brain_review(app: AppHandle, deck: Option<String>) -> Result<serde_json::Value, String> {
+pub async fn brain_review(
+    app: AppHandle,
+    deck: Option<String>,
+) -> Result<serde_json::Value, String> {
     if crate::lock::private_hidden(&app) {
         return Ok(review_hidden_answer());
     }
@@ -366,7 +369,10 @@ pub async fn brain_review(app: AppHandle, deck: Option<String>) -> Result<serde_
 /// Shows a card's back. A card can be rated only after this. Held on a stale
 /// link; not asked of the PC while hidden.
 #[tauri::command]
-pub async fn brain_review_reveal(app: AppHandle, card: String) -> Result<serde_json::Value, String> {
+pub async fn brain_review_reveal(
+    app: AppHandle,
+    card: String,
+) -> Result<serde_json::Value, String> {
     require_link_live(&app)?;
     if !valid_id(&card) {
         return Err(NO_SUCH_DECK.to_string());
@@ -513,7 +519,8 @@ mod tests {
         }
         assert_eq!(cards["cards"][0]["id"], "c1a2b3c4d5e6");
         assert_eq!(cards["cards"][0]["kind"], "recall");
-        let review = redact_answer(decks_answer(200, &sample("review_card"), Some("state")).unwrap());
+        let review =
+            redact_answer(decks_answer(200, &sample("review_card"), Some("state")).unwrap());
         assert!(!review.to_string().contains("sunlight"));
         assert_eq!(review["ready"], 3);
         assert_eq!(review["line"], "3 cards ready");
