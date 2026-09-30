@@ -292,10 +292,10 @@ await check("memory-used, profile and auto-learn readers keep the topic fields",
   assert.equal(used.facts[1].leftOut, false);
   const P = await import("../src/memory-profile.js");
   const prof = P.readProfile({ facts: [{ id: 4, text: "x", added: 1, paused: true }, { id: 5, text: "y", added: 1 }], chars: 2, limit: 1200 });
-  assert.deepEqual(prof.facts.map((f) => f.paused), [true, false]);
+  assert.deepEqual(prof.facts.map((f) => f.paused === true), [true, false]);
   const A = await import("../src/auto-learn.js");
   const auto = A.readAuto({ facts: [{ id: 8, text: "z", topic: 3 }, { id: 9, text: "q" }] });
-  assert.deepEqual(auto.facts.map((f) => f.topic), [3, 0]);
+  assert.deepEqual(auto.facts.map((f) => f.topic ?? 0), [3, 0]);
 });
 
 /* ── CONTROL: the wiring ──────────────────────────────────────────────── */

@@ -82,7 +82,7 @@ export function readProfile(answer) {
     .filter((f) => f && Number.isInteger(f.id))
     // `paused`: the fact's topic may not be used, so it is not read with
     // questions until the topic is back on (topic controls).
-    .map((f) => ({ id: f.id, text: text(f.text), added: num(f.added), paused: f.paused === true }));
+    .map((f) => ({ id: f.id, text: text(f.text), added: num(f.added), ...(f.paused === true ? { paused: true } : {}) }));
   const chars = num(a.chars);
   return {
     available,

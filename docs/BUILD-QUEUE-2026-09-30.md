@@ -85,3 +85,19 @@ to a hidden menu must still work by opening it for that visit.
 | # | Item |
 |---|---|
 | 12 | When ALL current work is done and nothing needs the owner's opinion, run a **cohesiveness audit**: how well the new additions (quiz, decks and Spanish practice, chat tags and fork, spending summaries, retirement what-if, goal locks and forecast, heatmap and balance chart, topic controls, menu visibility, referee switch, Galaxy panel, suggested tags) fit into Jarvis as ONE product, and the best way to integrate them. Covers: overlapping or duplicated screens and words, one shared look (palette, icons, wording), navigation and where each thing lives, the menu-visibility groups, settings patterns, the one permission model and scheduler, memory/privacy consistency (screen-only money and health, topic modes), both apps' parity, performance and startup cost, docs (ARCHITECTURE, JARVIS-API, README) and the update guide, and a ranked list of integration fixes. Reported in plain words with choices for the owner as multiple choice. |
+
+## Final sequence (owner, 2026-09-30)
+
+When ALL current work is finished and nothing needs the owner's opinion:
+1. Check that nothing conflicts with the two other pull requests: **#38** (merged 2026-09-30 08:08Z:
+   "Fill a form, show me the picture, then a separate Submit card", 51 files, branch ccr-31741289-lqx1wr)
+   and **#39** (open, being tested, expected to merge in about 45 minutes from the owner's message:
+   "Audit fixes: 8 GB extra cards, screen safety, settings, backups, time, update script, phone and
+   desktop hardening", 100+ files, branch ccr-a9b557ac-cpnbwx). Re-fetch #39's file list and main's
+   head at that time; bring main into this branch (merge, never rewrite history), fix conflicts,
+   regenerate fixtures, re-run every check.
+2. Create ONE pull request from ccr-b74ab13f-f0mhut into main, and **merge it once all checks pass**
+   (explicitly authorised by the owner 2026-09-30; this overrides "no pull request unless asked" for
+   this one PR). Follow the repo's PR template if it has one. Do not merge on red checks.
+3. Then run a **full bug audit only on the recent changes from these 3 PRs** (#38, #39 and this one).
+4. The cohesiveness audit (item 12) still runs when nothing needs the owner.

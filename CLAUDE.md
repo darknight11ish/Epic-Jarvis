@@ -1701,7 +1701,9 @@ React Flow, Datasette, Evidence, BERTopic and the other chat-clustering repos
 stay refused; the Galaxy is not swapped for a library.
 
 Standing instruction, 2026-09-30: **never open a pull request into `main` (or any
-branch) unless the owner asks for one.** Work is committed and pushed to the
+branch) unless the owner asks for one.** (The owner then asked for exactly one, at the end of
+the 2026-09-30 batch, to be merged once its checks pass: see docs/BUILD-QUEUE-2026-09-30.md,
+"Final sequence".) Work is committed and pushed to the
 session's own branch only. This overrides the earlier plans in this file to open
 "one pull request" per batch: those wait until the owner says so.
 

@@ -394,8 +394,8 @@ export function readAuto(answer, status = null) {
         savedAt: num(f.saved_at),
         provenance: text(f.provenance),
         // Topic controls: the id of the topic this fact is filed under (0 for
-        // none); brain.js looks it up to tag a topic that is not used.
-        topic: Number.isInteger(f.topic) && f.topic > 0 ? f.topic : 0,
+        // none, then absent); brain.js looks it up to tag a topic that is not used.
+        ...(Number.isInteger(f.topic) && f.topic > 0 ? { topic: f.topic } : {}),
         device: text(f.device),
         // Memory idea 3: how often the owner has said it again since, or 0.
         saidAgain: saidAgainCount(f.said_again),

@@ -49,18 +49,95 @@ class SecondCardContractTest {
     private fun switch(s: SecondCard.Status, id: String): SecondCard.SwitchView =
         SecondCard.switches(s).first { it.id == id }
 
+    /** The seven switches in the PC's order (Study helper and Referee since 2026-09-30). */
+    private val sevenIds = listOf(
+        "long_context", "vision", "learning", "browser_control", "wiki", "study", "referee",
+    )
+
     @Test
-    fun `all eight cases are read, with the five features in the PC's order`() {
+    fun `all eight cases are read, with the seven features in the PC's order`() {
         // Seven since 2026-09-26: one_card_reads_words (the PC reads the
         // words in a picture). Eight since 2026-09-27: combined_running
         // ("One bigger model on both cards").
         assertEquals(8, cases.size)
         for (name in cases.keys) {
             val s = status(name)
-            assertEquals(name, listOf("long_context", "vision", "learning", "browser_control", "wiki"),
-                s.features.map { it.id })
+            assertEquals(name, sevenIds, s.features.map { it.id })
+            // The ids are also read from the fixture itself, so a row the PC
+            // adds later is caught here rather than silently dropped.
+            val raw = cases[name]!!.jsonObject["features"]!!.jsonArray
+                .map { it.jsonObject["id"]!!.jsonPrimitive.content }
+            assertEquals(name, raw, s.features.map { it.id })
             s.features.forEach { assertTrue("$name ${it.id}: a line under it", it.why.isNotBlank()) }
+            // One switch row per feature, none dropped and none invented.
+            assertEquals(name, raw, SecondCard.switches(s).map { it.id })
         }
+    }
+
+    @Test
+    fun `study and referee - drawn from the PC's own words, no null and no GB on the model-free row`() {
+        for (name in cases.keys) {
+            val s = status(name)
+            for (id in listOf("study", "referee")) {
+                val v = switch(s, id)
+                assertTrue("$name $id: its own sentence", v.what.isNotBlank())
+                assertTrue("$name $id: a line", v.line.isNotBlank())
+                val all = listOf(v.name, v.what, v.line, v.blocked, v.modelLine, v.needsLine, v.lastLine)
+                    .filterNotNull().joinToString(" | ")
+                assertFalse("$name $id: $all", all.contains("null"))
+                assertFalse("$name $id: $all", all.contains("GB of the second card") && id == "referee")
+            }
+            // Referee loads no model: never a model or memory line, even on a capable PC.
+            assertNull(name, switch(s, "referee").modelLine)
+            val ref = s.features.first { it.id == "referee" }
+            assertNull(name, ref.model)
+            assertNull(name, ref.modelInstalled)
+            assertNull(name, ref.memoryGib)
+        }
+        assertEquals("Referee suggestions", switch(status("one_card"), "referee").name)
+        assertEquals("Study helper", switch(status("one_card"), "study").name)
+    }
+
+    @Test
+    fun `study and referee on a one-card PC - cannot be turned on, and the plain reason is shown`() {
+        val s = status("one_card")
+        for (id in listOf("study", "referee")) {
+            val v = switch(s, id)
+            assertFalse(id, v.canTurnOn)
+            assertTrue(id, v.line.contains("Needs a capable second graphics card"))
+            assertTrue(id, v.blocked!!.contains("Needs a capable second graphics card"))
+            assertNull(id, v.modelLine)
+        }
+    }
+
+    @Test
+    fun `study has a model line on a capable PC, referee never does`() {
+        val s = status("capable_off")
+        val study = switch(s, "study").modelLine!!
+        assertTrue(study, study.contains("qwen3:8b") && study.contains("7.7 GB"))
+        assertNull(switch(s, "referee").modelLine)
+        // Working: referee is available whenever it is active, with no lane and no model.
+        val ref = SecondCard.parse(
+            JsonObject(cases["capable_off"]!!.jsonObject.toMutableMap().also { m ->
+                m["features"] = kotlinx.serialization.json.JsonArray(
+                    m["features"]!!.jsonArray.map { el ->
+                        val o = el.jsonObject.toMutableMap()
+                        if (o["id"]!!.jsonPrimitive.content == "referee") {
+                            o["enabled"] = kotlinx.serialization.json.JsonPrimitive(true)
+                            o["active"] = kotlinx.serialization.json.JsonPrimitive(true)
+                            o["available"] = kotlinx.serialization.json.JsonPrimitive(true)
+                            o["why"] = kotlinx.serialization.json.JsonPrimitive(
+                                "Working: it compares the numbers you log with your targets on this PC and loads no model, so it uses none of the card's memory yet.")
+                        }
+                        JsonObject(o)
+                    },
+                )
+            }),
+        )!!
+        val v = SecondCard.switches(ref).first { it.id == "referee" }
+        assertTrue(v.on)
+        assertTrue(v.line, v.line.startsWith("Working"))
+        assertNull(v.modelLine)
     }
 
     @Test
@@ -202,10 +279,9 @@ class SecondCardContractTest {
     }
 
     @Test
-    fun `combined - its own row, not one of the five features, working and split`() {
+    fun `combined - its own row, not one of the seven features, working and split`() {
         val s = status("combined_running")
-        assertEquals(listOf("long_context", "vision", "learning", "browser_control", "wiki"),
-            s.features.map { it.id })
+        assertEquals(sevenIds, s.features.map { it.id })
         val combined = SecondCard.combinedSwitch(s)
         assertNotNull(combined)
         assertEquals("combined", combined!!.id)
