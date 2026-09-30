@@ -64,9 +64,8 @@ pub(crate) const KINDS: [&str; 5] = ["chat", "live", "support", "chatbot", "comp
 
 /// Chat tags (docs/CHAT-TAGS-DESIGN.md section 10, the frozen contract): a
 /// tag is `{id, name, colour 0-7, icon, order}`, one per chat, at most 12,
-/// names 1-24 characters. The owner's tag names are their own words, so
-/// every tag command below asks [`crate::lock::private_hidden`] first.
-pub(crate) const MAX_TAGS: usize = 12;
+/// names 1-24 characters (the PC holds the limit of 12). The owner's tag
+/// names are their own words, so every tag command below asks [`crate::lock::private_hidden`] first.
 pub(crate) const TAG_NAME_MAX: usize = 24;
 pub(crate) const TAG_COLOURS: i64 = 8;
 /// The shared icon list; each app draws them with its own icons.
@@ -195,6 +194,7 @@ pub(crate) fn search_answer(status: u16, body: &str) -> Result<serde_json::Value
 /// oldest conversation already shown; it is written as the plain number the
 /// page was given (Rust never writes an `f64` in exponent form), so paging
 /// neither repeats nor skips one.
+#[cfg(test)]
 pub(crate) fn list_path(
     limit: Option<u32>,
     before: Option<f64>,

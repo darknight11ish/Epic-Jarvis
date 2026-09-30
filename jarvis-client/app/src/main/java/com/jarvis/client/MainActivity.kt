@@ -1195,6 +1195,21 @@ class MainActivity : FragmentActivity() {
             }
             chat.consumeFaceTuningChange()
         }
+        // "Label my chat about the boiler as Home" (X-Jarvis-Route
+        // `open_brain: "history"` with `file_under` and `history_q`,
+        // docs/CHAT-TAGS-DESIGN.md section 10): open History with the search
+        // filled in and a banner, and file NOTHING until the owner taps a
+        // chat. Kept as two plain values so a rotation keeps the banner.
+        val fileUnderTarget by chat.fileUnder.collectAsState()
+        var filingTag by rememberSaveable { mutableStateOf<Int?>(null) }
+        var filingQuery by rememberSaveable { mutableStateOf("") }
+        LaunchedEffect(fileUnderTarget) {
+            val target = fileUnderTarget ?: return@LaunchedEffect
+            filingTag = target.tagId
+            filingQuery = target.query
+            nav.go(Screen.HISTORY)
+            chat.consumeFileUnder()
+        }
         // An empty Quick Settings tile slot was tapped: the same one-time
         // scroll, to "Quick Settings tiles".
         LaunchedEffect(openTileSettingsRequested.value) {
@@ -2381,6 +2396,12 @@ class MainActivity : FragmentActivity() {
                             pendingSection = "forget-range"
                             pendingSectionScreen = Screen.BRAIN.name
                             nav.go(Screen.BRAIN)
+                        },
+                        // "Tap the chat to file it under Home."
+                        fileUnder = filingTag?.let { com.jarvis.client.net.ChatTags.FileUnder(it, filingQuery) },
+                        onFileUnderDone = {
+                            filingTag = null
+                            filingQuery = ""
                         },
                         modifier = root,
                     )

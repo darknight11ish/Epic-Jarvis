@@ -409,6 +409,9 @@ export function readHistory(answer) {
         tainted: c.tainted === true,
         kind: readKind(c.kind),
         project: text(c.project) || null,
+        // Chat tags (docs/CHAT-TAGS-DESIGN.md): the tag's id, or null when
+        // untagged - and from a PC that has no tags yet.
+        tagId: Number.isInteger(c.tag_id) && c.tag_id > 0 ? c.tag_id : null,
       })),
   };
 }
@@ -638,6 +641,7 @@ export function readSearch(answer) {
           // (the second chat audit, 2026-09-28, desktop worst-three #2).
           kind: readKind(c.kind),
           project: text(c.project) || null,
+          tagId: Number.isInteger(c.tag_id) && c.tag_id > 0 ? c.tag_id : null,
           hits: num(c.hits) ?? 0,
           snippet: {
             role: ["user", "assistant", "title"].includes(s.role) ? s.role : "user",

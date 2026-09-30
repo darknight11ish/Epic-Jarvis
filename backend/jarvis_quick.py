@@ -160,6 +160,18 @@ approves nothing. A date it cannot be sure of ("on Monday" said on a
 Monday, "3/9", "the 3rd", "last night", a month that has not happened yet
 this year) is a question instead, and opens nothing.
 
+"LABEL THIS CHAT" (chat tags, the owner's decision of 2026-09-30, JARVIS-API
+section 99) is here too: "label this chat Work", "file this under Learning",
+"tag this as Ideas", "remove the tag from this chat". It files the request's
+own conversation at once, no card - it is the owner's own organisation and
+nothing leaves the PC. Only from the owner's newest typed or spoken words and
+never in a conversation that has read outside text. A tag that does not exist
+is answered with the tags that do (tags are made in History, never by voice).
+An OLDER chat ("label my chat about the boiler as Home") is never guessed at:
+the answer sets `open_brain: "history"`, `file_under: <tag id>` and
+`history_q: <search words>` in X-Jarvis-Route, History shows the matches, and
+nothing is filed until the owner taps one.
+
 WHERE THE IDEA COMES FROM
 Home Assistant's `prefer_local_intents` - try the built-in sentence matcher
 before the conversation agent - and the set of timer handlers in its
@@ -795,6 +807,11 @@ def _match(text, now: float) -> Optional[Intent]:
                     r"(?:my|the)\s+)?(timers|alarms|reminders|todos?|todo\s+list|todo\s+items)"
                     r"|(?:clear|empty|delete)\s+(?:my|the)\s+todo\s+list", s):
         return Intent("bulk")
+
+    # --- "label this chat Work" (chat tags, 2026-09-30) --------------------------
+    got = _chat_tag(s)
+    if got is not None:
+        return got
 
     # --- "forget what you learned last week" (jarvis_forget_range.py) ----------
     # Before everything that starts with "delete"/"remove": this one names
@@ -2983,6 +3000,113 @@ def _run_forget_range(f: dict, now: float) -> Result:
     return Result(reply, "forget_range", open_brain="forget-range" if opens else None)
 
 
+# --- "label this chat Work" (chat tags, 2026-09-30) ---------------------------
+_TAG_NAME = r"(?:the\s+)?(?:tag\s+)?(?P<n>[^\s].{0,59})"
+#: This chat: "label this chat Work", "label this chat as Work", "file this
+#: chat under Learning", and the short "file this under Learning" / "tag this
+#: as Ideas" (the short form needs "as" or "under": "file this" alone is not ours).
+_TAG_THIS = re.compile(
+    r"(?:label|tag|file|categori[sz]e|sort)\s+(?:this|the\s+current)\s+(?:chat|conversation)\s+"
+    r"(?:(?:as|under)\s+)?" + _TAG_NAME
+    + r"|(?:label|tag|file)\s+this\s+(?:as|under)\s+" + _TAG_NAME.replace("(?P<n>", "(?P<n2>"))
+#: An older chat, named by what it was about. Never this chat.
+_TAG_OLDER = re.compile(
+    r"(?:label|tag|file)\s+(?:my|the|that)\s+(?:chat|conversation)\s+"
+    r"(?:about|on|where\s+(?:i|we)\s+(?:talked|spoke|asked)\s+about)\s+(?P<q>.{1,60}?)\s+"
+    r"(?:as|under)\s+" + _TAG_NAME)
+_TAG_OFF = re.compile(
+    r"(?:remove|clear|delete|drop|take\s+off)\s+(?:the\s+)?(?:tag|label)\s+(?:from|off|on)\s+"
+    r"(?:this|the\s+current)\s+(?:chat|conversation)"
+    r"|(?:untag|unlabel|unfile)\s+(?:this|the\s+current)\s+(?:chat|conversation)"
+    r"|(?:remove|clear|delete)\s+(?:this|the\s+current)\s+(?:chat|conversation)'?s?\s+(?:tag|label)"
+    r"|take\s+the\s+(?:tag|label)\s+off\s+(?:this|the\s+current)\s+(?:chat|conversation)")
+
+
+def _chat_tag(s: str) -> Optional[Intent]:
+    """Whole sentences only. The name is kept as said (lower-cased here;
+    match() puts the owner's capitals back through the `text` field)."""
+    if _TAG_OFF.fullmatch(s):
+        return Intent("chat_tag", {"op": "off"})
+    m = _TAG_OLDER.fullmatch(s)
+    if m:
+        return Intent("chat_tag", {"op": "older", "text": m.group("n").strip(),
+                                   "about": m.group("q").strip()})
+    m = _TAG_THIS.fullmatch(s)
+    if m:
+        return Intent("chat_tag", {"op": "this",
+                                   "text": (m.group("n") or m.group("n2")).strip()})
+    return None
+
+
+CHAT_TAG_MISSING = ("Your PC's Jarvis cannot file chats under tags yet - run apply-patches.ps1 "
+                    "on the PC.")
+CHAT_TAG_OUTSIDE = ("I do not file a chat after it has read outside text, like an email or a web "
+                    "page. Use History to file it yourself.")
+CHAT_TAG_NO_CHAT = ("I cannot tell which chat this is. Open History and file it from there.")
+CHAT_TAG_TEMPORARY = ("This is a temporary chat, so it is not kept and cannot be filed.")
+CHAT_TAG_NOT_KEPT = ("This chat has not been saved yet, so there is nothing to file. Try again "
+                     "after my next answer, or use History.")
+
+
+def _chat_tainted(conversation, messages) -> bool:
+    """Has this conversation read outside text? Fails CLOSED, like
+    jarvis_widgets.chat_tainted."""
+    try:
+        import jarvis_chat_log
+        return bool(jarvis_chat_log.conversation_tainted(conversation, messages))
+    except Exception:
+        if not isinstance(messages, list):
+            return True
+        turns = [m for m in messages if isinstance(m, dict)
+                 and m.get("role") in ("user", "assistant", "tool")]
+        return len(turns) > 1 or any(m.get("role") != "user" for m in turns)
+
+
+def _run_chat_tag(f: dict, conversation, temporary: bool, messages) -> Result:
+    """File (or unfile) the request's own conversation - or, for an older
+    chat, only point History at it. No card: the owner's own organisation."""
+    n = "chat_tag"
+    try:
+        import jarvis_chat_log as CL
+    except Exception:
+        return Result(CHAT_TAG_MISSING, n)
+    if _chat_tainted(conversation, messages):
+        return Result(CHAT_TAG_OUTSIDE, n)
+    op = f.get("op")
+    tag = None
+    if op in ("this", "older"):
+        try:
+            reg = CL.tags()
+        except Exception:
+            return Result(CHAT_TAG_MISSING, n)
+        tags = reg.get("tags") or []
+        want = str(f.get("text") or "").strip()
+        tag = next((t for t in tags if t["name"].casefold() == want.casefold()), None)
+        if tag is None:
+            if not tags:
+                return Result("You have no tags yet. Make one in History.", n, private=True)
+            names = ", ".join(t["name"] for t in tags)
+            return Result(f"I do not have a tag called {want}. Your tags are: {names}. "
+                          "Make new ones in History.", n, private=True)
+        if op == "older":
+            return Result(f"Tap the chat you mean in History and I will file it under "
+                          f"{tag['name']}.", n, private=True, open_brain="history",
+                          file_under=int(tag["id"]), history_q=str(f.get("about") or ""))
+    if temporary:
+        return Result(CHAT_TAG_TEMPORARY, n)
+    if not conversation:
+        return Result(CHAT_TAG_NO_CHAT, n)
+    code, out = CL.tag_chat(conversation, None if op == "off" else tag["id"])
+    if code == 404 and out.get("error") == "not_found":
+        return Result(CHAT_TAG_NOT_KEPT, n)
+    if code != 200 or not out.get("ok"):
+        return Result(str(out.get("message") or "I could not file that just now."), n)
+    if op == "off":
+        return Result("Done, this chat has no tag now. You can change it in History.", n)
+    return Result(f"Done, filed under {tag['name']}. You can change it in History.", n,
+                  private=True)
+
+
 def _project_log(s: str) -> Optional[Intent]:
     """"log 5 km run", "I ran 5 km": ours only when a life project has a
     benchmark it fits (jarvis_projects.quick_match). Without
@@ -3144,6 +3268,11 @@ class Result:
     # Brain both apps open - "forget-range" - after "forget what you learned
     # last week" filled in its list. Navigation only; nothing is removed.
     open_brain: Optional[str] = None
+    # "Label my chat about the boiler as Home" (chat tags, 2026-09-30): the tag
+    # id History should offer to file a tapped chat under, and the words it
+    # should search for. Additive, like open_brain; both None otherwise.
+    file_under: Optional[int] = None
+    history_q: Optional[str] = None
     # "Where did I put ...?" (2026-09-28): the saved facts the answer quotes,
     # by id, and how many of them are sensitive - so X-Jarvis-Route says the
     # answer used memory, both apps show "Used 1 memory" with Forget, and a
@@ -3330,6 +3459,8 @@ def run(intent: Intent, sched, now: float, conversation: Optional[str] = None,
     if n == "bulk":
         return Result("Jarvis does not clear everything at once. Delete them one at a time, "
                       "here or under Coming up.", n)
+    if n == "chat_tag":
+        return _run_chat_tag(f, conversation, temporary, messages)
     if n == "forget_range":
         return _run_forget_range(f, now)
     if n == "missed":
@@ -4191,6 +4322,12 @@ def route_fields(res: Result) -> dict:
         # Brain place both apps open, with the list already filled in.
         # Additive, like open_settings.
         out["open_brain"] = res.open_brain
+    if res.file_under is not None:
+        # Chat tags (2026-09-30): "file under <tag id>" with the search words.
+        # The apps show the matches and the banner; nothing is filed until
+        # the owner taps a chat.
+        out["file_under"] = int(res.file_under)
+        out["history_q"] = str(res.history_q or "")
     return out
 
 
