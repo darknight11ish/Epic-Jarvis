@@ -497,7 +497,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz,
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz, decks,
   folders, animal, chatbot, support, historyImport, widgets, devices, screen }) {
   const listeners = {};
   window.__calls = [];
@@ -1728,20 +1728,41 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 q.title = ""; q.hidden = true;
                 for (const x of q.questions) {
                   x.prompt = "";
-                  if (x.mark) { x.mark.comment = ""; x.mark.passage = ""; }
+                  if (x.mark) {
+                    x.mark.comment = ""; x.mark.passage = "";
+                    if (typeof x.mark.expected === "string") x.mark.expected = "";
+                  }
                 }
               }
               return q;
             };
             if (cmd === "brain_quiz_start") {
               const t = String(args.text || "");
-              if (t.length < 200) return no("text_too_short");
+              const spanish = args.mode === "spanish" && !z.noMode;
+              if (spanish && t) {
+                if (t.length < 200) return no("text_too_short");
+              } else if (!spanish) {
+                if (t.length < 200) return no("text_too_short");
+              }
               if (t.length > 20000) return no("text_too_long");
               const n = args.count || 5;
-              const kinds = ["recall", "explain", "apply"];
-              z.quiz = { id: "qz0001", title: args.title || "", grader_verified: Boolean(z.verified),
-                answered: 0, questions: Array.from({ length: Math.min(n, z.questions || 3) }, (_, i) => ({
-                  n: i + 1, kind: kinds[i % 3], prompt: "Question text number " + (i + 1) + "?", mark: null })) };
+              if (spanish) {
+                const exercise = args.exercise || "mixed";
+                const kinds = exercise === "mixed" ? ["blank", "translate", "complete"] : [exercise];
+                z.quiz = { id: "qz0001", title: args.topic || "Spanish", grader_verified: false,
+                  mode: "spanish", level: args.level || "A2", key_source: t ? "text" : "model",
+                  notice: z.notice || "STAND-IN NOTICE: Spanish crisis words are not recognised. Call or text 988, or 911.",
+                  answered: 0, questions: Array.from({ length: Math.min(n, z.questions || 3) }, (_, i) => ({
+                    n: i + 1, kind: kinds[i % kinds.length],
+                    prompt: kinds[i % kinds.length] === "blank" ? "El libro _____ en la mesa " + (i + 1) + "."
+                      : "Spanish prompt number " + (i + 1), mark: null })) };
+              } else {
+                const kinds = ["recall", "explain", "apply"];
+                z.quiz = { id: "qz0001", title: args.title || "Bread", grader_verified: Boolean(z.verified),
+                  answered: 0, questions: Array.from({ length: Math.min(n, z.questions || 3) }, (_, i) => ({
+                    n: i + 1, kind: kinds[i % 3], prompt: "Question text number " + (i + 1) + "?", mark: null })) };
+                if (!z.noMode) { z.quiz.mode = "text"; z.quiz.level = null; z.quiz.key_source = null; }
+              }
               z.marks = {};
               return { ok: true, quiz: view(), ...(hideIt() ? { hidden: true } : {}) };
             }
@@ -1756,8 +1777,36 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
                 counts[x.mark.level] += 1;
                 if (x.mark.level !== "got_it") again.push(x.n);
               }
+              let kept;
+              if (args.keep) {
+                const k = args.keep;
+                const d = window.__decks;
+                if (z.keepRefuse) return no(z.keepRefuse);
+                if (!Array.isArray(k.cards) || !k.cards.length) return no("nothing_to_keep");
+                for (const c of k.cards) {
+                  const it = z.quiz.questions.find((x) => x.n === c.n);
+                  if (!it || !it.mark) return no("bad_question");
+                }
+                if (z.crisisWord && k.cards.some((c) => String(c.answer).includes(z.crisisWord))) {
+                  return { ok: true, crisis: true, message: "STAND-IN HELP WORDS.\n\nCall **988** any time.", quiz: view() };
+                }
+                if (d && d.available !== false) {
+                  let deck = k.deck ? d.decks.find((x) => x.id === k.deck) : null;
+                  if (k.deck && !deck) return no("deck_not_found");
+                  if (!deck) {
+                    deck = { id: "dnew" + (d.decks.length + 1), name: k.new_deck, paused: false, cards: [] };
+                    d.decks.push(deck);
+                  }
+                  for (const c of k.cards) {
+                    const it = z.quiz.questions.find((x) => x.n === c.n);
+                    deck.cards.push({ id: "cnew" + it.n, front: it.prompt, back: c.answer, passage: it.mark.passage,
+                      kind: it.kind, level: z.quiz.level || null, due: true, new: true });
+                  }
+                }
+                kept = k.cards.length;
+              }
               z.quiz = null;
-              return { ok: true, summary: { counts, again } };
+              return { ok: true, summary: { counts, again }, ...(kept !== undefined ? { kept } : {}) };
             }
             const item = z.quiz.questions.find((x) => x.n === args.n);
             if (!item) return no("bad_question");
@@ -1775,8 +1824,128 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const levels = z.levels || ["got_it", "partly", "not_yet"];
             item.mark = { level: levels[z.quiz.answered % levels.length],
               comment: "The passage says otherwise.", passage: "SOURCE PASSAGE " + item.n };
+            if (z.quiz.mode === "spanish") {
+              item.mark.marked_by = item.kind === "blank" ? "code" : "model";
+              item.mark.expected = "está";
+              item.mark.key_label = z.quiz.key_source === "model" ? "Answer key written by the model" : null;
+            }
             z.quiz.answered += 1;
             return { ok: true, mark: JSON.parse(JSON.stringify(item.mark)), quiz: view() };
+          }
+          // brain/decks.rs (Review decks). `window.__decks` is null - a PC
+          // without decks, which Rust answers with the "run apply-patches.ps1"
+          // sentence - unless the scenario names `decks: {...}`. It behaves like
+          // JARVIS-API section 102: a card is ready when its `due` is true and
+          // its deck is not paused; a run shows `limit` cards; a rating needs a
+          // reveal first. Words come out while the private lists are hidden and
+          // review is not asked at all, as brain/decks.rs does.
+          case "brain_decks":
+          case "brain_decks_create":
+          case "brain_decks_settings":
+          case "brain_decks_act":
+          case "brain_decks_cards":
+          case "brain_decks_card_act":
+          case "brain_review":
+          case "brain_review_reveal":
+          case "brain_review_rate":
+          case "brain_review_more": {
+            const d = window.__decks;
+            if (!d) throw new Error("Your PC's Jarvis does not have study decks yet - run apply-patches.ps1 on the PC.");
+            d.calls.push({ cmd, ...args });
+            const writes = !["brain_decks", "brain_decks_cards", "brain_review"].includes(cmd);
+            if (writes && state.stale) throw new Error("the event stream is stale");
+            const no = (error) => ({ ok: false, error, message: "the PC's own words for " + error });
+            if (d.refuse && d.refuse[cmd]) return no(d.refuse[cmd]);
+            const hideIt = () => window.__security.hidden && !window.__security.revealed;
+            const ready = (deck) => deck.paused ? 0 : deck.cards.filter((c) => c.due).length;
+            const line = (n) => n === 0 ? "Nothing ready today" : (n === 1 ? "1 card ready" : n + " cards ready");
+            const deckOut = (x) => ({ id: x.id, name: hideIt() ? "" : x.name, cards: x.cards.length,
+              ready: ready(x), paused: Boolean(x.paused), kind: x.cards.length ? "study" : "empty" });
+            const total = () => d.decks.reduce((a, x) => a + ready(x), 0);
+            const cardFull = (c) => ({ id: c.id, front: hideIt() ? "" : c.front, back: hideIt() ? "" : c.back,
+              passage: hideIt() ? "" : (c.passage || ""), kind: c.kind || "recall", level: c.level || null,
+              key_source: c.keySource || null, key_label: c.keyLabel || null, new: Boolean(c.new), due_day: null });
+            const view = (c) => c ? { id: c.id, front: c.front, kind: c.kind || "recall", level: c.level || null,
+              deck: c.deck, new: Boolean(c.new) } : null;
+            const queue = (deckId) => {
+              const out = [];
+              for (const x of d.decks) {
+                if (deckId && x.id !== deckId) continue;
+                if (x.paused) continue;
+                for (const c of x.cards) if (c.due) out.push({ ...c, deck: x.id });
+              }
+              return out;
+            };
+            const reviewOut = (deckId) => {
+              const q = queue(deckId);
+              const base = { ok: true, ready: total(), new_left: 2, line: line(total()),
+                run: { done: d.done, limit: d.limit } };
+              if (!d.decks.length) return { ...base, state: "no_decks", card: null, line: "" };
+              if (deckId && d.decks.find((x) => x.id === deckId) && d.decks.find((x) => x.id === deckId).paused) {
+                return { ...base, state: "paused", card: null, line: "This deck is paused" };
+              }
+              if (!q.length) return { ...base, state: d.decks.every((x) => x.paused) ? "paused" : "empty", card: null,
+                line: d.decks.every((x) => x.paused) ? "All decks paused" : "Nothing ready today" };
+              if (d.done >= d.limit) return { ...base, state: "enough", card: null };
+              return { ...base, state: "card", card: view(q[0]) };
+            };
+            if (cmd === "brain_decks") {
+              return { ok: true, available: d.available !== false, why: d.available === false ? d.why : "",
+                decks: d.available === false ? [] : d.decks.map(deckOut), ready: total(), new_per_day: d.newPerDay,
+                new_left: 2, next_ready_day: d.nextReadyDay || null, line: d.decks.length ? line(total()) : "",
+                limits: { decks: 20, cards: 1000, name: 60, front: 500, back: 2000, new_per_day: 20 },
+                ...(hideIt() ? { hidden: true } : {}) };
+            }
+            if (cmd === "brain_decks_create") {
+              if (!String(args.name || "").trim()) return no("bad_deck_name");
+              const x = { id: "dmade" + (d.decks.length + 1), name: args.name, paused: false, cards: [] };
+              d.decks.push(x);
+              return { ok: true, deck: deckOut(x) };
+            }
+            if (cmd === "brain_decks_settings") { d.newPerDay = args.newPerDay; return { ok: true, new_per_day: args.newPerDay }; }
+            if (cmd === "brain_decks_act") {
+              const x = d.decks.find((y) => y.id === args.id);
+              if (!x) return no("deck_not_found");
+              if (args.action === "delete") { d.decks = d.decks.filter((y) => y !== x); return { ok: true, deleted: true }; }
+              if (args.action === "pause") x.paused = true;
+              if (args.action === "resume") x.paused = false;
+              if (args.action === "rename") x.name = args.name;
+              return { ok: true, deck: deckOut(x) };
+            }
+            if (cmd === "brain_decks_cards") {
+              const x = d.decks.find((y) => y.id === args.id);
+              if (!x) return no("deck_not_found");
+              return { ok: true, deck: { id: x.id, name: hideIt() ? "" : x.name }, cards: x.cards.map(cardFull),
+                ...(hideIt() ? { hidden: true } : {}) };
+            }
+            if (cmd === "brain_decks_card_act") {
+              const x = d.decks.find((y) => y.id === args.id);
+              if (!x) return no("deck_not_found");
+              const c = x.cards.find((y) => y.id === args.cid);
+              if (!c) return no("card_not_found");
+              if (args.action === "delete") { x.cards = x.cards.filter((y) => y !== c); return { ok: true, deleted: true }; }
+              if (typeof args.front === "string") c.front = args.front;
+              if (typeof args.back === "string") c.back = args.back;
+              return { ok: true, card: cardFull(c) };
+            }
+            if (hideIt()) return { ok: true, hidden: true, message: "Turn off Hide memory lists to review" };
+            if (cmd === "brain_review") return reviewOut(args.deck || "");
+            if (cmd === "brain_review_more") { d.limit += 10; return reviewOut(args.deck || ""); }
+            const all = queue("");
+            const card = all.find((c) => c.id === args.card);
+            if (!card) return no("card_not_found");
+            if (cmd === "brain_review_reveal") {
+              d.revealed = card.id;
+              return { ok: true, back: { answer: card.back, passage: card.passage || "" }, key_label: card.keyLabel || null };
+            }
+            if (d.revealed !== card.id) return no("not_revealed");
+            if (!["again", "hard", "good", "easy"].includes(args.rating)) return no("bad_rating");
+            for (const x of d.decks) for (const c of x.cards) if (c.id === card.id) c.due = false;
+            d.done += 1;
+            d.revealed = "";
+            const out = reviewOut("");
+            const { card: next, ...rest } = out;
+            return { ...rest, next, comes_back: "2026-10-03" };
           }
           case "brain_widgets_draft": {
             window.__widgetCalls.push({ cmd, ...args });
@@ -2705,6 +2874,12 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
     goals: [], reads: 0, fails: null, checkinByGoal: {}, ...goals })) : null;
   window.__goalsCalls = [];
   window.__quiz = quiz ? JSON.parse(JSON.stringify({ calls: [], quiz: null, ...quiz })) : null;
+  // Review decks (brain/decks.rs). `null` - a PC without decks. Scenario
+  // `decks: {decks: [{id, name, paused, cards: [{id, front, back, passage,
+  // kind, level, due, new}]}], available, why, newPerDay, refuse: {cmd: code}}`.
+  window.__decks = decks ? JSON.parse(JSON.stringify({
+    calls: [], decks: [], available: true, why: "", newPerDay: 5, limit: 20, revealed: "", done: 0,
+    refuse: {}, ...decks })) : null;
   // "Widgets you describe" (brain/widgets.rs). Unset, a PC without it.
   // `widgets`/`drafts` are the PC's rows (with said and parts); `shows` maps
   // an id to its GET /api/widgets/show answer; `draft` is the preview the

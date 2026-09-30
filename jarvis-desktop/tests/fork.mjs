@@ -15,6 +15,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { continueWindow } from "../src/chat-history.js";
 import {
   FORK, FORK_BUSY, FORK_ERROR_FALLBACK, FORK_NO, FORK_TITLE, forkDoneWords, forkErrorWords, forkLabel,
   forkedRow, readConversation, withForkedRow,
@@ -103,6 +104,18 @@ await check("CONTROL: after a fork the narrowing is cleared and a reread cannot 
   for (const part of ['chats.kind = ""', 'chats.tag = ""', 's.query = ""']) assert.ok(clear.includes(part), part);
   assert.match(brain, /const justForked = /);
   assert.match(brain, /history-forked/, "the transcript is drawn above the list when its row is missing");
+});
+
+await check("a fork made at a user message continues cleanly: the unanswered question is left out, never re-sent", () => {
+  const forked = [
+    { role: "user", text: "first", provenance: "typed", answer_kept: true },
+    { role: "assistant", text: "one" },
+    { role: "user", text: "second", provenance: "typed", answer_kept: false },
+  ];
+  const got = continueWindow(forked);
+  assert.deepEqual(got.window.map((p) => [p.question, p.answer]), [["first", "one"]]);
+  assert.equal(got.skipped, 1);
+  // ...and the next question after Continue follows an assistant turn: no two user messages in a row.
 });
 
 await check("the opened chat keeps idx, forkable and fork_why", () => {
