@@ -229,3 +229,24 @@ Building `study` means, as for the other switches: a backend patch and test,
 a row in both apps' "Second graphics card" section, a `docs/JARVIS-API.md`
 entry, and `tools/check_parity.py` clean. It comes after Slice A, because the
 switch has nothing to switch until the quiz module exists.
+
+## 10. Second Gemini list, checked (2026-09-30)
+
+All nine repos exist (shallow clones read; star counts unverified). Verdicts:
+
+| Project | Licence | Verdict |
+|---|---|---|
+| py-fsrs (`fsrs` 6.3.2) | MIT | **Use** for milestone 3. Tiny, pure Python. The optional optimizer needs torch: leave it out. |
+| fabric | MIT | **Copy prompts as text**, keeping the notice: `create_quiz`, `create_flash_cards`, `extract_wisdom` (in `data/patterns/`). Its own program and YouTube fetch are not used. |
+| openlingo | MIT | Ideas only: needs Postgres and cloud models, uses SM-2 not FSRS. Its nine exercise kinds become question kinds in the quiz. Its word lists have their own source licences, not checked. |
+| Lute v3 | MIT | Ideas only. It has **no** automatic verb linking (parents are set by hand); familiarity levels 1-5 are real. |
+| yt-to-anki | **GPL-3.0** | Ideas only (clean-room route if ever wanted); also media download is refused. |
+| graphiti | Apache-2.0 | Skip: needs a graph database, telemetry on by default. |
+| srs-benchmark | none | Skip: a research harness on a public dataset, not for personal logs. |
+| faster-whisper | MIT | Optional fallback only; no measured VRAM figure for "small" exists in its README. Jarvis's own speech engine goes first (section 9). |
+| yt-dlp | Unlicense | Not used: it downloads media. |
+
+False claims in the pasted list: openlingo's `src/lib/ai/tools/` (it is one file,
+`lib/ai/tools.ts`); fabric's `create_study_guide` (does not exist; use
+`summarize_lecture` or write our own); Lute "links durmió to dormir
+automatically"; the "small float16" memory figure.
