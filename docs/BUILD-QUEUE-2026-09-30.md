@@ -112,3 +112,9 @@ exactly what changes plus test results; tests run in a throwaway copy first; lic
 and maintenance are checked by code, not only by the model; the fetch is a named way
 out of the PC carrying no private data (rule 1); the coding step waits for the 12 GB
 card. Queued after menu visibility.
+Pull request step (owner, 2026-09-30): **yes, open only.** After a tool add or update
+passes its tests, one card (full diff, test results, the pull request text, "sends this
+to GitHub") then Jarvis pushes a branch and opens a pull request on the Jarvis repo.
+Jarvis never merges; the owner presses Merge. Uses a fine-grained GitHub key limited to
+that one repo (code write + pull requests only), stored under rule 3. Part of
+`docs/GITHUB-TOOLS-DESIGN.md`.
