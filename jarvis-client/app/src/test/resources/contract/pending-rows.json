@@ -133,6 +133,33 @@
       }
     },
     {
+      "id": "f6",
+      "action": "browser_form_submit",
+      "tier": "ask",
+      "created": 1799999980.0,
+      "detail": {
+        "text": "Jarvis wants to submit a form on clinic.example. It goes only if you approve, and nothing was sent yet.\n\nSite: clinic.example\n\nWhat Jarvis did on the page, in order:\n  1. typed 'Alex Kim' into textbox \"Name\"\n  2. typed '555 0100' into textbox \"Phone\"\n\nThe picture shown with this card is the page exactly as it looks now - nothing in it is hidden or covered, so check every detail.\n\nJarvis will now click button \"Submit\". It cannot be undone.\n\nIf you say no: nothing is sent, and the filled-in form stays open in the browser for you.",
+        "picture": "Zm9ybS1yZXZpZXctMDAwMQ"
+      },
+      "prompt": "submit a form on clinic.example",
+      "raised": null,
+      "risk": {
+        "reversible": "no",
+        "reach": "outbound",
+        "why": "sends the form you were shown to the website named on the card, with every word typed into it; Jarvis clicks only after you approve this card and only if the page is still exactly as it looked in the picture, and once sent it cannot be taken back; the picture goes to your own devices only and is not saved",
+        "swipe_ok": false,
+        "classified": true
+      },
+      "notice": {
+        "title": "Jarvis wants to send a form you were shown on a website",
+        "body": "sends the form you were shown to the website named on the card, with every word typed into it; Jarvis clicks only after you approve this card and only if the page is still exactly as it looked in the picture, and once sent it cannot be taken back; the picture goes to your own devices only and is not saved. nothing has happened yet.",
+        "weight": "heavy",
+        "deny_ok": true,
+        "approve_ok": false
+      },
+      "expires_in": 160
+    },
+    {
       "action": "send_email",
       "tier": "ask",
       "created": 1800000000.0,
