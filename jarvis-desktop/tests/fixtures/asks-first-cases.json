@@ -395,6 +395,15 @@
        "title": "Work a web page for you in a browser"
       },
       {
+       "action": "browser_form_submit",
+       "fixed": false,
+       "id": "browser_form_submit",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a form you were shown on a website"
+      },
+      {
        "action": "obscura_enable",
        "fixed": false,
        "id": "obscura_enable",
@@ -1398,6 +1407,15 @@
        "title": "Work a web page for you in a browser"
       },
       {
+       "action": "browser_form_submit",
+       "fixed": false,
+       "id": "browser_form_submit",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a form you were shown on a website"
+      },
+      {
        "action": "obscura_enable",
        "fixed": false,
        "id": "obscura_enable",
@@ -2397,6 +2415,15 @@
        "title": "Work a web page for you in a browser"
       },
       {
+       "action": "browser_form_submit",
+       "fixed": false,
+       "id": "browser_form_submit",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a form you were shown on a website"
+      },
+      {
        "action": "obscura_enable",
        "fixed": false,
        "id": "obscura_enable",
@@ -3390,6 +3417,15 @@
        "title": "Work a web page for you in a browser"
       },
       {
+       "action": "browser_form_submit",
+       "fixed": false,
+       "id": "browser_form_submit",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a form you were shown on a website"
+      },
+      {
        "action": "obscura_enable",
        "fixed": false,
        "id": "obscura_enable",
@@ -4381,6 +4417,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Work a web page for you in a browser"
+      },
+      {
+       "action": "browser_form_submit",
+       "fixed": false,
+       "id": "browser_form_submit",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a form you were shown on a website"
       },
       {
        "action": "obscura_enable",
@@ -5389,6 +5434,15 @@
        "title": "Work a web page for you in a browser"
       },
       {
+       "action": "browser_form_submit",
+       "fixed": false,
+       "id": "browser_form_submit",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a form you were shown on a website"
+      },
+      {
        "action": "obscura_enable",
        "fixed": false,
        "id": "obscura_enable",
@@ -6386,6 +6440,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Work a web page for you in a browser"
+      },
+      {
+       "action": "browser_form_submit",
+       "fixed": false,
+       "id": "browser_form_submit",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Send a form you were shown on a website"
       },
       {
        "action": "obscura_enable",

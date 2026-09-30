@@ -99,6 +99,10 @@ internal fun normalisePendingRow(row: JsonElement, nowMs: Long): JsonObject? {
     // wire detail, before it is rewritten below. Always set here, so a row
     // that carries a "sign_text" of its own is overwritten.
     out["sign_text"] = JsonPrimitive(SignedApproval.wordsTextOf(rawDetail))
+    // The picture of a filled-in form, from the raw detail (FormReview). Always
+    // set or removed here, so a row cannot bring its own "form_picture".
+    val formPicture = FormReview.pictureIdOf(rawDetail)
+    if (formPicture == null) out.remove("form_picture") else out["form_picture"] = JsonPrimitive(formPicture)
     val detailObj: JsonObject? = when (rawDetail) {
         is JsonObject -> rawDetail
         is JsonPrimitive -> if (rawDetail.isString) parseObject(rawDetail.content) else null

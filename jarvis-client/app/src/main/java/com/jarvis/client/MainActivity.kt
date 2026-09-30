@@ -1007,11 +1007,15 @@ class MainActivity : FragmentActivity() {
         // And while "Solve it here" shows a picture of the PC's browser
         // window (it is never saved, so it must not be screenshotted either).
         val handoffShown = nav.current == Screen.HANDOFF
-        LaunchedEffect(security.appLock, security.privateLists, pairingKeyShown, handoffShown) {
+        // And while an approval card shows the picture of a web form Jarvis
+        // filled in (FormReview; the card raises this before it asks for it).
+        val formPictureShown = com.jarvis.client.net.FormReview.shown.collectAsState().value > 0
+        LaunchedEffect(security.appLock, security.privateLists, pairingKeyShown, handoffShown, formPictureShown) {
             val secure = SecurityRules.blockScreenCapture(
                 security,
                 keyShown = pairingKeyShown,
                 handoffShown = handoffShown,
+                formPictureShown = formPictureShown,
             )
             setRecentsScreenshotEnabled(!secure)
             if (secure) {

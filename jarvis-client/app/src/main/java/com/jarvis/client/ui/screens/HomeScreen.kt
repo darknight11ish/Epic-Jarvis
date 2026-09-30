@@ -1294,6 +1294,7 @@ private fun ConversationList(
                     onDeny = { actions.onDeny(item) },
                     onAmend = { note -> actions.onAmend(item.id, note) },
                     swipeAllowed = state.swipeDecides,
+                    pictureHidden = state.memoryHidden,
                     showFooter = state.pending.size == 1,
                     // UI-AUDIT-2026-09-26 item 6: a new card fades in, and the
                     // cards below glide up to fill the gap left by one that

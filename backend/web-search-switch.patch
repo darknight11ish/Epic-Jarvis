@@ -1,17 +1,17 @@
 --- a/jarvis_gate.py
 +++ b/jarvis_gate.py
-@@ -170,6 +170,7 @@
-     "tidy_inbox",  # jarvis_inbox_tidy.py / jarvis_agent.py acts only on tier "ask": ONE card per tidy, listing every email (inbox-tidy.patch)
+@@ -171,6 +171,7 @@
      "screen_picture_enable",  # jarvis_screen_picture.py acts only on tier "ask": ONE card to turn on slow picture reading (screen-picture.patch)
      "obscura_enable",  # jarvis_browser_engine.py acts only on tier "ask": ONE card to turn on the headless browser, Obscura (browser-engine.patch)
+     "browser_form_submit",  # jarvis_form_review.py / jarvis_agent.py acts only on tier "ask": ONE card, before the click that sends a filled-in form, showing the site, every word typed and a picture of the page (form-review.patch)
 +    "web_search_enable",  # jarvis_search.py acts only on tier "ask": ONE card to turn web search back on after the owner switched it off (web-search-switch.patch)
  })
  
  
-@@ -834,6 +835,12 @@
-     # the internet, and every page, click and box it fills is still its own
-     # plan card first. Stealth is on. Turning it off is instant and stops it.
-     "obscura_enable": ("yes", "outbound", "lets Jarvis choose a browser with no window (Obscura, a program on this PC that Jarvis starts and stops) for plain web reading; the pages are on the internet and it looks like an ordinary Chrome, but every page, click and box it fills is still its own card first, it never types a password or solves a captcha and stops at a captcha or sign-in page it recognises, it cannot open your own network, and turning it off is instant"),
+@@ -845,6 +846,12 @@
+     # it looks. What is typed goes to the site named on the card, and once
+     # sent it cannot be taken back, so a risky approval.
+     "browser_form_submit": ("no", "outbound", "sends the form you were shown to the website named on the card, with every word typed into it; Jarvis clicks only after you approve this card and only if the page is still exactly as it looked in the picture, and once sent it cannot be taken back; the picture goes to your own devices only and is not saved"),
 +    # web-search-switch.patch (jarvis_search.py; the settings audit of 2026-09-30).
 +    # Web search ships ON. The owner may switch it off at any time (instant, no
 +    # card); turning it back ON is this one card. The change itself sends nothing:

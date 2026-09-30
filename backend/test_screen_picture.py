@@ -1511,8 +1511,12 @@ def t_the_gate_lines_and_the_stack():
     order = _stack.order()
     # browser-engine.patch (2026-09-29) goes after it: its gate hunks sit on this
     # patch's own last lines.
-    check("screen-picture.patch is after screen.patch, and only browser-engine.patch follows it",
-          order.index("browser-engine.patch") == order.index("screen-picture.patch") + 1
+    # form-review.patch (2026-09-30) goes after browser-engine.patch, on its lines,
+    # and web-search-switch.patch (2026-09-30) after that.
+    check("screen-picture.patch is after screen.patch, and only browser-engine.patch, "
+          "form-review.patch and web-search-switch.patch follow it",
+          order[-4:] == ["screen-picture.patch", "browser-engine.patch",
+                         "form-review.patch", "web-search-switch.patch"]
           and order.index("screen.patch") < order.index("screen-picture.patch"))
     toml = (HERE / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8")
     check("the toml keeps the action at tier ask", re.search(

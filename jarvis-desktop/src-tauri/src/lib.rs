@@ -920,6 +920,7 @@ pub fn run() {
             brain::forget_range::forget_range_write,
             brain::inbox_tidy::inbox_tidy_read,
             brain::inbox_tidy::inbox_tidy_undo,
+            brain::form_review::form_review_picture,
             brain::brain_model,
             attention::mark_digest_seen,
             attention::set_attention_muted,

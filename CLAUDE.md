@@ -1661,6 +1661,55 @@ the rule blocking it"):
   stealth lives in its own files (`backend/jarvis_browser_engine*.py`), not
   in the chatbot driver's.
 
+Decided 2026-09-30, the owner's answers on filling in forms and booking
+appointments (`docs/FORM-REVIEW-DESIGN.md`; Gemini's browser-use, LaVague,
+OmniParser, UI-TARS, Midscene, Stagehand, Agent-S and steel-browser suggestions
+were checked and none is added - `jarvis_browser_control.py` already does the
+job, one permission model, named elements only):
+- **Fill a form, show me, then a separate Submit card.** Jarvis fills the
+  fields, stops before the one click marked `final`, shows the owner **a
+  picture of the filled form exactly as the page shows it** (nothing blacked
+  out - the owner must read their own name, phone and email to check them),
+  and raises a **second card just for the Submit click**
+  (`browser_form_submit`, tier ask, risky). The picture goes only to the
+  owner's own PC and phone: kept in memory only, never on disk, never to any
+  model, never in a log, event, notification or widget. This is the one screen
+  picture shown without `jarvis_screen.clean_picture`, because it never
+  reaches a model. Visible browser only; the headless one has no pixels, so
+  its Submit card is text only and says so.
+- **The picture is also hidden under App lock AND under "Hide memory lists and
+  chat history"**, on both apps (owner, 2026-09-30); a plain line says why.
+- **Built before the second card is installed** (owner: "build it now"); the
+  form driver itself still needs the 2060 and its "Browser control" switch.
+  **No pull request to `main` until the owner asks.** Built 2026-09-30
+  (JARVIS-API §98, `backend/jarvis_form_review.py`, `form-review.patch`); not
+  tried against a real browser or the owner's real gate.
+- **The form page Jarvis opened itself does not count as "outside text" for
+  the Submit click** (owner, 2026-09-30, "ignore the form page itself"). Email,
+  files, notes, web searches, memories and **a different website read earlier
+  in the same turn** still refuse it, as does a model that is not on this PC.
+  Known limit, said plainly: an earlier TURN of the same conversation that
+  used any tool still taints the conversation, so a form must be opened and
+  filled in one turn (the normal flow).
+- **A form of several pages** (owner, 2026-09-30): one `browser_control` call
+  per page, all in one turn; **up to 8 cards in a turn (instead of 5) while ONE
+  website's form is being filled** and nothing else has asked - a card for any
+  other tool or a second website puts it back to 5 (a loosening of the
+  2026-09-25 limit, for the form only, confirmed by the owner); and **the
+  Submit card lists every page's typed words** (JARVIS-API §98.1b), the
+  picture staying the last page.
+- **Pillow is a named requirement** (owner, 2026-09-30) so a very tall form
+  still gets a picture; it was already in `requirements.lock`.
+- **Model advice stays as it is** (owner, 2026-09-30, "improve what exists"):
+  Jarvis already offers the bigger model when it struggles or is corrected
+  twice; better signals are added to that, only after the 2060 is measured. No
+  llm-checker, llmfit, hf-mem, RouteLLM or UncommonRoute; never a second
+  router, and no "delete models" action without its own card.
+- **A numbered-boxes screen-parsing fallback** (the OmniParser idea) is only
+  a possible later spec, for pages the accessibility tree cannot read; it
+  waits for the 12 GB card, a measurement of how often reading a page fails,
+  and the owner's decision on mouse control.
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

@@ -31,6 +31,7 @@ ON_EARLIER_LINES = (
     "devices.patch",
     "apps-in-projects.patch",
     "screen-picture.patch",
+    "form-review.patch",
     "web-search-switch.patch",
 )
 
@@ -58,7 +59,7 @@ if text is not None:
     end = text.find("})", start)
     block = text[start:end]
     for entry in ('"phone_notifications_read"', '"chatbot_session"', '"memory_forget_range"',
-                  '"app_merge_change"'):
+                  '"app_merge_change"', '"browser_form_submit"'):
         check(block.count(entry) == 1, f"{entry} is in the tier-ask set exactly once")
 
 print()

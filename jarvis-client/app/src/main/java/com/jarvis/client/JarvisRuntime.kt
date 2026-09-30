@@ -6017,6 +6017,21 @@ object JarvisRuntime {
         }
     }
 
+    /**
+     * The picture of a filled-in web form for a "submit this form" card
+     * (FormReview). A read: never held. Kept by the card that asked only.
+     */
+    suspend fun formPicture(id: String): com.jarvis.client.net.FormReview.Answer =
+        when (val r = api.formPicture(id)) {
+            is ApiResult.Ok -> com.jarvis.client.net.FormReview.answer(r.value.code, r.value.body)
+            is ApiResult.Failed ->
+                if (r.error is ApiError.NotFound) {
+                    com.jarvis.client.net.FormReview.Answer.Gone
+                } else {
+                    com.jarvis.client.net.FormReview.Answer.Failed(com.jarvis.client.net.FormReview.COULD_NOT_LOAD)
+                }
+        }
+
     /** One picture of that window, kept by the screen that asked only. A read: never held. */
     suspend fun handoffFrame(h: String): com.jarvis.client.net.Handoff.Answer =
         when (val r = api.handoffFrame(h)) {
