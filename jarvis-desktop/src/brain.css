@@ -1325,6 +1325,42 @@ body {
   font-size: var(--text-xs);
 }
 
+/* Quiz me on a text (quiz.js): the paste box, one question at a time, the
+   mark with its comment and source passage, and the closing summary. */
+.quiz-text,
+.quiz-answer {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font: inherit;
+}
+
+.quiz-prompt {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  margin: 6px 0;
+}
+
+.quiz-mark {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: var(--stroke-hair) solid var(--border);
+}
+
+.quiz-passage {
+  margin: 6px 0 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+  color: var(--text-faint);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+
+.quiz-again {
+  margin: 6px 0;
+  padding-left: 18px;
+}
+
 /* Today cards (today.js): the words box, the time, and a day per box. */
 .today-form {
   flex-wrap: wrap;

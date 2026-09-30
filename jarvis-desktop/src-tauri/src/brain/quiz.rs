@@ -303,10 +303,12 @@ mod tests {
         assert!(quiz_answer(200, "not json", Some("quiz")).is_err());
         assert!(quiz_answer(200, r#"{"ok": false}"#, None).is_err());
         assert!(quiz_answer(200, r#"{"ok": true}"#, None).is_ok());
-        assert!(
-            quiz_answer(200, r#"{"ok": true, "summary": {"counts": {}, "again": []}}"#, Some("summary"))
-                .is_ok()
-        );
+        assert!(quiz_answer(
+            200,
+            r#"{"ok": true, "summary": {"counts": {}, "again": []}}"#,
+            Some("summary")
+        )
+        .is_ok());
     }
 
     #[test]
@@ -317,8 +319,12 @@ mod tests {
         assert_eq!(a["error"], "text_too_short");
         assert_eq!(a["message"], "Too short.");
         // The feature's own 404 is a refusal, not a missing feature.
-        let nf = quiz_answer(404, r#"{"ok": false, "error": "not_found", "message": "x"}"#, None)
-            .unwrap();
+        let nf = quiz_answer(
+            404,
+            r#"{"ok": false, "error": "not_found", "message": "x"}"#,
+            None,
+        )
+        .unwrap();
         assert_eq!(nf["error"], "not_found");
         let down = quiz_answer(
             503,

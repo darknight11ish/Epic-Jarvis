@@ -484,6 +484,19 @@ fun BrainScreen(
                 )
             }
 
+            // "Quiz me on a text" (docs/STUDY-FROM-TEXT-DESIGN.md, Slice A,
+            // 2026-09-30): paste a text, answer typed questions one at a
+            // time, marked on the PC by the local model, nothing saved or
+            // learned (QuizPlate.kt) - the desktop's Quiz page.
+            item(key = "quiz") {
+                QuizSection(
+                    canAct = canAct,
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
+
             // "Focus session" (the owner's decision of 2026-09-25): start and
             // stop one, the countdown, the counts and the report card
             // (FocusPlate.kt) - the desktop's Brain -> Work -> Focus session.

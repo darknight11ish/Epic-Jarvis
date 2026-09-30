@@ -698,6 +698,21 @@
                 <button id="goals-new-add" class="btn small" type="submit">Add</button>
               </form>
             </div>
+            <div class="card card-wide" id="quiz-card">
+              <h2>Quiz me on a text</h2>
+              <p class="note" id="quiz-intro">Paste some text and Jarvis writes a few questions about it. Your answers are marked by the model on this PC. Nothing is saved or learned, and nothing leaves this PC.</p>
+              <p class="note" id="quiz-outside">This text is treated as outside text: Jarvis never learns facts from it.</p>
+              <form id="quiz-start-form" autocomplete="off">
+                <textarea id="quiz-text" class="field quiz-text" rows="6" spellcheck="true"
+                          placeholder="Paste the text here" aria-label="The text to be quizzed on"
+                          aria-describedby="quiz-text-count"></textarea>
+                <p class="note" id="quiz-text-count" aria-live="polite">0 / 20,000 characters &middot; at least 200 needed</p>
+                <div class="goal-actions">
+                  <button id="quiz-start" class="btn small" type="submit" disabled>Write questions</button>
+                </div>
+              </form>
+              <div id="quiz-run" aria-live="polite"></div>
+            </div>
             <div class="card card-wide" id="briefing-card">
               <h2>Morning briefing</h2>
               <p class="note">A short list of your day, put together on your PC without the AI model. It only reads: it changes nothing and approves nothing.</p>
