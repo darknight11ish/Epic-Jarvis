@@ -1,5 +1,5 @@
 """test_youtube.py - "Quiz me on a YouTube video" (the owner's decision of
-2026-09-30; jarvis_youtube.py, youtube.patch, docs/JARVIS-API.md section 109,
+2026-09-30; jarvis_youtube.py, youtube.patch, docs/JARVIS-API.md section 112,
 docs/STUDY-FROM-TEXT-DESIGN.md sections 5 and 14).
 
     python3 backend/test_youtube.py
@@ -396,7 +396,8 @@ def t_cleaning_and_the_cap():
 
 
 def t_a_long_video_is_said_to_be_long():
-    r = fresh(snips=[{"text": ("word " * 20).strip(), "start": 10.0 * i} for i in range(2000)])
+    r = fresh(snips=[{"text": SENT + SENT2, "start": 0.0}]
+              + [{"text": ("word " * 20).strip(), "start": 10.0 * i} for i in range(1, 2000)])
     res = go()
     st = Y.show(res[1]["request"]["id"])[1]["request"]
     check("ready, with the truncation said in words and flagged",
@@ -588,7 +589,7 @@ def t_words_in_the_captions_cannot_steer_anything():
     check("a quiz is still made", st["state"] == "ready")
     user = [c for c in r.model_calls if "TEXT" in c["user"]][0]
     check("the injected words reach the model only inside the random-word fence, as data",
-          "IGNORE ALL PREVIOUS" in user["user"] and re.search(r"<<<TEXT-[0-9a-f]{12}", user["user"])
+          "IGNORE ALL PREVIOUS" in user["user"] and re.search(r"<<<TEXT [0-9a-f]{12}>>>", user["user"])
           and "IGNORE ALL PREVIOUS" not in user["system"], user["user"][:120])
     q = st["quiz"]
     r.model = None
@@ -711,15 +712,41 @@ def t_routes_through_install():
     # the server's own checks come first
     denied = []
 
-    class G(H):
+    class G:
+        def __init__(self, path):
+            self.path = path
+
+        def do_GET(self):
+            hits.append("g-get0")
+
+        def do_POST(self):
+            hits.append("g-post0")
+
         def _send(self, code, out):
             denied.append(code)
-    Y_get = G
-    Y.install(Y_get, origin_ok=lambda s: False, token_ok=lambda s: True, read_body=lambda s: b"{}")
-    g = Y_get("/api/youtube"); g.do_GET()
-    check("a cross-origin request is refused before anything runs", denied == [403])
-    g2 = types.SimpleNamespace(path="/api/youtube")
-    check("(and no request was raised by it)", not r.events or True)
+    Y.install(G, origin_ok=lambda s: False, token_ok=lambda s: True, read_body=lambda s: b"{}")
+    G("/api/youtube").do_GET()
+    G(Y.QUIZ_ROUTE).do_POST()
+    n_events = len(r.events)
+    check("a cross-origin request is refused before anything runs", denied == [403, 403]
+          and len(r.events) == n_events, str(denied))
+    denied.clear()
+    Y._reset_for_tests()
+    class G2:
+        def __init__(self, path):
+            self.path = path
+
+        def do_GET(self):
+            hits.append("g2-get0")
+
+        def do_POST(self):
+            hits.append("g2-post0")
+
+        def _send(self, code, out):
+            denied.append(code)
+    Y.install(G2, origin_ok=lambda s: True, token_ok=lambda s: False, read_body=lambda s: b"{}")
+    G2("/api/youtube").do_GET()
+    check("a missing or bad token is refused with 401", denied == [401], str(denied))
 
 
 def _rehearse():
@@ -818,7 +845,7 @@ def t_the_tables_and_docs():
     check("requirements.lock holds it with both PyPI hashes",
           "youtube-transcript-api==1.2.4" in lock and "03878759356da5caf5edac77431780b91448fb3d8c21d4496015bdc8a7bc43ff" in lock
           and "b72d0e96a335df599d67cee51d49e143cff4f45b84bcafc202ff51291603ddcd" in lock)
-    notices = (HERE.parent / "THIRD-PARTY-NOTICES.txt").read_text(encoding="utf-8")
+    notices = " ".join((HERE.parent / "THIRD-PARTY-NOTICES.txt").read_text(encoding="utf-8").split())
     check("THIRD-PARTY-NOTICES.txt credits it: MIT, Jonas Depoix, unofficial, terms",
           "youtube-transcript-api (version 1.2.4), MIT" in notices and "Jonas Depoix" in notices
           and "breaks YouTube's terms" in notices)
@@ -831,8 +858,8 @@ def t_the_tables_and_docs():
     check("apply-patches.ps1 applies the patch and ships the module",
           "'youtube.patch'" in ps1 and "'jarvis_youtube.py'" in ps1)
     api = (HERE.parent / "docs" / "JARVIS-API.md").read_text(encoding="utf-8")
-    check("JARVIS-API.md has section 109 with the routes",
-          "## 109." in api and "/api/youtube/quiz" in api and "youtube_captions_read" in api)
+    check("JARVIS-API.md has section 112 with the routes",
+          "## 112." in api and "/api/youtube/quiz" in api and "youtube_captions_read" in api)
     design = (HERE.parent / "docs" / "STUDY-FROM-TEXT-DESIGN.md").read_text(encoding="utf-8")
     check("the design doc holds the frozen Slice B contract",
           "Slice contract (frozen 2026-09-30): YouTube captions" in design)

@@ -772,7 +772,7 @@ permissions = [
 # uses the same private copy as the bar's own Copy (clipboard_privacy.rs).
 [[set]]
 identifier = "brain-history"
-description = "List, read and search the chat history kept on the PC, sort chats under the owner's own tags, fork a chat from a message into a new one, delete one conversation, change its two settings (turning it on only raises an approval card), hand a chat to the Jarvis bar to continue, and copy an old answer. No bulk delete."
+description = "List, read and search the chat history kept on the PC, sort chats under the owner's own tags (and switch on overnight tag suggestions, which only ever raise a card), put a divider above one of their own messages, fork a chat from a message into a new one, delete one conversation, change its two settings (turning it on only raises an approval card), hand a chat to the Jarvis bar to continue, and copy an old answer. No bulk delete."
 permissions = [
   "allow-brain-history-list",
   "allow-brain-history-open",
@@ -780,6 +780,8 @@ permissions = [
   "allow-brain-history-tags",
   "allow-brain-history-tags-edit",
   "allow-brain-history-tag",
+  "allow-brain-history-mark",
+  "allow-brain-history-tag-suggest",
   "allow-brain-history-fork",
   "allow-brain-history-delete",
   "allow-brain-history-settings",

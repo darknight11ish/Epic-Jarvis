@@ -2218,6 +2218,58 @@ body {
   cursor: not-allowed;
 }
 
+/* "New section here" (JARVIS-API.md section 106): a button on the owner's own
+   messages and a divider above a marked one. No motion of its own. The divider
+   is a heading landmark; its colour and rule use the existing tokens only. */
+.history-mark {
+  font-size: var(--text-xs);
+  margin-left: auto;
+}
+.history-fork ~ .history-mark {
+  margin-left: 0;
+}
+.history-mark:disabled,
+.history-mark-remove:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.history-section-break {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 8px;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.history-section-break::before,
+.history-section-break::after {
+  content: "";
+  flex: 1 1 24px;
+  border-top: var(--stroke-hair) solid var(--border-strong);
+}
+.history-section-break > .history-mark-remove {
+  order: 3;
+  flex: 0 0 auto;
+}
+.history-section-break::after {
+  order: 2;
+}
+.history-section-break-text {
+  order: 1;
+}
+
+/* "Suggest tags overnight": one switch row, at the foot of the Tags editor. */
+.tag-suggest {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: var(--stroke-hair) solid var(--border-strong);
+}
+.tag-suggest .note,
+.tag-suggest .hint {
+  margin: 4px 0 0;
+}
+
 .history-file-banner {
   display: flex;
   align-items: center;

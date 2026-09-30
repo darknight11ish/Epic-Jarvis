@@ -668,6 +668,8 @@ pub fn spawn_watch(app: AppHandle) {
 }
 
 fn emit_private_hidden(app: &AppHandle) {
+    // A tag-suggestion card already on screen loses its chat title now.
+    crate::stream::rebroadcast_pending(app);
     if let Err(err) = app.emit_to(
         crate::windows::BRAIN_LABEL,
         crate::events::PRIVATE_HIDDEN,

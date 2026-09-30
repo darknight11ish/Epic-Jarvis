@@ -574,6 +574,135 @@ pub(crate) fn fork_answer(status: u16, body: &str) -> Result<serde_json::Value, 
     Err(commands::backend_refusal(status, body))
 }
 
+/// The `error` codes the PC's "New section here" route answers with
+/// (JARVIS-API section 106.1). The page turns each into one plain sentence.
+pub(crate) const MARK_ERROR_CODES: [&str; 4] =
+    ["bad_request", "not_found", "not_markable", "too_many_marks"];
+
+/// What a section break is refused with while the private lists are hidden:
+/// an opened chat is hidden already, so nothing in it is marked.
+pub(crate) const MARK_STILL_HIDDEN: &str = "Your chat history is hidden. Press Show on \
+     the Brain's History tab and confirm it is you with Windows Hello first.";
+
+/// What a backend without section breaks is told to do about it.
+pub(crate) const MARK_UPDATE: &str = "This PC's Jarvis cannot save section breaks yet. \
+     Update the backend by running apply-patches.ps1, then open this again.";
+
+/// The body for `POST /api/history/mark`: exactly `id`, `idx` (the `idx` of a
+/// turn of the opened chat; the divider sits above it) and `on`.
+pub(crate) fn mark_body(id: &str, idx: i64, on: bool) -> Result<serde_json::Value, String> {
+    let id = checked_id(id)?;
+    if !(0..=1_000_000).contains(&idx) {
+        return Err("Choose one of your messages in this chat.".to_string());
+    }
+    Ok(serde_json::json!({ "id": id, "idx": idx, "on": on }))
+}
+
+/// The reading of `POST /api/history/mark`. A 2xx with `ok: true` is reduced
+/// to `ok`, `id`, `idx`, `on`, `marks`; a refusal the PC classified comes
+/// back as `Ok` with `ok: false`, `error`, `message` and (for `not_markable`)
+/// `mark_why` only; a backend with no route is [`MARK_UPDATE`].
+pub(crate) fn mark_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        let v = parsed(body)
+            .filter(|v| v.get("ok").and_then(|o| o.as_bool()) == Some(true))
+            .ok_or_else(|| UNREADABLE.to_string())?;
+        let marks: Vec<i64> = v
+            .get("marks")
+            .and_then(|m| m.as_array())
+            .map(|a| a.iter().filter_map(|n| n.as_i64()).collect())
+            .ok_or_else(|| UNREADABLE.to_string())?;
+        return Ok(serde_json::json!({
+            "ok": true,
+            "id": v.get("id").and_then(|i| i.as_str()).unwrap_or(""),
+            "idx": v.get("idx").and_then(|i| i.as_i64()).unwrap_or(-1),
+            "on": v.get("on").and_then(|o| o.as_bool()).unwrap_or(false),
+            "marks": marks,
+        }));
+    }
+    if let Some(v) = parsed(body).filter(|v| {
+        v.get("ok").and_then(|o| o.as_bool()) == Some(false)
+            && v.get("error")
+                .and_then(|e| e.as_str())
+                .is_some_and(|c| MARK_ERROR_CODES.contains(&c))
+    }) {
+        let mut out = serde_json::Map::new();
+        out.insert("ok".into(), serde_json::json!(false));
+        out.insert("error".into(), v["error"].clone());
+        for key in ["message", "mark_why"] {
+            if let Some(m) = v.get(key).and_then(|m| m.as_str()) {
+                out.insert(key.into(), serde_json::json!(m));
+            }
+        }
+        return Ok(serde_json::Value::Object(out));
+    }
+    if status == 404 || status == 501 {
+        return Err(MARK_UPDATE.to_string());
+    }
+    Err(commands::backend_refusal(status, body))
+}
+
+/// The `error` codes the PC's suggest-tags switch answers with (JARVIS-API
+/// section 104.1).
+pub(crate) const SUGGEST_ERROR_CODES: [&str; 3] = ["bad_request", "no_local_model", "no_tags"];
+
+/// What a backend without overnight suggestions is told to do about it.
+pub(crate) const SUGGEST_UPDATE: &str = "This PC's Jarvis cannot suggest tags yet. \
+     Update the backend by running apply-patches.ps1, then open this again.";
+
+/// The reading of `GET` or `POST /api/history/tags/suggest`. A 2xx with
+/// `ok: true` is reduced to the fields the page uses (`enabled`,
+/// `paused`, `waiting`, `last_day`, `pending`); a refusal the PC classified
+/// comes back as `Ok` with `ok: false`, `error` and `message`; a backend with
+/// no route reads as `{"available": false}` (the row is then left out) for a
+/// GET and is [`SUGGEST_UPDATE`] for a switch.
+pub(crate) fn suggest_answer(
+    status: u16,
+    body: &str,
+    is_write: bool,
+) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        let v = parsed(body)
+            .filter(|v| v.get("ok").and_then(|o| o.as_bool()) == Some(true))
+            .ok_or_else(|| UNREADABLE.to_string())?;
+        let mut out = serde_json::Map::new();
+        out.insert("ok".into(), serde_json::json!(true));
+        for key in ["enabled", "paused", "pending"] {
+            if let Some(b) = v.get(key).and_then(|b| b.as_bool()) {
+                out.insert(key.into(), serde_json::json!(b));
+            }
+        }
+        if let Some(n) = v.get("waiting").and_then(|n| n.as_u64()) {
+            out.insert("waiting".into(), serde_json::json!(n));
+        }
+        if let Some(d) = v.get("last_day").and_then(|d| d.as_str()) {
+            out.insert("last_day".into(), serde_json::json!(d));
+        }
+        return Ok(serde_json::Value::Object(out));
+    }
+    if let Some(v) = parsed(body).filter(|v| {
+        v.get("ok").and_then(|o| o.as_bool()) == Some(false)
+            && v.get("error")
+                .and_then(|e| e.as_str())
+                .is_some_and(|c| SUGGEST_ERROR_CODES.contains(&c))
+    }) {
+        let mut out = serde_json::Map::new();
+        out.insert("ok".into(), serde_json::json!(false));
+        out.insert("error".into(), v["error"].clone());
+        if let Some(m) = v.get("message").and_then(|m| m.as_str()) {
+            out.insert("message".into(), serde_json::json!(m));
+        }
+        return Ok(serde_json::Value::Object(out));
+    }
+    if status == 404 || status == 501 {
+        if is_write {
+            return Err(SUGGEST_UPDATE.to_string());
+        }
+        return Ok(serde_json::json!({ "ok": true, "available": false }));
+    }
+    Err(commands::backend_refusal(status, body))
+}
+
 /// A refusal the PC classified: `{"ok": false, "error": <one of the known
 /// codes>, ...}`. Passed on intact so the page can say one plain sentence
 /// per code; an `error` that is not a known code is not treated as one.
@@ -898,6 +1027,55 @@ pub async fn brain_history_fork(
         }
     }
     Ok(answer)
+}
+
+/// "New section here" (`POST /api/history/mark`, JARVIS-API section 106): a
+/// divider above one turn of ONE kept chat, or (`on` false) taking it off.
+/// View-only - it reaches no model - and no card. Refused while the private
+/// lists are hidden and held while the event stream is stale (rule 4).
+#[tauri::command]
+pub async fn brain_history_mark(
+    app: AppHandle,
+    id: String,
+    idx: i64,
+    on: bool,
+) -> Result<serde_json::Value, String> {
+    let body = mark_body(&id, idx, on)?;
+    if crate::lock::private_hidden(&app) {
+        return Err(MARK_STILL_HIDDEN.to_string());
+    }
+    require_link_live(&app)?;
+    let (status, text) = post(&app, "/api/history/mark", body).await?;
+    mark_answer(status, &text)
+}
+
+/// The "Suggest tags overnight" switch (JARVIS-API section 104.1). With
+/// `enabled` empty it is a read (`GET /api/history/tags/suggest`); with a
+/// value it is `POST` of exactly `{"enabled": bool}`. Turning it on only
+/// raises an approval card on the PC (the answer says `pending`); turning it
+/// off is at once. The row holds no chat words, so it is NOT hidden with the
+/// private lists. A write is held while the event stream is stale (rule 4).
+#[tauri::command]
+pub async fn brain_history_tag_suggest(
+    app: AppHandle,
+    enabled: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    match enabled {
+        None => {
+            let (status, body) = get(&app, "/api/history/tags/suggest").await?;
+            suggest_answer(status, &body, false)
+        }
+        Some(on) => {
+            require_link_live(&app)?;
+            let (status, text) = post(
+                &app,
+                "/api/history/tags/suggest",
+                serde_json::json!({ "enabled": on }),
+            )
+            .await?;
+            suggest_answer(status, &text, true)
+        }
+    }
 }
 
 /// Deletes ONE conversation. It cannot be undone, and the page asks first.
@@ -1227,6 +1405,94 @@ mod tests {
         assert!(fork_answer(400, r#"{"ok":false,"error":"weird","message":"x"}"#).is_err());
         // An older backend with no route.
         assert_eq!(fork_answer(404, "not found").unwrap_err(), FORK_UPDATE);
+    }
+
+    #[test]
+    fn a_mark_asks_for_exactly_a_chat_a_turn_and_a_direction() {
+        let b = mark_body("conv-12345678", 4, true).unwrap();
+        assert_eq!(
+            b,
+            serde_json::json!({"id": "conv-12345678", "idx": 4, "on": true})
+        );
+        assert_eq!(b.as_object().unwrap().len(), 3);
+        assert!(mark_body("conv-12345678", 0, false).is_ok());
+        assert!(mark_body("conv-12345678", -1, true).is_err());
+        assert!(mark_body("../etc", 1, true).is_err());
+    }
+
+    #[test]
+    fn a_mark_answer_is_reduced_and_a_refusal_keeps_its_sentence() {
+        let ok = mark_answer(
+            200,
+            r#"{"ok":true,"id":"conv-12345678","idx":4,"on":true,"marks":[2,4],"x":1}"#,
+        )
+        .unwrap();
+        assert_eq!(ok["marks"], serde_json::json!([2, 4]));
+        assert!(ok.get("x").is_none());
+        assert!(mark_answer(200, r#"{"ok":true}"#).is_err());
+        for (status, code) in [
+            (400, "bad_request"),
+            (404, "not_found"),
+            (409, "not_markable"),
+            (409, "too_many_marks"),
+        ] {
+            let body = format!(
+                r#"{{"ok":false,"error":"{code}","message":"Plain.","mark_why":"Why.","extra":1}}"#
+            );
+            let got = mark_answer(status, &body).unwrap();
+            assert_eq!(got["error"], code);
+            assert_eq!(got["message"], "Plain.");
+            assert_eq!(got["mark_why"], "Why.");
+            assert!(got.get("extra").is_none());
+        }
+        assert!(mark_answer(400, r#"{"ok":false,"error":"weird"}"#).is_err());
+        assert_eq!(mark_answer(404, "nope").unwrap_err(), MARK_UPDATE);
+    }
+
+    #[test]
+    fn the_mark_command_asks_the_lock_and_the_link() {
+        let src = include_str!("history.rs");
+        let name = "pub async fn brain_history_mark(";
+        let at = src.find(name).expect(name);
+        let body = &src[at..at + 900.min(src.len() - at)];
+        assert!(body.contains("private_hidden"), "ignores the lock");
+        let live = body.find("require_link_live").expect("rule 4");
+        assert!(live < body.find("post(").unwrap(), "posts before rule 4");
+    }
+
+    #[test]
+    fn the_suggest_switch_is_read_reduced_and_written_only_with_a_live_link() {
+        let read = suggest_answer(
+            200,
+            r#"{"ok":true,"enabled":true,"paused":false,"waiting":2,"last_day":"2026-09-30","x":1}"#,
+            false,
+        )
+        .unwrap();
+        assert_eq!(read["enabled"], true);
+        assert_eq!(read["waiting"], 2);
+        assert_eq!(read["last_day"], "2026-09-30");
+        assert!(read.get("x").is_none());
+        let pending = suggest_answer(202, r#"{"ok":true,"pending":true}"#, true).unwrap();
+        assert_eq!(pending["pending"], true);
+        assert!(pending.get("enabled").is_none());
+        let refused = suggest_answer(
+            409,
+            r#"{"ok":false,"error":"no_tags","message":"Make a tag first."}"#,
+            true,
+        )
+        .unwrap();
+        assert_eq!(refused["error"], "no_tags");
+        assert_eq!(refused["message"], "Make a tag first.");
+        assert!(suggest_answer(400, r#"{"ok":false,"error":"weird"}"#, true).is_err());
+        assert_eq!(suggest_answer(404, "", false).unwrap()["available"], false);
+        assert_eq!(suggest_answer(404, "", true).unwrap_err(), SUGGEST_UPDATE);
+        // Source check: the write is held on a stale link, the row is not
+        // hidden with the private lists (it holds no chat words).
+        let src = include_str!("history.rs");
+        let at = src.find("pub async fn brain_history_tag_suggest(").unwrap();
+        let body = &src[at..at + 1100.min(src.len() - at)];
+        assert!(!body.contains("private_hidden"));
+        assert!(body.find("require_link_live").unwrap() < body.find("post(").unwrap());
     }
 
     #[test]

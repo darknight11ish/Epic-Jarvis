@@ -2685,6 +2685,47 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               updated: Math.floor(Date.now() / 1000) });
             return { ok: true, id, title, turns: turns.length, tag_id: row.tag_id ?? null };
           }
+          // "New section here" (JARVIS-API section 106): the three keys only,
+          // kept in `__history.marked`. The mock holds each chat's list in
+          // `h.marks[id]` and the conversation read below carries it; `h.markRefuse`
+          // is an answer to give instead (a refusal the PC classified).
+          case "brain_history_mark": {
+            const h = window.__history;
+            (h.marked = h.marked || []).push({ id: args.id, idx: args.idx, on: args.on });
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) throw new Error("Your chat history is hidden. Press Show on the Brain's History tab and confirm it is you with Windows Hello first.");
+            if (h.markRefuse) return JSON.parse(JSON.stringify(h.markRefuse));
+            h.marks = h.marks || {};
+            const list = new Set(h.marks[args.id] || (h.transcripts[args.id] && h.transcripts[args.id].marks) || []);
+            if (args.on && !list.has(args.idx) && list.size >= 20) {
+              return { ok: false, error: "too_many_marks", message: "You can have at most 20 section breaks in one chat." };
+            }
+            if (args.on) list.add(args.idx); else list.delete(args.idx);
+            h.marks[args.id] = [...list].sort((a, b) => a - b);
+            if (h.transcripts[args.id]) h.transcripts[args.id].marks = h.marks[args.id];
+            return { ok: true, id: args.id, idx: args.idx, on: args.on, marks: h.marks[args.id] };
+          }
+          // "Suggest tags overnight" (JARVIS-API section 104.1): the read
+          // (enabled null) and the write (exactly {enabled}). `h.suggest` is
+          // the PC's state ({enabled, paused, waiting, last_day}); unset is a
+          // PC without the route. ON is a 202 card (the switch stays off);
+          // OFF is at once. `h.suggestRefuse` is an answer to give for a write.
+          case "brain_history_tag_suggest": {
+            const h = window.__history;
+            if (args.enabled === null || args.enabled === undefined) {
+              h.suggestReads = (h.suggestReads || 0) + 1;
+              if (!h.suggest) return { ok: true, available: false };
+              return { ok: true, ...JSON.parse(JSON.stringify(h.suggest)) };
+            }
+            (h.suggestWrites = h.suggestWrites || []).push({ enabled: args.enabled });
+            if (h.suggestRefuse) return JSON.parse(JSON.stringify(h.suggestRefuse));
+            if (args.enabled) {
+              h.suggestCards = (h.suggestCards || 0) + 1;
+              return { ok: true, pending: true };
+            }
+            h.suggest = { ...h.suggest, enabled: false, waiting: 0 };
+            return { ok: true, enabled: false };
+          }
           case "brain_history_open": {
             const h = window.__history;
             h.opened.push(args.id);

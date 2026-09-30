@@ -121,6 +121,10 @@ fn main() {
             "brain_history_tags",
             "brain_history_tags_edit",
             "brain_history_tag",
+            // "New section here" (JARVIS-API section 106) and the "Suggest
+            // tags overnight" switch (section 104). Brain only.
+            "brain_history_mark",
+            "brain_history_tag_suggest",
             "brain_history_fork",
             // "Continue this chat" (the chat audit, 2026-09-28): the Brain
             // tells the Jarvis bar which chat to carry on (the id only), and

@@ -16694,3 +16694,57 @@ line is `("yes", "local", ...)`, so it is not a risky approval (no Windows Hello
 `tools/gen_second_card_cases.py` (both apps' `second-card-cases.json`) now carries the two rows in every one of
 its eight cases; `tools/gen_asks_first_cases.py` and `tools/gen_card_words_cases.py` carry the `referee_tick`
 row and words. All three changes are additions.
+
+## 112. Quiz me on a YouTube video (added 2026-09-30; backend built and tested, apps planned)
+
+The owner's decision (2026-09-30, `docs/STUDY-FROM-TEXT-DESIGN.md` sections 5, 7 and 14): Jarvis may read a YouTube video's **caption text** for a quiz, **one approval card per link**. Caption text only: never the video, never its sound, never comments. **It breaks YouTube's terms and may be blocked**; the owner accepted that, and the card says so every time. Backend: `backend/jarvis_youtube.py` (the whole feature), `backend/youtube.patch` (the gate action and ONE install block in `jarvis_hud.py`), `backend/jarvis_quiz.py` (`start_outside`, the hook), `backend/test_youtube.py`. Numbers 109 and 111 were reserved by the build queue, 110 is taken, so this is 112. **Not tried against the real site** (the build container's network policy blocked it): `youtube-transcript-api` is unofficial, YouTube changes, and it often blocks data-centre addresses.
+
+### 112.1 The routes
+
+| route | body | answer |
+|---|---|---|
+| `GET /api/youtube` | - | `{"ok": true, "available": true, "title", "intro", "terms", "outside", "limits": {"link": 300, "text": 20000, "count_min": 1, "count_max": 10}, "latest": Request \| null}` |
+| `POST /api/youtube/quiz` | `{"url": str, "count": 1-10 (default 5), "title": str?, "language": str?}` | **202** `{"ok": true, "waiting": true, "request": Request, "message"}` - ONE approval card is raised; nothing is fetched yet |
+| `GET /api/youtube/{id}` | - | `{"ok": true, "request": Request}` |
+| `POST /api/youtube/{id}/cancel` | `{}` | `{"ok": true, "request": Request}` |
+
+* `Request` = `{"id", "state", "message", "link", "truncated": bool, "minutes": int \| null, "error": code \| null, "quiz": Quiz \| null, "provenance": "outside", "source": "youtube"}`. `state` is `waiting` (the card is open), `fetching`, `writing`, `ready` (`quiz` is the ordinary Quiz of section 98), or an end: `denied`, `timed_out`, `withdrawn`, `refused` (the card could not be answered) and `failed` (`error` says why). `message` is the PC's plain sentence for that state; the apps show it and do not write their own. `link` is the canonical address `https://www.youtube.com/watch?v=<id>` - the same one the card shows.
+* `Quiz` (section 98) gains two **additive** fields for a quiz made this way only: `"provenance": "outside"` and `"source": "youtube"`. A pasted-text quiz and the Spanish mode do not carry them. Everything else about the quiz - answering, the passage shown only after an answer, `finish`, `stop`, the 3-open cap, the 60-minute expiry, `grader_verified` - is section 98, unchanged.
+* **The card** (an ordinary approval, `/api/pending`, gate action `youtube_captions_read`, tier `ask` only, a **risky approval**: Windows Hello on the PC, the screen lock on the phone; never an "always allow", never decided by voice). It shows the exact canonical link, says the pasted extras (a time stamp, a tracking code) were dropped when they were, and says: the PC will fetch the caption text from YouTube; **this breaks YouTube's terms and may be blocked**; only caption text - never the video, its sound or the comments; the link tells YouTube which video the owner is studying; it is a way out of this PC; the captions are outside text, never learned or saved; one card covers one link. The gate's `_RISK` words: "makes this PC contact YouTube to fetch the caption text of the one video named on the card, for a quiz; this breaks YouTube's terms and YouTube may block it, only the caption text comes back (never the video or its sound), the link tells YouTube which video you are studying, and it cannot be taken back".
+* **Limits:** a link is at most 300 characters; the caption text is cut to 20,000 characters (the quiz's own limit) on a word boundary and the request says so (`truncated`, `minutes` = how far into the video the quiz reaches); under 200 characters is `too_little_text`. One waiting card at a time; finished requests are forgotten after an hour and at most five are kept. The library's requests have a 40-second limit.
+
+### 112.2 Errors
+
+`{"ok": false, "error": <code>, "message": <plain words>}`, refused **before any card**, nothing fetched:
+
+| code | status | when |
+|---|---|---|
+| `bad_link` | 400 | not a link at all; empty; a space, control character or backslash in it; longer than 300 characters |
+| `not_a_web_link` | 400 | a scheme that is not `http`/`https` (`javascript:`, `file:`, `ftp:`, `data:`) |
+| `link_has_login` | 400 | a name or password (`@`) in the address |
+| `not_youtube` | 400 | any host but `youtube.com`, `www.youtube.com`, `m.youtube.com`, `youtu.be`, `www.youtu.be`; a lookalike or non-ASCII host, an IP address, a port, a trailing dot |
+| `playlist_link` | 400 | a `list=` in the link, or `/playlist` |
+| `no_video` | 400 | a channel, a search, the home page, or no single 11-character video id (`/watch?v=`, `/shorts/`, `/embed/`, `/live/`, `/v/`, `youtu.be/`) |
+| `bad_count` / `bad_language` | 400 | count not 1-10; language not a short code such as `en` or `pt-BR` |
+| `outside_text_turn` | 409 | asked from a turn that had read outside text (a chat door, if one is ever built, must pass this; the apps' Quiz page never does) |
+| `request_waiting` | 409 | a YouTube card is already waiting |
+| `too_many_quizzes` | 409 | three quizzes are already open (before any card, so nothing is fetched for nothing) |
+| `card_unavailable` / `tier_not_ask` | 503 | the card could not be raised / the settings file gives this action a tier other than `ask`, so it is switched off |
+| `not_found` | 404 | unknown or expired request id |
+| `already_started` | 409 | `cancel` after the captions began to be read |
+
+A request that **fails after a yes** is a normal answer (status 200) with `state: "failed"` and `error` one of: `no_captions` ("No captions for this video..."), `no_captions_language`, `video_unavailable`, `age_restricted` (Jarvis never signs in), `youtube_refused` ("YouTube refused the request... try again later"), `youtube_failed`, `fetch_timeout`, `library_missing` ("run apply-patches.ps1"), `too_little_text`, `model_unavailable`, `quiz_failed`. **No message ever quotes the link, an exception or a word of the captions.** There is no speech-to-text fallback and no other site is tried.
+
+### 112.3 What it keeps and what it does not do
+
+* The card comes before any network call; only a person's yes fetches. A second link is a second card - never a standing permission. A yes that arrives after `cancel` fetches nothing.
+* The one real transport is `youtube-transcript-api` (`==1.2.4`, MIT, pinned and hash-locked, credited in `THIRD-PARTY-NOTICES.txt`): called with the video id and a language list only - no proxy, no cookies, no session of Jarvis's. A test proves the call.
+* The caption text is **outside text**: it reaches the model only inside the quiz's random-word fence, is never learned, saved or read into memory, and the quiz is in memory only. The crisis check runs on every answer (section 98.4). A kept question (section 102's Keep) copies its passage into the owner's review deck as the owner's own tap - the passage is caption text; a follow-up decision for the owner is written in `docs/STUDY-FROM-TEXT-DESIGN.md` section 14.
+* The audit log holds outcomes only (`approved`, `denied`, `failed` with a code) - never the link, the video id or any caption word.
+* **Not built:** a way to start it from chat (no model tool, so `jarvis_agent.py` is untouched); playlists; several videos at once; a timestamped outline; a language chooser beyond the `language` code; any download of video or audio (refused, `docs/STUDY-FROM-TEXT-DESIGN.md` section 9).
+
+### 112.4 The gate, tables and files
+
+`youtube.patch` adds `youtube_captions_read` to `jarvis_gate.py`'s "acts only on tier ask" set and its `_RISK` (`"no"`, `"outbound"`) and installs the routes in `jarvis_hud.py` after `tag-suggest.patch`. The framework file gets `youtube_captions_read = "ask"`. The action is in `jarvis_asks_first.py` (`MUST_ASK`, the page's "The internet" group, `LOCKDOWN_ACTIONS`), `jarvis_card_words.py` (title "fetch the caption text of a YouTube video for a quiz"), and `jarvis_reach.py` has a row "YouTube captions (for a quiz)"; `tools/gen_asks_first_cases.py`, `gen_card_words_cases.py` and `gen_reach_cases.py` were re-run. `docs/ARCHITECTURE.md` section 4 has its row. `tools/check_parity.py` lists the four routes as `planned`.
+
+Tests: `backend/test_youtube.py` (the link forms, refusals, the card's words, the gate order, cancel, cleaning and the cap, every error mapped to plain words, the real transport's call, the quiz hook, crisis, injection, no learner or disk, the routes, the patch on the stack, every table and doc).

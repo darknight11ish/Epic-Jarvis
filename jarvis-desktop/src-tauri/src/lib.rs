@@ -925,6 +925,8 @@ pub fn run() {
             brain::history::brain_history_tags,
             brain::history::brain_history_tags_edit,
             brain::history::brain_history_tag,
+            brain::history::brain_history_mark,
+            brain::history::brain_history_tag_suggest,
             brain::history::brain_history_fork,
             brain::history::brain_continue_chat,
             brain::history::brain_fact_chat,

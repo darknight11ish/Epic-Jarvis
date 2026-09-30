@@ -970,7 +970,7 @@ $PATCHES = @(
     # says so and the switch simply does nothing.
     'tag-suggest.patch'
     # "Quiz me on a YouTube video" (the owner's decision of 2026-09-30; docs/STUDY-FROM-TEXT-DESIGN.md
-    # section 5 and 14, JARVIS-API section 109): ONE card per YouTube link, then the video's CAPTION TEXT
+    # section 5 and 14, JARVIS-API section 112): ONE card per YouTube link, then the video's CAPTION TEXT
     # only is fetched and quizzed on as outside text. It breaks YouTube's terms and may be blocked; the card
     # says so. TWO files: in jarvis_gate.py the new action `youtube_captions_read` joins the "acts only on
     # tier ask" set and gets its _RISK line (both right after tag-suggest.patch's own, so it goes after it);

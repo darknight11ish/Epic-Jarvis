@@ -343,6 +343,10 @@ import {
   forkDoneWords,
   forkedRow,
   forkErrorWords,
+  MARK_BUSY,
+  markDoneWords,
+  markErrorWords,
+  readMarks,
   withForkedRow,
   SWITCH_LABEL,
   TAINT_TITLE,
@@ -381,6 +385,15 @@ import {
   RENAME as TAG_RENAME,
   saveOpenFlag,
   sectionLabel,
+  SUGGEST_ASKING,
+  SUGGEST_LABEL,
+  SUGGEST_OLD_PC,
+  SUGGEST_READING,
+  readSuggest,
+  suggestErrorWords,
+  suggestStateLine,
+  suggestWaitingLine,
+  suggestWriteResult,
   tagById,
   TAG_CHIPS_LABEL,
   TAGS_EDITOR_NOTE,
@@ -4183,6 +4196,12 @@ const chats = {
   openError: "",
   /** "Fork from here" in flight: `{ id, idx }`, one at a time. */
   forking: null,
+  /** "New section here" in flight: `{ id, idx }`, one at a time. */
+  marking: null,
+  /** "Suggest tags overnight" (JARVIS-API.md section 104): what the PC last
+   *  said (readSuggest), whether a read or a change is running, and the one
+   *  plain sentence the last change left. Nothing of it is kept on this device. */
+  suggest: { state: null, loaded: false, reading: false, busy: false, said: "", isError: false },
   /** The chat a fork just made, `{ id, row }`: kept open (and drawn above the
    *  list if its row is not in it) until the owner opens or closes something. */
   forked: null,
@@ -4284,6 +4303,8 @@ async function loadHistory({ background = false } = {}) {
     return;
   }
   paintHistory();
+  // The waiting-suggestions count follows the same re-read (no push).
+  if (chats.suggest.loaded) refreshSuggest();
 }
 
 async function loadOlderHistory() {
@@ -4606,7 +4627,8 @@ function paintFound() {
   const matches = f.needle.trim() ? findMatches(chats.open, f.needle) : [];
   f.total = matches.length;
   if (f.current >= matches.length) f.current = 0;
-  renderTranscript(box, chats.open, { el, onCopy: copyOldAnswer, fork: forkHelpers(chats.open) },
+  renderTranscript(box, chats.open,
+    { el, onCopy: copyOldAnswer, fork: forkHelpers(chats.open), mark: markHelpers(chats.open) },
     { matches, current: f.current, needle: f.needle.trim() });
   const count = $("history-find-count");
   if (count) count.textContent = f.needle.trim() ? findCountWords(f.current, matches.length) : "";
@@ -4763,6 +4785,49 @@ async function forkFrom(id, idx) {
   if (chats.openId !== made.id) await toggleConversation(made.id);
   await loadHistory();
   toast(forkDoneWords(made.title), "ok");
+}
+
+/**
+ * "New section here" (JARVIS-API.md section 106): what renderTranscript needs
+ * to draw the buttons and dividers of the opened chat. Nothing while the
+ * private lists are hidden. Dividers stay drawn when the PC says the chat is
+ * no longer markable (they can still be removed); the button only shows when
+ * it is. Held (greyed, the usual stale-link reason) while the link is stale,
+ * and all wait while one request runs.
+ */
+function markHelpers(conv) {
+  if (!conv || (chats.view && chats.view.hidden)) return null;
+  if (!conv.markable && !conv.marks.length) return null;
+  const busy = chats.marking && chats.marking.id === conv.id ? chats.marking : null;
+  return {
+    markable: conv.markable,
+    marks: conv.marks,
+    busy: busy || (chats.marking ? { idx: -1 } : null),
+    decorate: (b) => { liveButtons.add(b); syncLiveButton(b); },
+    onMark: (idx, on) => markSection(conv.id, idx, on),
+  };
+}
+
+/** Sends one section break (or takes it off), then draws the PC's whole list.
+ *  No card: it is the owner's own layout of a chat already kept. */
+async function markSection(id, idx, on) {
+  if (chats.marking || !IS_TAURI) return;
+  chats.marking = { id, idx };
+  chats.focus = { keys: [`${on ? "unmark" : "mark"}:${id}:${idx}`, `${on ? "mark" : "unmark"}:${id}:${idx}`, `open:${id}`], at: Date.now() };
+  paintHistory();
+  try {
+    const out = await invoke("brain_history_mark", { id, idx, on });
+    if (out && out.ok === true) {
+      if (chats.open && chats.open.id === id) chats.open.marks = readMarks(out.marks);
+      toast(markDoneWords(typeof out.on === "boolean" ? out.on : on), "ok");
+    } else {
+      toast(markErrorWords(out), "bad");
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  chats.marking = null;
+  paintHistory();
 }
 
 /** Back to every chat: no kind, no tag chip, no search words (a fork's new
@@ -5300,11 +5365,21 @@ function paintTagBarNow() {
   const v = chats.view;
   const tv = chats.tags;
   const show = Boolean(v && v.available && !v.hidden && tv && tv.available && !tv.hidden);
-  box.hidden = !show;
+  // "Suggest tags overnight" holds no chat words, so its row still shows while
+  // the private lists are hidden (JARVIS-API.md section 104.4); nothing else does.
+  const sg = chats.suggest;
+  const rowOnly = !show && Boolean(v && v.available && tv && tv.available && tv.hidden
+    && !(sg.loaded && !(sg.state && sg.state.available)));
+  box.hidden = !show && !rowOnly;
   // Typing in the editor survives a repaint: the control that had the
   // keyboard is found again by its `data-fkey` (giveBackTagFocus, after paint).
   rememberTagFocus();
   box.replaceChildren();
+  if (rowOnly) {
+    box.append(suggestRowNode());
+    if (!chats.suggest.loaded && !chats.suggest.reading) refreshSuggest();
+    return;
+  }
   if (!show) return;
 
   if (chats.filing) {
@@ -5349,6 +5424,8 @@ function paintTagBarNow() {
     chats.editor.open = !chats.editor.open;
     chats.editor.error = "";
     paintHistoryTagBar();
+    // The switch's state is read when the editor opens (no push).
+    if (chats.editor.open) refreshSuggest();
   });
   chips.append(edit);
   box.append(chips);
@@ -5653,6 +5730,109 @@ function tagEditorNode(tv) {
   err.setAttribute("role", "alert");
   err.hidden = !editor.error;
   box.append(err);
+  box.append(suggestRowNode());
+  if (!chats.suggest.loaded && !chats.suggest.reading) refreshSuggest();
+  return box;
+}
+
+/* ---- Suggest tags overnight (JARVIS-API.md section 104; the owner, 2026-09-30) ----
+ *
+ * A switch, a one-line state and how many suggestion cards wait. NOTHING is
+ * filed without a tap on Approve: each suggestion is an ordinary approval
+ * card (action chat_tag_suggest), shown by the same approvals flow as every
+ * other card, with the chat's title taken out while the private lists are
+ * hidden (stream.rs hide_private_cards). Turning it ON raises ONE card on the
+ * PC, so the switch stays OFF here - and says it is waiting - until a later
+ * read says it is enabled; OFF is at once. Read when the editor opens and
+ * after every change; there is no push. Nothing about it is kept on this
+ * device. Writes wait for a live link (rule 4). */
+
+/** Reads the switch's state from the PC and redraws the row if it moved. */
+async function refreshSuggest() {
+  const sg = chats.suggest;
+  if (sg.reading || !IS_TAURI) return;
+  sg.reading = true;
+  let next = null;
+  try {
+    next = readSuggest(await invoke("brain_history_tag_suggest", { enabled: null }));
+  } catch {
+    next = readSuggest({ available: false });
+  }
+  sg.reading = false;
+  sg.loaded = true;
+  const moved = JSON.stringify(next) !== JSON.stringify(sg.state);
+  sg.state = next;
+  // A read that says it is on ends the "waiting for your approval" line.
+  const cleared = Boolean(next.enabled && !sg.isError && sg.said);
+  if (cleared) sg.said = "";
+  if (moved || cleared) paintHistoryTagBar();
+}
+
+/** Turns it on (a card) or off (at once), then reads what the PC now says. */
+async function setSuggest(want) {
+  const sg = chats.suggest;
+  if (sg.busy || !IS_TAURI) return;
+  sg.busy = true;
+  sg.said = "";
+  sg.isError = false;
+  paintHistoryTagBar();
+  try {
+    const w = suggestWriteResult(await invoke("brain_history_tag_suggest", { enabled: want }));
+    if (!w.ok) sg.isError = true;
+    sg.said = w.said;
+  } catch (error) {
+    sg.isError = true;
+    sg.said = errorText(error);
+  }
+  sg.busy = false;
+  sg.reading = false;
+  await refreshSuggest();
+  paintHistoryTagBar();
+}
+
+function suggestRowNode() {
+  const sg = chats.suggest;
+  const box = el("div", "tag-suggest");
+  box.id = "tag-suggest";
+  const s = sg.state;
+  if (!sg.loaded) {
+    box.append(el("p", "note", SUGGEST_READING));
+    return box;
+  }
+  if (!s || !s.available) {
+    box.append(el("p", "note", SUGGEST_OLD_PC));
+    return box;
+  }
+  const label = el("label", "history-switch");
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.id = "tag-suggest-enabled";
+  input.dataset.fkey = "suggest-switch";
+  input.setAttribute("role", "switch");
+  input.setAttribute("aria-describedby", "tag-suggest-state");
+  // What the PC says, never what was clicked: ON is only a card.
+  input.checked = s.enabled;
+  label.append(input, el("span", "history-switch-label", SUGGEST_LABEL));
+  const state = el("p", "note tag-suggest-state", sg.busy ? SUGGEST_ASKING : suggestStateLine(s));
+  state.id = "tag-suggest-state";
+  box.append(label, state);
+  // A write, so a live link is needed either way (rule 4).
+  input.dataset.title = s.enabled ? "" : "Asks you first, with an approval card.";
+  liveButtons.add(input);
+  syncLiveButton(input);
+  if (sg.busy) input.disabled = true;
+  input.addEventListener("change", () => {
+    const want = input.checked;
+    input.checked = s.enabled;
+    setSuggest(want);
+  });
+  const waiting = suggestWaitingLine(s.waiting);
+  if (waiting) box.append(el("p", "hint learning-waiting tag-suggest-waiting", waiting));
+  if (sg.said) {
+    const said = el("p", `hint tag-suggest-said${sg.isError ? " failed" : ""}`, sg.said);
+    said.setAttribute("role", sg.isError ? "alert" : "status");
+    box.append(said);
+  }
   return box;
 }
 

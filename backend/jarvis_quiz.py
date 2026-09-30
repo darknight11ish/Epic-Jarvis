@@ -674,7 +674,7 @@ def _view(s: _Quiz) -> dict:
     if s.mode == "spanish":
         v["notice"] = SPANISH_NOTICE
     if s.provenance:
-        # Additive (JARVIS-API section 98/109): only a quiz on OUTSIDE text carries these.
+        # Additive (JARVIS-API section 98/112): only a quiz on OUTSIDE text carries these.
         v["provenance"] = s.provenance
         v["source"] = s.source
     return v

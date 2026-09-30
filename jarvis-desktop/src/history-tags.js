@@ -355,3 +355,100 @@ export function readFilePlace(left) {
   if (!Number.isInteger(id) || id <= 0 || !q) return null;
   return { tagId: id, q };
 }
+
+/* ── Suggest tags overnight (JARVIS-API.md section 104; docs/OVERNIGHT-TAGS-DESIGN.md
+ *    section 9.A; fixture `words.tag_suggest*`). Word for word with the phone. ─── */
+
+export const SUGGEST_LABEL = "Suggest tags overnight";
+export const SUGGEST_OFF = "Off";
+export const SUGGEST_ON = "On. Looks at up to 5 chats a night.";
+export const SUGGEST_PAUSED = "Paused after three 'no' answers. Turn it on again to carry on.";
+export const SUGGEST_PENDING =
+  "Waiting for your approval. It turns on only if you approve the card, on your PC or phone.";
+export const SUGGEST_WAITING_ONE = "1 suggestion is waiting for your Approve.";
+export const SUGGEST_WAITING_OTHER = "{n} suggestions are waiting for your Approve.";
+export const SUGGEST_CHAT_HIDDEN = "A chat from {when}";
+export const SUGGEST_ERROR_FALLBACK = "Your PC did not change that setting.";
+export const SUGGEST_ERRORS = Object.freeze({
+  bad_request: "That request was not understood.",
+  no_local_model:
+    "Jarvis needs a model on this PC to do this, and none answered. It does not use a cloud model for this.",
+  no_tags: "Make a tag first.",
+});
+/** This app's own words (not in the shared list): a PC that cannot suggest tags yet. */
+export const SUGGEST_OLD_PC =
+  "This PC's Jarvis cannot suggest tags yet. Update it by running apply-patches.ps1 on the PC.";
+export const SUGGEST_ASKING = "Asking your PC…";
+export const SUGGEST_READING = "Reading…";
+
+/** The gate actions of the two cards (the ordinary approvals flow shows them). */
+export const SUGGEST_CARD_ACTION = "chat_tag_suggest";
+export const SUGGEST_SWITCH_ACTION = "chat_tags_suggest_on";
+
+/**
+ * `GET /api/history/tags/suggest`, read: `{ available, enabled, paused,
+ * waiting, lastDay }`. `available: false` is a PC without the route (the row
+ * says so). `paused` and `enabled` are never both true: if a buggy answer said
+ * both, paused wins and the switch reads off (the safer way).
+ */
+export function readSuggest(answer) {
+  const a = answer && typeof answer === "object" ? answer : {};
+  if (a.available === false || a.ok === false || typeof a.enabled !== "boolean") {
+    return { available: false, enabled: false, paused: false, waiting: 0, lastDay: "" };
+  }
+  const paused = a.paused === true;
+  const waiting = Number.isInteger(a.waiting) ? Math.max(0, Math.min(1_000_000, a.waiting)) : 0;
+  return {
+    available: true,
+    enabled: a.enabled && !paused,
+    paused,
+    waiting,
+    lastDay: typeof a.last_day === "string" ? a.last_day.trim() : "",
+  };
+}
+
+/** The one state line: paused, else on, else off. */
+export const suggestStateLine = (s) => (s.paused ? SUGGEST_PAUSED : s.enabled ? SUGGEST_ON : SUGGEST_OFF);
+
+/** The line under it, or "" when nothing waits. */
+export function suggestWaitingLine(waiting) {
+  if (!(waiting > 0)) return "";
+  return waiting === 1 ? SUGGEST_WAITING_ONE : SUGGEST_WAITING_OTHER.replace("{n}", String(waiting));
+}
+
+/** The PC's non-empty message, else the code's sentence, else the fallback. */
+export function suggestErrorWords(answer) {
+  const a = answer && typeof answer === "object" ? answer : {};
+  const code = typeof a.error === "string" ? a.error : "";
+  const message = typeof a.message === "string" ? a.message.trim() : "";
+  if (message) return message;
+  return Object.hasOwn(SUGGEST_ERRORS, code) ? SUGGEST_ERRORS[code] : SUGGEST_ERROR_FALLBACK;
+}
+
+/**
+ * What a switch change came to. `pending`: a card is up on the PC, so the
+ * switch stays OFF until a later read says `enabled`; `said` is SUGGEST_PENDING.
+ * A refusal is `ok: false` with the one plain sentence.
+ */
+export function suggestWriteResult(answer) {
+  const a = answer && typeof answer === "object" ? answer : {};
+  if (a.ok === true) {
+    if (a.pending === true) return { ok: true, pending: true, said: SUGGEST_PENDING };
+    return { ok: true, pending: false, said: "", enabled: typeof a.enabled === "boolean" ? a.enabled : null };
+  }
+  return { ok: false, pending: false, said: suggestErrorWords(a) };
+}
+
+/**
+ * The text of a suggestion card: the PC's `text_hidden` while the private
+ * lists are hidden (and nothing at all if it sent none - fail closed; the
+ * title still says what the card is), else `text`. Rust already swaps the two
+ * before a card reaches a window (stream.rs `hide_private_cards`); this is the
+ * same rule for any surface that reads a raw detail.
+ */
+export function suggestCardText(detail, hidden) {
+  const d = detail && typeof detail === "object" ? detail : {};
+  const whole = typeof d.text === "string" ? d.text : "";
+  const safe = typeof d.text_hidden === "string" ? d.text_hidden : "";
+  return hidden ? safe : whole || safe;
+}

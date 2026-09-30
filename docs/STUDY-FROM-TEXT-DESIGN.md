@@ -512,3 +512,50 @@ the owner's `jarvis_gate.py`, which this repository does not hold - **not checke
   `study`. It ties up both cards, so it could not run beside the quiz's lane.
 * The quiz's grader has not been run on the second card's model; marks made there stay "Jarvis's guess".
 * Nothing has run on the real second card.
+
+## 14. Slice contract (frozen 2026-09-30): YouTube captions
+
+Slice B, built on the backend (2026-09-30); the apps build from this. The owner's rules (section 7, answer 1): **allowed, one card per link, caption text only**; it breaks YouTube's terms and may be blocked and the owner accepts that; never video or audio. API: `docs/JARVIS-API.md` section 112 (109 and 111 are reserved by the build queue, 110 is taken). Backend: `backend/jarvis_youtube.py`, `backend/youtube.patch`, the hook `jarvis_quiz.start_outside`, `backend/test_youtube.py`. **Not tried against the real YouTube** (network policy in the build container): the first real try on the owner's PC is `py -3 -c "from youtube_transcript_api import YouTubeTranscriptApi as Y; print(len(Y().fetch('dQw4w9WgXcQ')))"` after `apply-patches.ps1` installs the package.
+
+**Where it lives.** A second block on the existing "Quiz me on a text" page in both apps (not a new page): under the paste box, a link field and a button. The result is the ordinary quiz screen. No new Brain entry. The desktop's Rust reads/writes through new commands in `src-tauri/src/brain/quiz.rs` (or a sibling `youtube.rs`); the phone in `net/Quiz.kt` / a new `net/YouTube.kt`. **Builders do not edit `jarvis_youtube.py`, `youtube.patch` or the gate.**
+
+**The flow (both apps identical).**
+1. The owner pastes a link and presses **Read the captions and write questions**. The app sends `POST /api/youtube/quiz` `{url, count}` (count from the same question-count control the text quiz has; `language` is not offered in the first version). The app does NOT check the link itself beyond "not empty": the PC's refusal message is shown as is.
+2. On **202** the app shows `request.message` ("Waiting for your yes on the approval card.") and **polls `GET /api/youtube/{id}` about every 2 seconds** (stop polling at any end state or when the page closes). The card itself is an ordinary approval (`/api/pending`), decided in the apps' existing approval screens - a **risky approval** (Windows Hello / phone screen lock), never by voice, never from the widget's Approve on the phone without the lock. The desktop widget sends this card's Approve to the Jarvis bar, as for email.
+3. States: `waiting` -> `fetching` -> `writing` -> `ready`. On `ready` the app opens `request.quiz` as the ordinary quiz (all of section 98 unchanged; answering uses `/api/quiz/{id}/answer`). On `denied`, `timed_out`, `withdrawn`, `refused` or `failed` the app shows `request.message` and offers the link field again. A **Cancel** button (`POST /api/youtube/{id}/cancel`) is shown only in `waiting`; it is never held on a stale link.
+4. `request.truncated` true: show `request.message` above the questions (it already says the quiz covers only the first part).
+5. A quiz with `provenance: "outside"` shows the **outside line** (below) in place of "This text is treated as outside text..." and a small label `From YouTube captions`. Answer marking, Finish, Stop and the crisis message are exactly the text quiz's.
+
+**Rules for the apps.**
+* **Rule 4 / stale link:** the start button is held (greyed, with the app's usual "waiting for a live link" words) on a stale link. Polling, Cancel and reading a finished quiz are not held.
+* **Under "Hide memory lists and chat history":** the link field's text, `request.link` and the quiz's words are hidden like the text quiz's; the state message and Cancel stay. Never keep the pasted link anywhere on the app side (not in a saved draft, not in a log, not in a notification). Clear the field once the card is raised.
+* **App lock (desktop):** the page is behind the lock like the rest of Quiz.
+* **Never** put the link or a video id into a notification, a toast, a widget line or the desktop tray. Approval-card titles are the PC's words (`Jarvis wants to fetch the caption text of a YouTube video for a quiz`); an app does not build a card text itself.
+* **A PC without the feature** answers `GET /api/youtube` with 404 (or 503): show "Your PC's Jarvis does not have YouTube quizzes yet - run apply-patches.ps1 on the PC." and hide the block. Do not probe by starting a request.
+* **Speech:** questions and marks are ordinary answers; none is read aloud (outside text). The crisis message (section 98.4) is shown as for a text quiz.
+* **Keep (section 102):** unchanged in the apps. See the open question below.
+
+**Shared words (both apps, word for word; the PC also sends them in `GET /api/youtube`).**
+* Block title: `Quiz me on a YouTube video`
+* Intro: `Paste a YouTube link and Jarvis reads the video's captions (the words shown as subtitles), then quizzes you on them. It asks with a card first, every time.`
+* The terms line (shown under the link field, always visible, not behind a tap): `This breaks YouTube's terms and may be blocked. Only the caption text is fetched - never the video or its sound. The link tells YouTube which video you are studying.`
+* Outside line (during and after the quiz): `The captions are treated as outside text: Jarvis never learns facts from them. Your answers are marked by the model on this PC.`
+* Link field placeholder: `Paste a YouTube video link`
+* Start button: `Read the captions and write questions`
+* Cancel: `Cancel`
+* Small label on the quiz: `From YouTube captions`
+* Missing feature: `Your PC's Jarvis does not have YouTube quizzes yet - run apply-patches.ps1 on the PC.`
+* State messages come from the PC (`request.message`); for reference: `waiting`: Waiting for your yes on the approval card. `fetching`: Reading the captions from YouTube... `writing`: Writing the questions... `ready`: Ready. `denied`: You said no, so nothing was fetched. `timed_out`: Nobody answered the card in time, so nothing was fetched. `withdrawn`: You cancelled before the card was answered, so nothing was fetched. `refused`: The card could not be answered, so nothing was fetched. `failed`: Could not make a quiz from that video.
+* Every refusal and failure message comes from the PC (section 112.2); the apps never rewrite it and never show an error code.
+
+**Wire shapes (frozen).** `POST /api/youtube/quiz` `{"url": str, "count": 1-10?, "title": str?, "language": str?}` -> 202 `{"ok": true, "waiting": true, "request": Request, "message": str}`; `GET /api/youtube/{id}` -> `{"ok": true, "request": Request}`; `POST /api/youtube/{id}/cancel` `{}` -> `{"ok": true, "request": Request}`; `GET /api/youtube` -> `{"ok": true, "available": true, "title", "intro", "terms", "outside", "limits": {"link", "text", "count_min", "count_max"}, "latest": Request | null}`. `Request` = `{"id", "state": "waiting"|"fetching"|"writing"|"ready"|"denied"|"timed_out"|"withdrawn"|"refused"|"failed", "message", "link", "truncated", "minutes", "error", "quiz": Quiz | null, "provenance": "outside", "source": "youtube"}`. `Quiz` gains, only for these quizzes, `"provenance": "outside"` and `"source": "youtube"` (additive; a text or Spanish quiz has neither key). Errors are `{"ok": false, "error", "message"}` with the codes in section 112.2. **Decode leniently:** ignore unknown keys and unknown `state` values (treat an unknown state as still working, and stop after 3 minutes with the PC's last message).
+
+**Fixtures.** The words above and a set of example `Request` shapes are for `tools/gen_youtube_cases.py` (not written yet; the first app builder writes it, in the pattern of `gen_decks_cases.py`, and both apps' tests read the file). Until then the shapes here are the contract.
+
+**Parity.** `tools/check_parity.py` lists `/api/youtube`, `/api/youtube/quiz`, `/api/youtube/{id}` and `/api/youtube/{id}/cancel` as `planned`. The app builder moves them to `ported` (with the file names) when built. Nothing about this feature is deliberately one-sided.
+
+**Open question for the owner (not decided; built the careful way meanwhile).** A kept question copies its **passage**, which here is caption text, into the review deck as the owner's own tap. Captions are outside text; the deck is not memory and is never learned from, so the backend allows it. If the owner would rather a video's questions could not be kept, the change is one line in `jarvis_quiz.finish` (refuse Keep when `provenance == "outside"`). Until told otherwise, Keep works and the deck row shows the same `From YouTube captions` label is NOT carried (the deck has no source field) - so a kept card's passage looks like any other. That is the known gap.
+
+**What is not in this slice.** A model tool or chat door for it (`jarvis_agent.py` untouched, so "quiz me on this video" in chat is not yet understood); playlists; a timestamped outline; choosing a caption language in the apps; Spanish-mode practice from captions; the cloud "grade this better" button; any audio or video download (refused for good, section 9); the second-card "Study helper" for this quiz (it uses whatever lane the quiz uses).
+
+**Known limits, said plainly.** Never run against the real site here. YouTube may refuse this PC's address (`youtube_refused`), change how captions are served (`youtube_failed`), or close nothing of the owner's - no account or cookie is involved. An auto-generated caption is used when no human-made one exists, and can be wrong; the quiz is marked against it anyway.

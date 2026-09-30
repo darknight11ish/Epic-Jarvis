@@ -12,7 +12,7 @@
      # or removed at once, and no chat words are kept or logged.
      "chat_tags_suggest_on": ("yes", "local", "lets Jarvis's model on this PC read the first few messages you wrote in a few old chats each night to suggest a tag; it never reads chats that read email or web pages, difficult moments, or Live, support and AI-chat records, it can only pick a tag you already made, nothing is filed without your Approve, and turning it off is instant"),
      "chat_tag_suggest": ("yes", "local", "files one chat under a tag you already made, exactly as if you had filed it yourself; you can move or remove the tag at once, and nothing else about the chat changes"),
-+    # youtube.patch (jarvis_youtube.py, JARVIS-API section 112; the owner's
++    # youtube.patch (jarvis_youtube.py, JARVIS-API section 109; the owner's
 +    # decision of 2026-09-30, docs/STUDY-FROM-TEXT-DESIGN.md section 5). ONE
 +    # card per YouTube link: the exact link is on the card, which says this
 +    # breaks YouTube's terms and may be blocked. Your PC contacts YouTube and
@@ -31,7 +31,7 @@
          print(f"  tag-suggest NOT ON ({type(exc).__name__}) - Suggest tags overnight is off")
          print("             until jarvis_tag_suggest.py is back: run apply-patches.ps1 again")
 +    # youtube.patch ("Quiz me on a YouTube video", the owner's decision of 2026-09-30;
-+    # JARVIS-API section 112): POST /api/youtube/quiz raises ONE approval card per link
++    # JARVIS-API section 109): POST /api/youtube/quiz raises ONE approval card per link
 +    # (youtube_captions_read, tier ask; it breaks YouTube's terms and may be blocked), then
 +    # fetches the video's CAPTION TEXT only and makes an ordinary quiz on it (outside text);
 +    # GET /api/youtube and /api/youtube/<id> say how the request is going, POST

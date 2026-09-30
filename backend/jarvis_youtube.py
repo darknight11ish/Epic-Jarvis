@@ -4,7 +4,7 @@ after the owner's own card, then quiz the owner on it.
 NEW MODULE, shipped whole. youtube.patch adds the gate lines (the new action
 `youtube_captions_read`) and ONE install block in jarvis_hud.py. Design:
 docs/STUDY-FROM-TEXT-DESIGN.md section 5 (Slice B) and section 14 (the frozen
-contract the apps build from). API: docs/JARVIS-API.md section 109.
+contract the apps build from). API: docs/JARVIS-API.md section 112.
 
 THE OWNER'S DECISION (2026-09-30): reading a YouTube video's captions is
 allowed, ONE CARD PER LINK, caption text only, never video or audio. The owner
@@ -96,7 +96,7 @@ _ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 _LANG = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
 _PATH_KINDS = ("shorts", "embed", "live", "v")
 
-# ---- the words both apps show (word for word; JARVIS-API section 109) ------
+# ---- the words both apps show (word for word; JARVIS-API section 112) ------
 TITLE = "Quiz me on a YouTube video"
 INTRO = ("Paste a YouTube link and Jarvis reads the video's captions (the words shown as "
          "subtitles), then quizzes you on them. It asks with a card first, every time.")
@@ -118,9 +118,9 @@ STATE_WORDS = {
 
 #: code -> (status, plain words). Nothing here quotes the link or an exception.
 CLASSES = {
-    "bad_link": (400, "That does not look like a link. Paste the video's address, starting "
-                      "with https://"),
-    "not_a_web_link": (400, "That is not a web link. A YouTube address starts with https://"),
+    "bad_link": (400, "That does not look like a link. Paste the video's address, which "
+                      "starts with https."),
+    "not_a_web_link": (400, "That is not a web link. A YouTube address starts with https."),
     "link_has_login": (400, "That link has a name or password in it, so Jarvis will not use "
                             "it. Paste the plain video address."),
     "not_youtube": (400, "That is not a YouTube video link. Jarvis only reads captions from "
@@ -591,6 +591,8 @@ def start(body, *, tainted: bool = False) -> tuple:
         with _LOCK:
             _REQS.pop(rid, None)
         return _refuse("card_unavailable")
+    with _LOCK:
+        _purge()
     return 202, {"ok": True, "waiting": True, "request": _view(r),
                  "message": "Waiting for your yes. Nothing is fetched unless you approve the card."}
 
