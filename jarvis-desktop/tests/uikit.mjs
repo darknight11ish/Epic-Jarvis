@@ -2275,6 +2275,25 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             c.tag_id = args.tagId ?? null;
             return { ok: true, id: args.id, tag_id: c.tag_id };
           }
+          // "Fork from here" (JARVIS-API section 110): the two keys only. The
+          // mock makes a new chat from the first turns; `h.forkRefuse` is an
+          // answer to give instead (a refusal the PC classified).
+          case "brain_history_fork": {
+            const h = window.__history;
+            (h.forked = h.forked || []).push({ id: args.id, upto: args.upto });
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) throw new Error("Your chat history is hidden. Press Show on the Brain's History tab and confirm it is you with Windows Hello first.");
+            if (h.forkRefuse) return JSON.parse(JSON.stringify(h.forkRefuse));
+            const src = h.transcripts[args.id];
+            const row = h.conversations.find((x) => x.id === args.id);
+            if (!src || !row) return { ok: false, error: "not_found", message: "not_found" };
+            const id = `${args.id}-fork`;
+            const turns = src.turns.filter((t) => t.idx <= args.upto).map((t, i) => ({ ...t, idx: i }));
+            const title = `Fork of ${row.title}`;
+            h.transcripts[id] = { ...JSON.parse(JSON.stringify(src)), id, title, turns: JSON.parse(JSON.stringify(turns)) };
+            h.conversations.splice(h.conversations.indexOf(row) + 1, 0, { ...row, id, title, turns: turns.length });
+            return { ok: true, id, title, turns: turns.length, tag_id: row.tag_id ?? null };
+          }
           case "brain_history_open": {
             const h = window.__history;
             h.opened.push(args.id);

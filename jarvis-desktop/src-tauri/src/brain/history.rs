@@ -508,6 +508,72 @@ pub(crate) fn tag_chat_body(id: &str, tag_id: Option<i64>) -> Result<serde_json:
     Ok(serde_json::json!({ "id": id, "tag_id": tag_id }))
 }
 
+/// The `error` codes the PC's fork route answers with (JARVIS-API section
+/// 110.1). The page turns each into one plain sentence.
+pub(crate) const FORK_ERROR_CODES: [&str; 3] = ["bad_request", "not_found", "not_forkable"];
+
+/// What a fork is refused with while the private lists are hidden: an
+/// opened chat is hidden already, so nothing is forked from it.
+pub(crate) const FORK_STILL_HIDDEN: &str = "Your chat history is hidden. Press Show on \
+     the Brain's History tab and confirm it is you with Windows Hello first.";
+
+/// What a backend without "Fork from here" is told to do about it.
+pub(crate) const FORK_UPDATE: &str = "This PC's Jarvis cannot fork a chat yet. \
+     Update the backend by running apply-patches.ps1, then open this again.";
+
+/// The body for `POST /api/history/fork`: exactly `id` and `upto` (the
+/// `idx` of a turn of the opened chat), nothing else.
+pub(crate) fn fork_body(id: &str, upto: i64) -> Result<serde_json::Value, String> {
+    let id = checked_id(id)?;
+    if !(0..=1_000_000).contains(&upto) {
+        return Err("Choose a message in this chat to fork from.".to_string());
+    }
+    Ok(serde_json::json!({ "id": id, "upto": upto }))
+}
+
+/// The reading of `POST /api/history/fork`. A 2xx with `ok: true` is
+/// reduced to `ok`, `id`, `title`, `turns`, `tag_id`; a refusal the PC
+/// classified comes back as `Ok` with `ok: false`, `error` and `message`
+/// only; a backend with no route is [`FORK_UPDATE`].
+pub(crate) fn fork_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        let v = parsed(body)
+            .filter(|v| v.get("ok").and_then(|o| o.as_bool()) == Some(true))
+            .ok_or_else(|| UNREADABLE.to_string())?;
+        let id = v
+            .get("id")
+            .and_then(|i| i.as_str())
+            .filter(|i| commands::valid_conversation_id(i))
+            .ok_or_else(|| UNREADABLE.to_string())?;
+        return Ok(serde_json::json!({
+            "ok": true,
+            "id": id,
+            "title": v.get("title").and_then(|t| t.as_str()).unwrap_or(""),
+            "turns": v.get("turns").and_then(|t| t.as_u64()).unwrap_or(0),
+            "tag_id": v.get("tag_id").filter(|t| t.is_u64()).cloned()
+                .unwrap_or(serde_json::Value::Null),
+        }));
+    }
+    if let Some(v) = parsed(body).filter(|v| {
+        v.get("ok").and_then(|o| o.as_bool()) == Some(false)
+            && v.get("error")
+                .and_then(|e| e.as_str())
+                .is_some_and(|c| FORK_ERROR_CODES.contains(&c))
+    }) {
+        let mut out = serde_json::Map::new();
+        out.insert("ok".into(), serde_json::json!(false));
+        out.insert("error".into(), v["error"].clone());
+        if let Some(m) = v.get("message").and_then(|m| m.as_str()) {
+            out.insert("message".into(), serde_json::json!(m));
+        }
+        return Ok(serde_json::Value::Object(out));
+    }
+    if status == 404 || status == 501 {
+        return Err(FORK_UPDATE.to_string());
+    }
+    Err(commands::backend_refusal(status, body))
+}
+
 /// A refusal the PC classified: `{"ok": false, "error": <one of the known
 /// codes>, ...}`. Passed on intact so the page can say one plain sentence
 /// per code; an `error` that is not a known code is not treated as one.
@@ -806,6 +872,34 @@ pub async fn brain_history_tag(
     tag_write_answer(status, &text)
 }
 
+/// "Fork from here" (`POST /api/history/fork`, JARVIS-API section 110):
+/// copies the first turns of ONE kept chat, up to the turn numbered `upto`,
+/// into a new chat. No card: the owner's own kept words, nothing leaves the
+/// PC. Refused while the private lists are hidden and held while the event
+/// stream is stale (rule 4).
+#[tauri::command]
+pub async fn brain_history_fork(
+    app: AppHandle,
+    id: String,
+    upto: i64,
+) -> Result<serde_json::Value, String> {
+    let body = fork_body(&id, upto)?;
+    if crate::lock::private_hidden(&app) {
+        return Err(FORK_STILL_HIDDEN.to_string());
+    }
+    require_link_live(&app)?;
+    let (status, text) = post(&app, "/api/history/fork", body).await?;
+    let mut answer = fork_answer(status, &text)?;
+    // The lock may have come on while the request ran: the new title is the
+    // owner's words, so it does not leave Rust then.
+    if crate::lock::private_hidden(&app) {
+        if let Some(o) = answer.as_object_mut() {
+            o.remove("title");
+        }
+    }
+    Ok(answer)
+}
+
 /// Deletes ONE conversation. It cannot be undone, and the page asks first.
 /// Held while the event stream is stale, like forgetting a fact
 /// ([`super::brain_memory_forget`]): it acts on a list read from a link
@@ -1076,6 +1170,74 @@ mod tests {
                 "{name} posts before rule 4"
             );
         }
+    }
+
+    #[test]
+    fn a_fork_asks_for_exactly_a_chat_and_a_turn() {
+        let b = fork_body("conv-12345678", 3).unwrap();
+        assert_eq!(b, serde_json::json!({"id": "conv-12345678", "upto": 3}));
+        assert_eq!(b.as_object().unwrap().len(), 2);
+        assert!(fork_body("conv-12345678", 0).is_ok());
+        assert!(fork_body("conv-12345678", -1).is_err());
+        assert!(fork_body("../etc", 1).is_err());
+        assert!(fork_body("", 1).is_err());
+    }
+
+    #[test]
+    fn a_fork_answer_is_reduced_to_what_the_page_needs() {
+        let ok = fork_answer(
+            200,
+            r#"{"ok":true,"id":"conv-87654321","title":"Fork of Boiler","turns":4,"tag_id":2,"secret":"x"}"#,
+        )
+        .unwrap();
+        assert_eq!(ok["id"], "conv-87654321");
+        assert_eq!(ok["title"], "Fork of Boiler");
+        assert_eq!(ok["turns"], 4);
+        assert_eq!(ok["tag_id"], 2);
+        assert!(ok.get("secret").is_none());
+        let untagged = fork_answer(
+            200,
+            r#"{"ok":true,"id":"conv-87654321","title":"t","turns":1,"tag_id":null}"#,
+        )
+        .unwrap();
+        assert!(untagged["tag_id"].is_null());
+        // No usable new id: not a success.
+        assert!(fork_answer(200, r#"{"ok":true,"id":"../x","title":"t"}"#).is_err());
+        assert!(fork_answer(200, r#"{"ok":true}"#).is_err());
+        assert!(fork_answer(200, "not json").is_err());
+    }
+
+    #[test]
+    fn a_fork_refusal_keeps_its_code_and_sentence() {
+        for (status, code) in [
+            (400, "bad_request"),
+            (404, "not_found"),
+            (409, "not_forkable"),
+        ] {
+            let body = format!(r#"{{"ok":false,"error":"{code}","message":"Plain.","extra":1}}"#);
+            let got = fork_answer(status, &body).unwrap();
+            assert_eq!(got["ok"], false);
+            assert_eq!(got["error"], code);
+            assert_eq!(got["message"], "Plain.");
+            assert!(got.get("extra").is_none());
+        }
+        let bare = fork_answer(409, r#"{"ok":false,"error":"not_forkable"}"#).unwrap();
+        assert!(bare.get("message").is_none());
+        // An unknown code is not passed on as a refusal.
+        assert!(fork_answer(400, r#"{"ok":false,"error":"weird","message":"x"}"#).is_err());
+        // An older backend with no route.
+        assert_eq!(fork_answer(404, "not found").unwrap_err(), FORK_UPDATE);
+    }
+
+    #[test]
+    fn the_fork_command_asks_the_lock_and_the_link() {
+        let src = include_str!("history.rs");
+        let name = "pub async fn brain_history_fork(";
+        let at = src.find(name).expect(name);
+        let body = &src[at..at + 900.min(src.len() - at)];
+        assert!(body.contains("private_hidden"), "ignores the lock");
+        let live = body.find("require_link_live").expect("rule 4");
+        assert!(live < body.find("post(").unwrap(), "posts before rule 4");
     }
 
     #[test]

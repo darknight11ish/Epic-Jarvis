@@ -2014,6 +2014,18 @@ body {
   max-width: 140px;
 }
 
+/* "Fork from here" on a message of an opened chat. No motion of its own, so
+   reduced motion needs nothing switched off; a greyed one (busy, or a stale
+   link) is dimmed and shows the reason as its title. */
+.history-fork {
+  font-size: var(--text-xs);
+  margin-left: auto;
+}
+.history-fork:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .history-file-banner {
   display: flex;
   align-items: center;

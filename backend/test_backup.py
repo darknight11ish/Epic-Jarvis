@@ -292,8 +292,15 @@ def t_what_is_backed_up_and_what_is_excluded():
             continue
         opened |= set(_re.findall(r"[\"']([A-Za-z0-9_-]+\.db)[\"']",
                                   mod.read_text(encoding="utf-8")))
+    # Written down here on purpose: study.db (jarvis_decks.py, review decks,
+    # 2026-09-30) is NOT backed up yet. Its words are sealed under a Credential
+    # Manager key of their own, and QUIZ-DECKS-DESIGN.md section 4 leaves whether
+    # decks join the locked backup to the owner, when the backup is next touched.
+    NOT_BACKED_UP = {"study.db"}
     check("every .db a backend module names is backed up (or written down here)",
-          opened <= set(B.SOURCE_DBS), sorted(opened - set(B.SOURCE_DBS)))
+          opened - NOT_BACKED_UP <= set(B.SOURCE_DBS), sorted(opened - NOT_BACKED_UP - set(B.SOURCE_DBS)))
+    check("... and the one written down here is really not on the list",
+          not (NOT_BACKED_UP & set(B.SOURCE_DBS)))
     check("the settings JSON is in", "settings/folders.json" in names)
     check("notes are in", "notes/todo.md" in names
           and zf_read(zip_bytes, "notes/todo.md") == b"buy milk")

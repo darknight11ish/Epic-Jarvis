@@ -1343,6 +1343,37 @@ class JarvisApi(
         }
 
     /**
+     * `POST /api/history/fork` (docs/JARVIS-API.md section 110): [json] is
+     * [ChatFork.body], exactly `{"id", "upto"}`. The status and body come back
+     * whole, so a refusal ({"ok": false, "error", "message"}) reaches the owner
+     * as the PC wrote it. Sent with the pairing token and `X-Jarvis-Client:
+     * hud` like every call ([authed]); the token is never logged. A 404
+     * without `ok` in the body is a PC without the route.
+     */
+    suspend fun forkPost(json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            val target = url("/api/history/fork") ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    when {
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 && obj?.containsKey("ok") != true -> ApiResult.Failed(ApiError.NotFound)
+                        obj != null -> ApiResult.Ok(resp.code to obj)
+                        resp.isSuccessful -> ApiResult.Ok(resp.code to null)
+                        resp.code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, ""))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `GET /api/memory/fact-chat?id=` (the chat audit, 2026-09-28): which chat
      * a fact came from - its title and when - so "Also delete the chat it
      * came from" names it first. A read; it deletes nothing.

@@ -48,8 +48,10 @@ import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.data.HistoryViewPrefs
 import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
+import com.jarvis.client.net.ChatFork
 import com.jarvis.client.net.ChatLog
 import com.jarvis.client.net.ChatTags
+import com.jarvis.client.net.PlainErrors
 import com.jarvis.client.platform.PrivateClipboard
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Kicker
@@ -189,6 +191,12 @@ fun HistoryScreen(
     var keepToConfirm by remember { mutableStateOf<Int?>(null) }
     // The conversation open for reading. Saveable, so a rotation keeps it open.
     var openId by rememberSaveable { mutableStateOf<String?>(null) }
+    // The sentence "Fork from here" left for the chat it opened: (that chat's id, the words).
+    // Dropped when the conversation is closed, so it never shows on a later visit.
+    var forkNote by remember { mutableStateOf<Pair<String, String>?>(null) }
+    LaunchedEffect(openId) {
+        if (openId == null) forkNote = null
+    }
     var listSaid by remember { mutableStateOf<String?>(null) }
     // The search box (docs/JARVIS-API.md section 71). Two letters or more:
     // the PC searches what was SAID in the kept chats, opening each in its
@@ -349,6 +357,17 @@ fun HistoryScreen(
                     id = open,
                     initialFind = findFirst,
                     onContinue = onContinue,
+                    canAct = canAct,
+                    notice = forkNote?.takeIf { it.first == open }?.second,
+                    onForked = { newId, sentence ->
+                        // The new chat opens at once; the list is read again so the
+                        // fork shows beside the original. The original is untouched.
+                        forkNote = newId to sentence
+                        listSaid = sentence
+                        findFirst = ""
+                        openId = newId
+                        reads += 1
+                    },
                     tags = tagView?.tags.orEmpty(),
                     onTagged = { id, tagId ->
                         rows = rows?.map { if (it.id == id) it.copy(tagId = tagId) else it }
@@ -968,6 +987,12 @@ private fun Conversation(
     id: String,
     initialFind: String,
     onContinue: suspend (String) -> String?,
+    /** The link is up and fresh: "Fork from here" writes a new chat, so it waits for it (rule 4). */
+    canAct: Boolean,
+    /** A sentence to show at the top, e.g. what Fork from here just did. */
+    notice: String?,
+    /** A fork worked: the new chat's id and the "Forked into ..." words. */
+    onForked: (newId: String, sentence: String) -> Unit,
     tags: List<ChatTags.Tag>,
     onTagged: (id: String, tagId: Int?) -> Unit,
     modifier: Modifier,
@@ -980,6 +1005,10 @@ private fun Conversation(
     var continuing by remember(id) { mutableStateOf(false) }
     // Kept over a rotation: a plain sentence, no words of the chat.
     var continueSaid by rememberSaveable(id) { mutableStateOf<String?>(null) }
+    // "Fork from here": which message's request is running (one at a time), and
+    // the plain sentence a refusal left. The success sentence arrives as [notice].
+    var forking by remember(id) { mutableStateOf<Int?>(null) }
+    var forkSaid by remember(id) { mutableStateOf<String?>(notice) }
     val zone = remember { ZoneId.systemDefault() }
     val today = LocalDate.now(zone)
     var loaded by remember(id) { mutableStateOf<ChatLog.Transcript?>(null) }
@@ -1148,6 +1177,20 @@ private fun Conversation(
                     }
                     continueSaid?.let {
                         Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk,
+                            modifier = Modifier.liveStatus())
+                    }
+                    // "Fork from here" (JARVIS-API section 110): a chat that cannot be
+                    // forked says why where the buttons would be; an older PC says nothing.
+                    t.forkWhy?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                    }
+                    // Forking writes a new chat, so the buttons wait for a fresh link.
+                    if (t.forkable && !canAct) {
+                        Text(PlainErrors.shown("link_stale").text, style = MaterialTheme.typography.labelSmall,
+                            color = chrome.textMid)
+                    }
+                    forkSaid?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
                             modifier = Modifier.liveStatus())
                     }
                 }
@@ -1361,6 +1404,39 @@ private fun Conversation(
                         color = chrome.textMid,
                         modifier = Modifier.semantics { contentDescription = ChatLog.COPY_TITLE },
                         onClick = { PrivateClipboard.copy(context, turn.text) },
+                    )
+                }
+                // "Fork from here" on the owner's messages and Jarvis's kept answers
+                // (never a support, chatbot or comparison record - not forkable).
+                // Its screen-reader name holds the visible words and says which message.
+                val forkAt = turn.idx
+                if (forkAt != null && ChatFork.offered(loaded?.forkable == true, turn.role, forkAt)) {
+                    val thisOne = forking == forkAt
+                    Quiet(
+                        if (thisOne) ChatFork.BUSY else ChatFork.BUTTON,
+                        color = chrome.textMid,
+                        enabled = canAct && forking == null,
+                        modifier = Modifier.semantics {
+                            contentDescription = if (thisOne) ChatFork.BUSY else ChatFork.label(turn.role)
+                        },
+                        onClick = {
+                            forking = forkAt
+                            forkSaid = null
+                            scope.launch {
+                                try {
+                                    val r = JarvisRuntime.forkChat(id, forkAt)
+                                    val newId = r.id
+                                    if (r.ok && newId != null) {
+                                        onForked(newId, r.said)
+                                    } else {
+                                        // Stay on the original chat and say why.
+                                        forkSaid = r.said
+                                    }
+                                } finally {
+                                    forking = null
+                                }
+                            }
+                        },
                     )
                 }
             }

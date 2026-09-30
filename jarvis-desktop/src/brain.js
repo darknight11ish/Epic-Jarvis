@@ -317,6 +317,8 @@ import {
   SEARCHING,
   searchMoreWords,
   SWITCH_DETAIL,
+  forkDoneWords,
+  forkErrorWords,
   SWITCH_LABEL,
   TAINT_TITLE,
   whenLine,
@@ -3090,6 +3092,8 @@ const chats = {
   openId: null,
   open: null,
   openError: "",
+  /** "Fork from here" in flight: `{ id, idx }`, one at a time. */
+  forking: null,
   /** What the open chat taught (readChatFacts), or null while it is read or
    *  when this PC cannot say (the second chat audit, 2026-09-28, finding 9). */
   openFacts: null,
@@ -3506,7 +3510,7 @@ function paintFound() {
   const matches = f.needle.trim() ? findMatches(chats.open, f.needle) : [];
   f.total = matches.length;
   if (f.current >= matches.length) f.current = 0;
-  renderTranscript(box, chats.open, { el, onCopy: copyOldAnswer },
+  renderTranscript(box, chats.open, { el, onCopy: copyOldAnswer, fork: forkHelpers(chats.open) },
     { matches, current: f.current, needle: f.needle.trim() });
   const count = $("history-find-count");
   if (count) count.textContent = f.needle.trim() ? findCountWords(f.current, matches.length) : "";
@@ -3574,6 +3578,9 @@ function transcriptNode() {
   else if (!chats.open) t.append(el("p", "empty", "Reading…"));
   else {
     t.append(continueNode(chats.open));
+    if (chats.open.forkWhy && !(chats.view && chats.view.hidden)) {
+      t.append(el("p", "hint history-fork-why", chats.open.forkWhy));
+    }
     if (chats.openFacts) t.append(factsTaughtNode(chats.openFacts));
     t.append(findBar());
     const turns = el("div", "history-transcript-turns");
@@ -3605,6 +3612,52 @@ function continueNode(conv) {
   go.classList.add("history-continue-go");
   box.append(go);
   return box;
+}
+
+/**
+ * "Fork from here" (JARVIS-API.md section 110): what renderTranscript needs to
+ * draw the button on each message of the opened chat. Nothing while the
+ * private lists are hidden or when the PC did not say the chat is forkable.
+ * The buttons are held (greyed, with the usual stale-link reason) while the
+ * link is stale, and all wait while one fork runs.
+ */
+function forkHelpers(conv) {
+  if (!conv || !conv.forkable || (chats.view && chats.view.hidden)) return null;
+  const busy = chats.forking && chats.forking.id === conv.id ? chats.forking : null;
+  return {
+    forkable: true,
+    busy: busy || (chats.forking ? { idx: -1 } : null),
+    decorate: (b) => { liveButtons.add(b); syncLiveButton(b); },
+    onFork: (idx) => forkFrom(conv.id, idx),
+  };
+}
+
+/** Sends the fork, then opens the new chat (the same open as its row) and
+ *  refreshes the list. A refusal leaves the original chat open, with the
+ *  PC's sentence. No card: nothing leaves the PC. */
+async function forkFrom(id, idx) {
+  if (chats.forking || !IS_TAURI) return;
+  chats.forking = { id, idx };
+  chats.focus = { keys: [`fork:${id}:${idx}`, `open:${id}`], at: Date.now() };
+  paintHistory();
+  let made = null;
+  try {
+    const out = await invoke("brain_history_fork", { id, upto: idx });
+    if (out && out.ok === true && typeof out.id === "string" && out.id) made = out;
+    else toast(forkErrorWords(out), "bad");
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  chats.forking = null;
+  if (!made) {
+    paintHistory();
+    return;
+  }
+  chats.focus = { keys: [`open:${made.id}`], at: Date.now() };
+  chats.at = 0;
+  await loadHistory();
+  if (chats.openId !== made.id) await toggleConversation(made.id);
+  toast(forkDoneWords(made.title), "ok");
 }
 
 /** Copy on an opened old answer: the bar's own private copy (kept out of
@@ -4189,6 +4242,7 @@ function focusFallbacks(key) {
     case "rename": return [`name:${id}`];
     case "move": return [`open:${id}`];
     case "file": return [`move:${id}`, `open:${id}`];
+    case "fork": return [`open:${id.slice(0, id.lastIndexOf(":"))}`];
     case "chip": return ["chip:"];
     default: return key === "add-btn" ? ["add-name"] : [];
   }

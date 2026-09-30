@@ -121,6 +121,7 @@ fn main() {
             "brain_history_tags",
             "brain_history_tags_edit",
             "brain_history_tag",
+            "brain_history_fork",
             // "Continue this chat" (the chat audit, 2026-09-28): the Brain
             // tells the Jarvis bar which chat to carry on (the id only), and
             // the bar reads that one chat - never a support, chatbot or

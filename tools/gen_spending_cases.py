@@ -38,7 +38,10 @@ for p in (BACKEND, BACKEND / "rebuilt"):
 import jarvis_documents as D  # noqa: E402
 import jarvis_spending as SP  # noqa: E402
 
+import datetime as _dt  # noqa: E402
+
 D._config_dir = lambda: _CONF
+SP._today = lambda: _dt.date(2026, 9, 30)      # a fixed day, so the file only changes when the backend does
 
 DESKTOP = ROOT / "jarvis-desktop" / "tests" / "fixtures" / "spending-cases.json"
 PHONE = (ROOT / "jarvis-client" / "app" / "src" / "test" / "resources" / "contract"

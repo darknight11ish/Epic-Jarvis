@@ -465,6 +465,28 @@ def t_a_new_layout_waits_for_the_owner():
           list(SP.load_profiles()) == [SP.fingerprint(["Date", "Description", "Amount", "Balance"])])
 
 
+def t_a_header_the_words_do_not_recognise_is_named_by_the_owner():
+    fresh()
+    text = "When,What,How much\n2026-01-01,TESCO,-5.00\n2026-01-02,LIDL,-6.00\n"
+    d = folder("Odd", text={"odd.csv": text})
+    listed(d)
+    got = SP.read_rows(str(d / "odd.csv"), roots=[str(d)])
+    prop = SP.propose(got["rows"], name="odd.csv")
+    check("no header found: the box asks for the header row and offers no guess",
+          prop["guess"] is None and prop["questions"] == ["header_row"] and prop["header_index"] == []
+          and len(prop["preview"]) == 3, prop)
+    res = summary(d / "odd.csv")
+    check("and the tool says to check the columns on the PC", res["ok"] is False
+          and "choose it there" in res["error"], res)
+    body = {"file": str(d / "odd.csv"), "confirm": True, "header_row": 0,
+            "columns": {"date": 0, "description": 1, "amount": 2}, "sign": "negative_out",
+            "date_order": "ymd", "decimal": ".", "currency": "", "label": "odd"}
+    fp, prof, norm = SP.confirm(body, rows=got["rows"], name="odd.csv", real=got["real"])
+    res = summary(d / "odd.csv")
+    check("once the owner has named it, the file is read (the saved header row finds it)",
+          res.get("ok") is True and dictify(res)["total"] == ["11.00", 2], res.get("error"))
+
+
 # ============================================================ 4. files
 
 def t_encodings_and_excel():
@@ -920,7 +942,11 @@ def t_no_bank_file_opens_after_outside_text():
 
 
 def t_the_table_is_not_in_chat_history():
-    from test_chat_log import World, req, local
+    try:
+        from test_chat_log import World, req, local
+    except BaseException as exc:            # cryptography missing or broken on this Python
+        check(f"SKIP - chat history needs the cryptography package ({type(exc).__name__})", True)
+        return
     fresh()
     d = folder("History", "a_signed.csv")
     listed(d)

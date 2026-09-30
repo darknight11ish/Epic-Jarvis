@@ -85,6 +85,51 @@ export const CONTINUE_WHY = Object.freeze({
   compare: "A comparison can't be continued here: its replies are outside text, not a " +
     "conversation with Jarvis.",
 });
+/* "Fork from here" (JARVIS-API.md section 110; docs/CHAT-TAGS-DESIGN.md "Fork
+ * contract"). The words are the phone's, word for word (history-cases.json
+ * `words.fork*`); the title "Fork of ..." is made by the PC, never here. */
+export const FORK = "Fork from here";
+export const FORK_TITLE = "Start a new chat that begins with everything up to this message.";
+export const FORK_BUSY = "Forking\u2026";
+export const FORK_NO = "This chat cannot be forked.";
+export const FORK_ERROR_FALLBACK = "Your PC did not fork that chat.";
+const FORK_LABELS = Object.freeze({
+  user: "Fork from here, after your message",
+  assistant: "Fork from here, after Jarvis's answer",
+});
+const FORK_ERRORS = Object.freeze({
+  bad_request: "Choose a message in this chat to fork from.",
+  bad_upto: "That message is not in this chat, so it was not forked.",
+  not_found: "That chat is not kept any more, so it was not forked.",
+});
+
+/** The screen-reader name of a fork button; it starts with the visible text. */
+export function forkLabel(role) {
+  return role === "assistant" ? FORK_LABELS.assistant : FORK_LABELS.user;
+}
+
+/** `Forked into "{title}".`; a PC that sent no title (or a hidden one) gets a plain line. */
+export function forkDoneWords(title) {
+  const t = typeof title === "string" ? title.trim() : "";
+  return t ? `Forked into "${t}".` : "Forked into a new chat.";
+}
+
+/**
+ * The one sentence for a refused fork. A known code (except `bad_request`,
+ * whose PC sentence can say more, like "Chat history is off") has its fixed
+ * sentence; then the PC's own message; then `bad_request`'s sentence; a
+ * `not_forkable` with no message is FORK_NO; else the fallback.
+ */
+export function forkErrorWords(answer) {
+  const a = answer && typeof answer === "object" ? answer : {};
+  const code = typeof a.error === "string" ? a.error : "";
+  const message = typeof a.message === "string" ? a.message.trim() : "";
+  if (code !== "bad_request" && Object.hasOwn(FORK_ERRORS, code)) return FORK_ERRORS[code];
+  if (message) return message;
+  if (code === "bad_request") return FORK_ERRORS.bad_request;
+  return code === "not_forkable" ? FORK_NO : FORK_ERROR_FALLBACK;
+}
+
 export const COPY = "Copy";
 export const COPY_TITLE = "Copy this answer.";
 export const COPIED = "Copied.";
@@ -440,6 +485,10 @@ export function readConversation(answer) {
     updated: num(a.updated),
     continuable,
     continueWhy: continuable ? "" : text(a.continue_why).trim() || CONTINUE_WHY[kind] || CONTINUE_WHY.support,
+    // "Fork from here": only the PC's explicit `true` offers the button; an
+    // older PC sends neither field, so nothing is offered and nothing said.
+    forkable: a.forkable === true,
+    forkWhy: a.forkable === true ? "" : typeof a.forkable === "boolean" ? text(a.fork_why).trim() || FORK_NO : "",
     turns: turns
       .filter((t) => t && (t.role === "user" || t.role === "assistant" || t.role === "support"
         || t.role === "chatbot"))
@@ -455,6 +504,8 @@ export function readConversation(answer) {
           : t.role === "support" ? text(t.provenance) || "support_note"
             : t.role === "chatbot" ? text(t.provenance) || "chatbot_note" : "",
         readOutside: t.read_outside === true,
+        // The turn's number, what "Fork from here" sends as `upto`.
+        idx: Number.isInteger(t.idx) && t.idx >= 0 ? t.idx : null,
         // Only the PC's "false" says so; an older PC sends nothing.
         answerKept: t.answer_kept !== false,
       })),
@@ -734,7 +785,7 @@ function markedText(el, s, matches, current) {
  * what the bar showed, not "**" and "#". While "Find in this chat" has
  * words in it, the words are shown plain, with the matches marked.
  */
-export function renderTranscript(box, conv, { el, onCopy = null }, find = null) {
+export function renderTranscript(box, conv, { el, onCopy = null, fork = null }, find = null) {
   box.replaceChildren();
   if (conv.tainted) {
     box.append(el("p", "history-taint-note",
@@ -789,6 +840,22 @@ export function renderTranscript(box, conv, { el, onCopy = null }, find = null) 
       copy.title = COPY_TITLE;
       copy.addEventListener("click", () => onCopy(text(t.text), copy));
       head.append(copy);
+    }
+    // "Fork from here" on the owner's messages and on Jarvis's kept answers.
+    if (fork && fork.forkable && (t.role === "user" || t.role === "assistant") && t.idx !== null
+      && t.idx !== undefined) {
+      const busyHere = fork.busy && fork.busy.idx === t.idx;
+      const fb = el("button", "btn ghost small history-fork", busyHere ? FORK_BUSY : FORK);
+      fb.type = "button";
+      fb.dataset.fkey = `fork:${conv.id}:${t.idx}`;
+      fb.dataset.title = FORK_TITLE;
+      fb.title = FORK_TITLE;
+      fb.setAttribute("aria-label", busyHere ? FORK_BUSY : forkLabel(t.role));
+      if (fork.busy) fb.dataset.busy = "true";
+      if (typeof fork.decorate === "function") fork.decorate(fb);
+      if (fork.busy) fb.disabled = true;
+      fb.addEventListener("click", () => fork.onFork(t.idx, fb));
+      head.append(fb);
     }
     item.append(head);
     const mine = matches.filter((m) => m.turn === index);

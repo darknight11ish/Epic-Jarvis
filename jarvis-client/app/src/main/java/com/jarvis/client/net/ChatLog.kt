@@ -183,6 +183,13 @@ object ChatLog {
         val readOutside: Boolean,
         /** False on a user turn whose answer the PC did not keep (a cloud answer, or one that did not finish). */
         val answerKept: Boolean = true,
+        /**
+         * The turn's number in its chat, as the PC counts it (`idx`, JARVIS-API
+         * section 110): what "Fork from here" sends as `upto`. Null from an
+         * older PC, or a value that is not a whole number 0 or more - such a
+         * turn gets no fork button.
+         */
+        val idx: Int? = null,
     )
 
     data class Transcript(
@@ -204,6 +211,18 @@ object ChatLog {
         val keeping: Keeping? = null,
         /** The tag it is filed under, or null (section 10 of docs/CHAT-TAGS-DESIGN.md). */
         val tagId: Int? = null,
+        /**
+         * Whether "Fork from here" is offered (`forkable`, JARVIS-API section
+         * 110). False from an older PC that says nothing: no fork buttons.
+         */
+        val forkable: Boolean = false,
+        /**
+         * Why it cannot be forked, shown where the button would be: the PC's
+         * `fork_why`, else [ChatFork.NO]. Null when it can be forked, and
+         * null from an older PC that sends no `forkable` at all (it says
+         * nothing rather than a reason it does not have).
+         */
+        val forkWhy: String? = null,
     )
 
     /** `history.enabled` / `history.recording` on a conversation; each null when not clearly a yes or a no. */
@@ -276,6 +295,7 @@ object ChatLog {
                 readOutside = o.flag("read_outside") == true,
                 // Only "false" from the PC says so; an older PC sends nothing.
                 answerKept = o.flag("answer_kept") != false,
+                idx = o.whole("idx")?.takeIf { it in 0..Int.MAX_VALUE.toLong() }?.toInt(),
             )
         }
         val kind = kindOf(body.str("kind"))
@@ -283,6 +303,8 @@ object ChatLog {
         // row says it is a support or chatbot record.
         val others = turns.any { it.role == "support" || it.role == "chatbot" }
         val continuable = body.flag("continuable") ?: (kind in CONTINUABLE && !others)
+        // An older PC sends no `forkable`: no fork buttons and no reason line.
+        val forkFlag = body.flag("forkable")
         return Transcript(
             id, body.str("title") ?: UNTITLED, body.flag("tainted") == true, turns,
             kind = kind,
@@ -291,6 +313,8 @@ object ChatLog {
                 ?: CONTINUE_WHY.getValue("support"),
             keeping = (body["history"] as? JsonObject)?.let { Keeping(it.flag("enabled"), it.flag("recording")) },
             tagId = body.whole("tag_id")?.toInt(),
+            forkable = forkFlag == true,
+            forkWhy = if (forkFlag == false) body.str("fork_why") ?: ChatFork.NO else null,
         )
     }
 

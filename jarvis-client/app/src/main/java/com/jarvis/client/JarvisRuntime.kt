@@ -6693,6 +6693,35 @@ object JarvisRuntime {
             )
         }
 
+    /**
+     * "Fork from here" (`POST /api/history/fork`, docs/JARVIS-API.md section
+     * 110): a new chat holding turns 0..[upto] of [chatId]. Writes a new chat,
+     * so it is held on a stale link (rule 4) and refused while the private
+     * lists are hidden. No card. Only the chat's id and the turn's number are
+     * sent - none of its words. On success the caller opens the new chat and
+     * reads the list again.
+     */
+    suspend fun forkChat(chatId: String, upto: Int): com.jarvis.client.net.ChatFork.Result {
+        actionBlocker()?.let { return com.jarvis.client.net.ChatFork.Result(false, it) }
+        if (privateListsHidden) {
+            return com.jarvis.client.net.ChatFork.Result(false, com.jarvis.client.net.ChatFork.HIDDEN)
+        }
+        if (!com.jarvis.client.net.ChatHistory.validConversationId(chatId) || upto < 0) {
+            return com.jarvis.client.net.ChatFork.Result(false, com.jarvis.client.net.ChatFork.errorSentence("bad_request"))
+        }
+        return when (val r = api.forkPost(com.jarvis.client.net.ChatFork.body(chatId, upto))) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatFork.result(r.value.second)
+            is ApiResult.Failed -> com.jarvis.client.net.ChatFork.Result(
+                false,
+                if (r.error == ApiError.NotFound) {
+                    com.jarvis.client.net.ChatFork.ERROR_FALLBACK
+                } else {
+                    "The chat was not forked. " + describe(r.error)
+                },
+            )
+        }
+    }
+
     /** The chat Home is in, when it was kept on the PC (so History can say "this is the one you are in"). */
     fun homeKeptChatId(): String? = if (chat.hasKeptChat()) chat.conversationIdNow() else null
 

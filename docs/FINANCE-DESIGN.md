@@ -507,3 +507,234 @@ file limit; "Keep these numbers" for the calculator off (form starts empty).
 - The default return figures for the retirement model are placeholders for the
   owner to see and change, not researched or recommended.
 - Nothing was tried on Windows or on the phone.
+
+
+## Slice contract (frozen)
+
+Written 2026-09-30, when part A (spending summaries, queue item 2, JARVIS-API section 100)
+was built on the backend. **Two other builders (the desktop, the phone) build against this
+section.** Do not change a field name, a value or a word below on either app's side; if
+something here is wrong, say so and the backend changes first. Part B (the retirement
+what-if, section 103) is not frozen; it will reuse the `sections` shape but not necessarily
+this exact block.
+
+Built and tested on the backend: `backend/jarvis_spending.py`, `backend/jarvis_money_parse.py`
+(shipped whole), `backend/spending.patch` (one install block), the `my_spending` tool in
+`backend/jarvis_agent.py`, `backend/test_spending.py` (468 checks, totals worked out by
+hand in `backend/fixtures/spending/expected.json`). **The reference for every shape and every
+word is one generated file, made by the real code:**
+
+```
+python3 tools/gen_spending_cases.py            # write both copies
+python3 tools/gen_spending_cases.py --check    # compare only (test_spending.py runs it)
+  jarvis-desktop/tests/fixtures/spending-cases.json
+  jarvis-client/app/src/test/resources/contract/spending-cases.json    (byte-identical)
+```
+
+Both apps' tests load it. It holds `words` (every shared sentence, exact), `sign_sentences`,
+`errors`, `tables` (six tables: by_category, by_month, by_category_and_month,
+two_files_overlapping, two_currencies, one_category) and the `GET /api/spending` and
+column-check answers in named situations (`view_pc_*`, `view_phone_*`, `proposal_*`).
+Neither app writes a word or a figure of its own for the table; it draws what the file says.
+
+### 1. How a table reaches an app
+
+1. `POST /api/chat` streams as usual. When the answer used `my_spending` and a table was
+   made, the stream carries ONE comment line, immediately BEFORE the answer's sentence:
+
+   ```
+   : jarvis-table 3f9c0a5e1d7b4c2a8e6f01b2c3d4e5f6
+
+   ```
+
+   (`: jarvis-table ` + 32 lowercase hex characters + a blank line, the same style as
+   `: jarvis-status <word>`). It is an SSE comment: an app that does not know it ignores it.
+   A `stream: false` reply carries the same id as a top-level `"jarvis_table": "<id>"` on the
+   completion body. The words of the answer (the `data:` chunks) are the checked sentence
+   alone; they never contain a figure that is not in the table.
+2. The app fetches `GET /api/chat/table?id=<id>` (header `X-Jarvis-Token`, `X-Jarvis-Client:
+   hud`, like every request) -> `200 {"ok": true, "table": {...}}`, or
+   `404 {"ok": false, "error": "gone", "message": <words.TABLE_GONE>}`. The table is kept two
+   hours in memory (the last 50) and can be fetched again.
+3. **Hidden states: do NOT fetch, and draw `words.TABLE_HIDDEN` ("Spending table hidden") in
+   its place**, when (a) "Hide memory lists and chat history" is on, or (b) on the desktop,
+   App lock is on and the app is locked (fetch and draw when it unlocks; the id is still good
+   for two hours). Phone: those two states already block screenshots; the table is one more
+   thing on that screen.
+4. **The table is never stored by an app**: not in `localStorage`, DataStore, Room, a log
+   or a saved chat. It lives in memory for the conversation on screen and is dropped when the
+   conversation is cleared or the app closes. After a restart the thread shows the sentence
+   only (that is all chat history keeps: `words.TABLE_GONE` if the app tries the old id).
+5. **Never read aloud.** Nothing to add: the tool is not on the read-aloud list
+   (`private-aloud-cases.json` was regenerated with `my_spending` in the tool list), so the
+   apps' existing rule keeps a spoken answer on screen and says its own fixed line. A table
+   is never spoken, copied, shared or exported in this first version (no export button).
+
+### 2. The table block (`GET /api/chat/table` -> `table`)
+
+```
+{
+ "kind": "spending", "version": 1,
+ "title":  "Spending by category, March 2026",
+ "period": "March 2026",                       // or "2026-03-01 to 2026-04-02" when no period was asked
+ "sources": ["bank-march.csv"],                 // file names, digits hidden; at most 6
+ "columns": [{"key": "category", "label": "Category", "align": "left"},
+             {"key": "spent",    "label": "Spent",    "align": "right"},
+             {"key": "rows",     "label": "Rows",     "align": "right"}],
+ "sections": [                                  // one per currency; ONE for nearly every file
+   {"heading": "GBP" | "",  "currency": "GBP" | "",
+    "rows":   [{"kind": "category" | "uncategorised" | "month", "cells": ["Food and groceries", "70.40", "2"]}],
+    "totals": [{"kind": "total", "cells": ["Total spent", "119.64", "7"]}],
+    "also":   [{"kind": "refunds" | "income" | "transfers", "cells": ["Refunds (already taken off above)", "5.10", "1"]}]}],
+ "caveats": ["3 rows were in more than one file and were counted once.", "..."],
+ "private": true, "read_aloud": false, "remember": false,
+ "words": {"hidden": "Spending table hidden"}
+}
+```
+
+Rules for drawing it:
+
+- `columns[i]` names the i-th string of every `cells` list; **every `cells` list has exactly
+  `len(columns)` strings, in every section and every group** (a test enforces it). Draw a
+  string as it is: figures are already formatted ("1,234.56", a leading minus for a
+  negative, no currency symbol - the section `heading` is the currency). **An app never adds,
+  rounds, sorts, re-formats or hides a figure**, and never computes a percentage or a bar
+  from them (a bar picture is a possible later slice).
+- `align`: `"left"` for the first column, `"right"` for figures.
+- `sections`: draw `heading` (when not empty) as a small title above its rows; two currencies
+  are two sections, never merged. `rows`, then `totals` (bold, a rule above), then `also`
+  (smaller, muted: refunds, income, transfers are shown apart from spending, not netted).
+  `kind: "uncategorised"` is an ordinary row with a neutral style (never red, no warning
+  icon); it is always present, even at 0.00 and 0 rows.
+- Three layouts, by `columns`: (name, Spent, Rows) for `by: category` and `by: month`;
+  (Category, one column per month, Total) for both - up to 13 columns, so the phone scrolls
+  the table sideways and the desktop lets it scroll inside the chat bubble.
+- `title` (strong), then `period` (muted), then the table, then `caveats` as a short muted
+  list under it (each already a full sentence; do not join or reword them), then `sources`
+  as one muted line ("From: a.csv, b.csv"). No streaks, no praise, no warnings, no colour
+  meaning good or bad.
+- `private: true` means: not in any copy-to-clipboard/share path, not in notifications, not
+  in the widget or the tray, not in a screenshot when the app is locked/hidden (see 1.3).
+- Screen reader (both): each row is read as its cells joined by commas with the column
+  labels ("Food and groceries, Spent 70.40, Rows 2"); the totals row first says "Total".
+
+### 3. The words (exact, in `spending-cases.json` -> `words`)
+
+`TITLE` "Spending", `DETAIL`, `PC_ONLY`, `NEEDS_SETUP_ON_PC`, `EMPTY_PROFILES`,
+`STARTER_NOTE`, `HIDDEN_COLUMNS_NOTE`, `TABLE_HIDDEN`, `TABLE_GONE`, `SPOKEN_LINE`,
+`NO_SENTENCE_LINE`, `DROPPED_LINE`, the row labels `ROW_TOTAL`, `ROW_UNCATEGORISED`,
+`ROW_REFUNDS`, `ROW_INCOME`, `ROW_TRANSFERS_OUT`, `ROW_TRANSFERS_IN`, and the caveats
+`CAV_*` (already filled in the table; listed so a test can check the app never re-words
+them). The sign sentences are `sign_sentences` (negative_out, positive_out, debit_credit,
+drcr). Error texts the backend returns as `message` are in `errors`. **The app shows
+`message`/the words as given.** Words only the desktop uses (the column-check box) are in
+section 5 below. Phone words: `TITLE`, `DETAIL`, `PC_ONLY` ("Set up on the PC: Settings,
+Spending. The columns of a new bank file are checked there, once."), `EMPTY_PROFILES`,
+`STARTER_NOTE`, `TABLE_HIDDEN`, `TABLE_GONE`.
+
+### 4. `GET /api/spending` (any device) - who reads what
+
+`{"available", "title", "detail", "can_edit", "pc_only", "profiles": [{"id", "label",
+"columns", "sign", "sign_sentence", "saved"}], "empty_profiles", "categories": [{"category",
+"words": [..]}], "categories_are_starter", "starter_note", "waiting": [{"name", "path"?}],
+"sign_sentences", "needs_setup", "table_hidden"}`.
+
+- `can_edit` is true only for a request from this PC. `waiting[].path` is present only on the
+  PC (a bank file whose columns are not checked yet, kept in memory; it leaves the list once a
+  saved layout fits it).
+- **Phone**: a read-only "Spending" plate in Brain (a plain list, like Folders): `title`,
+  `detail`, the categories with their words, `starter_note` when `categories_are_starter`,
+  the saved layouts (`label`, `columns`, `sign_sentence`), each waiting file's `name` with
+  `needs_setup`, and `pc_only` at the top ("Set up on the PC ..."). **No edit control, no
+  form.** The phone also asks the questions in the ordinary chat and draws the table.
+- **Desktop**: Settings, "Spending" (beside "Folders Jarvis may look in"), see section 5.
+
+### 5. The PC-only box (desktop builds it; the phone never does)
+
+Routes (full request and answer shapes: JARVIS-API section 100.4; every write is **403
+`pc_only`** from any other device; none raises an approval card):
+
+| route | use |
+|---|---|
+| `GET /api/spending/profile?file=<path>` | the proposal for a waiting file (or `known: true` with its saved profile) |
+| `POST /api/spending/profile` | save the confirmed columns (`confirm: true` required) |
+| `POST /api/spending/profile/delete` `{id}` | forget a saved layout |
+| `POST /api/spending/categories` `{categories}` / `{reset: true}` | save or reset the category words |
+| `POST /api/spending/suggest` `{file}` | proposals for shop names no rule catches (nothing saved) |
+
+"Check these columns" (a dialog opened from a `waiting` row, or from a saved layout's row):
+
+1. Call `GET /api/spending/profile?file=<waiting[i].path>` (URL-encoded).
+2. Show `hidden_note` when `hidden_columns > 0`. Show a table of `header` + `preview` (already
+   hidden; private columns removed; `header[i]` is original column `header_index[i]`).
+3. Choices, each a dropdown: **Date column**, **Description column**, then **how the amounts
+   are written** as three radio choices - "One amount column" (`sign` negative_out or
+   positive_out, `columns.amount`), "Separate Debit and Credit columns" (`sign` debit_credit,
+   `columns.debit` and `columns.credit`), "An amount column and a Dr/Cr column" (`sign` drcr,
+   `columns.amount` and `columns.drcr`); the **sign rule** for a single amount column
+   ("Minus means money spent" = negative_out, "Plus means money spent" = positive_out);
+   **Date order** ("Day first, like 25/03/2026" = dmy, "Month first, like 03/25/2026" = mdy;
+   when `guess.date_order` is `ymd` show "The dates say their own order" and no choice);
+   **Decimal mark** ("." or ","); **Currency** (free text, at most 6 characters, optional);
+   **Name** (free text, at most 60). Dropdown values are ORIGINAL column numbers
+   (`header_index`), never positions in `header`.
+4. Every field named in `questions` starts with no choice and **Save is disabled until each
+   has one** (this is the "never guess" rule: `date_order`, `decimal`, `sign`,
+   `date_column`, `description_column`, `amount_column`, `header_row`). When `header_row` is
+   in `questions` there is no usable guess (`guess` is null): show the first rows, let the
+   owner pick the number of the header row and every column themselves, and send that
+   `header_row` with the POST (the backend re-reads the file with it).
+5. Under the sign choice show `sign_sentences[sign]` (it changes as the choice changes).
+6. Save -> `POST /api/spending/profile` with `{file, confirm: true, header_row, columns,
+   sign, date_order, decimal, currency, label}` (`guess` filled in with the owner's choices).
+   200 -> "Saved. {rows_read} rows read, {rows_skipped} left out." then refresh
+   `GET /api/spending`. 400 -> show `message` verbatim.
+7. Words for this box (desktop only): dialog title "Check these columns"; button "Save these
+   columns"; "Cancel"; a saved layout's button "Forget this layout"; "Check the columns again".
+
+Categories editor (same Settings block): one row per category (name, then its words as
+comma-separated text or chips); reorder (first match wins - say so in one line); add and remove
+rows; **Save** posts the whole list; **Reset to the starter list** posts `{reset: true}` after
+an "are you sure?"; the starter list is shown with `starter_note`. Words are matched whole-word
+and case-blind; the editor shows them lower-case as the backend keeps them. "Suggest
+categories" (a button, only when a file is chosen) posts `/suggest`, shows each `{name,
+category}` ticked with a plain "Add these rules" button (unticking drops it); adding merges the
+ticked names into that category's words and posts the whole list. Nothing is added by the
+model on its own. Desktop-only words: "Categories", "Suggest categories", "Add these rules",
+"Reset to the starter list", "Save categories".
+
+### 6. What the backend does and does not do (so neither app duplicates it)
+
+- Refuses a bank file after outside text, on a pasted or shared message, and for a second table
+  in one answer (the model is told; the app sees nothing special).
+- Holds the model's words until code has checked them, so the sentence in the stream is final:
+  the app never edits, hides or re-checks it.
+- Does not stream the table: it is fetched. Does not put a table in `POST /api/chat`'s
+  `X-Jarvis-Route` header (it is sent before the tool runs).
+- Not built: a bar picture; any Spending page; asking about a period longer than 12 months by
+  month; converting currencies; reading a bank site; Beancount/Plaid/Actual Budget.
+
+### 7. Who builds what
+
+| piece | desktop builder | phone builder |
+|---|---|---|
+| Read the `: jarvis-table` line (and `jarvis_table` on a JSON body) in the chat stream reader | yes (the window that reads `: jarvis-status`) | yes (the SSE reader that reads it) |
+| `GET /api/chat/table` and draw the block in the chat thread (Jarvis bar) | yes (`tests/spending.mjs` against `spending-cases.json` `tables`) | yes (Compose; `SpendingTest.kt` / a contract test against the same file) |
+| Hidden states (Hide lists; desktop App lock) and "never stored" | yes | yes (memory only; not in Room/DataStore) |
+| `GET /api/spending`, the read-only plate | Settings, Spending (shows everything, editable) | Brain, Spending (read-only, "Set up on the PC") |
+| Column check, layouts list, categories editor, suggestions | **yes (PC only)** | **no, on purpose** (ARCHITECTURE section 8 already has the row) |
+| Words | copy from `spending-cases.json` (a test compares) | copy from `spending-cases.json` (a test compares) |
+| `tools/check_parity.py` | when the desktop calls `/api/spending/profile`, `/profile/delete`, `/categories`, `/suggest`, change their `planned` rows to `deliberate` (kept off the phone); when both call `/api/spending` and `/api/chat/table`, change those to `ported` | |
+| The widget (`widget.html`) | not drawn there (it never renders chat text; ARCHITECTURE section 8) | the home-screen widget likewise shows nothing of it |
+
+### 8. Not verified
+
+- No real bank file, no real model, no Windows or phone run. The tests script the model and
+  use invented files (`backend/fixtures/spending/`). The header words and layouts are from
+  general knowledge of common exports; the column-check box exists for the ones missed.
+- `openpyxl` reading ran on Linux with 3.1.5 only.
+- Whether the apps' stream readers already tolerate an unknown SSE comment line is assumed
+  from `: jarvis-status` (the SSE rule), not tested here.
+- Speed: hiding account numbers in descriptions is about 1 second per 1,000 distinct
+  descriptions on this container (a 40,000-row file took about 36 seconds the first time; the
+  hidden text is then remembered in memory). A period narrows it first.

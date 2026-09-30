@@ -737,7 +737,7 @@ def propose(rows: list, *, name: str = "") -> dict:
                 "preview": [_preview_row(r, set()) for r in preview_rows],
                 "guess": None, "sentences": {}, "warnings": [ERRORS["no_header"]]}
     header = rows[idx]
-    body = rows[idx + 1: idx + 1 + 400]
+    body = rows[idx + 1:]          # the whole file settles the date order and the decimal mark
     g = M.guess_columns(header, body)
     private = set(g["private"])
     col = lambda k: g[k]
