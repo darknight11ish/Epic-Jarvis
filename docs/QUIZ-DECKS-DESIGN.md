@@ -479,3 +479,228 @@ Today it would be marked as a wrong answer, with no help message, in any languag
   pages in practice (the test reads the bytes).
 - Whether decks should join the locked backup, and how the later export reads.
 - Everything about Android and Windows behaviour: nothing was built or run.
+
+## Slice contract (frozen)
+
+Frozen 2026-09-30 by the backend builder, after the backend was built and its tests
+passed (`backend/test_decks.py`, `backend/test_quiz.py`, JARVIS-API section **102**).
+The desktop and phone builders build from this section; where this section and the
+design above differ, **this section wins**. Anything the backend does that is not
+written here is not part of the contract. Changes to it go through the backend builder.
+
+### C1. Rules every screen keeps
+
+- No approval card anywhere in this slice. The owner's tap is the yes; the Keep
+  screen lists every card word for word first.
+- `X-Jarvis-Client: hud` on every request. Every write (Keep, deck and card writes,
+  settings, reveal, rate, more) is **held on a stale link** (rule 4); reads are not.
+- **Hide memory lists and chat history** hides: deck names, fronts, backs, passages,
+  the review card, the card lists, the Keep sheet's words. **Counts, `line` and the
+  next-ready day stay.** While hidden: review is unavailable ("Turn off Hide memory lists
+  to review"), Keep is unavailable ("Turn off Hide memory lists to keep questions"),
+  Finish and "Stop and forget this quiz" stay (as today). App lock: the study decks
+  section asks for the unlocked app first, exactly like Goals.
+- **Banned in every string of the new decks, review, Keep and Spanish screens** in both
+  apps (case-insensitive, whole words; a test scans those files' strings, not the whole app,
+  whose other screens have their own words such as a lost connection): `streak`, `missed`, `overdue`, `behind`, `in a row`, `keep it up`,
+  `XP`, `hearts`, `lost`, `leaderboard`, `league`. No count of days, no chart, no
+  heat map, no score, no colour that goes red for "late".
+- Numbers and dates are shown as the backend gave them (`line`, `ready`, `comes_back`,
+  `next_ready_day`); an app formats a `YYYY-MM-DD` day for display only.
+- Typed only: no speech-to-text, no microphone in this slice.
+
+### C2. Quiz changes (section 98 -> 102.1, 102.4)
+
+**Start** `POST /api/quiz` body adds (all optional, additive):
+`{"mode": "text"|"spanish", "level": "A1".."C2", "exercise": "translate"|"blank"|"complete"|"mixed", "topic": str<=60}`.
+Text mode is unchanged. Spanish mode: `text` is optional (absent, null or blank = the
+model writes the sentences); if there is text it is the owner's own Spanish, 200-20,000
+characters as before. Defaults: `level` `A2`, `exercise` `mixed`, `count` 5.
+
+**`Quiz`** (every reply that carries a quiz) is now
+`{"id", "title", "grader_verified": bool, "questions": [Question], "answered": int, "mode": "text"|"spanish", "level": "A1".."C2"|null, "key_source": "text"|"model"|null, "notice"?: str}`.
+`notice` exists only when `mode` is `"spanish"`. **A reply with no `mode` means an older
+PC**: show `Your PC's Jarvis does not have Spanish practice yet - run apply-patches.ps1 on the PC.`
+and offer Text mode only.
+
+**`Question`** = `{"n", "kind": "recall"|"explain"|"apply"|"translate"|"blank"|"complete", "prompt", "mark": Mark|null}`.
+For `blank` the prompt is a Spanish sentence with `_____` where the word is hidden; for
+`complete` it is the start of a sentence ending in ` ...`; for `translate` it is an English
+sentence to type in Spanish.
+
+**`Mark`** = `{"level": "got_it"|"partly"|"not_yet", "comment": str, "passage": str, "marked_by": "model"|"code", "expected": str|null, "key_label": str|null}`.
+Show, after the answer: the mark word and `comment`; if `expected` is not null the line
+`Answer: <expected>` and, if `key_label` is not null, the backend's `key_label` under it
+(it reads `Answer key written by the model`); the passage as before, headed `From the text`
+when the quiz's `key_source` is `"text"` (or in Text mode) and `Example sentence` when it is
+`"model"`. **`Jarvis's guess` shows beside a mark only when `marked_by` is `"model"` and
+`grader_verified` is false.** A code-marked mark (`"code"`) never shows it.
+
+**Crisis** is unchanged (98.4) and now also applies to every Spanish answer. In Spanish
+mode the page shows `notice` (the backend's text, never a copy) in small plain type under
+the mode chooser and again above the answer box.
+
+**Answer box, Spanish mode only:** a row of nine buttons under the box inserting the
+character at the cursor: `á` `é` `í` `ó` `ú` `ñ` `ü` `¿` `¡` (in that order; a Shift or
+capital toggle that uppercases them is welcome, not required). The box's limit is still
+2,000 characters; the count line is unchanged.
+
+**Finish with Keep.** `POST /api/quiz/{id}/finish` body (optional; `{}` is unchanged):
+
+```
+{"keep": {"deck": "<deck id>" | null, "new_deck": "<name>"?, "cards": [{"n": 2, "answer": "<back text>"}]}}
+```
+
+Send `deck` for an existing deck, or `deck: null` with `new_deck` (1-60 characters after
+trimming) for a new one. Send **only** `n` and `answer` per card. Reply on success:
+`{"ok": true, "summary": {"counts", "again"}, "kept": N}`; the quiz is gone. Reply on a
+crisis phrase in a back: `200 {"ok": true, "crisis": true, "message", "quiz": Quiz}` (nothing kept,
+quiz open: show the message calmly, as for an answer). Failures keep the quiz open:
+
+| status | `error` | when | what the app does |
+|---|---|---|---|
+| 400 | `nothing_to_keep` | no card ticked | show `message` |
+| 400 | `bad_question` | an unanswered or repeated `n` | show `message` |
+| 400 | `answer_too_long` | a back over 2,000 characters | show `message` |
+| 400 | `answer_empty` | a back that is not text (an app bug) | show `message` |
+| 400 | `bad_deck_name` | new deck name not 1-60 characters | show `message` beside the name box |
+| 404 | `deck_not_found` | the deck was deleted meanwhile | reload the deck list, show `message` |
+| 409 | `duplicate_card` | that question is already in the deck | show `message` (names the question) |
+| 409 | `too_many_decks` | 20 decks already | show `message` |
+| 409 | `deck_full` | 1,000 cards already | show `message` |
+| 503 | `deck_unavailable` | no key / no `cryptography` / key does not open / decks not set up | show `message` word for word |
+
+### C3. The Keep screen (on the quiz page)
+
+Shown by a button `Keep these questions` beside `Finish`, enabled once at least one
+question is answered (and never while private lists are hidden). It lists **every answered
+question**, each row: a tick box, the question (`prompt`), the passage (`mark.passage`,
+headed as in C2), and an editable box for the back (limit 2,000, the count line
+`12 / 2000 characters`) with the placeholder `Type the answer in your own words`.
+- **Ticks:** ticked by default for answered questions marked `partly` or `not_yet`; unticked
+  for `got_it`; the owner may change any.
+- **Prefill of the back:** for a `got_it` question, the owner's own typed answer (the app
+  holds each answer it sent, in memory, until the quiz ends; **never** for an answer the
+  backend answered with `crisis: true`, and never stored anywhere); for `partly`, `not_yet`,
+  or a question whose answer the app no longer has: **empty**. The model's `comment` is
+  never used as a back. An empty back is allowed (the card then shows the passage alone).
+- **Deck chooser:** the existing decks from `GET /api/decks` (`name`), or `New deck` with a
+  name box (default: the quiz `title`, trimmed to 60). If `GET /api/decks` says
+  `available: false`, show its `why` and disable Keep.
+- Buttons `Keep and finish` (sends `finish` with `keep`) and `Cancel` (back to the quiz).
+  Nothing is sent until the first.
+- On success show the summary as today plus the line `Kept 3 questions` / `Kept 1 question`
+  (from `kept`), then `Close`. On a failure keep the sheet open with the ticks and
+  backs intact and show the backend's `message` (and reload the decks on `deck_not_found`).
+
+### C4. Decks and review routes (section 102.2), exact shapes
+
+```
+GET /api/decks ->
+{"ok": true, "available": true, "why": "",
+ "decks": [{"id": "d1a2b3c4d5e6", "name": "Plants", "cards": 8, "ready": 3, "paused": false, "kind": "study"}],
+ "ready": 3, "new_per_day": 5, "new_left": 2, "next_ready_day": "2026-10-03"|null,
+ "line": "3 cards ready", "limits": {"decks": 20, "cards": 1000, "name": 60, "front": 500, "back": 2000, "new_per_day": 20}}
+```
+`kind` is `study`, `spanish`, `mixed` (both) or `empty`. When `available` is false: `decks` is `[]`,
+`why` is plain words (show it word for word), the counts and `line` still work. `line` is
+`""` when there are no decks at all (then show the empty state, C6).
+
+```
+POST /api/decks {"name"} -> {"ok": true, "deck": Deck}
+POST /api/decks/settings {"new_per_day": 0..20} -> {"ok": true, "new_per_day": n}
+POST /api/decks/{id}/act {"do": "rename", "name": "..."} -> {"ok": true, "deck": Deck}
+                         {"do": "pause"|"resume"}        -> {"ok": true, "deck": Deck}
+                         {"do": "delete"}                -> {"ok": true, "deleted": true}
+GET  /api/decks/{id}/cards -> {"ok": true, "deck": {"id", "name"}, "cards": [CardFull]}
+POST /api/decks/{id}/cards/{cid}/act {"do": "edit", "front"?: str, "back"?: str} -> {"ok": true, "card": CardFull}
+                                     {"do": "delete"} -> {"ok": true, "deleted": true}
+CardFull = {"id", "front", "back", "passage", "kind", "level": str|null, "key_source": "text"|"model"|null,
+            "key_label": str|null, "new": bool, "due_day": "YYYY-MM-DD"|null}
+```
+Edit limits: front 1-500 characters, back 0-2,000, at least one field. Errors (all
+`{"ok": false, "error", "message"}`): `bad_deck_name` 400, `too_many_decks` 409,
+`deck_not_found` 404, `card_not_found` 404, `bad_action` 400, `bad_card` 400,
+`bad_setting` 400, `deck_unavailable` 503.
+
+```
+GET /api/review[?deck=<id>] ->
+{"ok": true, "ready": 3, "new_left": 2, "state": "card", "line": "3 cards ready",
+ "card": {"id": "c...", "front": "What absorbs sunlight?", "kind": "recall", "level": null, "deck": "d...", "new": true},
+ "run": {"done": 0, "limit": 20}}
+POST /api/review/reveal {"card": id} -> {"ok": true, "back": {"answer": "...", "passage": "..."}, "key_label": str|null}
+POST /api/review/rate {"card": id, "rating": "again"|"hard"|"good"|"easy"} ->
+{"ok": true, "ready": 2, "new_left": 1, "next": CardView|null, "state": "card", "line": "2 cards ready",
+ "run": {"done": 1, "limit": 20}, "comes_back": "2026-10-03"}
+POST /api/review/more {"deck"?: id} -> the same object as GET /api/review
+```
+`state` values and what to show: `card` (the `card`/`next` card), `empty` (`Nothing ready today`,
+plus `Next cards ready on <day>` when `next_ready_day` is not null - read it from
+`GET /api/decks`), `enough` (`That's enough for now`, `Do 10 more`, `Stop`), `paused`
+(show `line`: `All decks paused` or `This deck is paused`), `no_decks` (leave the review;
+go back to the decks page). Errors: `not_revealed` 409 (rating before reveal; an app bug
+- but show `message`), `card_not_found` 404 (the card is gone or no longer up: fetch
+`GET /api/review` again), `deck_paused` 409, `bad_rating` 400, `deck_not_found` 404,
+`deck_unavailable` 503. **Reveal is required before rate**: send `reveal` when the owner
+taps `Show answer`, and only then show the four buttons.
+
+### C5. Shared words (word for word in both apps)
+
+- Section title next to the Quiz in Brain: `My study decks`. Quiz mode chooser:
+  `Text` / `Spanish practice`. Level label: `Level B1 (roughly)` (any of A1-C2); picker
+  choices show just `A1`..`C2` under the heading `Level (roughly)`. Exercise choices:
+  `Translate` / `Fill the blank` / `Finish the sentence` / `Mixed`. Topic: label `Topic (optional)`,
+  counter `0 / 60`. Spanish text box placeholder: `Paste Spanish text (optional)`. Spanish
+  start button: `Write questions` (as in Text mode). Kind labels for the new kinds: `Translate` /
+  `Fill the blank` / `Finish the sentence`. Result lines: `Answer: <expected>` and the backend's
+  `key_label`; passage headings `From the text` / `Example sentence`.
+- Keep: `Keep these questions`, `Keep and finish`, `Cancel`, `Type the answer in your own words`,
+  `Kept 3 questions` / `Kept 1 question`, `New deck`, `Deck name`, `Choose a deck`. Hidden:
+  `Turn off Hide memory lists to keep questions`.
+- Decks page: `Cards ready` (the heading over `line`), `Nothing ready today` (the empty line),
+  `New cards a day` (with a 0-20 number field or stepper), `Review` (button), `Pause` / `Resume`,
+  `Delete this deck`, `Delete this card`, `Edit`, `Save`, `Cards` (the per-deck list link),
+  `<N> cards` / `1 card` in a deck row, `<N> ready` in a deck row. Confirm text for either delete:
+  `Are you sure? Deleting is immediate. Copies in older backups stay until they age out.`
+  with `Delete` and `Cancel`. Empty state (no decks): `Keep questions from a quiz to make your first deck.`
+  Hidden: `Turn off Hide memory lists to review`.
+- Review: `Show answer`; optional box placeholder `Type your answer (only for you - it is not sent or marked)`
+  (the text is never sent anywhere and is dropped on Show answer); rating buttons, in this order and
+  with these ids: `Didn't remember` (`again`), `Remembered, with effort` (`hard`), `Remembered`
+  (`good`), `Easy` (`easy`); `That's enough for now`, `Do 10 more`, `Stop`; back headings `Answer` and
+  `From the text` / `Example sentence`; the label `Answer key written by the model` comes from `key_label`.
+- The Spanish crisis line and the model-written-key label always come from the backend
+  (`notice`, `key_label`), never from a copy in an app.
+
+### C6. Who builds what
+
+**Backend (done):** everything in sections C2-C4.
+
+**Desktop builder** (`jarvis-desktop/`): `src/decks.js` (the "My study decks" section next to the Quiz
+in Brain; review session; Keep sheet lives with the quiz code), `src-tauri/src/brain/decks.rs`
+(commands for every route in C4, each holding writes on a stale link and blanking words when the
+private lists are hidden, like `brain/goals.rs` and `brain/quiz.rs`), the quiz changes in `src/quiz.js`
+and `src-tauri/src/brain/quiz.rs` (mode chooser, level/exercise/topic, accent row, `expected` and
+`key_label` lines, the guess-label rule, the Keep flow, `notice`), `tests/decks.mjs`, and a banned-word
+scan over the new strings. The section shows: the `line`; `New cards a day`; the deck rows
+(name, `N cards`, `N ready`, `Review`, `Pause`/`Resume`, `Cards`, `Delete this deck`); a `New deck`
+button; the backup sentence. No new top-level window.
+
+**Phone builder** (`jarvis-client/`): `net/Decks.kt` (models, parsing, the same words, the banned-word
+check), `ui/screens/DecksPlate.kt` (the section in Brain beside the Quiz, the review session, the Keep
+sheet lives with `QuizPlate.kt`), the quiz changes in `net/Quiz.kt` and `ui/screens/QuizPlate.kt`,
+`JarvisRuntime` calls, `DecksTest.kt`. Behaviours as the desktop's; the phone's screenshots are
+already blocked under App lock and Hide lists.
+
+Both builders: add the words in C5 to a shared fixture their tests compare with (the way the quiz's
+shared words are), and `tools/check_parity.py` rows for the nine routes are already in place (they
+are 'ported' and turn green once both apps call each route; **it is red until then**, on purpose).
+
+### C7. Not in this slice
+
+A Markdown or Anki export (would be a named unencrypted exception, desktop only, later); putting decks
+into the locked backup (the owner's call when the backup is next touched); a Spanish crisis-phrase list
+(needs the owner's go-ahead, separately tested); `quiz_spanish_cases.json` and a Spanish
+`grader_verified` (nothing has measured the model's Spanish); cloud "grade this better"; spoken Spanish;
+YouTube captions; notifications for cards (the owner's question 3, default "never"); a model suggesting a
+rating.

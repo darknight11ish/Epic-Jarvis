@@ -403,6 +403,31 @@ CRISIS_CONTINUE_WHY = ("This chat is kept as your own record. It is not carried 
                        "new chat any time, and nothing from that moment is read again.")
 
 
+# ------------------------------------------------------------ Fork from here
+#
+# "Fork from here" (owner, 2026-09-30; docs/CHAT-TAGS-DESIGN.md section 8 and
+# its frozen "Fork contract"; docs/JARVIS-API.md section 110): copies the first
+# turns of a kept chat, up to and including the message the owner chose, into a
+# NEW conversation titled "Fork of <title>". No tree, no table, no card (the
+# owner's own kept words never leave the PC).
+#: What the fork's title starts with (shared word, both apps).
+FORK_PREFIX = "Fork of "
+#: Said in place of the button under a chat of a kind that is not the owner's
+#: own conversation with Jarvis (a support record, a chat with another AI, a
+#: comparison), and in the not_forkable answer.
+FORK_WHY_KIND = ("A customer-support record, a chat with another AI and a comparison can't "
+                 "be forked: they hold another side's words, kept as your record.")
+#: Said for a chat titled "A difficult moment". It is never carried on or
+#: copied: nothing from that moment is read again.
+FORK_WHY_CRISIS = ("This chat is kept as your own record. It can't be forked - start a new "
+                   "chat any time, and nothing from that moment is read again.")
+FORK_MESSAGES = {
+    "bad_request": "Choose a message in this chat to fork from.",
+    "bad_upto": "That message is not in this chat, so it was not forked.",
+    "not_found": "That chat is not kept any more, so it was not forked.",
+}
+
+
 # ------------------------------------------------------------ chat tags
 #
 # "Chat tags and sections in History" (owner, 2026-09-30; docs/CHAT-TAGS-DESIGN.md,
@@ -466,6 +491,12 @@ TAG_MESSAGES = {
 
 def _tag_fail(code: str, message: str = "") -> dict:
     return _tag_err(code, message or TAG_MESSAGES.get(code, ""))
+
+
+def _fork_fail(code: str, message: str = "") -> dict:
+    """{"ok": false, "error", "message"} for POST /api/history/fork."""
+    return {"ok": False, "error": code,
+            "message": message or FORK_MESSAGES.get(code) or FORK_WHY_KIND}
 
 
 def _has_visible_char(n: str) -> bool:
@@ -1664,7 +1695,7 @@ class ChatLog:
                 text = self._open(aead, blob, self._aad(cid, idx)).decode("utf-8")
             except Exception:
                 text = "(this line could not be opened)"
-            t = {"role": role, "text": text, "at": int(at or 0)}
+            t = {"idx": int(idx), "role": role, "text": text, "at": int(at or 0)}
             if role == "support":
                 # A customer-support chat (record_support): who wrote it.
                 t.update(provenance=prov or "support_note", read_outside=True)
@@ -1686,7 +1717,12 @@ class ChatLog:
                 "started": int(conv["started"] or 0), "updated": int(conv["updated"] or 0),
                 "continuable": kind in CONTINUABLE and not crisis,
                 "continue_why": (CRISIS_CONTINUE_WHY if crisis
-                                 else "" if kind in CONTINUABLE else CONTINUE_WHY[kind])}
+                                 else "" if kind in CONTINUABLE else CONTINUE_WHY[kind]),
+                # "Fork from here" (section 110): the same chats Continue
+                # works on, and `fork_why` in words when it does not.
+                "forkable": kind in CONTINUABLE and not crisis,
+                "fork_why": (FORK_WHY_CRISIS if crisis
+                             else "" if kind in CONTINUABLE else FORK_WHY_KIND)}
 
     def search(self, query, limit=SEARCH_DEFAULT, kind=None) -> dict:
         """Search what was said in the kept conversations (GET
@@ -2019,6 +2055,114 @@ class ChatLog:
             with c:
                 c.execute("UPDATE conversations SET tag_id=? WHERE id=?", (tag_id, cid))
         return 200, {"ok": True, "id": cid, "tag_id": tag_id}
+
+    def fork(self, cid, upto) -> tuple:
+        """POST /api/history/fork: (http code, answer). Copies turns 0..`upto`
+        (an `idx` from GET /api/history/conversation, inclusive) of the kept
+        chat `cid` into a NEW conversation, "Fork of <title>".
+
+        * A fork point is a message: `upto` may be any kept turn (the apps
+          offer it on the owner's messages and on Jarvis's answers). Stopping
+          at a user message copies that message without its answer; its
+          `answer_kept` mark is then cleared, because no answer is kept here.
+        * Each turn is opened with its old seal and sealed again under the new
+          id and its new place (AAD = id|idx); the title is sealed too. The
+          copy keeps each turn's own time, provenance, device, lane, voice
+          check, read_outside and answer_kept marks, and the chat keeps its
+          device, started/updated times, project and tag. The fork is kind
+          "chat" even when copied from a Live session (it is not a Live
+          session, and a Live label would tell the History length line a lie).
+        * Only chats the apps may Continue (CONTINUABLE) and that are not
+          titled "A difficult moment"; anything else is `not_forkable`.
+        * The source's Forget/Erase hush is NOT copied. The fork gets its own,
+          set at the fork point: every user message copied was already read
+          by the learner in the source chat, so when "Continue this chat"
+          puts them back in the registry (_rehydrate) automatic learning
+          drops what they alone would teach again instead of proposing every
+          fact a second time. Messages said after the fork are learned as
+          usual. A message the source's learner never got to (learning off,
+          a fact waiting as a card there) is not learned in the fork either;
+          the source's card is still the place to decide it.
+        * No card, and it works while recording is switched off: filing away
+          words that are already kept records nothing new. Only the key
+          matters - without it nothing is read or written (fail closed).
+        Never touches the source chat."""
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)):
+            return 400, _fork_fail("bad_request")
+        if not _is_int(upto) or upto < 0:
+            return 400, _fork_fail("bad_request")
+        aead, why = self._tag_cipher()
+        if aead is None:
+            return 503, _fork_fail("bad_request", _off_message(why, "The chat was not forked."))
+        if not self.db_path.exists():
+            return 404, _fork_fail("not_found")
+        with self._lock, closing(self._connect()) as c:
+            got = c.execute(f"SELECT {_conv_cols(raw=True)} FROM conversations WHERE id=?",
+                            (cid,)).fetchone()
+            if got is None:
+                return 404, _fork_fail("not_found")
+            src = _conv_named(got)
+            kind = src["kind"] if src["kind"] in KINDS else "chat"
+            title = self._title(aead, cid, src["title"])
+            if kind not in CONTINUABLE:
+                return 409, _fork_fail("not_forkable", FORK_WHY_KIND)
+            if title == CRISIS_TITLE:
+                return 409, _fork_fail("not_forkable", FORK_WHY_CRISIS)
+            rows = c.execute(f"SELECT {self._TURN_COLS} FROM turns WHERE conversation_id=?"
+                             " AND idx <= ? ORDER BY idx", (cid, int(upto))).fetchall()
+            if not rows or int(rows[-1][1]) != int(upto):
+                return 400, _fork_fail("bad_request", FORK_MESSAGES["bad_upto"])
+            cols = [x.strip() for x in self._TURN_COLS.split(",")]
+            ix = {name: i for i, name in enumerate(cols)}
+            # Open every copied line first: one that cannot be opened stops
+            # the fork before anything is written.
+            plain = []
+            try:
+                for r in rows:
+                    plain.append(self._open(aead, r[ix["text"]],
+                                            self._aad(cid, r[ix["idx"]])))
+            except Exception:
+                return 503, _fork_fail("bad_request", "Some of this chat could not be opened, "
+                                       "so it was not forked.")
+            for _ in range(8):
+                new = "fork-" + secrets.token_urlsafe(12)
+                if c.execute("SELECT 1 FROM conversations WHERE id=?", (new,)).fetchone() is None:
+                    break
+            else:
+                return 503, _fork_fail("bad_request", "A new chat could not be made, so it "
+                                       "was not forked.")
+            room = TITLE_CHARS - len(FORK_PREFIX)
+            base = title if len(title) <= room else title[:max(0, room - 1)].rstrip() + "\u2026"
+            new_title = FORK_PREFIX + base
+            # The user messages at the tail whose answer is not copied.
+            last_assistant = max((i for i, r in enumerate(rows)
+                                  if r[ix["role"]] == "assistant"), default=-1)
+            with c:
+                c.execute(f"INSERT INTO conversations ({', '.join(CONV_COLS)}) VALUES "
+                          f"({','.join('?' * len(CONV_COLS))})",
+                          tuple(new if col == "id"
+                                else self._seal(aead, new_title.encode("utf-8"),
+                                                self._aad(new, "title")) if col == "title"
+                                else "chat" if col == "kind" else src[col]
+                                for col in CONV_COLS))
+                marks = ",".join("?" * len(cols))
+                last_user = -1
+                for n, (r, text) in enumerate(zip(rows, plain)):
+                    row = list(r)
+                    row[ix["conversation_id"]] = new
+                    row[ix["idx"]] = n
+                    if row[ix["role"]] == "user" and n > last_assistant:
+                        row[ix["answer_kept"]] = 0
+                    row[ix["text"]] = self._seal(aead, text, self._aad(new, n))
+                    c.execute(f"INSERT INTO turns ({self._TURN_COLS}) VALUES ({marks})", row)
+                    if row[ix["role"]] == "user":
+                        last_user = n
+                if last_user >= 0:
+                    c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
+                              (self._hush_key(new),
+                               json.dumps({"upto": last_user, "erased": False}).encode("utf-8")))
+        return 200, {"ok": True, "id": new, "title": new_title, "turns": len(rows),
+                     "tag_id": _tag_id(src["tag_id"])}
 
     def _drop_unknown_tag(self, c, cid: str) -> None:
         """After a chat was put back: a tag deleted while it was held is
@@ -2378,6 +2522,11 @@ def tag_chat(cid, tag_id) -> tuple:
     return _log().set_tag(cid, tag_id)
 
 
+def fork_chat(cid, upto) -> tuple:
+    """POST /api/history/fork: (http code, answer). See ChatLog.fork."""
+    return _log().fork(cid, upto)
+
+
 def search(query, limit=SEARCH_DEFAULT, kind=None) -> dict:
     """GET /api/history/search's answer (ChatLog.search). For the apps'
     History screens only: nothing a model or a chat turn can call reaches
@@ -2659,7 +2808,7 @@ def handle_get(path: str, query: str = "") -> tuple:
 
 
 def handle_post(route: str, body) -> tuple:
-    """POST /api/history/delete, /settings, /tags and /tag. (code, body)."""
+    """POST /api/history/delete, /settings, /tags, /tag and /fork. (code, body)."""
     if route == "/api/history/delete":
         if not isinstance(body, dict) or set(body) != {"id"} or not isinstance(body["id"], str):
             return 400, {"error": 'need {"id": "<conversation id>"} - one conversation '
@@ -2677,4 +2826,13 @@ def handle_post(route: str, body) -> tuple:
         if not isinstance(body, dict) or set(body) != {"id", "tag_id"}:
             return 400, _tag_fail("bad_request")
         return _log().set_tag(body["id"], body["tag_id"])
+    if route == "/api/history/fork":
+        # Fork from here (section 110): the owner's own kept words, copied
+        # on this PC; no card. The audit line holds counts, never words.
+        if not isinstance(body, dict) or set(body) != {"id", "upto"}:
+            return 400, _fork_fail("bad_request")
+        code, out = _log().fork(body["id"], body["upto"])
+        if code == 200:
+            _audit("history.fork", {"turns": out["turns"]})
+        return code, out
     return 404, {"error": "no such route"}

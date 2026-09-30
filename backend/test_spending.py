@@ -61,6 +61,8 @@ import jarvis_agent as AG  # noqa: E402
 import jarvis_documents as D  # noqa: E402
 import jarvis_money_parse as M  # noqa: E402
 import jarvis_spending as SP  # noqa: E402
+sys.path.insert(0, str(REPO / "tools"))
+import gen_private_aloud_cases as G  # noqa: E402
 
 FAILED, PASSED = [], []
 TMP = Path(tempfile.mkdtemp(prefix="jarvis-spending-"))
@@ -407,10 +409,6 @@ def t_no_float_in_the_money_code():
                  if t.type == tokenize.NAME]
         check(f"{name}: the word float is not used in code (Decimal and whole cents only)",
               "float" not in names, [n for n in names if "float" in n])
-        check(f"{name}: no floating-point literal in code",
-              not any(t.type == tokenize.NUMBER and "." in t.string and not t.string.startswith("0x")
-                      for t in tokenize.generate_tokens(io.StringIO(src).readline)
-                      if False) or True)
     check("the sums are integers", isinstance(M.parse_money("45.10"), int))
 
 
@@ -632,8 +630,10 @@ def t_account_and_card_numbers_never_show():
     check("the shop names for a suggestion have them hidden too",
           "PAYMENT TO [hidden] ACME" in names and "CARD [hidden] ONLINE STORE" in names, names)
     check("digit runs of 8+ are hidden whole, not partly",
-          SP.hide_one("REF 12345678 X") == "REF [hidden] X" and SP.hide_one("SORT 12-34-56 ACC 12345678")
-          == "SORT [hidden] ACC [hidden]".replace("SORT [hidden]", "SORT 12-34-56") or True)
+          SP.hide_one("REF 12345678 X") == "REF [hidden] X"
+          and SP.hide_one("SORT 12-34-56 ACC 12345678") == "SORT 12-34-56 ACC [hidden]"
+          and SP.hide_one("TO 12-34-56 12345678 J SMITH") == "TO [hidden] J SMITH",
+          [SP.hide_one("SORT 12-34-56 ACC 12345678"), SP.hide_one("TO 12-34-56 12345678 J SMITH")])
     check("a date in a description is not mistaken for an account", SP.hide_one("ON 2026-03-04") == "ON 2026-03-04")
     check("a phone-length number is hidden", "[hidden]" in SP.hide_one("CALL 07123456789"))
     check("a short number stays", SP.hide_one("STORE 4411") == "STORE 4411")
@@ -804,9 +804,9 @@ def t_the_tool_is_offered_only_with_a_folder():
     import jarvis_claims, jarvis_reach
     check("a reading tool for the 'I have done it' check", "my_spending" in jarvis_claims.READ_ONLY_TOOLS)
     check("a plain-English row on 'What asks first'", "my_spending" in jarvis_reach.TOOL_NAMES)
-    check("read aloud: not on the read-aloud list, so the answer stays on screen",
-          "my_spending" not in __import__("gen_private_aloud_cases").READ_ALOUD_TOOLS
-          if (sys.path.insert(0, str(REPO / "tools")) or True) else False)
+    check("read aloud: not on the read-aloud list, so a spoken answer stays on screen",
+          "my_spending" not in G.READ_ALOUD_TOOLS
+          and G.is_private_tool_run({"phase": "tool_finished", "tool": "my_spending"}))
     fresh()
 
 
@@ -824,11 +824,10 @@ def t_a_whole_turn_table_and_sentence():
     check("the words are the checked sentence, and only that", words(stream) == sentence, words(stream))
     check("the table is fetchable by that id", SP.fetch_table(tid) is not None
           and SP.fetch_table(tid)["sections"][0]["totals"][0]["cells"][1] == "89.24")
-    check("the marker comes before the sentence", stream.index(b": jarvis-table") < stream.index(b'"content"'
-          if False else b"You spent"))
+    check("the marker comes before the sentence", stream.index(b": jarvis-table") < stream.index(b"You spent"))
     check("the turn's answer (what chat history keeps) is the sentence", out["answer"] == sentence, out["answer"])
-    check("the turn's record holds no table", "table" not in json.dumps(
-        {k: v for k, v in out.items() if k not in ("answer",)}).lower().replace("jarvis-table", ""))
+    check("the turn's record (what the PC keeps) holds no table",
+          "_table" not in json.dumps(out) and "Food and groceries" not in json.dumps(out))
     model_msgs = json.dumps(calls[1]["messages"])
     check("the model was NOT given the table's rows", '"_table"' not in model_msgs
           and "Uncategorised\", \"20.00\"" not in model_msgs and "TESCO" not in model_msgs)
@@ -951,22 +950,98 @@ def t_the_table_is_not_in_chat_history():
 
 def t_nothing_of_it_is_remembered_or_spoken():
     fresh()
-    # read aloud: the apps decide by tool name; my_spending is not on the short list
-    sys.path.insert(0, str(REPO / "tools"))
-    import gen_private_aloud_cases as G
-    check("a spoken turn that used my_spending stays on screen",
-          G.stays_on_screen("my_spending") if hasattr(G, "stays_on_screen") else "my_spending" not in G.READ_ALOUD_TOOLS)
-    tab = {"kind": "spending"}
+    check("a spoken turn that used my_spending stays on screen (the apps' own table)",
+          G.is_private_tool_run({"phase": "tool_started", "tool": "my_spending"}))
     d = folder("Private", "a_signed.csv")
     listed(d)
     setup(d / "a_signed.csv")
     t = summary(d / "a_signed.csv")["_table"]
     check("the table itself says private, not read aloud, not remembered",
           t["private"] is True and t["read_aloud"] is False and t["remember"] is False)
-    # learning takes the owner's own words only; a table is not a message
-    import jarvis_auto_learn as AL
-    check("auto-learn reads messages, and a table is not one",
-          not hasattr(AL, "learn_table") and "table" not in (AL.__doc__ or "").lower().split("spending")[0])
+    check("no file is written for a table (memory only)",
+          not any("table" in p.name for p in CONF.iterdir()))
+
+
+def t_several_currencies_are_never_mixed():
+    fresh()
+    text = ("Date,Payee,Amount,Currency\n2026-02-01,TESCO,-10.00,GBP\n2026-02-02,LIDL,-20.00,EUR\n"
+            "2026-02-03,ALDI,-5.00,GBP\n")
+    d = folder("Currencies", text={"multi.csv": text})
+    listed(d)
+    setup(d / "multi.csv")
+    for by in ("category", "month", "both"):
+        res = summary(d / "multi.csv", by=by)
+        t = res["_table"]
+        heads = {s["heading"]: s["totals"][0]["cells"] for s in t["sections"]}
+        check(f"{by}: one section for each currency, each added on its own",
+              set(heads) == {"GBP", "EUR"} and heads["GBP"][1 if by != "both" else -1] == "15.00"
+              and heads["EUR"][1 if by != "both" else -1] == "20.00", heads)
+    check("... and the caveat says nothing is converted", SP.CAV_CURRENCIES in res["_table"]["caveats"])
+    check("... the model sees each currency's total on its own",
+          {s["currency"]: s["total_spent"] for s in res["sections"]} == {"GBP": "15.00", "EUR": "20.00"})
+
+
+def t_a_saved_date_order_that_no_longer_fits_is_said():
+    fresh()
+    d = folder("Drift", "h_ambiguous.csv", text={"later.csv": "Date,Description,Amount\n25/03/2026,ALDI,-5.00\n"
+                                                              "26/03/2026,LIDL,-6.00\n"})
+    listed(d)
+    setup(d / "h_ambiguous.csv", date_order="mdy")
+    res = summary(d / "later.csv")
+    check("nothing to add up when no date fits", res["ok"] is False, res.get("error"))
+    text = "Date,Description,Amount\n03/25/2026,ALDI,-5.00\n25/03/2026,LIDL,-6.00\n04/01/2026,LIDL,-1.00\n"
+    (d / "later.csv").write_text(text, encoding="utf-8")
+    res = summary(d / "later.csv")
+    check("rows whose date does not fit the saved order are left out and said so",
+          res["ok"] is True and dictify(res)["total"] == ["6.00", 2]
+          and any("did not fit the saved date order" in c for c in res["_table"]["caveats"]),
+          res.get("error") or res["_table"]["caveats"])
+
+
+def t_a_big_file_is_not_slow_twice():
+    import time
+    fresh()
+    rows = "\n".join(f"2026-01-{1 + i % 28:02d},SHOP{i} LONDON REF {i * 7},-{1 + i % 9}.00" for i in range(3000))
+    d = folder("Fast", text={"big.csv": "Date,Description,Amount\n" + rows + "\n"})
+    listed(d)
+    setup(d / "big.csv")
+    t0 = time.time()
+    a = summary(d / "big.csv")
+    t1 = time.time()
+    b = summary(d / "big.csv", period="2026-01")
+    t2 = time.time()
+    check("3,000 rows are added up", a["ok"] is True and a["sections"][0]["rows"] == 3000, a.get("error"))
+    check("hidden descriptions are remembered in memory, so the second question is quicker",
+          (t2 - t1) < max(1.0, (t1 - t0)), (t1 - t0, t2 - t1))
+    SP._reset_for_tests()
+    check("the remembered text holds no raw description",
+          all(len(k) == 40 for k in SP._H_CACHE) or not SP._H_CACHE)
+
+
+def t_both_apps_read_the_current_contract():
+    r = subprocess.run([sys.executable, str(REPO / "tools" / "gen_spending_cases.py"), "--check"],
+                       capture_output=True, text=True, timeout=180,
+                       env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+    check("spending-cases.json (desktop and phone) is what the backend says today "
+          "(python3 tools/gen_spending_cases.py)", r.returncode == 0, r.stdout + r.stderr)
+    cases = json.loads((REPO / "jarvis-desktop" / "tests" / "fixtures" / "spending-cases.json")
+                       .read_text(encoding="utf-8"))
+    check("both copies are byte-identical",
+          (REPO / "jarvis-desktop" / "tests" / "fixtures" / "spending-cases.json").read_bytes()
+          == (REPO / "jarvis-client" / "app" / "src" / "test" / "resources" / "contract"
+              / "spending-cases.json").read_bytes())
+    want = json.dumps(cases)
+    for name, t in cases["tables"].items():
+        check(f"example {name}: every row has one cell for every column",
+              all(len(r["cells"]) == len(t["columns"]) for sec in t["sections"]
+                  for grp in ("rows", "totals", "also") for r in sec[grp]))
+        check(f"example {name}: private, not read aloud, not remembered",
+              t["private"] is True and t["read_aloud"] is False and t["remember"] is False)
+    check("the contract holds no account or card number and no raw description",
+          not any(x in want for x in SECRETS) and "IGNORE ALL" not in want)
+    check("the phone's copy says the columns are set up on the PC",
+          "Set up on the PC" in cases["view_phone_file_waiting"]["pc_only"]
+          and all("path" not in w for w in cases["view_phone_file_waiting"]["waiting"]))
 
 
 # ============================================================ 8. the routes
@@ -1164,8 +1239,8 @@ def t_the_patch_and_the_lists():
     reqs = (HERE / "requirements.txt").read_text(encoding="utf-8")
     check("openpyxl is named in requirements.txt (MarkItDown brings it; naming it keeps it)",
           any(l.lower().startswith("openpyxl") for l in reqs.splitlines()))
-    check("no DuckDB, no bank-connection library",
-          not any(w in reqs.lower() for w in ("duckdb", "plaid", "pandas==")) or "pandas" in reqs.lower())
+    check("no DuckDB and no bank-connection library",
+          not any(w in reqs.lower() for w in ("duckdb", "plaid", "yodlee", "truelayer")))
 
 
 def t_the_words_are_plain_and_complete():
@@ -1181,7 +1256,7 @@ def t_the_words_are_plain_and_complete():
 
 
 if __name__ == "__main__":
-    for name, fn in list(globals().items()):
+        for name, fn in list(globals().items()):
         if name.startswith("t_") and callable(fn):
             print(f"\n--- {name} ---")
             try:

@@ -293,12 +293,38 @@ def _neutral(s: str) -> str:
     return s
 
 
+# Descriptions already hidden, so a second question about the same file does not
+# search every line again. Keyed by a hash (the raw text is not kept), values are
+# the HIDDEN text, memory only, bounded.
+_H_LOCK = threading.Lock()
+_H_CACHE: "OrderedDict[str, str]" = OrderedDict()
+_H_MAX = 60_000
+
+
+def _hkey(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8", "replace")).hexdigest()
+
+
+def _cache_get(text: str) -> Optional[str]:
+    if not text:
+        return ""
+    with _H_LOCK:
+        return _H_CACHE.get(_hkey(text))
+
+
+def _cache_put(text: str, hidden: str) -> None:
+    with _H_LOCK:
+        _H_CACHE[_hkey(text)] = hidden
+        while len(_H_CACHE) > _H_MAX:
+            _H_CACHE.popitem(last=False)
+
+
 def hide_many(texts) -> list:
     """Each text cleaned and hidden, in order. Raises SpendingError('unchecked')
     when jarvis_secrets cannot check (missing, too much text, out of time):
     nothing is shown then."""
     tidy = [_tidy(t) for t in texts]
-    uniq = list(dict.fromkeys(tidy))
+    uniq = [u for u in dict.fromkeys(tidy) if _cache_get(u) is None]
     done: dict = {}
     try:
         import jarvis_secrets as S
@@ -347,7 +373,14 @@ def hide_many(texts) -> list:
         chunk.append(u)
         size += len(u) + 1
     flush()
-    return [_neutral(_digits_hidden(done.get(t, ""))) for t in tidy]
+    out = []
+    for t in tidy:
+        got = _cache_get(t)
+        if got is None:
+            got = _neutral(_digits_hidden(done.get(t, "")))
+            _cache_put(t, got)
+        out.append(got)
+    return out
 
 
 def hide_one(text) -> str:
@@ -833,7 +866,8 @@ def _cell(row: list, i: Optional[int]) -> str:
     return str(row[i]).strip()
 
 
-def normalise(rows: list, header_idx: int, profile: dict, *, hide=hide_many) -> Normalised:
+def normalise(rows: list, header_idx: int, profile: dict, *, hide=hide_many,
+              keep: Optional[Callable] = None) -> Normalised:
     cols = profile["columns"]
     dec, order, sign = profile["decimal"], profile["date_order"], profile["sign"]
     raw: list = []
@@ -848,6 +882,8 @@ def normalise(rows: list, header_idx: int, profile: dict, *, hide=hide_many) -> 
                                                       _cell(row, cols["date"])):
                 bad_dates += 1
             continue
+        if keep is not None and not keep(d):
+            continue                # outside the period asked about: not read further
         cents = _amount(row, cols, dec, sign)
         if cents is None:
             skipped += 1
@@ -1479,6 +1515,7 @@ def _run_tool(args, roots, convert, today, rules) -> dict:
         raise SpendingError("category", ERRORS["category"].format(
             names=", ".join(r["category"] for r in rules)))
     d_from, d_to, label = resolve_period(args.get("period"), today)
+    in_period = (lambda d: (d_from is None or d >= d_from) and (d_to is None or d <= d_to))
     files, names = [], []
     skipped = bad_dates = 0
     hidden_any = False
@@ -1494,16 +1531,13 @@ def _run_tool(args, roots, convert, today, rules) -> dict:
         if prof is None:
             _note_waiting(real)
             raise SpendingError("needs_setup", NEEDS_SETUP_ON_PC)
-        norm = normalise(got["rows"], idx, prof)
+        norm = normalise(got["rows"], idx, prof, keep=in_period)
         skipped += norm.skipped
         bad_dates += norm.bad_dates
         hidden_any = hidden_any or norm.hidden_any
         files.append(norm.txns)
         names.append(got["name"])
     txns, once = combine(files)
-    if d_from or d_to:
-        txns = [t for t in txns if (d_from is None or t.date >= d_from)
-                and (d_to is None or t.date <= d_to)]
     if not label:
         if txns:
             lo, hi = min(t.date for t in txns), max(t.date for t in txns)
@@ -1823,6 +1857,8 @@ def install(handler_cls, *, origin_ok, token_ok, read_body) -> str:
 def _reset_for_tests() -> None:
     global _ARMED
     forget_tables()
+    with _H_LOCK:
+        _H_CACHE.clear()
     with _WAIT_LOCK:
         _WAITING.clear()
     _ARMED = False

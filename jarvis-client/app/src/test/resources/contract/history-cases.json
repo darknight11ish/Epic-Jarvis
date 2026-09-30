@@ -140,7 +140,23 @@
       "bad_request": "That request was not understood."
     },
     "tag_error_fallback": "Your PC did not make that change.",
-    "tag_section_label": "{name}, {count} chats"
+    "tag_section_label": "{name}, {count} chats",
+    "fork": "Fork from here",
+    "fork_title": "Start a new chat that begins with everything up to this message.",
+    "fork_label_user": "Fork from here, after your message",
+    "fork_label_assistant": "Fork from here, after Jarvis's answer",
+    "fork_busy": "Forking…",
+    "fork_title_of": "Fork of {title}",
+    "fork_done": "Forked into \"{title}\".",
+    "fork_no": "This chat cannot be forked.",
+    "fork_why_kind": "A customer-support record, a chat with another AI and a comparison can't be forked: they hold another side's words, kept as your record.",
+    "fork_why_crisis": "This chat is kept as your own record. It can't be forked - start a new chat any time, and nothing from that moment is read again.",
+    "fork_errors": {
+      "bad_request": "Choose a message in this chat to fork from.",
+      "bad_upto": "That message is not in this chat, so it was not forked.",
+      "not_found": "That chat is not kept any more, so it was not forked."
+    },
+    "fork_error_fallback": "Your PC did not fork that chat."
   },
   "kinds": [
     "chat",
@@ -1357,6 +1373,60 @@
         "flat": true,
         "sections": []
       }
+    }
+  ],
+  "fork_prefix": "Fork of ",
+  "fork_title_max": 80,
+  "fork_error_codes": [
+    "bad_request",
+    "not_found",
+    "not_forkable"
+  ],
+  "fork_labels": {
+    "user": "Fork from here, after your message",
+    "assistant": "Fork from here, after Jarvis's answer"
+  },
+  "fork_error_cases": [
+    {
+      "answer": {
+        "ok": false,
+        "error": "not_forkable",
+        "message": "This chat is kept as your own record. It can't be forked - start a new chat any time, and nothing from that moment is read again."
+      },
+      "expect": "This chat is kept as your own record. It can't be forked - start a new chat any time, and nothing from that moment is read again."
+    },
+    {
+      "answer": {
+        "ok": false,
+        "error": "not_forkable"
+      },
+      "expect": "This chat cannot be forked."
+    },
+    {
+      "answer": {
+        "ok": false,
+        "error": "not_found"
+      },
+      "expect": "That chat is not kept any more, so it was not forked."
+    },
+    {
+      "answer": {
+        "ok": false,
+        "error": "bad_request",
+        "message": "Chat history is off. The chat was not forked."
+      },
+      "expect": "Chat history is off. The chat was not forked."
+    },
+    {
+      "answer": {
+        "ok": false,
+        "error": "bad_request"
+      },
+      "expect": "Choose a message in this chat to fork from."
+    },
+    {
+      "answer": {},
+      "expect": "Your PC did not fork that chat."
     }
   ],
   "tag_delete_cases": [

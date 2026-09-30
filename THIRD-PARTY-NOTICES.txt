@@ -666,6 +666,18 @@ MarkItDown (Microsoft), MIT - https://github.com/microsoft/markitdown
   magika (Apache-2.0), beautifulsoup4 and markdownify (MIT), defusedxml
   (PSFL) and charset-normalizer (MIT).
 
+SPENDING SUMMARIES (not generated - keep when regenerating)
+---------------------------------------------------------------------------
+openpyxl, MIT - https://openpyxl.readthedocs.io
+  Used directly by backend/jarvis_spending.py, in a separate program (python
+  -I, no passwords in its environment), to read the values of a bank export
+  saved as Excel (.xlsx; formulas are never run, macros refused). Pinned in
+  backend/requirements.txt as openpyxl==3.1.5, hash-locked in
+  backend/requirements.lock; not shipped here and none of its code is copied.
+  It was already installed through MarkItDown (named above); it is named on
+  its own so a later MarkItDown change cannot remove it unnoticed. The MIT
+  text is the one given for browser-use above.
+
 REVIEW DECKS (not generated - keep when regenerating)
 ---------------------------------------------------------------------------
 py-fsrs (the `fsrs` package, version 6.3.2), MIT - https://github.com/open-spaced-repetition/py-fsrs

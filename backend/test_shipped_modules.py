@@ -111,6 +111,9 @@ INDIRECT = {
     "markitdown": "imported only by the separate converter program jarvis_documents.py "
                   "starts (its _CHILD code), never by the backend itself - so a crafted "
                   "PDF is read in a process with no passwords in its environment",
+    "openpyxl": "imported only by the separate reader program jarvis_spending.py starts "
+                "(its _CHILD code, `python -I`, no passwords in its environment) for an Excel "
+                "bank export, never by the backend itself; MarkItDown brings it too",
 }
 
 # Files in backend/ that are NOT shipped, on purpose. Tools run from this

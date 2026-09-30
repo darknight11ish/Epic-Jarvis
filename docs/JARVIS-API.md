@@ -15565,7 +15565,7 @@ The owner's decision (2026-09-30, `docs/STUDY-FROM-TEXT-DESIGN.md` sections 3, 4
 | `POST /api/quiz/{id}/finish` | `{}` | `{"ok": true, "summary": Summary}`, and the quiz is forgotten |
 | `POST /api/quiz/{id}/stop` | `{}` | `{"ok": true}`, and the quiz is forgotten |
 
-* `Quiz` = `{"id", "title", "grader_verified": bool, "questions": [Question], "answered": int}`. `Question` = `{"n": 1.., "kind": "recall"|"explain"|"apply", "prompt", "mark": Mark|null}`. **The source passage is not in a `Question` until that question is answered.** `Mark` = `{"level": "got_it"|"partly"|"not_yet", "comment": one plain sentence, "passage": the passage it was marked against}`. `Summary` = `{"counts": {"got_it", "partly", "not_yet"}, "again": [n, ...]}` - `counts` are the ANSWERED questions only; `again` lists, in question order, every answered question not marked `got_it` AND every question left unanswered (owner, 2026-09-30: a skipped question is worth another look). Both apps show the prompts of the `again` questions in the summary, a skipped one with no extra label.
+* `Quiz` = `{"id", "title", "grader_verified": bool, "questions": [Question], "answered": int}`. **Section 102 adds** `mode`, `level`, `key_source` (and `notice` for Spanish) to `Quiz`, more question kinds, `marked_by` / `expected` / `key_label` to `Mark`, and an optional `keep` body on `finish`. `Question` = `{"n": 1.., "kind": "recall"|"explain"|"apply", "prompt", "mark": Mark|null}`. **The source passage is not in a `Question` until that question is answered.** `Mark` = `{"level": "got_it"|"partly"|"not_yet", "comment": one plain sentence, "passage": the passage it was marked against}`. `Summary` = `{"counts": {"got_it", "partly", "not_yet"}, "again": [n, ...]}` - `counts` are the ANSWERED questions only; `again` lists, in question order, every answered question not marked `got_it` AND every question left unanswered (owner, 2026-09-30: a skipped question is worth another look). Both apps show the prompts of the `again` questions in the summary, a skipped one with no extra label.
 * **Limits:** `text` 200-20,000 characters (after trimming, at least 200), `answer` 1-2,000, `count` 1-10, **3 open quizzes**, and a quiz ends after **60 minutes without use** (any read or answer renews it). A default title is "Quiz on your text"; a given one is trimmed to 80 characters.
 * **Errors** are `{"ok": false, "error": <code>, "message": <plain words>}`: `text_too_short` (400; also a missing or non-text `text`), `text_too_long` (400), `bad_count` (400), `too_many_quizzes` (409; the model is not asked), `not_found` (404; unknown, finished, stopped, expired or restarted - both apps hold their buttons on it, like Goals), `bad_question` (400), `already_answered` (409), `answer_empty` (400), `answer_too_long` (400), `model_unavailable` (503: the model on this PC did not answer, or answered in a shape Jarvis could not use; nothing was lost, an unanswered question stays unanswered).
 * Every route needs the usual origin and token checks (`install()` is the same shape as `jarvis_goals.install`). The apps send `X-Jarvis-Client: hud`.
@@ -15632,6 +15632,149 @@ Errors are `{"ok": false, "error": <code>, "message": <one plain sentence>}`: `b
 `Untagged`, `All`, `Tags` (editor title), `Add a tag`, `Rename`, `Delete this tag`, `Move to`, `No tag`; section header `{name} ({count})` with the screen-reader form `{name}, {count} chats, collapsed|expanded` (the phone's merged description; the desktop conveys the open/closed state through `aria-expanded` and its label is just `{name}, {count} chats`, fixture `words.tag_section_label`, so it is not announced twice); delete confirm `Delete the tag {name}? Its {count} chats become untagged.`; banner `Tap the chat to file it under {name}.`. Under "Hide memory lists and chat history" the apps hide tag names with the titles: the list is replaced by one flat block, `N conversations, hidden until ...` and a Show button (no sections, no names). **Sections show only when the owner has at least one tag**; with none the list is flat in both apps. A header's count is the PC's own number when nothing narrows the list, and the rows shown when a Show kind or title words do (fixture `tag_group_cases`; a section with nothing to show is left out). Nothing about tags is kept on a device except which sections are folded (by tag id); the desktop's short-lived "file it under" hand-over key (`jarvis.brain.place`) is removed the moment the Brain reads it (and after a minute if it never does), and the phone's banner lapses when History is left or after ten minutes.
 
 Tests: `backend/test_chat_tags.py` (the registry, every limit and error code, sealing checked in the raw file, the filter including a page cut inside one second, Undo of Forget-a-time-frame keeping tags, an old file migrated, no key and history off, the routes, contrast of the palette, the phrases with injection-style texts and near misses, both apps' fixture copies), with `test_chat_log.py` and `test_chat_kinds.py` updated for the new column and route lists.
+
+## 100. Spending summaries: "how much did I spend on food last month?" (added 2026-09-30; backend built, apps to follow)
+
+The owner's decision of 2026-09-30 (`docs/BUILD-QUEUE-2026-09-30.md`, item 2; design
+`docs/FINANCE-DESIGN.md` part A; the exact shape both apps draw is its "Slice contract
+(frozen)"). A bank export (CSV or Excel) dropped into a folder on "Folders Jarvis may
+look in" is added up by plain code and shown as a small table **in the chat**, in both
+apps. There is no Spending page. Backend: `jarvis_spending.py` and
+`jarvis_money_parse.py` (shipped whole), `spending.patch` (one install block), the
+`my_spending` tool in `jarvis_agent.py`. Tests: `backend/test_spending.py`.
+
+### 100.1 The rules
+
+- **Numbers come from code, never from the model.** The model gets the totals and the
+  category names (never a raw description) and writes ONE short sentence. Code keeps the
+  sentence only if every number in it is in the table; otherwise the chat shows the plain
+  line "Here is the table. (Jarvis's own summary sentence used a figure that is not in the
+  table, so it was left out.)". A spoken question gets "I have put it on your screen."
+- **Screen only.** The table is never read aloud (the tool is not on the read-aloud list,
+  so the apps' existing rule keeps a spoken answer on screen), never remembered, never
+  sent to a web search or a chatbot, and is not in chat history. The kept chat holds the
+  question and the sentence. Under "Hide memory lists and chat history" the apps draw
+  only "Spending table hidden" (`table_hidden` in `GET /api/spending`); the desktop also
+  needs the app unlocked while App lock is on; the phone already blocks screenshots in
+  both states.
+- **Account and card numbers are hidden** before anything is shown or given to the model:
+  `jarvis_secrets` (cards with the Luhn check, IBAN, email, IP, keys) plus any run of 8 or
+  more digits, all of it, as `[hidden]`. A header called account, IBAN, card or sort code
+  is never shown. If the check cannot run, nothing is shown.
+- **No bank connections**, no new server or port, nothing leaves the PC, no card: the tool
+  is decided under `file_read`'s action (`read_files_readonly`), like `my_files`.
+- **Refused** (before a file is opened) when a reading tool already ran this turn, the
+  conversation read outside text before, the newest message was pasted or shared, or the
+  app added text; and for a second table in one answer.
+- Money is whole cents (`Decimal`, never a float). A day/month date column that cannot
+  say which is which, and a number written with the wrong decimal mark, are **asked about,
+  never guessed**. Refunds reduce their category and are shown on their own line;
+  Transfers and money in are shown apart from spending; several currencies are each added
+  up on their own and never converted; overlapping exports count a row once (the larger
+  count in any one file, never the sum), and the answer says how many.
+
+### 100.2 How a table reaches the apps
+
+The chat stream (`POST /api/chat`) carries, right BEFORE the sentence, one SSE comment
+line: `: jarvis-table <32 hex characters>`. An app that sees it fetches the table with
+`GET /api/chat/table?id=<id>`. A `stream: false` reply carries the same id as a top-level
+`jarvis_table` on the body. An app that does not know the line ignores it (it is an SSE
+comment, like `: jarvis-status`). The table is kept two hours in memory (the last 50), is
+never written to disk, and can be fetched again (an unlock, a scroll back); after that
+`404 {"ok": false, "error": "gone", "message": "This table is no longer kept. Ask again to
+see it."}`.
+
+`GET /api/chat/table?id=` (any paired device, behind the token) ->
+`{"ok": true, "table": {...}}` where the table is:
+
+```
+{"kind": "spending", "version": 1, "title": "Spending by category, March 2026",
+ "period": "March 2026", "sources": ["bank-march.csv"],
+ "columns": [{"key", "label", "align": "left"|"right"}, ...],
+ "sections": [{"heading": "GBP" | "", "currency": "GBP" | "",
+               "rows":   [{"kind": "category"|"uncategorised"|"month", "cells": [...]}],
+               "totals": [{"kind": "total", "cells": [...]}],
+               "also":   [{"kind": "refunds"|"income"|"transfers", "cells": [...]}]}],
+ "caveats": ["3 rows were in more than one file and were counted once.", ...],
+ "private": true, "read_aloud": false, "remember": false,
+ "words": {"hidden": "Spending table hidden"}}
+```
+
+Every `cells` list has exactly one string per column. Figures are already formatted
+("1,234.56", a leading minus for a negative). `by: "category"` and `"month"` have three
+columns (name, Spent, Rows); `"both"` has Category, one column per month (at most 12), and
+Total. Examples made by the real code: `spending-cases.json` (`python3 tools/gen_spending_cases.py`; desktop `tests/fixtures/`, phone `test/resources/contract/`).
+
+### 100.3 The tool `my_spending` (model side)
+
+`action`: `summary` (period, by category / month / both, optional one category, one file
+by `path` or every file with a saved layout by `all: true`), `files` (the bank-looking
+files in the listed folders and whether each has a saved layout), `suggest` (the top
+uncategorised shop names, at most 20 and 40 characters each, passed as quoted data - not
+instructions - for the model to say which category each might belong to; nothing is saved).
+`period`: `last_month`, `this_month`, `last_year`, `this_year`, `2026`, `2026-03`,
+`2026-01-01..2026-03-31`, or none for every date in the file. Offered only while a folder
+is listed and `my_spending` is in `[tools].enabled`; one of the "documents" group's tools.
+
+### 100.4 The column check (PC only)
+
+A bank file's **layout** (which columns are the date, the description and the amount or the
+debit and credit; the sign rule; the date order; the decimal mark) is saved once, keyed by
+a hash of the header row, in `spending-profiles.json` (names and choices only, never rows).
+A file with a header Jarvis has not seen is not guessed at: the tool says "Open Jarvis on
+the PC to check the columns of this bank file (Settings, Spending). It takes a minute and
+is remembered." and the file is listed under `waiting`.
+
+- `GET /api/spending` (any device) -> `{"available", "title", "detail", "can_edit", "pc_only",
+  "profiles": [{"id", "label", "columns", "sign", "sign_sentence", "saved"}],
+  "empty_profiles", "categories": [{"category", "words": [...]}], "categories_are_starter",
+  "starter_note", "waiting": [{"name", "path"?}], "sign_sentences": {sign: sentence},
+  "needs_setup", "table_hidden"}`. `path` in `waiting` and `can_edit: true` only on the PC.
+- `GET /api/spending/profile?file=<path>` (**this PC only**, 403 `pc_only` otherwise) -> for
+  a layout already saved `{"ok", "known": true, "fingerprint", "saved", "label", "profile"}`;
+  for a new one a proposal: `{"ok", "known": false, "fingerprint", "header_row", "header":
+  [visible names], "header_index": [their column numbers], "hidden_columns": N,
+  "hidden_note", "preview": [first 5 rows, cells hidden, private columns dropped],
+  "guess": {"header_row", "columns": {"date", "description", "amount", "debit", "credit",
+  "drcr", "currency"}, "sign", "date_order", "decimal", "currency", "label"},
+  "questions": [fields the file could not settle: "date_order", "decimal", "sign",
+  "date_column", ...], "warnings", "sentences": {"sign"}, "sign_sentences"}`. A `null` in
+  `guess` for a field in `questions` must be chosen by the owner.
+- `POST /api/spending/profile` (**this PC only**) `{"file", "confirm": true, "header_row",
+  "columns", "sign": "negative_out"|"positive_out"|"debit_credit"|"drcr", "date_order":
+  "dmy"|"mdy"|"ymd", "decimal": "."|",", "currency", "label"}` -> `{"ok", "fingerprint",
+  "rows_read", "rows_skipped", "view"}`. The choices are checked against the file itself
+  (it must read at least one row; two roles cannot share a column; an account column cannot
+  be used). No approval card: the owner's own tap on their own file.
+- `POST /api/spending/profile/delete` (**this PC only**) `{"id"}`.
+- `POST /api/spending/categories` (**this PC only**) `{"categories": [{"category", "words"}]}`
+  (at most 40 categories, 200 words each, matched whole-word, case-blind, the first rule in
+  the owner's order wins) or `{"reset": true}` for the starter list. Editing re-runs the
+  totals at the next question. No card.
+- `POST /api/spending/suggest` (**this PC only**) `{"file"}` -> `{"ok", "suggestions":
+  [{"name", "category"}], "note"}`: proposals from the local model for shop names no rule
+  catches. Only a name that was asked about and a category that exists is kept. Nothing is
+  written until the owner taps "Add these rules" (a `POST /categories`).
+
+The starter categories: Food and groceries, Eating out, Transport, Home and bills, Health,
+Shopping, Fun and travel, Subscriptions, Cash, Transfers, Income, Other (empty). What no
+rule catches is "Uncategorised", always shown with its count, never folded into Other.
+"Transfers" is left out of spending; "Income" and any money in that no shop rule catches
+is shown as "Income and other money in".
+
+### 100.5 Limits and honest caveats
+
+A file over 5 MB or 50,000 rows, more than 60 columns, an empty file, `.xlsm`/`.xls`/`.ods`,
+an Excel file with a macro part, and any path outside a listed folder are refused with a
+plain sentence. Excel is read by `openpyxl` in a `python -I` child (allowlisted
+environment, a clock), values only; a CSV is read in this process. A bank that changes a
+shop's name between a pending and a posted export can make one row count twice (said on
+every multi-file table). Real bank files were not read; the layouts are invented.
+
+Tests: `backend/test_spending.py` (hand-worked totals in
+`backend/fixtures/spending/expected.json`); `test_agent.py`, `test_tool_text.py`,
+`test_short_tool_list.py`, `test_private_aloud.py`, `test_reach.py` and
+`test_shipped_modules.py` cover the tool's fit.
 
 ## 101. Goal step locks and finish-time range (added 2026-09-30)
 
@@ -15746,3 +15889,92 @@ expectations), `backend/test_goals.py` (locks, cycles, ticks and undo,
 measures, old plans, check-in words, the pace-line rule, the routes),
 `backend/test_projects.py` (the read carries the range), and
 `tools/gen_projects_cases.py --check` (both apps' fixture copies).
+
+## 102. Review decks and Spanish practice (added 2026-09-30)
+
+The owner's decision (2026-09-30, `docs/QUIZ-DECKS-DESIGN.md`, build queue item 4): questions from a finished quiz can be **kept in a deck** and asked again on a spaced schedule, and the quiz gains a **typed Spanish practice** mode. Backend: `backend/jarvis_decks.py` (new, shipped whole; `decks.patch` installs its routes), extensions in `backend/jarvis_quiz.py`, and `jarvis_schedule.KIND_MODULES` (one line). **No approval card anywhere**: the owner's own tap saves the owner's own words on this PC (the screen lists every card word for word, with ticks, before Keep), nothing leaves the PC, nothing is acted on. The exact JSON shapes, states and words both apps build from are in `docs/QUIZ-DECKS-DESIGN.md`, "Slice contract (frozen)".
+
+### 102.1 Keeping questions: `finish` with a `keep` body
+
+`POST /api/quiz/{id}/finish` takes an optional body (`{}` works exactly as before): `{"keep": {"deck": "<id>" | null, "new_deck": "<name>"?, "cards": [{"n": 2, "answer": "<the owner's words for the back>"}]}}`. **The server takes each card's front (the question's prompt) and passage from its own open quiz**; the app sends only the question number and the back, so an app cannot put other text on a card. Only **answered** questions can be kept. The back is the owner's own words, possibly empty (then a review shows the passage alone); it is never written by the model - one exception, code-made: a Spanish fill-the-blank whose key came from the owner's own text and whose back is empty gets that word. **All or nothing:** one transaction; on any failure nothing is kept and **the quiz stays open**. On success the reply is `{"ok": true, "summary": Summary, "kept": N}` and the quiz is forgotten. A crisis phrase in a card's back is never kept: the reply is the quiz's crisis answer (`{"ok": true, "crisis": true, "message": <the chat's help wording>, "quiz": Quiz}`), nothing is kept, the quiz stays open.
+
+Errors add (all `{"ok": false, "error", "message"}`): `nothing_to_keep` (400; no cards, or `keep` is not an object with a list of cards), `bad_question` (400; an `n` that is missing, not a whole number, out of range, repeated, or **unanswered**), `answer_empty` (400; a back that is not text), `answer_too_long` (400; over 2,000), and from the deck side `deck_unavailable` (503; no key in Credential Manager, no `cryptography`, the key does not open the file, or decks are not set up; the message says which, and the quiz is still open), `deck_not_found` (404; also "choose a deck or name a new one"), `too_many_decks` (409; 20 decks), `deck_full` (409; 1,000 cards over every deck), `bad_deck_name` (400; 1 to 60 characters), `duplicate_card` (409; the same question and passage is already in that deck, or twice in the request; the message names the question). `jarvis_quiz.py` stays import-clean (standard library, `jarvis_local_http`, `jarvis_wellbeing`): the store is handed in by `jarvis_quiz.configure(keep=...)`, which `jarvis_decks.install()` calls.
+
+### 102.2 Decks and review routes
+
+| route | body / query | answer |
+|---|---|---|
+| `GET /api/decks` | - | `{"ok", "available", "why", "decks": [Deck], "ready", "new_per_day", "new_left", "next_ready_day", "line", "limits"}` |
+| `POST /api/decks` | `{"name"}` | `{"ok": true, "deck": Deck}` (an empty deck) |
+| `POST /api/decks/settings` | `{"new_per_day": 0-20}` | `{"ok": true, "new_per_day": n}` |
+| `POST /api/decks/{id}/act` | `{"do": "rename"\|"pause"\|"resume"\|"delete", "name"?}` | `{"ok", "deck": Deck}`, or `{"ok", "deleted": true}` |
+| `GET /api/decks/{id}/cards` | - | `{"ok", "deck": {"id", "name"}, "cards": [CardFull]}` |
+| `POST /api/decks/{id}/cards/{cid}/act` | `{"do": "edit"\|"delete", "front"?, "back"?}` | `{"ok", "card": CardFull}`, or `{"ok", "deleted": true}` |
+| `GET /api/review?deck=<id>` | `deck` optional (all decks) | `{"ok", "ready", "new_left", "state", "card": CardView\|null, "line", "run": {"done", "limit"}}` |
+| `POST /api/review/reveal` | `{"card"}` | `{"ok", "back": {"answer", "passage"}, "key_label": str\|null}` |
+| `POST /api/review/rate` | `{"card", "rating": "again"\|"hard"\|"good"\|"easy"}` | `{"ok", "ready", "new_left", "next": CardView\|null, "state", "line", "run", "comes_back": "YYYY-MM-DD"}` |
+| `POST /api/review/more` | `{"deck"?}` | the same as `GET /api/review` |
+
+* `Deck` = `{"id", "name", "cards", "ready", "paused", "kind": "study"\|"spanish"\|"mixed"\|"empty"}`. `CardView` = `{"id", "front", "kind", "level": "A1".."C2"\|null, "deck", "new": bool}`. `CardFull` = `{"id", "front", "back", "passage", "kind", "level", "key_source": "text"\|"model"\|null, "key_label": str\|null, "new", "due_day": "YYYY-MM-DD"\|null}`. `line` is the one plain sentence, from numbers only: `3 cards ready`, `1 card ready`, `Nothing ready today`, `All decks paused` (`This deck is paused` for one paused deck), or `""` when there is no deck. `state` is `card`, `empty`, `enough`, `paused` or `no_decks`. `next_ready_day` is the day the next waiting card is ready (this PC's local day), or `null`. `limits` = `{"decks": 20, "cards": 1000, "name": 60, "front": 500, "back": 2000, "new_per_day": 20}`.
+* **Errors** add `card_not_found` (404; also "not up for review right now"), `not_revealed` (409; **a rating is refused until this card's back was shown**), `deck_paused` (409), `bad_rating` (400), `bad_setting` (400; new cards a day is a whole number 0-20), `bad_action` (400), `bad_card` (400; a front of 1-500 characters, a back of at most 2,000). `GET /api/decks` never fails for a missing key: it answers `available: false` with `why` in plain words, no deck list, and the counts (which need no key).
+* **Rules.** Delete and edit are immediate once the owner confirms in the app (they only remove or fix the owner's own words; there is no card). Deleting a deck or card removes its sealed bytes from the file (`secure_delete`, then `VACUUM`); older **backups** may still hold a copy; "Forget a time frame" (section 64) does not cover decks. Under "Hide memory lists and chat history" the apps hide `name`, `front`, `back`, `passage` and `answer`; counts, `line` and `next_ready_day` stay; review is unavailable while hidden. Every write is held on a stale link (rule 4).
+
+### 102.3 How it works
+
+* **Sealed store.** `study.db` (Jarvis settings folder, beside `schedule.db`; `JARVIS_STUDY_DB` overrides) seals each deck name, front, back and passage with AES-256-GCM, the chat-history scheme (12-byte nonce, then ciphertext; the row's address is the authenticated data, so a piece moved to another row does not open), under **its own Credential Manager entry** ("Jarvis Backend/study decks key"). Plain columns: ids, kind, level tag, key source, the paused flag, the day made and py-fsrs's numbers, so the "N cards ready" line needs no key. No review log is kept. Fail closed: no key, no `cryptography` or a key that does not open the file means nothing is kept and the reason is said; there is no plain-text path.
+* **The schedule** is **py-fsrs 6.3.2** (MIT; `fsrs==6.3.2` in `requirements.txt` and the hash-locked list; **never the optimizer extra**, which needs torch). Default parameters, desired retention 0.90, **no same-day learning steps** (a card rated "Didn't remember" comes back the next day), fuzzing on. "Today" is this PC's local day; a card is ready when its due day is today or earlier, so a card left for a month is simply ready. **The owner rates every card themselves; review calls no model.** Numbers are checked against py-fsrs's own (`backend/decks_fsrs_golden.json`, made by `tools/gen_decks_golden.py`), not against Anki's.
+* **Limits.** New cards a day 5 (0-20), shared by every deck; a run shows at most 20 cards (`state: "enough"`, then `POST /api/review/more` adds 10; a run that sat idle over 30 minutes, or a new day, starts fresh). 20 decks, 1,000 cards, front 500, back 2,000, passage 800.
+* **The scheduler kind** `review` (`plain_repeat`, `silent`, `single`, not `notify`, listed): one job, once a day at 04:00, made with the first deck and removed with the last (`jarvis_schedule.KIND_MODULES` imports `jarvis_decks`). It only tells the apps the list changed; its `note` is the `line`. No approval card (like a plain repeating reminder), no notification, and Coming up offers no Pause/Delete for it (Decks owns that).
+* **Not memory.** A deck is never read into memory, the learner, chat context, a search or a cloud lane; no model tool and no voice command makes a deck or card - only a tap does (a test scans for it).
+
+### 102.4 Spanish practice (a quiz mode)
+
+`POST /api/quiz` adds `"mode": "text"` (default) `|"spanish"`; for Spanish also `"level"` (`A1`..`C2`, default `A2`), `"exercise"` (`translate`, `blank`, `complete` or `mixed`, default `mixed`), `"topic"` (at most 60 characters, optional), and `text` is now optional (no text: the model writes the sentences; if given, the usual 200-20,000 characters). New errors: `bad_mode`, `bad_level`, `bad_exercise` (all 400). `Quiz` gains `mode`, `level` (null in text mode), `key_source` (`"text"` when the owner's own Spanish text is the source, `"model"` when the model wrote sentences and key, null in text mode) and, for Spanish only, `notice` (the fixed line about Spanish crisis words below). `Question.kind` adds `translate`, `blank`, `complete`. `Mark` gains `marked_by` (`"code"` or `"model"`), `expected` (the key, shown after the answer; null in text mode) and `key_label` (`"Answer key written by the model"` when the key was model-written, else null).
+
+* **Fill the blank** - a sentence with one word hidden (`_____`, every copy of that word in the sentence). **Cut and marked by code**: exact = Got it; the same letters differing only in accents, capitals or outer punctuation/spaces = Partly with `Check the accent: it is `está`.` (or the capital letters / `Nearly - it is ...`); anything else = Not yet. **`n` and `ñ` are different letters** (`ano` for `año` is Not yet). No model reads the answer, so words in it cannot steer the mark. With no text, the model also lists up to three other accepted single words.
+* **Translate** (an English sentence to type in Spanish) and **Finish the sentence** (the first half is shown) are marked by the local model against one reference, which is not the only right answer (a different wording with the same meaning is never Not yet). Not verified: nothing has measured an 8B model's Spanish at any level.
+* **Sources.** With the owner's Spanish text, every sentence must really be in it (checked by code) and the key is the owner's. With none, sentences **and** key are the model's, and every mark says `key_label`, whatever `grader_verified` says. **Level is a request, not a measurement**: the apps say "roughly".
+* **`grader_verified` is always false for a Spanish quiz** (no Spanish case has been measured); the apps show "Jarvis's guess" beside a mark only when `marked_by` is `"model"` and `grader_verified` is false. A code-marked blank shows no guess label.
+* **The crisis check on every answer** (section 98.4) runs for every mode and kind, blanks included, before anything is marked. It is **English only**: `notice` says "Jarvis cannot recognise a crisis message written in Spanish. If you are in danger, call or text 988, or 911." A Spanish list is a later, separately tested step that needs the owner's go-ahead. A crisis answer is never kept in a deck.
+* No score, XP, hearts, streak or league; nothing about the owner's Spanish is saved as a fact. Typed only (no speech-to-text). No word list is shipped and no prompt text is copied from another project.
+
+Tests: `backend/test_decks.py` (the golden py-fsrs sequences, the pin and no torch, sealed bytes with no words in them, no key and the wrong key fail closed, deleted words leave the file, the scheduler kind, new cards a day, runs of 20, the day rolling over in two time zones, reveal-before-rate, keep through the quiz including all-or-nothing and the server's own passage, crisis words never kept, hide-lists shapes, the banned-word scan, purity, the routes, the patch on the stack), and the Spanish parts of `backend/test_quiz.py` (validation, the code-side checks on items, the mark table for accents and `n`/`ñ`, the end-to-end marks, the label, the crisis check, the keep hook). Unverified: everything about the apps, Windows Credential Manager and the real Ollama model (all stubbed here).
+
+## 110. Fork a chat (added 2026-09-30)
+
+The owner's decision (2026-09-30, `docs/CHAT-TAGS-DESIGN.md` section 8 and its "Fork contract (frozen)"): **"Fork from here"** on a message in an opened History chat copies the first turns of that chat, up to and including the message the owner picked, into a **new** chat titled `Fork of <original title>`. No tree, no new table, no card (it is the owner's own kept words and nothing leaves the PC). Built in `backend/jarvis_chat_log.py` (`ChatLog.fork`), through `chat-history.patch`'s route list (beside `/api/history/tag`; the same token and origin checks).
+
+### 110.1 The route
+
+`POST /api/history/fork` with exactly `{"id": "<chat id>", "upto": <int>}`. `upto` is the `idx` of a turn, as `GET /api/history/conversation` now sends it on every turn; turns `0..upto` are copied.
+
+Answer `200`: `{"ok": true, "id": "<new chat id>", "title": "Fork of ...", "turns": <int copied>, "tag_id": <int | null>}`. Refusals are `{"ok": false, "error": <code>, "message": <one plain sentence>}`:
+
+| code | http | when |
+|---|---|---|
+| `bad_request` | 400 | a body that is not exactly `id` and `upto`, an `id` that is not a chat id, `upto` not a whole number, below 0, or not one of this chat's turns (message: "That message is not in this chat, so it was not forked."). Also `503` with `bad_request` and a sentence saying why when the encryption key is missing or does not open the history ("...The chat was not forked."), or when a copied line cannot be opened. Nothing is read or written. |
+| `not_found` | 404 | no such chat (deleted, or never kept) |
+| `not_forkable` | 409 | the chat is a support record, a chat with another AI or a comparison (`H.FORK_WHY_KIND`), or is titled "A difficult moment" (`H.FORK_WHY_CRISIS`). The message says which, and never quotes the owner. |
+
+`GET /api/history/conversation` gains, on **every** turn, `"idx"` (its number), and on the chat `"forkable": true | false` and `"fork_why"` (an empty string, or the sentence for `not_forkable`). Forkable means what "Continue this chat" allows: kind `chat` or `live`, and not "A difficult moment". The apps hide the button when `forkable` is false and show `fork_why` in its place.
+
+### 110.2 What is copied, and what is not
+
+* **Each turn is opened and sealed again** under the new id and its new place (the seal is bound to `id|idx`, as `take_out`/`put_back` already rely on), so a copied line is not the source's bytes. The new title is sealed under the new id's title seal. The raw file holds neither in the clear (tested).
+* **Kept as they were:** each turn's time, role, provenance, device, lane, voice check and `read_outside` mark, and the chat's device, `started`/`updated`, project and **tag**. So a fork of a chat that had read outside text is still treated as having read it, and it sits beside the original in the list (it is not moved to the top; the apps open it by id).
+* **The fork is kind `chat`**, also when copied from a Jarvis Live session (it is not a Live session, so it carries no Live label or length). Live transcripts are forkable because they are continuable and are only the words and times kept.
+* **A fork point is a message.** `upto` may be any kept turn; the apps offer the button on the owner's messages and on Jarvis's answers. Stopping at a user message copies that message without its answer, and its `answer_kept` mark is cleared in the fork (no answer is kept there).
+* **Not copied:** the source's Forget/Erase hush, and anything after `upto`. The source is never touched.
+* **Never forked:** a support, chatbot or comparison record, and a chat titled "A difficult moment" (a crisis title is set whenever a crisis turn was in the chat, so a chat with one is refused whole).
+* Works **while chat history is switched off** (like tagging: it records nothing new), and needs the key: without it, `503` and nothing is read or written. It is not a temporary chat's thing (a temporary chat was never kept, so it cannot be forked).
+* The audit line is `history.fork` with the number of turns; never a title or a word.
+
+### 110.3 No double learning
+
+Automatic learning saves a fact only from a message this PC saw arrive live, and "Continue this chat" puts a chat's own typed and spoken messages back in that registry from the encrypted record (section 18.7, `_rehydrate`). Copied messages would be read a second time by the learner, and every fact they teach would be proposed again. The fork therefore gets **its own hush**: the same numbers-only marker Forget uses (`meta` key `hush:<id>`, `{"upto": <last copied user turn>, "erased": false}`), set when the fork is made. Rehydrated copied messages sit under the floor, so a proposal that only they support is dropped (section 19), while a message said **after** the fork is learned as usual. Two consequences, said plainly: a fact the source's learner never got to (learning was off, or it is still a card in the source) is not learned in the fork either; and "said again" counts are not doubled, because the copy keeps each turn's own time and a repeat is counted once per (fact, time). The hush goes with the chat: deleting the fork drops it, and Undo of "Forget a time frame" puts it back with the fork. `backend/test_chat_fork.py` proves it end to end with the real learner, with a control (hush removed) that shows the double learning is otherwise real.
+
+### 110.4 One column list
+
+`jarvis_chat_log.CONV_COLS` is the single list of the `conversations` columns. `get`, `brief`, `list`, `search`, `overlapping`, `take_out` and `put_back` (`_put_one`, which pads an older held row to the list's length) all read it, so a new column is one edit and cannot be dropped by a hand-written positional tuple (a test pins the list against the real table). Added as the "refactor before Fork" the tags audit asked for; behaviour is unchanged (every existing suite passes).
+
+Tests: `backend/test_chat_fork.py`, with `test_chat_log.py` and `test_chat_tags.py` updated for the new per-turn `idx` and the new route in the patch. Shared words and worked examples are in `history-cases.json` (`words.fork*`, `fork_labels`, `fork_error_cases`).

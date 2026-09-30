@@ -7618,7 +7618,14 @@ function goalStepRow(goal, step, index) {
   });
   label.append(box, el("span", "goal-step-text", step.step));
   line.append(label);
-  if (row.locked) line.append(el("span", "row-tag goal-locked-tag", "\u{1F512} " + GOAL_WORDS.locked));
+  if (row.locked) {
+    // A padlock glyph plus the word - the word is what is said and read.
+    const tag = el("span", "row-tag goal-locked-tag");
+    const glyph = el("span", "", "\u{1F512} ");
+    glyph.setAttribute("aria-hidden", "true");
+    tag.append(glyph, GOAL_WORDS.locked);
+    line.append(tag);
+  }
   if (row.reached) line.append(el("span", "row-tag goal-reached-tag", REACHED_TAG));
   if (step.by) line.append(el("span", "goal-step-by", step.by));
   if (lines.length) {

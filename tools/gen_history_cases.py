@@ -181,6 +181,22 @@ WORDS = {
     # rides on aria-expanded, so the label does not repeat it (the phone's
     # merged description uses "tag_section_sr", which does).
     "tag_section_label": "{name}, {count} chats",
+    # -- Fork from here (section 110) ---------------------------------------
+    "fork": "Fork from here",
+    "fork_title": "Start a new chat that begins with everything up to this message.",
+    # The screen-reader name of the button on one message: it contains the
+    # visible text, then says which message.
+    "fork_label_user": "Fork from here, after your message",
+    "fork_label_assistant": "Fork from here, after Jarvis's answer",
+    "fork_busy": "Forking\u2026",
+    "fork_title_of": "Fork of {title}",
+    "fork_done": "Forked into \"{title}\".",
+    "fork_no": "This chat cannot be forked.",
+    "fork_why_kind": H.FORK_WHY_KIND,
+    "fork_why_crisis": H.FORK_WHY_CRISIS,
+    "fork_errors": dict(H.FORK_MESSAGES),
+    # Said when the PC named no code the app knows and sent no sentence.
+    "fork_error_fallback": "Your PC did not fork that chat.",
 }
 
 # The eight colour slots (contrast 4.5:1 or better against both themes, checked
@@ -213,6 +229,34 @@ TAG_CASES = [("Work", 12, False), ("Learning", 1, True), ("Untagged", 0, False)]
 
 def tag_section_label(name: str, count: int) -> str:
     return WORDS["tag_section_label"].format(name=name, count=count)
+
+
+def fork_label(role: str) -> str:
+    return WORDS["fork_label_assistant" if role == "assistant" else "fork_label_user"]
+
+
+FORK_ERROR_CASES = [
+    {"ok": False, "error": "not_forkable", "message": H.FORK_WHY_CRISIS},
+    {"ok": False, "error": "not_forkable"},
+    {"ok": False, "error": "not_found"},
+    {"ok": False, "error": "bad_request", "message": "Chat history is off. The chat was not forked."},
+    {"ok": False, "error": "bad_request"},
+    {},
+]
+
+
+def fork_error_words(answer: dict) -> str:
+    """The one sentence a refused fork shows, identical in both apps: the PC's
+    own `message` wins; else the sentence for the code; else the fallback."""
+    code = answer.get("error") if isinstance(answer.get("error"), str) else ""
+    msg = answer.get("message").strip() if isinstance(answer.get("message"), str) else ""
+    if msg:
+        return msg
+    if code == "not_forkable":
+        return WORDS["fork_no"]
+    if code in H.FORK_MESSAGES:
+        return H.FORK_MESSAGES[code]
+    return WORDS["fork_error_fallback"]
 
 
 def tag_error_words(answer: dict) -> str:
@@ -539,6 +583,12 @@ def build() -> dict:
         "tag_group_cases": [{"name": n, "tags": t, "untagged": u, "rows": r, "exact": e,
                              "expect": group_reference(t, u, r, e)}
                             for n, t, u, r, e in GROUP_CASES],
+        "fork_prefix": H.FORK_PREFIX,
+        "fork_title_max": H.TITLE_CHARS,
+        "fork_error_codes": ["bad_request", "not_found", "not_forkable"],
+        "fork_labels": {"user": fork_label("user"), "assistant": fork_label("assistant")},
+        "fork_error_cases": [{"answer": a, "expect": fork_error_words(a)}
+                             for a in FORK_ERROR_CASES],
         "tag_delete_cases": [{"name": "Work", "count": 3,
                               "expect": WORDS["tag_delete_confirm"].format(name="Work", count=3)}],
     }

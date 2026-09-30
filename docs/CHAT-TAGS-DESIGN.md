@@ -248,3 +248,82 @@ nothing else about tags is stored on a device, apart from the desktop's brief
 hand-over key for "label my chat about the boiler as Home" (`jarvis.brain.place`,
 holding a tag id and the search words), which is removed the moment the Brain
 reads it, and after a minute if it never does.
+
+## Fork contract (frozen)
+
+Frozen 2026-09-30 for the desktop and phone builders (backend built and tested:
+`backend/test_chat_fork.py`, JARVIS-API section 110). Section 8 holds the
+decision; this is the exact shape. Where this and section 8 differ, this wins.
+
+**Route.** `POST /api/history/fork` with exactly `{"id": "<chat id>", "upto": <int>}`
+(no other keys). `upto` is the `idx` of a turn, taken from the opened chat's
+`turns[].idx` (a new field on every turn of `GET /api/history/conversation`).
+Turns `0..upto` are copied. Answer `200`:
+`{"ok": true, "id": "<new id>", "title": "Fork of ...", "turns": <int>, "tag_id": <int | null>}`.
+
+**The opened chat** (`GET /api/history/conversation`) also gains, on the chat,
+`"forkable": true | false` and `"fork_why": ""` (or a sentence when not
+forkable). Forkable = a chat or a Live session that is not "A difficult moment".
+Apps show the button only when `forkable` is true; when false they show
+`fork_why` where the button would be (like `continue_why`) and no button.
+
+**Errors** `{"ok": false, "error", "message"}` (one plain sentence, show
+`message`; fixture `fork_error_cases` gives the exact rule): `bad_request` (400,
+or 503 when the key is missing or wrong: "... The chat was not forked."),
+`not_found` (404), `not_forkable` (409). Nothing is retried. No card anywhere.
+
+**What the backend decided** (the apps need not re-check, but must not contradict):
+the fork is kind `chat` (also from a Live session), keeps the source's tag,
+outside-text marks, device and times, sits beside the original in the list
+(same `updated`), has its own learning hush so its copied messages are not
+learned twice, and works while chat history is off (only the key matters).
+A user message as fork point is copied without its answer.
+
+**Words** (fixture `history-cases.json`, `words.fork*`, word for word in both
+apps): button `Fork from here` (`fork`); its hover/help text `fork_title`;
+screen-reader names `Fork from here, after your message` and `Fork from here,
+after Jarvis's answer` (`fork_labels`; both contain the visible text); while
+waiting `Forking…`; on success `Forked into "{title}".` (`fork_done`, with the
+title the backend sent); a chat that cannot be forked: the backend's `fork_why`
+(`fork_why_kind`, `fork_why_crisis`), else `This chat cannot be forked.`
+(`fork_no`); other errors by `fork_error_cases`, fallback `Your PC did not fork
+that chat.` The title `Fork of {title}` is made by the backend; apps never
+build it.
+
+**What each app builds.**
+
+* *Both:* in the opened chat in History, a **Fork from here** button on every
+  message the owner sent and every answer Jarvis kept (turns with role `user` or
+  `assistant`; never on a support, chatbot or comparison record, which are not
+  forkable anyway). Pressing it sends the route with that turn's `idx`. On
+  success the app **opens the new chat in History** (the same open as tapping
+  its row: read `GET /api/history/conversation?id=<new id>`), refreshes the list
+  so the fork appears (it sits beside the original), and shows `fork_done`. The
+  original stays as it was. On a refusal the app stays on the original chat and
+  shows the sentence. The button is disabled with `Forking…` while the request
+  runs (one at a time). A fork is offered to nothing else: no card, no undo (a
+  fork is deleted like any chat), no automatic fork.
+* *Stale link (rule 4):* forking writes a new chat, so the button is held
+  (disabled, with the app's usual stale-link reason) while the link to the PC is
+  stale, like tagging.
+* *Hidden lists:* under "Hide memory lists and chat history" the opened chat is
+  hidden already, so no button shows; nothing is forked from a hidden list.
+* *Screen readers:* each button's accessible name is the `fork_labels` sentence
+  for its message's role; the success and error sentences are announced politely.
+* *Desktop:* `brain/history.rs` gets one command (`brain_history_fork`, exactly
+  the two keys; the answer reduced to `ok`, `id`, `title`, `turns`, `tag_id` or
+  the refusal's `error` and `message`; title redacted while private lists are
+  hidden like other titles), registered in `lib.rs` and the Brain's capability
+  and permission files; `brain.js` (History) draws the buttons and follows the
+  new id; the opened-chat reader keeps `idx`, `forkable`, `fork_why`; tests read
+  `words.fork*` and `fork_error_cases` from the fixture.
+* *Phone:* `net/ChatLog.kt` parses `idx`, `forkable`, `fork_why` and the answer;
+  `JarvisApi.kt` and `JarvisRuntime.forkChat` call the route (held on a stale
+  link); `HistoryScreen.kt` draws the button on each message and, on success,
+  opens the new chat; tests read the same fixture keys.
+* *Neither app* computes the title, checks the kind itself beyond `forkable`, or
+  keeps anything about a fork on the device.
+
+**Parity:** `tools/check_parity.py` already classifies `/api/history/fork` as
+`ported`; it stays red ("classified here but the desktop no longer calls it")
+until the desktop's Rust calls the route.
