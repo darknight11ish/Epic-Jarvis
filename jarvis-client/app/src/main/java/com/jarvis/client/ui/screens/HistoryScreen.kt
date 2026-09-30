@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -36,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -50,6 +53,7 @@ import com.jarvis.client.net.ApiError
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.ChatFork
 import com.jarvis.client.net.ChatLog
+import com.jarvis.client.net.ChatMark
 import com.jarvis.client.net.ChatTags
 import com.jarvis.client.net.PlainErrors
 import com.jarvis.client.platform.PrivateClipboard
@@ -394,9 +398,13 @@ fun HistoryScreen(
             if (privateHidden) {
                 Column(Modifier.fillMaxWidth().weight(1f).padding(16.dp)) {
                     HiddenSection(ChatTags.EDITOR_TITLE, busy = showPrivateBusy, onShow = onShowPrivate)
+                    // The overnight switch holds no chat words, so it stays reachable.
+                    Gap(12)
+                    SuggestTagsRow(canAct = canAct)
                 }
             } else {
                 TagsEditor(
+                    canAct = canAct,
                     view = tagView,
                     oldPc = tagsOld,
                     // Deleting a tag untags its chats, so the list is read again too.
@@ -1009,6 +1017,12 @@ private fun Conversation(
     // the plain sentence a refusal left. The success sentence arrives as [notice].
     var forking by remember(id) { mutableStateOf<Int?>(null) }
     var forkSaid by remember(id) { mutableStateOf<String?>(notice) }
+    // "New section here" (section 106): the turn numbers a divider sits above (the
+    // PC's list, replaced by its answer after every change), which button's request
+    // is running, and the polite sentence the last change left.
+    var marks by remember(id) { mutableStateOf<Set<Int>>(emptySet()) }
+    var marking by remember(id) { mutableStateOf<Int?>(null) }
+    var markSaid by remember(id) { mutableStateOf<String?>(null) }
     val zone = remember { ZoneId.systemDefault() }
     val today = LocalDate.now(zone)
     var loaded by remember(id) { mutableStateOf<ChatLog.Transcript?>(null) }
@@ -1064,6 +1078,7 @@ private fun Conversation(
                 if (t == null) err = "Your PC sent something this app could not read." else {
                     loaded = t
                     chatTagId = t.tagId
+                    marks = t.marks
                 }
             }
             is ApiResult.Failed -> err = ChatLog.failure(r.error) ?: JarvisRuntime.noticeFor(r.error)
@@ -1190,6 +1205,11 @@ private fun Conversation(
                             color = chrome.textMid)
                     }
                     forkSaid?.let {
+                        Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
+                            modifier = Modifier.liveStatus())
+                    }
+                    // What "New section here" just did (or why not), announced politely.
+                    markSaid?.let {
                         Text(it, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
                             modifier = Modifier.liveStatus())
                     }
@@ -1333,6 +1353,44 @@ private fun Conversation(
             val chatbot = turn.role == "chatbot"
             val answer = turn.role == "assistant"
             Column(Modifier.fillMaxWidth()) {
+                // A section break sits ABOVE the message it was set on: a heading-level
+                // landmark with its own Remove (the same tap, both directions).
+                val markAt = turn.idx
+                if (ChatMark.dividerAbove(markAt, marks) && markAt != null) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Box(Modifier.weight(1f).height(1.dp).background(chrome.textLo))
+                        Text(
+                            ChatMark.DIVIDER,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = chrome.textMid,
+                            modifier = Modifier.semantics { heading() },
+                        )
+                        Box(Modifier.weight(1f).height(1.dp).background(chrome.textLo))
+                        Quiet(
+                            ChatMark.REMOVE,
+                            color = chrome.textMid,
+                            enabled = canAct && marking == null,
+                            modifier = Modifier.semantics { contentDescription = ChatMark.REMOVE_LABEL },
+                            onClick = {
+                                marking = markAt
+                                markSaid = null
+                                scope.launch {
+                                    try {
+                                        val r = JarvisRuntime.markSection(id, markAt, false)
+                                        r.marks?.let { marks = it }
+                                        markSaid = r.said
+                                    } finally {
+                                        marking = null
+                                    }
+                                }
+                            },
+                        )
+                    }
+                }
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -1434,6 +1492,33 @@ private fun Conversation(
                                     }
                                 } finally {
                                     forking = null
+                                }
+                            }
+                        },
+                    )
+                }
+                // "New section here" on the owner's own messages only, when the PC says the
+                // chat is markable (10+ messages, a chat or Live session). Nothing is drawn
+                // otherwise. A divider is only ever a divider: nothing reaches a model.
+                if (markAt != null && ChatMark.offered(loaded?.markable == true, turn.role, markAt, marks)) {
+                    val thisOne = marking == markAt
+                    Quiet(
+                        if (thisOne) ChatMark.BUSY else ChatMark.BUTTON,
+                        color = chrome.textMid,
+                        enabled = canAct && marking == null,
+                        modifier = Modifier.semantics {
+                            contentDescription = if (thisOne) ChatMark.BUSY else ChatMark.BUTTON_LABEL
+                        },
+                        onClick = {
+                            marking = markAt
+                            markSaid = null
+                            scope.launch {
+                                try {
+                                    val r = JarvisRuntime.markSection(id, markAt, true)
+                                    r.marks?.let { marks = it }
+                                    markSaid = r.said
+                                } finally {
+                                    marking = null
                                 }
                             }
                         },

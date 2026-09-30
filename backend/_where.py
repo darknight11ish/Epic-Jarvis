@@ -392,6 +392,9 @@ SHIPPED = (
     "jarvis_referee.py",
     # "Suggest tags overnight" (2026-09-30; tag-suggest.patch): cards only.
     "jarvis_tag_suggest.py",
+    # "Quiz me on a YouTube video" (2026-09-30; youtube.patch): one card per
+    # link, caption text only, quizzed on as outside text.
+    "jarvis_youtube.py",
 )
 
 

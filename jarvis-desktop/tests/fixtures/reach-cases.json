@@ -6,7 +6,7 @@
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
    "everything_else": "Anything not on this list stays on this PC.",
-   "on": 2,
+   "on": 3,
    "rows": [
     {
      "asks": "-",
@@ -117,6 +117,16 @@
      "state": "off",
      "state_words": "Off",
      "where": ""
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "youtube",
+     "line": "Reads the caption text (never the video or its sound) of a YouTube link you paste in the Quiz page, then quizzes you on it. One approval card per link shows the exact link. This breaks YouTube's terms and may be blocked. The captions are outside text.",
+     "name": "YouTube captions (for a quiz)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "youtube.com"
     },
     {
      "asks": "-",
@@ -270,7 +280,7 @@
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
    "everything_else": "Anything not on this list stays on this PC.",
-   "on": 0,
+   "on": 1,
    "rows": [
     {
      "asks": "-",
@@ -381,6 +391,16 @@
      "state": "off",
      "state_words": "Off",
      "where": ""
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "youtube",
+     "line": "Reads the caption text (never the video or its sound) of a YouTube link you paste in the Quiz page, then quizzes you on it. One approval card per link shows the exact link. This breaks YouTube's terms and may be blocked. The captions are outside text.",
+     "name": "YouTube captions (for a quiz)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "youtube.com"
     },
     {
      "asks": "-",
@@ -530,7 +550,7 @@
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
    "everything_else": "Anything not on this list stays on this PC.",
-   "on": 6,
+   "on": 7,
    "rows": [
     {
      "asks": "-",
@@ -641,6 +661,16 @@
      "state": "off",
      "state_words": "Off",
      "where": ""
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "youtube",
+     "line": "Reads the caption text (never the video or its sound) of a YouTube link you paste in the Quiz page, then quizzes you on it. One approval card per link shows the exact link. This breaks YouTube's terms and may be blocked. The captions are outside text.",
+     "name": "YouTube captions (for a quiz)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "youtube.com"
     },
     {
      "asks": "-",
@@ -814,7 +844,7 @@
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
    "everything_else": "Anything not on this list stays on this PC.",
-   "on": 23,
+   "on": 24,
    "rows": [
     {
      "asks": "Yes, every question",
@@ -925,6 +955,16 @@
      "state": "on",
      "state_words": "On",
      "where": "api.github.com"
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "youtube",
+     "line": "Reads the caption text (never the video or its sound) of a YouTube link you paste in the Quiz page, then quizzes you on it. One approval card per link shows the exact link. This breaks YouTube's terms and may be blocked. The captions are outside text.",
+     "name": "YouTube captions (for a quiz)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "youtube.com"
     },
     {
      "asks": "-",
@@ -1178,7 +1218,7 @@
    "available": true,
    "detail": "Every way Jarvis can reach something outside itself, and whether each one is on right now. The PC writes this list from its own settings - the AI model does not write it, so it cannot be talked into saying something else. Passwords, keys and private links are never shown.",
    "everything_else": "Anything not on this list stays on this PC.",
-   "on": 0,
+   "on": 1,
    "rows": [
     {
      "asks": "-",
@@ -1289,6 +1329,16 @@
      "state": "off",
      "state_words": "Off",
      "where": ""
+    },
+    {
+     "asks": "Yes, every time",
+     "id": "youtube",
+     "line": "Reads the caption text (never the video or its sound) of a YouTube link you paste in the Quiz page, then quizzes you on it. One approval card per link shows the exact link. This breaks YouTube's terms and may be blocked. The captions are outside text.",
+     "name": "YouTube captions (for a quiz)",
+     "on": true,
+     "state": "on",
+     "state_words": "On",
+     "where": "youtube.com"
     },
     {
      "asks": "-",
@@ -1443,6 +1493,7 @@
   "notes_read",
   "notes_write",
   "github",
+  "youtube",
   "phone_push",
   "computer",
   "browser",

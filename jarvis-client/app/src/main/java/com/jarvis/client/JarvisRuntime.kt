@@ -7119,6 +7119,60 @@ object JarvisRuntime {
         }
     }
 
+    /**
+     * "New section here" (`POST /api/history/mark`, docs/JARVIS-API.md section
+     * 106): put a divider above the turn numbered [idx] of [chatId], or take
+     * it off. Held on a stale link (rule 4) and refused while the private
+     * lists are hidden. No card. Only the chat's id, the turn's number and
+     * on/off are sent - none of its words - and nothing here reaches a model.
+     */
+    suspend fun markSection(chatId: String, idx: Int, on: Boolean): com.jarvis.client.net.ChatMark.Result {
+        val words = com.jarvis.client.net.ChatMark
+        actionBlocker()?.let { return com.jarvis.client.net.ChatMark.Result(false, it) }
+        if (privateListsHidden) return com.jarvis.client.net.ChatMark.Result(false, words.HIDDEN)
+        if (!com.jarvis.client.net.ChatHistory.validConversationId(chatId) || idx < 0) {
+            return com.jarvis.client.net.ChatMark.Result(false, words.errorSentence("bad_request"))
+        }
+        return when (val r = api.markPost(words.body(chatId, idx, on))) {
+            is ApiResult.Ok -> words.result(r.value.second, on)
+            is ApiResult.Failed -> com.jarvis.client.net.ChatMark.Result(
+                false,
+                if (r.error == ApiError.NotFound) words.ERROR_FALLBACK else "The section break was not saved. " + describe(r.error),
+            )
+        }
+    }
+
+    /**
+     * `GET /api/history/tags/suggest` (section 104): the "Suggest tags
+     * overnight" switch. A read, never held on a stale link, and it shows
+     * under hidden lists (it holds no chat words). Null for a PC without it
+     * (an older PC answers 404) or an answer that is not one.
+     */
+    suspend fun tagSuggestState(): com.jarvis.client.net.TagSuggest.State? =
+        when (val r = api.tagSuggestState()) {
+            is ApiResult.Ok -> com.jarvis.client.net.TagSuggest.state(r.value)
+            is ApiResult.Failed -> null
+        }
+
+    /**
+     * Turn "Suggest tags overnight" on or off (`POST /api/history/tags/suggest`
+     * with exactly `{"enabled": bool}`). ON raises ONE approval card on the PC
+     * and comes back `pending`: the caller keeps the switch OFF until a later
+     * [tagSuggestState] says enabled. OFF is instant. Every write is held on
+     * a stale link (rule 4), so both wait for a fresh one.
+     */
+    suspend fun setTagSuggest(on: Boolean): com.jarvis.client.net.TagSuggest.Write {
+        val words = com.jarvis.client.net.TagSuggest
+        actionBlocker()?.let { return com.jarvis.client.net.TagSuggest.Write(false, it) }
+        return when (val r = api.tagSuggestPost(words.body(on))) {
+            is ApiResult.Ok -> words.write(r.value.first, r.value.second)
+            is ApiResult.Failed -> com.jarvis.client.net.TagSuggest.Write(
+                false,
+                if (r.error == ApiError.NotFound) words.OLD_PC else "Not changed. " + describe(r.error),
+            )
+        }
+    }
+
     /** The chat Home is in, when it was kept on the PC (so History can say "this is the one you are in"). */
     fun homeKeptChatId(): String? = if (chat.hasKeptChat()) chat.conversationIdNow() else null
 

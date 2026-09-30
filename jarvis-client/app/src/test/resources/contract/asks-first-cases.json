@@ -476,6 +476,15 @@
        "title": "Accept an offer from customer support in your name"
       },
       {
+       "action": "youtube_captions_read",
+       "fixed": false,
+       "id": "youtube_captions_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch the caption text of a YouTube video for a quiz"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -1506,6 +1515,15 @@
        "title": "Accept an offer from customer support in your name"
       },
       {
+       "action": "youtube_captions_read",
+       "fixed": false,
+       "id": "youtube_captions_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch the caption text of a YouTube video for a quiz"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -2532,6 +2550,15 @@
        "title": "Accept an offer from customer support in your name"
       },
       {
+       "action": "youtube_captions_read",
+       "fixed": false,
+       "id": "youtube_captions_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch the caption text of a YouTube video for a quiz"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -3552,6 +3579,15 @@
        "title": "Accept an offer from customer support in your name"
       },
       {
+       "action": "youtube_captions_read",
+       "fixed": false,
+       "id": "youtube_captions_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch the caption text of a YouTube video for a quiz"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -4570,6 +4606,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "action": "youtube_captions_read",
+       "fixed": false,
+       "id": "youtube_captions_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch the caption text of a YouTube video for a quiz"
       },
       {
        "fixed": true,
@@ -5605,6 +5650,15 @@
        "title": "Accept an offer from customer support in your name"
       },
       {
+       "action": "youtube_captions_read",
+       "fixed": false,
+       "id": "youtube_captions_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch the caption text of a YouTube video for a quiz"
+      },
+      {
        "fixed": true,
        "id": "fixed:handoff",
        "note": "Your own taps and typing, passed to that one browser window on the PC only while Jarvis is paused at the page. Jarvis never solves it, and the picture is never saved. After you solve it, the paused job only carries on after you approve a card.",
@@ -6629,6 +6683,15 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Accept an offer from customer support in your name"
+      },
+      {
+       "action": "youtube_captions_read",
+       "fixed": false,
+       "id": "youtube_captions_read",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Fetch the caption text of a YouTube video for a quiz"
       },
       {
        "fixed": true,

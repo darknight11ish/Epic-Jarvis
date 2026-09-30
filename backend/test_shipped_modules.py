@@ -85,6 +85,7 @@ THIRD_PARTY = {
     "cryptography": "cryptography",
     "fsrs": "fsrs",
     "ddgs": "ddgs",
+    "youtube_transcript_api": "youtube-transcript-api",   # jarvis_youtube.py (2026-09-30)
     "winrt": "winrt-Windows.Media.Control",
     "espeakng_loader": "espeakng-loader",
     "onnx": "onnx",

@@ -969,6 +969,16 @@ $PATCHES = @(
     # in (and the rebuilt jarvis-framework.toml's two `ask` lines); without it, or on any error, the banner
     # says so and the switch simply does nothing.
     'tag-suggest.patch'
+    # "Quiz me on a YouTube video" (the owner's decision of 2026-09-30; docs/STUDY-FROM-TEXT-DESIGN.md
+    # section 5 and 14, JARVIS-API section 109): ONE card per YouTube link, then the video's CAPTION TEXT
+    # only is fetched and quizzed on as outside text. It breaks YouTube's terms and may be blocked; the card
+    # says so. TWO files: in jarvis_gate.py the new action `youtube_captions_read` joins the "acts only on
+    # tier ask" set and gets its _RISK line (both right after tag-suggest.patch's own, so it goes after it);
+    # in jarvis_hud.py ONE install block after tag-suggest.patch's own (the last one before
+    # `_loopback_companion`). Needs jarvis_youtube.py copied in, the youtube-transcript-api package from
+    # requirements.txt, and the rebuilt jarvis-framework.toml's `youtube_captions_read = "ask"` line; without
+    # them, or on any error, the banner says so and the routes are simply not there.
+    'youtube.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1201,6 +1211,8 @@ $SHIPPED = @(
     'jarvis_topics.py'           # topics.patch: per-topic mode (Learn and use / Use but don't learn / Learn but don't use / Off) - tables in memory.db, sorting by fixed rules with the local model only as an opt-in suggestion, one card (topic_loosen) for turning a private topic back on; the filter itself lives in the rebuilt jarvis_memory.py
     'jarvis_referee.py'          # referee.patch: "This looks done - tick it?" - one card per goal step whose number reached its target, at most three a day, no model, only the owner's tap ticks; a second-card switch (id referee)
     'jarvis_tag_suggest.py'      # tag-suggest.patch: "Suggest tags overnight" - the local model may suggest a tag for a few untagged chats a night, each a card (chat_tag_suggest), filed only on a tap; off by default, turning it on is one card (chat_tags_suggest_on)
+    # --- "Quiz me on a YouTube video" (2026-09-30, youtube.patch) ---
+    'jarvis_youtube.py'          # youtube.patch: ONE card per YouTube link (youtube_captions_read), then the caption text only is fetched (youtube-transcript-api) and quizzed on as outside text; breaks YouTube's terms, may be blocked; never video or audio
 )
 
 # The settings file. Installed only where none exists; never overwritten.

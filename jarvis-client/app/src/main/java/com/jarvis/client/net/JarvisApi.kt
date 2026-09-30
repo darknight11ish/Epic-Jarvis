@@ -1556,6 +1556,46 @@ class JarvisApi(
         }
 
     /**
+     * `POST /api/history/mark` ("New section here", docs/JARVIS-API.md section
+     * 106): [json] is [ChatMark.body], exactly `{"id", "idx", "on"}`. The
+     * status and body come back whole so a refusal reaches the owner as the PC
+     * wrote it. Same shape and rules as [forkPost]; the token is never logged.
+     */
+    suspend fun markPost(json: String): ApiResult<Pair<Int, JsonObject?>> = historyWrite(ChatMark.MARK_PATH, json)
+
+    /**
+     * `GET /api/history/tags/suggest` (section 104): a read of the "Suggest
+     * tags overnight" switch. Never held on a stale link. A 404 is a PC
+     * without the route.
+     */
+    suspend fun tagSuggestState(): ApiResult<JsonObject> = probe(TagSuggest.PATH)
+
+    /** `POST /api/history/tags/suggest`: [json] is [TagSuggest.body], exactly `{"enabled": bool}`. */
+    suspend fun tagSuggestPost(json: String): ApiResult<Pair<Int, JsonObject?>> = historyWrite(TagSuggest.PATH, json)
+
+    /** One JSON POST to a History route, the answer whole (status and body), like [forkPost]. */
+    private suspend fun historyWrite(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    when {
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 && obj?.containsKey("ok") != true -> ApiResult.Failed(ApiError.NotFound)
+                        obj != null -> ApiResult.Ok(resp.code to obj)
+                        resp.isSuccessful -> ApiResult.Ok(resp.code to null)
+                        resp.code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, ""))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `GET /api/memory/fact-chat?id=` (the chat audit, 2026-09-28): which chat
      * a fact came from - its title and when - so "Also delete the chat it
      * came from" names it first. A read; it deletes nothing.

@@ -268,6 +268,10 @@ class Ctx:
     # The headless browser (jarvis_browser_engine.py): {"enabled": bool,
     # "ready": bool, "mode": str}; None: read it.
     browser_engine: Optional[dict] = None
+    # YouTube captions for a quiz (jarvis_youtube.py): {"ready": True | False |
+    # None} - the module is here and its caption reader installed / the module
+    # is here but the reader is not / the module is not here; None: look.
+    youtube: Optional[dict] = None
 
 
 def _gate_action(lookup: str) -> Optional[str]:
@@ -669,6 +673,49 @@ def _github(ctx: Ctx) -> dict:
                 "Searches GitHub for existing code libraries, with the search words shown "
                 "on the card." + (" A GitHub token is saved on this PC." if token else
                                   " No GitHub token is set, so it searches without one."))
+
+
+def _youtube_ready() -> Optional[bool]:
+    """Is jarvis_youtube here, and is its caption reader installed? None = the
+    module itself is not on this PC. Opens no connection."""
+    try:
+        import importlib.util
+        import jarvis_youtube  # noqa: F401
+    except Exception:
+        return None
+    try:
+        return importlib.util.find_spec("youtube_transcript_api") is not None
+    except Exception:
+        return False
+
+
+def _youtube(ctx: Ctx) -> dict:
+    """"Quiz me on a YouTube video" (jarvis_youtube.py, the owner's decision of
+    2026-09-30): ONE approval card per link, then the video's CAPTION TEXT
+    only is fetched from YouTube. It breaks YouTube's terms and may be blocked."""
+    name = "YouTube captions (for a quiz)"
+    ready = ctx.youtube.get("ready") if ctx.youtube is not None else _youtube_ready()
+    if ready is None:
+        return _row("youtube", name, "not_set_up", "", ASK_NA,
+                    "Not set up: this PC's Jarvis does not have the YouTube quiz yet - run "
+                    "apply-patches.ps1.")
+    tier = "ask"
+    try:
+        tier = str(ctx.tier("youtube_captions_read"))
+    except Exception:
+        pass
+    if tier == "never":
+        return _row("youtube", name, "blocked", "", ASK_NEVER,
+                    "Your settings say never, so Jarvis never reads a video's captions.")
+    if not ready:
+        return _row("youtube", name, "not_set_up", "", ASK_NA,
+                    "Not set up: the caption reader (youtube-transcript-api) is not installed "
+                    "on this PC yet - run apply-patches.ps1.")
+    return _row("youtube", name, "on", "youtube.com", ASK_EVERY,
+                "Reads the caption text (never the video or its sound) of a YouTube link you "
+                "paste in the Quiz page, then quizzes you on it. One approval card per link "
+                "shows the exact link. This breaks YouTube's terms and may be blocked. The "
+                "captions are outside text.")
 
 
 def _phone_push(ctx: Ctx) -> dict:
@@ -1101,6 +1148,7 @@ KINDS = (
     ("notes_read", _notes_read),
     ("notes_write", _notes_write),
     ("github", _github),
+    ("youtube", _youtube),
     ("phone_push", _phone_push),
     ("computer", _computer),
     ("browser", _browser),

@@ -300,7 +300,7 @@ HARD_LIMITS = frozenset({
     "chat_tags_suggest_on", "chat_tag_suggest",
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
     "register_approval_key",
-    "support_chat", "support_offer",
+    "support_chat", "support_offer", "youtube_captions_read",
 })
 
 #: Actions whose own module refuses anything but "ask" (a looser line
@@ -319,7 +319,7 @@ MUST_ASK = frozenset({
     "topic_loosen", "referee_tick", "chat_tags_suggest_on", "chat_tag_suggest",
     "chatbot_session", "memory_forget_range", "pair_device", "unretire_shared_key",
     "register_approval_key", "app_merge_change",
-    "support_chat", "support_offer",
+    "support_chat", "support_offer", "youtube_captions_read",
 })
 
 #: The page's groups, in order: (title, [action or fixed-row id]). A fixed
@@ -346,7 +346,8 @@ GROUPS = (
                       "control_browser", "obscura_enable", "post_to_external_service",
                       "open_public_tunnel",
                       "news_read", "page_read", "github_read", "chatbot_session",
-                      "support_chat", "support_offer", "fixed:handoff"]),
+                      "support_chat", "support_offer", "youtube_captions_read",
+                      "fixed:handoff"]),
     ("This PC and your phone", ["run_shell_on_host", "control_computer", "control_phone",
                                 "run_plan", "fixed:plugin_start", "fixed:plugin_use",
                                 "delete_file", "spend_money", "power_manage",
@@ -1628,7 +1629,7 @@ LOCKDOWN_ACTIONS = frozenset({
     # sending, saving and tidying email
     "send_email", "draft_email", "tidy_inbox",
     # an address the owner typed, and GitHub watches
-    "news_read", "page_read", "github_read",
+    "news_read", "page_read", "github_read", "youtube_captions_read",
     # the browser, a cloud AI model, models and tool updates from the internet
     "control_browser", "cloud_model", "browse_model_catalog", "download_model",
     "check_tool_updates",

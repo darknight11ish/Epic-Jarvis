@@ -223,6 +223,18 @@ object ChatLog {
          * nothing rather than a reason it does not have).
          */
         val forkWhy: String? = null,
+        /**
+         * "New section here" (JARVIS-API section 106): the turn numbers (`idx`)
+         * a divider sits ABOVE. Empty from an older PC.
+         */
+        val marks: Set<Int> = emptySet(),
+        /**
+         * Whether the owner's messages get the "New section here" button
+         * (`markable`). False from an older PC that says nothing: no buttons.
+         */
+        val markable: Boolean = false,
+        /** Why not, when the PC says (`mark_why`); shown only as an error's sentence, never drawn. */
+        val markWhy: String? = null,
     )
 
     /** `history.enabled` / `history.recording` on a conversation; each null when not clearly a yes or a no. */
@@ -315,6 +327,9 @@ object ChatLog {
             tagId = body.whole("tag_id")?.toInt(),
             forkable = forkFlag == true,
             forkWhy = if (forkFlag == false) body.str("fork_why") ?: ChatFork.NO else null,
+            marks = ChatMark.marksOf(body["marks"]),
+            markable = body.flag("markable") == true,
+            markWhy = body.str("mark_why"),
         )
     }
 

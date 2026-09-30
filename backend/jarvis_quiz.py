@@ -642,7 +642,7 @@ _CLOCK = {"now": time.time}
 
 class _Quiz:
     def __init__(self, title: str, questions: list, now: float, *, mode: str = "text",
-                 level=None, key_source=None):
+                 level=None, key_source=None, provenance=None, source=None):
         self.id = secrets.token_hex(8)
         self.title = title
         self.questions = [dict(q, mark=None) for q in questions]
@@ -651,6 +651,8 @@ class _Quiz:
         self.level = level              # "A1".."C2" in Spanish mode, else None
         self.key_source = key_source    # "text" | "model" in Spanish mode, else None
         self.model = ""                 # the model that last wrote or marked here ("" = everyday)
+        self.provenance = provenance    # "outside" for text the owner did not write (YouTube captions), else None
+        self.source = source            # a short label for where outside text came from, e.g. "youtube"
 
 
 def _purge(now: float) -> None:
@@ -671,6 +673,10 @@ def _view(s: _Quiz) -> dict:
          "mode": s.mode, "level": s.level, "key_source": s.key_source}
     if s.mode == "spanish":
         v["notice"] = SPANISH_NOTICE
+    if s.provenance:
+        # Additive (JARVIS-API section 98/109): only a quiz on OUTSIDE text carries these.
+        v["provenance"] = s.provenance
+        v["source"] = s.source
     return v
 
 
@@ -733,6 +739,23 @@ def start(body: dict) -> dict:
     count = _count_of(body)
     title = _clean_line(body.get("title"), TITLE_MAX) or DEFAULT_TITLE
     return _register(lambda: write_questions(text, count), title)
+
+
+def start_outside(text, count, title, source: str) -> dict:
+    """A quiz on OUTSIDE text - text the owner did not write and did not paste,
+    handed in by another module (jarvis_youtube.py: a video's caption text,
+    fetched after the owner's own card). Same limits, same fenced-data model
+    calls, same crisis check on every answer, nothing learned or written; the
+    quiz is only marked `provenance: "outside"` and `source`, so the apps can
+    say so. The caller cuts a long text to TEXT_MAX itself (and says it did)."""
+    if not isinstance(text, str) or len(text.strip()) < TEXT_MIN:
+        raise QuizError("text_too_short")
+    if len(text) > TEXT_MAX:
+        raise QuizError("text_too_long")
+    n = _count_of({"count": count})
+    label = _clean_line(title, TITLE_MAX) or DEFAULT_TITLE
+    tag = _clean_line(source, 20) or "outside"
+    return _register(lambda: write_questions(text, n), label, provenance="outside", source=tag)
 
 
 def _start_spanish(body: dict) -> dict:

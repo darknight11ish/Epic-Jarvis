@@ -122,6 +122,14 @@ chatbot_session           = "ask"
 # (unknown_action_tier).
 support_chat              = "ask"
 support_offer             = "ask"
+# Reading a YouTube video's captions for a quiz (jarvis_youtube.py; the
+# owner's decision of 2026-09-30, docs/STUDY-FROM-TEXT-DESIGN.md section 5):
+# ONE card per link, showing the exact address. It breaks YouTube's terms and
+# may be blocked - the card says so. Caption text only, never video or audio.
+# Must stay "ask": anything else and no captions are fetched; "never"
+# switches the feature off. A file without this line asks too
+# (unknown_action_tier).
+youtube_captions_read     = "ask"
 # GitHub watches in "tell me when" (jarvis_tellme.py "github" source, the
 # owner's choice of 2026-09-28): one read-only GET to api.github.com per look
 # - a workflow run list or one pull request - for a watch the owner already

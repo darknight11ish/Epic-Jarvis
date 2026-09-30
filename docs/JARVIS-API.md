@@ -11792,7 +11792,7 @@ the list "Windows Hello for memory lists" hides (`lock/rules.rs`
   5. Press Enter for the next." or "No name matches that." It matches the
   name, names joined to it, and what the owner calls it ("sister").
 
-The phone has no Galaxy: the memory graph stays off the phone (CLAUDE.md).
+The phone has no Galaxy picture: the memory graph stays off the phone (CLAUDE.md). Picking a dot now also lists the facts that name it, read-only, in their own words - see §106.4.
 
 ### 71.4 Not checked, said plainly
 
@@ -16452,6 +16452,14 @@ A new table `marks (conversation_id TEXT PRIMARY KEY, v BLOB)`; `v` is the sorte
 `words.mark*` in `history-cases.json`, word for word in both apps: button `New section here` (`mark`; its screen-reader name is `New section here, before your message`), divider `New section` (`mark_divider`, a heading-level landmark reading `New section`), `Remove section break` (`mark_remove`), `Section break added.` (`mark_done`), `Section break removed.` (`mark_removed`), `You can have at most 20 section breaks in one chat.` (`mark_limit`), `This chat cannot have section breaks.` (`mark_no`, used when the PC gave no `mark_why`), and the fallback `Your PC did not save that section break.` Results are announced politely. The opened chat is already hidden under "Hide memory lists and chat history", so no marker is reachable there.
 
 Tests: `backend/test_chat_marks.py` (add, remove, idempotent add, bad `idx`, the 21st, sealed with no plain list in the file and only its own additional data opening it, no turn or conversation row touched, `take_out`/`put_back` including the joined chat, fork, delete, sweep, the four refused kinds and a Live session, history off and no key, the routes, the audit line).
+
+### 106.4 Galaxy: facts behind this dot (desktop, built 2026-09-30)
+
+`docs/GALAXY-PANEL-DESIGN.md`. Picking a dot in the Galaxy adds a labelled section, "Facts behind this dot ({count})", to the side panel. **No new route, no gate action, no library.** The dot's `fact_ids` (from `GET /api/memory/entities`, newest first) are read 20 at a time through `GET /api/memory/used?ids=` (the desktop's `memory_used`, never more than 100 ids a call); nothing else is read - no chat, history, document, graph or web route. Read-only: each row has only `Open in Memory` (the same "About <name>" page); Forget, Erase and Pin stay there. The heading count is `fact_ids.length` from the list, not a model's.
+
+Rows: the fact's words, the date saved, and `Pinned` / `Forgotten`; forgotten facts sort after the current ones within a page. An erased fact (empty `text`, `erased_at` set) reads `Erased. Only the dates are kept.` with its dates. An id `memory_used` reports `missing` is skipped. A fact `memory_used` marks `left_out` (its topic is Off or learn-only) is never shown and is counted: `{n} hidden by topic settings`. If the memory lists become hidden while the panel is open (Rust empties `memory_used`), the panel is wiped and says `Hidden. Show memory lists to see these facts.`; no words stay on the page.
+
+Shared words: the `galaxy_panel*` keys in `galaxy-cases.json` (`tools/gen_galaxy_cases.py`, written to the desktop's `tests/fixtures/` and the phone's `contract/`). Code: `src/galaxy-view.js` (`factPage`, `factRow`, `panelWords`), `src/galaxy-panel.js`, `brain.js` `select()`. Test: `jarvis-desktop/tests/galaxy-panel.mjs`.
 
 ## 107. Topic controls: include or exclude topics in Jarvis's brain (added 2026-09-30; backend and both apps built)
 

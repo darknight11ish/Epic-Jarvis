@@ -79,6 +79,8 @@ TITLES = {
     # jarvis_support.py (2026-09-28): ONE card per support chat, and ONE per offer
     "support_chat": "chat with a company's customer support for you",
     "support_offer": "accept an offer from customer support in your name",
+    # jarvis_youtube.py (2026-09-30): ONE card per YouTube link, caption text only
+    "youtube_captions_read": "fetch the caption text of a YouTube video for a quiz",
     "stop_asking_before_every_web_search": "stop asking before every web search",
     # --- notes
     "read_joplin_note": "read a note in Joplin",

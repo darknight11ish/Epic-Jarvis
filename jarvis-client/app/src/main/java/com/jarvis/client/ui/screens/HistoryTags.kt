@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +35,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ChatTags
+import com.jarvis.client.net.TagSuggest
 import com.jarvis.client.ui.parts.Dot
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
@@ -255,6 +257,8 @@ internal fun TagsEditor(
     oldPc: Boolean,
     onChanged: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The link is up and fresh: the "Suggest tags overnight" switch is a write, so it waits (rule 4). */
+    canAct: Boolean = true,
 ) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
@@ -466,6 +470,97 @@ internal fun TagsEditor(
                 }
             }
         }
+        // The last row: "Suggest tags overnight" (docs/JARVIS-API.md section 104).
+        item(key = "suggest") { SuggestTagsRow(canAct = canAct) }
         item(key = "tail") { Gap(24) }
+    }
+}
+
+/**
+ * "Suggest tags overnight" (docs/JARVIS-API.md section 104; the owner,
+ * 2026-09-30): a switch, a one-line state, and how many suggestion cards wait.
+ *
+ * NOTHING is filed without a tap on Approve: each suggestion is an ordinary
+ * approval card. Turning it ON raises ONE card on the PC, so the switch stays
+ * OFF here - and says it is waiting - until a later read says it is enabled;
+ * turning it OFF is instant. The state is read when this row appears and after
+ * every change; there is no push. Writes wait for a fresh link. The row holds
+ * no chat words, so it also shows while the private lists are hidden.
+ * (Written by eye: no local Android build - CI is the compiler.)
+ */
+@Composable
+internal fun SuggestTagsRow(canAct: Boolean, modifier: Modifier = Modifier) {
+    val chrome = LocalChrome.current
+    val scope = rememberCoroutineScope()
+    var state by remember { mutableStateOf<TagSuggest.State?>(null) }
+    var loaded by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    // The plain sentence left by the last change: "waiting for your approval", or why not.
+    var said by remember { mutableStateOf<String?>(null) }
+    var saidIsError by remember { mutableStateOf(false) }
+
+    suspend fun read() {
+        state = JarvisRuntime.tagSuggestState()
+        loaded = true
+        // A read that says it is on ends the "waiting for your approval" line.
+        if (state?.enabled == true && !saidIsError) said = null
+    }
+    LaunchedEffect(Unit) { read() }
+
+    Plate(modifier) {
+        val s = state
+        when {
+            !loaded -> Text("Reading…", style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+            s == null -> Text(TagSuggest.OLD_PC, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
+            else -> {
+                SwitchRow(
+                    title = TagSuggest.LABEL,
+                    detail = null,
+                    checked = s.enabled,
+                    // A write, so a fresh link is needed either way (rule 4).
+                    enabled = canAct && !busy,
+                    onChange = { want ->
+                        busy = true
+                        said = null
+                        saidIsError = false
+                        scope.launch {
+                            try {
+                                val w = JarvisRuntime.setTagSuggest(want)
+                                if (!w.ok) saidIsError = true
+                                said = w.said
+                                read()
+                            } finally {
+                                busy = false
+                            }
+                        }
+                    },
+                )
+                Gap(4)
+                Text(
+                    if (busy) TagSuggest.ASKING else TagSuggest.stateLine(s),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = chrome.textMid,
+                    modifier = Modifier.liveStatus(),
+                )
+                TagSuggest.waitingLine(s.waiting)?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
+                }
+                said?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (saidIsError) chrome.warnInk else chrome.textMid,
+                        modifier = Modifier.liveStatus(),
+                    )
+                }
+                if (!canAct) {
+                    Text(
+                        com.jarvis.client.net.PlainErrors.shown("link_stale").text,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = chrome.textMid,
+                    )
+                }
+            }
+        }
     }
 }

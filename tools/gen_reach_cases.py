@@ -134,7 +134,8 @@ def _ctx(enabled, *, tiers=None, search=None, keys=None, lanes=None, providers=N
                  second_card=second or OFF, big_model=big or {"master": False},
                  gate_action=lambda lookup: None, plugins=plugins or NO_PLUGINS,
                  chatbot=chatbot or _gemini(False), support=support or _support(False),
-                 screen_picture=picture or {"enabled": False, "model": "minicpm-v:4.6"})
+                 screen_picture=picture or {"enabled": False, "model": "minicpm-v:4.6"},
+                 youtube={"ready": True})
 
 
 def cases() -> dict:

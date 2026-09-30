@@ -357,6 +357,10 @@
     {
       "action": "write_notes_after_outside_text",
       "title": "Jarvis wants to write to your notes after reading outside text"
+    },
+    {
+      "action": "youtube_captions_read",
+      "title": "Jarvis wants to fetch the caption text of a YouTube video for a quiz"
     }
   ],
   "fallback": [
