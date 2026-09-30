@@ -170,10 +170,7 @@ pub async fn brain_quiz_cloud_start(
 
 /// Reads one grading request. A read; never held on a stale link.
 #[tauri::command]
-pub async fn brain_quiz_cloud_get(
-    app: AppHandle,
-    id: String,
-) -> Result<serde_json::Value, String> {
+pub async fn brain_quiz_cloud_get(app: AppHandle, id: String) -> Result<serde_json::Value, String> {
     if !valid_id(&id) {
         return Err(NO_SUCH_REQUEST.to_string());
     }
@@ -218,7 +215,10 @@ mod tests {
     use super::*;
 
     fn fixture() -> serde_json::Value {
-        serde_json::from_str(include_str!("../../../tests/fixtures/quiz-cloud-cases.json")).unwrap()
+        serde_json::from_str(include_str!(
+            "../../../tests/fixtures/quiz-cloud-cases.json"
+        ))
+        .unwrap()
     }
 
     #[test]
@@ -256,7 +256,10 @@ mod tests {
         }
         for old in [404, 501] {
             for body in ["", "Not Found", "{}"] {
-                assert_eq!(quiz_cloud_answer(old, body).unwrap_err(), QUIZ_CLOUD_MISSING);
+                assert_eq!(
+                    quiz_cloud_answer(old, body).unwrap_err(),
+                    QUIZ_CLOUD_MISSING
+                );
             }
         }
     }
