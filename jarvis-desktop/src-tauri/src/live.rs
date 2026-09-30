@@ -439,7 +439,7 @@ pub(crate) fn adopt(app: &AppHandle) {
                 serde_json::json!({ "do": "stop", "why": "owner", "device": "desktop" }),
             )
             .await;
-            commands::notify(&app, "Jarvis Live", &why);
+            commands::notify_guarded(&app, "Jarvis Live", &why, None);
             return;
         }
         CARD_PAUSED.store(false, Ordering::SeqCst);
@@ -587,7 +587,7 @@ pub fn toggle(app: &AppHandle, by: &'static str) {
             start(&app, Some(by), None).await
         };
         if let Err(why) = result {
-            commands::notify(&app, "Jarvis Live", &why);
+            commands::notify_guarded(&app, "Jarvis Live", &why, None);
         }
     });
 }

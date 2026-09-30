@@ -36,7 +36,7 @@
 //!
 //! NOTHING HERE READS THE SCREEN.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use tauri::{AppHandle, Manager, PhysicalPosition};
@@ -93,6 +93,65 @@ pub(crate) const NOT_THIS_PC: &str = "Jarvis only looks at the screen of the PC 
 /// The Jarvis bar's line when a look could not be taken and the PC gave no
 /// reason of its own.
 const NO_LOOK: &str = "Jarvis could not look at your screen just now.";
+
+/// How often this app tells the PC "I am still here" while a session is on
+/// (the heartbeat). The PC ends a session after about 45 seconds of silence,
+/// so a closed or crashed app cannot leave Jarvis watching with nobody to
+/// see the sign. 12 s leaves three beats inside that window.
+pub(crate) const HEARTBEAT_EVERY: Duration = Duration::from_secs(12);
+/// The PC's silence limit, in seconds (the backend's number, not ours).
+#[cfg(test)]
+const HEARTBEAT_PC_LIMIT_SECS: u64 = 45;
+/// Which heartbeat loop is the current one; a newer session bumps it, so an
+/// older loop notices and stops instead of doubling the beats.
+static BEAT_GEN: AtomicU64 = AtomicU64::new(0);
+
+/// The body of the heartbeat. The verb is `heartbeat` on `POST /api/screen`,
+/// no other fields.
+pub(crate) fn heartbeat_body() -> serde_json::Value {
+    serde_json::json!({ "do": "heartbeat" })
+}
+
+/// What one loop turn does.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Beat {
+    Send,
+    Stop,
+}
+
+/// Pure decision for one turn of the heartbeat loop: beat only while this is
+/// still the newest loop and a session is on.
+pub(crate) fn beat_action(my_gen: u64, current_gen: u64, on: bool) -> Beat {
+    if on && my_gen == current_gen {
+        Beat::Send
+    } else {
+        Beat::Stop
+    }
+}
+
+/// Starts the heartbeat for a session that just began. One loop per session:
+/// the generation counter retires any older one. A PC that does not know the
+/// verb (older backend) just answers an error, which is ignored - the beat
+/// is best effort and never shows the owner a message.
+fn start_heartbeat(app: &AppHandle) {
+    let my_gen = BEAT_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(HEARTBEAT_EVERY).await;
+            if beat_action(my_gen, BEAT_GEN.load(Ordering::SeqCst), on_here()) == Beat::Stop {
+                return;
+            }
+            if let Ok(out) = post(&app, "/api/screen", heartbeat_body(), WRITE_TIMEOUT).await {
+                // The PC's answer carries the session's state: if it says
+                // the session ended, the sign follows.
+                if out.get("on").is_some() {
+                    on_status(&app, &out);
+                }
+            }
+        }
+    });
+}
 
 /// Is a watch session on on this PC (the tray asks).
 pub fn on_here() -> bool {
@@ -289,6 +348,9 @@ pub(crate) fn on_status(app: &AppHandle, status: &serde_json::Value) {
         if let Err(why) = show_badge(app) {
             eprintln!("[look] the badge did not open: {why}");
         }
+        if !was {
+            start_heartbeat(app);
+        }
     } else if was {
         // Ended: the badge stays a few seconds, saying why.
         let app = app.clone();
@@ -439,7 +501,7 @@ async fn look_then_bar(app: &AppHandle) {
     let out = match post(app, "/api/screen", look_body(false), LOOK_TIMEOUT).await {
         Ok(out) => out,
         Err(why) => {
-            commands::notify(app, "Jarvis", &why);
+            commands::notify_guarded(app, "Jarvis", &why, None);
             return;
         }
     };
@@ -564,7 +626,7 @@ pub fn toggle(app: &AppHandle, by: &'static str) {
             run_watch(&app, "start", None, Some(by)).await
         };
         if let Err(why) = result {
-            commands::notify(&app, "Watch with me", &why);
+            commands::notify_guarded(&app, "Watch with me", &why, None);
         }
     });
 }
@@ -645,6 +707,24 @@ pub(crate) fn note_held(status: &serde_json::Value) {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn the_heartbeat_is_one_fixed_word_inside_the_pcs_silence_limit() {
+        assert_eq!(heartbeat_body(), json!({ "do": "heartbeat" }));
+        // Between 10 and 15 seconds, and at least three beats fit in the
+        // PC's 45 seconds of allowed silence.
+        assert!((10..=15).contains(&HEARTBEAT_EVERY.as_secs()));
+        assert!(HEARTBEAT_EVERY.as_secs() * 3 <= HEARTBEAT_PC_LIMIT_SECS);
+        // Not a verb a page can send.
+        assert!(!WATCH_ACTIONS.contains(&"heartbeat"));
+    }
+
+    #[test]
+    fn the_heartbeat_stops_when_the_session_ends_or_a_newer_loop_starts() {
+        assert_eq!(beat_action(3, 3, true), Beat::Send);
+        assert_eq!(beat_action(3, 3, false), Beat::Stop);
+        assert_eq!(beat_action(3, 4, true), Beat::Stop);
+    }
 
     #[test]
     fn a_look_body_says_only_what_to_look_at() {

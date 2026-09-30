@@ -1338,10 +1338,12 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         ID_APPROVALS => {
             if let Err(err) = windows::show_quickbar(app) {
                 eprintln!("[jarvis] tray: quickbar unavailable: {err}");
-                commands::notify(
+                commands::notify_failed(
                     app,
                     "Jarvis",
-                    &format!("The Jarvis bar could not open: {err}"),
+                    "The Jarvis bar could not open.",
+                    &err.to_string(),
+                    commands::Details::Log,
                 );
                 return;
             }
@@ -1359,28 +1361,52 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         ID_SHOW_HUD => {
             if let Err(err) = windows::show_hud(app) {
                 eprintln!("[jarvis] tray: HUD unavailable: {err}");
-                commands::notify(app, "Jarvis", &format!("HUD unavailable: {err}"));
+                commands::notify_failed(
+                    app,
+                    "Jarvis",
+                    "The HUD could not open.",
+                    &err.to_string(),
+                    commands::Details::Log,
+                );
             }
         }
 
         ID_SHOW_FACES => {
             if let Err(err) = windows::show_faces(app) {
                 eprintln!("[jarvis] faces unavailable: {err}");
-                commands::notify(app, "Jarvis", &format!("Faces unavailable: {err}"));
+                commands::notify_failed(
+                    app,
+                    "Jarvis",
+                    "The faces window could not open.",
+                    &err.to_string(),
+                    commands::Details::Log,
+                );
             }
         }
 
         ID_SHOW_BRAIN => {
             if let Err(err) = windows::show_brain(app) {
                 eprintln!("[jarvis] tray: the Brain would not open: {err}");
-                commands::notify(app, "Jarvis", &format!("Brain unavailable: {err}"));
+                commands::notify_failed(
+                    app,
+                    "Jarvis",
+                    "The Brain could not open.",
+                    &err.to_string(),
+                    commands::Details::Log,
+                );
             }
         }
 
         ID_CHAT_HISTORY => {
             if let Err(err) = windows::show_brain_at(app, "history") {
                 eprintln!("[jarvis] tray: chat history would not open: {err}");
-                commands::notify(app, "Jarvis", &format!("Chat history unavailable: {err}"));
+                commands::notify_failed(
+                    app,
+                    "Jarvis",
+                    "Chat history could not open.",
+                    &err.to_string(),
+                    commands::Details::Log,
+                );
             }
         }
 
@@ -1409,10 +1435,12 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         ID_WAITING => {
             if let Err(err) = windows::show_quickbar(app) {
                 eprintln!("[jarvis] tray: quickbar unavailable: {err}");
-                commands::notify(
+                commands::notify_failed(
                     app,
                     "Jarvis",
-                    &format!("The Jarvis bar could not open: {err}"),
+                    "The Jarvis bar could not open.",
+                    &err.to_string(),
+                    commands::Details::Log,
                 );
                 return;
             }
@@ -1433,7 +1461,13 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                     .muted;
                 if let Err(err) = crate::attention::set_attention_muted(app.clone(), !muted).await {
                     eprintln!("[jarvis] tray: mute failed: {err}");
-                    commands::notify(&app, "Jarvis", &first_sentence(&err));
+                    commands::notify_failed(
+                        &app,
+                        "Jarvis",
+                        "Mute could not be changed.",
+                        &err,
+                        commands::Details::Log,
+                    );
                 }
             });
         }
@@ -1450,7 +1484,13 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
                     Ok(message) => commands::notify(&app, "Jarvis", &first_sentence(&message)),
                     Err(err) => {
                         eprintln!("[jarvis] tray: power mode failed: {err}");
-                        commands::notify(&app, "Jarvis", &first_sentence(&err));
+                        commands::notify_failed(
+                            &app,
+                            "Jarvis",
+                            "The power mode could not be changed.",
+                            &err,
+                            commands::Details::Log,
+                        );
                     }
                 }
             });
@@ -1464,7 +1504,13 @@ fn handle_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
         ID_UPDATE | ID_SETTINGS => {
             if let Err(err) = windows::show_settings(app) {
                 eprintln!("[jarvis] tray: settings unavailable: {err}");
-                commands::notify(app, "Jarvis", &format!("Settings unavailable: {err}"));
+                commands::notify_failed(
+                    app,
+                    "Jarvis",
+                    "Settings could not open.",
+                    &err.to_string(),
+                    commands::Details::Log,
+                );
             }
         }
 
@@ -1520,16 +1566,34 @@ fn run_backend_action(app: &AppHandle) {
     let owned = crate::sidecar::supervisor_status(app.clone()).owned;
 
     tauri::async_runtime::spawn(async move {
+        let mut failed = None;
         let outcome = if owned {
             crate::sidecar::stop_owned(&handle, "asked from the tray").await
         } else {
             match crate::sidecar::start_backend(handle.clone()).await {
                 Ok(outcome) => outcome,
-                Err(err) => err,
+                Err(err) => {
+                    failed = Some(err.clone());
+                    err
+                }
             }
         };
         println!("[jarvis] tray: {outcome}");
-        commands::notify(&handle, "Jarvis — backend", &outcome);
+        match failed {
+            // A failed start is raw error text: plain words in the toast, the
+            // text itself in the log and the crash notes.
+            Some(raw) => {
+                crate::crash_notes::record("backend", "start", &raw);
+                commands::notify_failed(
+                    &handle,
+                    "Jarvis — backend",
+                    "The backend could not be started.",
+                    &raw,
+                    commands::Details::CrashNotes,
+                );
+            }
+            None => commands::notify(&handle, "Jarvis — backend", &outcome),
+        }
         // The row's label is derived from state that just changed.
         let link = handle.state::<crate::stream::StreamState>().link();
         on_link_changed(&handle, &link);
@@ -1552,7 +1616,13 @@ fn run_status_check(app: &AppHandle) {
             }
             Err(err) => {
                 eprintln!("[jarvis] tray: status check failed: {err}");
-                commands::notify(&handle, "Jarvis — Status Check", &format!("Failed: {err}"));
+                commands::notify_failed(
+                    &handle,
+                    "Jarvis — Status Check",
+                    "The status check could not finish.",
+                    &err,
+                    commands::Details::Log,
+                );
             }
         }
     });
