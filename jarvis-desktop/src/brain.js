@@ -139,15 +139,36 @@ import {
   checkinJobFor,
   checkinLines,
   EMPTY_GOALS,
+  FOLLOWS_LABEL,
+  GOAL_WORDS,
   GOALS_MISSING,
+  lifeProjectIds,
+  MEASURE_LABEL,
+  MEASURE_NONE,
+  measureChoices,
+  NEEDS_CLEANED,
+  NEEDS_FULL,
+  NEEDS_LABEL,
+  NEEDS_NONE,
+  needChoices,
+  newStep,
   openCount,
+  planBody,
   planIsValid,
   readGoals,
+  REACHED_TAG,
   REMOVE_STEP_LABEL,
+  removeStepAt,
+  setNeed,
   statusLabel,
   STEP_PLACEHOLDER,
+  stepRow,
   STOP_LABEL,
+  UNDO_LABEL,
+  UNDO_TICKED,
+  UNTICKED,
 } from "./goals.js";
+import { fill as goalFill } from "./projects.js";
 import {
   AGAIN_EMPTY as QUIZ_AGAIN_EMPTY,
   AGAIN_HEADING as QUIZ_AGAIN_HEADING,
@@ -7280,7 +7301,10 @@ if (dom.standbyAdd) {
    source of truth.
    ========================================================================== */
 
-const gl = { view: null, error: "", loading: false, again: false, at: 0 };
+const gl = { view: null, error: "", loading: false, again: false, at: 0,
+  // The life benchmarks a step can follow (goals.js measureChoices), read
+  // from Projects only while a draft is open; `undo` is the last tick.
+  measures: [], measuresAt: 0, undo: null };
 const GOALS_READ_MS = 20000;
 
 /** goal id -> its working plan while it is still a draft, edited but not yet
@@ -7360,7 +7384,7 @@ async function acceptGoal(goal) {
     return;
   }
   try {
-    const out = await invoke("brain_goals_accept", { id: goal.id, plan });
+    const out = await invoke("brain_goals_accept", { id: goal.id, plan: planBody(plan) });
     if (out && out.ok === false) {
       toast(String(out.error || "Refused."), "bad");
     } else {
@@ -7379,11 +7403,39 @@ async function acceptGoal(goal) {
   await loadComingUp();
 }
 
-async function goalStep(goal, index, done) {
+/** The life benchmarks with a target, for "Follows a number" (a read of
+ *  Projects; nothing is written). Once a minute at most, and only when a
+ *  draft is on screen. */
+async function loadMeasures() {
+  if (!IS_TAURI) return;
+  gl.measuresAt = Date.now();
   try {
-    const out = await invoke("brain_goals_step", { id: goal.id, index, done });
+    const list = await invoke("projects_read", {});
+    const answers = await Promise.all(lifeProjectIds(list).map((project) =>
+      invoke("projects_read", { project }).catch(() => null)));
+    gl.measures = measureChoices(list, answers);
+  } catch {
+    gl.measures = [];
+  }
+  if (state.view === "work") paintGoals();
+}
+
+async function goalStep(goal, step, index, done, undoing = false) {
+  try {
+    // By the step's id when the PC gave one (it stays put when steps move),
+    // else by position, as before.
+    const args = step && step.id
+      ? { id: goal.id, stepId: step.id, done }
+      : { id: goal.id, index, done };
+    const out = await invoke("brain_goals_step", args);
     if (out && out.ok === false) toast(String(out.error || "Refused."), "bad");
+    else if (done && !undoing) {
+      gl.undo = { goalId: goal.id, stepId: step && step.id ? step.id : "", index,
+        name: goal.hidden ? "" : String((step && step.step) || "") };
+    } else gl.undo = null;
   } catch (error) {
+    // A locked step ticked from a stale screen: the PC answers 409 with its
+    // own sentence, which is shown as it is. Nothing changed.
     toast(errorText(error), "bad");
   }
   await loadGoals();
@@ -7403,6 +7455,7 @@ async function stopGoal(goal) {
 }
 
 function goalStepEditorRow(plan, index) {
+  const wrap = el("div", "goal-editor-step");
   const line = el("div", "goal-editor-row");
   const step = el("input", "field goal-step-field");
   step.type = "text";
@@ -7423,10 +7476,89 @@ function goalStepEditorRow(plan, index) {
     plan[index].by = by.value;
   });
   line.append(step, by, button(REMOVE_STEP_LABEL, () => {
-    plan.splice(index, 1);
+    const name = String(plan[index].step || "").trim();
+    const { touched } = removeStepAt(plan, index);
+    // The PC does not clean other steps' "Do these first" for the app: it
+    // was done above, and the owner is told before anything is saved.
+    if (touched) toast(goalFill(NEEDS_CLEANED, { step: name || "the step" }), "ok");
     paintGoals();
   }, { danger: true }));
-  return line;
+  wrap.append(line);
+  if (gl.view && gl.view.locks) wrap.append(goalLockEditor(plan, index));
+  return wrap;
+}
+
+/** "Do these first" (up to 3 other steps) and "Follows a number", for one
+ *  step of a draft. Plain checkboxes and a list, so a keyboard and a screen
+ *  reader reach them; the PC checks circles and the rest when Accept is
+ *  pressed and its sentence is shown as sent. */
+function goalLockEditor(plan, index) {
+  const s = plan[index];
+  const max = (gl.view && gl.view.limits.needs) || 3;
+  const box = el("div", "goal-lock-editor");
+  const group = el("fieldset", "goal-needs");
+  group.append(el("legend", "goal-lock-legend", NEEDS_LABEL));
+  const choices = needChoices(plan, index);
+  if (!choices.length) group.append(el("span", "goal-note", NEEDS_NONE));
+  const boxes = [];
+  const sync = () => {
+    const full = (s.needs || []).length >= max;
+    for (const [cb, id] of boxes) cb.disabled = full && !cb.checked && !(s.needs || []).includes(id);
+    note.hidden = !full;
+  };
+  const note = el("span", "goal-note", goalFill(NEEDS_FULL, { max }));
+  for (const c of choices) {
+    const label = el("label", "goal-need");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = (s.needs || []).includes(c.id);
+    cb.addEventListener("change", () => {
+      if (!setNeed(s, c.id, cb.checked, max)) cb.checked = (s.needs || []).includes(c.id);
+      sync();
+    });
+    boxes.push([cb, c.id]);
+    label.append(cb, el("span", "", c.label));
+    group.append(label);
+  }
+  group.append(note);
+  sync();
+  box.append(group);
+
+  const pick = el("label", "goal-measure");
+  pick.append(el("span", "goal-lock-legend", MEASURE_LABEL));
+  const sel = el("select", "field goal-measure-select");
+  const none = el("option", "", MEASURE_NONE);
+  none.value = "";
+  sel.append(none);
+  const key = (m) => `${m.project}:${m.bench}`;
+  const current = s.measure ? key(s.measure) : "";
+  const known = gl.measures.map((m) => key(m));
+  const list = [...gl.measures];
+  if (current && !known.includes(current)) {
+    // The number is not in the list read just now (still reading, or the
+    // Projects tab is hidden): keep the choice, name it as the PC did.
+    list.unshift({ project: s.measure.project, bench: s.measure.bench,
+      label: s.measureName || FOLLOWS_LABEL.replace(/:\s*$/, "") });
+  }
+  for (const m of list) {
+    const o = el("option", "", m.label);
+    o.value = key(m);
+    sel.append(o);
+  }
+  sel.value = current;
+  sel.addEventListener("change", () => {
+    if (!sel.value) {
+      s.measure = null;
+      return;
+    }
+    const [project, bench] = sel.value.split(":");
+    s.measure = { project, bench };
+    const m = list.find((x) => key(x) === sel.value);
+    s.measureName = m ? m.label : s.measureName;
+  });
+  pick.append(sel);
+  box.append(pick);
+  return box;
 }
 
 function draftGoalBlock(goal) {
@@ -7446,7 +7578,7 @@ function draftGoalBlock(goal) {
       toast(`A plan can have at most ${maxSteps} steps - keep the big ones and drop the rest.`, "bad");
       return;
     }
-    plan.push({ step: "", by: "", done: false });
+    plan.push(newStep(plan, Boolean(gl.view && gl.view.locks)));
     paintGoals();
   }));
   actions.append(button(ACCEPT_LABEL, () => acceptGoal(goal), { live: true }));
@@ -7455,25 +7587,44 @@ function draftGoalBlock(goal) {
 }
 
 function goalStepRow(goal, step, index) {
+  const row = stepRow(step, { hideWords: goal.hidden });
   const line = el("div", "goal-step");
+  if (row.locked) line.dataset.state = "locked";
   const label = el("label", "goal-step-label");
   const box = document.createElement("input");
   box.type = "checkbox";
   box.checked = step.done;
   const active = goal.status === "active";
-  box.disabled = !active;
-  if (active) {
+  // A locked step's tick is shown but disabled, with the reason beside it
+  // (a stale screen that ticks it anyway gets the PC's 409 sentence).
+  box.disabled = !active || row.locked;
+  if (active && !row.locked) {
     liveButtons.add(box);
     syncLiveButton(box);
   }
+  const why = el("p", "goal-note goal-lock-line");
+  why.id = `goal-why-${goal.id}-${index}`;
+  const lines = [];
+  if (row.reachedLine) lines.push(row.reachedLine);
+  if (row.lockLine) lines.push(row.lockLine);
+  if (row.goneLine) lines.push(row.goneLine);
+  if (row.follows) lines.push(row.follows);
+  if (row.label && row.label !== step.step) box.setAttribute("aria-label", row.label);
+  if (row.locked) box.setAttribute("aria-describedby", why.id);
   box.addEventListener("change", async () => {
     const want = box.checked;
     box.disabled = true;
-    await goalStep(goal, index, want);
+    await goalStep(goal, step, index, want);
   });
   label.append(box, el("span", "goal-step-text", step.step));
   line.append(label);
+  if (row.locked) line.append(el("span", "row-tag goal-locked-tag", "\u{1F512} " + GOAL_WORDS.locked));
+  if (row.reached) line.append(el("span", "row-tag goal-reached-tag", REACHED_TAG));
   if (step.by) line.append(el("span", "goal-step-by", step.by));
+  if (lines.length) {
+    why.textContent = lines.join(" ");
+    line.append(why);
+  }
   return line;
 }
 
@@ -7488,6 +7639,25 @@ function activeGoalBlock(goal, jobs) {
   const steps = el("div", "goal-steps");
   goal.plan.forEach((s, i) => steps.append(goalStepRow(goal, s, i)));
   block.append(steps);
+  if (gl.undo && gl.undo.goalId === goal.id) {
+    // Undo of the last tick: one tap, no card. Unticking clears only that
+    // step; a later step stays done and then reads "(open again)".
+    const u = gl.undo;
+    const said = u.name ? goalFill(UNDO_TICKED, { step: u.name }) : "Ticked a step.";
+    const row = el("p", "goal-note goal-undo");
+    row.append(said, " ", button(UNDO_LABEL, async () => {
+      const target = goal.plan.find((x) => u.stepId && x.id === u.stepId) || goal.plan[u.index];
+      if (!target) {
+        gl.undo = null;
+        paintGoals();
+        return;
+      }
+      const idx = goal.plan.indexOf(target);
+      await goalStep(goal, target, idx, false, true);
+      if (!goal.hidden) announce(goalFill(UNTICKED, { step: target.step }), "polite");
+    }, { live: true }));
+    block.append(row);
+  }
   if (goal.status === "active") {
     const job = checkinJobFor(goal, jobs, checkinJobIds.get(goal.id));
     if (job) checkinJobIds.set(goal.id, job.id);
@@ -7517,6 +7687,10 @@ function paintGoals() {
   }
   const full = openCount(v) >= v.limits.goals;
   if (dom.goalsNewForm) dom.goalsNewForm.hidden = full;
+  // "Follows a number" needs Projects' benchmarks, read only while a draft
+  // is showing and at most once a minute.
+  if (v.locks && v.goals.some((g) => g.status === "draft") && IS_TAURI
+    && Date.now() - gl.measuresAt > 60000) loadMeasures();
   if (!v.goals.length) {
     box.replaceChildren(el("p", "empty", EMPTY_GOALS));
   } else {
@@ -7863,6 +8037,7 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   TAURI.event.listen("private-hidden", rereadSchedule);
   // Goals hides its words the same way (brain/goals.rs redact_goals).
   const rereadGoals = () => {
+    gl.measuresAt = 0;
     gl.at = 0;
     if (state.view === "work") loadGoals();
   };

@@ -4714,7 +4714,7 @@ object JarvisRuntime {
         if (!com.jarvis.client.net.Goals.validId(id)) return Triple(false, null, "That is not one of your goals.")
         val result = when (val r = api.goalsWrite("/api/goals/$id/step",
             com.jarvis.client.net.Goals.stepBody(index, done))) {
-            is ApiResult.Ok -> com.jarvis.client.net.Goals.changedSaid(r.value)
+            is ApiResult.Ok -> com.jarvis.client.net.Goals.changedSaid(r.value, doneWord = if (done) "Done." else "Unticked.")
             is ApiResult.Failed -> Triple(false, null, "Not changed. " + describe(r.error))
         }
         if (result.first) _goalsTick.update { n -> n + 1 }

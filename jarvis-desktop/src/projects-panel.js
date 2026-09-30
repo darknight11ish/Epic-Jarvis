@@ -953,12 +953,19 @@ function chart(b) {
   const H = 120;
   const pts = b.points || (b.latest ? [b.latest] : []);
   if (!pts.length) return el("p", "empty pj-chart-empty", WORDS.chart_empty);
-  const g = chartGeometry(pts, b.target, W, H);
+  const f = b.forecast;
+  const g = chartGeometry(pts, b.target, W, H, 8, f);
   const svg = document.createElementNS(SVG, "svg");
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   svg.setAttribute("class", "pj-chart");
   svg.setAttribute("role", "img");
   svg.setAttribute("aria-label", `${b.name}: ${chartSummary(b)}`);
+  const poly = (coords, cls) => {
+    const p = document.createElementNS(SVG, "polygon");
+    p.setAttribute("points", coords.map((q) => `${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(" "));
+    p.setAttribute("class", cls);
+    return p;
+  };
   const line = (x1, y1, x2, y2, cls) => {
     const l = document.createElementNS(SVG, "line");
     l.setAttribute("x1", x1);
@@ -972,11 +979,36 @@ function chart(b) {
   if (g.target !== null) {
     svg.append(line(0, g.target, W, g.target, "pj-target"));
   }
+  if (g.forecast) {
+    // The guess, under the numbers: a translucent triangle, its dashed
+    // edge, the dashed trend line, a bracket on the target and an arrow
+    // where the drawing stops short. Decoration only - the words carry it.
+    const fc = g.forecast;
+    const group = document.createElementNS(SVG, "g");
+    group.setAttribute("class", "pj-forecast");
+    group.setAttribute("aria-hidden", "true");
+    group.append(poly(fc.band, "pj-band"));
+    group.append(line(fc.line.x1, fc.line.y1, fc.line.x2, fc.line.y2, "pj-trend"));
+    if (fc.bracket) {
+      const { x1, x2, y } = fc.bracket;
+      const cls = "pj-bracket";
+      group.append(line(x1, y, x2, y, cls), line(x1, y - 4, x1, y + 4, cls),
+        line(x2, y - 4, x2, y + 4, cls));
+    }
+    for (const a of fc.arrows) {
+      const chevron = document.createElementNS(SVG, "polyline");
+      chevron.setAttribute("points",
+        `${(a.x - 5).toFixed(1)},${(a.y - 4).toFixed(1)} ${a.x.toFixed(1)},${a.y.toFixed(1)} ${(a.x - 5).toFixed(1)},${(a.y + 4).toFixed(1)}`);
+      chevron.setAttribute("class", "pj-arrow");
+      group.append(chevron);
+    }
+    svg.append(group);
+  }
   if (g.points.length > 1) {
-    const poly = document.createElementNS(SVG, "polyline");
-    poly.setAttribute("points", g.points.map((q) => `${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(" "));
-    poly.setAttribute("class", "pj-line");
-    svg.append(poly);
+    const path = document.createElementNS(SVG, "polyline");
+    path.setAttribute("points", g.points.map((q) => `${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(" "));
+    path.setAttribute("class", "pj-line");
+    svg.append(path);
   }
   for (const q of g.points) {
     const dot = document.createElementNS(SVG, "circle");
@@ -999,6 +1031,20 @@ function chart(b) {
     legend.append(el("span", "pj-legend-target", `${WORDS.chart_target}: ${withUnit(b.target, b.unit)}`));
   }
   wrap.append(legend);
+  if (f && f.words) {
+    // The PC's sentence, as sent, where the "Target" caption is. The
+    // chart's label already carries it for a screen reader, so this copy is
+    // hidden from one to avoid being read twice. On the owner's screen only.
+    const words = el("p", "pj-forecast-words", f.words);
+    words.dataset.state = f.state;
+    words.setAttribute("aria-hidden", "true");
+    wrap.append(words);
+    if (f.basis) {
+      const basis = el("p", "note pj-forecast-basis", f.basis);
+      basis.setAttribute("aria-hidden", "true");
+      wrap.append(basis);
+    }
+  }
   return wrap;
 }
 

@@ -115,6 +115,51 @@ object Goals {
     /** Stands in for words the private lists hide. */
     const val HIDDEN_TEXT = "(hidden)"
 
+    // Steps that wait on other steps, and follow a number (docs/JARVIS-API.md
+    // section 101; docs/GOALS-PROGRESS-DESIGN.md "Slice contract (frozen)").
+    const val DO_FIRST = "Do these first"
+    const val DO_FIRST_UNDER = "This step stays locked until the ones you pick are done. Pick up to 3."
+    const val FOLLOWS = "Follows a number"
+    const val FOLLOWS_NONE = "No number"
+    const val FOLLOWS_EMPTY = "No number with a target yet. Set a target on a benchmark in Projects first."
+    const val FOLLOWS_UNDER =
+        "The step shows \"reached\" when that number reaches its target. You still tick it yourself."
+    const val FOLLOWS_LABEL = "Follows"
+    const val UNDO = "Undo"
+    const val DROPPED_NEEDS = "Removed. It was also taken off what other steps wait on."
+
+    /** The PC's own limit on what one step can wait on (`limits.needs`). */
+    const val MAX_NEEDS = 3
+
+    /** The step ids the PC hands out (`goal_limits.step_ids`). */
+    val STEP_IDS: List<String> = (1..9).map { "s$it" }
+
+    /**
+     * The lock sentences, word for word (`jarvis_goals.WORDS`, the contract's
+     * `goal_words`). The PC fills the `{...}` in and sends the finished
+     * sentence (`lock_words`, `reached_words`, `error`), so this app shows
+     * those as sent and needs only [w]("locked") and [w]("measure_gone").
+     */
+    val WORDS: Map<String, String> = mapOf(
+        "after" to "after: {steps}",
+        "after_open_again" to "after: {steps} (open again)",
+        "circle" to "These steps wait on each other in a circle: {steps}.",
+        "locked" to "locked",
+        "locked_refusal" to "Do \"{step}\" first, or tick it if it is already done.",
+        "measure_gone" to "The number this step follows is gone - tick it by hand.",
+        "no_such_benchmark" to "\"{step}\" follows a number that does not exist any more.",
+        "no_target" to "\"{step}\" follows \"{name}\", which has no target yet - set one first.",
+        "reached" to "The number reached its target: {latest} (target {target}).",
+        "reached_tick" to "{step}: the number reached its target - tick it when you are ready.",
+        "self_wait" to "\"{step}\" cannot wait on itself.",
+        "too_many_needs" to "\"{step}\" can wait on at most 3 other steps.",
+        "unknown_wait" to "\"{step}\" waits on a step that is not in this plan.",
+        "waiting_on" to "Waiting on \"{step}\".",
+    )
+
+    /** One of [WORDS]. */
+    fun w(key: String): String = WORDS.getValue(key)
+
     /**
      * The PC's own numbers (`backend/jarvis_goals.py` MAX_TEXT / MAX_STEPS /
      * MAX_GOALS / MAX_BY) - also sent back in `GET /api/goals`'s own
@@ -126,7 +171,43 @@ object Goals {
     const val MAX_GOALS = 20
     const val MAX_BY = 40
 
-    data class Step(val step: String, val by: String, val done: Boolean)
+    /** The benchmark a step follows (`measure`): both ids, 32 hex digits each. */
+    data class Measure(val project: String, val bench: String)
+
+    /**
+     * One step. The first three fields are the owner's own words and tick;
+     * the rest are what the PC stores ([id], [doneAt], [needs], [measure])
+     * and what it computes and sends ([state] and below - never worked out
+     * here, and never sent back). Every extra field has a default, so an
+     * older PC's plain `{step, by, done}` still reads.
+     */
+    data class Step(
+        val step: String,
+        val by: String,
+        val done: Boolean,
+        val id: String = "",
+        val doneAt: Double? = null,
+        val needs: List<String> = emptyList(),
+        val measure: Measure? = null,
+        /** "open", "locked", "met_by_number" or "done"; "" from an older PC. */
+        val state: String = "",
+        val waitingOn: List<String> = emptyList(),
+        val lockWords: String = "",
+        val reached: Boolean = false,
+        val reachedWords: String = "",
+        val measureName: String = "",
+        val measureGone: Boolean = false,
+        val measureSensitive: Boolean = false,
+    ) {
+        /** Waiting for another step, as the PC says. */
+        val locked: Boolean get() = state == "locked"
+
+        /** Met, as the PC says: ticked, or its number reached the target. */
+        val met: Boolean get() = state == "done" || state == "met_by_number"
+    }
+
+    /** A benchmark a step could follow: it has a target and a better-direction. */
+    data class MeasureOption(val measure: Measure, val label: String)
 
     data class Goal(
         val id: String,
@@ -137,7 +218,7 @@ object Goals {
         val changed: Double?,
     )
 
-    data class Limits(val text: Int, val steps: Int, val goals: Int, val by: Int)
+    data class Limits(val text: Int, val steps: Int, val goals: Int, val by: Int, val needs: Int = MAX_NEEDS)
 
     data class View(val goals: List<Goal>, val limits: Limits?)
 
@@ -149,9 +230,40 @@ object Goals {
     /** A goal id as the PC makes them. */
     fun validId(id: String?): Boolean = id != null && ID.matches(id)
 
+    private val STEP_ID = Regex("s[0-9]")
+    private val HEX32 = Regex("[0-9a-f]{32}")
+
+    private fun ids(a: Any?): List<String> =
+        (a as? JsonArray)?.mapNotNull { el ->
+            (el as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.takeIf { STEP_ID.matches(it) }
+        }.orEmpty()
+
+    private fun measure(o: JsonObject?): Measure? {
+        if (o == null) return null
+        val project = o.raw("project") ?: return null
+        val bench = o.raw("bench") ?: return null
+        return if (HEX32.matches(project) && HEX32.matches(bench)) Measure(project, bench) else null
+    }
+
     private fun step(o: JsonObject): Step? {
         val text = o.text("step") ?: return null
-        return Step(text, o.text("by") ?: "", o.flag("done") == true)
+        return Step(
+            step = text,
+            by = o.text("by") ?: "",
+            done = o.flag("done") == true,
+            id = o.raw("id")?.takeIf { STEP_ID.matches(it) } ?: "",
+            doneAt = o.num("done_at"),
+            needs = ids(o["needs"]),
+            measure = measure(o["measure"] as? JsonObject),
+            state = o.raw("state") ?: "",
+            waitingOn = ids(o["waiting_on"]),
+            lockWords = o.raw("lock_words") ?: "",
+            reached = o.flag("reached") == true,
+            reachedWords = o.raw("reached_words") ?: "",
+            measureName = o.raw("measure_name") ?: "",
+            measureGone = o.flag("measure_gone") == true,
+            measureSensitive = o.flag("measure_sensitive") == true,
+        )
     }
 
     private fun goal(o: JsonObject): Goal? {
@@ -175,8 +287,9 @@ object Goals {
             val steps = l.num("steps")?.toInt()
             val goalsMax = l.num("goals")?.toInt()
             val by = l.num("by")?.toInt()
+            val needs = l.num("needs")?.toInt() ?: MAX_NEEDS
             if (text != null && steps != null && goalsMax != null && by != null) {
-                Limits(text, steps, goalsMax, by)
+                Limits(text, steps, goalsMax, by, needs)
             } else {
                 null
             }
@@ -207,9 +320,23 @@ object Goals {
         plan.forEach { s ->
             add(
                 buildJsonObject {
+                    // ONLY the stored fields. done_at and everything the PC
+                    // computes (state, lock_words ...) are never sent back;
+                    // a new step has no id yet.
+                    if (s.id.isNotEmpty()) put("id", s.id)
                     put("step", s.step.trim())
                     put("by", s.by.trim())
                     put("done", s.done)
+                    put("needs", buildJsonArray { s.needs.forEach { add(JsonPrimitive(it)) } })
+                    put(
+                        "measure",
+                        s.measure?.let { m ->
+                            buildJsonObject {
+                                put("project", m.project)
+                                put("bench", m.bench)
+                            }
+                        } ?: JsonNull,
+                    )
                 },
             )
         }
@@ -253,6 +380,9 @@ object Goals {
     private fun refusalSaid(reply: Reply, gone: String = ALREADY_GONE): String {
         val error = reply.body?.text("error")
         return when {
+            // A tick on a step that is still waiting (a stale screen): the
+            // PC's sentence, as sent - 'Do "Get quotes" first, or tick it ...'.
+            reply.code == 409 && reply.body?.flag("locked") == true && error != null -> error
             reply.code == 404 && error == "no such goal" -> gone
             reply.code == 404 || reply.code == 501 -> TOO_OLD
             reply.code == 503 -> NOT_AVAILABLE
@@ -305,8 +435,108 @@ object Goals {
 
     /** The list with every goal's own words replaced, for while the lists are hidden. */
     fun hide(v: View): View = v.copy(
-        goals = v.goals.map { g -> g.copy(text = HIDDEN_TEXT, plan = g.plan.map { it.copy(step = "", by = "") }) },
+        goals = v.goals.map { g ->
+            g.copy(
+                text = HIDDEN_TEXT,
+                plan = g.plan.map { s ->
+                    // lock_words repeat other steps' own words, so they go too;
+                    // a health or money number's name and value go with them.
+                    // The state stays: it is not a word, and it still drives the UI blind.
+                    s.copy(
+                        step = "", by = "", lockWords = "",
+                        reachedWords = if (s.measureSensitive) "" else s.reachedWords,
+                        measureName = if (s.measureSensitive) "" else s.measureName,
+                    )
+                },
+            )
+        },
     )
+
+    // ------------------------------------------------- the draft editor ----
+
+    /** A step's own words for lists in the editor: its text, or "Step N" while still empty. */
+    fun label(plan: List<Step>, index: Int): String =
+        plan.getOrNull(index)?.step?.trim()?.takeIf { it.isNotEmpty() }?.let { if (it.length > 40) it.take(40) + "…" else it }
+            ?: "Step ${index + 1}"
+
+    /** A new, empty step with a free id from the PC's own s1..s9. */
+    fun newStep(plan: List<Step>): Step {
+        val taken = plan.map { it.id }.toSet()
+        return Step("", "", false, id = STEP_IDS.firstOrNull { it !in taken } ?: "")
+    }
+
+    /**
+     * The plan without step [index], and that step's id taken out of every
+     * other step's `needs` - the PC does not clean that for the app. Second
+     * value: whether any other step was changed by that (so the screen can say so).
+     */
+    fun removeStep(plan: List<Step>, index: Int): Pair<List<Step>, Boolean> {
+        val gone = plan.getOrNull(index) ?: return plan to false
+        var touched = false
+        val rest = plan.filterIndexed { i, _ -> i != index }.map { s ->
+            if (gone.id.isNotEmpty() && gone.id in s.needs) {
+                touched = true
+                s.copy(needs = s.needs.filter { it != gone.id })
+            } else {
+                s
+            }
+        }
+        return rest to touched
+    }
+
+    /**
+     * Picks or drops [otherId] in step [index]'s "Do these first". A fourth
+     * is not added (the picker stops at [maxNeeds]; the PC would refuse it
+     * with its own sentence); a step never waits on itself.
+     */
+    fun toggleNeed(plan: List<Step>, index: Int, otherId: String, maxNeeds: Int = MAX_NEEDS): List<Step> {
+        val s = plan.getOrNull(index) ?: return plan
+        if (otherId.isEmpty() || otherId == s.id) return plan
+        val next = when {
+            otherId in s.needs -> s.needs.filter { it != otherId }
+            s.needs.size >= maxNeeds -> return plan
+            else -> s.needs + otherId
+        }
+        return plan.mapIndexed { i, it -> if (i == index) it.copy(needs = next) else it }
+    }
+
+    /** Sets (or, with null, clears) the number step [index] follows. */
+    fun setMeasure(plan: List<Step>, index: Int, measure: Measure?): List<Step> =
+        plan.mapIndexed { i, it -> if (i == index) it.copy(measure = measure) else it }
+
+    /**
+     * The benchmarks a step could follow, from the projects as read: a
+     * number (not a command) with a target and a better-direction. The
+     * label is "project: benchmark".
+     */
+    fun measureOptions(projects: List<Projects.Project>): List<MeasureOption> =
+        projects.flatMap { p ->
+            p.benchList
+                .filter { it.kind == "number" && it.target != null && it.better != null }
+                .map { b -> MeasureOption(Measure(p.id, b.id), "${p.name}: ${b.name}") }
+        }.filter { HEX32.matches(it.measure.project) && HEX32.matches(it.measure.bench) }
+
+    // ------------------------------------------------------- the rows ----
+
+    /**
+     * What a screen reader hears for a row: "<step>, locked, after: <steps>",
+     * then the reached line and what it follows. [shownStep] is the step's
+     * words, or the hidden stand-in.
+     */
+    fun spoken(s: Step, shownStep: String): String = buildList {
+        add(shownStep)
+        if (s.locked) {
+            add(w("locked"))
+            if (s.lockWords.isNotEmpty()) add(s.lockWords)
+        } else if (s.lockWords.isNotEmpty()) {
+            add(s.lockWords)
+        }
+        if (s.reached && s.reachedWords.isNotEmpty()) add(s.reachedWords)
+        if (s.measureGone) add(w("measure_gone"))
+    }.joinToString(", ")
+
+    /** Whether the tick control is usable: never for a locked step (the PC would answer 409). */
+    fun canTick(s: Step): Boolean = !s.locked || s.done
 
     /** The open goals (draft, active) first, newest first, as the PC already sends them; then the rest. */
     fun ordered(v: View?): List<Goal> {
@@ -321,6 +551,10 @@ object Goals {
 
     private fun JsonObject.text(key: String): String? =
         (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+
+    /** A string exactly as sent (no trimming), or null when it is absent or not a string. */
+    private fun JsonObject.raw(key: String): String? =
+        (this[key] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.takeIf { it.isNotEmpty() }
 
     private fun JsonObject.flag(key: String): Boolean? =
         (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull && !it.isString }?.booleanOrNull

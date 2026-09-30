@@ -21,7 +21,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
@@ -449,6 +453,17 @@ private fun BenchView(
         }
         Gap(4)
         Chart(b)
+        // The finish-time range, exactly as the PC worded it (never rebuilt). The chart's own
+        // spoken text already carries it, so this line is for the eyes only.
+        val pace = b.forecast
+        if (pace != null && (b.points.orEmpty().isNotEmpty() || b.latest != null)) {
+            Text(pace.words, style = MaterialTheme.typography.bodySmall, color = chrome.textMid,
+                modifier = Modifier.clearAndSetSemantics { })
+            if (pace.basis.isNotEmpty() && (pace.state == "range" || pace.state == "open_ended")) {
+                Text(pace.basis, style = MaterialTheme.typography.labelSmall, color = chrome.textLo,
+                    modifier = Modifier.clearAndSetSemantics { })
+            }
+        }
         b.target?.let {
             Text("${Projects.w("chart_target")}: ${Projects.withUnit(it, b.unit)} (dashed line)",
                 style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
@@ -546,6 +561,8 @@ private fun Chart(b: Projects.Bench) {
     val ground = chrome.surface2
     val edge = chrome.hairlineStrong
     val targetInk = chrome.warnMark
+    val trend = chrome.textMid
+    val forecast = b.forecast?.takeIf { it.drawable }
     Canvas(
         Modifier
             .fillMaxWidth()
@@ -553,8 +570,30 @@ private fun Chart(b: Projects.Bench) {
             .semantics { contentDescription = words },
     ) {
         drawRect(ground)
-        val (placed, target) = Projects.chartGeometry(points, b.target, size.width, size.height, 8.dp.toPx())
+        val fore = Projects.forecastGeometry(points, forecast, b.target, size.width, size.height, 8.dp.toPx())
+        val (placed, target) = if (fore != null) {
+            fore.points to fore.target
+        } else {
+            Projects.chartGeometry(points, b.target, size.width, size.height, 8.dp.toPx())
+        }
         drawLine(edge, Offset(0f, size.height - 1f), Offset(size.width, size.height - 1f), 1.dp.toPx())
+        // The band goes under everything else: a soft accent fill, its outline dashed.
+        if (fore != null) {
+            val band = Path().apply {
+                moveTo(fore.bandFrom.x, fore.bandFrom.y)
+                lineTo(fore.bandFast.x, fore.bandFast.y)
+                lineTo(fore.bandSlow.x, fore.bandSlow.y)
+                close()
+            }
+            drawPath(band, accent.copy(alpha = 0.20f))
+            drawPath(
+                band, trend,
+                style = Stroke(
+                    width = 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx())),
+                ),
+            )
+        }
         target?.let {
             drawLine(
                 targetInk, Offset(0f, it), Offset(size.width, it), 1.5.dp.toPx(),
@@ -565,7 +604,42 @@ private fun Chart(b: Projects.Bench) {
             drawLine(accent, Offset(placed[i - 1].x, placed[i - 1].y), Offset(placed[i].x, placed[i].y), 2.dp.toPx())
         }
         for (pt in placed) drawCircle(accent, radius = 3.dp.toPx(), center = Offset(pt.x, pt.y))
+        if (fore != null) {
+            // The dashed trend line, then the bracket on the target level and arrows at open ends.
+            drawLine(
+                trend, Offset(fore.lineFrom.x, fore.lineFrom.y), Offset(fore.lineTo.x, fore.lineTo.y), 1.5.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 4.dp.toPx())),
+            )
+            val from = fore.bracketFrom
+            val to = fore.bracketTo
+            val level = fore.target
+            if (from != null && to != null && level != null) {
+                val tick = 4.dp.toPx()
+                val stroke = 2.dp.toPx()
+                drawLine(trend, Offset(from, level), Offset(to, level), stroke)
+                drawLine(trend, Offset(from, level - tick), Offset(from, level + tick), stroke)
+                drawLine(trend, Offset(to, level - tick), Offset(to, level + tick), stroke)
+            }
+            if (fore.arrowLine) drawArrow(trend, fore.lineTo)
+            if (fore.arrowFast) drawArrow(trend, fore.bandFast)
+            if (fore.arrowSlow) drawArrow(trend, fore.bandSlow)
+        }
     }
+}
+
+/** A small arrowhead pointing right, just past [at]: "this goes on past the edge". */
+private fun DrawScope.drawArrow(color: androidx.compose.ui.graphics.Color, at: Projects.Placed) {
+    val len = 6.dp.toPx()
+    val half = 4.dp.toPx()
+    val tip = minOf(at.x + len, size.width)
+    val base = tip - len
+    val head = Path().apply {
+        moveTo(tip, at.y)
+        lineTo(base, at.y - half)
+        lineTo(base, at.y + half)
+        close()
+    }
+    drawPath(head, color)
 }
 
 @Composable

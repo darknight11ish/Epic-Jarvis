@@ -200,37 +200,155 @@ export function chartScale(values, target = null) {
 }
 
 /**
+ * The forecast the PC sends with a benchmark read (`benchmark.forecast`,
+ * JARVIS-API section 101.4), read with defaults; null when there is none
+ * (a read without `points`, or an older PC) or its state is not one of the
+ * six. `words` and `basis` are kept exactly as sent - this page never
+ * builds them. `line` and `band` are the finished drawing points.
+ */
+export const FORECAST_STATES = Object.freeze(
+  ["no_target", "reached", "not_enough", "range", "open_ended", "never"]);
+
+export function readForecast(f) {
+  const o = f && typeof f === "object" ? f : null;
+  if (!o || !FORECAST_STATES.includes(o.state)) return null;
+  const pt = (p) => (p && typeof p === "object" && num(p.at) !== null && num(p.value) !== null
+    ? { at: p.at, value: p.value } : null);
+  const line = o.line && typeof o.line === "object" ? (() => {
+    const from = pt(o.line.from);
+    const to = pt(o.line.to);
+    return from && to ? { from, to, clipped: o.line.clipped === true } : null;
+  })() : null;
+  const band = o.band && typeof o.band === "object" ? (() => {
+    const from = pt(o.band.from);
+    const fast = pt(o.band.fast);
+    const slow = pt(o.band.slow);
+    return from && fast && slow ? {
+      from,
+      fast: { ...fast, clipped: o.band.fast.clipped === true },
+      slow: { ...slow, clipped: o.band.slow.clipped === true, open: o.band.slow.open === true },
+    } : null;
+  })() : null;
+  const drawn = line && band ? { line, band } : { line: null, band: null };
+  return {
+    state: o.state,
+    words: text(o.words),
+    basis: text(o.basis),
+    lowWeeks: num(o.low_weeks),
+    highWeeks: num(o.high_weeks),
+    overTwoYears: o.over_two_years === true,
+    why: text(o.why),
+    used: num(o.used) || 0,
+    needed: num(o.needed) || 0,
+    firstAt: num(o.first_at),
+    lastAt: num(o.last_at),
+    horizonAt: num(o.horizon_at),
+    crossLowAt: num(o.cross_low_at),
+    crossAt: num(o.cross_at),
+    crossHighAt: num(o.cross_high_at),
+    ...drawn,
+  };
+}
+
+/**
+ * Where the chart's edges are once a forecast is drawn: x runs from the
+ * first number to the last number or the farthest end of the dashed line
+ * and band; y is `chartScale` over the numbers, the target, and the
+ * forecast's own values (line start and end, the band's three corners).
+ * A forecast without a line changes nothing. The same as
+ * tools/gen_projects_cases.py's `forecast_extent` (`forecast_cases[*].extent`).
+ * `points` are {at, value}; `f` is a `readForecast` answer or null.
+ */
+export function forecastExtent(points, f, target = null) {
+  const pts = (points || []).filter((p) => num(p.at) !== null && num(p.value) !== null);
+  const xs = pts.map((p) => p.at);
+  const ys = pts.map((p) => p.value);
+  if (f && f.line && f.band) {
+    xs.push(f.line.to.at, f.band.fast.at, f.band.slow.at);
+    ys.push(f.line.from.value, f.line.to.value, f.band.from.value,
+      f.band.fast.value, f.band.slow.value);
+  }
+  return {
+    x: xs.length ? [Math.min(...xs), Math.max(...xs)] : [0, 1],
+    y: chartScale(ys, target),
+  };
+}
+
+/**
  * The chart's drawing, as numbers only: each point's x and y inside a box
  * `width` by `height` (y grows downward, as in SVG), and the target line's
  * y, or null. Points are placed by their date: the first on the left, the
  * newest on the right; one point sits in the middle.
+ *
+ * With a `forecast` (a `readForecast` answer) that has a line, the box
+ * grows to the right to hold the dashed line and band (`forecastExtent`),
+ * and the answer also carries `forecast`: {line: {x1, y1, x2, y2},
+ * band: [three {x, y}], bracket: {x1, x2, y} | null, arrows: [{x, y}]}.
+ * A bracket needs both ends on the target level (`cross_low_at` and
+ * `cross_high_at`); a clipped end (or the open slow end) gets an arrow and
+ * no bracket end. Without a forecast, or for a state with no line, nothing
+ * changes from before.
  */
-export function chartGeometry(points, target, width, height, inset = 8) {
+export function chartGeometry(points, target, width, height, inset = 8, forecast = null) {
   const pts = (points || []).filter((p) => num(p.at) !== null && num(p.value) !== null);
-  const [lo, hi] = chartScale(pts.map((p) => p.value), target);
+  const drawn = forecast && forecast.line && forecast.band ? forecast : null;
+  const ext = forecastExtent(pts, drawn, target);
+  const [lo, hi] = ext.y;
   const w = width - inset * 2;
   const h = height - inset * 2;
   const y = (v) => inset + h - ((v - lo) / (hi - lo)) * h;
-  const first = pts.length ? pts[0].at : 0;
-  const last = pts.length ? pts[pts.length - 1].at : 0;
-  const span = last - first;
+  const first = ext.x[0];
+  const span = ext.x[1] - ext.x[0];
+  const x = (at) => (span > 0 ? inset + ((at - first) / span) * w : inset + w / 2);
   const xy = pts.map((p) => ({
     id: text(p.id),
     at: p.at,
     value: p.value,
-    x: span > 0 ? inset + ((p.at - first) / span) * w : inset + w / 2,
+    x: x(p.at),
     y: y(p.value),
   }));
   const t = target !== null && target !== undefined && Number.isFinite(Number(target))
     ? y(Number(target)) : null;
-  return { points: xy, target: t, lo, hi };
+  const out = { points: xy, target: t, lo, hi, extent: ext, forecast: null };
+  if (drawn) {
+    const { line, band } = drawn;
+    const corner = (p) => ({ x: x(p.at), y: y(p.value) });
+    const fast = { ...corner(band.fast), clipped: band.fast.clipped };
+    const slow = { ...corner(band.slow), clipped: band.slow.clipped, open: band.slow.open };
+    const end = corner(line.to);
+    const arrows = [];
+    const arrow = (p) => {
+      if (!arrows.some((a) => Math.abs(a.x - p.x) < 0.5 && Math.abs(a.y - p.y) < 0.5)) {
+        arrows.push({ x: p.x, y: p.y });
+      }
+    };
+    if (band.fast.clipped) arrow(fast);
+    if (band.slow.clipped || band.slow.open) arrow(slow);
+    if (line.clipped) arrow(end);
+    const bracket = t !== null && drawn.crossLowAt !== null && drawn.crossHighAt !== null
+      && !band.slow.open
+      ? { x1: x(drawn.crossLowAt), x2: x(drawn.crossHighAt), y: t } : null;
+    out.forecast = {
+      line: { x1: x(line.from.at), y1: y(line.from.value), x2: end.x, y2: end.y },
+      band: [corner(band.from), fast, slow].map(({ x: px, y: py }) => ({ x: px, y: py })),
+      bracket,
+      arrows,
+    };
+  }
+  return out;
 }
 
-/** "3 numbers. Latest: 12 km." - the chart's words for a screen reader. */
+/**
+ * "3 numbers. Latest: 12 km." - the chart's words for a screen reader,
+ * then a space and the PC's forecast sentence (`forecast.words`, as sent)
+ * when there is a forecast. With no numbers it is only the empty sentence.
+ */
 export function chartSummary(bench) {
   const count = Number(bench.results) || (bench.points ? bench.points.length : 0);
   if (!count || !bench.latest) return WORDS.chart_empty;
-  return fill(WORDS.chart_summary, { count, latest: withUnit(bench.latest.value, bench.unit) });
+  const base = fill(WORDS.chart_summary, { count, latest: withUnit(bench.latest.value, bench.unit) });
+  const words = bench.forecast && bench.forecast.words ? bench.forecast.words : "";
+  return words ? `${base} ${words}` : base;
 }
 
 /** One benchmark, from the PC's `view`. */
@@ -264,6 +382,7 @@ export function readBench(b) {
       ? o.points.filter((p) => p && num(p.value) !== null && num(p.at) !== null)
         .map((p) => ({ id: text(p.id), at: p.at, value: p.value }))
       : null,
+    forecast: readForecast(o.forecast),
   };
 }
 

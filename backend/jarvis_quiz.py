@@ -128,6 +128,7 @@ CLASSES = {
     "text_too_long": (400, "That text is too long for one quiz. Paste at most 20,000 characters, "
                            "or split it in parts."),
     "bad_count": (400, "Ask for between 1 and 10 questions."),
+    "nothing_to_keep": (400, "Tick at least one question to keep."),
     "bad_mode": (400, "The quiz mode is either text or Spanish practice."),
     "bad_level": (400, "Pick a level from A1 to C2."),
     "bad_exercise": (400, "Pick translate, fill the blank, finish the sentence, or mixed."),

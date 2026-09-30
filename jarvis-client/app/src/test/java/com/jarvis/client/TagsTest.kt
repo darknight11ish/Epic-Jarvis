@@ -157,9 +157,17 @@ class TagsTest {
             assertTrue("$c has a sentence", s.isNotBlank() && s.endsWith("."))
             assertFalse("$c is plain, not a code", s.contains("_"))
         }
-        assertEquals("Mine.", ChatTags.errorSentence("bad_name", "Mine."))
-        assertTrue(ChatTags.errorSentence("something_new").isNotBlank())
-        assertTrue(ChatTags.errorSentence(null).isNotBlank())
+        // A code the app has a sentence for wins; bad_request and unknown codes
+        // say what the PC said (the desktop's errorWords is the same rule).
+        assertEquals(ChatTags.ERRORS.getValue("bad_name"), ChatTags.errorSentence("bad_name", "Mine."))
+        assertEquals(
+            "Chat history is off. Tags are not changed.",
+            ChatTags.errorSentence("bad_request", "Chat history is off. Tags are not changed."),
+        )
+        assertEquals("Try later.", ChatTags.errorSentence("weird", "Try later."))
+        assertEquals(ChatTags.ERRORS.getValue("bad_request"), ChatTags.errorSentence("bad_request", "  "))
+        assertEquals(ChatTags.ERROR_FALLBACK, ChatTags.errorSentence("something_new"))
+        assertEquals(ChatTags.ERROR_FALLBACK, ChatTags.errorSentence(null))
     }
 
     // --------------------------------------------------------- reading ---
@@ -217,7 +225,12 @@ class TagsTest {
         assertNull(filed.tag)
         val refused = ChatTags.write(409, obj("""{"ok":false,"error":"name_taken","message":"That name is in use."}"""))
         assertFalse(refused.ok)
-        assertEquals("That name is in use.", refused.said)
+        assertEquals(ChatTags.ERRORS.getValue("name_taken"), refused.said)
+        val off = ChatTags.write(
+            503,
+            obj("""{"ok":false,"error":"bad_request","message":"Chat history is off. Tags are not changed."}"""),
+        )
+        assertEquals("Chat history is off. Tags are not changed.", off.said)
         val noWords = ChatTags.write(400, obj("""{"ok":false,"error":"too_many_tags"}"""))
         assertEquals(ChatTags.errorSentence("too_many_tags"), noWords.said)
         val odd = ChatTags.write(500, null)
@@ -236,6 +249,25 @@ class TagsTest {
         assertNull(ChatTags.validName("a".repeat(25)))
         assertNull(ChatTags.addBody(""))
         assertNull(ChatTags.renameBody(3, "x".repeat(30)))
+    }
+
+    @Test
+    fun `the limit counts code points, never cuts a pair, and a name needs something visible`() {
+        val emoji24 = "\uD83D\uDE00".repeat(24)              // 24 code points, 48 UTF-16 units
+        assertEquals(emoji24, ChatTags.validName(emoji24))
+        assertNull(ChatTags.validName(emoji24 + "\uD83D\uDE00"))
+        assertEquals(24, ChatTags.nameLength(ChatTags.clipName("\uD83D\uDE00".repeat(30))))
+        val cut = ChatTags.clipName("a".repeat(23) + "\uD83D\uDE00\uD83D\uDE00")
+        assertEquals(24, ChatTags.nameLength(cut))
+        assertFalse("not cut inside a pair", Character.isHighSurrogate(cut.last()))
+        assertEquals("short names are left alone", "Work", ChatTags.clipName("Work"))
+        assertNull(ChatTags.validName("\u3164"))
+        assertNull(ChatTags.validName("\u200D\u200D"))
+        assertNull(ChatTags.validName("  \u3164 "))
+        assertNull(ChatTags.validName("\u2800"))
+        val family = "\uD83D\uDC68\u200D\uD83D\uDC69\u200D\uD83D\uDC67\u200D\uD83D\uDC66"
+        assertEquals(family, ChatTags.validName(family))
+        assertEquals("NFC", "Caf\u00E9", ChatTags.validName("Cafe\u0301"))
     }
 
     @Test
@@ -329,8 +361,42 @@ class TagsTest {
         assertEquals(listOf("u1", "gone"), sections[2].rows.map { it.id })
         assertEquals(ChatTags.UNTAGGED_KEY, sections[2].key)
         // The header shows the PC's count, or the loaded rows when that is more.
-        assertEquals(5, ChatTags.countOf(sections[1], 2))
-        assertEquals(2, ChatTags.countOf(sections[2], 2))
+        assertEquals(5, sections[1].count)
+        assertEquals(2, sections[2].count)
+        // A filter (Show, or title words) narrows what "N chats" would mean:
+        // the header then counts the rows shown, and an empty section goes.
+        val narrowed = ChatTags.group(rows, tags, untagged = 2, exact = false)
+        assertEquals(listOf(1, 2, 2), narrowed.map { it.count })
+        val none = ChatTags.group(listOf(row("w", 1, 1)), tags, untagged = 4, exact = false)
+        assertEquals(listOf(1), none.map { it.key })
+        assertEquals("nothing loaded, nothing counted: no Untagged section", 1, none.size)
+    }
+
+    @Test
+    fun `a tag with chats on older pages still shows its count, unless narrowed`() {
+        val tags = listOf(ChatTags.Tag(1, "Work", 0, "briefcase", 0, count = 4), ChatTags.Tag(2, "Empty", 1, "book", 1))
+        val rows = listOf(row("u", 5, null))
+        val all = ChatTags.group(rows, tags, untagged = 1)
+        assertEquals(listOf(1, ChatTags.UNTAGGED_KEY), all.map { it.key })
+        assertEquals(4, all[0].count)
+        assertTrue(all[0].rows.isEmpty())
+        assertEquals(listOf(ChatTags.UNTAGGED_KEY), ChatTags.group(rows, tags, untagged = 1, exact = false).map { it.key })
+    }
+
+    @Test
+    fun `a chat filed elsewhere leaves a list a tag chip is narrowing`() {
+        assertTrue(ChatTags.matchesFilter("", 3))
+        assertTrue(ChatTags.matchesFilter("", null))
+        assertTrue(ChatTags.matchesFilter("3", 3))
+        assertFalse(ChatTags.matchesFilter("3", 4))
+        assertFalse(ChatTags.matchesFilter("3", null))
+        assertTrue(ChatTags.matchesFilter(ChatTags.NONE_FILTER, null))
+        assertFalse(ChatTags.matchesFilter(ChatTags.NONE_FILTER, 3))
+    }
+
+    @Test
+    fun `with no tags at all there are no sections - the list is flat`() {
+        assertTrue(ChatTags.group(listOf(row("a", 1, null)), emptyList(), untagged = 1).isEmpty())
     }
 
     @Test

@@ -9,6 +9,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import java.text.Normalizer
 
 /**
  * Chat tags and sections in History - the phone's side of
@@ -115,7 +116,6 @@ object ChatTags {
     /** Editor extras, phone-only wording (not in the shared list). */
     const val CANCEL = "Cancel"
     const val EDIT = "Edit"
-    const val NONE_HERE = "No chats here."
     const val NONE_LOADED = "None loaded yet. \"Load older\" may bring in more."
     const val OLD_PC =
         "This PC's Jarvis has no chat tags yet. Update it by running apply-patches.ps1 on the PC."
@@ -127,9 +127,12 @@ object ChatTags {
     const val NAME_PLACEHOLDER = "Tag name"
     const val FILED_HIDDEN = "Show your chats first, then tap the one you mean."
 
-    /** One plain sentence per error code (section 10), used when the PC sent none. */
+    /** Said when the PC named no code this app knows and sent no sentence. */
+    const val ERROR_FALLBACK = "Your PC did not make that change."
+
+    /** One plain sentence per error code (section 10). */
     val ERRORS = mapOf(
-        "bad_name" to "A tag name needs 1 to 24 letters or numbers.",
+        "bad_name" to "A tag name needs 1 to 24 characters, with at least one letter, number or symbol it can show.",
         "name_taken" to "You already have a tag with that name.",
         "too_many_tags" to "You can have up to 12 tags. Delete one to make room.",
         "bad_colour" to "That colour is not one of the eight.",
@@ -216,18 +219,67 @@ object ChatTags {
         return Write(ok = false, said = errorSentence(body?.str("error"), body?.str("message")))
     }
 
-    /** The sentence for an error [code] the PC named, preferring its own [message]. */
-    fun errorSentence(code: String?, message: String? = null): String =
-        message?.takeIf { it.isNotBlank() }
-            ?: code?.let { ERRORS[it] }
-            ?: "Your PC did not make that change."
+    /**
+     * The sentence for an error [code] the PC named - the same rule as the
+     * desktop's `errorWords`: a code this app has a sentence for wins, except
+     * `bad_request`, a catch-all whose real reason ("Chat history is off...")
+     * is in the PC's own [message]; then that message; then `bad_request`'s
+     * sentence; then [ERROR_FALLBACK].
+     */
+    fun errorSentence(code: String?, message: String? = null): String {
+        if (code != null && code != "bad_request") ERRORS[code]?.let { return it }
+        message?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+        return if (code == "bad_request") ERRORS.getValue("bad_request") else ERROR_FALLBACK
+    }
 
     // --------------------------------------------------------- requests ---
 
-    private fun name(raw: String): String = raw.trim()
+    private fun name(raw: String): String = Normalizer.normalize(raw, Normalizer.Form.NFC).trim()
 
-    /** A name the PC would take (1-24 characters once trimmed), or null: nothing is sent. */
-    fun validName(raw: String): String? = name(raw).takeIf { it.length in 1..NAME_MAX }
+    /** Blank fillers that take room but show nothing (Hangul fillers, Braille blank). */
+    private val BLANKS = setOf(0x3164, 0x115F, 0x1160, 0xFFA0, 0x2800)
+
+    /** Character types a person can see: letters, marks, numbers, punctuation, symbols. */
+    private val VISIBLE_TYPES = setOf(
+        Character.UPPERCASE_LETTER, Character.LOWERCASE_LETTER, Character.TITLECASE_LETTER,
+        Character.MODIFIER_LETTER, Character.OTHER_LETTER, Character.NON_SPACING_MARK,
+        Character.ENCLOSING_MARK, Character.COMBINING_SPACING_MARK, Character.DECIMAL_DIGIT_NUMBER,
+        Character.LETTER_NUMBER, Character.OTHER_NUMBER, Character.CONNECTOR_PUNCTUATION,
+        Character.DASH_PUNCTUATION, Character.START_PUNCTUATION, Character.END_PUNCTUATION,
+        Character.INITIAL_QUOTE_PUNCTUATION, Character.FINAL_QUOTE_PUNCTUATION,
+        Character.OTHER_PUNCTUATION, Character.MATH_SYMBOL, Character.CURRENCY_SYMBOL,
+        Character.MODIFIER_SYMBOL, Character.OTHER_SYMBOL,
+    ).map { it.toInt() }.toSet()
+
+    private fun shows(cp: Int): Boolean = cp !in BLANKS && Character.getType(cp) in VISIBLE_TYPES
+
+    /** How many characters (code points, not UTF-16 units: an emoji is one) a name has. */
+    fun nameLength(s: String): Int = s.codePointCount(0, s.length)
+
+    /**
+     * [raw] cut to [NAME_MAX] code points, never inside a surrogate pair -
+     * for the text box, so a 25th character is not typed in.
+     */
+    fun clipName(raw: String): String {
+        if (nameLength(raw) <= NAME_MAX) return raw
+        return raw.substring(0, raw.offsetByCodePoints(0, NAME_MAX))
+    }
+
+    /**
+     * A name the PC would take, or null: nothing is sent. Normalised (NFC),
+     * trimmed, 1-24 code points, and at least one character it can show.
+     */
+    fun validName(raw: String): String? {
+        val n = name(raw)
+        if (nameLength(n) !in 1..NAME_MAX) return null
+        var i = 0
+        while (i < n.length) {
+            val cp = n.codePointAt(i)
+            if (shows(cp)) return n
+            i += Character.charCount(cp)
+        }
+        return null
+    }
 
     fun addBody(rawName: String, colour: Int? = null, icon: String? = null): String? {
         val n = validName(rawName) ?: return null
@@ -293,8 +345,11 @@ object ChatTags {
 
     // ---------------------------------------------------------- grouping ---
 
-    /** One section of the grouped list: a tag ([tag] null = Untagged) and its loaded rows. */
-    data class Section(val tag: Tag?, val rows: List<ChatLog.Summary>) {
+    /**
+     * One section of the grouped list: a tag ([tag] null = Untagged), its
+     * loaded rows and the [count] its header shows.
+     */
+    data class Section(val tag: Tag?, val rows: List<ChatLog.Summary>, val count: Int) {
         /** The key open/closed is remembered under: the tag id, or [UNTAGGED_KEY]. */
         val key: Int get() = tag?.id ?: UNTAGGED_KEY
     }
@@ -312,39 +367,60 @@ object ChatTags {
         else -> filter.toIntOrNull()
     }
 
+    /**
+     * Whether a chat filed under [tagId] still belongs in the list the chip
+     * [filter] shows (so a chat filed elsewhere leaves a filtered list at once).
+     */
+    fun matchesFilter(filter: String, tagId: Int?): Boolean = when (val key = filterKey(filter)) {
+        null -> true
+        UNTAGGED_KEY -> tagId == null
+        else -> tagId == key
+    }
+
     /** The open/closed flag key of the Untagged section (a tag id is never negative). */
     const val UNTAGGED_KEY = -1
 
     /**
-     * [rows] in sections: one per tag in the owner's order, newest chat
-     * first inside each, and Untagged LAST. A row whose tag is not in the
-     * list (deleted elsewhere) counts as untagged. Untagged shows only when
-     * it has loaded rows or the PC says some chats have no tag ([untagged]).
-     * [only] narrows to one tag id, or to [UNTAGGED_KEY].
+     * [rows] in sections, the same as the desktop's `groupRows`: one per tag
+     * in the owner's order, newest chat first inside each, and Untagged LAST.
+     * A row whose tag is not in the list (deleted elsewhere) counts as
+     * untagged. With no tags at all there are no sections (the caller draws a
+     * flat list).
+     *
+     * A section's header count is the PC's own when nothing narrows the list
+     * ([exact]) and never less than the rows loaded; when a "Show" kind or the
+     * title words narrow it ([exact] false) it is the rows shown. A section
+     * with no rows shown and no count is left out - an empty header says
+     * nothing. [only] narrows to one tag id, or to [UNTAGGED_KEY].
      */
-    fun group(rows: List<ChatLog.Summary>, tags: List<Tag>, untagged: Int, only: Int? = null): List<Section> {
+    fun group(
+        rows: List<ChatLog.Summary>,
+        tags: List<Tag>,
+        untagged: Int,
+        only: Int? = null,
+        exact: Boolean = true,
+    ): List<Section> {
+        if (tags.isEmpty()) return emptyList()
         val known = tags.mapTo(HashSet()) { it.id }
         fun newest(list: List<ChatLog.Summary>) = list.sortedByDescending { it.updated ?: 0L }
         val out = ArrayList<Section>()
         for (t in tags) {
             if (only != null && only != t.id) continue
-            out += Section(t, newest(rows.filter { it.tagId == t.id }))
+            val mine = newest(rows.filter { it.tagId == t.id })
+            val count = if (exact) maxOf(t.count, mine.size) else mine.size
+            if (mine.isNotEmpty() || count > 0) out += Section(t, mine, count)
         }
-        val loose = rows.filter { r ->
-            val t = r.tagId
-            t == null || t !in known
-        }
-        if ((only == null || only == UNTAGGED_KEY) && (loose.isNotEmpty() || untagged > 0)) {
-            out += Section(null, newest(loose))
+        if (only == null || only == UNTAGGED_KEY) {
+            val loose = newest(
+                rows.filter { r ->
+                    val t = r.tagId
+                    t == null || t !in known
+                },
+            )
+            val count = if (exact) maxOf(untagged, loose.size) else loose.size
+            if (loose.isNotEmpty() || count > 0) out += Section(null, loose, count)
         }
         return out
-    }
-
-    /** The count a section's header shows: the PC's, or the loaded rows when the PC sent none. */
-    fun countOf(section: Section, untagged: Int): Int {
-        val loaded = section.rows.size
-        val told = section.tag?.count ?: untagged
-        return maxOf(told, loaded)
     }
 
     // ------------------------------------------------- "file it" flow ---

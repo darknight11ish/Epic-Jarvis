@@ -1,5 +1,8 @@
 package com.jarvis.client.ui.screens
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +22,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -61,6 +65,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.ZoneId
+
+/** How long a "file it under" request waits for a tap before it lapses. */
+private const val FILING_BANNER_MS = 10 * 60 * 1000L
 
 /**
  * Chat history on the PC ([ChatLog], docs/JARVIS-API.md section 18) - the
@@ -151,6 +158,23 @@ fun HistoryScreen(
     // The row whose "Move to" list is open.
     var moveFor by remember { mutableStateOf<String?>(null) }
     var filing by remember(fileUnder) { mutableStateOf(fileUnder) }
+    // The "file it under" request does not outlive this visit: it goes when
+    // the screen is left (a rotation is not leaving) and after ten quiet
+    // minutes, so the banner is not waiting the next time History opens.
+    DisposableEffect(Unit) {
+        onDispose {
+            var host: Context? = context
+            while (host is ContextWrapper && host !is Activity) host = host.baseContext
+            val rotating = (host as? Activity)?.isChangingConfigurations == true
+            if (!rotating && filing != null) onFileUnderDone()
+        }
+    }
+    LaunchedEffect(filing) {
+        if (filing == null) return@LaunchedEffect
+        delay(FILING_BANNER_MS)
+        filing = null
+        onFileUnderDone()
+    }
     // "History settings", folded until opened: the list comes first.
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var status by remember { mutableStateOf<ChatLog.Status?>(null) }
@@ -288,6 +312,7 @@ fun HistoryScreen(
             val w = JarvisRuntime.fileChat(id, tagId)
             if (w.ok) {
                 rows = rows?.map { if (it.id == id) it.copy(tagId = tagId) else it }
+                    ?.filter { ChatTags.matchesFilter(tagFilter, it.tagId) }
                 found = found?.let { f ->
                     f.copy(found = f.found.map { h -> if (h.row.id == id) h.copy(row = h.row.copy(tagId = tagId)) else h })
                 }
@@ -327,6 +352,7 @@ fun HistoryScreen(
                     tags = tagView?.tags.orEmpty(),
                     onTagged = { id, tagId ->
                         rows = rows?.map { if (it.id == id) it.copy(tagId = tagId) else it }
+                            ?.filter { ChatTags.matchesFilter(tagFilter, it.tagId) }
                         found = found?.let { f ->
                             f.copy(found = f.found.map { h -> if (h.row.id == id) h.copy(row = h.row.copy(tagId = tagId)) else h })
                         }
@@ -625,10 +651,15 @@ fun HistoryScreen(
                         // Sections, one per tag in the owner's order, newest
                         // first inside, Untagged last. Each header says its
                         // name, icon and count, and folds shut.
-                        val sections = ChatTags.group(visible, view.tags, view.untagged, ChatTags.filterKey(tagFilter))
+                        // A "Show" kind or title words narrow the list: then a header
+                        // counts the rows shown, not the PC's whole number (the desktop's rule).
+                        val narrowed = kind.isNotEmpty() || search.isNotBlank()
+                        val sections = ChatTags.group(
+                            visible, view.tags, view.untagged, ChatTags.filterKey(tagFilter), exact = !narrowed,
+                        )
                         sections.forEach { sec ->
                             val isOpen = sec.key !in closed
-                            val count = ChatTags.countOf(sec, view.untagged)
+                            val count = sec.count
                             item(key = "sec-${sec.key}") {
                                 TagSectionHeader(sec.tag, count, isOpen, onToggle = {
                                     val next = if (isOpen) closed + sec.key else closed - sec.key
@@ -640,7 +671,7 @@ fun HistoryScreen(
                                 if (sec.rows.isEmpty()) {
                                     item(key = "sec-${sec.key}-none") {
                                         Text(
-                                            if (count > 0) ChatTags.NONE_LOADED else ChatTags.NONE_HERE,
+                                            ChatTags.NONE_LOADED,
                                             style = MaterialTheme.typography.bodySmall,
                                             color = chrome.textLo,
                                         )

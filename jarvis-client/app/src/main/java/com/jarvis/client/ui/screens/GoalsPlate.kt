@@ -20,13 +20,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.ApiResult
 import com.jarvis.client.net.Goals
+import com.jarvis.client.net.Projects
 import com.jarvis.client.net.Schedule
 import com.jarvis.client.ui.parts.Gap
+import com.jarvis.client.ui.parts.Pill
 import com.jarvis.client.ui.parts.Plate
 import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Section
@@ -96,6 +101,25 @@ internal fun GoalsSection(
     // for as long as it says "waiting" - see [Goals]'s own doc comment for
     // why this is the one place that state is kept once read.
     var waitingCheckins by remember { mutableStateOf(mapOf<String, Schedule.Job>()) }
+    // The numbers a draft's step could follow (benchmarks with a target),
+    // read only while a draft is on screen and the lists are shown.
+    var options by remember { mutableStateOf<List<Goals.MeasureOption>>(emptyList()) }
+    // The step just ticked, (goal id, index), so an Undo can untick it.
+    var undo by remember { mutableStateOf<Pair<String, Int>?>(null) }
+    val hasDraft = view?.goals?.any { it.status == "draft" } == true
+
+    LaunchedEffect(hasDraft, privateHidden, reads) {
+        if (!hasDraft || privateHidden) return@LaunchedEffect
+        val listed = (JarvisRuntime.projectsRead(Projects.PATH) as? ApiResult.Ok)?.value
+            ?.takeIf { it.code in 200..299 }?.body?.let { Projects.parseList(it) }
+            ?: return@LaunchedEffect
+        val full = listed.projects.take(20).mapNotNull { p ->
+            val path = Projects.projectPath(p.id) ?: return@mapNotNull null
+            (JarvisRuntime.projectsRead(path) as? ApiResult.Ok)?.value
+                ?.takeIf { it.code in 200..299 }?.let { Projects.projectOf(it) }
+        }
+        options = Goals.measureOptions(full)
+    }
 
     LaunchedEffect(reads, tick) {
         when (val r = JarvisRuntime.goals()) {
@@ -191,6 +215,10 @@ internal fun GoalsSection(
                             goal = goal,
                             plan = edits[goal.id] ?: goal.plan,
                             maxSteps = shown.limits?.steps ?: Goals.MAX_STEPS,
+                            maxNeeds = shown.limits?.needs ?: Goals.MAX_NEEDS,
+                            options = options,
+                            undoIndex = undo?.takeIf { it.first == goal.id }?.second,
+                            onSay = { said = it },
                             hidden = privateHidden,
                             enabled = canAct && busyId == null,
                             waiting = waitingCheckins[goal.id],
@@ -220,11 +248,19 @@ internal fun GoalsSection(
                             onStep = { index, done ->
                                 busyId = goal.id
                                 said = null
+                                undo = null
                                 scope.launch {
+                                    var ok = false
                                     try {
-                                        said = JarvisRuntime.setGoalStep(goal.id, index, done).third
+                                        val r = JarvisRuntime.setGoalStep(goal.id, index, done)
+                                        ok = r.first
+                                        said = r.third
+                                        // A tick can be taken back at once; the Undo untick is the same route.
+                                        if (ok && done) undo = goal.id to index
                                     } finally {
                                         busyId = null
+                                        // A refused tick (a stale screen) reads the list again to catch up.
+                                        if (!ok) reads += 1
                                     }
                                 }
                             },
@@ -290,6 +326,10 @@ private fun GoalRow(
     goal: Goals.Goal,
     plan: List<Goals.Step>,
     maxSteps: Int,
+    maxNeeds: Int,
+    options: List<Goals.MeasureOption>,
+    undoIndex: Int?,
+    onSay: (String) -> Unit,
     hidden: Boolean,
     enabled: Boolean,
     waiting: Schedule.Job?,
@@ -351,23 +391,59 @@ private fun GoalRow(
                         Goals.REMOVE_STEP,
                         color = chrome.badInk,
                         enabled = enabled && plan.size > 1,
-                        onClick = { onPlanChange(plan.filterIndexed { idx, _ -> idx != i }) },
+                        onClick = {
+                            val (next, touched) = Goals.removeStep(plan, i)
+                            onPlanChange(next)
+                            if (touched) onSay(Goals.DROPPED_NEEDS)
+                        },
                     )
                 }
+                StepLinks(plan, i, maxNeeds, options, enabled, onPlanChange)
             } else {
+                val shownStep = if (hidden) Goals.HIDDEN_TEXT else s.step
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // A locked step's tick is shown but off, with the reason beside it.
                     Checkbox(
                         checked = s.done,
-                        enabled = enabled && goal.status == "active",
+                        enabled = enabled && goal.status == "active" && Goals.canTick(s),
                         onCheckedChange = { onStep(i, it) },
+                        modifier = Modifier.semantics { contentDescription = "Done: $shownStep" },
                     )
-                    Column(Modifier.weight(1f)) {
+                    // One spoken line per row: "<step>, locked, after: <steps>".
+                    Column(Modifier.weight(1f).clearAndSetSemantics { contentDescription = Goals.spoken(s, shownStep) }) {
                         Text(
-                            if (hidden) Goals.HIDDEN_TEXT else s.step,
-                            style = MaterialTheme.typography.bodySmall, color = chrome.textHi,
+                            shownStep,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (s.locked) chrome.textMid else chrome.textHi,
                         )
                         if (!hidden && s.by.isNotEmpty()) {
                             Text(s.by, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                        }
+                        // Greyed is never the only signal: the word "locked" and the PC's own reason.
+                        if (s.locked || s.lockWords.isNotEmpty()) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                if (s.locked) Pill(Goals.w("locked"), color = chrome.textMid)
+                                if (s.lockWords.isNotEmpty()) {
+                                    Text(
+                                        s.lockWords, style = MaterialTheme.typography.labelSmall, color = chrome.textMid,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
+                            }
+                        }
+                        // Reached is not a tick: the owner still ticks it.
+                        if (s.reached && s.reachedWords.isNotEmpty()) {
+                            Text(s.reachedWords, style = MaterialTheme.typography.labelSmall, color = chrome.textMid)
+                        }
+                        if (s.measure != null) {
+                            if (s.measureGone) {
+                                Text(Goals.w("measure_gone"), style = MaterialTheme.typography.labelSmall, color = chrome.warnInk)
+                            } else if (s.measureName.isNotEmpty()) {
+                                Text(
+                                    "${Goals.FOLLOWS_LABEL}: ${s.measureName}",
+                                    style = MaterialTheme.typography.labelSmall, color = chrome.textLo,
+                                )
+                            }
                         }
                     }
                 }
@@ -376,7 +452,7 @@ private fun GoalRow(
         if (editable) {
             Gap(6)
             if (plan.size < maxSteps) {
-                Quiet(Goals.ADD_STEP, enabled = enabled, onClick = { onPlanChange(plan + Goals.Step("", "", false)) })
+                Quiet(Goals.ADD_STEP, enabled = enabled, onClick = { onPlanChange(plan + Goals.newStep(plan)) })
             } else {
                 Text(Goals.TOO_MANY_STEPS, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
             }
@@ -390,8 +466,80 @@ private fun GoalRow(
         } else if (goal.status == "active") {
             Gap(6)
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                if (undoIndex != null) {
+                    Quiet(Goals.UNDO, enabled = enabled, onClick = { onStep(undoIndex, false) })
+                }
                 Quiet(Goals.STOP, color = chrome.badInk, enabled = enabled, onClick = onStop)
             }
+        }
+    }
+}
+
+/**
+ * A draft step's two pickers, before Accept: "Do these first" (the other
+ * steps it waits on, at most [maxNeeds]) and "Follows a number" (a
+ * benchmark with a target). Shown under a tap so seven steps stay short.
+ */
+@Composable
+private fun StepLinks(
+    plan: List<Goals.Step>,
+    i: Int,
+    maxNeeds: Int,
+    options: List<Goals.MeasureOption>,
+    enabled: Boolean,
+    onPlanChange: (List<Goals.Step>) -> Unit,
+) {
+    val chrome = LocalChrome.current
+    val s = plan[i]
+    var open by remember(s.id, i) { mutableStateOf(false) }
+    val others = plan.withIndex().filter { it.index != i && it.value.id.isNotEmpty() }
+    val summary = buildList {
+        if (s.needs.isNotEmpty()) add("${Goals.DO_FIRST}: ${s.needs.size}")
+        if (s.measure != null) add(Goals.FOLLOWS_LABEL)
+    }.joinToString(" · ")
+    Quiet(
+        if (open) "Hide links" else if (summary.isEmpty()) "${Goals.DO_FIRST} / ${Goals.FOLLOWS}" else summary,
+        color = chrome.textMid,
+        onClick = { open = !open },
+    )
+    if (!open) return
+    if (others.isNotEmpty()) {
+        Text(Goals.DO_FIRST.uppercase(), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        Text(Goals.DO_FIRST_UNDER, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        others.forEach { (j, o) ->
+            val on = o.id in s.needs
+            Quiet(
+                if (on) "✓ ${Goals.label(plan, j)}" else Goals.label(plan, j),
+                color = if (on) null else chrome.textMid,
+                // The picker stops at the limit; the PC would refuse a fourth.
+                enabled = enabled && (on || s.needs.size < maxNeeds),
+                onClick = { onPlanChange(Goals.toggleNeed(plan, i, o.id, maxNeeds)) },
+            )
+        }
+    }
+    Gap(4)
+    Text(Goals.FOLLOWS.uppercase(), style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    if (options.isEmpty() && s.measure == null) {
+        Text(Goals.FOLLOWS_EMPTY, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+    } else {
+        Text(Goals.FOLLOWS_UNDER, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+        Quiet(
+            if (s.measure == null) "✓ ${Goals.FOLLOWS_NONE}" else Goals.FOLLOWS_NONE,
+            color = if (s.measure == null) null else chrome.textMid,
+            enabled = enabled,
+            onClick = { onPlanChange(Goals.setMeasure(plan, i, null)) },
+        )
+        options.forEach { o ->
+            val on = s.measure == o.measure
+            Quiet(
+                if (on) "✓ ${o.label}" else o.label,
+                color = if (on) null else chrome.textMid,
+                enabled = enabled,
+                onClick = { onPlanChange(Goals.setMeasure(plan, i, o.measure)) },
+            )
+        }
+        if (s.measure != null && options.none { it.measure == s.measure } && s.measureName.isNotEmpty()) {
+            Text("${Goals.FOLLOWS_LABEL}: ${s.measureName}", style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
         }
     }
 }

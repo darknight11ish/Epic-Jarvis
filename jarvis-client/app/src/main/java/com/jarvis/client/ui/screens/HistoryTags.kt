@@ -302,7 +302,7 @@ internal fun TagsEditor(
                 } else {
                     TextInput(
                         value = addText,
-                        onValueChange = { addText = it.take(ChatTags.NAME_MAX) },
+                        onValueChange = { addText = ChatTags.clipName(it) },
                         placeholder = ChatTags.NAME_PLACEHOLDER,
                         modifier = Modifier.semantics { contentDescription = ChatTags.ADD },
                     )
@@ -360,13 +360,13 @@ internal fun TagsEditor(
                     Gap(4)
                     TextInput(
                         value = renameText,
-                        onValueChange = { renameText = it.take(ChatTags.NAME_MAX) },
+                        onValueChange = { renameText = ChatTags.clipName(it) },
                         placeholder = ChatTags.NAME_PLACEHOLDER,
                         modifier = Modifier.semantics { contentDescription = ChatTags.RENAME + " " + t.name },
                     )
                     Quiet(
                         ChatTags.RENAME,
-                        enabled = !busy && ChatTags.validName(renameText) != null && renameText.trim() != t.name,
+                        enabled = !busy && ChatTags.validName(renameText).let { it != null && it != t.name },
                         onClick = { send(ChatTags.renameBody(t.id, renameText)) },
                     )
                     Gap(4)

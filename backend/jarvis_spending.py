@@ -718,13 +718,21 @@ def propose(rows: list, *, name: str = "") -> dict:
     elif g["drcr"] is not None:
         sign = "drcr"
     elif g["amount"] is not None:
-        signs = set()
+        neg = pos = 0
         for r in body:
             if g["amount"] < len(r):
                 c = M.parse_money(r[g["amount"]], decimal or ".")
                 if c:
-                    signs.add(c < 0)
-        sign = "negative_out" if True in signs else None
+                    neg, pos = neg + (c < 0), pos + (c > 0)
+        # Only a clear majority is a guess: a bank account has more money out
+        # (negative), a credit card export more purchases counted positive.
+        # All one sign, or close to even, is the owner's to say.
+        if neg and neg >= 2 * pos:
+            sign = "negative_out"
+        elif pos and neg and pos >= 2 * neg:
+            sign = "positive_out"
+        else:
+            sign = "negative_out" if neg and not pos else None
     questions = [k for k, v in (("date_order", order), ("decimal", decimal), ("sign", sign)) if v is None]
     for k in ("date", "description"):
         if cols_out[k] is None:
@@ -918,7 +926,7 @@ STARTER = (
     ("Fun and travel", ("cinema", "airline", "hotel", "airbnb", "theatre")),
     ("Subscriptions", ("netflix", "spotify", "subscription")),
     ("Cash", ("atm", "cash withdrawal")),
-    ("Transfers", ("transfer", "credit card payment", "internal transfer")),
+    ("Transfers", ("transfer", "credit card payment", "internal transfer", "payment thank you")),
     ("Income", ("salary", "payroll", "wages")),
     ("Other", ()),
 )

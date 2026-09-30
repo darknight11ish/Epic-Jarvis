@@ -1449,6 +1449,14 @@ reads from on its own. Three things about it are invariants:
   docs/JARVIS-API.md §64): the chats from some days, on a list the owner
   checks, deleted only after ONE approval card listing every one, with 10
   minutes to Undo.
+- **Tags label saved chats (2026-09-30; `docs/CHAT-TAGS-DESIGN.md`,
+  docs/JARVIS-API.md §99).** One tag per chat, chosen only by the owner (or by
+  Jarvis when asked; never on its own). The tag names are the owner's words, so
+  they are one sealed value in `meta`; a chat carries only an opaque `tag_id`
+  number. No card - nothing leaves the PC - and tagging an already-saved chat
+  works while history is off, since it records nothing new; with no key
+  nothing is read or written. Tag names never reach memory, the learner, a
+  search index or a log. The apps keep only which sections are folded.
 - **A temporary chat is never kept** (2026-09-25): nothing of it reaches
   `chat-history.db`, whether history is on or off (§5, "A temporary chat
   uses and makes no memory"). Since 2026-09-27 a game or role-play the PC

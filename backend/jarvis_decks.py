@@ -401,8 +401,7 @@ class Decks:
         cap = self._new_per_day(c)
         introduced = sum(1 for r in cards if r[4] == today)
         new_left = max(0, cap - introduced)
-        reviews, news, per_deck = [], [], {}
-        later = []
+        reviews, news, later = [], [], []
         for cid, did, last, due, first_day, kind, level in cards:
             if paused.get(did, True):
                 continue
@@ -413,21 +412,29 @@ class Decks:
             else:
                 later.append(_day(due))
         reviews.sort(key=lambda r: r[0])
-        offered_new = news[:new_left]
-        for _due, did, _cid in reviews:
-            per_deck[did] = per_deck.get(did, 0) + 1
-        for did, _cid in offered_new:
-            per_deck[did] = per_deck.get(did, 0) + 1
-        queue = [r[2] for r in reviews] + [r[1] for r in offered_new]
-        queue_deck = {r[2]: r[1] for r in reviews}
-        queue_deck.update({cid: did for did, cid in offered_new})
-        if deck is not None:
-            queue = [q for q in queue if queue_deck[q] == deck]
+        # The day's allowance of new cards is shared by every deck (it is counted
+        # from what was learned today), but what a view offers is worked out for
+        # the deck asked about: its own reviews, then its own new cards up to it.
+        def offered(scope_deck):
+            mine = [r for r in reviews if scope_deck is None or r[1] == scope_deck]
+            fresh = [x for x in news if scope_deck is None or x[0] == scope_deck][:new_left]
+            return mine, fresh
+
+        def ids(pair):
+            return [r[2] for r in pair[0]] + [x[1] for x in pair[1]]
+        per_deck = {did: len(ids(offered(did))) for did in paused}
+        queue = ids(offered(deck))
+        every = offered(None)
+        # A card is up for review if its own deck would offer it (the deck
+        # asked about, or all decks together).
+        up = set()
+        for did in paused:
+            up.update(ids(offered(did)))
         tomorrow = _day(self._clock() + 24 * 3600.0)
-        if len(news) > len(offered_new):
+        if len(news) > len(every[1]):
             later.append(tomorrow)
         return {"decks": paused, "cards": cards, "per_deck": per_deck, "queue": queue,
-                "queue_deck": queue_deck, "new_left": new_left, "new_per_day": cap,
+                "total": len(ids(every)), "up": up, "new_left": new_left, "new_per_day": cap,
                 "next_day": min(later) if later else None,
                 "all_paused": bool(paused) and all(paused.values())}
 
@@ -438,7 +445,7 @@ class Decks:
                 return ""
             with closing(self._connect()) as c:
                 n = self._numbers(c)
-            return line_for(len(n["decks"]), len(n["queue"]), n["all_paused"])
+            return line_for(len(n["decks"]), n["total"], n["all_paused"])
         except Exception:
             return ""
 
@@ -469,9 +476,9 @@ class Decks:
             return base
         with self._lock, closing(self._connect()) as c:
             n = self._numbers(c)
-            base.update(ready=len(n["queue"]), new_per_day=n["new_per_day"],
+            base.update(ready=n["total"], new_per_day=n["new_per_day"],
                         new_left=n["new_left"], next_ready_day=n["next_day"],
-                        line=line_for(len(n["decks"]), len(n["queue"]), n["all_paused"]))
+                        line=line_for(len(n["decks"]), n["total"], n["all_paused"]))
             if not ok:
                 return base
             aead = self._cipher() if n["decks"] else None
@@ -705,10 +712,10 @@ class Decks:
                 "new": row[13] is None}
 
     def _review_view(self, c, deck: Optional[str]) -> dict:
-        run = self._scope_run(deck)
         n = self._numbers(c, deck)
         if deck is not None and deck not in n["decks"]:
             raise DeckError("deck_not_found")
+        run = self._scope_run(deck)
         ready = len(n["queue"])
         state, card = "card", None
         if not n["decks"]:
@@ -723,7 +730,7 @@ class Decks:
             state = "enough"
         if state == "card":
             cid = n["queue"][0]
-            card = self._card_view(self._cipher(), c, cid, n["queue_deck"][cid])
+            card = self._card_view(self._cipher(), c, cid, self._card_row(c, cid)[1])
         scope_decks = 1 if deck is not None else len(n["decks"])
         line = line_for(scope_decks, ready, state == "paused")
         if deck is not None and state == "paused":
@@ -757,7 +764,7 @@ class Decks:
         n = self._numbers(c)
         if n["decks"].get(row[1]):
             raise DeckError("deck_paused")
-        if cid not in n["queue"]:
+        if cid not in n["up"]:
             raise DeckError("card_not_found")
         return row, n
 
@@ -802,9 +809,12 @@ class Decks:
                           (after["state"], after["step"], after["stability"], after["difficulty"],
                            after["due"], after["last_review"], lapse, self._today(), cid))
                 self._revealed.pop(cid, None)
-                run = self._scope_run(self._run["scope"] or None if self._run else None)
+                scope = (self._run or {}).get("scope") or None
+                if scope is not None and c.execute("SELECT 1 FROM decks WHERE id=?", (scope,)).fetchone() is None:
+                    scope = None
+                run = self._scope_run(scope)
                 run["done"] += 1
-                view = self._review_view(c, run["scope"] or None)
+                view = self._review_view(c, scope)
             return {"ok": True, "ready": view["ready"], "new_left": view["new_left"],
                     "next": view["card"], "state": view["state"], "line": view["line"],
                     "run": view["run"], "comes_back": _day(after["due"])}

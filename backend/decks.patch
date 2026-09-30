@@ -1,6 +1,6 @@
 --- a/jarvis_hud.py
 +++ b/jarvis_hud.py
-@@ -3609,6 +3609,20 @@
+@@ -3609,6 +3609,21 @@
      except Exception as exc:
          print(f"  quiz       NOT ON ({type(exc).__name__}) - Quiz me on a text is off")
          print("             until jarvis_quiz.py is back: run apply-patches.ps1 again")

@@ -48,6 +48,16 @@ ideas 1-4 are measured.
   `list`, `_row`, `get`, `take_out`, `put_back._put_one` (which pads to 7 fields
   today), `search`, `overlapping`, `brief`. Otherwise Undo of "Forget a time
   frame" would silently lose the tag.
+- **Row copies are hand-written positional tuples** in `list`, `get`, `brief`,
+  `overlapping`, `take_out` and `put_back` (`_put_one` writes `conv[:8]`, padding
+  a held row from before `kind`/`tag_id`). A new column must be added to each by
+  hand, in the same position, or a chat silently loses it on Undo. **Refactor
+  before Fork (section 8):** replace the positional tuples with one named row
+  helper (a column list read once) before "Fork from here" adds another copy
+  path, so a fork cannot drop `tag_id` or `read_outside` the same way.
+- **Tagging works while chat history is off** (owner, 2026-09-30): filing an
+  already-saved chat records nothing new, so tag reads and writes need only the
+  key. No key, nothing read or written; a chat never saved cannot be tagged.
 - Deleting a tag sets its chats to untagged (after a confirm). Deleting a chat
   leaves the registry alone. Tag names never enter memory, facts, the learner or
   a search index.
@@ -100,9 +110,14 @@ any patch edit. Add rows to `tools/check_parity.py`.
   Live/support filter ("Show") keeps working with the tags.
 - A "Tags" editor in History: add, rename, recolour, reorder, delete.
 - Under "Hide memory lists and chat history": tag names are hidden along with
-  titles (the Rust side must call `lock::private_hidden`), sections show only
-  a count. Screenshots stay blocked as today.
-- Screen readers read "Work, 12 chats, collapsed" and the tag on each row.
+  titles (the Rust side must call `lock::private_hidden`); both apps show the
+  hidden list as one flat block, "N conversations, hidden", not sections with a
+  count. Screenshots stay blocked as today. With no tags at all the list is
+  flat too (sections appear once at least one tag exists).
+- Screen readers: the phone reads "Work, 12 chats, collapsed" (a merged
+  description); the desktop's header says "Work, 12 chats" and carries the
+  open/closed state in `aria-expanded`, so it is not said twice. Both read the
+  tag on each row.
 
 ## 7. Files and tests
 
@@ -140,7 +155,8 @@ chats (waits on memory ideas 1-4). Tag-based auto-delete rules.
 Three builders (backend, desktop, phone) work from this. Sections 1-9 are the
 decisions; this section is the exact shape.
 
-**Tags.** `Tag` = `{"id": int, "name": str (1-24 chars, trimmed, unique ignoring case),
+**Tags.** `Tag` = `{"id": int, "name": str (1-24 code points, NFC, trimmed, at least one
+visible character, unique ignoring case and NFC/NFD),
 "colour": 0-7, "icon": str, "order": int}`. At most **12** tags. The starter tags
 are created the first time the registry is read: ids 1-5 = Work (colour 0 blue,
 icon `briefcase`), Learning (1 green, `book`), Personal (2 amber, `home`),
@@ -177,7 +193,7 @@ tests read; colour is never the only clue (icon + name + count always show).
 | `POST /api/history/tag` | `{"id": chat_id, "tag_id": int \| null}` | `{"ok": true, "id", "tag_id"}` |
 | `GET /api/history` | new `tag=<id>` or `tag=none` filter | rows and the single-conversation read gain `"tag_id": int \| null` |
 
-Errors `{"ok": false, "error", "message"}`: `bad_name`, `name_taken`, `too_many_tags`,
+Errors (sentence choice in JARVIS-API §99.2) `{"ok": false, "error", "message"}`: `bad_name`, `name_taken`, `too_many_tags`,
 `bad_colour`, `bad_icon`, `tag_not_found`, `not_found` (chat), `bad_request`.
 No card anywhere (the owner's own organisation, nothing leaves the PC). Every
 write is held on a stale link (rule 4).
@@ -203,7 +219,9 @@ Cancel clears it. Nothing is filed until the owner taps.
 **Shared words** (both apps, word for word): `Untagged`, `All`, `Tags` (editor
 title), `Add a tag`, `Rename`, `Delete this tag`, `Move to`, `No tag`, section
 header `{name} ({count})` with the screen-reader form `{name}, {count} chats,
-collapsed|expanded`, delete confirm `Delete the tag {name}? Its {count} chats
+collapsed|expanded` (the phone's merged description; the desktop conveys the
+state through `aria-expanded` and labels the header `{name}, {count} chats`),
+delete confirm `Delete the tag {name}? Its {count} chats
 become untagged.`, banner `Tap the chat to file it under {name}.`, editor errors
 one plain sentence per code above.
 
@@ -226,4 +244,7 @@ fixes to `test_chat_kinds.py`/`test_forget_range.py`, `tools/gen_history_cases.p
 route keys, tests). Phone: everything under `jarvis-client/` (ChatLog.kt,
 HistoryScreen.kt, JarvisApi/JarvisRuntime, ChatSession.kt, tests). Collapsed/open
 state of each section is remembered per device (a harmless view preference);
-nothing else about tags is stored on a device.
+nothing else about tags is stored on a device, apart from the desktop's brief
+hand-over key for "label my chat about the boiler as Home" (`jarvis.brain.place`,
+holding a tag id and the search words), which is removed the moment the Brain
+reads it, and after a minute if it never does.
