@@ -64,6 +64,15 @@ export const BOX = Object.freeze({
   fromLine: "From: ",
   unreadable: "This table could not be shown.",
   checkColumns: "Check the columns",
+  // (audit 2026-09-30) the picker, the counts and the "save it anyway" tick.
+  chooseFile: "Choose a bank file…",
+  noFileForLayout: "No bank file with this layout was found in your folders.",
+  acceptTick: "This does not look right, but save it anyway",
+  forgetSure: "Forget this layout? Files that use it will need their columns checked again.",
+  forgetYes: "Yes, forget it",
+  forgetNo: "No, keep it",
+  checking: "Checking what these choices would count…",
+  misfitPrefix: "This does not look right: ",
 });
 
 /** The most a category list may hold (JARVIS-API section 100.4). */
@@ -424,6 +433,10 @@ export function formFor(proposal, file) {
     decimal: noHeader || has(q, "decimal") || !g.decimal ? null : g.decimal,
     currency: g && isStr(g.currency) ? g.currency : "",
     label: g && isStr(g.label) ? g.label : "",
+    // (audit) what the box asked, sent back as `answered`; an Excel column of
+    // date serials keeps its flag.
+    questions: q.filter(isStr),
+    dateSerial: Boolean(g) && g.date_serial === true,
   };
 }
 
@@ -441,8 +454,9 @@ export function canSave(f) {
 }
 
 /** The body of the save call (Rust adds `confirm: true`). Null while
- *  `canSave` is false. */
-export function saveBody(f) {
+ *  `canSave` is false. `accept`: the owner ticked "save it anyway" after the
+ *  PC said the choices do not fit the file. */
+export function saveBody(f, { accept = false } = {}) {
   if (!canSave(f)) return null;
   const columns = { date: f.dateColumn, description: f.descriptionColumn };
   if (f.mode === "one") columns.amount = f.amountColumn;
@@ -462,7 +476,63 @@ export function saveBody(f) {
     decimal: f.decimal,
     currency: f.currency.trim(),
     label: f.label.trim(),
+    answered: (f.questions || []).slice(),
+    date_serial: f.dateSerial === true,
+    ...(accept ? { accept_warnings: true } : {}),
   };
+}
+
+/** The body of the "what would this count?" call: the same choices, `preview:
+ *  true`, and (in Rust) no `confirm`. Null while `canSave` is false. */
+export function previewBody(f) {
+  const body = saveBody(f);
+  return body ? { ...body, preview: true } : null;
+}
+
+/** Reading the PC's preview answer: `{line, warnings, problems}` (all empty
+ *  for anything that is not a ready preview - the box then says nothing and
+ *  the PC's own check on Save still applies). */
+export function previewState(answer) {
+  if (!answer || answer.ready !== true) return { line: "", warnings: [], problems: [] };
+  const warnings = Array.isArray(answer.warnings) ? answer.warnings.filter(isStr) : [];
+  const problems = Array.isArray(answer.problems) ? answer.problems.filter(isStr) : [];
+  return { line: isStr(answer.line) ? answer.line : "", warnings, problems };
+}
+
+/** Save is allowed once the choices are complete and, if the PC said they do
+ *  not fit the file, the owner ticked the box. */
+export function canPress(f, state, accepted) {
+  if (!canSave(f)) return false;
+  return !(state && state.problems && state.problems.length) || accepted === true;
+}
+
+/* ── Settings: the bank file picker ──────────────────────────────────── */
+
+/** The options of the Bank file picker: the files the PC found, by name. The
+ *  value is the path (the PC sends a path only to itself). */
+export function pickerOptions(view) {
+  const files = view && Array.isArray(view.bank_files) ? view.bank_files : [];
+  return files
+    .filter((f) => f && isStr(f.path) && isStr(f.name))
+    .map((f) => ({
+      value: f.path,
+      label: f.name + (f.waiting ? " (columns not checked yet)" : ""),
+    }));
+}
+
+/** The files that use a saved layout (its `id` is their `layout_id`). */
+export function filesForLayout(view, layoutId) {
+  const files = view && Array.isArray(view.bank_files) ? view.bank_files : [];
+  return files.filter((f) => f && isStr(f.path) && f.layout_id === layoutId).map((f) => f.path);
+}
+
+/** The file "Check the columns again" opens for a layout row: the picker's
+ *  file when it uses that layout, else the first file that does; null when
+ *  none is known. Never a free-typed path. */
+export function fileForAgain(view, layoutId, picked) {
+  const files = filesForLayout(view, layoutId);
+  if (picked && files.includes(picked)) return picked;
+  return files.length ? files[0] : null;
 }
 
 /** "Saved. 7 rows read, 1 left out." - the contract's line. */

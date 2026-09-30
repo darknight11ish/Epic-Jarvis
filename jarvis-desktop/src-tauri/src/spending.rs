@@ -23,9 +23,13 @@
 //! * [`get_spending`] - `GET /api/spending`: layouts, categories, waiting
 //!   files. A read.
 //! * [`spending_profile_read`] - `GET /api/spending/profile?file=`: the
-//!   proposal for a waiting file, or the saved layout it already has.
+//!   proposal for a waiting file, or the saved layout it already has; with
+//!   `again` (`&again=1`) a fresh proposal with the saved choices filled in.
+//!   Nothing is deleted by asking (audit 2026-09-30).
 //! * [`spending_profile_save`] - `POST /api/spending/profile` with
-//!   `confirm: true` (added here, always).
+//!   `confirm: true` (added here, always) - or, when the page sends
+//!   `preview: true`, a read that only counts what the choices would do
+//!   (no `confirm`, nothing saved).
 //! * [`spending_profile_delete`] - `POST /api/spending/profile/delete`.
 //! * [`spending_categories_save`] / [`spending_categories_reset`] -
 //!   `POST /api/spending/categories`.
@@ -225,14 +229,19 @@ pub async fn get_spending(app: AppHandle) -> Result<serde_json::Value, String> {
 pub async fn spending_profile_read(
     app: AppHandle,
     file: String,
+    again: Option<bool>,
 ) -> Result<serde_json::Value, String> {
     if !valid_file(&file) {
         return Err("choose a bank file first".to_string());
     }
     let base = jarvis_base(&app);
+    let mut query: Vec<(&str, &str)> = vec![("file", file.as_str())];
+    if again == Some(true) {
+        query.push(("again", "1"));
+    }
     let response = jarvis_client(Some(FILE_TIMEOUT))?
         .get(format!("{base}{PROFILE_PATH}"))
-        .query(&[("file", file.as_str())])
+        .query(&query)
         .headers(jarvis_headers(&app)?)
         .send()
         .await
@@ -264,8 +273,11 @@ async fn post(
     change_answer(status, &text)
 }
 
-/// The keys a confirmed layout may carry; `confirm` is added here, always.
-const PROFILE_KEYS: [&str; 8] = [
+/// The keys a confirmed layout may carry; `confirm` is added here, always
+/// (except for a preview). `answered` is the list of questions the box asked,
+/// `date_serial` an Excel column of date serials, `accept_warnings` the
+/// owner's tick after the PC said the choices do not fit the file.
+const PROFILE_KEYS: [&str; 11] = [
     "file",
     "header_row",
     "columns",
@@ -274,10 +286,14 @@ const PROFILE_KEYS: [&str; 8] = [
     "decimal",
     "currency",
     "label",
+    "answered",
+    "date_serial",
+    "accept_warnings",
 ];
 
 /// The body of `POST /api/spending/profile`: only the known keys of what the
-/// page sent, plus `confirm: true`. `Err` when it names no file.
+/// page sent, plus `confirm: true` - or, for a preview (`preview: true` from
+/// the page), `preview: true` and no `confirm`. `Err` when it names no file.
 pub(crate) fn profile_body(choices: &serde_json::Value) -> Result<serde_json::Value, String> {
     let Some(obj) = choices.as_object() else {
         return Err("the column choices were not readable".to_string());
@@ -292,7 +308,11 @@ pub(crate) fn profile_body(choices: &serde_json::Value) -> Result<serde_json::Va
             out.insert(key.to_string(), v.clone());
         }
     }
-    out.insert("confirm".to_string(), serde_json::Value::Bool(true));
+    if obj.get("preview") == Some(&serde_json::Value::Bool(true)) {
+        out.insert("preview".to_string(), serde_json::Value::Bool(true));
+    } else {
+        out.insert("confirm".to_string(), serde_json::Value::Bool(true));
+    }
     Ok(serde_json::Value::Object(out))
 }
 
