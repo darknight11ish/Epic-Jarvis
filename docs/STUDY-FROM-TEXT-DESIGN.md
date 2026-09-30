@@ -250,3 +250,60 @@ False claims in the pasted list: openlingo's `src/lib/ai/tools/` (it is one file
 `lib/ai/tools.ts`); fabric's `create_study_guide` (does not exist; use
 `summarize_lecture` or write our own); Lute "links durmió to dormir
 automatically"; the "small float16" memory figure.
+
+## 11. Slice A contract (frozen 2026-09-30; builders work from this)
+
+Owner went ahead 2026-09-30: three builders at once (backend, desktop, phone),
+on the current branch, no pull request yet. It will be **JARVIS-API section 98**.
+
+**Rules it must keep.** No card (the owner's own pasted words, the local model
+only, nothing leaves the PC). The text is **outside text**. The quiz module never
+calls the learner or memory and writes nothing to disk: a session lives in memory
+only, and ends on `finish`, `stop`, a PC restart, or 60 minutes without use. A
+grade is never a fact about the owner. No streak, no letter grade, no number
+shown as exact. Chat history is not touched. Under "Hide memory lists and chat
+history" the quiz page hides its questions and answers like the "Used" list does.
+Send `X-Jarvis-Client: hud`. The phone does no speech-to-text: answers are typed.
+
+**Routes** (backend `backend/jarvis_quiz.py`, installed like `jarvis_goals.install`):
+
+| Route | Body | Answer |
+|---|---|---|
+| `POST /api/quiz` | `{"text": str, "count": 1-10 (default 5), "title": str?}` | `{"ok": true, "quiz": Quiz}` |
+| `GET /api/quiz/{id}` | - | `{"ok": true, "quiz": Quiz}` |
+| `POST /api/quiz/{id}/answer` | `{"n": int, "answer": str}` | `{"ok": true, "mark": Mark, "quiz": Quiz}` |
+| `POST /api/quiz/{id}/finish` | `{}` | `{"ok": true, "summary": Summary}` and the session is deleted |
+| `POST /api/quiz/{id}/stop` | `{}` | `{"ok": true}` and the session is deleted |
+
+`Quiz` = `{"id": str, "title": str, "grader_verified": bool, "questions": [Question], "answered": int}`.
+`Question` = `{"n": 1.., "kind": "recall"|"explain"|"apply", "prompt": str, "mark": Mark|null}`.
+The source passage is NOT in `Question` until it is answered.
+`Mark` = `{"level": "got_it"|"partly"|"not_yet", "comment": str, "passage": str}`.
+`Summary` = `{"counts": {"got_it": int, "partly": int, "not_yet": int}, "again": [n, ...]}`.
+Limits: `text` 200-20000 characters, `answer` 1-2000, `count` 1-10, 3 open quizzes.
+`grader_verified` is `false` until the grader test set (`backend/quiz_grader_cases.json`)
+has passed on this PC; while false, every app shows "Jarvis's guess" beside a mark.
+
+**Errors** (`{"ok": false, "error": <code>, "message": <plain words>}`): `text_too_short`,
+`text_too_long`, `bad_count`, `too_many_quizzes`, `not_found`, `bad_question`,
+`already_answered`, `answer_empty`, `answer_too_long`, `model_unavailable`
+(plain message: the local model did not answer; nothing was lost).
+On a stale link the apps hold the buttons, like Goals (rule 4).
+
+**Shared words** (both apps, word for word):
+- Page title: `Quiz me on a text`
+- Intro: `Paste some text and Jarvis writes a few questions about it. Your answers are marked by the model on this PC. Nothing is saved or learned, and nothing leaves this PC.`
+- Start button: `Write questions`
+- Answer button: `Check my answer`
+- Marks: `Got it` / `Partly` / `Not yet`; label `Jarvis's guess` (while `grader_verified` is false)
+- Finish: `Finish` ; stop: `Stop and forget this quiz`
+- Summary heading: `Look at these again`; empty: `Nothing to look at again.`
+- Outside-text line: `This text is treated as outside text: Jarvis never learns facts from it.`
+
+**Files.** Backend: `backend/jarvis_quiz.py`, `backend/quiz.patch` (one hunk installing it,
+like `goals.patch`; then run `python3 tools/build_patch_history.py` after `git fetch --unshallow origin`),
+`backend/test_quiz.py`, `backend/quiz_grader_cases.json`, JARVIS-API §98,
+`tools/check_parity.py` entries. Desktop: `jarvis-desktop/src/quiz.js` (+ its place in Brain),
+`src-tauri/src/brain/quiz.rs`, `tests/quiz.mjs`. Phone: `net/Quiz.kt`,
+`ui/screens/QuizPlate.kt`, `QuizTest.kt`. One builder owns each group; builders do
+not edit each other's files, and do not run `git commit`.
