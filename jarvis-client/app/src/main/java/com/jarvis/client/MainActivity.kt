@@ -210,7 +210,7 @@ class MainActivity : FragmentActivity() {
      */
     private val resumeListeningRequestedAt = mutableStateOf<Long?>(null)
 
-    /** Why listening could not be started from the restart notice; shown once on Checks. */
+    /** Why listening could not be started from the restart notice; shown once in Settings, Voice. */
     private val resumeListeningNotice = mutableStateOf<String?>(null)
 
     /** An empty tile slot was tapped - see [readTileSettingsIntent]. Consumed once. */
@@ -1658,10 +1658,13 @@ class MainActivity : FragmentActivity() {
                 if (why == null) {
                     JarvisRuntime.setNotice(com.jarvis.client.data.WakeResume.BACK_ON)
                 } else {
-                    // Checks, where the switch is, with the reason under it.
+                    // Settings, Voice, where the switch is (moved there from
+                    // Checks, 2026-09-30), with the reason under it.
                     resumeListeningNotice.value = why
+                    pendingSection = "voice"
+                    pendingSectionScreen = Screen.SETTINGS.name
                     nav.resetTo(Screen.HOME)
-                    nav.go(Screen.CHECKS)
+                    nav.go(Screen.SETTINGS)
                 }
             }
         }
@@ -2491,14 +2494,16 @@ class MainActivity : FragmentActivity() {
                         // it), so a later manual visit to Settings does not
                         // scroll anywhere on its own.
                         onSectionConsumed = sectionConsumed,
-                        // The "hey Jarvis" switches, moved here from Platform
-                        // checks (settings audit 2026-09-30): they need a
-                        // desktop, so only once paired.
+                        // Picture mode's button to the Looking at your screen
+                        // switch, which is on the Security screen.
                         onOpenLookSwitch = {
                             pendingSection = "look"
                             pendingSectionScreen = Screen.SECURITY.name
                             nav.go(Screen.SECURITY)
                         },
+                        // The "hey Jarvis" switches, moved here from Platform
+                        // checks (settings audit 2026-09-30): they need a
+                        // desktop, so only once paired.
                         voiceSwitches = if (paired) {
                             { VoiceSwitches() }
                         } else {
