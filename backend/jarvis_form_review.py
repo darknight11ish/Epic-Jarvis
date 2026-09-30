@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib
 import io
 import json
 import re
@@ -192,7 +193,8 @@ def fit(data: bytes) -> dict:
     if max(w, h) <= MAX_SIDE and len(data) <= MAX_BYTES:
         return {"jpeg": data, "width": w, "height": h}
     try:
-        from PIL import Image  # type: ignore
+        # By name, as jarvis_screen_picture.py does: Pillow is optional here.
+        Image = importlib.import_module("PIL.Image")
     except Exception:
         raise NoPicture("the page is too big to show in one picture here (Pillow, which "
                         "scales it down, is not installed)") from None
@@ -299,8 +301,9 @@ def card_text(info: dict, *, has_picture: bool) -> str:
         lines.append("The picture shown with this card is the page exactly as it looks now "
                      "- nothing in it is hidden or covered, so check every detail.")
     else:
-        lines.append((info.get("no_picture") or NO_WINDOW).rstrip(".") + ". Read the words "
-                     "above carefully: they are all you have to check.")
+        why = (info.get("no_picture") or NO_WINDOW).rstrip(".")
+        lines.append(why[:1].upper() + why[1:] + ". Read the words above carefully: they "
+                     "are all you have to check.")
     lines += ["",
               f'Jarvis will now click {_label(fin.get("role", "button"), fin.get("name", ""), fin.get("within", ""))}. '
               "It cannot be undone.",

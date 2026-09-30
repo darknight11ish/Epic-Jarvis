@@ -1312,16 +1312,15 @@ TOOLS: dict = {
         "Drive one browser tab by naming page elements (role and accessible "
         "name). A missing or ambiguous element is reported, not guessed. "
         "read_new: a chat's new messages; read_page: the main text in "
-        "pieces. Stops if the page leaves the allowed sites, asks a "
-        "question, opens a tab or downloads.",
+        "pieces. Stops if the page leaves the allowed sites or opens a tab. "
+        "A form: fill it, end with one click marked final.",
         {"type": "object", "properties": {
             "goal": {"type": "string"},
             "session": {"type": "string"},
             "mode": {"type": "string", "enum": ["auto", "headless", "visible"],
-                "description": "headless: no window, reading only. visible: sign-in, "
-                    "checkout"},
+                "description": "headless: no window, reading only. visible: sign-in"},
             "allowed_domains": {"type": "array", "items": {"type": "string"},
-                "description": "hostnames allowed (default: the plan's sites)"},
+                "description": "allowed hostnames (default: the plan's)"},
             "requests": {"type": "array", "items": {"type": "object", "properties": {
                 "action": {"type": "string",
                     "enum": ["navigate", "click", "type", "select", "read", "read_new",
@@ -1329,18 +1328,17 @@ TOOLS: dict = {
                 "role": {"type": "string", "description": "e.g. button, textbox; "
                     "read_new: the list's"},
                 "name": {"type": "string", "description": "accessible name"},
-                "within": {"type": "string", "description": "the section, dialog or row it "
-                    "is in, when two elements match"},
+                "within": {"type": "string", "description": "its section or row, if "
+                    "two match"},
                 "value": {"type": "string", "description": "navigate: URL. type/select: "
                     "text (saved secret: <secret>name</secret>). read_new: highest index "
                     "seen. read_page: offset (\"0\")"},
                 "why": {"type": "string"},
                 "irreversible": {"type": "boolean"},
                 "leaves_machine": {"type": "boolean",
-                    "description": "true for nearly every browser step"},
+                    "description": "true for nearly every step"},
                 "final": {"type": "boolean",
-                    "description": "the LAST click that sends a form: the owner is shown "
-                        "the form first"},
+                    "description": "the last click, which sends a form"},
             }}}},
          "required": ["goal", "session", "requests"]},
         _prepare_browser_control,

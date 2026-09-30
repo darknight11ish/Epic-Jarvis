@@ -2113,14 +2113,16 @@ def _run_steps(p, getter, actor, looker, allowed, announce, checkpoint, secrets,
         out.update(extra)
         return out
 
-    def _fp(session: str, look: dict) -> str:
+    def _fp(session: str, look: dict) -> Optional[str]:
+        """The page's fingerprint, or None when the deeper look that was
+        given cannot be taken - which the callers treat as a stop, never as
+        "nothing changed"."""
         extra = ""
         if fingerprint is not None:
             try:
                 extra = str(fingerprint(session) or "")
-            except Exception as exc:
-                # A deeper look that cannot be taken is a difference, not a pass.
-                extra = f"unreadable:{type(exc).__name__}"
+            except Exception:
+                return None
         return page_fingerprint(look) + "|" + extra
 
     def _review_final(step, i: int, label: str, current: dict):
@@ -2138,6 +2140,9 @@ def _run_steps(p, getter, actor, looker, allowed, announce, checkpoint, secrets,
                       "fields Jarvis filled in are still on the page")
         first_url = str(current.get("url") or "")
         seen_fp = _fp(step.session, current)
+        if seen_fp is None:
+            return no("the form's fields could not be checked before showing it to you - "
+                      "nothing was sent")
         picture, no_picture = None, ""
         if snapshot is not None:
             try:
@@ -2160,7 +2165,7 @@ def _run_steps(p, getter, actor, looker, allowed, announce, checkpoint, secrets,
             return no(f"before the final step: the page could not be read "
                       f"({type(exc).__name__}: {exc}) - nothing was sent")
         problem = _page_problem(look, allowed, first_url, notes)
-        if problem or _fp(step.session, look) != seen_fp:
+        if problem or _fp(step.session, look) != seen_fp:   # None (unreadable) != a hash
             return no("the page changed while Jarvis was preparing to show it to you"
                       + (f" ({problem})" if problem else "") + " - nothing was sent")
         info = {"site": (urlparse(first_url).hostname or "").lower(),
@@ -2200,7 +2205,7 @@ def _run_steps(p, getter, actor, looker, allowed, announce, checkpoint, secrets,
         if len(found) != 1 or not found[0].get("enabled", True):
             return no("the page changed after you looked at it: the button to send the form "
                       "is no longer there exactly once and ready - nothing was sent")
-        if _fp(step.session, look) != seen_fp:
+        if _fp(step.session, look) != seen_fp:   # None (unreadable) != a hash
             return no("the page changed after you looked at it - nothing was sent")
         return None
 
