@@ -4643,6 +4643,10 @@ A `job`:
  "card": "Waiting for your yes on the approval card." (waiting),
  "fired_at", "late": bool, "missed": "missed at 07:00",
  "went_off_at": "07:00",          when it last went off, by the PC's clock (21.9)
+ "age_s": 45.0,                   seconds since it went off, by the PC's clock, never below 0
+                                  (added 2026-09-30): an app that shows "went off 3 minutes
+                                  ago" needs no clock of its own - the phone's and the PC's
+                                  can disagree. Only on a job that has gone off.
  "list": "shopping",              a to-do item's named list; "" is the to-do list (21.9)
  "snoozed": true,                 a snoozed copy of something that went off (21.9)
  "lock_screen": "Jarvis: a reminder is due.",   the kind's words, never the job's
@@ -4768,6 +4772,16 @@ What it understands:
 | "Cancel that" (21.9) | "cancel that", "never mind", "undo", "delete that reminder", "no, cancel that alarm" |
 | Morning briefing | "brief me now", "brief me every weekday at 7", "stop my briefing" - section 22.5 |
 | "What did I miss?" (22.9) | "what did I miss", "did I miss anything", "catch me up", "what's new" |
+
+**"12" (owner, 2026-09-30: "read it as midnight and always say the time
+back").** "12 at night", "12 in the evening" and "tonight at 12" are
+**midnight** (00:00 - the one that ends the day), never noon. A bare "12" (or
+"12:30") with nothing to say which, and any repeat like "every day at 12", is
+also read as the clock reads it - midnight for a repeat, the next 12 for a
+one-off - and the reply says which it set: "... That is 12:00 midnight. If you
+meant the other, say "12 noon"." (or "... 12:00 noon. If you meant the other,
+say "midnight"."). "12pm", "12 noon", "noon", "12am" and "midnight" are
+unambiguous and get no extra words.
 
 "cancel all timers", "clear my to-do list" and the like are answered
 "Jarvis does not clear everything at once" and change nothing. Two timers
@@ -8408,6 +8422,7 @@ words too (`"Erase the words" cannot reach into an older backup ...`).
 | `POST /api/backup/folder` `{"path"}` | Sets where backups are written. This PC only. **202** while ONE approval card waits (action `change_own_config`, the same action "Folders Jarvis may look in" uses to add a folder, and refused the same places - `jarvis_documents.check_folder`, imported not copied). |
 | `POST /api/backup/now` `{}` | Makes one backup into the folder already set. This PC only, **no card** - the folder was already approved. **409** with no folder set. 200 `{"ok", "name", "at", "counts", "recovery_code"}` - the code shown once. |
 | `POST /api/backup/restore/preview` `{"name", "code"}` | Decrypts to read the backup's own `manifest.json` - counts and its date, never any other content. Changes nothing. **400** `{"wrong_code": true}` for a code that does not open it. This PC only. |
+| `POST /api/backup/delete-older` `{}` | **"Delete older backups now"**, offered by both apps after an "Erase the words" (2026-09-30): erased words can still be readable in a backup made before the erase. This PC only (**403** otherwise). **202** while ONE approval card waits (action `change_own_config`, the folder card's own; the card says how many files go and that it cannot be undone). Approved: one FRESH backup is made first (a new recovery code, returned once in `last_delete_older.fresh_backup`), then every other backup file in the folder is deleted; if the fresh one cannot be made, nothing is deleted. **409** with no folder or no backups. The outcome is in `GET /api/backup` as `last_delete_older` (`outcome` `deleted`\|`denied`\|`timed_out`\|`withdrawn`\|`refused`\|`failed`, `deleted`, `message`, `fresh_backup`) and `pending_delete_older_card`. |
 | `POST /api/backup/restore` `{"name", "code"}` | **202** while ONE approval card waits, action **`restore_backup`** - in `jarvis_owner_check.PC_ONLY_ACTIONS`, so it ALWAYS needs Windows Hello and is ALWAYS refused from any device but this PC, whatever the gate's own risk table says (the same mechanism `loosen_what_asks_first` and `enable_reading_tool` use). On approval: Jarvis backs up the CURRENT state first, automatically, with a FRESH one-time recovery code (returned in the outcome exactly once), so the restore itself can be undone - then writes the backup's files back. Restore only adds and overwrites; it never deletes a file that is not in the backup. |
 
 `[autonomy.tiers]` carries `restore_backup = "ask"` (must stay `ask`, like
@@ -8418,10 +8433,32 @@ has its plain-words title; "What asks first" (§32) lists it under
 ### 45.4 Retention
 
 The newest 5 backup files in the folder are kept; making a new one
-deletes the rest. Chosen, not measured: a card is shown for each restore
+deletes the rest - **never the one just written**, whatever its name says. A
+name is trusted for its date, except one dated more than 5 minutes in the
+future (the PC's clock was wrong): that file is dated by its real modified time
+instead. A same-second `-2` file counts as newer than the first. A file too
+small to be a backup (a copy or sync that was cut short) is listed with
+`"complete": false`, is not counted among the kept, and is not deleted. Chosen, not measured: a card is shown for each restore
 either way, so keeping more costs disk, not safety, and a synced folder
 should not grow without bound. Two backups made in the same second get
 distinct names (`-2`, `-3`, ...) rather than overwrite each other.
+
+### 45.4a Restore is all-or-nothing, as far as files allow (2026-09-30)
+
+Every file is first written beside its place as a hidden temp file (a full disk
+fails here, before anything real is touched); then each real file is copied
+aside and replaced in one step, and a restored database's old `-wal` and `-shm`
+files are moved aside too (they belong to the OLD database); on any failure
+everything already replaced is put back and every temp file removed. The
+outcome words are true: "failed" says everything was put back;
+"failed_partial" says putting back failed too and points to the safety backup;
+a safety backup that could not be made says nothing was restored. A chat-history
+key that cannot be put back in Credential Manager is a plain `warning` on the
+restored outcome, not silence. The restore card says it "REPLACES your memory
+and chat files, settings and notes with that day's copies" - what was added
+or changed since is lost unless it is in the safety backup. Nothing can pause
+the programs that hold these files open (there is no such hook), so restart
+Jarvis afterwards, as the outcome says.
 
 ### 45.5 Desktop and phone
 
@@ -10368,9 +10405,10 @@ screen is learned, and nothing on it can start a look.
     {"state": "off"|"watching"|"paused"|"ended", "on": bool,
      "paused": <a reason above> | null, "pause_words": <its words> | null,
      "left_s": int | null, "ending_soon": bool,
-     "ended": "owner"|"time"|"locked"|"slept"|"stop_all" | null,
+     "ended": "owner"|"time"|"locked"|"slept"|"stop_all"|"no_heartbeat" | null,
      "ended_words": "you stopped it"|"the time was up"|"Windows locked"|
-                    "the PC slept"|"Stop everything" | null,
+                    "the PC slept"|"Stop everything"|
+                    "the Jarvis window stopped answering" | null,
      "look_held": bool, "look_left_s": int | null, "built": bool}
 
 **Never an app name, a site, a window title or a word from the screen.**
@@ -10480,6 +10518,17 @@ Both wrap the server's `Handler` after its own origin and token checks.
     it runs on, and only when it is asked from that PC."
   - `stop` and `drop` - accepted from **anywhere**, because they only make
     Jarvis look less. The phone's "Stop watching" on Home is `stop`.
+  - **`heartbeat`** (added 2026-09-30; **this PC only**, like `start`) - "the
+    window that shows the sign is still here". A Watch started with
+    `{"do": "start", "from": "desktop", "minutes"?}` ends itself, in `tick()`
+    and by the MONOTONIC clock (a clock change cannot end or stretch it), when
+    **45 seconds** (`HEARTBEAT_LOST_S`) pass with no heartbeat: `ended` is
+    `"no_heartbeat"` and `ended_words` "the Jarvis window stopped answering" - so
+    Jarvis never goes on watching with nobody showing the "Jarvis is watching"
+    sign. The desktop app pings about every 10-15 seconds while its Watch is on.
+    The answer is the flat status plus `watching` (false: the session is over,
+    so the app drops its sign). A Watch started without `from: "desktop"` has no
+    heartbeat client and is never ended for silence.
   - The answer is the same flat status, plus the verb's own fields: `ok`,
     `note` (the "Looked at: ..." line, never a word from the screen), `said`
     (the plain reason for a refusal), `why` (the pause reason of a refused
@@ -10640,10 +10689,16 @@ characters, so a cut can never leave half of one), and hides them:
   program not used) and Presidio's card
   (must pass the card check digit - a made-up number that fails it is left
   alone), crypto wallet (its own check digits), IBAN (mod 97), email and IP
-  patterns (MIT; the regular expressions only, no package, no spaCy), and two
-  of Jarvis's own (a value after "Password:" / "PIN:" / "secret", which is
-  often shorter than gitleaks's broad rule wants, and a private key that is
-  cut off before its end line). gitleaks's keyword pre-filter is NOT used
+  patterns (MIT; the regular expressions only, no package, no spaCy), and
+  Jarvis's own: a value after "Password:" / "PIN:" / "secret" (also
+  `DB_PASSWORD=...`, `API_SECRET_KEY=...`, German "Passwort:", and "password
+  hunter2" with no colon or a label on the line above - the value must hold a
+  digit then, so "password reset" is left alone), a code before or after its
+  label ("482913 is your verification code", "Your code is 482913", "PIN 4821",
+  "CVV: 123"), a login header ("Authorization: Bearer ..."), a US social
+  security number (123-45-6789; the kind `"ssn"` in `PII_KINDS`; dates and phone
+  numbers do not fit its shape), and a private key that is cut off before its
+  end line (patterns added 2026-09-30). gitleaks's keyword pre-filter is NOT used
   (it saves nothing at screen size and would let a token through whose
   vendor's name is not on the screen);
 - every word that overlaps a secret, by even one letter, is hidden whole; a
@@ -10659,8 +10714,11 @@ characters, so a cut can never leave half of one), and hides them:
   model may be shown (a second-card vision model, the CPU picture model), the
   original is never passed on, and when nothing was hidden the original bytes
   come back unchanged;
-- **fail closed**: the check failing or taking too long (10 s), rule data that
-  will not load, more than 80,000 characters of text, words with no position
+- **fail closed**: the check failing or taking too long (6 s, checked between
+  rules and every 32 matches inside one), rule data that will not load, more
+  than **25,000** characters of text (was 80,000: on 70,000 characters of dense
+  text the check took 8-13 s holding Python's lock, which froze the event stream
+  and the approvals and left the phone with a stale link; 2026-09-30), words with no position
   for a hidden word, a picture that cannot be opened (a JPEG with no Windows
   reader) or whose size is not the size the words were read from - each gives
   NO picture (`png` None, with `png_why`); when the check itself cannot run,

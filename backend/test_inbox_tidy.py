@@ -807,6 +807,19 @@ def t_undo_lasts_ten_minutes_and_holds_no_words():
     check("the emails stay archived", "INBOX" not in s.where("<n1@shop.example>"))
     fresh()
     s = mailbox()
+    T.run(plan(s, "archive", sender="shop"), approved=True, connect=connect_to(s), now=NOW,
+          timer=lambda sec, fn: None)
+    import time
+    real_mono = time.monotonic
+    time.monotonic = lambda: real_mono() + 700       # ten real minutes ...
+    try:
+        st = T.status(NOW - 3600)                    # ... but the PC's clock was set back an hour
+    finally:
+        time.monotonic = real_mono
+    check("a clock set back cannot stretch Undo past ten real minutes (monotonic guard)",
+          st["undo"] is None, st)
+    fresh()
+    s = mailbox()
     timers = []
     T.run(plan(s, "archive", sender="shop"), approved=True, connect=connect_to(s), now=NOW,
           timer=lambda sec, fn: timers.append((sec, fn)))

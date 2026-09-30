@@ -159,6 +159,14 @@ READ_WAIT_S = 35.0
 TICK_S = 1.0
 #: A gap this long between two checks means the PC slept: the session ends.
 SLEEP_GAP_S = 30.0
+#: A Watch started from the desktop app is kept alive by that app's pings
+#: (the `heartbeat` verb, about every 10-15 s). This long with none, and the
+#: session ends: the app that shows the "Jarvis is watching" sign is gone (closed,
+#: crashed, frozen), and Jarvis must not go on watching with no sign on screen.
+HEARTBEAT_LOST_S = 45.0
+#: The `from` value on a start that opts in to the heartbeat. A session started
+#: any other way (or with no `from`) has no heartbeat client and is not ended for it.
+HEARTBEAT_FROM = "desktop"
 
 #: Caps on what the model gets (the design: OCR 4,500, the window's text 3,000).
 OCR_MAX_CHARS = 4500
@@ -253,6 +261,7 @@ END_WORDS = {
     "locked": "Windows was locked",
     "slept": "the PC slept",
     "stop_all": "you pressed Stop everything",
+    "no_heartbeat": "the Jarvis window stopped answering",
 }
 
 #: The words BOTH apps show for the sign (the desktop's badge and strip, the
@@ -1096,6 +1105,7 @@ def with_screen(messages: list, mark: str = "", *, engine=None,
         return msgs, info
     kept, added, words = [], [], []
     empty_part = False
+    unchecked = False
     pic_jobs: list = []
     try:
         for p in parts:
@@ -1123,6 +1133,8 @@ def with_screen(messages: list, mark: str = "", *, engine=None,
                     got = clean_picture(image, ocr=read)
                     if not pic_jobs:
                         pic_jobs.append(_phone_picture_start(image))
+                if isinstance(got, dict) and got.get("unchecked"):
+                    unchecked = True
                 t, _left = _ocr_words(got) if got is not None else ("", 0)
                 if t:
                     texts.append(t)
@@ -1133,6 +1145,10 @@ def with_screen(messages: list, mark: str = "", *, engine=None,
             body = label_phone_text(joined)
             info.update(read=True, text=clip(joined, UI_MAX_CHARS * 2)[0])
             added.append({"type": "text", "text": body})
+        elif mark == "phone" and unchecked:
+            # A picture that could not be checked for private things is not
+            # "no words": say that it was not read, never that it was empty.
+            added.append({"type": "text", "text": SCREEN_TEXT_UNCHECKED})
         elif mark == "phone" or empty_part:
             added.append({"type": "text", "text": SCREEN_TEXT_NONE})
         elif mark == "look":
@@ -1196,8 +1212,9 @@ class Screen:
                  front_reader: Optional[Callable] = None, capture: Optional[Callable] = None,
                  ocr: Optional[Callable] = None, ui_text: Optional[Callable] = None,
                  never: Optional[NeverLook] = None, publish: Optional[Callable] = None,
-                 run_loop: bool = True):
+                 run_loop: bool = True, mono: Callable[[], float] = time.monotonic):
         self.clock = clock
+        self.mono = mono            # the heartbeat's clock: a clock change cannot end or extend it
         self.front = front_reader
         self.capture = capture
         self.ocr = ocr
@@ -1212,6 +1229,8 @@ class Screen:
         self.warned = False
         self.ended_why = None       # an END_WORDS key, once ended
         self.last_tick = 0.0
+        self.started_by: Optional[str] = None     # HEARTBEAT_FROM when the desktop app started it
+        self._beat = 0.0                          # self.mono() of the last heartbeat
         self._look: Optional[Glance] = None
         self._gen = 0
 
@@ -1238,7 +1257,9 @@ class Screen:
             pass
 
     # -- Watch with me ---------------------------------------------------------------
-    def start(self, minutes=None) -> dict:
+    def start(self, minutes=None, source=None) -> dict:
+        """`source` is the request's `from`: "desktop" asks for the heartbeat
+        (the app promises to ping); anything else means no heartbeat client."""
         if not self.built():
             return {"ok": False, "error": NOT_BUILT, "status": self.status()}
         try:
@@ -1252,6 +1273,8 @@ class Screen:
             self.ends_at = now + m * 60
             self.warned = False
             self.last_tick = now
+            self.started_by = HEARTBEAT_FROM if source == HEARTBEAT_FROM else None
+            self._beat = self.mono()
             self._gen += 1
             gen = self._gen
         _audit("screen.watch", {"did": "start", "minutes": m})
@@ -1291,6 +1314,16 @@ class Screen:
             _audit("screen.watch", {"did": "end", "why": self.ended_why})
             self._emit()
         return {"ok": True, "stopped": was, "status": self.status()}
+
+    def heartbeat(self) -> dict:
+        """The desktop app's "I am still here" ping. {"ok": True, "watching":
+        bool}: `watching` False tells the app the session is over (for
+        instance ended because pings were late), so it can drop its sign."""
+        with self._lock:
+            on = self.state in (WATCHING, PAUSED)
+            if on:
+                self._beat = self.mono()
+        return {"ok": True, "watching": on}
 
     def extend(self, minutes=None) -> dict:
         try:
@@ -1334,6 +1367,10 @@ class Screen:
                 changed = True
             elif now >= self.ends_at:
                 self._end("time")
+                changed = True
+            elif (self.started_by == HEARTBEAT_FROM
+                  and self.mono() - self._beat > HEARTBEAT_LOST_S):
+                self._end("no_heartbeat")
                 changed = True
             else:
                 self.last_tick = now
@@ -1491,7 +1528,17 @@ class Screen:
             return {"ok": False, "looked": False, "paused": why, "said": said_for(why)}
         g.consume = True
         with self._lock:
-            old, self._look = self._look, g
+            # Stop (or a pause) may have come while the look was being taken,
+            # outside the lock: a look must not be stored after the session it
+            # belonged to has ended.
+            state, pause = self.state, self.pause
+            if state == WATCHING:
+                old, self._look = self._look, g
+        if state != WATCHING:
+            _cancel_picture(g)
+            if state == PAUSED:
+                return {"ok": False, "looked": False, "paused": pause, "said": said_for(pause)}
+            return {"ok": True, "looked": False, "off": True}
         if old is not g:
             _cancel_picture(old)
         self._emit()
@@ -1763,7 +1810,7 @@ PICTURE_MISSING = ("This PC's Jarvis does not have picture mode: jarvis_screen_p
 #: The verbs POST /api/screen takes. "look", "ask", "start" and "extend" can
 #: only come from THIS PC; "stop" (and "drop") from anywhere, because they
 #: only ever make Jarvis look LESS.
-LOCAL_DOS = ("look", "ask", "start", "extend")
+LOCAL_DOS = ("look", "ask", "start", "extend", "heartbeat")
 ANY_DOS = ("stop", "drop")
 LOCAL_ONLY_SAYS = ("Jarvis can only look at the screen of the PC it runs on, and only when it "
                    "is asked from that PC. Press the Look at this key on the PC.")
@@ -1886,7 +1933,7 @@ def handle_post(path: str, body, local: bool) -> tuple:
     if do in LOCAL_DOS and not local:
         return 403, {"ok": False, "error": LOCAL_ONLY_SAYS}
     if do not in LOCAL_DOS + ANY_DOS:
-        return 400, {"ok": False, "error": "say look, ask, start, extend, stop or drop"}
+        return 400, {"ok": False, "error": "say look, ask, start, extend, heartbeat, stop or drop"}
     if do in ("look", "start") and not ENGINE.built():
         return 503, _answer({"ok": False, "error": not_built_words()})
     if do == "look":
@@ -1896,8 +1943,10 @@ def handle_post(path: str, body, local: bool) -> tuple:
     if do == "ask":
         return 200, _answer(ENGINE.ask())
     if do == "start":
-        out = ENGINE.start(body.get("minutes"))
+        out = ENGINE.start(body.get("minutes"), source=str(body.get("from") or ""))
         return (200 if out.get("ok") else 400), _answer(out)
+    if do == "heartbeat":
+        return 200, _answer(ENGINE.heartbeat())
     if do == "extend":
         out = ENGINE.extend(body.get("minutes"))
         return (200 if out.get("ok") else 400), _answer(out)

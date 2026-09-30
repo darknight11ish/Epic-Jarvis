@@ -410,6 +410,14 @@ def t_screen():
     flat = repr(out)
     check("the phone's screen picture: its words come with the secret hidden, and no picture goes on",
           info["read"] and "[hidden]" in flat and TOKEN not in flat and "image_url" not in flat, flat[:300])
+    out, info = SC.with_screen(msgs, "phone", read=reader(lines_of("x" * 9000), size=(400, 120)))
+    flat = repr(out)
+    check("a phone picture that could not be CHECKED says so - never 'could not read any words'",
+          SC.SCREEN_TEXT_UNCHECKED in flat and SC.SCREEN_TEXT_NONE not in flat and "image_url" not in flat,
+          flat[:300])
+    out, info = SC.with_screen(msgs, "phone", read=reader([], size=(400, 120), text=""))
+    check("CONTROL: a picture with truly no words still says 'no words'",
+          SC.SCREEN_TEXT_NONE in repr(out) and SC.SCREEN_TEXT_UNCHECKED not in repr(out), repr(out)[:300])
     out, info = SC.with_screen(msgs, "phone", read=lambda image: 1 / 0)
     check("... and a reader that fails gives 'could not read any words', never the picture",
           "image_url" not in repr(out))

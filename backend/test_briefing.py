@@ -1263,7 +1263,11 @@ def t_the_routes():
 
 
 def t_the_grammar():
-    now = time.time()
+    # A fixed zone and moment, not the machine's: "brief me tomorrow at 7" was
+    # checked with tm_hour == 7 in whatever zone and at whatever hour the test
+    # happened to run (time audit, 2026-09-30).
+    use_tz("Europe/London")
+    now = local(2026, 9, 25, 12, 0)
     for s in ("brief me", "brief me now", "Jarvis, brief me now please", "read my briefing",
               "what's my briefing", "what is my morning briefing", "give me my briefing",
               "morning briefing", "my briefing", "read me today's briefing", "read out my briefing"):
