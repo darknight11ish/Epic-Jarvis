@@ -168,6 +168,7 @@ on a throwaway copy instead.
 | `spending.patch` | `jarvis_hud.py` | **"Spending summaries"** (the owner's decision of 2026-09-30; `docs/FINANCE-DESIGN.md` part A, `docs/JARVIS-API.md` section 100). ONE install block, `jarvis_spending.install(Handler, ...)`, right after `decks.patch`'s own, answering `GET /api/spending`, `GET`/`POST /api/spending/profile`, `POST /api/spending/profile/delete`, `/categories`, `/suggest` (this PC only) and `GET /api/chat/table?id=<id>`. No card and no gate line: the `my_spending` tool in `jarvis_agent.py` is decided under `file_read`'s action, and it reads a file in a folder the owner already listed. Needs `jarvis_spending.py` and `jarvis_money_parse.py`; without them, or on any error, the banner says so and the routes are simply not there. Last in the list. See "Spending summaries", at the very end. |
 | `retirement.patch` | `jarvis_hud.py` | **"Retirement what-if"** (the owner's decision of 2026-09-30; `docs/FINANCE-DESIGN.md` part B, `docs/JARVIS-API.md` section 103). ONE install block, `jarvis_retirement.install(Handler, ...)`, right after `spending.patch`'s own, answering `GET /api/retirement/defaults` and `POST /api/retirement/run` on any paired device. A pure calculation on numbers the owner typed: no file, no network, nothing stored, no card and no gate line. Needs `jarvis_retirement.py` (plain Python, no numpy); without it, or on any error, the banner says so and the routes are simply not there. Last in the list. See "Retirement what-if", at the very end. |
 | `progress.patch` | `jarvis_hud.py` | **"Activity heatmap and balance chart"** (the owner's decision of 2026-09-30; `docs/GOALS-PROGRESS-DESIGN.md` part C, `docs/JARVIS-API.md` section 105). ONE install block, `jarvis_progress.install(Handler, ...)`, right after `retirement.patch`'s own, answering `GET /api/progress/activity`, `GET` and `POST /api/progress/balance`. Reads the owner's ticked goal steps and logged numbers; the only thing kept is the owner's choice of chart areas (a small table in `projects.db`; no card, no gate line). Health and money numbers only shade a day and are never named. NOT a model tool: a test fails if any other module mentions it. Needs `jarvis_progress.py` (and `jarvis_projects.py`, `jarvis_goals.py`); without it, or on any error, the banner says so and the routes are simply not there. Last in the list. See "Activity heatmap and balance chart", at the very end. |
+| `topics.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **"Topic controls"** (the owner's decision of 2026-09-30; `docs/TOPIC-CONTROLS-DESIGN.md`, `docs/JARVIS-API.md` section 107). Three hunks: in `jarvis_gate.py` the new action `topic_loosen` joins the "acts only on tier ask" set and gets its `_RISK` line (both right after `browser-engine.patch`'s own last lines); in `jarvis_hud.py` ONE install block right after `progress.patch`'s, and ONE line after `auto-learn.patch`'s `injected_sensitive` line that puts `topics_left_out` (a count) in the chat route's header. Needs `jarvis_topics.py` and the rebuilt `jarvis_memory.py` (its three tables and the `topics=` search filter). A mode per topic - Learn and use / Use but don't learn / Learn but don't use / Off; turning a private topic back on is ONE card. With every topic on "Learn and use" nothing changes. See "Topic controls", at the very end. |
 | `devices.patch` | `jarvis_hud.py`, `jarvis_gate.py` | **Pairing a phone by QR code, with a key per device** (the owner's decisions of 2026-09-24 and 2026-09-28; `docs/PAIRING-DESIGN.md` phase 1, `docs/JARVIS-API.md` section 90). One block in `jarvis_hud.py`, right after `_refuse_every_interface(bind)` and BEFORE owner-check's block: it replaces `_token_ok` with `jarvis_devices.wrap_token_ok(_token_ok)` before any module is handed it, so a device key (`jdk1.<id>.<secret>`) is checked everywhere and never falls back to the old check, and adds `/api/pair/*` and `/api/devices*`. Two lines in `jarvis_gate.py`: the cards `pair_device` and `unretire_shared_key` join `_NO_RULE_FROM_DENIAL` and `_RISK` (local, reversible; both are also PC only with Windows Hello, `jarvis_owner_check.PC_ONLY_ACTIONS`). Last in the list: its context is other patches' lines. Needs `jarvis_devices.py`; without it, or on any error, nothing is replaced - only the shared key works, exactly as before - and the banner says so. See "Pairing a phone by QR code", at the very end. |
 
 ## All but two of the patches apply, and that is correct
@@ -18066,4 +18067,56 @@ python3 backend/test_progress.py
 python3 tools/gen_progress_cases.py --check
 python3 backend/test_shipped_modules.py
 python3 backend/test_patch_history.py
+```
+
+## Topic controls (2026-09-30, JARVIS-API section 107)
+
+The owner asked to "adjust the brain of Jarvis to include or exclude different topics". Every saved fact
+sits under one topic (Work, Health, Money, Family, Hobbies, Projects, Ideas, the owner's own, or
+Unsorted), and each topic has a mode: **Learn and use**, **Use, but don't learn**, **Learn, but don't
+use**, **Off**. Nothing is deleted by any of them.
+
+What is here:
+
+- `jarvis_topics.py` (shipped whole): the topic list and its limits, the sorting (sensitive patterns, then
+  English keywords, then - only if the owner turns it on - the local model as a suggestion), the modes and
+  the one card, the routes and `install()`, the labelling of facts already saved.
+- `rebuilt/jarvis_memory.py`: three tables (`topics`, `fact_topics`, `topic_skips`) and
+  `MemoryStore.search(topics="use")` - the default - which keeps a topic that may not be USED out of the
+  candidate lists themselves. `topics="all"` is for the readers that only protect the owner.
+- `jarvis_intake.py` (drops a sure "don't learn" fact before the queue), `jarvis_auto_learn.py` (checks
+  again at save time; an unsure fact becomes a card with a reason; `Remember:` on such a topic asks
+  first), `jarvis_places.py`, `jarvis_tidy.py`, `jarvis_briefing.py`, `jarvis_entities.py` (each filters
+  what it shows), `jarvis_chatbot.py` and `jarvis_search.py` (`topics="all"`: they only protect),
+  `jarvis_quick.py` and `jarvis_settings_registry.py` ("stop using my work topic", by voice or chat),
+  `jarvis_schedule.py` (one quiet hourly `topic_sort` step).
+- `topics.patch`; `topic_loosen` in `jarvis-framework.toml`, `jarvis_asks_first.py` ("What asks first")
+  and `jarvis_card_words.py`.
+- Tests: `test_topics.py`, `test_topics_leaks.py` (the guard: fails the build when a module that reads
+  facts is not on its list), the `topic` cases in `eval/learner_cases.jsonl`, `eval_topics.py` (part of
+  the memory self-test: parity, leaks, sorting). `tools/gen_topics_cases.py` writes `topics-cases.json`
+  for both apps; `tools/topic_accuracy.py` is the sorting-accuracy script for the PC, over
+  `backend/topic_cases/`.
+
+Said plainly:
+
+- **`memory.db` is a plain SQLite file.** A topic's name sits in the clear beside the fact text. It is
+  hidden under "Hide memory lists and chat history" in the apps, never logged.
+- **How well the sorting guesses on real facts is not measured.** English only. A fact wrongly filed under
+  a topic that is on can still reach an answer; a fact wrongly filed under one that is off is left out.
+  That is why the check list exists and why an unchecked label already counts.
+- Nothing ran on the owner's PC. The real embedding model and the real learner model were not used.
+
+Owner steps: `apply-patches.ps1`. Nothing to switch on: every topic starts on "Learn and use". The
+screens (Brain -> Memory -> Topics in both apps) are separate work against the "Slice contract (frozen)"
+in `docs/TOPIC-CONTROLS-DESIGN.md`.
+
+Test it:
+
+```
+python3 backend/test_topics.py
+python3 backend/test_topics_leaks.py
+python3 tools/gen_topics_cases.py --check
+python3 backend/eval_memory.py --words-only --sizes 0,100,1000
+python3 backend/test_shipped_modules.py
 ```

@@ -16214,3 +16214,100 @@ and higher, NaN/infinity/huge stored numbers, a goals file that cannot be read
 that no backend module reaches `jarvis_progress`. **Not tried:** a real PC's
 `datetime.fromtimestamp` in a zone other than the one it runs in (the tests pass
 a zone in); both apps' screens (not built yet).
+
+## 107. Topic controls: include or exclude topics in Jarvis's brain (added 2026-09-30; backend built, apps to follow)
+
+The owner's request (2026-09-30): "add the ability to adjust the brain of Jarvis to include or exclude different topics". Designed in `docs/TOPIC-CONTROLS-DESIGN.md` (its last section, "Slice contract (frozen)", is what the two apps are built against); the owner's answers are in `docs/BUILD-QUEUE-2026-09-30.md`. Backend: `jarvis_topics.py` (shipped whole), the tables and the search filter in the rebuilt `jarvis_memory.py`, `topics.patch` (an install block, the route-header line, and the `topic_loosen` gate lines), and small changes in `jarvis_intake.py`, `jarvis_auto_learn.py`, `jarvis_places.py`, `jarvis_tidy.py`, `jarvis_briefing.py`, `jarvis_entities.py`, `jarvis_chatbot.py`, `jarvis_search.py`, `jarvis_quick.py` and `jarvis_settings_registry.py`. Tests: `test_topics.py`, `test_topics_leaks.py` (the guard), the `topic` cases in `eval/learner_cases.jsonl`, and `eval_topics.py` (run by the memory self-test).
+
+### 107.1 What a topic is
+
+Every saved fact sits under **one** topic. **Unsorted** (id 1) holds anything not yet sorted, cannot be renamed or deleted, and has a mode. The ready-made topics are ids 2-8: Work, Health (private), Money (private), Family, Hobbies, Projects, Ideas. The owner adds their own (16 in all, not counting Unsorted). A name is 1-24 characters, unique ignoring case. Colour is one of the eight chat-tag slots, icon one of the chat-tag icons plus `heart`, `coin`, `people`. `private` belongs to the id, so it survives a rename.
+
+Each topic has a **mode**:
+
+| `mode` | Name | Learn | Use in answers |
+|---|---|---|---|
+| `both` | Learn and use | yes | yes |
+| `use_only` | Use, but don't learn | no | yes |
+| `learn_only` | Learn, but don't use | yes | no |
+| `off` | Off | no | no |
+
+The words are in the fixture (section 107.9). Every ready-made topic starts on `both`, so **on the day this ships nothing about learning or answers changes** (proved by `test_topics.py`: the same facts, order and scores as a memory with no topics, and by the memory self-test, which reproduces its scoreboard exactly).
+
+A fact that fits two topics is filed under the **stricter** one and remembers the other (`alt`); its effective mode is the AND of both.
+
+### 107.2 Routes
+
+Every route is behind the usual origin and token checks. Errors are `{"ok": false, "error": <code>, "message": <one plain sentence>}`.
+
+| route | body / query | answer |
+|---|---|---|
+| `GET /api/topics` | - | `{"ok": true, "topics": [Topic], "unchecked": int, "facts": int, "sorted": int, "model_help": bool, "backfill": {"done", "remaining"}, "limits": {...}, "modes": [...], "waiting": {"topic": id, "kind": "mode\|private_clear\|delete\|file"} \| null, "last": {"outcome", "why", "at", "message"} \| null}` - Unsorted first, then the owner's order. |
+| `POST /api/topics` | `{"op": "add", "name", "colour"?, "icon"?, "words"?, "private"?}` | `200` the same view plus `"id"` of the new topic |
+| | `{"op": "rename", "id", "name"}` / `{"op": "style", "id", "colour"?, "icon"?}` / `{"op": "move", "id", "before": id \| null}` (reorder; `null` = last) / `{"op": "words", "id", "words": [str]}` | `200` the view plus `"id"` |
+| | `{"op": "private", "id", "private": bool}` | `true`: at once. `false`: `202 {"waiting": true}` and ONE card |
+| | `{"op": "delete", "id", "move_to": id}` | `200` the view plus `"deleted": id` (its facts are kept, in `move_to`); `202` and ONE card when the home is looser and the deleted topic is private |
+| `POST /api/topics/mode` | `{"id", "mode"}` | `200` the view plus `"id"`, `"changed": bool`; or `202 {"ok": true, "waiting": true, "id", "kind": "mode", "message"}` when a card was raised |
+| `GET /api/topics/preview` | `?id=&mode=` | `{"ok": true, "id", "mode", "affected": int, "pinned": int, "stops_learning": bool, "loosens": bool, "needs_card": bool, "private": bool, "line": str, "card_line": str}` - numbers from the code, never fact words |
+| `GET /api/topics/review` | `?after=&limit=` (`limit` 1-50, default 10) | `{"ok": true, "facts": [{"id", "text", "saved_at", "topic", "alt", "how", "checked": false, "held_back": bool}], "next": str \| null, "total": int, "batch": 10}` - a memory list |
+| `POST /api/topics/file` | `{"ids": [int] (1-200), "topic_id": int}` | file them (`how: owner`, checked); `200` the view plus `"filed": n`; `202` + ONE card when a batch of more than one leaves a private topic for a looser one |
+| | `{"ids": [...], "confirm": true}` | "These are right": `200` the view plus `"confirmed": n` |
+| `GET /api/topics/hidden` | `?id=&after=&limit=` | `{"ok": true, "id", "mode", "facts": [...], "next": int \| null}` - "Show them"; a memory list |
+| `POST /api/topics/settings` | `{"model_help": bool}` | `200` the view. No card: it lets the local model suggest a topic for at most 20 Unsorted facts a night, reading the owner's own facts as the learner already does |
+
+Error codes: `bad_request`, `bad_name` (400), `name_taken` (409), `too_many_topics` (409), `bad_colour`, `bad_icon`, `bad_words`, `topic_not_found` (404), `bad_mode`, `no_delete_unsorted` (409), `no_rename_unsorted` (409), `needs_destination`, `bad_destination`, `no_such_fact` (404), `unavailable` (503); a card that cannot be raised is `503 {"error": "gate_not_ask" \| "no_card"}`.
+
+Reads are not held on a stale link. Every write is held by both apps (rule 4). The audit log carries topic **ids**, modes and counts - never a name, never a fact's words.
+
+### 107.3 Where "don't learn" and "don't use" are enforced
+
+**Don't learn**, before a fact is saved: `jarvis_intake` takes a fact that is *sure* to belong to a topic that does not learn out of the learner model's answer BEFORE the review queue (`jarvis_topics.gate_proposals`), and counts it (`topic_skips`: a topic id, a day and a number - no words). `jarvis_auto_learn.after_pass` checks again at save time, before every other check; a topic can only add a "no". A fact that only **might** belong to such a topic (two topics, or one weak word) is not dropped and not saved: it becomes an ordinary card whose reason is `This might be about Work, which you set to not learn.` (the owner answers **Save under Unsorted** = the card's accept, or **Skip it** = its decline; five such cards a day, then dropped and counted). A fact with no signal at all follows Unsorted's mode. An explicit `Remember: ...` on a topic that does not learn asks first: `You set Work to not learn. Save this one anyway?`. Outside text is still never learned, whatever the mode; the sensitive-topic gate is untouched and runs after.
+
+**Don't use**, inside the memory search: `MemoryStore.search(..., topics="use")` is the default. Facts of a topic that may not be used are kept out of the candidate lists themselves (words, meaning, the entity list, "who is this", past recall), before the cut to k, so the best allowed facts fill the slots. `topics="all"` is for the readers that only PROTECT the owner (duplicate checks, "said again", the contradiction check, the chatbot leak check, web search's "would this repeat a saved fact"), which never show the text to a model; `"visible"` hides only an Off topic (the owner's lists; the learner's stored-fact candidates). With every topic on `both` the check is one small query that finds nothing to skip, and the results are byte-for-byte what they were. `test_topics_leaks.py` walks the backend source and **fails the build** when a module reads facts and is not on its list, or when a module's role does not match what it does.
+
+| Reader | Rule |
+|---|---|
+| chat recall, past recall (retired facts), the entity list and "who is this", the `memory_search` tool | `use` (the default) |
+| pinned facts (`with_profile`) | `use`: a pin in a blocked topic is not read (the topic wins); the pin row stays, `GET /api/memory/profile` marks it `"paused": true` |
+| "Where is my passport?" (`jarvis_places`, own SQL), the overnight tidy (`jarvis_tidy`, own SQL), the morning briefing's "saved automatically" section | `use` |
+| the entity model pass (`jarvis_entities`), the learner's stored-fact candidates (`jarvis_intake.candidates`) | `visible` (Off excluded) |
+| "Used in this answer" (`GET /api/memory/used`) | a fact whose topic was switched off since has `"text": ""` and `"left_out": true` |
+| the owner's lists (`GET /api/memory/facts`, `/api/memory/auto`, the Galaxy's people list) | `visible`: an Off topic's facts are hidden; `GET /api/memory/facts` says `"topics_hidden": n`, each fact carries `"topic": id`; the topic's "Show them" button reads `GET /api/topics/hidden` |
+| Forget, Erase, Forget a time frame | see everything; work on hidden facts. Erase keeps the topic row (an id, like `meta.kind`) |
+| `GET /api/memory/export` | everything, plus a `"topic"` column and the `"topics"` list |
+| duplicate, "said again", contradiction, `find_one`, the chatbot leak check, web-search fact check | `all` |
+
+`X-Jarvis-Route` on a chat answer gains **`topics_left_out`: int** - how many facts matching the question the topic settings kept out (a count only) - the recall before the answer; a search the model makes later through the `memory_search` tool is filtered the same way but not counted. The phone and desktop may show `Left out 2 facts because of your topic settings`.
+
+### 107.4 Sorting a fact into a topic
+
+Layers, cheapest first; **how well this guesses on real facts is not measured** (`tools/topic_accuracy.py` is the script the owner runs on a labelled set; `docs/MEMORY-SCOREBOARD.md` records what the made-up set says).
+
+1. `jarvis_sensitive.patterns()`: health words -> Health, money words -> Money (eight languages, already measured).
+2. Fixed English keyword lists for the ready-made topics (strong: one hit files it; weak: one hit is only a guess), the names of the owner's projects, and the owner's own keywords for their topics. English only: a fact in another language falls to Unsorted.
+3. The local model, as a **suggestion**, only for facts still Unsorted, only when the owner turned **Let Jarvis's local model help sort** on (`POST /api/topics/settings`), at most 20 a night, through a loopback model only (a cloud model is refused). It can only choose among the topic names it is given, inside a random data tag; it cannot create a topic, change a mode, or move a fact out of a topic the rules chose. Stored as `how: "model"`, unchecked.
+
+A fact saved at any time is filed by layers 1-2 in the same transaction (`MemoryStore.add`), `how: "rule"`, `checked: 0`. Facts saved before the feature are labelled by a quiet hourly scheduler step (`topic_sort`, on the one scheduler, labels only: it never edits, retires or hides a fact and never calls a model). **Unchecked labels still count** - otherwise switching a topic off would leak everything not yet reviewed. `GET /api/topics/review` lists them in batches of 10; `POST /api/topics/file` with `confirm` is "These are right".
+
+### 107.5 The card (`topic_loosen`, tier `ask`)
+
+One action, one card at a time, the newest wins, the opposite change withdraws it, outcomes are recorded in words (`last`). It is raised for: a **private** topic (Health, Money, or one the owner marked private) turned back on for learning or for answers; clearing the private mark; moving a ticked batch out of a private topic into a looser one; deleting a private topic into a looser home; and **any loosening asked from outside text**. Stricter changes, marking private, renames, colours, icons, reordering, keywords, adding a topic, and turning a normal topic back on are **immediate**. The card names the topic and the new mode; for a private topic it says sensitive facts are still kept on screen and never read aloud and new ones still wait for the owner's yes. If the card's tier in `jarvis-framework.toml` is not `ask`, or the gate answers at any other tier, nothing changes. Undo is just another change: undoing a tightening on a private topic asks.
+
+### 107.6 By voice and chat (no model)
+
+`jarvis_quick.py`, the owner's newest typed or said words only, and never in a conversation that has read outside text (`I do not change your topics after I have read outside text...`): "stop using my work topic" (Learn, but don't use), "don't learn about money" (Use, but don't learn; a bare name only when it IS a topic), "use my health topic again", "turn on my hobbies topic", "start learning about work again" apply through the exact function the picker calls (`jarvis_settings_registry.set_topic_mode` -> `jarvis_topics.set_mode`), so a private topic still raises its card; the reply is `Done: Work is Learn, but don't use. You can change it in Brain.` (kept on screen). The ambiguous "switch off / pause / hide / change my work topic" **opens the picker instead of guessing**: `X-Jarvis-Route` gains `open_brain: "topics"` and **`topic_id`** and nothing changes until the owner taps. "open my topics" sets `open_brain: "topics"` alone. An unknown name is answered with the topics that exist.
+
+### 107.7 Where it is stored, said plainly
+
+In `memory.db`: `topics`, `fact_topics` (fact id, topic id, second topic id, how, checked, when) and `topic_skips`. **`memory.db` is a plain SQLite file** (`MemoryStore._connect()` opens it without a cipher; whether Windows disk encryption covers it was not checked), so a topic's name - the owner's word - sits in the clear beside the fact text. No second copy of a name is written anywhere. A backup or restore of the file carries the modes and rows with it; erased facts stay in older backups until they age out.
+
+### 107.8 Not built, or not measured
+
+* Classification accuracy on real facts: **not measured**. The made-up set is in `backend/topic_cases/`; the rules were written alongside it, so its numbers flatter them.
+* Per-chat "for this chat, leave out Work", non-English keywords, a chat's tag as a hint, and a topic filter on the briefing's other sections: later (design section 11).
+* The rest of the "what can I say" list (`jarvis_sayable`) does not yet carry the topic phrases.
+* Search time with a blocked topic was measured only on the build machine (words only, up to 1,071 facts); the 10,000-fact figure is for the owner's PC.
+
+### 107.9 The shared fixture
+
+`tools/gen_topics_cases.py` writes `jarvis-desktop/tests/fixtures/topics-cases.json` and `jarvis-client/app/src/test/resources/contract/topics-cases.json` (byte-identical; `python3 tools/gen_topics_cases.py --check`): every word, the four modes and their sentences, the errors, the palette and icons, the ready-made list, worked cases for which changes need a card, the name and keyword rules, and the screen-reader lines.
