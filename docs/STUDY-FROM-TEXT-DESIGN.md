@@ -184,3 +184,48 @@ quiz screen (recommended: yes), and the cloud grader's monthly money limit
 
 Build Slice A, then Slice B, then the cloud button, each with its own feature
 audit. Nothing is built yet.
+
+## 9. The second graphics card (owner, 2026-09-30)
+
+The owner is adding the RTX 2060 12 GB and said a study feature may need it,
+**built but switched off until the card is installed and measured**. This is
+the same rule every second-card feature already follows
+(`docs/MODEL-TOPOLOGY.md`, "The planned second card"; `FEATURES` in
+`backend/jarvis_second_card.py`).
+
+What the second card would add (all unmeasured; the card is not installed):
+
+1. **A "Study helper" switch**, a sixth in the second-card list (id `study`,
+   needs nothing else). On: quiz questions are written and answers marked by
+   the second card's model, so a quiz never slows the everyday chat, and the
+   local grader can be the bigger model ("One bigger model on both cards",
+   `qwen3:14b`) instead of the 8B. This is the answer to "the local grader is
+   noisy": try the bigger local model before offering the cloud button. It
+   is the same switch pattern as the five others: off by default, turning it on
+   raises an approval card that names the card and the model, turning it off
+   is immediate.
+2. **Spoken practice and audio lectures** (later, its own switch, needs
+   `study`): a multilingual speech-to-text engine on the PC for a spoken
+   Spanish exercise or an audio file the owner gives Jarvis. Jarvis's speech
+   engine today (sherpa-onnx, on the processor, 0 GB of graphics memory)
+   hears English only, but the same file already offers SenseVoice
+   (multilingual): try that first, measured on Jarvis's own Spanish clips.
+   `faster-whisper` is only a fallback if SenseVoice is not good enough,
+   because a second engine is a second thing to keep safe
+   (`backend/jarvis_speech.py`). The phone still does no speech-to-text.
+   On the 12 GB card, an 8B at 32K (7.69 GiB) plus a small speech model is
+   about 9 GiB by arithmetic, under the ~11.4 GiB ceiling; **not measured**.
+3. **What the second card does not change:** downloading video or audio from
+   YouTube (yt-to-anki's clips). More graphics memory is not the reason it is
+   refused; the owner's answer was captions only. A graph database (graphiti)
+   also stays out.
+
+The corrected hardware line for the pasted list: Jarvis's everyday model is
+Qwen 3 8B at 16K (about 6.5 GiB on the 8 GB card, with about 6.9 GiB usable),
+not qwen2.5:7b, so nothing should share the 2080 Super with a speech model.
+Anything new that needs graphics memory waits for the second card.
+
+Building `study` means, as for the other switches: a backend patch and test,
+a row in both apps' "Second graphics card" section, a `docs/JARVIS-API.md`
+entry, and `tools/check_parity.py` clean. It comes after Slice A, because the
+switch has nothing to switch until the quiz module exists.

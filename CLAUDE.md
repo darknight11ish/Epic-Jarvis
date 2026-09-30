@@ -1672,6 +1672,13 @@ the change is worth it**, and chose:
 - **Grading is local first, cloud on request:** a card lists exactly what goes,
   bending rule 1 for that one quiz. Nothing is built yet.
 
+Also decided 2026-09-30: **study features that need the second graphics card
+are built switched off until the card is installed and measured** - a "Study
+helper" switch (quiz writing and marking on the second card, possibly with the
+bigger local model) and, later, multilingual speech-to-text for spoken
+practice. Video/audio download from YouTube stays refused; a second card does
+not change that (`docs/STUDY-FROM-TEXT-DESIGN.md` section 9).
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added
