@@ -1679,6 +1679,14 @@ bigger local model) and, later, multilingual speech-to-text for spoken
 practice. Video/audio download from YouTube stays refused; a second card does
 not change that (`docs/STUDY-FROM-TEXT-DESIGN.md` section 9).
 
+Decided 2026-09-30: **chat tags** (`docs/CHAT-TAGS-DESIGN.md`) - History gets
+collapsible coloured sections for tagged chats (a starter set the owner can
+rename and add to; one tag per chat), and the owner can ask Jarvis to label the
+current chat (applies at once, no card) or an older one (Jarvis shows matches and
+the owner taps the chat; it never guesses). **No automatic tagging**, and no
+tree index or clustering of past chats (ChatIndex, BERTopic and the others were
+checked and turned down).
+
 ## Every new feature gets its own audit, without being asked
 
 Standing instruction from the owner, 2026-09-24. Whenever features are added

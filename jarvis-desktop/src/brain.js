@@ -6998,6 +6998,11 @@ function paintQuizCount() {
 function paintQuiz() {
   const run = dom.quizRun;
   if (!run) return;
+  // A repaint from elsewhere (the tab shown again, a link change) must not
+  // wipe an answer being typed: carry it over to the same question. It stays
+  // in this window's memory only.
+  const typing = run.querySelector(".quiz-answer");
+  const typed = typing ? { n: typing.dataset.n, value: typing.value } : null;
   if (dom.quizStartForm) dom.quizStartForm.hidden = Boolean(qz.quiz || qz.summary);
   const parts = [];
   if (qz.busy) parts.push(el("p", "note", qz.busy));
@@ -7048,7 +7053,9 @@ function paintQuiz() {
         answer.spellcheck = true;
         answer.placeholder = QUIZ_ANSWER_PLACEHOLDER;
         answer.setAttribute("aria-label", `Your answer to question ${next.n}`);
-        const count = el("p", "note", quizAnswerCount("").note);
+        answer.dataset.n = String(next.n);
+        if (typed && typed.n === answer.dataset.n) answer.value = typed.value;
+        const count = el("p", "note", quizAnswerCount(answer.value).note);
         answer.addEventListener("input", () => {
           count.textContent = quizAnswerCount(answer.value).note;
         });
