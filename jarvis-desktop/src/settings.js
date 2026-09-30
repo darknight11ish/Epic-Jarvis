@@ -55,6 +55,7 @@ import {
   saveInterrupt,
 } from "./live-rules.js";
 import { mountCardLink } from "./card-link.js";
+import { menuManager, showForVisit } from "./menu-visibility-settings.js";
 import {
   describeHeard,
   describeMoment,
@@ -803,6 +804,11 @@ function goToPlace() {
   if (!(Date.now() - Number(left.at) < PLACE_FRESH_MS)) return;
   const target = $(left.place);
   if (!target) return;
+  const card = target.closest("section.card");
+  const menuId = card?.dataset?.menuId || (card ? `settings.${card.id}` : null);
+  if (menuId && menuManager.isHidden(menuId)) {
+    showForVisit(menuId, card);
+  }
   const details = target.closest("details");
   if (details && !details.open) details.open = true;
   // After the page has loaded and laid out: a scroll made earlier is undone

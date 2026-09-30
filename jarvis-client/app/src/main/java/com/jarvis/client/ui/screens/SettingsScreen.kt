@@ -86,27 +86,27 @@ import com.jarvis.client.ui.theme.LocalChrome
  * kept so OpenPlaceTest can still check each target against a real row.
  */
 private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
-    "voice" to 0,
-    "security" to 1,
+    "voice" to 1,
+    "security" to 2,
     // "Show or hide menus" (docs/JARVIS-API.md section 109) sits right after Security.
-    "menu-visibility" to 2,
-    "appearance-card" to 3,
+    "menu-visibility" to 3,
+    "appearance-card" to 4,
     // "Animal options" lives inside Appearance on the phone (2026-09-28):
     // the Appearance row, whose button opens it.
-    "animal-options" to 3,
-    "manner" to 5,
-    "web-search" to 6,
-    "asks-first" to 7,
-    "reach" to 8,
-    "email-sending" to 9,
-    "folders" to 10,
-    "backup" to 11,
-    "watch-notify" to 12,
-    "phone-notify" to 13,
-    "screen-look" to 14,
-    "browser-engine" to 15,
-    "devices" to 16,
-    "quick-tiles" to 17,
+    "animal-options" to 4,
+    "manner" to 6,
+    "web-search" to 7,
+    "asks-first" to 8,
+    "reach" to 9,
+    "email-sending" to 10,
+    "folders" to 11,
+    "backup" to 12,
+    "watch-notify" to 13,
+    "phone-notify" to 14,
+    "screen-look" to 15,
+    "browser-engine" to 16,
+    "devices" to 17,
+    "quick-tiles" to 18,
 )
 
 /**

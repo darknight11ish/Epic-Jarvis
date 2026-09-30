@@ -60,6 +60,7 @@
           <a href="#voice">Voice</a>
           <a href="#manner">How Jarvis talks</a>
           <a href="#briefing-settings">Morning briefing</a>
+          <a href="#menu-visibility">Show or hide menus</a>
         </div>
         <div class="settings-jump-group">
           <span class="settings-jump-label">Rare</span>
@@ -94,6 +95,10 @@
         Those live in the <strong>Brain</strong>, not here — open it from
         the tray icon, "Open the Brain".
       </p>
+
+      <div id="menus-hidden-bar" class="menus-hidden-bar" hidden>
+        <button type="button" class="btn-link" id="btn-show-hidden-menus"></button>
+      </div>
 
       <h2 class="settings-group-heading">Everyday</h2>
 
@@ -1001,6 +1006,27 @@
           <span class="status" id="br-senders-status" role="status"></span>
           <p class="note" id="br-spoken"></p>
           <p class="note">The notification says only "Jarvis: your morning briefing is ready." The briefing itself is in the Brain, on the Work tab.</p>
+        </div>
+      </section>
+
+      <section class="card" id="menu-visibility">
+        <h2>Show or hide menus</h2>
+        <p class="note">
+          Hiding a menu only tidies it away. Nothing is turned off, and Jarvis
+          can still do it when you ask. Asking Jarvis to hide or show a menu
+          changes every device that hears it.
+        </p>
+        <p class="sub">This hides menus on this device only.</p>
+
+        <div id="menu-visibility-list" class="menu-visibility-list"></div>
+
+        <p class="note" style="margin-top: 16px;">
+          Some things always stay visible: approvals, security, What asks first,
+          and the connection status. The system-tray menu is not affected.
+        </p>
+
+        <div class="row" style="margin-top: 16px;">
+          <button type="button" class="btn ghost" id="menu-visibility-reset">Show everything</button>
         </div>
       </section>
 
@@ -2275,5 +2301,6 @@
     <script type="module" src="devices.js"></script>
     <script type="module" src="tool-updates-settings.js"></script>
     <script type="module" src="manner-settings.js"></script>
+    <script type="module" src="menu-visibility-settings.js"></script>
   </body>
 </html>

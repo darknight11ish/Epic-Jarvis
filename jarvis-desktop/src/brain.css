@@ -3044,3 +3044,23 @@ mark.find-current {
     animation: none;
   }
 }
+
+/* Menu visibility: Show or hide menus */
+.rail-hidden-menus {
+  padding: 4px 8px;
+}
+
+.rail-item-hidden {
+  border: 1px dashed var(--border);
+  color: var(--text-muted);
+}
+
+.rail-item-hidden:hover {
+  border-color: var(--border-accent);
+  color: var(--text);
+}
+
+.card.card-collapsed > :not(h2):not(.card-tools) {
+  display: none !important;
+}
+

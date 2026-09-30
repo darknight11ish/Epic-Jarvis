@@ -108,7 +108,7 @@ def hunks(patch_text: str, target: str) -> list:
 
 def _apply(git: str, d: Path, target: str, hunk: str, *extra: str) -> bool:
     p = d / "one.patch"
-    p.write_text(f"--- a/{target}\n+++ b/{target}\n{hunk}", encoding="utf-8", newline="\n")
+    p.write_text(f"--- a/{target}\n+++ b/{target}\n{hunk}", encoding="utf-8")
     r = subprocess.run([git, "apply", *extra, "--include", target, str(p)], cwd=d,
                        capture_output=True, text=True)
     return r.returncode == 0
@@ -128,7 +128,7 @@ def stand_in(target: str, patches=None, *, replace: dict = None):
     log = []
     try:
         f = d / target
-        f.write_text("", encoding="utf-8", newline="\n")
+        f.write_text("", encoding="utf-8")
         gaps = 0
         for name in patches:
             text_of = (replace or {}).get(name)
@@ -142,7 +142,7 @@ def stand_in(target: str, patches=None, *, replace: dict = None):
                 if text and not text.endswith("\n"):
                     text += "\n"
                 f.write_text(text + f"{GAP} {gaps}\n" + "\n".join(pre) + "\n",
-                             encoding="utf-8", newline="\n")
+                             encoding="utf-8")
                 if not _apply(git, d, target, hunk):
                     return None, log + [f"{name}: a hunk does not apply even to its own "
                                         f"pre-image:\n{hunk[:400]}"]

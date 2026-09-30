@@ -133,6 +133,12 @@
           <span class="rail-count" id="count-advanced" hidden></span>
         </button>
 
+        <div class="rail-hidden-menus" id="rail-hidden-menus" hidden>
+          <button type="button" class="rail-item rail-item-hidden" id="btn-rail-hidden-menus" title="Show or hide menus">
+            <span class="rail-glyph" aria-hidden="true">👁</span>
+            <span class="rail-label" id="rail-hidden-count">0 hidden</span>
+          </button>
+        </div>
         <div class="rail-foot">
           <label class="rail-theme">
             <span class="sr-only">Theme</span>
@@ -252,7 +258,7 @@
         <section class="view view-now" id="view-now" role="tabpanel"
                  aria-labelledby="tab-now" hidden>
           <div class="live-grid">
-            <div class="card card-state">
+            <div class="card card-state" id="right-now-card" data-menu-id="brain.now.right-now">
               <h2>Right now</h2>
               <div class="now">
                 <span class="now-face" id="now-face" data-face="idle" aria-hidden="true"></span>
@@ -264,13 +270,13 @@
               <dl class="kv" id="now-kv"></dl>
             </div>
 
-            <div class="card card-budget">
+            <div class="card card-budget" id="budget-card" data-menu-id="brain.now.budget">
               <h2>Interruption budget</h2>
               <div class="budget" id="budget"></div>
               <p class="note" id="budget-note"></p>
             </div>
 
-            <div class="card card-trace">
+            <div class="card card-trace" id="trace-card" data-menu-id="brain.now.trace">
               <h2>
                 Trace
                 <span class="card-tools">
@@ -303,15 +309,15 @@
         <section class="view view-panes" id="view-faculties" role="tabpanel"
                  aria-labelledby="tab-faculties" hidden>
           <div class="panes">
-            <div class="card">
+            <div class="card" id="models-card" data-menu-id="brain.model.models">
               <h2>Models</h2>
               <div id="models"></div>
             </div>
-            <div class="card">
+            <div class="card" id="compute-card" data-menu-id="brain.model.compute">
               <h2>Compute</h2>
               <div id="compute"></div>
             </div>
-            <div class="card card-wide">
+            <div class="card card-wide" id="skills-card" data-menu-id="brain.model.skills">
               <h2>Skills</h2>
               <p class="note">
                 Quarantined skills are not listed — the scanner withholds them
@@ -320,7 +326,7 @@
               </p>
               <div id="skills"></div>
             </div>
-            <div class="card card-wide">
+            <div class="card card-wide" id="faculties-memory-card" data-menu-id="brain.model.memory">
               <h2>Memory</h2>
               <div id="memory"></div>
             </div>
@@ -331,7 +337,7 @@
         <section class="view view-panes" id="view-memory" role="tabpanel"
                  aria-labelledby="tab-memory" hidden>
           <div class="panes">
-            <div class="card card-wide">
+            <div class="card card-wide" id="learning-card" data-menu-id="brain.memory.learning">
               <h2>Learning</h2>
               <p class="note">
                 After a conversation goes quiet, Jarvis reads back what
@@ -350,7 +356,7 @@
                  85): an export from ChatGPT, Claude, Gemini or DeepSeek, picked on this
                  PC. Every fact it finds waits under "Waiting for you". The
                  note is HISTORY_IMPORT.about, word for word. -->
-            <div class="card card-wide" id="history-import-card">
+            <div class="card card-wide" id="history-import-card" data-menu-id="brain.memory.history-import">
               <h2>Bring in old chats</h2>
               <p class="note" id="history-import-note">Jarvis reads only what you wrote in those chats - never the other assistant's replies - on this PC, with the AI model on this PC. Every possible fact waits under “Waiting for you” for your yes, one at a time; nothing is saved by itself. The chats are not added to your History. It can take hours for a big export, and Jarvis may answer more slowly while it runs.</p>
               <p class="history-import-words" id="history-import-words" role="status" aria-live="polite"></p>
@@ -369,7 +375,7 @@
               <p class="note" id="topics-intro"></p>
               <div id="topics-body"></div>
             </div>
-            <div class="card card-wide" id="memory-auto-card">
+            <div class="card card-wide" id="memory-auto-card" data-menu-id="brain.memory.auto">
               <h2>Saved automatically</h2>
               <!-- auto-learn.js HISTORY_NOTE, word for word. -->
               <p class="note" id="memory-auto-note">Deleting a conversation from History does not forget facts learned from it - use Forget here.</p>
@@ -378,7 +384,7 @@
               <div id="memory-saved-line" role="status"></div>
               <div id="memory-auto-list"></div>
             </div>
-            <div class="card card-wide" id="memory-profile-card">
+            <div class="card card-wide" id="memory-profile-card" data-menu-id="brain.memory.profile">
               <!-- "Always keep in mind" (memory-profile.js): PROFILE_TITLE and
                    PROFILE_DETAIL, word for word. Right under "Saved automatically",
                    where the phone puts it too. -->
@@ -386,7 +392,7 @@
               <p class="note" id="memory-profile-note">Jarvis reads these with every question, word for word. Keep it short.</p>
               <div id="memory-profile"></div>
             </div>
-            <div class="card card-wide" id="memory-shared-card">
+            <div class="card card-wide" id="memory-shared-card" data-menu-id="brain.memory.between-us">
               <!-- "Between us" (memory-shared.js): SHARED_TITLE and
                    SHARED_DETAIL, word for word. Right under "Always keep in
                    mind". -->
@@ -402,11 +408,11 @@
               <p class="note" id="memory-about-note">The facts Jarvis has linked to this name, word for word. Nothing here is written by the model.</p>
               <div id="memory-about"></div>
             </div>
-            <div class="card card-wide">
+            <div class="card card-wide" id="memory-waiting-card" data-menu-id="brain.memory.waiting">
               <h2>Waiting for you</h2>
               <div id="memory-proposals"></div>
             </div>
-            <div class="card card-wide">
+            <div class="card card-wide" id="memory-known-card" data-menu-id="brain.memory.known">
               <h2>What Jarvis knows about you</h2>
               <p class="note">
                 Retired facts are shown, greyed. Forgetting stops a fact being
@@ -424,7 +430,7 @@
               <div id="memory-facts"></div>
             </div>
             <!-- The wiki builder (backend/wiki.patch; wiki.js). -->
-            <div class="card card-wide" id="wiki-card">
+            <div class="card card-wide" id="wiki-card" data-menu-id="brain.memory.wiki">
               <h2>Wiki</h2>
               <p class="note">
                 Put .md or .txt files in your vault's <code>Jarvis Wiki/Sources</code>
@@ -438,7 +444,7 @@
             <!-- Deep questions (backend/big-model.patch; deep.js). The box
                  stays put across repaints so typing is never lost; only the
                  line above it and the list below are redrawn. -->
-            <div class="card card-wide" id="deep-card">
+            <div class="card card-wide" id="deep-card" data-menu-id="brain.memory.deep">
               <h2>Deep questions</h2>
               <p class="note">
                 Ask one question you want a careful answer to. The big model
@@ -476,7 +482,7 @@
               <h2>Chat history</h2>
               <div id="history-settings"></div>
             </div>
-            <div class="card card-wide">
+            <div class="card card-wide" id="conversations-card" data-menu-id="brain.history.conversations">
               <h2>Conversations</h2>
               <p class="note">
                 Newest first. Opening one only reads it. Deleting one removes
@@ -501,7 +507,7 @@
                    (paintHistoryTagBar). The "Suggest tags overnight" switch
                    (JARVIS-API.md section 104) is the last row of the editor,
                    and the only thing here while the private lists are hidden. -->
-              <div class="history-tagbar" id="history-tagbar" hidden></div>
+              <div class="history-tagbar" id="history-tagbar" data-menu-id="brain.history.tags" hidden></div>
               <input class="field search history-filter" id="history-filter" type="search"
                      placeholder="Search what was said…" spellcheck="false" autocomplete="off"
                      aria-label="Search what was said in your chats" />
@@ -512,7 +518,7 @@
                  and chats, "Forget these" (ONE approval card), then 10
                  minutes of Undo. Here, next to the chats it deletes; the
                  facts it forgets are the Memory tab's. -->
-            <div class="card card-wide" id="forget-range-card">
+            <div class="card card-wide" id="forget-range-card" data-menu-id="brain.history.forget-range">
               <h2>Forget a time frame</h2>
               <p class="note" id="forget-range-note">Choose some days. Jarvis lists what it learned and your chats from then - untick anything you want to keep, then tap Forget these. Nothing is removed until you approve the card, and for 10 minutes one tap on Undo puts it all back.</p>
               <div id="forget-range"></div>
@@ -524,7 +530,7 @@
         <section class="view view-panes" id="view-work" role="tabpanel"
                  aria-labelledby="tab-work" hidden>
           <div class="panes">
-            <div class="card card-wide" id="focus-card">
+            <div class="card card-wide" id="focus-card" data-menu-id="brain.work.focus">
               <h2>Focus session</h2>
               <p class="note">A timer plus Quiet. On the PC, Jarvis watches which app or site is in front and says so when you drift - out loud, on the PC only. It keeps counts, never what it saw, and nothing leaves the PC. Off unless you start it.</p>
               <div id="focus"></div>
@@ -539,7 +545,7 @@
               <p class="note">Or say "focus for 30 minutes". While one runs: "lock on this", "snooze", "I'm doing research", "I need a minute", "pause", "how am I doing?".</p>
               <div id="focus-report"></div>
             </div>
-            <div class="card card-wide" id="chatbot-card">
+            <div class="card card-wide" id="chatbot-card" data-menu-id="brain.work.chatbot" data-menu-group="chatbots">
               <h2>Talk to a chatbot for me</h2>
               <p class="note">Jarvis asks an AI chatbot about something for you, and writes its own follow-up questions on this PC, within limits you set. One approval card covers the whole conversation. While it does this, Jarvis knows only your goal - not your memory, email, calendar, notes or files.</p>
               <p class="note" id="chatbot-version"></p>
@@ -593,7 +599,7 @@
                  JARVIS-API section 65). The details rows are painted by brain.js
                  (paintSupportRows); the live chat, its offer and its transcript by
                  paintSupport. -->
-            <div class="card card-wide" id="support-card">
+            <div class="card card-wide" id="support-card" data-menu-id="brain.work.support" data-menu-group="chatbots">
               <h2>Chat with customer support for me</h2>
               <p class="note">Jarvis chats with a company's customer support for you (Groupon first), in your name, in a browser window on the PC. One approval card lists exactly which of your details it may give. Every offer - a refund, a credit, a cancellation - gets its own card, and nothing is accepted before you approve it.</p>
               <p class="note" id="support-version"></p>
@@ -635,7 +641,7 @@
                 <p class="note">You sign in to your own account by hand in the window on the PC, and open the company's chat there yourself (its Chat or Help button). Jarvis never types, sees or keeps a password.</p>
               </form>
             </div>
-            <div class="card card-wide" id="today-card">
+            <div class="card card-wide" id="today-card" data-menu-id="brain.work.today">
               <h2>Today</h2>
               <p class="note">Your own cards, shown at the times and on the days you choose, and the parts of your latest briefing. Kept on your PC; nothing new is read for this page, and adding a card needs no approval card.</p>
               <div id="today"></div>
@@ -660,7 +666,7 @@
               </form>
               <p class="note" id="today-hint">Or say "show gym bag on my Today page on Mondays and Wednesdays at 7". Delete removes a card at once; it is also under Coming up, where Pause skips it.</p>
             </div>
-            <div class="card card-wide" id="widgets-card">
+            <div class="card card-wide" id="widgets-card" data-menu-id="brain.work.widgets">
               <h2>Widgets</h2>
               <p class="note" id="widgets-detail">Describe a small widget and Jarvis makes a preview: a heading, numbers, short lists, a bar and up to four buttons, from a fixed menu. You see the preview first, and nothing is added until you tap Add. Delete removes one at once.</p>
               <div id="widgets"></div>
@@ -673,7 +679,7 @@
               </form>
               <p class="note" id="widgets-hint">For example: "my next 3 reminders, my to-do count and a 10-minute timer button". You can also say "make me a widget showing ..." to Jarvis. Show one on your desktop from the widget window's "Your widget" list, or on your phone's home screen as a Jarvis widget.</p>
             </div>
-            <div class="card card-wide" id="coming-up-card">
+            <div class="card card-wide" id="coming-up-card" data-menu-id="brain.work.coming-up">
               <h2>Coming up</h2>
               <p class="note">Timers, alarms and reminders, kept on your PC. They go off on both apps while they are connected. A repeating reminder or alarm is set up at once, with no card; a repeating briefing or "tell me when" waits for your yes on an approval card.</p>
               <div id="went-off-part" hidden>
@@ -715,7 +721,7 @@
                 <button id="standby-add" class="btn small" type="submit">Set up</button>
               </form>
             </div>
-            <div class="card card-wide" id="goals-card">
+            <div class="card card-wide" id="goals-card" data-menu-id="brain.work.goals" data-menu-group="goals-projects">
               <h2>Goals</h2>
               <p class="note">Say what you want, add a few steps with rough dates, then Accept. Jarvis checks in once a week - only ever a nudge, never an action. Ticking a step off, and Stop tracking, need no approval card.</p>
               <div id="goals-list"></div>
@@ -726,7 +732,7 @@
                 <button id="goals-new-add" class="btn small" type="submit">Add</button>
               </form>
             </div>
-            <div class="card card-wide" id="quiz-card">
+            <div class="card card-wide" id="quiz-card" data-menu-id="brain.work.quiz" data-menu-group="study">
               <h2>Quiz me on a text</h2>
               <p class="note" id="quiz-intro">Paste some text and Jarvis writes a few questions about it. Your answers are marked by the model on this PC. Nothing is saved unless you choose Keep, nothing is learned, and nothing leaves this PC.</p>
               <p class="note" id="quiz-outside">This text is treated as outside text: Jarvis never learns facts from it.</p>
@@ -755,10 +761,10 @@
                   <button id="quiz-start" class="btn small" type="submit" disabled>Write questions</button>
                 </div>
               </form>
-              <div id="youtube-block" class="yt-block" hidden></div>
+              <div id="youtube-block" class="yt-block" data-menu-id="brain.work.quiz.youtube" data-menu-group="study" hidden></div>
               <div id="quiz-run" aria-live="polite"></div>
             </div>
-            <div class="card card-wide" id="decks-card">
+            <div class="card card-wide" id="decks-card" data-menu-id="brain.work.decks" data-menu-group="study">
               <h2>My study decks</h2>
               <p class="note" id="decks-intro"></p>
               <div id="decks-body"></div>
@@ -767,7 +773,7 @@
               <h2 id="retirement-title">Retirement what-if</h2>
               <div id="retirement-body"></div>
             </div>
-            <div class="card card-wide" id="briefing-card">
+            <div class="card card-wide" id="briefing-card" data-menu-id="brain.work.briefing">
               <h2>Morning briefing</h2>
               <p class="note">A short list of your day, put together on your PC without the AI model. It only reads: it changes nothing and approves nothing.</p>
               <div id="briefing"></div>
@@ -777,7 +783,7 @@
               </div>
               <p class="note">When it arrives each morning is in Settings, under Morning briefing.</p>
             </div>
-            <div class="card card-wide">
+            <div class="card card-wide" id="jobs-card" data-menu-id="brain.work.jobs">
               <h2>Background jobs</h2>
               <p class="note">
                 Each job's capability set was frozen when it was created and
@@ -786,7 +792,7 @@
               </p>
               <div id="jobs"></div>
             </div>
-            <div class="card card-wide">
+            <div class="card card-wide" id="undo-card" data-menu-id="brain.work.undo">
               <h2>Undo shelf</h2>
               <p class="note">
                 What each entry was, never the stored bytes — the before-images
@@ -795,7 +801,7 @@
               </p>
               <div id="undo"></div>
             </div>
-            <div class="card card-wide">
+            <div class="card card-wide" id="activity-card" data-menu-id="brain.work.activity">
               <h2>Activity</h2>
               <p class="note">
                 Past approval cards, read-only: what each one was, whether it
@@ -811,7 +817,7 @@
         <!-- ── Projects (projects-panel.js draws it) ──────────────────── -->
         <section class="view view-panes" id="view-projects" role="tabpanel"
                  aria-labelledby="tab-projects" hidden>
-          <div class="panes" id="progress-root" data-menu-id="brain.projects.progress"></div>
+          <div class="panes" id="progress-root" data-menu-id="brain.projects.progress" data-menu-group="goals-projects"></div>
           <div class="panes" id="projects-root"></div>
         </section>
 
@@ -819,7 +825,7 @@
         <section class="view view-panes" id="view-trust" role="tabpanel"
                  aria-labelledby="tab-trust" hidden>
           <div class="panes">
-            <div class="card card-wide">
+            <div class="card card-wide" id="trust-content-risk-card" data-menu-id="brain.trust.content-risk">
               <h2>Content risk</h2>
               <p class="note">
                 Read-only, deliberately. Nothing here approves a tool
@@ -829,7 +835,7 @@
               </p>
               <div id="content-risk"></div>
             </div>
-            <div class="card card-wide">
+            <div class="card card-wide" id="trust-ledger-card" data-menu-id="brain.trust.ledger">
               <h2>Ledger</h2>
               <p class="note">
                 Chain status only — entry count, the last verified point, the
@@ -844,7 +850,7 @@
         <section class="view view-panes" id="view-watch" role="tabpanel"
                  aria-labelledby="tab-watch" hidden>
           <div class="panes">
-            <div class="card card-wide">
+            <div class="card card-wide" id="watch-card" data-menu-id="brain.watch.watchlist">
               <h2>
                 GitHub watchlist
                 <span class="card-tools">

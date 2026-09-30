@@ -557,12 +557,12 @@ def apply_allowlists(found, allow):
 # says to reclassify it once the app reads it.
 ROUTE_FIELDS = {
     "menu_visibility": (
-        "planned", "ported",
+        "ported", "ported",
         "\"Show or hide menus\" by asking Jarvis (2026-09-30; JARVIS-API section 109; "
         "backend jarvis_menus.py + jarvis_quick.py; docs/MENU-VISIBILITY-DESIGN.md). "
         "{\"action\", \"target\"}: each app applies it to its OWN per-device list - there is "
-        "no HTTP route and no card. Phone: net/MenuVisibility.kt, ChatSession. Desktop: a "
-        "later build (menu-visibility.js, the chat handler that reads the route)."),
+        "no HTTP route and no card. Phone: net/MenuVisibility.kt, ChatSession. Desktop: "
+        "menu-visibility.js, settings.js, brain.js, main.js."),
 }
 
 

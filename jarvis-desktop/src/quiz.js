@@ -171,6 +171,8 @@ export const ERROR_WORDS = Object.freeze({
   already_answered: "You have already answered that question.",
   answer_empty: "Type an answer first.",
   answer_too_long: "That answer is too long. Keep it to 2,000 characters or fewer.",
+  outside_keep_refused:
+    "Questions from outside text (like YouTube captions) cannot be saved to review decks.",
   model_unavailable:
     "The model on this PC did not answer. Nothing was changed - try again in a moment.",
 });
@@ -267,6 +269,7 @@ export function readQuiz(q) {
     // A quiz made from a video's captions carries `source: "youtube"` (JARVIS-API
     // 112); a text or Spanish quiz has neither key.
     source: q.source === "youtube" ? "youtube" : "",
+    provenance: q.provenance === "outside" ? "outside" : "",
   };
 }
 

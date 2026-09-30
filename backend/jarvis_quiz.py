@@ -140,6 +140,7 @@ CLASSES = {
     "already_answered": (409, "That question is already answered."),
     "answer_empty": (400, "Type an answer first."),
     "answer_too_long": (400, "That answer is too long. Keep it under 2,000 characters."),
+    "outside_keep_refused": (400, "Questions from outside text (like YouTube captions) cannot be saved to review decks."),
     "model_unavailable": (503, "The model on this PC did not answer in a way Jarvis could use. "
                                "Nothing was changed - try again."),
 }
@@ -986,6 +987,8 @@ def finish(qid: str, keep=None) -> dict:
         s = _get(qid)
         kept = None
         if keep is not None:
+            if s.provenance == "outside":
+                raise QuizError("outside_keep_refused")
             spec, cards = _keep_cards(s, keep)
             fn = _STATE["keep"]
             if fn is None:

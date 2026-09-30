@@ -44,9 +44,27 @@ USAGE
 Importing this module also puts `BACKEND` on `sys.path`, so `import
 jarvis_memory` works without each test repeating it.
 """
+from __future__ import annotations
+
 import os
 import sys
 from pathlib import Path
+
+# Python < 3.10 compatibility: Path.write_text did not accept newline
+try:
+    Path("").write_text("", newline="\n")
+except TypeError:
+    _orig_write_text = Path.write_text
+
+    def _compat_write_text(self, data, encoding=None, errors=None, newline=None):
+        if newline is not None:
+            with self.open(mode="w", encoding=encoding, errors=errors, newline=newline) as f:
+                return f.write(data)
+        return _orig_write_text(self, data, encoding=encoding, errors=errors)
+
+    Path.write_text = _compat_write_text
+except Exception:
+    pass
 
 _HERE = Path(__file__).resolve().parent
 

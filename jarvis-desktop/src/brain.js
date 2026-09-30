@@ -40,6 +40,8 @@ import {
 } from "./jarvis-link.js";
 import { addToWiki, readWiki, renderWiki } from "./wiki.js";
 import { mountCardLink } from "./card-link.js";
+import { createMenuManager, WORDS } from "./menu-visibility.js";
+const menuManager = createMenuManager();
 import { fallbackTitle } from "./card-words.js";
 import { stepText } from "./step-words.js";
 import { validToFromText } from "./valid-to.js";
@@ -1131,14 +1133,16 @@ async function showView(name, { reload = true } = {}) {
   dom.title.textContent = VIEWS[name].title;
   dom.sub.textContent = VIEWS[name].sub;
 
+  const visible = visibleTabOrder();
+  const focusedTab = visible.includes(name) ? name : (visible[0] || name);
   for (const key of Object.keys(VIEWS)) {
     const tab = $(`tab-${key}`);
     const view = $(`view-${key}`);
     if (tab) {
       tab.setAttribute("aria-selected", String(key === name));
       // Roving tabindex: exactly one tab is in the document's tab order, and
-      // it is the selected one. Without this the six buttons are six stops.
-      tab.tabIndex = key === name ? 0 : -1;
+      // it is the selected one (or first visible if current is not in visible order).
+      tab.tabIndex = key === focusedTab ? 0 : -1;
     }
     if (view) view.hidden = key !== name;
   }
@@ -9447,7 +9451,7 @@ async function stopQuiz() {
 
 async function openKeep() {
   const q = qz.quiz;
-  if (!q || q.hidden) return;
+  if (!q || q.hidden || q.provenance === "outside") return;
   qz.error = "";
   qz.crisis = "";
   qz.keep = {
@@ -9829,15 +9833,18 @@ function paintQuiz() {
     const foot = el("div", "goal-actions");
     // Finish and Stop reveal nothing (numbers only), so both stay while hidden.
     foot.append(button(QUIZ_FINISH, finishQuiz, { live: true }));
-    // Keep lists the owner's words, so it is never offered while they are hidden.
-    const keep = button(Decks.KEEP_BUTTON, openKeep);
-    keep.dataset.fkey = "keep";
-    if (q.hidden || !q.questions.some((x) => x.mark)) keep.disabled = true;
-    if (q.hidden) keep.title = Decks.KEEP_HIDDEN;
-    foot.append(keep);
+    // Keep lists the owner's words, so it is never offered while they are hidden,
+    // and quizzes made from outside text (like YouTube) cannot be saved to review decks.
+    if (q.provenance !== "outside") {
+      const keep = button(Decks.KEEP_BUTTON, openKeep);
+      keep.dataset.fkey = "keep";
+      if (q.hidden || !q.questions.some((x) => x.mark)) keep.disabled = true;
+      if (q.hidden) keep.title = Decks.KEEP_HIDDEN;
+      foot.append(keep);
+    }
     foot.append(button(QUIZ_STOP, stopQuiz, { live: true, danger: true }));
     block.append(foot);
-    if (q.hidden) block.append(el("p", "note", Decks.KEEP_HIDDEN));
+    if (q.hidden && q.provenance !== "outside") block.append(el("p", "note", Decks.KEEP_HIDDEN));
     parts.push(block);
   }
   run.replaceChildren(...parts);
@@ -12503,7 +12510,54 @@ for (const key of TAB_ORDER) {
  * would let arrowing past Work land nowhere.
  */
 function visibleTabOrder() {
-  return TAB_ORDER.filter((key) => advancedOpen || !ADVANCED_VIEWS.includes(key));
+  return TAB_ORDER.filter((key) => {
+    if (!advancedOpen && ADVANCED_VIEWS.includes(key)) return false;
+    if (menuManager.isHidden(`brain.tab.${key}`)) return false;
+    return true;
+  });
+}
+
+function updateMenuVisibility() {
+  const visible = visibleTabOrder();
+  for (const key of TAB_ORDER) {
+    const tab = $(`tab-${key}`);
+    const item = tab?.closest("li");
+    if (item) {
+      const isAdv = ADVANCED_VIEWS.includes(key);
+      const advHidden = isAdv && !advancedOpen;
+      const menuHidden = menuManager.isHidden(`brain.tab.${key}`);
+      item.hidden = advHidden || menuHidden;
+    }
+  }
+
+  if (!visible.includes(state.view) && visible.length > 0) {
+    showView(visible[0]);
+  }
+
+  const cards = document.querySelectorAll("[data-menu-id]");
+  for (const card of cards) {
+    const mid = card.dataset.menuId;
+    if (!mid) continue;
+    card.hidden = menuManager.isHidden(mid);
+    if (menuManager.isCollapsed(mid)) {
+      card.classList.add("card-collapsed");
+    } else {
+      card.classList.remove("card-collapsed");
+    }
+  }
+
+  const count = menuManager.hiddenCount("desktop");
+  const railHidden = $("rail-hidden-menus");
+  const railCount = $("rail-hidden-count");
+  if (railHidden && railCount) {
+    if (count > 0) {
+      railHidden.hidden = false;
+      railCount.textContent =
+        count === 1 ? WORDS.hidden_line_one : WORDS.hidden_line_many.replace("{n}", count);
+    } else {
+      railHidden.hidden = true;
+    }
+  }
 }
 
 dom.rail?.addEventListener("keydown", (event) => {
@@ -12535,16 +12589,20 @@ dom.advancedToggle?.addEventListener("click", () => {
   dom.advancedToggle.setAttribute("aria-expanded", String(advancedOpen));
   for (const key of ADVANCED_VIEWS) {
     const item = $(`tab-${key}`)?.closest("li");
-    if (item) item.hidden = !advancedOpen;
+    if (item) {
+      const menuHidden = menuManager.isHidden(`brain.tab.${key}`);
+      item.hidden = !advancedOpen || menuHidden;
+    }
   }
   // Roving tabindex needs exactly one reachable stop at all times. showView()
   // already keeps that true whenever the active view is on the visible rail;
   // the one gap is collapsing Advanced while one of ITS views is the active
   // one, which would otherwise leave every tab at -1 and the rail untabbable.
   if (!advancedOpen && ADVANCED_VIEWS.includes(state.view)) {
+    const first = visibleTabOrder()[0] || "memory";
     for (const key of TAB_ORDER) {
       const tab = $(`tab-${key}`);
-      if (tab) tab.tabIndex = key === "memory" ? 0 : -1;
+      if (tab) tab.tabIndex = key === first ? 0 : -1;
     }
   }
   renderCounts();
@@ -12786,6 +12844,9 @@ onEvent((frame) => {
   // frame" with the list filled in (forget-range-panel.js). "Earlier chats"
   // in the bar, and "Chat history…" in the tray (`#history`), open History
   // itself (the chat audit, 2026-09-28). Navigation only.
+  updateMenuVisibility();
+  const visible = visibleTabOrder();
+  const landing = visible.includes("memory") ? "memory" : (visible[0] || "memory");
   const place = takeAnyPlace() || (location.hash === `#${HISTORY_PLACE}` ? HISTORY_PLACE : "");
   if (place === FORGET_RANGE_PLACE) {
     await showView("history");
@@ -12798,7 +12859,7 @@ onEvent((frame) => {
     // topic (topic controls). Nothing changes until Change is tapped.
     await goToTopics(Topics.readTopicPlace(takePlaceExtras()).topicId);
   } else {
-    await showView("memory");
+    await showView(landing);
   }
 })();
 
@@ -12817,6 +12878,21 @@ async function goToPlace(place = takeAnyPlace()) {
 window.addEventListener("focus", () => goToPlace());
 window.addEventListener("storage", (e) => {
   if (e.key === BRAIN_PLACE_KEY && e.newValue) goToPlace();
+  if (e.key && e.key.startsWith("jarvis.menus.")) {
+    menuManager.reload();
+    updateMenuVisibility();
+  }
+});
+
+$("btn-rail-hidden-menus")?.addEventListener("click", () => {
+  if (IS_TAURI) {
+    TAURI.core.invoke("open_fix_place", { place: "menu-visibility" });
+  } else {
+    try {
+      localStorage.setItem("jarvis.settings.place", JSON.stringify({ place: "menu-visibility", at: Date.now() }));
+    } catch {}
+    window.location.href = "settings.html#menu-visibility";
+  }
 });
 // "Chat history…" in the tray, with the Brain already open (windows.rs
 // show_brain_at): the place's name only.

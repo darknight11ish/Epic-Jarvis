@@ -228,6 +228,12 @@ import { mountSpendingTable, tableIdFromBody, tableIdFromLine } from "./spending
 import { stepText } from "./step-words.js";
 import { DEVICE_CHANGES, stepTuning } from "./animal-shared.js";
 import { loadFaceTuning, saveFaceTuning } from "./face-tuning.js";
+import {
+  apply as applyMenuVisibility,
+  loadState as loadMenuState,
+  parseRoute as parseMenuRoute,
+  saveState as saveMenuState,
+} from "./menu-visibility.js";
 // Jarvis Live: the same rules as the phone's (live-rules.js, 2026-09-28).
 import {
   BUTTONS,
@@ -1463,10 +1469,25 @@ function applyHeaderRoute(route) {
   applyFaceTuningFromRoute(state.turnRoute);
   cloudOfferFromRoute(state.turnRoute);
   openBrainFromRoute(state.turnRoute);
+  menuVisibilityFromRoute(state.turnRoute);
   const next = routeFromHeader(route);
   if (!next) return;
   state.routeFromHeader = true;
   applyRoute(next);
+}
+
+/**
+ * "Show or hide menus" by voice or chat (jarvis_menus.py, jarvis_quick.py,
+ * 2026-09-30; docs/MENU-VISIBILITY-DESIGN.md, JARVIS-API section 109):
+ * `menu_visibility` in X-Jarvis-Route names the action and target. Applies
+ * immediately to localStorage with no confirmation card.
+ */
+function menuVisibilityFromRoute(route) {
+  const parsed = parseMenuRoute(route);
+  if (!parsed) return;
+  const st = loadMenuState();
+  applyMenuVisibility(st, parsed.action, parsed.target, "desktop");
+  saveMenuState(st);
 }
 
 /**

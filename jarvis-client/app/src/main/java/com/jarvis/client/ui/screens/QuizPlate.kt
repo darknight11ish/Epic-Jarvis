@@ -450,11 +450,13 @@ internal fun QuizSection(
                                     }
                                 },
                             )
-                            Quiet(
-                                Quiz.KEEP_OPEN,
-                                enabled = canAct && !busy && !privateHidden && answeredQs.isNotEmpty(),
-                                onClick = { open?.let { openKeep(it) } },
-                            )
+                            if (open?.provenance != "outside") {
+                                Quiet(
+                                    Quiz.KEEP_OPEN,
+                                    enabled = canAct && !busy && !privateHidden && answeredQs.isNotEmpty(),
+                                    onClick = { open?.let { openKeep(it) } },
+                                )
+                            }
                             Quiet(
                                 Quiz.STOP,
                                 color = chrome.badInk,

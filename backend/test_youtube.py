@@ -535,6 +535,8 @@ def t_it_becomes_an_ordinary_outside_quiz():
     code, out = Q.handle_post(f"/api/quiz/{q['id']}/answer", {"n": 1, "answer": "chlorophyll"})
     check("an answer is marked by the ordinary path", code == 200 and out["mark"]["level"] == "got_it"
           and out["mark"]["passage"] == P1 and out["quiz"]["provenance"] == "outside")
+    code, out = Q.handle_post(f"/api/quiz/{q['id']}/finish", {"keep": {"cards": [{"n": 1, "answer": "chlorophyll"}]}})
+    check("finish with keep on outside quiz is refused", code == 400 and out.get("error") == "outside_keep_refused")
     code, out = Q.handle_post(f"/api/quiz/{q['id']}/finish", {})
     check("finish works and forgets the quiz", code == 200 and "summary" in out
           and Q.handle_get(f"/api/quiz/{q['id']}")[0] == 404)
@@ -829,7 +831,10 @@ def t_the_tables_and_docs():
     toml = (HERE / "rebuilt" / "jarvis-framework.toml").read_text(encoding="utf-8")
     check("jarvis-framework.toml: tier ask",
           re.search(r'^youtube_captions_read\s*=\s*"ask"', toml, re.M) is not None)
-    import tomllib
+    try:
+        import tomllib
+    except ImportError:
+        import tomli as tomllib
     check("the toml still parses and holds the tier",
           tomllib.loads(toml)["autonomy"]["tiers"]["youtube_captions_read"] == "ask")
     req = (HERE / "requirements.txt").read_text(encoding="utf-8")
