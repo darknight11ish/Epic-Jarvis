@@ -134,3 +134,87 @@ a proposal.
 
 Suggesting tags by the model (owner said no; a later, cards-only overnight opt-in could be asked again if many chats stay untagged). A manual "new section here" marker inside a long chat. A cross-chat question across old
 chats (waits on memory ideas 1-4). Tag-based auto-delete rules.
+
+## 10. Slice contract (frozen 2026-09-30; JARVIS-API section 99)
+
+Three builders (backend, desktop, phone) work from this. Sections 1-9 are the
+decisions; this section is the exact shape.
+
+**Tags.** `Tag` = `{"id": int, "name": str (1-24 chars, trimmed, unique ignoring case),
+"colour": 0-7, "icon": str, "order": int}`. At most **12** tags. The starter tags
+are created the first time the registry is read: ids 1-5 = Work (colour 0 blue,
+icon `briefcase`), Learning (1 green, `book`), Personal (2 amber, `home`),
+Projects (3 violet, `folder`), Ideas (4 teal, `lightbulb`). New tags take the next
+unused id (never reuse a deleted id). Icon names (shared list, each app draws them
+with its own icon set): `briefcase book home folder lightbulb star flag wrench leaf music`.
+
+**Colour slots** (0-7: blue, green, amber, violet, teal, rose, slate, orange). Text
+ink on a tinted header, contrast 4.5:1 or better in both themes (checked):
+
+| slot | name | light ink | dark ink |
+|---|---|---|---|
+| 0 | blue | #1d4ed8 | #93b4ff |
+| 1 | green | #146c36 | #86e0a6 |
+| 2 | amber | #8a5300 | #f5c26b |
+| 3 | violet | #6d28d9 | #c4a8ff |
+| 4 | teal | #0f766e | #7adfd3 |
+| 5 | rose | #be123c | #ff9ab5 |
+| 6 | slate | #475569 | #b6c2d1 |
+| 7 | orange | #b43a00 | #ffb385 |
+
+The header tint is the ink at 12% (light) or 16% (dark) over the surface. The
+palette and icon list live in the shared fixture `history-cases.json`
+(`tools/gen_history_cases.py`, owned by the backend builder), which both apps'
+tests read; colour is never the only clue (icon + name + count always show).
+
+**Routes.**
+
+| Route | Body | Answer |
+|---|---|---|
+| `GET /api/history/tags` | - | `{"ok": true, "tags": [Tag + "count"], "untagged": int}`; while private lists are hidden the desktop/phone redact names |
+| `POST /api/history/tags` | `{"op": "add", "name", "colour"?, "icon"?}` | `{"ok": true, "tag": Tag, "tags": [...]}` |
+| | `{"op": "rename", "id", "name"}` / `{"op": "style", "id", "colour"?, "icon"?}` / `{"op": "move", "id", "before": id \| null}` / `{"op": "delete", "id"}` | same answer; delete makes its chats untagged |
+| `POST /api/history/tag` | `{"id": chat_id, "tag_id": int \| null}` | `{"ok": true, "id", "tag_id"}` |
+| `GET /api/history` | new `tag=<id>` or `tag=none` filter | rows and the single-conversation read gain `"tag_id": int \| null` |
+
+Errors `{"ok": false, "error", "message"}`: `bad_name`, `name_taken`, `too_many_tags`,
+`bad_colour`, `bad_icon`, `tag_not_found`, `not_found` (chat), `bad_request`.
+No card anywhere (the owner's own organisation, nothing leaves the PC). Every
+write is held on a stale link (rule 4).
+
+**Storage** exactly as section 3: registry sealed in `meta` key `tags`; plain
+`conversations.tag_id INTEGER` column; carried by every row-copy path incl.
+`take_out`/`put_back`; never in memory, facts, learner or search index.
+
+**Asking Jarvis** (`jarvis_quick.py`, backend only; the apps just show the reply).
+Current chat: "label this chat Work", "file this under Learning", "tag this as Ideas",
+"remove the tag from this chat" -> acts on the request's conversation at once,
+reply `Done, filed under Work. You can change it in History.` Unknown name -> `I
+do not have a tag called Garage. Your tags are: Work, Learning. Make new ones in
+History.` Only from the newest typed/spoken words. Older chat ("label my chat
+about the boiler as Home"): reply `Tap the chat you mean in History and I will file
+it under Home.` and add route fields `open_brain: "history"`, `file_under: <tag id>`,
+`history_q: "<search words>"`. The apps whitelist those two new keys (desktop
+`commands.rs` route-key list and its test; phone `net/ChatSession.kt`), open
+History with the search prefilled and the banner `Tap the chat to file it under
+Home.`; tapping a row files it (POST /api/history/tag) and clears the banner;
+Cancel clears it. Nothing is filed until the owner taps.
+
+**Shared words** (both apps, word for word): `Untagged`, `All`, `Tags` (editor
+title), `Add a tag`, `Rename`, `Delete this tag`, `Move to`, `No tag`, section
+header `{name} ({count})` with the screen-reader form `{name}, {count} chats,
+collapsed|expanded`, delete confirm `Delete the tag {name}? Its {count} chats
+become untagged.`, banner `Tap the chat to file it under {name}.`, editor errors
+one plain sentence per code above.
+
+**Owned files.** Backend: `jarvis_chat_log.py`, `chat-history.patch`,
+`jarvis_quick.py` grammar (+ `tools/gen_sayable_cases.py`), `test_chat_tags.py`,
+fixes to `test_chat_kinds.py`/`test_forget_range.py`, `tools/gen_history_cases.py`
+(writes both apps' fixture copies), `tools/check_parity.py` rows, JARVIS-API §99,
+`apply-patches.ps1`/`_where.py` lists if needed. Desktop: everything under
+`jarvis-desktop/` (history-view.js, brain.js/html/css History parts,
+`src-tauri/src/brain/history.rs` + lib.rs/capabilities/permissions, commands.rs
+route keys, tests). Phone: everything under `jarvis-client/` (ChatLog.kt,
+HistoryScreen.kt, JarvisApi/JarvisRuntime, ChatSession.kt, tests). Collapsed/open
+state of each section is remembered per device (a harmless view preference);
+nothing else about tags is stored on a device.
