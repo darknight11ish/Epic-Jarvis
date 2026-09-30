@@ -149,6 +149,31 @@ import {
   STOP_LABEL,
 } from "./goals.js";
 import {
+  AGAIN_EMPTY as QUIZ_AGAIN_EMPTY,
+  AGAIN_HEADING as QUIZ_AGAIN_HEADING,
+  ANSWER_LABEL as QUIZ_ANSWER_LABEL,
+  ANSWER_PLACEHOLDER as QUIZ_ANSWER_PLACEHOLDER,
+  answerCount as quizAnswerCount,
+  CHECKING as QUIZ_CHECKING,
+  countsLine as quizCountsLine,
+  errorWords as quizErrorWords,
+  FINISH_LABEL as QUIZ_FINISH,
+  GUESS_LABEL as QUIZ_GUESS,
+  isRefusal,
+  KIND_LABELS as QUIZ_KIND_LABELS,
+  LIMITS as QUIZ_LIMITS,
+  levelLabel as quizLevelLabel,
+  nextQuestion as quizNextQuestion,
+  NEXT_LABEL as QUIZ_NEXT,
+  progressLine as quizProgressLine,
+  readQuiz,
+  readSummary,
+  SOURCE_LABEL as QUIZ_SOURCE,
+  STOP_LABEL as QUIZ_STOP,
+  textCount as quizTextCount,
+  WRITING as QUIZ_WRITING,
+} from "./quiz.js";
+import {
   BUILDING as BRIEFING_BUILDING,
   EMPTY as BRIEFING_EMPTY,
   KEPT as BRIEFING_KEPT,
@@ -566,6 +591,11 @@ const dom = {
   goalsNewForm: $("goals-new-form"),
   goalsNewText: $("goals-new-text"),
   goalsNewAdd: $("goals-new-add"),
+  quizStartForm: $("quiz-start-form"),
+  quizText: $("quiz-text"),
+  quizTextCount: $("quiz-text-count"),
+  quizStart: $("quiz-start"),
+  quizRun: $("quiz-run"),
   today: $("today"),
   widgets: $("widgets"),
   widgetsForm: $("widgets-form"),
@@ -1006,6 +1036,7 @@ function render(name) {
       renderSupport();
       renderComingUp();
       renderGoals();
+      renderQuiz();
       renderBriefing();
       renderJobs();
       renderUndo();
@@ -6819,6 +6850,261 @@ if (dom.goalsNewAdd) {
   syncLiveButton(dom.goalsNewAdd);
 }
 
+/* ==========================================================================
+   Quiz me on a text (the owner's "go ahead", 2026-09-30; docs/STUDY-FROM-
+   TEXT-DESIGN.md section 11; JARVIS-API.md section 98; quiz.js).
+
+   The pasted text, the questions, the answers and the marks live in this
+   window's memory and on the PC's - NEVER in localStorage or anywhere else
+   this app writes (not even a draft). No card: the text is the owner's own
+   and only the PC's local model sees it. Every change is held on a stale
+   link. While the private lists are hidden Rust takes the questions, the
+   comments and the source passages out (brain/quiz.rs), and this section
+   shows the "Show" prompt instead.
+   ========================================================================== */
+
+const qz = { quiz: null, summary: null, shown: null, busy: "", error: "" };
+
+function quizReset() {
+  qz.quiz = null;
+  qz.summary = null;
+  qz.shown = null;
+  qz.busy = "";
+  qz.error = "";
+}
+
+/** Puts words to a refusal or a thrown error; a quiz the PC no longer holds
+ *  ends the session here. Returns true when it was a problem. */
+function quizProblem(out) {
+  if (isRefusal(out)) {
+    qz.error = quizErrorWords(out);
+    if (out.error === "not_found") {
+      qz.quiz = null;
+      qz.summary = null;
+      qz.shown = null;
+    }
+    return true;
+  }
+  return false;
+}
+
+async function quizCall(cmd, args, busyWords) {
+  if (!linkWords(currentLink()).canAct) {
+    qz.error = STALE_TITLE;
+    paintQuiz();
+    return null;
+  }
+  qz.busy = busyWords;
+  qz.error = "";
+  paintQuiz();
+  try {
+    const out = await invoke(cmd, args);
+    qz.busy = "";
+    if (quizProblem(out)) {
+      paintQuiz();
+      return null;
+    }
+    return out;
+  } catch (error) {
+    qz.busy = "";
+    qz.error = errorText(error);
+    paintQuiz();
+    return null;
+  }
+}
+
+async function startQuiz() {
+  const box = dom.quizText;
+  const value = box ? box.value : "";
+  const c = quizTextCount(value);
+  if (!c.ok) {
+    qz.error = quizErrorWords({ error: c.n < QUIZ_LIMITS.textMin ? "text_too_short" : "text_too_long" });
+    paintQuiz();
+    return;
+  }
+  const out = await quizCall("brain_quiz_start", { text: value }, QUIZ_WRITING);
+  if (!out) return;
+  const quiz = readQuiz(out.quiz);
+  if (!quiz) {
+    qz.error = "Jarvis answered, but not with a quiz this app can read.";
+    paintQuiz();
+    return;
+  }
+  qz.quiz = quiz;
+  qz.summary = null;
+  qz.shown = null;
+  // The pasted text is not kept here once the questions exist.
+  box.value = "";
+  paintQuizCount();
+  paintQuiz();
+}
+
+async function checkAnswer(question, box) {
+  const c = quizAnswerCount(box.value);
+  if (!c.ok) {
+    qz.error = quizErrorWords({ error: c.n < 1 || !box.value.trim() ? "answer_empty" : "answer_too_long" });
+    paintQuiz();
+    return;
+  }
+  const value = box.value;
+  const out = await quizCall("brain_quiz_answer", { id: qz.quiz.id, n: question.n, answer: value }, QUIZ_CHECKING);
+  if (!out) return;
+  const quiz = readQuiz(out.quiz);
+  if (quiz) {
+    qz.quiz = quiz;
+    qz.shown = question.n;
+  }
+  paintQuiz();
+}
+
+async function finishQuiz() {
+  const out = await quizCall("brain_quiz_finish", { id: qz.quiz.id }, "");
+  if (!out) return;
+  qz.summary = readSummary(out.summary);
+  qz.quiz = null;
+  qz.shown = null;
+  paintQuiz();
+}
+
+async function stopQuiz() {
+  const id = qz.quiz && qz.quiz.id;
+  if (!id) return;
+  const out = await quizCall("brain_quiz_stop", { id }, "");
+  if (!out) return;
+  quizReset();
+  toast("Quiz forgotten.", "ok");
+  paintQuiz();
+}
+
+function markBlock(mark, verified) {
+  const box = el("div", "quiz-mark");
+  const head = el("div", "goal-head");
+  head.append(el("span", "goal-title", quizLevelLabel(mark.level)));
+  if (!verified) head.append(el("span", "row-tag", QUIZ_GUESS));
+  box.append(head);
+  if (mark.comment) box.append(el("p", "", mark.comment));
+  if (mark.passage) {
+    box.append(el("p", "goal-note", QUIZ_SOURCE));
+    box.append(el("p", "quiz-passage", mark.passage));
+  }
+  return box;
+}
+
+function paintQuizCount() {
+  if (!dom.quizTextCount || !dom.quizText) return;
+  dom.quizTextCount.textContent = quizTextCount(dom.quizText.value).note;
+}
+
+function paintQuiz() {
+  const run = dom.quizRun;
+  if (!run) return;
+  if (dom.quizStartForm) dom.quizStartForm.hidden = Boolean(qz.quiz || qz.summary);
+  const parts = [];
+  if (qz.busy) parts.push(el("p", "note", qz.busy));
+  if (qz.error) parts.push(el("p", "empty failed", qz.error));
+  const q = qz.quiz;
+  if (qz.summary) {
+    const s = qz.summary;
+    const block = el("div", "goal-block");
+    block.append(el("h3", "subhead", QUIZ_AGAIN_HEADING));
+    block.append(el("p", "note", quizCountsLine(s)));
+    if (s.again.length) {
+      block.append(el("p", "", s.again.map((n) => `Question ${n}`).join(", ")));
+    } else {
+      block.append(el("p", "empty", QUIZ_AGAIN_EMPTY));
+    }
+    block.append(button("Close", () => {
+      quizReset();
+      paintQuiz();
+    }));
+    parts.push(block);
+  } else if (q) {
+    const block = el("div", "goal-block");
+    if (!q.hidden) block.append(el("p", "goal-note", quizProgressLine(q)));
+    if (q.hidden) {
+      block.append(hiddenNode(0, "words"));
+    } else {
+      const shown = qz.shown != null ? q.questions.find((x) => x.n === qz.shown) : null;
+      const next = quizNextQuestion(q);
+      if (shown && shown.mark) {
+        block.append(el("p", "quiz-prompt", shown.prompt));
+        block.append(markBlock(shown.mark, q.verified));
+        const more = quizNextQuestion(q);
+        const actions = el("div", "goal-actions");
+        if (more) {
+          actions.append(button(QUIZ_NEXT, () => {
+            qz.shown = null;
+            paintQuiz();
+          }));
+        }
+        block.append(actions);
+      } else if (next) {
+        block.append(el("span", "row-tag", QUIZ_KIND_LABELS[next.kind]));
+        block.append(el("p", "quiz-prompt", next.prompt));
+        const answer = document.createElement("textarea");
+        answer.className = "field quiz-answer";
+        answer.rows = 4;
+        answer.maxLength = QUIZ_LIMITS.answerMax;
+        answer.spellcheck = true;
+        answer.placeholder = QUIZ_ANSWER_PLACEHOLDER;
+        answer.setAttribute("aria-label", `Your answer to question ${next.n}`);
+        const count = el("p", "note", quizAnswerCount("").note);
+        answer.addEventListener("input", () => {
+          count.textContent = quizAnswerCount(answer.value).note;
+        });
+        block.append(answer, count);
+        const actions = el("div", "goal-actions");
+        actions.append(button(QUIZ_ANSWER_LABEL, () => checkAnswer(next, answer), { live: true }));
+        block.append(actions);
+      } else {
+        block.append(el("p", "note", quizProgressLine(q)));
+      }
+    }
+    const foot = el("div", "goal-actions");
+    if (!q.hidden) foot.append(button(QUIZ_FINISH, finishQuiz, { live: true }));
+    foot.append(button(QUIZ_STOP, stopQuiz, { live: true, danger: true }));
+    block.append(foot);
+    parts.push(block);
+  }
+  run.replaceChildren(...parts);
+}
+
+/** A hidden quiz read again after Show (or a setting change): Rust decides
+ *  whether the words come back. Nothing is asked of the PC when no quiz is
+ *  open. */
+async function rereadQuiz() {
+  if (!IS_TAURI || !qz.quiz) return;
+  try {
+    const out = await invoke("brain_quiz_get", { id: qz.quiz.id });
+    if (quizProblem(out)) {
+      paintQuiz();
+      return;
+    }
+    const quiz = readQuiz(out.quiz);
+    if (quiz) qz.quiz = quiz;
+  } catch (error) {
+    qz.error = errorText(error);
+  }
+  paintQuiz();
+}
+
+function renderQuiz() {
+  paintQuizCount();
+  paintQuiz();
+}
+
+if (dom.quizStartForm) {
+  dom.quizStartForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    startQuiz();
+  });
+}
+if (dom.quizText) dom.quizText.addEventListener("input", paintQuizCount);
+if (dom.quizStart) {
+  liveButtons.add(dom.quizStart);
+  syncLiveButton(dom.quizStart);
+}
+
 // Private answers turned on or off, or a Show ran out: read it again - Rust
 // decides whether the words come back.
 if (IS_TAURI && TAURI.event && TAURI.event.listen) {
@@ -6839,6 +7125,9 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   };
   TAURI.event.listen("security-changed", rereadGoals);
   TAURI.event.listen("private-hidden", rereadGoals);
+  // A quiz's questions and marks are hidden the same way (brain/quiz.rs).
+  TAURI.event.listen("security-changed", rereadQuiz);
+  TAURI.event.listen("private-hidden", rereadQuiz);
   // The deep questions are hidden with the lists too (commands.rs get_deep).
   const rereadDeep = () => {
     deep.at = 0;

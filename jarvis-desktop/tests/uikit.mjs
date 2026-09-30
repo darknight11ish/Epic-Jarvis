@@ -497,7 +497,7 @@ export const UPDATE_NONE = {
   error: null, supported: true, check_on_start: true,
 };
 
-export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals,
+export function bridge({ link, pending, attention, digest, telemetry, prefs, answer, brain, theme, hotkeys, refuse, update, found, installFails, restartFails, appearance, noRoute, decideFails, amendFails, appearanceFails, memoryRefuses, learningFloor, learningWaits, apiSettings, tokenSaveRefuses, bindAddressRefuses, bindAddressRefusalMessage, baseRefusals, chatReplies, heard, captureFails, speakFails, autoListenFails, speakDelayMs, taskActionFails, taskNoteFails, vision, noteJobs, noteTargets, secondCard, bigModel, deep, voice, caps, security, vt, history, auto, profile, shared, appLock, hardware, schedule, briefing, emailSending, focus, goals, quiz,
   folders, animal, chatbot, support, historyImport, widgets, devices, screen }) {
   const listeners = {};
   window.__calls = [];
@@ -1692,6 +1692,75 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             }
             return { ok: true, goal: { ...goal } };
           }
+          // brain/quiz.rs (Quiz me on a text). `window.__quiz` is null - a PC
+          // without Quiz, which Rust answers with the "run apply-patches.ps1"
+          // sentence - unless the scenario names `quiz: {...}`. It behaves like
+          // the contract (docs/STUDY-FROM-TEXT-DESIGN.md section 11): start
+          // makes `count` questions, answer marks with the scenario's `levels`
+          // in turn, finish/stop delete the session. `refuse: {cmd: code}` makes
+          // that command answer a refusal with the code. Words come out while
+          // the private lists are hidden, as brain/quiz.rs redact_answer does.
+          case "brain_quiz_start":
+          case "brain_quiz_get":
+          case "brain_quiz_answer":
+          case "brain_quiz_finish":
+          case "brain_quiz_stop": {
+            const z = window.__quiz;
+            if (!z) throw new Error("Your PC's Jarvis does not have Quiz yet - run apply-patches.ps1 on the PC.");
+            z.calls.push({ cmd, ...args });
+            if (cmd !== "brain_quiz_get" && state.stale) throw new Error("the event stream is stale");
+            const no = (error) => ({ ok: false, error, message: "the PC's own words for " + error });
+            if (z.refuse && z.refuse[cmd]) return no(z.refuse[cmd]);
+            const hideIt = () => window.__security.hidden && !window.__security.revealed;
+            const view = () => {
+              const q = JSON.parse(JSON.stringify(z.quiz));
+              if (hideIt()) {
+                q.title = ""; q.hidden = true;
+                for (const x of q.questions) {
+                  x.prompt = "";
+                  if (x.mark) { x.mark.comment = ""; x.mark.passage = ""; }
+                }
+              }
+              return q;
+            };
+            if (cmd === "brain_quiz_start") {
+              const t = String(args.text || "");
+              if (t.length < 200) return no("text_too_short");
+              if (t.length > 20000) return no("text_too_long");
+              const n = args.count || 5;
+              const kinds = ["recall", "explain", "apply"];
+              z.quiz = { id: "qz0001", title: args.title || "", grader_verified: Boolean(z.verified),
+                answered: 0, questions: Array.from({ length: Math.min(n, z.questions || 3) }, (_, i) => ({
+                  n: i + 1, kind: kinds[i % 3], prompt: "Question text number " + (i + 1) + "?", mark: null })) };
+              z.marks = {};
+              return { ok: true, quiz: view(), ...(hideIt() ? { hidden: true } : {}) };
+            }
+            if (!z.quiz || args.id !== z.quiz.id) return no("not_found");
+            if (cmd === "brain_quiz_get") return { ok: true, quiz: view() };
+            if (cmd === "brain_quiz_stop") { z.quiz = null; return { ok: true }; }
+            if (cmd === "brain_quiz_finish") {
+              const counts = { got_it: 0, partly: 0, not_yet: 0 };
+              const again = [];
+              for (const x of z.quiz.questions) {
+                if (!x.mark) continue;
+                counts[x.mark.level] += 1;
+                if (x.mark.level !== "got_it") again.push(x.n);
+              }
+              z.quiz = null;
+              return { ok: true, summary: { counts, again } };
+            }
+            const item = z.quiz.questions.find((x) => x.n === args.n);
+            if (!item) return no("bad_question");
+            if (item.mark) return no("already_answered");
+            const a = String(args.answer || "");
+            if (!a.trim()) return no("answer_empty");
+            if (a.length > 2000) return no("answer_too_long");
+            const levels = z.levels || ["got_it", "partly", "not_yet"];
+            item.mark = { level: levels[z.quiz.answered % levels.length],
+              comment: "The passage says otherwise.", passage: "SOURCE PASSAGE " + item.n };
+            z.quiz.answered += 1;
+            return { ok: true, mark: JSON.parse(JSON.stringify(item.mark)), quiz: view() };
+          }
           case "brain_widgets_draft": {
             window.__widgetCalls.push({ cmd, ...args });
             if (args.pasted) {
@@ -2512,6 +2581,7 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
   window.__goals = goals ? JSON.parse(JSON.stringify({
     goals: [], reads: 0, fails: null, checkinByGoal: {}, ...goals })) : null;
   window.__goalsCalls = [];
+  window.__quiz = quiz ? JSON.parse(JSON.stringify({ calls: [], quiz: null, ...quiz })) : null;
   // "Widgets you describe" (brain/widgets.rs). Unset, a PC without it.
   // `widgets`/`drafts` are the PC's rows (with said and parts); `shows` maps
   // an id to its GET /api/widgets/show answer; `draft` is the preview the

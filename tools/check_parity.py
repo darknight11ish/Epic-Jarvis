@@ -313,6 +313,14 @@ CLASSIFICATION = {
     "/api/goals/{id}/accept": ("ported", "The owner's edited plan (or the draft as it stood) is kept, and the goal becomes active. The ONE place this feature can raise a card - the backend's own weekly-check-in `schedule_repeat` card (the same one a repeating reminder or the morning briefing already raises), approving nothing that acts. Held on a stale link (brain_goals_accept)."),
     "/api/goals/{id}/step": ("ported", "Marks one step done or not - no card, the same shape as ticking off a to-do item. Held on a stale link (brain_goals_step)."),
     "/api/goals/{id}/stop": ("ported", "Stops tracking the goal and deletes its check-in job on the PC - no card, immediate, the same rule every \"stop tracking this\" control in this project follows. Held on a stale link (brain_goals_stop)."),
+    # Quiz me on a text (the owner's decision of 2026-09-30; JARVIS-API.md
+    # section 98; backend jarvis_quiz.py, quiz.patch). Both apps: the desktop's
+    # Brain -> Quiz (brain/quiz.rs) and the phone's Brain -> Quiz (net/Quiz.kt).
+    "/api/quiz": ("ported", "Start a quiz: the owner's pasted text (200-20000 characters) and a question count go to the local model, which writes the questions; kept in memory only, no card, never learned from. Desktop: brain/quiz.rs. Phone: net/Quiz.kt."),
+    "/api/quiz/{id}": ("ported", "Read one open quiz (the questions, the marks so far; a question's source passage only once it is answered). Held on a stale link (not_found). Desktop: brain/quiz.rs. Phone: net/Quiz.kt."),
+    "/api/quiz/{id}/answer": ("ported", "Mark one typed answer against that question's passage only (Got it / Partly / Not yet plus one sentence); no card. Desktop: brain/quiz.rs. Phone: net/Quiz.kt."),
+    "/api/quiz/{id}/finish": ("ported", "End the quiz with the short \"look at these again\" summary; the quiz is forgotten. Desktop: brain/quiz.rs. Phone: net/Quiz.kt."),
+    "/api/quiz/{id}/stop": ("ported", "Stop and forget the quiz at once, no summary. Desktop: brain/quiz.rs. Phone: net/Quiz.kt."),
     # Projects (the owner's decision of 2026-09-28; backend/jarvis_projects.py,
     # projects.patch; JARVIS-API section 88). Both apps since build step 3:
     # desktop Brain -> Projects (brain/projects.rs projects_read /
