@@ -81,6 +81,10 @@ RADAR_LABEL = 14.0
 RINGS = (0.25, 0.5, 0.75, 1.0)
 
 
+assert all(b - a >= SHADING["min_step"] - 1e-9
+           for a, b in zip(SHADING["alpha"], SHADING["alpha"][1:])), "shading steps too close"
+
+
 def ts(y, m, d, hh=12, mm=0):
     return dt.datetime(y, m, d, hh, mm, tzinfo=NY).timestamp()
 
@@ -305,7 +309,7 @@ def cases() -> dict:
         "shading": SHADING,
         "limits": {"weeks_default": PR.WEEKS_DEFAULT, "weeks_min": PR.WEEKS_MIN,
                    "weeks_max": PR.WEEKS_MAX, "axes_min": PR.MIN_AXES, "axes_max": PR.MAX_AXES,
-                   "label_max": PR.MAX_LABEL},
+                   "label_max": PR.MAX_LABEL, "label_short": PR.MAX_SHORT},
         "heat_grid": {"cell": CELL, "gap": GAP, "step": STEP,
                       "sizes": {str(w): heat_size(w) for w in (4, 12, 26)}},
         "radar_constants": {"size": RADAR_SIZE, "radius": RADAR_R, "label_offset": RADAR_LABEL,

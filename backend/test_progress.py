@@ -505,6 +505,10 @@ def t_axis_values():
     lab = w.set([{"kind": "bench", "ref": x} for x in (lo, hi, long)])["axes"][2]["label"]
     check("a long default name is shortened for the spoke", len(lab) <= PR.MAX_LABEL
           and lab.endswith("…"))
+    ax = w.set([{"kind": "bench", "ref": x} for x in (lo, hi, long)])["axes"]
+    check("each area also carries a 12-character name for beside the spoke",
+          all(len(a["short"]) <= PR.MAX_SHORT for a in ax) and ax[0]["short"] == "Weight goal"
+          and ax[2]["short"].endswith("…"), [a["short"] for a in ax])
 
 
 def t_bad_numbers_in_db():

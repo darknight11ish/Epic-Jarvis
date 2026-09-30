@@ -72,7 +72,8 @@
   "weeks_max": 26,
   "axes_min": 3,
   "axes_max": 8,
-  "label_max": 24
+  "label_max": 24,
+  "label_short": 12
  },
  "heat_grid": {
   "cell": 14,
@@ -6273,6 +6274,7 @@
    "axes": [
     {
      "label": "Running",
+     "short": "Running",
      "name": "Weekly distance",
      "kind": "bench",
      "ref": "00000000000000000000000000000003",
@@ -6284,6 +6286,7 @@
     },
     {
      "label": "Emergency fund",
+     "short": "Emergency f…",
      "name": "Emergency fund",
      "kind": "bench",
      "ref": "00000000000000000000000000000004",
@@ -6295,6 +6298,7 @@
     },
     {
      "label": "Garage",
+     "short": "Garage",
      "name": "Insulate the garage",
      "kind": "goal",
      "ref": "g0000000000",
@@ -6444,6 +6448,7 @@
    "axes": [
     {
      "label": "Body weight",
+     "short": "Body weight",
      "name": "Body weight",
      "kind": "bench",
      "ref": "00000000000000000000000000000002",
@@ -6455,6 +6460,7 @@
     },
     {
      "label": "Weekly distance",
+     "short": "Weekly dist…",
      "name": "Weekly distance",
      "kind": "bench",
      "ref": "00000000000000000000000000000003",
@@ -6466,6 +6472,7 @@
     },
     {
      "label": "Emergency fund",
+     "short": "Emergency f…",
      "name": "Emergency fund",
      "kind": "bench",
      "ref": "00000000000000000000000000000004",
@@ -6477,6 +6484,7 @@
     },
     {
      "label": "Books read",
+     "short": "Books read",
      "name": "Books read",
      "kind": "bench",
      "ref": "00000000000000000000000000000005",
@@ -6488,6 +6496,7 @@
     },
     {
      "label": "Sleep target",
+     "short": "Sleep target",
      "name": "Sleep target",
      "kind": "bench",
      "ref": "00000000000000000000000000000006",
@@ -6667,6 +6676,7 @@
    "axes": [
     {
      "label": "Body weight",
+     "short": "Body weight",
      "name": "Body weight",
      "kind": "bench",
      "ref": "00000000000000000000000000000002",
@@ -6678,6 +6688,7 @@
     },
     {
      "label": "Weekly distance",
+     "short": "Weekly dist…",
      "name": "Weekly distance",
      "kind": "bench",
      "ref": "00000000000000000000000000000003",
@@ -6689,6 +6700,7 @@
     },
     {
      "label": "Books read",
+     "short": "Books read",
      "name": "Books read",
      "kind": "bench",
      "ref": "00000000000000000000000000000005",
@@ -6838,6 +6850,7 @@
    "axes": [
     {
      "label": "Body weight",
+     "short": "Body weight",
      "name": "Body weight",
      "kind": "bench",
      "ref": "00000000000000000000000000000002",
@@ -6849,6 +6862,7 @@
     },
     {
      "label": "Books read",
+     "short": "Books read",
      "name": "Books read",
      "kind": "bench",
      "ref": "00000000000000000000000000000005",

@@ -63,6 +63,7 @@ WEEKS_MAX = 26
 MIN_AXES = 3
 MAX_AXES = 8
 MAX_LABEL = 24
+MAX_SHORT = 12          # the name written beside a spoke; the list shows the whole label
 MAX_CHOICES = 60
 
 #: count -> level: 0, 1, 2, 3-4, 5 or more.
@@ -409,7 +410,7 @@ def _resolve(a: dict, p, goals_by_id: dict) -> Optional[dict]:
             return None
         core = _goal_axis(g)
     label = _short(a.get("label") or core["default_name"], MAX_LABEL)
-    return {"label": label, "name": _short(core["default_name"], 60), "kind": a["kind"],
+    return {"label": label, "short": _short(label, MAX_SHORT), "name": _short(core["default_name"], 60), "kind": a["kind"],
             "ref": a["ref"], "project": core["project"], "state": core["state"],
             "value_words": core["value_words"], "fraction": core["fraction"],
             "keep_on_screen": core["keep_on_screen"]}

@@ -412,7 +412,7 @@ mod tests {
         assert!(!valid_table_id("3f9c0a5e1d7b4c2a8e6f01b2c3d4e5f"));
         assert!(!valid_table_id("3f9c0a5e1d7b4c2a8e6f01b2c3d4e5f6a"));
         assert!(!valid_table_id("3f9c0a5e1d7b4c2a8e6f01b2c3d4&5f6"));
-        assert!(!valid_table_id("../../api/approve/aaaaaaaaaaaaaaaaaa"));
+        assert!(!valid_table_id("../../up/../aaaaaaaaaaaaaaaaaaaaaaa"));
     }
 
     #[test]
