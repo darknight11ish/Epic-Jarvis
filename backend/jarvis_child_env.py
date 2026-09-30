@@ -30,12 +30,48 @@ Windows upper-cases them in `os.environ` ("ProgramFiles" is "PROGRAMFILES"
 there), so the comparison here is case-blind. The value, and the name's own
 spelling, are passed on unchanged.
 
+TELEMETRY IS OFF (supply-chain audit, 2026-09-30)
+Libraries the models come with report usage on their own unless told not to:
+the Hugging Face download library (HF_HUB_DISABLE_TELEMETRY), and many
+open-source tools honour the shared DO_NOT_TRACK convention or their own
+ANONYMIZED_TELEMETRY switch (Chroma, Posthog-based libraries). Rule 1 says
+nothing about the owner leaves the PC, so the three switches are on for
+Jarvis's own process (`switch_off_telemetry`, run when this module is
+imported - it is imported by the modules that start models) and for every
+program Jarvis starts (`inherited` adds them). `setdefault`, so a value the
+owner has deliberately set is left alone. Said plainly: this is what these
+three names cover. A library with a switch of its own name that is not on the
+list still reports; sherpa-onnx's ONNX Runtime is the known one
+(docs/ARCHITECTURE.md, telemetry).
+
 Standard library only.
 """
 from __future__ import annotations
 
 import os
 from typing import Iterable, Mapping, Optional
+
+#: The telemetry switches: name -> the value that turns it OFF.
+TELEMETRY_OFF = {
+    "HF_HUB_DISABLE_TELEMETRY": "1",
+    "DO_NOT_TRACK": "1",
+    "ANONYMIZED_TELEMETRY": "False",
+}
+
+
+def switch_off_telemetry(env=None) -> dict:
+    """Sets each TELEMETRY_OFF name that is not set yet, in `env` (default:
+    this process's own environment). Returns the names it set."""
+    target = os.environ if env is None else env
+    done = {}
+    for k, v in TELEMETRY_OFF.items():
+        if k not in target:
+            target[k] = v
+            done[k] = v
+    return done
+
+
+switch_off_telemetry()
 
 #: Names a program needs to start and find its files, copied when present.
 #: Windows: the system folders, the search path, the temp folders, the user's
@@ -78,4 +114,8 @@ def inherited(base: Optional[Mapping[str, str]] = None, *, names: Iterable[str] 
         up = str(k).upper()
         if (up in want or up.startswith(pre)) and not _looks_secret(up):
             out[k] = v
+    # Every program Jarvis starts is told not to report usage (see the top).
+    # Not from `src`: the owner's own environment is not what decides this.
+    for k, v in TELEMETRY_OFF.items():
+        out.setdefault(k, v)
     return out

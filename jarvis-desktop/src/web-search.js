@@ -41,6 +41,11 @@ export const WHOOGLE_WHY =
   "Not offered: its own README says it no longer returns results, since Google blocked searching without JavaScript in 2025.";
 export const DEFAULT_WHY =
   "SearXNG is the default because it costs nothing, needs no key or account, and runs on this PC, so no single search company keeps a record of your searches.";
+export const ENABLED_LABEL = "Web search";
+export const ENABLED_DETAIL =
+  "On (the default): Jarvis may search the web when it needs to, with the search you chose below. Off: Jarvis searches nothing and the AI model is not offered the search at all. Turning it off is immediate; turning it back on asks you with an approval card.";
+export const OFF_LINE = "Web search is off, so Jarvis searches nothing until you turn it back on.";
+export const WAITING_CARD = "Waiting for your approval card.";
 export const ASK_LABEL = "Ask before every web search";
 export const ASK_DETAIL =
   "Off (the default): Jarvis asks first only when private things could slip into a search - after it has read your email, files, notes or other outside text, when the search words repeat something you told it, or when it used a sensitive saved fact - and shows you the exact search words. On: it asks before every search. Turning this on is immediate; turning it off asks you with an approval card.";
@@ -122,6 +127,13 @@ export function readSearch(answer) {
     providers,
     leftOut,
     address: String(a.searxng_url || DEFAULT_ADDRESS),
+    // An older PC sends no switch: read as on, never as off.
+    enabled: a.enabled !== false,
+    enabledLabel: ENABLED_LABEL,
+    enabledDetail: ENABLED_DETAIL,
+    enableWaiting: a.enable_waiting === true,
+    enableLast:
+      a.enable_last && typeof a.enable_last === "object" ? String(a.enable_last.message || "") : "",
     askEveryTime: a.ask_every_time === true,
     askLabel: String(a.ask_every_time_label || ASK_LABEL),
     askDetail: String(a.ask_every_time_detail || ASK_DETAIL),

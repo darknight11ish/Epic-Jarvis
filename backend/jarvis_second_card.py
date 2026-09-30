@@ -12,6 +12,14 @@ anything on that depends on it until it is installed and measured" is kept:
 nothing here does anything on a PC with one card, and nothing does anything
 on a PC with two until the owner says yes on an approval card.
 
+CARD SIZES (2026-09-30). An extra card may be 8, 10, 11, 12, 16 or 24 GB (the
+floor is 7,680 MiB reported - MIN_TOTAL_MB). What each size can run is
+worked out in the comment blocks above LONG_BIG and the small-card plan:
+an 8 GB card runs Learning, the Wiki builder and (no monitor on it) Pictures -
+work taken off the main card - but not "Longer conversations" or "Browser
+control", which need more room than the main card's 16K. 10 GB and up is
+the full plan. Every figure is calculated, not measured.
+
 THE FEATURES (the ids are the API contract - both apps build against them):
 
     long_context     "Longer conversations": when a chat would be trimmed to
@@ -409,8 +417,20 @@ MAIN_OLLAMA_PORT = 11434
 
 #: Turing. See the module docstring and MODEL-TOPOLOGY.md.
 MIN_COMPUTE = 7.5
-#: 10 GiB, as nvidia-smi reports memory.total (MiB).
-MIN_TOTAL_MB = 10240
+#: The capability floor, as nvidia-smi reports memory.total (MiB): 7.5 GiB.
+#: CHANGED 2026-09-30 from 10,240 (10 GiB) so an 8 GB extra card can be used
+#: (owner: "make sure if the second and/or 3rd GPUs are only 8 GB VRAM each
+#: that they are able to be utilized fully"). A card sold as "8 GB" is
+#: 8,192 MiB and some drivers report a few MiB less (8,188 was seen), so the
+#: floor sits half a GiB under 8,192: every real 8 GB card clears it, and a
+#: 6 GB card (6,144 MiB, the RTX 2060 6 GB) does not. A card under 8,192 is
+#: still sized honestly from its real memory (see the small-card plan below),
+#: never from the label. Turing (compute 7.5) and a card id are still needed.
+MIN_TOTAL_MB = 7680
+#: The old floor, now the line between the two plans: a card at or above 10 GiB
+#: gets the full plan below (LONG_BIG/LONG_SMALL - unchanged), a card between
+#: MIN_TOTAL_MB and this gets the small-card plan.
+FULL_TOTAL_MB = 10240
 #: A card sold as "12 GB". 11.5 GiB rather than exactly 12,288 MiB, because
 #: a card can report a little under its label; an 11 GB 2080 Ti (11,264 MiB)
 #: stays below it. Since 2026-09-24 both sizes get the same lane (below);
@@ -448,6 +468,36 @@ BIG_TOTAL_MB = 11776
 LONG_BIG = ("qwen3:8b", 32768, 7.69)
 LONG_SMALL = ("qwen3:8b", 32768, 7.69)
 
+# EVERY SIZE, BY MEMORY BAND (2026-09-30). Extra cards are expected to be 8 to
+# 24 GB. nvidia-smi reports MiB, a little under the label on some cards
+# (16 GB: 16,376; 24 GB: 24,564), so bands are read from the reported MiB and
+# never from the label. CALCULATED, NOT MEASURED - no extra card is installed.
+#
+#   band            reported MiB          plan (this file's own arithmetic)
+#   8 GB            7,680 - 10,239        the small-card plan below: qwen3:8b at the
+#                                         largest of 16K / 8K that fits; no
+#                                         "Longer conversations" (no more room than
+#                                         the main card), no "Browser control"
+#   10, 11, 12 GB   10,240 - up           LONG_BIG above, unchanged: qwen3:8b @ 32K
+#   16 GB           16,376 (room 14.64)   the same LONG_BIG, spare 6.95 GiB
+#   24 GB           24,564 (room 22.64)   the same LONG_BIG, spare 14.95 GiB
+#
+# (room = total - 0.60 desktop - 0.75 gap, the same terms as the small-card
+# plan's table below; spare = room - the 7.69 LONG_BIG needs.)
+# WHY 16 AND 24 GB DO NOT GET A BIGGER PLAN. Two larger things were checked
+# against this file's own arithmetic and neither is taken:
+#  - a longer context on qwen3:8b: 32,768 is the model's own native length. Room
+#    for 64K exists (cache 4.78 GiB, need 10.08 GiB) but going past the native
+#    length needs rope scaling, which nothing here sets or has tested, so it
+#    is not offered.
+#  - a bigger model: qwen3:14b @ 32K needs 8.42 + 2.66 + 0.30 + 0.33 = 11.71 GiB
+#    (COMBINED_MODEL's own weights and cache, one card's runtime), which fits a
+#    16 GB card (14.64) and a 24 GB one. It is NOT switched on, because it would
+#    change which model writes the answers and does the learning, and the
+#    tool-call tests and the learner test (CLAUDE.md: measure before keeping a
+#    memory or learning change) are measured on the 8B. Left as an owner
+#    decision; the extra memory on a 16/24 GB card stays spare until then.
+
 # Pictures. NOT CHECKED against ollama.com: the library page could not be
 # reached from where this was written (ollama.com and huggingface.co are
 # blocked there). From the published Qwen2.5-VL-7B geometry as remembered -
@@ -461,6 +511,84 @@ VISION_MODEL = "qwen2.5vl:7b"
 VISION_WEIGHTS_GIB = 5.59
 VISION_KV_BYTES_PER_TOKEN = 30464
 RUNTIME_GIB = 0.63
+
+# --------------------------------------------------------------------------
+#   The small-card plan: an 8 GB extra card (2026-09-30)
+# --------------------------------------------------------------------------
+#
+# CALCULATED, NOT MEASURED. No extra card is installed in the owner's PC yet;
+# every number below comes from the same arithmetic LONG_BIG uses, from
+# docs/HARDWARE-PROFILES.md's shapes, and none of it has been run.
+#
+# THE KEY FACT. The everyday model, jarvis-primary, already has 16,384 tokens
+# of room (backend/jarvis-primary.Modelfile, num_ctx 16384). An 8 GB extra card
+# can hold no more than that (below), so "Longer conversations" would move a
+# conversation to a card with NO more room than the one it left - the exact
+# mistake bug audit T3 (above) already removed for 12 GB. So on an 8 GB card
+# "Longer conversations" is NOT offered, and "Browser control" (which needs it,
+# and needs room for page after page of history - jarvis_browser_control.py)
+# is not offered either. What the card is still good for is taking work OFF
+# the main card: Learning in the background, the Wiki builder and, when
+# nothing is plugged into it, Pictures. That work then never competes with
+# chat for the main card.
+#
+# THE ROOM. Same terms as LONG_BIG's comment - memory total, minus the
+# desktop's own share (0.60 GiB with no monitor on the card, 1.10 with one:
+# HARDWARE-PROFILES section 4.2), minus the owner's 0.75 GiB empty gap:
+#
+#   8,192 MiB card, no monitor   8.00 - 0.60 - 0.75  =  6.65 GiB
+#   8,192 MiB card, monitor      8.00 - 1.10 - 0.75  =  6.15 GiB
+#   8,188 MiB card, no monitor   7.996 - 0.60 - 0.75 =  6.65 GiB (rounded)
+#   7,680 MiB card (the floor)   7.50 - 0.60 - 0.75  =  6.15 GiB
+#
+# WHAT IS PUT IN IT. Qwen 3 8B Q4_K_M (learning, wiki), KV cache q8_0 at
+# 2 x 36 x 8 x 128 x 1.0625 = 78,336 B a token (the same 78,336 as LONG_BIG):
+#
+#   need = weights 4.67 + cache + compute 0.30 + CUDA start-up 0.33
+#   @ 16,384 tokens: 4.67 + 1.20 + 0.30 + 0.33 = 6.50 GiB
+#                    -> fits the 6.65 of a no-monitor card, 0.15 spare
+#                       (tight - the owner's 0.75 gap is already taken out
+#                       of the room, so it is kept; only this sliver is
+#                       left over, and it is an estimate)
+#   @  8,192 tokens: 4.67 + 0.60 + 0.30 + 0.33 = 5.90 GiB
+#                    -> fits even with a monitor (6.15), 0.25 spare
+#
+# so each 8 GB card gets the LARGEST of 16,384 / 8,192 that fits. 16,384 is the
+# most an 8 GB card can give and it equals the main card's, which is the
+# whole reason "Longer conversations" is off here. Under 8,192 is refused as
+# too small to be useful (the wiki's source budget shrinks with it).
+#
+# PICTURES. qwen2.5vl:7b, the same guessed 5.59 GiB of weights as
+# VISION_WEIGHTS_GIB (UNCHECKED - `ollama show qwen2.5vl:7b` has not been read
+# on the PC), cache 30,464 B a token, 0.63 runtime:
+#   @ 8,192 tokens: 5.59 + 0.23 + 0.63 = 6.45 GiB
+#                   -> fits a no-monitor card (6.65), 0.20 spare; does NOT fit
+#                      with a monitor (6.15), so Pictures is refused there,
+#                      in words. 16,384 would need 6.68 and does not fit either.
+# Reading a picture needs an unmeasured extra on top; 0.20 spare is thin, so
+# if Pictures is slow on an 8 GB card, that is the first thing to suspect.
+#
+# Cards between 8 GB and 10 GB (there are none on sale that Jarvis knows of)
+# are sized by the same rule from their own memory. From 10,240 MiB up the
+# full plan applies, exactly as before.
+
+#: The largest, then the smaller, context an 8 GB card is offered.
+SMALL_CTX_STEPS = (16384, 8192)
+#: Below this an 8 GB card is refused for the features that need room.
+SMALL_MIN_CTX = 8192
+#: Qwen 3 8B Q4_K_M (LONG_BIG's own 4.67 + 0.30 compute), KV bytes per token.
+QWEN8_WEIGHTS_GIB = 4.67
+QWEN8_COMPUTE_GIB = 0.30
+QWEN8_KV_BYTES_PER_TOKEN = 78336
+CUDA_START_GIB = 0.33
+#: The desktop's share on a card with no monitor / with a monitor, and the
+#: owner's empty gap (HARDWARE-PROFILES section 4.2 and decision 1).
+DESKTOP_GIB = 0.60
+DESKTOP_MONITOR_GIB = 1.10
+GAP_GIB = 0.75
+#: The main card's context (jarvis-primary.Modelfile): what an extra card has
+#: to beat for "Longer conversations" to be worth anything.
+MAIN_CARD_CTX = 16384
 
 #: The five features, in the order both apps show them.
 FEATURES = (
@@ -890,7 +1018,7 @@ SUGGEST_DEFAULT = True
 def _read_switches() -> dict:
     """{"master": bool, "combined": bool, "features": {id: bool},
     "suggest": {"struggle": bool, "correction": bool},
-    "third_feature": Optional[str]}. "combined" is the third mode's own
+    "third_feature": Optional[str], "third_card": Optional[str]}. "combined" is the third mode's own
     switch - a sibling of "master", not one of "features" (it does not
     compose with them: see the module docstring). "suggest" is neither: it
     never starts or stops anything by itself, it only says whether
@@ -898,13 +1026,20 @@ def _read_switches() -> dict:
     "third_feature" (2026-09-28) is which of FEATURE_IDS, if any, is moved
     onto a third capable card - None (the default) means the third card
     does nothing, even if one is plugged in (module docstring's "A THIRD
-    CARD'S OWN LANE"). A missing or broken file is everything off (and
+    CARD'S OWN LANE"). "third_card" (2026-09-30) is the id of the card the
+    owner APPROVED that move for: the third slot is re-picked from whatever
+    cards are plugged in on every read (best memory, then lowest index), so
+    a swapped, moved or added card can be the third one tomorrow. The
+    assignment only counts while the card in that slot IS this one
+    (_third_feature_now). A file from before this field has none, and is
+    read as "ask again" - never as "whichever card is third now". A missing or broken file is everything off (and
     third_feature None), and "suggest" both ON - the safe reading either
     way: nothing starts without a person's yes, and a missing file
     offering nothing is the wrong direction to fail an offer in, so the two
     defaults are opposite on purpose."""
     out = {"master": False, "combined": False, "features": {f: False for f in FEATURE_IDS},
-           "suggest": {s: SUGGEST_DEFAULT for s in SUGGEST_SIGNALS}, "third_feature": None}
+           "suggest": {s: SUGGEST_DEFAULT for s in SUGGEST_SIGNALS}, "third_feature": None,
+           "third_card": None}
     try:
         raw = json.loads(_state_path().read_text(encoding="utf-8"))
     except Exception:
@@ -925,6 +1060,9 @@ def _read_switches() -> dict:
     tf = raw.get("third_feature")
     if isinstance(tf, str) and tf in FEATURE_IDS:
         out["third_feature"] = tf
+    tc = raw.get("third_card")
+    if out["third_feature"] and isinstance(tc, str) and tc.strip():
+        out["third_card"] = tc.strip()
     return out
 
 
@@ -941,6 +1079,7 @@ def _write_state(cur: dict) -> Optional[str]:
         tmp.write_text(json.dumps({"master": cur["master"], "combined": cur["combined"],
                                    "features": cur["features"], "suggest": cur["suggest"],
                                    "third_feature": cur.get("third_feature"),
+                                   "third_card": cur.get("third_card"),
                                    "set_at": int(time.time())}, indent=1),
                        encoding="utf-8")
         tmp.replace(p)
@@ -960,13 +1099,17 @@ def _write_switch(feature: str, enabled: bool) -> Optional[str]:
         return _write_state(cur)
 
 
-def _write_third(feature: Optional[str]) -> Optional[str]:
-    """Sets which feature (if any) is moved onto the third card. None on
-    success, else the error in words. `feature` outside FEATURE_IDS is
-    written as unassigned (None) - the safe direction."""
+def _write_third(feature: Optional[str], card_uuid: Optional[str] = None) -> Optional[str]:
+    """Sets which feature (if any) is moved onto the third card, and the id
+    of the card the owner approved it for. None on success, else the error in
+    words. `feature` outside FEATURE_IDS is written as unassigned (None), and
+    an assignment without a card id is written without one - which reads as
+    "ask again" (_third_feature_now) - the safe direction both ways."""
     with _STATE_LOCK:
         cur = _read_switches()
-        cur["third_feature"] = feature if feature in FEATURE_IDS else None
+        ok = feature in FEATURE_IDS
+        cur["third_feature"] = feature if ok else None
+        cur["third_card"] = (str(card_uuid) if ok and card_uuid else None)
         return _write_state(cur)
 
 
@@ -1006,7 +1149,7 @@ def _not_capable(card) -> Optional[str]:
                 f"capability 7.5), which the second-card features need{extra}")
     if card.total_mb < MIN_TOTAL_MB:
         return (f"the {name} has {_gb(card.total_mb)}, which is not enough: the "
-                f"second-card features need at least 10 GB")
+                f"extra-card features need at least 8 GB")
     if not card.uuid:
         return (f"nvidia-smi did not give the {name}'s id, and Jarvis only points work "
                 f"at a card by its id")
@@ -1126,8 +1269,20 @@ def _detect(fresh: bool) -> dict:
     p = {"uuid": prim.uuid or None, "index": prim.index, "name": prim.name}
     if second is not None:
         s = _card_summary(second)
-        why = (f"the {second.name} ({_gb(second.total_mb)}) can take the second-card "
-               f"features; everyday chat stays on the {prim.name}")
+        if _is_small(second.total_mb):
+            ok = [_BY_ID[f]["name"] for f in FEATURE_IDS
+                  if _small_card_refusal(f, second) is None]
+            no = [_BY_ID[f]["name"] for f in FEATURE_IDS
+                  if _small_card_refusal(f, second) is not None]
+            why = (f"the {second.name} ({_gb(second.total_mb)}) can take some of the "
+                   f"extra-card features ({', '.join(ok) or 'none right now'}), which keeps "
+                   f"that work off the {prim.name}; it holds no more than the {prim.name}, so "
+                   f"{', '.join(no) or 'nothing else'} stay"
+                   f"{'s' if len(no) == 1 else ''} off; everyday chat stays on the "
+                   f"{prim.name}")
+        else:
+            why = (f"the {second.name} ({_gb(second.total_mb)}) can take the second-card "
+                   f"features; everyday chat stays on the {prim.name}")
         return {"capable": True, "why": why, "primary": p, "second": s, "cards": rows,
                 "_second": second, "_lanes": lanes, "_third": third}
     if len(cards) == 1:
@@ -1214,9 +1369,118 @@ def _detect_preset(plan: dict, fresh: bool) -> dict:
             "_third": None}
 
 
-def _long_context_plan(total_mb: int) -> tuple:
-    """(model, num_ctx, memory_gib) for a second card with this much memory."""
+def _is_small(total_mb: int) -> bool:
+    """An extra card under the full plan's floor (10 GiB): the 8 GB plan."""
+    return int(total_mb) < FULL_TOTAL_MB
+
+
+def _shows_monitor(card) -> bool:
+    """Is a monitor plugged into this card? nvidia-smi not saying (None) reads
+    as no, the way the rest of this module already reads it."""
+    return bool(getattr(card, "display_active", False))
+
+
+def _room_gib(total_mb: int, monitor: bool) -> float:
+    """What is left of a card for a model, in GiB, after the desktop's share
+    and the owner's empty gap (the small-card plan's comment above)."""
+    return round(total_mb / 1024.0 - (DESKTOP_MONITOR_GIB if monitor else DESKTOP_GIB)
+                 - GAP_GIB, 2)
+
+
+def _small_8b_need(ctx: int) -> float:
+    kv = QWEN8_KV_BYTES_PER_TOKEN * ctx / 1024 ** 3
+    return round(QWEN8_WEIGHTS_GIB + kv + QWEN8_COMPUTE_GIB + CUDA_START_GIB, 2)
+
+
+def _small_8b_plan(total_mb: int, monitor: bool) -> tuple:
+    """(model, num_ctx, memory_gib) for an 8 GB card: the largest of
+    SMALL_CTX_STEPS whose need fits the room, or (None, None, None)."""
+    room = _room_gib(total_mb, monitor)
+    for ctx in SMALL_CTX_STEPS:
+        need = _small_8b_need(ctx)
+        if ctx >= SMALL_MIN_CTX and need <= room:
+            return LONG_BIG[0], ctx, need
+    return None, None, None
+
+
+def _small_vision_plan(total_mb: int, monitor: bool) -> tuple:
+    """(model, num_ctx, memory_gib) for Pictures on an 8 GB card: 8,192
+    tokens if it fits (the picture model's guessed size - see VISION_WEIGHTS_GIB),
+    else (None, None, None)."""
+    room = _room_gib(total_mb, monitor)
+    ctx = SMALL_MIN_CTX
+    need = _vision_gib(ctx)
+    if need <= room:
+        return VISION_MODEL, ctx, need
+    return None, None, None
+
+
+def _small_card_refusal(feature: str, card) -> Optional[str]:
+    """Why `feature` cannot run on this card, in words - or None when it can.
+    None for every card of 10 GiB and up (the full plan runs everything, as
+    before this was written), so nothing about a 10/11/12 GB card moves. For an
+    8 GB card: the arithmetic in the small-card plan's comment above."""
+    if card is None or not _is_small(card.total_mb):
+        return None
+    name = getattr(card, "name", "this card")
+    gb = _gb(card.total_mb)
+    mon = _shows_monitor(card)
+    if feature == "long_context":
+        return (f"the {name} ({gb}) holds no more conversation than your main card "
+                f"already does ({MAIN_CARD_CTX:,} tokens), so moving long "
+                f"conversations there would not help. A card with 10 GB or more can hold "
+                f"more")
+    if feature == "browser_control":
+        return (f"Browser control needs room for page after page of history, more than your "
+                f"main card has, and the {name} ({gb}) has no more than the main card. A "
+                f"card with 10 GB or more can do it")
+    if feature == "vision":
+        model, _, _ = _small_vision_plan(card.total_mb, mon)
+        if model is None:
+            room = _room_gib(card.total_mb, mon)
+            need = _vision_gib(SMALL_MIN_CTX)
+            return (f"the picture model needs about {need:.1f} GB and the {name} has about "
+                    f"{room:.1f} GB to spare after the desktop"
+                    f"{' and the monitor plugged into it' if mon else ''}"
+                    f" and a safety gap"
+                    + ("; plug the monitors into the main card and it may fit" if mon else ""))
+        return None
+    # learning, wiki: the 8B model at the largest context that fits.
+    model, _, _ = _small_8b_plan(card.total_mb, mon)
+    if model is None:
+        return (f"the {name} has too little memory left after the desktop"
+                f"{' and the monitor plugged into it' if mon else ''} and a safety gap "
+                f"({_room_gib(card.total_mb, mon):.1f} GB) for the 8B model at a useful "
+                f"conversation length")
+    return None
+
+
+def _unsupported(feature: str, det: dict, card=None) -> Optional[str]:
+    """Why `feature` cannot run on the second card (or on `card`, the third),
+    in words, or None. A chosen preset carries its own list (det["unsupported"],
+    set by _detect_preset); without one, the card's own size decides."""
+    if det.get("_plan") is not None:
+        return (det.get("unsupported") or {}).get(feature)
+    target = card if card is not None else det.get("_second")
+    return _small_card_refusal(feature, target)
+
+
+def _long_context_plan(total_mb: int, monitor: bool = False) -> tuple:
+    """(model, num_ctx, memory_gib) for a second card with this much memory.
+    From 10,240 MiB up, LONG_BIG/LONG_SMALL exactly as before; under it, the
+    small-card plan (which may be (None, None, None) - nothing fits)."""
+    if _is_small(total_mb):
+        return _small_8b_plan(total_mb, monitor)
     return LONG_BIG if total_mb >= BIG_TOTAL_MB else LONG_SMALL
+
+
+def _lane_ctx(card) -> int:
+    """The context the lane's own OLLAMA_CONTEXT_LENGTH is set to, from the
+    card's size. Each model call also names its own num_ctx (a feature's
+    Lane carries it), so on an 8 GB card, where Pictures runs at 8,192 beside
+    the 8B model's 16,384, this is only the default."""
+    plan = _long_context_plan(card.total_mb, _shows_monitor(card))
+    return int(plan[1]) if plan and plan[1] else SMALL_MIN_CTX
 
 
 def _vision_gib(num_ctx: int) -> float:
@@ -1225,7 +1489,8 @@ def _vision_gib(num_ctx: int) -> float:
 
 
 def _feature_model(feature: str, det: dict, card=None) -> tuple:
-    """(model, num_ctx, memory_gib) - all None without a capable card.
+    """(model, num_ctx, memory_gib) - all None without a capable card, or for
+    a feature the card cannot run (an 8 GB card and "Longer conversations").
 
     `card` (2026-09-28): a specific jarvis_compute Device to size the plan
     from, instead of det["_second"] - used by the third card's own lane
@@ -1244,6 +1509,13 @@ def _feature_model(feature: str, det: dict, card=None) -> tuple:
     target = card if card is not None else det.get("_second")
     if target is None:
         return None, None, None
+    monitor = _shows_monitor(target)
+    if _is_small(target.total_mb):
+        if _small_card_refusal(feature, target) is not None:
+            return None, None, None
+        if feature == "vision":
+            return _small_vision_plan(target.total_mb, monitor)
+        return _small_8b_plan(target.total_mb, monitor)
     model, ctx, gib = _long_context_plan(target.total_mb)
     if feature == "vision":
         return VISION_MODEL, ctx, _vision_gib(ctx)
@@ -1258,6 +1530,26 @@ def _combined_rows(det: dict) -> tuple:
     prim = next((r for r in rows if r.get("role") == "primary"), None)
     second = next((r for r in rows if r.get("role") == "second"), None)
     return prim, second
+
+
+def _combined_alone_note(det: dict) -> str:
+    """One sentence when the SECOND card alone has room for COMBINED_MODEL (a
+    16 or 24 GB card, 2026-09-30): "One bigger model on both cards" is meant
+    for a model bigger than either card holds alone, so there splitting it
+    across both only adds the slower card's pace. "" otherwise. Not a refusal:
+    the owner may still want it, and the switch and its card are unchanged."""
+    try:
+        _, second = _combined_rows(det)
+        total = int((second or {}).get("total_mb") or 0)
+        model, ctx, gib = COMBINED_MODEL
+        need = round(gib - 0.57, 2)     # one card's runtime, not two (12.28 - 1.20 + 0.63)
+        if total and _room_gib(total, False) >= need:
+            return (f"The {second.get('name')} ({_gb(total)}) alone has room for {model}, so "
+                    f"splitting it across both cards is not needed for size and can only slow "
+                    f"it down to the slower card's pace.")
+    except Exception:
+        pass
+    return ""
 
 
 def _combined_capable(det: dict) -> tuple:
@@ -1737,12 +2029,47 @@ _COMBINED_LANE = _LaneProcess("combined")
 _THIRD_LANE = _LaneProcess("third")
 
 
+def _third_feature_now(sw: dict, det: dict) -> Optional[str]:
+    """Which feature runs on the third card RIGHT NOW: the stored assignment,
+    but only while the card in the third slot is the very card the owner
+    approved it for (2026-09-30). None when there is no third card, under a
+    preset, when nothing is assigned, when the card in the slot is a different
+    one (swapped, moved to another slot, another added), or when the saved file
+    has no card id (it is from before the id was kept: ask again). The choice
+    stays SAVED in every one of those cases - it is just not acted on, so a
+    lane never starts on a card the owner did not approve."""
+    third = det.get("_third")
+    feature = sw.get("third_feature")
+    if third is None or det.get("_main") or not feature:
+        return None
+    saved = str(sw.get("third_card") or "").strip().lower()
+    if not saved or saved != str(getattr(third, "uuid", "") or "").strip().lower():
+        return None
+    return feature
+
+
+def _third_stale_why(sw: dict, det: dict) -> str:
+    """In words, why a SAVED third-card assignment is not being acted on, or ""
+    when it is being acted on (or nothing is saved / no third card)."""
+    third = det.get("_third")
+    feature = sw.get("third_feature")
+    if third is None or det.get("_main") or not feature or _third_feature_now(sw, det):
+        return ""
+    name = f"\"{_BY_ID[feature]['name']}\""
+    if not str(sw.get("third_card") or "").strip():
+        return (f"{name} was moved to the third card before Jarvis kept track of which card you "
+                f"approved. Your choice is kept, but to be safe nothing runs on the {third.name} "
+                f"until you approve the move again.")
+    return (f"{name} was moved to a different graphics card than the one in the third slot now "
+            f"(the {third.name}). Your choice is kept, but nothing runs on the {third.name} "
+            f"until you approve moving it there.")
+
+
 def _on_third(feature: str, sw: dict, det: dict) -> bool:
     """Is `feature` moved onto a third card RIGHT NOW (a capable third card
-    is here, this is not a preset, and the switch points at it)? Module
-    docstring's "A THIRD CARD'S OWN LANE" section."""
-    return bool(det.get("_third") is not None and not det.get("_main")
-                and sw.get("third_feature") == feature)
+    is here, this is not a preset, the switch points at it, and it is the card
+    the owner approved)? Module docstring's "A THIRD CARD'S OWN LANE"."""
+    return _third_feature_now(sw, det) == feature
 
 
 def _wanted(sw: dict, det: dict) -> bool:
@@ -1755,9 +2082,11 @@ def _wanted(sw: dict, det: dict) -> bool:
                         for f in FEATURE_IDS))
 
 
-def _feature_active(feature: str, sw: dict, det: dict) -> bool:
+def _feature_active(feature: str, sw: dict, det: dict, card=None) -> bool:
+    """`card`: the third card, when asking whether the feature can run THERE
+    (its own size decides for an 8 GB card); None means the second card."""
     return bool(det.get("capable") and sw["master"] and sw["features"].get(feature)
-                and feature not in (det.get("unsupported") or {})
+                and _unsupported(feature, det, card) is None
                 and all(sw["features"].get(d) for d in _BY_ID[feature]["needs"]))
 
 
@@ -1798,7 +2127,7 @@ def _reconcile(sw: dict, det: dict) -> None:
             return
         if _wanted(sw, det):
             second = det["_second"]
-            _, ctx, _ = _long_context_plan(second.total_mb)
+            ctx = _lane_ctx(second)
             plan = det.get("_plan")
             fit = None
             if plan is not None:
@@ -1899,23 +2228,25 @@ def _reconcile_third(sw: dict, det: dict) -> None:
                 _THIRD_LANE.why = _ASLEEP["why"]
             return
         third = det.get("_third")
-        feature = sw.get("third_feature")
+        feature = _third_feature_now(sw, det)
         if third is None or not feature or feature not in _BY_ID:
             why = ("no capable third graphics card" if third is None
-                   else "no feature is assigned to the third card")
+                   else _third_stale_why(sw, det) or "no feature is assigned to the third card")
             if _THIRD_LANE.state != "off" or _THIRD_LANE.proc is not None:
                 _THIRD_LANE.stop(why)
             else:
                 _THIRD_LANE.why = why
             return
-        if not _feature_active(feature, sw, det):
-            why = f"\"{_BY_ID[feature]['name']}\" is off"
+        if not _feature_active(feature, sw, det, card=third):
+            refused = _unsupported(feature, det, third)
+            why = (f"\"{_BY_ID[feature]['name']}\" cannot run on this card: {refused}"
+                   if refused else f"\"{_BY_ID[feature]['name']}\" is off")
             if _THIRD_LANE.state != "off" or _THIRD_LANE.proc is not None:
                 _THIRD_LANE.stop(why)
             else:
                 _THIRD_LANE.why = why
             return
-        _, ctx, _ = _feature_model(feature, det, card=third)
+        ctx = _lane_ctx(third)
         ours = (_THIRD_LANE.state in ("starting", "running") and _THIRD_LANE.uuid == third.uuid
                 and _THIRD_LANE.alive())
         if not ours:
@@ -2079,10 +2410,10 @@ def lane_for(feature: str) -> Optional[Lane]:
         det = detect()
         _reconcile(sw, det)
         _reconcile_third(sw, det)
-        if not det.get("capable") or feature in (det.get("unsupported") or {}):
-            return None
         third = det.get("_third")
-        on_third = third is not None and not det.get("_main") and sw.get("third_feature") == feature
+        on_third = _on_third(feature, sw, det)
+        if not det.get("capable") or _unsupported(feature, det, third if on_third else None):
+            return None
         model, ctx, _ = _feature_model(feature, det, card=third if on_third else None)
         if on_third:
             # Moved onto the third card (2026-09-28) - runs alongside the
@@ -2370,11 +2701,12 @@ def _feature_row(f: dict, sw: dict, det: dict, lane_state: str, lane_why: str,
     available = bool(active and running and installed is True)
     missing = [d for d in f["needs"] if not sw["features"].get(d)]
     names = ", ".join(_BY_ID[d]["name"] for d in missing)
-    unsupported = (det.get("unsupported") or {}).get(fid)
+    unsupported = _unsupported(fid, det)
     if unsupported and det.get("capable"):
         why = (f"{'On' if enabled else 'Off'}, but {unsupported}. "
-               + ("Your choice is kept." if enabled else "It cannot be turned on with this "
-                  "preset."))
+               + ("Your choice is kept." if enabled else
+                  ("It cannot be turned on with this preset." if det.get("_plan") is not None
+                   else "It cannot be turned on with this card.")))
     elif not det.get("capable"):
         if enabled:
             why = (f"On, but it cannot run: {det['why']}. Your choice is kept; it works "
@@ -2517,27 +2849,36 @@ def _third_status(sw: dict, det: dict, pending: list) -> dict:
     third = det.get("_third")
     capable = third is not None and not det.get("_main")
     card = _card_summary(third) if capable else None
-    assigned = sw.get("third_feature")
+    # The SAVED choice, and the one being acted on (2026-09-30: only while the
+    # card in the third slot is the one the owner approved it for).
+    saved = sw.get("third_feature")
+    assigned = _third_feature_now(sw, det)
+    stale = _third_stale_why(sw, det) if capable else ""
     lane = _THIRD_LANE
     running = lane.state == "running"
     model = ctx = gib = installed = None
     if not capable:
         why = "No capable third graphics card is plugged in right now."
-        if assigned:
-            why = (f"\"{_BY_ID[assigned]['name']}\" was moved here, but there is no capable "
+        if saved:
+            why = (f"\"{_BY_ID[saved]['name']}\" was moved here, but there is no capable "
                    f"third card right now: {det.get('why') or 'no capable third card.'} Your "
                    f"choice is kept.")
     elif not assigned:
         why = (f"Not running anything. Assign one of the switches above to the {third.name} "
                f"to use it.")
+        if stale:
+            why = stale
         if "third" in pending:
             why = "A card to move a feature here is waiting for your answer."
     else:
         f = _BY_ID[assigned]
-        active = _feature_active(assigned, sw, det)
+        active = _feature_active(assigned, sw, det, card=third)
         model, ctx, gib = _feature_model(assigned, det, card=third)
         installed = _model_installed_on(model, lane.url()) if running else None
-        if not active:
+        refused = _unsupported(assigned, det, third)
+        if refused:
+            why = f"\"{f['name']}\" is assigned here, but it cannot run on this card: {refused}."
+        elif not active:
             why = f"\"{f['name']}\" is assigned here, but it is off. Turn it on above to use it."
         elif not running:
             why = f"On. The third copy of Ollama is {lane.state}: {lane.why}"
@@ -2549,12 +2890,20 @@ def _third_status(sw: dict, det: dict, pending: list) -> dict:
         else:
             why = (f"Working: {model} on the {third.name}, with room for {ctx:,} tokens - at "
                    f"the same time as the second card's own lane.")
+    unavailable = ({f: _small_card_refusal(f, third) for f in FEATURE_IDS
+                    if _small_card_refusal(f, third)} if capable and det.get("_plan") is None
+                   else {})
     return {"capable": capable, "card": card, "assigned": assigned,
             # Which switches could be moved here right now - already ON,
             # so assigning them never turns anything on as a side effect
             # (module docstring: the assignment card only ever says WHERE).
+            # Not one this card cannot run (an 8 GB card and "Longer
+            # conversations" - 2026-09-30).
             "assignable": [f for f in FEATURE_IDS
-                           if sw["master"] and sw["features"].get(f)],
+                           if sw["master"] and sw["features"].get(f) and f not in unavailable],
+            # Additive (2026-09-30): {feature: why} for a switch this card
+            # cannot run. The apps do not need it; it is here to be read.
+            "unavailable": unavailable,
             "pending": "third" in pending,
             "lane": {"state": lane.state, "why": lane.why},
             "model": model, "context": ctx, "memory_gib": gib, "model_installed": installed,
@@ -2647,7 +2996,7 @@ def _shares_with_big_model() -> str:
             "until it stops.")
 
 
-def _would_work(feature: str, sw: dict) -> list:
+def _would_work(feature: str, sw: dict, det: Optional[dict] = None) -> list:
     """The features that are working once `feature` is turned on, given the
     owner's other switches as they are - every choice is kept while the
     main switch or a feature it needs is off, so approving one card can
@@ -2657,15 +3006,16 @@ def _would_work(feature: str, sw: dict) -> list:
         after["master"] = True
     else:
         after["features"][feature] = True
-    ok = {"capable": True}
+    ok = det if det is not None else {"capable": True}
     return [f for f in FEATURE_IDS if _feature_active(f, after, ok)]
 
 
-def _brings_browser(feature: str, sw: dict) -> bool:
+def _brings_browser(feature: str, sw: dict, det: Optional[dict] = None) -> bool:
     """Does saying yes to `feature`'s card start "Browser control" working
     (it was not before)? Then the card must not say nothing leaves."""
-    return ("browser_control" in _would_work(feature, sw)
-            and not _feature_active("browser_control", sw, {"capable": True}))
+    ok = det if det is not None else {"capable": True}
+    return ("browser_control" in _would_work(feature, sw, det)
+            and not _feature_active("browser_control", sw, ok))
 
 
 def _names(ids: list) -> str:
@@ -2693,7 +3043,7 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
             lane += (" There is not room for both at once: a message with a picture unloads "
                      "chat for a moment, and chat loads again on your next message (a few "
                      "seconds each way).")
-    if _brings_browser(feature, sw):
+    if _brings_browser(feature, sw, det):
         # AP-9: not "Nothing leaves this PC". The model stays here; the
         # browser tool it offers works real web pages.
         lane += (" \"Browser control\" also lets Jarvis offer to work web pages in your "
@@ -2708,7 +3058,7 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
         head = (f"Let Jarvis run extra models beside chat on the {s['name']}, as the setup you "
                 f"chose says?")
     if feature == "master":
-        back = _would_work("master", sw)
+        back = _would_work("master", sw, det)
         if back:
             yes = (f"If you say yes: {_names(back)} start{'s' if len(back) == 1 else ''} "
                    f"working again at once - you left "
@@ -2732,11 +3082,17 @@ def describe_on(feature: str, det: dict, sw: Optional[dict] = None) -> str:
               if feature == "vision" else ""))
     installed = _model_installed(model)
     inst = ""
+    if det.get("_plan") is None and _is_small(s["total_mb"]):
+        # An 8 GB card (2026-09-30): the numbers are arithmetic, and thin.
+        inst += ("\n\nThis card has 8 GB, so the room is tight. The memory figure above is "
+                 "calculated from the model's size, not measured on this card - the second "
+                 "card's real use has not been measured yet. If answers get slow, the model "
+                 "may not fully fit.")
     if installed is False:
-        inst = (f"\n\n{model} is not installed yet. The switch will be on, but the "
-                f"feature waits until it is installed.")
-    ok = {"capable": True}
-    also = [x for x in _would_work(feature, sw)
+        inst += (f"\n\n{model} is not installed yet. The switch will be on, but the "
+                 f"feature waits until it is installed.")
+    ok = det
+    also = [x for x in _would_work(feature, sw, det)
             if x != feature and not _feature_active(x, sw, ok)]
     if also:
         one = len(also) == 1
@@ -2767,6 +3123,8 @@ def describe_third_assign(feature: str, det: dict) -> str:
     scard = (det.get("second") or {}).get("name", "the second card")
     model, ctx, gib = _feature_model(feature, det, card=third)
     mem = f"about {gib:.1f} GB of the card's {_gb(third.total_mb)}" if gib else "an unknown amount"
+    if _is_small(third.total_mb):
+        mem += " (calculated from the model's size, not measured - the card is tight at 8 GB)"
     installed = _model_installed_on(model, _THIRD_LANE.url()) \
         if _THIRD_LANE.state == "running" else _model_installed_on(model, _main_ollama_url())
     inst = ""
@@ -2778,7 +3136,8 @@ def describe_third_assign(feature: str, det: dict) -> str:
         f"What it does: {_what(f, det)}\n\n"
         f"Which card: {tcard} - instead of {scard}, where it runs today.\n"
         f"Which model: {model}, with room for {ctx:,} tokens - {mem}.\n\n"
-        f"Jarvis starts a fourth copy of Ollama that uses only that card and listens on "
+        f"Jarvis starts one more copy of Ollama, separate from your everyday one and from "
+        f"the second card's, that uses only that card and listens on "
         f"{HOST}:{_third_port()} - this PC only, not your network or the internet. Nothing "
         f"leaves this PC. It runs AT THE SAME TIME as the second card's own copy: the two "
         f"cards work independently, one feature on each.{inst}\n\n"
@@ -2800,6 +3159,10 @@ def _decide_third(feature: str, pid: str, gate: Callable, tier_of: Callable) -> 
     if not cur["master"] or not cur["features"].get(feature):
         return _finish("third", pid, "refused",
                        f"\"{_BY_ID[feature]['name']}\" is not on")
+    refused = _small_card_refusal(feature, third)
+    if refused:
+        return _finish("third", pid, "refused",
+                       f"\"{_BY_ID[feature]['name']}\" cannot run on the {third.name}: {refused}")
     text = describe_third_assign(feature, det)
     model, ctx, gib = _feature_model(feature, det, card=third)
     detail = {"text": text, "what": f"move a second-card feature to the third graphics card: "
@@ -2835,9 +3198,16 @@ def _decide_third(feature: str, pid: str, gate: Callable, tier_of: Callable) -> 
         return _finish("third", pid, "refused",
                        f"\"{_BY_ID[feature]['name']}\" was turned off while the card waited", rid)
     det2 = detect(fresh=True)
-    if det2.get("_third") is None:
+    third2 = det2.get("_third")
+    if third2 is None:
         return _finish("third", pid, "refused", "the third card is not there any more", rid)
-    err = _write_third(feature)
+    if str(third2.uuid or "").lower() != str(third.uuid or "").lower():
+        # The card in the third slot changed while the card waited: the owner
+        # approved the OTHER one (2026-09-30), so nothing is saved.
+        return _finish("third", pid, "refused",
+                       "the graphics card in the third slot changed while the card waited, "
+                       "so what you approved no longer matches - ask again", rid)
+    err = _write_third(feature, third.uuid)
     if err:
         return _finish("third", pid, "failed", err, rid)
     _finish("third", pid, "enabled", "", rid)
@@ -2876,7 +3246,8 @@ def _request_change_third(assign: Optional[str], gate: Callable, tier_of: Callab
         return 400, {"error": f"there is no second-card feature called {str(assign)[:40]!r}"}
     label = f"\"{_BY_ID[assign]['name']}\""
     sw = _read_switches()
-    if sw.get("third_feature") == assign:
+    det0 = detect()
+    if _third_feature_now(sw, det0) == assign:
         return 200, {"ok": True, "assigned": assign, "pending": False,
                      "message": f"{label} is already on the third card."}
     if not sw["master"] or not sw["features"].get(assign):
@@ -2891,6 +3262,9 @@ def _request_change_third(assign: Optional[str], gate: Callable, tier_of: Callab
     third = det.get("_third")
     if third is None:
         return 503, {"error": "there is no capable third graphics card right now."}
+    refused = _small_card_refusal(assign, third)
+    if refused:
+        return 503, {"error": f"{label} cannot run on the {third.name}: {refused}."}
     held = big_model_holds(third.uuid, third.name)
     if held:
         return 409, {"error": f"Not now: {held}."}
@@ -2921,7 +3295,7 @@ def _request_change_third(assign: Optional[str], gate: Callable, tier_of: Callab
     except Exception:
         _finish("third", pid, "failed", "could not start")
         return 503, {"error": "could not raise the approval card"}
-    return 200, {"ok": True, "assigned": sw.get("third_feature"), "pending": True,
+    return 200, {"ok": True, "assigned": _third_feature_now(sw, det), "pending": True,
                  "message": ("Approve the card on your PC or phone to move it. "
                              "Nothing changes until you do.")}
 
@@ -2990,9 +3364,12 @@ def _decide(feature: str, pid: str, gate: Callable, tier_of: Callable) -> None:
     det = detect()
     if not det.get("capable"):
         return _finish(feature, pid, "refused", det.get("why", ""))
+    refused = _unsupported(feature, det) if feature != "master" else None
+    if refused:
+        return _finish(feature, pid, "refused", f"it cannot run on this card: {refused}")
     text = describe_on(feature, det)
     model, ctx, gib = _feature_model(feature, det) if feature != "master" else (None, None, None)
-    web = _brings_browser(feature, _read_switches())
+    web = _brings_browser(feature, _read_switches(), det)
     detail = {"text": text, "what": f"turn on the second graphics card: {feature}",
               "feature": feature, "card": det["second"]["name"],
               "card_id": det["second"]["uuid"], "model": model, "memory_gib": gib,
@@ -3076,8 +3453,9 @@ def _describe_combined(det: dict, why: str = "") -> str:
         f"Nothing leaves this PC.\n\n"
         f"Ollama splits the model by how much FREE memory each card has right now, not by "
         f"how fast each card is - so most of the model can land on the bigger, slower card. "
+        + (_combined_alone_note(det) + " " if _combined_alone_note(det) else "") +
         f"Every answer then runs at roughly that card's pace. Real speed is not measured yet: "
-        f"the second card is not installed.\n\n"
+        f"the extra card is not installed yet.\n\n"
         f"This uses both cards for the one model, so it cannot run at the same time as the "
         f"second card's other features (Longer conversations, Pictures, Learning in the "
         f"background, Browser control, Wiki builder) - turn those off first, or this stays "
@@ -3478,8 +3856,9 @@ def request_change(feature: str, enabled: bool = False, *, assign: Optional[str]
     det = detect(fresh=True)
     if not det.get("capable"):
         return 503, {"error": f"{label} cannot be turned on: {det.get('why')}."}
-    if feature in (det.get("unsupported") or {}):
-        return 503, {"error": f"{label} cannot be turned on: {det['unsupported'][feature]}."}
+    refused = _unsupported(feature, det)
+    if refused:
+        return 503, {"error": f"{label} cannot be turned on: {refused}."}
     if feature != "master":
         if not sw["master"]:
             return 400, {"error": "Turn on the second graphics card itself first "

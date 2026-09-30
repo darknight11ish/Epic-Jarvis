@@ -1235,8 +1235,8 @@ class Live:
 # there is no passing result, so this is false and cheap (one folder read).
 
 PHOTO_TEST_DIR_NAME = "photo-test"
-CAMERA_NEEDS = ("The camera needs the second graphics card (the 12 GB one) and a passed photo "
-                "test on this PC. Until then it stays off.")
+CAMERA_NEEDS = ("The camera needs an extra graphics card with its Pictures switch on and a "
+                "passed photo test on this PC. Until then it stays off.")
 
 
 def _config_dir() -> Path:

@@ -102,6 +102,7 @@ import com.jarvis.client.ui.screens.PairingScreen
 import com.jarvis.client.ui.screens.ReadinessScreen
 import com.jarvis.client.ui.screens.SecurityScreen
 import com.jarvis.client.ui.screens.SettingsScreen
+import com.jarvis.client.ui.screens.WakeWordSwitchesCard
 import com.jarvis.client.ui.screens.VoiceCheckScreen
 import com.jarvis.client.ui.screens.VoiceTrainingScreen
 import com.jarvis.client.ui.screens.VoicesScreen
@@ -209,7 +210,7 @@ class MainActivity : FragmentActivity() {
      */
     private val resumeListeningRequestedAt = mutableStateOf<Long?>(null)
 
-    /** Why listening could not be started from the restart notice; shown once on Checks. */
+    /** Why listening could not be started from the restart notice; shown once in Settings, Voice. */
     private val resumeListeningNotice = mutableStateOf<String?>(null)
 
     /** An empty tile slot was tapped - see [readTileSettingsIntent]. Consumed once. */
@@ -600,16 +601,32 @@ class MainActivity : FragmentActivity() {
      * start Live - the owner's own tap - once the app is unlocked.
      */
     private fun readLiveIntent(intent: Intent?, fresh: Boolean = true) {
-        when (intent?.action) {
-            ACTION_OPEN_LIVE -> openLiveRequested.value = true
-            ACTION_START_LIVE -> if (fresh) startLiveRequested.value = "start" else openLiveRequested.value = true
-            ACTION_RESUME_LIVE -> if (fresh) startLiveRequested.value = "resume" else openLiveRequested.value = true
+        // MainActivity is exported, so any app can send these actions. START
+        // and RESUME need this app's own proof (InternalLaunch); without it
+        // they only open the Live screen, where the owner presses Start.
+        val what = InternalLaunch.decide(
+            intent?.action,
+            intent?.getStringExtra(InternalLaunch.EXTRA_PROOF),
+            InternalLaunch.token(this),
+            fresh,
+        )
+        when (what) {
+            InternalLaunch.Launch.OPEN_LIVE_SCREEN -> openLiveRequested.value = true
+            InternalLaunch.Launch.START_LIVE -> startLiveRequested.value = "start"
+            InternalLaunch.Launch.RESUME_LIVE -> startLiveRequested.value = "resume"
+            else -> Unit
         }
     }
 
-    /** The "a website needs you" alert: the Solve it here screen (behind the app lock, as ever). */
+    /** The "a website needs you" alert: the Solve it here screen (behind the app lock, as ever). Needs this app's own proof. */
     private fun readHandoffIntent(intent: Intent?) {
-        if (intent?.action != ACTION_OPEN_HANDOFF) return
+        val what = InternalLaunch.decide(
+            intent?.action,
+            intent?.getStringExtra(InternalLaunch.EXTRA_PROOF),
+            InternalLaunch.token(this),
+            true,
+        )
+        if (what != InternalLaunch.Launch.OPEN_HANDOFF) return
         openHandoffRequested.value = true
     }
 
@@ -656,6 +673,110 @@ class MainActivity : FragmentActivity() {
      * actually rolling over while the app sits open past midnight.
      */
     private fun todayLocal(): String = java.time.LocalDate.now().toString()
+
+    /**
+     * The "hey Jarvis" switches, for Settings, Voice. They used to sit on
+     * Platform checks (settings audit, 2026-09-30, "move them and add a jump
+     * list"): a desktop with the same list keeps them in Settings, Voice, and a
+     * check is something to read, not a place to change how Jarvis listens.
+     * Everything here is what that branch already did - the same calls, the same
+     * approval card for turning the desktop's switch on, the same "off is at once".
+     */
+    @Composable
+    private fun VoiceSwitches() {
+        val voice = JarvisRuntime.voice
+        val voiceStatus by voice.status.collectAsState()
+        val wakeWord by voice.wakeWord.collectAsState()
+        val phoneListening by WakeWordService.state.collectAsState()
+        val interruptChoice by JarvisRuntime.settings.interrupt.collectAsState()
+        val oneMomentOn by JarvisRuntime.settings.oneMoment.collectAsState()
+        val heardSoundOn by JarvisRuntime.settings.heardSound.collectAsState()
+        // Asked once: whether this phone has an echo canceller at all. It
+        // decides the barge-in default.
+        val echoCanceller = remember {
+            runCatching { AcousticEchoCanceler.isAvailable() }.getOrDefault(false)
+        }
+        var wakeBusy by remember { mutableStateOf(false) }
+        var wakeNotice by remember { mutableStateOf<String?>(null) }
+        // Why the restart notice could not start listening (data/WakeResume.kt):
+        // shown once, under the switch.
+        LaunchedEffect(resumeListeningNotice.value) {
+            resumeListeningNotice.value?.let {
+                wakeNotice = it
+                resumeListeningNotice.value = null
+            }
+        }
+        // The desktop's switch went off (from here, the desktop, or a restart):
+        // this phone stops too. The listener also checks for itself every few
+        // minutes.
+        LaunchedEffect(wakeWord) {
+            if (wakeWord == WakeWord.OFF && WakeWordService.state.value.on) {
+                WakeWordService.stop(this@MainActivity)
+            }
+        }
+        // Asked on arrival: a stale answer is the wrong thing to be reassured by.
+        LaunchedEffect(Unit) { voice.refreshStatus() }
+
+        WakeWordSwitchesCard(
+            state = wakeWord,
+            busy = wakeBusy,
+            notice = wakeNotice,
+            onTurnOff = {
+                if (!wakeBusy) {
+                    wakeBusy = true
+                    wakeNotice = null
+                    // This phone first: off must never wait on the network to
+                    // close a microphone.
+                    WakeWordService.stop(this@MainActivity)
+                    lifecycleScope.launch {
+                        wakeNotice = voice.setWakeWord(false)
+                        wakeBusy = false
+                    }
+                }
+            },
+            onRecheck = {
+                if (!wakeBusy) {
+                    wakeBusy = true
+                    lifecycleScope.launch {
+                        voice.refreshStatus()
+                        wakeBusy = false
+                    }
+                }
+            },
+            // Raises the approval card; turns nothing on.
+            onTurnOn = {
+                if (!wakeBusy) {
+                    wakeBusy = true
+                    wakeNotice = null
+                    lifecycleScope.launch {
+                        wakeNotice = voice.setWakeWord(true)
+                        wakeBusy = false
+                    }
+                }
+            },
+            pending = voiceStatus.listening.wakeWordPending,
+            phone = phoneListening,
+            onPhone = { on ->
+                if (on) {
+                    wakeNotice = startPhoneListening()
+                } else {
+                    WakeWordService.stop(this@MainActivity)
+                }
+            },
+            interrupt = interruptChoice,
+            bargeInEchoCanceller = echoCanceller,
+            // A setting on this phone only: it changes when the phone listens,
+            // never what the desktop allows.
+            onInterrupt = { v -> JarvisRuntime.settings.setInterrupt(v) },
+            // Also this phone's own: whether "One moment." is played when a tool
+            // starts during a spoken question.
+            oneMoment = oneMomentOn,
+            onOneMoment = { on -> JarvisRuntime.settings.setOneMoment(on) },
+            // And whether the "I heard you" sound plays.
+            heardSound = heardSoundOn,
+            onHeardSound = { on -> JarvisRuntime.settings.setHeardSound(on) },
+        )
+    }
 
     @Composable
     private fun App() {
@@ -1557,10 +1678,13 @@ class MainActivity : FragmentActivity() {
                 if (why == null) {
                     JarvisRuntime.setNotice(com.jarvis.client.data.WakeResume.BACK_ON)
                 } else {
-                    // Checks, where the switch is, with the reason under it.
+                    // Settings, Voice, where the switch is (moved there from
+                    // Checks, 2026-09-30), with the reason under it.
                     resumeListeningNotice.value = why
+                    pendingSection = "voice"
+                    pendingSectionScreen = Screen.SETTINGS.name
                     nav.resetTo(Screen.HOME)
-                    nav.go(Screen.CHECKS)
+                    nav.go(Screen.SETTINGS)
                 }
             }
         }
@@ -1812,24 +1936,6 @@ class MainActivity : FragmentActivity() {
                         val wakeWord by voice.wakeWord.collectAsState()
                         val voiceAnswered by voice.answered.collectAsState()
                         val phoneListening by WakeWordService.state.collectAsState()
-                        val interruptChoice by JarvisRuntime.settings.interrupt.collectAsState()
-                        val oneMomentOn by JarvisRuntime.settings.oneMoment.collectAsState()
-                        val heardSoundOn by JarvisRuntime.settings.heardSound.collectAsState()
-                        // Asked once: whether this phone has an echo canceller
-                        // at all. It decides the barge-in default.
-                        val echoCanceller = remember {
-                            runCatching { AcousticEchoCanceler.isAvailable() }.getOrDefault(false)
-                        }
-                        var wakeBusy by remember { mutableStateOf(false) }
-                        var wakeNotice by remember { mutableStateOf<String?>(null) }
-                        // Why the restart notice could not start listening
-                        // (data/WakeResume.kt): shown once, under the switch.
-                        LaunchedEffect(resumeListeningNotice.value) {
-                            resumeListeningNotice.value?.let {
-                                wakeNotice = it
-                                resumeListeningNotice.value = null
-                            }
-                        }
                         // The desktop's switch went off (from here, the
                         // desktop, or a restart): this phone stops too. The
                         // listener also checks for itself every few minutes.
@@ -1871,61 +1977,17 @@ class MainActivity : FragmentActivity() {
                                 }
                             },
                             wakeWord = wakeWord,
-                            wakeWordBusy = wakeBusy,
-                            wakeWordNotice = wakeNotice,
-                            onWakeWordOff = {
-                                if (!wakeBusy) {
-                                    wakeBusy = true
-                                    wakeNotice = null
-                                    // This phone first: off must never wait on
-                                    // the network to close a microphone.
-                                    WakeWordService.stop(this@MainActivity)
-                                    lifecycleScope.launch {
-                                        wakeNotice = voice.setWakeWord(false)
-                                        wakeBusy = false
-                                    }
-                                }
-                            },
-                            // Raises the approval card; turns nothing on.
-                            onWakeWordOn = {
-                                if (!wakeBusy) {
-                                    wakeBusy = true
-                                    wakeNotice = null
-                                    lifecycleScope.launch {
-                                        wakeNotice = voice.setWakeWord(true)
-                                        wakeBusy = false
-                                    }
-                                }
-                            },
                             wakeWordPending = voiceStatus.listening.wakeWordPending,
                             phoneListening = phoneListening,
-                            interrupt = interruptChoice,
-                            bargeInEchoCanceller = echoCanceller,
-                            // A setting on this phone only: it changes when the
-                            // phone listens, never what the desktop allows.
-                            onInterrupt = { v -> JarvisRuntime.settings.setInterrupt(v) },
-                            // Also this phone's own: whether "One moment." is
-                            // played when a tool starts during a spoken question.
-                            oneMoment = oneMomentOn,
-                            onOneMoment = { on -> JarvisRuntime.settings.setOneMoment(on) },
-                            // And whether the "I heard you" sound plays.
-                            heardSound = heardSoundOn,
-                            onHeardSound = { on -> JarvisRuntime.settings.setHeardSound(on) },
-                            onPhoneListening = { on ->
-                                if (on) {
-                                    wakeNotice = startPhoneListening()
-                                } else {
-                                    WakeWordService.stop(this@MainActivity)
-                                }
-                            },
-                            onRecheckWakeWord = {
-                                if (!wakeBusy) {
-                                    wakeBusy = true
-                                    lifecycleScope.launch {
-                                        voice.refreshStatus()
-                                        wakeBusy = false
-                                    }
-                                }
+                            // The switches (turn "hey Jarvis" on or off, Listen on
+                            // this phone, interrupting, "One moment", the "I heard
+                            // you" sound) moved to Settings, Voice, with the other
+                            // voice settings (settings audit, 2026-09-30); Checks
+                            // keeps the status and this button.
+                            onOpenVoiceSettings = {
+                                pendingSection = "voice"
+                                pendingSectionScreen = Screen.SETTINGS.name
+                                nav.go(Screen.SETTINGS)
                             },
                             modifier = root,
                             // The saved host, not the typed one: this card is about
@@ -2436,6 +2498,8 @@ class MainActivity : FragmentActivity() {
                             notice = securityNotice.value,
                             onDismissNotice = { securityNotice.value = null },
                             modifier = root,
+                            initialSection = sectionFor(Screen.SECURITY),
+                            onSectionConsumed = sectionConsumed,
                         )
                     }
 
@@ -2450,6 +2514,21 @@ class MainActivity : FragmentActivity() {
                         // it), so a later manual visit to Settings does not
                         // scroll anywhere on its own.
                         onSectionConsumed = sectionConsumed,
+                        // Picture mode's button to the Looking at your screen
+                        // switch, which is on the Security screen.
+                        onOpenLookSwitch = {
+                            pendingSection = "look"
+                            pendingSectionScreen = Screen.SECURITY.name
+                            nav.go(Screen.SECURITY)
+                        },
+                        // The "hey Jarvis" switches, moved here from Platform
+                        // checks (settings audit 2026-09-30): they need a
+                        // desktop, so only once paired.
+                        voiceSwitches = if (paired) {
+                            { VoiceSwitches() }
+                        } else {
+                            null
+                        },
                         // Same three ternaries as Screen.CHECKS above: null
                         // until this phone is paired.
                         onTrainVoice = if (paired) {

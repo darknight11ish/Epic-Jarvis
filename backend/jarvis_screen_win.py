@@ -194,7 +194,14 @@ def must_hide(w: dict, never, *, front_hwnd=None,
     import jarvis_screen as S            # the lists and the words live there
     exe = ntpath.basename(str(w.get("exe") or "")).lower()
     if not exe:
-        return False
+        # The program is unknown, so it cannot be checked against the list:
+        # when the owner has a list at all (or it cannot be read), a window
+        # that cannot be identified is painted black rather than shown. It
+        # was returned False here before - the one gap in "fail closed".
+        try:
+            return bool(getattr(never, "broken", False)) or bool(never.entries())
+        except Exception:
+            return True
     if never.has_program(exe) or exe in S.LOCK_EXES or exe in S.ADMIN_EXES:
         return True
     if front is not None and (exe in front.JARVIS_EXES

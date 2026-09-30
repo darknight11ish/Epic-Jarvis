@@ -92,6 +92,29 @@ class WebSearchTest {
         assertEquals("{\"searxng_url\":\"a\\\"b\"}", WebSearch.addressBody("a\"b"))
         assertNull(WebSearch.addressBody("x".repeat(201)))
         assertEquals("{\"ask_every_time\":false}", WebSearch.askBody(false))
+        assertEquals("{\"enabled\":false}", WebSearch.enabledBody(false))
+        assertEquals("{\"enabled\":true}", WebSearch.enabledBody(true))
+    }
+
+    @Test
+    fun `the on-off switch is read from the PC, on for an older PC`() {
+        assertTrue(view("default").enabled)
+        assertFalse(view("default").enableWaiting)
+        val off = view("switched_off")
+        assertFalse(off.enabled)
+        assertEquals(WebSearch.ENABLED_LABEL, off.enabledLabel)
+        assertTrue(off.enabledDetail.contains("approval card"))
+        assertTrue(view("switched_off_card_waiting").enableWaiting)
+        // An older PC sends no "enabled" at all: read as on, never as off.
+        val older = JsonObject(cases["default"]!!.jsonObject.filterKeys { it != "enabled" })
+        assertTrue(WebSearch.parse(older)!!.enabled)
+    }
+
+    @Test
+    fun `turning web search off is at once, back on waits for a card`() {
+        assertTrue(WebSearch.replyLine(post("post_enabled_off")).startsWith("Web search is off"))
+        assertTrue(WebSearch.replyLine(post("post_enabled_on")).startsWith("Waiting for your approval."))
+        assertTrue(WebSearch.OFF_LINE.contains("turn it back on"))
     }
 
     @Test

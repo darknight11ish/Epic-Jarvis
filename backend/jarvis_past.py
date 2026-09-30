@@ -49,6 +49,7 @@ Standard library only. Nothing here writes anything or logs any words.
 """
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import re
 import time
@@ -212,12 +213,15 @@ def when(text: str, now: Optional[float] = None) -> Optional[tuple]:
     elif _RX_LAST_MONTH.search(t):
         out = _month_window(y, mo - 1)
     elif _RX_LAST_WEEK.search(t):
-        today = _local(y, mo, lt.tm_mday)
-        monday = today - lt.tm_wday * 86400
-        # mktime for the day boundaries, not "- 7 * 86400": a week that
-        # crosses a clock change is 167 or 169 hours long.
-        s = time.localtime(monday - 7 * 86400 + 12 * 3600)
-        out = (_local(s.tm_year, s.tm_mon, s.tm_mday), monday)
+        # Calendar-date arithmetic, then mktime for each midnight: a day is
+        # not always 86,400 seconds (a week that crosses a clock change is 167
+        # or 169 hours long, and "today's midnight minus 6 x 86,400" landed an
+        # hour off - 23:00 the day before - on the Sunday after the clocks
+        # changed in a zone like Asia/Jerusalem).
+        monday_d = _dt.date(y, mo, lt.tm_mday) - _dt.timedelta(days=lt.tm_wday)
+        prev_d = monday_d - _dt.timedelta(days=7)
+        monday = _local(monday_d.year, monday_d.month, monday_d.day)
+        out = (_local(prev_d.year, prev_d.month, prev_d.day), monday)
     else:
         m = _RX_LAST_MONTH_NAME.search(t)
         if m:

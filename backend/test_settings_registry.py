@@ -141,6 +141,35 @@ def t_sections_match_the_real_ui():
     _check_settings_item_index(kt)
 
 
+def t_every_real_settings_card_is_listed():
+    """The other direction (settings audit 2026-09-30): "devices" and
+    "crash-notes" were real cards on the apps that "open ..." could not name.
+    Every top-level desktop card, and every phone Settings row, must be in
+    SECTIONS - or be one of the few named exceptions below."""
+    settings_html = (REPO / "jarvis-desktop" / "src" / "settings.html").read_text(encoding="utf-8")
+    # Cards only (nested <details> such as "link-tech" are parts of a card);
+    # "More options" is the one top-level <details>.
+    desktop_ids = set(re.findall(r'<section class="card"[^>]*\bid="([^"]+)"', settings_html))
+    desktop_ids.add("more-options")
+    kt = (REPO / "jarvis-client" / "app" / "src" / "main" / "java" / "com" / "jarvis" / "client"
+          / "ui" / "screens" / "SettingsScreen.kt").read_text(encoding="utf-8")
+    phone_keys = set(re.findall(r'item\(key\s*=\s*"([^"]+)"', kt))
+    listed = {s.id for s in R.SECTIONS}
+    # The phone's "appearance" row is the registry's "appearance-card"; "tail" is
+    # a spacer; "floating-avatar" and "voice-switches"/"jump-list" are rows of
+    # the same screen reached through Appearance / Voice / the top.
+    phone_ok = {"appearance", "tail", "floating-avatar", "jump-list"}
+    check("every desktop settings card is a SECTION",
+          not (desktop_ids - listed), sorted(desktop_ids - listed))
+    check("every phone Settings row is a SECTION (bar the named spacers)",
+          not (phone_keys - listed - phone_ok), sorted(phone_keys - listed - phone_ok))
+    for sid in ("devices", "crash-notes"):
+        check(f"'open {sid.replace('-', ' ')}' finds its section",
+              R.find_section(sid.replace("-", " ")) is not None)
+    check("'devices' is on both apps, 'crash-notes' is desktop only",
+          R.section_by_id("devices").app == "both" and R.section_by_id("crash-notes").app == "desktop")
+
+
 def _check_settings_item_index(kt: str):
     """`SettingsScreen.kt`'s own `SETTINGS_ITEM_INDEX` claims a `LazyColumn`
     position for each key it lists - checked here against the REAL, current

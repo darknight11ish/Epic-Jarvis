@@ -54,8 +54,17 @@
   patch reports "not onto the files as they are". With this switch, each such
   file is first copied into _jarvis-backup-<date>-endings inside the backend
   folder, then rewritten with LF endings - nothing else about it changes, and
-  Python reads both. Without the switch nothing of yours is rewritten and the
-  script only says which files are affected and the command to run.
+  Python reads both. The rewrite happens only AFTER the rehearsal (on a copy
+  that is converted the same way) has succeeded and every other check has
+  passed, so a run that stops early has not touched your files. Without the
+  switch nothing of yours is rewritten and the script only says which files
+  are affected and the command to run.
+
+.PARAMETER Force
+  By default the script refuses to change anything while a Python program that
+  looks like Jarvis (its command line names the backend folder or jarvis_hud.py)
+  is running, because a running Jarvis has the files open and would go on
+  running the old code. Close Jarvis and run again; -Force skips that check.
 
 .PARAMETER SkipPackages
   Do not run pip. The packages in backend/requirements.txt are then yours to
@@ -84,7 +93,8 @@ param(
     [switch] $SkipTests,
     [switch] $SkipMissing,
     [switch] $SkipPackages,
-    [switch] $FixLineEndings
+    [switch] $FixLineEndings,
+    [switch] $Force
 )
 
 $ErrorActionPreference = 'Stop'
@@ -913,6 +923,15 @@ $PATCHES = @(
     # plan card still says its last step waits for a second card that cannot
     # be raised - so nothing is sent.
     'form-review.patch'
+    # The web search on/off switch (the settings audit of 2026-09-30): turning
+    # web search back ON after the owner switched it off is ONE card
+    # (web_search_enable, tier ask); turning it off is instant. Two gate hunks
+    # only - the new action joins the "a no is not a standing rule" list and
+    # gets its _RISK line - both right after browser-engine.patch's own last
+    # lines, so it goes after it (last, like every new patch). It touches no
+    # route: POST /api/search/settings already exists (web-search.patch) and
+    # jarvis_search.py answers the new {"enabled": ...} body.
+    'web-search-switch.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1209,6 +1228,133 @@ function Ok($msg)   { Write-Host "  ok    $msg" -ForegroundColor Green }
 function Warn($msg) { Write-Host "  skip  $msg" -ForegroundColor Yellow }
 function Bad($msg)  { Write-Host "  FAIL  $msg" -ForegroundColor Red }
 
+# --- what this run did, and how it ends --------------------------------------
+#
+# Audit 2026-09-30 found runs that ended looking like success after something
+# failed (a missing module printed FAIL and carried on, -SkipTests said "Done"
+# whatever had happened, no exit code was set at the end), and a message that
+# said "NOTHING HAS BEEN CHANGED" after the line endings had been rewritten.
+# So: every real problem goes in $script:Problems, everything that touched the
+# owner's files is recorded in $script:State, and the run ends in ONE place
+# (Finish-Run) that says plainly whether it worked and what to do next.
+$script:Problems = New-Object System.Collections.ArrayList
+$script:Notes    = New-Object System.Collections.ArrayList
+$script:State    = @{
+    Changed          = $false   # any real file of the owner's touched yet
+    Patching         = $false   # in the middle of changing the patched files (not yet safe to stop)
+    Damaged          = $false   # the patched files may be HALF changed right now
+    Backup           = $null    # _jarvis-backup-<stamp>
+    EndingsBackup    = $null    # _jarvis-backup-<stamp>-endings
+    EndingsConverted = $false
+    Proven           = $false   # the test suites ran, none failed, none skipped
+    StartLine        = $null
+}
+function Add-Problem($msg, [switch] $Damaged) {
+    [void]$script:Problems.Add([string]$msg)
+    if ($Damaged) { $script:State.Damaged = $true }
+}
+function Add-Note($msg)    { [void]$script:Notes.Add([string]$msg) }
+
+# One PowerShell line that puts every file this run backed up back where it
+# was. The patch backup goes first and the line-endings backup second, so the
+# oldest copy (the owner's own, CRLF) wins where a file is in both.
+function Get-RestoreCommand {
+    $dirs = @()
+    foreach ($d in @($script:State.Backup, $script:State.EndingsBackup)) {
+        if ($d -and (Test-Path -LiteralPath $d)) { $dirs += ("'" + ($d -replace "'", "''") + "'") }
+    }
+    if ($dirs.Count -eq 0) { return $null }
+    $dest = "'" + ($BackendPath -replace "'", "''") + "'"
+    return ('foreach ($d in ' + ($dirs -join ',') + ') { Get-ChildItem -LiteralPath $d | Copy-Item -Destination ' + $dest + ' -Recurse -Force }')
+}
+
+# The end of every run. Never returns.
+function Finish-Run {
+    param([string] $Kind = 'apply')
+    $bar = ('=' * 68)
+    Write-Host ""
+    if ($script:Problems.Count -gt 0) {
+        Write-Host $bar -ForegroundColor Red
+        Write-Host " DONE WITH PROBLEMS - do not trust this update yet" -ForegroundColor Red
+        Write-Host $bar -ForegroundColor Red
+        $n = 0
+        foreach ($p in $script:Problems) {
+            $n++
+            Write-Host "  $n. $p" -ForegroundColor Red
+        }
+        Write-Host ""
+        $restore = Get-RestoreCommand
+        if ($script:State.Damaged) {
+            Write-Host "Some of your backend files WERE changed before this went wrong, and the" -ForegroundColor Yellow
+            Write-Host "patched files may be HALF updated." -ForegroundColor Yellow
+            if ($script:State.EndingsConverted) {
+                Write-Host "That includes their line endings (CRLF to LF)." -ForegroundColor Yellow
+            }
+            Write-Host "Jarvis may not start correctly until that is fixed. Do NOT start it yet." -ForegroundColor Yellow
+            if ($restore) {
+                Write-Host "To put every file back exactly as it was, paste this one line:" -ForegroundColor Cyan
+                Write-Host "    $restore" -ForegroundColor Cyan
+                Write-Host "Then, if Jarvis is running, close it and start it again." -ForegroundColor Cyan
+            }
+        } elseif ($script:State.Changed) {
+            Write-Host "Your backend files WERE changed by this run, and the patches themselves are on;" -ForegroundColor Yellow
+            Write-Host "the problems above are about the rest. Close Jarvis and start it again only" -ForegroundColor Yellow
+            Write-Host "once you have read them." -ForegroundColor Yellow
+            if ($restore) {
+                Write-Host "To undo the whole update instead, paste this one line:" -ForegroundColor Cyan
+                Write-Host "    $restore" -ForegroundColor Cyan
+            }
+        } else {
+            Write-Host "None of your backend files were changed by this run." -ForegroundColor Green
+        }
+        if ($script:Notes.Count -gt 0) {
+            foreach ($t in $script:Notes) { Write-Host "  note: $t" -ForegroundColor Yellow }
+        }
+        Write-Host ""
+        Write-Host "What to do: read the problem list above, fix the first one, run the" -ForegroundColor Cyan
+        Write-Host "same command again. If it is not clear, send back the log file." -ForegroundColor Cyan
+        if ($script:RunLog) { Write-Host "Log: $($script:RunLog)" -ForegroundColor Cyan }
+        exit 1
+    }
+    Write-Host $bar -ForegroundColor Green
+    if ($Kind -eq 'revert')            { Write-Host " FINISHED - the patches were taken off" -ForegroundColor Green }
+    elseif ($script:State.Proven)      { Write-Host " ALL DONE - the backend is patched and proven" -ForegroundColor Green }
+    else                               { Write-Host " DONE - no problems, but NOT fully proven (see below)" -ForegroundColor Yellow }
+    Write-Host $bar -ForegroundColor Green
+    foreach ($t in $script:Notes) { Write-Host "  note: $t" -ForegroundColor Yellow }
+    Write-Host ""
+    if ($script:State.Changed) {
+        Write-Host "Restart Jarvis (close it and start it again) so it uses the new files." -ForegroundColor Cyan
+    }
+    if ($script:State.StartLine) {
+        Write-Host "Start it (one line), and watch its 'token' line - it should say Windows Credential Manager:" -ForegroundColor Cyan
+        Write-Host "    $($script:State.StartLine)" -ForegroundColor Cyan
+    }
+    if ($script:State.Backup -and (Test-Path -LiteralPath $script:State.Backup)) {
+        Write-Host "Your files from before this run are in:  $($script:State.Backup)" -ForegroundColor Gray
+    }
+    if ($script:State.EndingsBackup -and (Test-Path -LiteralPath $script:State.EndingsBackup)) {
+        Write-Host "Your files from before the line-endings change:  $($script:State.EndingsBackup)" -ForegroundColor Gray
+    }
+    Write-Host "Nothing deletes old backups for you. After a good run you can delete the old" -ForegroundColor Gray
+    Write-Host "_jarvis-backup-* folders inside the backend folder; keep the newest one for now." -ForegroundColor Gray
+    if ($script:RunLog) { Write-Host "Log: $($script:RunLog)" -ForegroundColor Gray }
+    exit 0
+}
+
+# Any error nobody planned for (a locked file, a full disk) lands here instead
+# of scrolling past as a red block with no hint what state the files are in.
+trap {
+    Write-Host ""
+    Write-Host "  FAIL  The script stopped unexpectedly: $($_.Exception.Message)" -ForegroundColor Red
+    if ($script:State.Patching) {
+        Add-Problem "The script stopped unexpectedly: $($_.Exception.Message)" -Damaged
+    } else {
+        Add-Problem "The script stopped unexpectedly: $($_.Exception.Message)"
+    }
+    Finish-Run
+}
+
 # --- which Python ------------------------------------------------------------
 #
 # NOT simply `python`. On a fresh Windows 11 that name is a Microsoft Store
@@ -1315,6 +1461,44 @@ Say "Patches : $PatchDir"
 Say "Tool    : $(if ($UseGit) { 'git apply' } else { 'patch' })"
 if ($RunLog) { Say "Log     : $RunLog (a copy of everything printed here)" }
 else { Say "Log     : none - the log file could not be started, so copy this window if you need a record" Yellow }
+
+# --- a backend folder inside ANOTHER git repository --------------------------
+#
+# `git apply` behaves differently inside a repository than outside one: it
+# applies the repository's own line-ending rules (.gitattributes, autocrlf) to
+# the files it reads. The rehearsal runs on a copy in %TEMP% - outside any
+# repository - so a real run inside one could behave differently from the
+# rehearsal that was meant to predict it (reproduced 2026-09-30 with a
+# `*.py text eol=crlf` attribute: the same patch applied inside the repository
+# and was refused outside it). So every git call here is told to stop looking
+# for a repository at the folder ABOVE the backend (GIT_CEILING_DIRECTORIES):
+# rehearsal and real run then behave the same. And after the real run the
+# result is checked again (Test-StackReverses).
+$script:GitCeiling = $null
+if ($UseGit) {
+    $resolvedBackend = (Resolve-Path -LiteralPath $BackendPath).Path
+    $ceil = Split-Path -Parent $resolvedBackend
+    if ($ceil) { $script:GitCeiling = $ceil }
+    $prevEapG = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    $topOk = $false
+    $topOut = @()
+    try {
+        $topOut = @(& git -C $resolvedBackend rev-parse --show-toplevel 2>$null)
+        $topOk = ($LASTEXITCODE -eq 0)
+    } catch { $topOk = $false } finally { $ErrorActionPreference = $prevEapG }
+    if ($topOk -and $topOut.Count -gt 0) {
+        $top = "$($topOut[0])".Trim().Replace('/', [IO.Path]::DirectorySeparatorChar)
+        $sameTop = $false
+        try { $sameTop = ((Resolve-Path -LiteralPath $top).Path.TrimEnd('\', '/') -eq $resolvedBackend.TrimEnd('\', '/')) } catch { $sameTop = $false }
+        if (-not $sameTop) {
+            Say "Git     : this backend folder sits inside another git repository ($top)." Yellow
+            Say "          git is told to ignore that repository for this run, so the rehearsal and" Yellow
+            Say "          the real run behave the same." Yellow
+            Add-Note "the backend folder sits inside the git repository at $top; git was told to ignore it for this run"
+        }
+    }
+}
 
 # --- substitute the split patches, if the rebuilt modules are installed ------
 if ($UsingRebuilt) {
@@ -1478,44 +1662,107 @@ if (Test-Path -LiteralPath $probe) {
 # --- backend files with Windows line endings (CRLF) ------------------------------
 #
 # The patches are LF. A backend .py file that has CRLF lines can take none of
-# their hunks: git compares context byte for byte, so the run said "will not
-# apply" for nearly every patch (seen 2026-09-30: jarvis_hud.py had 3375 CRLF
-# lines of 3375, and the script's own warning above was the whole answer).
-# Rewriting someone's source is not done silently: it needs -FixLineEndings,
-# and every file it changes is copied to _jarvis-backup-<date>-endings first.
-$endTargets = @{}
-foreach ($pname in $PATCHES) {
-    $pf = Join-Path $PatchSrc (Split-Path -Leaf $pname)
-    if (-not (Test-Path -LiteralPath $pf)) { continue }
-    foreach ($pl in [IO.File]::ReadAllLines($pf)) {
-        if ($pl.StartsWith('+++ b/')) { $endTargets[$pl.Substring(6).Trim()] = $true }
+# their hunks: the patch tool compares context byte for byte, so the run said
+# "will not apply" for nearly every patch (seen 2026-09-30: jarvis_hud.py had
+# 3375 CRLF lines of 3375, and the script's own warning above was the whole
+# answer). Rewriting someone's source is not done silently: it needs
+# -FixLineEndings, and every file it changes is copied to
+# _jarvis-backup-<date>-endings first.
+#
+# WHEN the rewrite happens matters (audit 2026-09-30). It used to run right
+# here, before the missing-file check and before the rehearsal, so a run that
+# then stopped with "NOTHING HAS BEEN CHANGED" had in fact rewritten the
+# owner's files. Now this section only FINDS the CRLF files. The rehearsal
+# runs on a copy converted the same way (Reset-Rehearsal), and the real files
+# are converted (Convert-BackendEndings) only after the rehearsal succeeded
+# and every other check has passed.
+function Get-CrlfFiles {
+    $endTargets = @{}
+    foreach ($pname in $PATCHES) {
+        $pf = Join-Path $PatchSrc (Split-Path -Leaf $pname)
+        if (-not (Test-Path -LiteralPath $pf)) { continue }
+        foreach ($pl in [IO.File]::ReadAllLines($pf)) {
+            if ($pl.StartsWith('+++ b/')) {
+                # Up to a tab: diff -u writes the file's date after one.
+                $endTargets[($pl.Substring(6) -split "`t")[0].Trim()] = $true
+            }
+        }
     }
-}
-$crlfFiles = @()
-foreach ($tname in ($endTargets.Keys | Sort-Object)) {
-    $tp = Join-Path $BackendPath $tname
-    if (-not (Test-Path -LiteralPath $tp)) { continue }
-    $tb = [IO.File]::ReadAllBytes($tp)
-    $tc = 0
-    for ($ti = 1; $ti -lt $tb.Length; $ti++) {
-        if ($tb[$ti] -eq 10 -and $tb[$ti - 1] -eq 13) { $tc++ }
+    $found = @()
+    foreach ($tname in ($endTargets.Keys | Sort-Object)) {
+        $tp = Join-Path $BackendPath $tname
+        if (-not (Test-Path -LiteralPath $tp)) { continue }
+        $tb = [IO.File]::ReadAllBytes($tp)
+        $tc = 0
+        for ($ti = 1; $ti -lt $tb.Length; $ti++) {
+            if ($tb[$ti] -eq 10 -and $tb[$ti - 1] -eq 13) { $tc++ }
+        }
+        if ($tc -gt 0) { $found += [pscustomobject]@{ Name = $tname; Path = $tp; Count = $tc } }
     }
-    if ($tc -gt 0) { $crlfFiles += [pscustomobject]@{ Name = $tname; Path = $tp; Count = $tc } }
+    return $found
 }
-if ($crlfFiles.Count -gt 0) {
-    if ($FixLineEndings) {
-        $endBackup = Join-Path $BackendPath "_jarvis-backup-$Stamp-endings"
-        New-Item -ItemType Directory -Force -Path $endBackup | Out-Null
-        Say "Endings : -FixLineEndings: $($crlfFiles.Count) backend file(s) have CRLF. Each is copied to" Yellow
-        Say "          $endBackup" Yellow
-        Say "          first, then rewritten with LF (nothing else about it changes)." Yellow
-        foreach ($cf in $crlfFiles) {
+
+# Rewrites each CRLF file with LF, one file at a time (temp file, then
+# replace), after copying it to the endings backup. If any file cannot be
+# replaced - the usual reason is Jarvis still running and holding it open -
+# every file already converted is put back from the backup, the temp files
+# are removed, and the run stops saying which file it was. Only called once
+# nothing else can stop the run first.
+function Convert-BackendEndings {
+    param($Files)
+    $endBackup = Join-Path $BackendPath "_jarvis-backup-$Stamp-endings"
+    New-Item -ItemType Directory -Force -Path $endBackup | Out-Null
+    $script:State.EndingsBackup = $endBackup
+    $script:State.Changed = $true
+    $script:State.Patching = $true
+    Say "Endings : -FixLineEndings: $($Files.Count) backend file(s) have CRLF. Each is copied to" Yellow
+    Say "          $endBackup" Yellow
+    Say "          first, then rewritten with LF (nothing else about it changes)." Yellow
+    $done = @()
+    foreach ($cf in $Files) {
+        $tmpLf = $cf.Path + ".lf-tmp"
+        try {
             Copy-Item -LiteralPath $cf.Path -Destination (Join-Path $endBackup $cf.Name) -Force
-            $tmpLf = $cf.Path + ".lf-tmp"
             $changed = Copy-AsLf -Src $cf.Path -Dest $tmpLf
             Move-Item -LiteralPath $tmpLf -Destination $cf.Path -Force
+            $done += $cf
+            $script:State.EndingsConverted = $true
             Say "          $($cf.Name): $changed line(s) now LF"
+        } catch {
+            $why = $_.Exception.Message
+            Bad "$($cf.Name) could not be rewritten: $why"
+            $undone = @()
+            $stuck = @()
+            foreach ($d in $done) {
+                try {
+                    Copy-Item -LiteralPath (Join-Path $endBackup $d.Name) -Destination $d.Path -Force
+                    $undone += $d.Name
+                } catch { $stuck += $d.Name }
+            }
+            Get-ChildItem -LiteralPath $BackendPath -Filter '*.lf-tmp' -File -ErrorAction SilentlyContinue |
+                Remove-Item -Force -ErrorAction SilentlyContinue
+            if ($stuck.Count -eq 0) {
+                # Everything is as it was. Say so - and only then.
+                $script:State.EndingsConverted = $false
+                $script:State.Changed = $false
+                $script:State.Patching = $false
+                Add-Problem "$($cf.Name) is locked or could not be replaced ($why). Close Jarvis (and anything else that has that file open), then run this again. Files already converted ($($undone.Count)) were put back from $endBackup; nothing of yours is changed."
+            } else {
+                Add-Problem "$($cf.Name) is locked or could not be replaced ($why), and $($stuck -join ', ') could not be put back either. Close Jarvis, then paste the restore line below." -Damaged
+            }
+            Finish-Run
         }
+    }
+    $script:State.Patching = $false
+}
+
+$crlfFiles = @(Get-CrlfFiles)
+if ($crlfFiles.Count -gt 0) {
+    if ($FixLineEndings) {
+        Say "Endings : -FixLineEndings: $($crlfFiles.Count) backend file(s) have CRLF. They are rehearsed on a" Yellow
+        Say "          converted copy first. Only if the whole rehearsal works are the real files" Yellow
+        Say "          converted - each copied to a _jarvis-backup-$Stamp-endings folder first." Yellow
+        Say "          Until then nothing of yours is touched." Yellow
     } else {
         Say "Endings : $($crlfFiles.Count) backend file(s) the patches change have Windows line endings:" Yellow
         foreach ($cf in $crlfFiles) { Say "          $($cf.Name) ($($cf.Count) CRLF lines)" Yellow }
@@ -1525,6 +1772,52 @@ if ($crlfFiles.Count -gt 0) {
     }
 }
 Say ""
+
+# A running Jarvis has its files open (Windows will not let a locked file be
+# replaced) and keeps running the OLD code from memory after they change. Best
+# effort: a Python program whose command line names the backend folder or
+# jarvis_hud.py. -Force skips it. Returns a list of short descriptions.
+function Get-RunningBackend {
+    $found = @()
+    try {
+        $bp = (Resolve-Path -LiteralPath $BackendPath).Path
+        $rows = @()
+        if (Get-Command Get-CimInstance -ErrorAction SilentlyContinue) {
+            foreach ($p in @(Get-CimInstance -ClassName Win32_Process -ErrorAction Stop)) {
+                $rows += @{ Id = [int]$p.ProcessId; Name = "$($p.Name)"; Cmd = "$($p.CommandLine)" }
+            }
+        } else {
+            # Not Windows (this is how the tests reach the check).
+            foreach ($l in @(& ps -eo 'pid=,comm=,args=' 2>$null)) {
+                $m = [regex]::Match("$l", '^\s*(\d+)\s+(\S+)\s+(.*)$')
+                if ($m.Success) { $rows += @{ Id = [int]$m.Groups[1].Value; Name = $m.Groups[2].Value; Cmd = $m.Groups[3].Value } }
+            }
+        }
+        foreach ($r in $rows) {
+            if ($r.Id -eq $PID) { continue }
+            if ($r.Name -notmatch '^(py|pyw|python[0-9.]*|pythonw[0-9.]*)(\.exe)?$') { continue }
+            if (-not $r.Cmd) { continue }
+            if ($r.Cmd.IndexOf($bp, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or $r.Cmd -match 'jarvis_hud\.py') {
+                $found += "process $($r.Id): $($r.Name)"
+            }
+        }
+    } catch { }
+    return $found
+}
+
+function Assert-JarvisClosed {
+    if ($Force) { return }
+    $running = @(Get-RunningBackend)
+    if ($running.Count -eq 0) { return }
+    Say ""
+    Bad "Jarvis (or something else using this backend folder) looks like it is still running:"
+    foreach ($r in $running) { Say "          $r" Red }
+    Say "  Close Jarvis first (quit the desktop app from the tray, or close the PowerShell" Cyan
+    Say "  window it runs in), then run this again. To go ahead anyway, add  -Force." Cyan
+    Say "  NOTHING HAS BEEN CHANGED." Yellow
+    Add-Problem "Jarvis looks like it is still running ($($running -join '; ')). Close it, then run this again (or add -Force)."
+    Finish-Run
+}
 
 # --- how to run one patch ----------------------------------------------------
 
@@ -1543,6 +1836,8 @@ function Invoke-Patch {
     # Copy-Item must not be shrugged off before the backup is complete.
     $prev = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
+    $prevCeiling = $env:GIT_CEILING_DIRECTORIES
+    if ($UseGit -and $script:GitCeiling) { $env:GIT_CEILING_DIRECTORIES = $script:GitCeiling }
     try {
 
     # NOT $args - that is an automatic variable in PowerShell, and writing to
@@ -1567,6 +1862,8 @@ function Invoke-Patch {
 
     } finally {
         $ErrorActionPreference = $prev
+        if ($null -eq $prevCeiling) { Remove-Item Env:GIT_CEILING_DIRECTORIES -ErrorAction SilentlyContinue }
+        else { $env:GIT_CEILING_DIRECTORIES = $prevCeiling }
     }
     return @{ Ok = ($LASTEXITCODE -eq 0); Output = ($out | Out-String).Trim() }
 }
@@ -1632,7 +1929,8 @@ if ($absent.Count -gt 0) {
     if (-not $SkipMissing) {
         Say ""
         Say "NOTHING HAS BEEN CHANGED." Yellow
-        exit 1
+        Add-Problem "$($absent.Count) file(s) the patches expect are not in your backend folder ($($absent -join ', ')). Find them (commands above) or add -SkipMissing."
+        Finish-Run
     }
 
     # -SkipMissing is safe to offer because it changes nothing about how the
@@ -1650,8 +1948,13 @@ if ($absent.Count -gt 0) {
     $PATCHES = $clear
     if ($PATCHES.Count -eq 0) {
         Bad "Nothing is left to apply."
-        exit 1
+        Add-Problem "Every patch needs a file that is missing; nothing is left to apply."
+        Finish-Run
     }
+    Add-Note "PARTIAL install (-SkipMissing): $($blocked.Count) patch(es) were left out; the features they carry are not there."
+    $script:State.Partial = $true
+    # Only the files the remaining patches touch are converted.
+    $crlfFiles = @(Get-CrlfFiles)
 }
 
 Push-Location -LiteralPath $BackendPath
@@ -1659,7 +1962,10 @@ try {
 
     # --- revert ---------------------------------------------------------------
     if ($Revert) {
+        Assert-JarvisClosed
+        if ($FixLineEndings -and $crlfFiles.Count -gt 0) { Convert-BackendEndings -Files $crlfFiles }
         Say "Removing patches, newest first." Cyan
+        $script:State.Patching = $true
         $removed = 0
         $backwards = @($PATCHES); [array]::Reverse($backwards)
         foreach ($name in $backwards) {
@@ -1667,7 +1973,7 @@ try {
             if (-not (Test-Path -LiteralPath $full)) { continue }
             if ((Invoke-Patch -File $full -Check -Reverse).Ok) {
                 $r = Invoke-Patch -File $full -Reverse
-                if ($r.Ok) { Ok $name; $removed++ } else { Bad "$name`n$($r.Output)" }
+                if ($r.Ok) { Ok $name; $removed++; $script:State.Changed = $true } else { Bad "$name`n$($r.Output)"; Add-Problem "$name could not be taken off." -Damaged }
                 continue
             }
             # Not the current text. An older one, from before it was edited?
@@ -1677,7 +1983,7 @@ try {
             }
             if ($older) {
                 $r = Invoke-Patch -File $older.File -Reverse
-                if ($r.Ok) { Ok "$name - $($older.Label)"; $removed++ } else { Bad "$name`n$($r.Output)" }
+                if ($r.Ok) { Ok "$name - $($older.Label)"; $removed++; $script:State.Changed = $true } else { Bad "$name`n$($r.Output)"; Add-Problem "$name (older version) could not be taken off." -Damaged }
             } else {
                 Warn "$name (was not applied)"
             }
@@ -1688,7 +1994,8 @@ try {
         Say " and the rest - and your jarvis-framework.toml are left where they are." Cyan
         Say " Any older copy a run replaced is in a _jarvis-backup-<date> folder in" Cyan
         Say " the backend folder.)" Cyan
-        exit 0
+        $script:State.Patching = $false
+        Finish-Run -Kind revert
     }
 
     # --- 1. rehearse the WHOLE STACK on a copy -------------------------------
@@ -1731,20 +2038,42 @@ try {
         }
         New-Item -ItemType Directory -Path $rehearsal -Force | Out-Null
         Copy-Item -Path (Join-Path $BackendPath '*.py') -Destination $rehearsal -Force
+        # With -FixLineEndings the real files will be converted only AFTER
+        # this rehearsal succeeds, so the rehearsal must see them already
+        # converted - the same files, the same conversion (Copy-AsLf).
+        if ($FixLineEndings) {
+            foreach ($cf in $crlfFiles) {
+                $rdest = Join-Path $rehearsal $cf.Name
+                $rdir = Split-Path -Parent $rdest
+                if ($rdir -and (Test-Path -LiteralPath $rdir)) {
+                    [void](Copy-AsLf -Src $cf.Path -Dest $rdest)
+                }
+            }
+        }
+    }
+
+    # Does the WHOLE stack reverse cleanly on a fresh copy of the backend as
+    # it is right now? True means every patch in the list is on. Used for
+    # the "already applied?" question, and again after the real run: a real
+    # run that reported success is checked against the files themselves.
+    function Test-StackReverses {
+        Reset-Rehearsal
+        Push-Location -LiteralPath $rehearsal
+        $all = $true
+        try {
+            $bw = @($PATCHES); [array]::Reverse($bw)
+            foreach ($nm in $bw) {
+                $fp = Join-Path $PatchSrc (Split-Path -Leaf $nm)
+                if (-not (Test-Path -LiteralPath $fp)) { $all = $false; break }
+                if (-not (Invoke-Patch -File $fp -Reverse).Ok) { $all = $false; break }
+            }
+        } finally { Pop-Location }
+        return $all
     }
 
     try {
         # (a) is it already patched? Reverse the stack, newest first.
-        Reset-Rehearsal
-        Push-Location -LiteralPath $rehearsal
-        $reversedAll = $true
-        $backwards = @($PATCHES); [array]::Reverse($backwards)
-        foreach ($name in $backwards) {
-            $full = Join-Path $PatchSrc (Split-Path -Leaf $name)
-            if (-not (Test-Path -LiteralPath $full)) { $reversedAll = $false; break }
-            if (-not (Invoke-Patch -File $full -Reverse).Ok) { $reversedAll = $false; break }
-        }
-        Pop-Location
+        $reversedAll = Test-StackReverses
 
         if ($reversedAll) {
             $already = $true
@@ -1861,7 +2190,7 @@ try {
     if ($broken.Count -gt 0) {
         Say ""
         Bad "$($broken.Count) patch(es) will not apply. NOTHING HAS BEEN CHANGED."
-        Say "(The rehearsal ran on a copy. Your backend was never opened.)" Cyan
+        Say "(The rehearsal ran on a copy. Your backend files were not changed - not even their line endings.)" Cyan
         Say ""
         foreach ($b in $broken) {
             Say "--- $($b.Name) ---" Yellow
@@ -1873,8 +2202,17 @@ try {
         Say "this repository ever published were already tried and would have" Cyan
         Say "been recognised.) Send the block above back and the patch gets" Cyan
         Say "regenerated." Cyan
-        exit 1
+        Add-Problem "$($broken.Count) patch(es) will not apply to your files as they are: $(($broken | ForEach-Object { $_.Name }) -join ', '). Nothing was changed."
+        Finish-Run
     }
+
+    # The rehearsal worked. From here on the owner's real files are touched,
+    # so a running Jarvis has to be closed first (Windows locks open files,
+    # and a running Jarvis would keep the old code in memory anyway).
+    Assert-JarvisClosed
+
+    # -FixLineEndings: only now, with everything else known to be fine.
+    if ($FixLineEndings -and $crlfFiles.Count -gt 0) { Convert-BackendEndings -Files $crlfFiles }
 
     # No early exit here even with -SkipTests: step 3 (the modules) still
     # has to run on a backend whose patches are all on already.
@@ -1884,6 +2222,7 @@ try {
     # One backup folder for the whole run: the patched files below, and any
     # older copy of a module that step 3 replaces.
     $backup = Join-Path $BackendPath "_jarvis-backup-$Stamp"
+    $script:State.Backup = $backup
     if (-not $already) {
         $todo = @($PATCHES | ForEach-Object { Join-Path $PatchSrc (Split-Path -Leaf $_) })
         New-Item -ItemType Directory -Path $backup -Force | Out-Null
@@ -1922,6 +2261,8 @@ try {
         if ($undoFirst.Count -gt 0) {
             Say ""
             Say "Taking off $($undoFirst.Count) patch(es) an earlier run applied, newest first." Cyan
+            $script:State.Changed = $true
+            $script:State.Patching = $true
             foreach ($u in $undoFirst) {
                 $r = Invoke-Patch -File $u.File -Reverse
                 if ($r.Ok) {
@@ -1931,15 +2272,16 @@ try {
                 else {
                     Bad "$($u.Name)`n$($r.Output)"
                     Say ""
-                    Bad "Stopped part-way. Your originals are in:"
-                    Say "  $backup" Yellow
-                    Say "  Copy them back, or run with -Revert." Yellow
-                    exit 1
+                    Bad "Stopped part-way: your backend is only PARTLY updated."
+                    Add-Problem "Taking off $($u.Name) failed part-way, so your backend is only partly updated. Jarvis may not start until it is restored." -Damaged
+                    Finish-Run
                 }
             }
         }
         Say ""
         Say "Applying $($todo.Count)." Cyan
+        $script:State.Changed = $true
+        $script:State.Patching = $true
 
         foreach ($full in $todo) {
             $name = Split-Path -Leaf $full
@@ -1948,11 +2290,27 @@ try {
             else {
                 Bad "$name`n$($r.Output)"
                 Say ""
-                Bad "Stopped part-way. Your originals are in:"
-                Say "  $backup" Yellow
-                Say "  Copy them back, or run with -Revert." Yellow
-                exit 1
+                Bad "Stopped part-way: your backend is only PARTLY updated."
+                Add-Problem "$name failed part-way through applying, so your backend is only partly updated. Jarvis may not start until it is restored." -Damaged
+                Finish-Run
             }
+        }
+
+        # Every patch said "ok" - now look at the files themselves. The whole
+        # stack must take off cleanly from a fresh copy of what is on disk
+        # now; if it cannot, the tool reported success on files that do not
+        # carry the patches (which is what a git that skipped or reshaped
+        # the work would look like).
+        $verified = $false
+        try { $verified = Test-StackReverses }
+        finally { Remove-Item -LiteralPath $rehearsal -Recurse -Force -ErrorAction SilentlyContinue }
+        if ($verified) {
+            Ok "Checked again on the real files: all $($PATCHES.Count) patches are on."
+            $script:State.Patching = $false
+        } else {
+            Bad "Every patch said ok, but the real files do not show them all."
+            Add-Problem "The patches reported success, but a second check of the real files does not find them all on. Treat the backend as NOT updated." -Damaged
+            Finish-Run
         }
     }
 
@@ -1992,6 +2350,7 @@ try {
             }
             Copy-Item -LiteralPath $dst -Destination (Join-Path $backup $leaf) -Force
         }
+        $script:State.Changed = $true
         Copy-Item -LiteralPath $src -Destination $dst -Force
         $copied++
         if ($had) { Ok "$leaf - replaced an older copy (the old one is in $backup)" }
@@ -2003,6 +2362,7 @@ try {
         Bad "$($absentSrc.Count) module(s) this script ships are missing from this repository's backend folder:"
         foreach ($a in $absentSrc) { Say "          $a" Red }
         Say "        Get a fresh copy of the repository (git pull) and run this again." Cyan
+        Add-Problem "$($absentSrc.Count) module(s) this script ships are missing from this repository ($($absentSrc -join ', ')), so the features they carry are OFF. Get a fresh copy (git pull) and run again."
     }
     if ($copied -eq 0 -and $absentSrc.Count -eq 0) {
         Ok "All $($SHIPPED.Count) modules this repository ships are there and up to date."
@@ -2047,6 +2407,7 @@ foreach ($m in $toolManifests) {
         }
         Copy-Item -LiteralPath $dst -Destination (Join-Path $backup $m.Dst) -Force
     }
+    $script:State.Changed = $true
     Copy-Item -LiteralPath $m.Src -Destination $dst -Force
     $manifestsCopied++
     if ($had) { Ok "$($m.Dst) - replaced an older copy (the old one is in $backup)" }
@@ -2056,6 +2417,7 @@ if ($manifestsAbsent.Count -gt 0) {
     Bad "$($manifestsAbsent.Count) file(s) 'Check for tool updates' reads are missing from this repository:"
     foreach ($a in $manifestsAbsent) { Say "          $a" Red }
     Say "        Get a fresh copy of the repository (git pull) and run this again." Cyan
+    Add-Problem "$($manifestsAbsent.Count) file(s) 'Check for tool updates' reads are missing from this repository ($($manifestsAbsent -join ', ')). Get a fresh copy (git pull) and run again."
 } elseif ($manifestsCopied -eq 0) {
     Ok "requirements.lock and rust-crates.lock (for 'Check for tool updates') are there and up to date."
 }
@@ -2099,9 +2461,11 @@ foreach ($c in $cfgCandidates) {
 }
 if (-not (Test-Path -LiteralPath $cfgSrc)) {
     Bad "This repository has no $CONFIG_SRC - get a fresh copy (git pull)."
+    Add-Problem "This repository has no $CONFIG_SRC (the settings file), so none was put in place. Get a fresh copy (git pull) and run again."
 } elseif (-not $cfgInUse) {
     $cfgDst = Join-Path $BackendPath $CONFIG_NAME
     Copy-Item -LiteralPath $cfgSrc -Destination $cfgDst
+    $script:State.Changed = $true
     Ok "$CONFIG_NAME - you had none, so this repository's copy is now at $cfgDst"
     Say "        It is yours from now on: this script will never overwrite it." Cyan
 } else {
@@ -2143,10 +2507,12 @@ if ($SkipPackages) {
     Say ""
     Warn "Python packages (-SkipPackages). To install them yourself:"
     Say "          py -3 -m pip install -r `"$reqs`"" Cyan
+    Add-Note "Python packages were not installed (-SkipPackages); the features that need them stay off until you install them."
 } elseif (-not $py) {
     Say ""
     Bad "Python packages were not installed, because there is no working Python."
     Explain-NoPython
+    Add-Problem "Python packages were not installed, because there is no working Python (winget install Python.Python.3.12, then open a NEW PowerShell window and run again)."
 } else {
     Say ""
     Say "Installing the Python packages in backend\requirements.txt (a minute or two the first time)." Cyan
@@ -2165,6 +2531,7 @@ if ($SkipPackages) {
         Say (($pipOut | Select-Object -Last 15 | ForEach-Object { "        $_" }) -join "`n")
         Say "        The backend still starts; the features those packages carry stay off." Cyan
         Say "        Send the lines above back if the reason is not clear." Cyan
+        Add-Problem "pip could not install everything in backend\requirements.txt; the features those packages carry stay off. The last lines pip printed are above."
     }
 }
 
@@ -2172,15 +2539,17 @@ if ($SkipPackages) {
 
 if ($SkipTests) {
     Say ""
-    Ok "Done. Tests skipped."
-    exit 0
+    Warn "Tests skipped (-SkipTests). Nothing here has been proven to work."
+    Add-Note "The test suites were not run (-SkipTests), so this update is applied but NOT proven."
+    Finish-Run
 }
 
 if (-not $py) {
     Say ""
     Bad "The patches and modules are in place, but the tests were NOT run: there is no working Python."
     if ($SkipPackages) { Explain-NoPython } else { Say "  (What to do about it is just above.)" Cyan }
-    exit 1
+    Add-Problem "The tests were NOT run: there is no working Python."
+    Finish-Run
 }
 
 Say ""
@@ -2199,8 +2568,14 @@ Say ""
 # own location, so both roots are right at once.
 $env:JARVIS_BACKEND = (Resolve-Path -LiteralPath $BackendPath).Path
 
-$tests = Get-ChildItem -LiteralPath $PatchDir -Filter 'test_*.py' | Sort-Object Name
+$tests = @(Get-ChildItem -LiteralPath $PatchDir -Filter 'test_*.py' | Sort-Object Name)
 $pass = 0; $fail = @()
+# A suite that exits 0 is not necessarily a suite that tested anything: many
+# print "SKIP - <reason>" (as a pass) when a file, a package or a machine
+# feature they need is absent, and _where.missing() skips a whole suite when a
+# backend file is not there. The output is read, and a suite that skipped
+# anything is counted and named, never folded into "passed".
+$skipped = @()
 
 # Same trap as Invoke-Patch: a test that prints anything to stderr - which a
 # failing one does, and several passing ones do too - would terminate the run
@@ -2230,10 +2605,21 @@ if ($savedEnv.Count -eq 0) {
 try {
     foreach ($t in $tests) {
         $out = & $py.Exe $t.FullName 2>&1
-        if ($LASTEXITCODE -eq 0) { Ok $t.Name; $pass++ }
+        $exitCode = $LASTEXITCODE
+        $txt = ($out | Out-String)
+        if ($exitCode -eq 0) {
+            $skipN = ([regex]::Matches($txt, '(?m)^[ \t]*(ok[ \t]+)?SKIP(PED)?\b')).Count
+            $sm = [regex]::Match($txt, '(?i)\b(\d+) skipped\b')
+            if ($sm.Success -and [int]$sm.Groups[1].Value -gt $skipN) { $skipN = [int]$sm.Groups[1].Value }
+            $pass++
+            if ($skipN -gt 0) {
+                Warn "$($t.Name) - passed, but $skipN part(s) were SKIPPED (not proven)"
+                $skipped += "$($t.Name) ($skipN)"
+            } else { Ok $t.Name }
+        }
         else {
             Bad $t.Name
-            $fail += @{ Name = $t.Name; Output = ($out | Out-String).Trim() }
+            $fail += @{ Name = $t.Name; Output = $txt.Trim() }
         }
     }
 } finally {
@@ -2247,12 +2633,12 @@ $ErrorActionPreference = $prev
 
 $hudPath = Join-Path $env:JARVIS_BACKEND 'jarvis_hud.py'
 Say ""
-if ($fail.Count -eq 0) {
-    Ok "$pass suites passed. The backend is patched and proven."
-    Say ""
-    Say "Start it (one line), and watch its 'token' line - it should say Windows Credential Manager:" Cyan
-    Say "    & `"$($py.Exe)`" `"$hudPath`"" Cyan
-} else {
+$ran = $pass + $fail.Count
+if ($ran -eq 0) {
+    Bad "No test suites were found to run in $PatchDir - nothing has been proven."
+    Add-Problem "No test suites ran (none found in $PatchDir), so nothing is proven. Get a fresh copy of the repository (git pull) and run again."
+}
+if ($fail.Count -gt 0) {
     Bad "$pass passed, $($fail.Count) failed."
     Say ""
     foreach ($f in $fail) {
@@ -2267,5 +2653,15 @@ if ($fail.Count -eq 0) {
     Say "the first place they meet the real modules. A failure means the" Cyan
     Say "backend here differs from the one the patches were written against," Cyan
     Say "or that a rebuilt module is wrong - and the second one has happened." Cyan
-    exit 1
+    Add-Problem "$($fail.Count) test suite(s) FAILED: $(($fail | ForEach-Object { $_.Name }) -join ', '). The output is above."
+} elseif ($ran -gt 0) {
+    if ($skipped.Count -eq 0) {
+        Ok "$pass suites passed, none skipped."
+        if (-not $script:State.Partial) { $script:State.Proven = $true }
+    } else {
+        Warn "$pass suites passed, but $($skipped.Count) of them skipped part or all of their checks."
+        Add-Note "Patched, but $($skipped.Count) of the $pass suites could not fully run, so this is NOT fully proven: $($skipped -join ', '). (A skip usually means a backend file, a Python package or a machine feature the suite needs is not there.)"
+    }
 }
+if ($py) { $script:State.StartLine = "& `"$($py.Exe)`" `"$hudPath`"" }
+Finish-Run

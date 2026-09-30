@@ -866,6 +866,10 @@ pub fn spawn_watchdog(app: AppHandle) {
         loop {
             tokio::time::sleep(WATCHDOG_INTERVAL).await;
 
+            // backend.log is held open by the child, so it can only be capped
+            // while it runs (logfile.rs `trim_backend_log`).
+            logfile::trim_backend_log();
+
             if !read_supervise(&app) {
                 continue;
             }

@@ -32,6 +32,7 @@ ON_EARLIER_LINES = (
     "apps-in-projects.patch",
     "screen-picture.patch",
     "form-review.patch",
+    "web-search-switch.patch",
 )
 
 failures = 0

@@ -218,10 +218,16 @@ class World:
                 setattr(mod, name, val)
             CP._cache.update(at=-1e9, cards=None, fields="")
 
-    def switches(self, master=False, combined=False, third_feature=None, **features):
+    def switches(self, master=False, combined=False, third_feature=None, third_card=None,
+                 **features):
         data = {"master": master, "combined": combined,
                 "features": {f: bool(features.get(f)) for f in SC.FEATURE_IDS},
                 "third_feature": third_feature}
+        if third_card is not None:
+            # The id of the card the owner approved the move for (2026-09-30).
+            # Left out on purpose when not given: that is a file from before
+            # the id was kept, which reads as "ask again".
+            data["third_card"] = third_card
         (self.dir / "second-card.json").write_text(json.dumps(data), encoding="utf-8")
 
     def __enter__(self):

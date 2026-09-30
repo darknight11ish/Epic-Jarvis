@@ -4046,6 +4046,17 @@ def _headless_offered() -> bool:
         return False
 
 
+def _web_search_switched_off() -> bool:
+    """True when the owner switched web search off (jarvis_search.settings()).
+    Not readable or not installed: False - the settings-file list and every
+    search's own plan() still decide, and a plan refuses when the switch is off."""
+    try:
+        import jarvis_search as WS
+        return WS.settings().get("enabled", True) is not True
+    except Exception:
+        return False
+
+
 def offered_tools(enabled_tools) -> list:
     """The tool names a turn actually offers the model: the ones in
     `enabled_tools` that are real tools here, in TOOLS order. `None` means
@@ -4058,6 +4069,15 @@ def offered_tools(enabled_tools) -> list:
     if enabled_tools is None:
         return list(TOOLS)
     wanted = set(enabled_tools)
+    if "email_read" in wanted:
+        # An older build saved the email row's gate-action name here instead of the
+        # tool's own name (jarvis_asks_first.LEGACY_TOOL_NAMES): read it as the tool.
+        wanted.add("email_check")
+    if "web_search" in wanted and _web_search_switched_off():
+        # The owner's own on/off switch for web search (Settings, Web search):
+        # read from its file every turn, so off means the AI model is not even
+        # offered the tool - not merely refused when it tries.
+        wanted.discard("web_search")
     if ("browser_control" in wanted and _second_card_lane("browser_control") is None
             and not _headless_offered()):
         # Browser control needs BOTH: its name in `[tools].enabled`, and the

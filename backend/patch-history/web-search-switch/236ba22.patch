@@ -1,0 +1,23 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -170,6 +170,7 @@
+     "tidy_inbox",  # jarvis_inbox_tidy.py / jarvis_agent.py acts only on tier "ask": ONE card per tidy, listing every email (inbox-tidy.patch)
+     "screen_picture_enable",  # jarvis_screen_picture.py acts only on tier "ask": ONE card to turn on slow picture reading (screen-picture.patch)
+     "obscura_enable",  # jarvis_browser_engine.py acts only on tier "ask": ONE card to turn on the headless browser, Obscura (browser-engine.patch)
++    "web_search_enable",  # jarvis_search.py acts only on tier "ask": ONE card to turn web search back on after the owner switched it off (web-search-switch.patch)
+ })
+ 
+ 
+@@ -834,6 +835,12 @@
+     # the internet, and every page, click and box it fills is still its own
+     # plan card first. Stealth is on. Turning it off is instant and stops it.
+     "obscura_enable": ("yes", "outbound", "lets Jarvis choose a browser with no window (Obscura, a program on this PC that Jarvis starts and stops) for plain web reading; the pages are on the internet and it looks like an ordinary Chrome, but every page, click and box it fills is still its own card first, it never types a password or solves a captcha and stops at a captcha or sign-in page it recognises, it cannot open your own network, and turning it off is instant"),
++    # web-search-switch.patch (jarvis_search.py; the settings audit of 2026-09-30).
++    # Web search ships ON. The owner may switch it off at any time (instant, no
++    # card); turning it back ON is this one card. The change itself sends nothing:
++    # a search still follows every rule it had (its own card when private things
++    # could slip in, never a password or key), so this is a setting on this PC.
++    "web_search_enable": ("yes", "local", "lets Jarvis search the web again, with the search you chose; the change itself sends nothing, every search keeps the rules it already had, and you can turn web search off again at any time, at once"),
+ }
+ 
+ _UNKNOWN_RISK = ("no", "outbound",

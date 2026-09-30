@@ -158,6 +158,14 @@ object QuickTiles {
         else -> appLock != false
     }
 
+    /**
+     * The link tile's Mute / Unmute tap ([com.jarvis.client.service.LinkTileService])
+     * with App lock on and the phone locked asks Android for the phone's unlock
+     * first, like every other tile ([decide]'s UnlockThenRun). App lock null
+     * (cannot be read) fails closed.
+     */
+    fun muteNeedsUnlock(appLock: Boolean?, phoneLocked: Boolean): Boolean = appLock != false && phoneLocked
+
     /** Said when a widget button is tapped under App lock before the widget redrew. */
     const val WIDGET_LOCKED = "App lock is on - open Jarvis first, then use it there."
 

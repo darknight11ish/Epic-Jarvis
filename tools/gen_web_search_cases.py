@@ -112,6 +112,18 @@ def cases() -> dict:
     WS._spawn = lambda fn: None
     out["post_ask_off"] = WS.handle_settings({"ask_every_time": False})
     WS._spawn = saved_spawn
+    # The on/off switch (2026-09-30): off at once, back on through ONE card.
+    _fresh()
+    out["post_enabled_off"] = WS.handle_settings({"enabled": False})
+    out["switched_off"] = WS.view()
+    WS._reset_for_tests()
+    saved_tier = WS._tier
+    WS._tier = lambda action: "ask"
+    WS._spawn = lambda fn: None
+    out["post_enabled_on"] = WS.handle_settings({"enabled": True})
+    out["switched_off_card_waiting"] = WS.view()
+    WS._spawn = saved_spawn
+    WS._tier = saved_tier
     _fresh()
     WS._HTTP = _answer(200, json.dumps({"results": [
         {"url": "https://example.org/1", "title": "One", "content": "a"},

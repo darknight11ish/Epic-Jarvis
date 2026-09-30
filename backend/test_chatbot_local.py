@@ -328,6 +328,39 @@ def t_one_card():
           "needs your second graphics card" in note and "jarvis-primary" in note, note)
 
 
+def t_the_size_limit_follows_the_real_card_not_a_12_gb_guess():
+    clean()
+    real = L._lane_card_mb
+    try:
+        for label, mb, want_gib in (("12 GB", 12288, 9), ("10 GB", 10240, 7), ("8 GB", 8192, 5)):
+            L._lane_card_mb = lambda mb=mb: mb
+            check(f"a {label} card: the limit is its memory minus 3 GiB ({want_gib} GiB)",
+                  L.lane_max_bytes() == want_gib * GIB, L.lane_max_bytes())
+        L._lane_card_mb = lambda: None
+        check("card memory unreadable: the old 9 GiB limit, unchanged",
+              L.lane_max_bytes() == L.LANE_MAX_BYTES == 9 * GIB)
+        L._lane_card_mb = lambda: 1024
+        check("a tiny card never gives a limit under 1 GiB", L.lane_max_bytes() == L.LANE_MIN_BYTES)
+        # A model that fits a 12 GB card (8 GiB) is refused on an 8 GB one.
+        setup("gemma3:12b", two_cards())
+        for mb, refused in ((12288, False), (10240, True), (8192, True)):
+            L._lane_card_mb = lambda mb=mb: mb
+            a = L.LocalChatbot("gemma3:12b", L.placement("gemma3:12b")[0])
+            try:
+                a.open()
+                why = ""
+            except L.LocalUnavailable as exc:
+                why = exc.code
+                text = str(exc)
+            check(f"an 8 GiB model on a {mb // 1024} GB card: {'refused' if refused else 'allowed'}",
+                  (why == "too_big") == refused, why)
+            if refused:
+                check("... in words that do not assume it is the second card or 12 GB",
+                      "12 GB" not in text and "Choose a smaller model" in text, text)
+    finally:
+        L._lane_card_mb = real
+
+
 def t_two_cards():
     clean()
     setup("gemma3:12b", two_cards())

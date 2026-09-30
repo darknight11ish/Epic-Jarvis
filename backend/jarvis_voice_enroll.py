@@ -178,6 +178,17 @@ class BadClip(ValueError):
     """A clip the owner has to re-record. The message is shown on the phone."""
 
 
+def _left_s(p: dict) -> float:
+    """Seconds left of a waiting card's time, by the MONOTONIC clock: a clock
+    that is set or synced while a card waits must not shorten or stretch it
+    (time audit, 2026-09-30). `since` (wall clock) stays for display; a record
+    made before this change has no `since_m` and falls back to it."""
+    m = p.get("since_m")
+    if isinstance(m, (int, float)) and not isinstance(m, bool):
+        return p["timeout"] - (time.monotonic() - m)
+    return p["since"] + p["timeout"] - time.time()
+
+
 def _read_clip(n: int, raw: bytes) -> tuple:
     """(16-bit PCM bytes, seconds) for clip number `n` (1-based), or BadClip."""
     if not raw:
@@ -655,7 +666,7 @@ def stage(body: bytes, *, gate: Optional[Callable] = None,
 
     with _LOCK:
         if _PENDING is not None:
-            left = max(0, int(_PENDING["since"] + _PENDING["timeout"] - time.time()))
+            left = max(0, int(_left_s(_PENDING)))
             return 409, {"error": ("a voice training is already waiting for "
                                    "approval - approve or deny that card first"),
                          "pending": True, "expires_in": left}
@@ -722,7 +733,7 @@ def _start_card(mic: str, add: bool, rounds: dict, *, gate, tier_of, enroll, spa
         _PENDING = {"id": pid, "clips": flat, "conditions": conditions, "index": index,
                     "rounds": sorted(rounds), "add": bool(add),
                     "count": count, "seconds": seconds, "mic": mic,
-                    "kind": "enroll", "since": time.time(), "timeout": _timeout()}
+                    "kind": "enroll", "since": time.time(), "since_m": time.monotonic(), "timeout": _timeout()}
     for got in rounds.values():
         got.clear()
     _audit("voice.training.staged", {"clips": count, "seconds": seconds,
@@ -893,7 +904,7 @@ def state() -> dict:
         if p is not None:
             out["clips"] = p.get("count", 0)
             out["kind"] = p.get("kind", "enroll")
-            out["expires_in"] = max(0, int(p["since"] + p["timeout"] - time.time()))
+            out["expires_in"] = max(0, int(_left_s(p)))
             if p.get("kind") == "setting":
                 out["setting"] = {"name": p.get("key"), "value": p.get("value")}
         if _LAST is not None:
@@ -1150,7 +1161,7 @@ def stage_setting(doc: dict, key: str, *, gate: Callable, tier_of: Callable,
                      "pending": False}
     with _LOCK:
         if _PENDING is not None:
-            left = max(0, int(_PENDING["since"] + _PENDING["timeout"] - time.time()))
+            left = max(0, int(_left_s(_PENDING)))
             return 409, {"error": ("a voice card is already waiting for approval - "
                                    "approve or deny that one first"),
                          "pending": True, "expires_in": left}
@@ -1169,7 +1180,7 @@ def stage_setting(doc: dict, key: str, *, gate: Callable, tier_of: Callable,
                                    "approve or deny that one first"), "pending": True}
         _PENDING = {"id": pid, "clips": [], "count": 0, "seconds": 0.0, "mic": "",
                     "kind": "setting", "key": key, "value": value,
-                    "since": time.time(), "timeout": _timeout()}
+                    "since": time.time(), "since_m": time.monotonic(), "timeout": _timeout()}
 
     def work():
         try:
@@ -1419,7 +1430,7 @@ def stage_threshold(doc: dict, *, gate: Callable, tier_of: Callable,
                                    "approve or deny that one first"), "pending": True}
         _PENDING = {"id": pid, "clips": [], "count": 0, "seconds": 0.0, "mic": mic,
                     "kind": "threshold", "threshold": new, "old": old,
-                    "model": which, "since": time.time(), "timeout": _timeout()}
+                    "model": which, "since": time.time(), "since_m": time.monotonic(), "timeout": _timeout()}
     if apply is None:
         if _takes(jarvis_voice.set_threshold, "model"):
             apply = (lambda value, m: jarvis_voice.set_threshold(value, m, model=name))

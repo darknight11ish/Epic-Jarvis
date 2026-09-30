@@ -374,8 +374,15 @@ steps.
 One line (change the path if your backend folder is elsewhere):
 
 ```powershell
-cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; py -3 jarvis_hud.py
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $env:HF_HUB_DISABLE_TELEMETRY = "1"; $env:DO_NOT_TRACK = "1"; $env:ANONYMIZED_TELEMETRY = "False"; py -3 jarvis_hud.py
 ```
+
+The three `$env:` settings in the middle tell the libraries Jarvis uses (the
+model downloader, and tools that honour the shared "do not track" switch) not
+to report anything about your use. Jarvis also sets them itself once it is
+running; putting them in the start line makes sure they are on before any
+library loads. (Supply-chain audit, 2026-09-30. They cover those three names
+only - `docs/ARCHITECTURE.md` says which telemetry is not covered.)
 
 Read what it prints at the top. Three lines matter:
 
@@ -864,7 +871,7 @@ hand instead. One line (put in your own `100.x` address, and change the path
 if your backend folder is elsewhere):
 
 ```powershell
-cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $env:JARVIS_HUD_BIND = "<your 100.x address>"; py -3 jarvis_hud.py
+cd "C:\Users\pcadmin\Documents\Claude\Open jarvis files\Desktop program"; $env:JARVIS_HUD_BIND = "<your 100.x address>"; $env:HF_HUB_DISABLE_TELEMETRY = "1"; $env:DO_NOT_TRACK = "1"; $env:ANONYMIZED_TELEMETRY = "False"; py -3 jarvis_hud.py
 ```
 
 **Do not set `HUD_TOKEN` here.** This page used to tell you to invent one,

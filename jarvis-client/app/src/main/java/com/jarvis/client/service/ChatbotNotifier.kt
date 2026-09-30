@@ -33,16 +33,16 @@ import com.jarvis.client.net.Support
  * stale link and never a card: it only makes Jarvis do less. Nothing here
  * can approve, resume or start anything.
  *
- * Its own id, 0x3200: below [ApprovalNotifier]'s range (whose restore()
+ * Its own id (NotificationIds.CHATBOT, 0x3200): below [ApprovalNotifier]'s range (whose restore()
  * cancels anything of ours at or above 0x4B00), apart from
  * [ScheduleNotifier]'s 0x3100 and the services' own.
  */
 object ChatbotNotifier {
     private const val TAG = "ChatbotNotifier"
-    const val NOTIFICATION_ID = 0x3200
+    const val NOTIFICATION_ID = NotificationIds.CHATBOT
 
     /** A customer-support chat's own line, beside a chatbot conversation's. */
-    const val SUPPORT_NOTIFICATION_ID = 0x3201
+    const val SUPPORT_NOTIFICATION_ID = NotificationIds.SUPPORT_CHAT
 
     /** The conversation (or comparison) id a Stop carries. */
     const val EXTRA_SESSION_ID = "com.jarvis.client.extra.CHATBOT_SESSION"

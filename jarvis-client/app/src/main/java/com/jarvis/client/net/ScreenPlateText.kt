@@ -30,6 +30,8 @@ object ScreenPlateText {
     /** Pointers between the two places the screen settings live. */
     const val PICTURE_POINTER = "This also needs the Looking at your screen switch on the " +
         "Security screen."
+    /** The button under [PICTURE_POINTER]: opens Security at that switch. */
+    const val OPEN_LOOK_SWITCH = "Open the Looking at your screen switch (Security)"
     const val LOOK_POINTER = "Picture mode is under Settings."
 
     /** The PC's sign detail, with the extend hint added when it says "Ending soon". */

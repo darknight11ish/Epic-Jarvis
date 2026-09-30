@@ -1728,8 +1728,8 @@ html[data-state="error"] .pulse {
 }
 
 .approval-option:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.35);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .approval-option .opt-label {
@@ -1919,9 +1919,9 @@ html[data-state="error"] .pulse {
 }
 
 .approval-button:focus-visible {
-  outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-faint);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 /* While a gate is open the reactor goes amber: the bar is waiting on a person,
@@ -2742,4 +2742,25 @@ html[data-state="approval"] .pulse {
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
   color: var(--text-faint);
+}
+
+/* Windows high-contrast (forced-colors): the system palette replaces ours, so
+   box-shadows and tinted fills vanish. Keep every control's edge and its focus
+   outline visible, in the system's own colours. */
+@media (forced-colors: active) {
+  .approval-button,
+  .approval-option,
+  .text-button,
+  .icon-button {
+    border: 1px solid ButtonText;
+  }
+
+  .approval-button:focus-visible,
+  .approval-option:focus-visible,
+  .text-button:focus-visible,
+  .icon-button:focus-visible,
+  .prompt:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
 }

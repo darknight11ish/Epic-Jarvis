@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Checkbox
@@ -20,6 +21,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.JarvisRuntime
@@ -355,11 +357,24 @@ private fun GoalRow(
                     )
                 }
             } else {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                // The whole row is one checkbox with its words (the box itself
+                // takes no taps), so TalkBack reads the step and its state.
+                val stepEnabled = enabled && goal.status == "active"
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .toggleable(
+                            value = s.done,
+                            enabled = stepEnabled,
+                            role = Role.Checkbox,
+                            onValueChange = { onStep(i, it) },
+                        ),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Checkbox(
                         checked = s.done,
-                        enabled = enabled && goal.status == "active",
-                        onCheckedChange = { onStep(i, it) },
+                        enabled = stepEnabled,
+                        onCheckedChange = null,
                     )
                     Column(Modifier.weight(1f)) {
                         Text(

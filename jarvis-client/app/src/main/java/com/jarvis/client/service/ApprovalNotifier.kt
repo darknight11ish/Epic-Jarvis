@@ -417,6 +417,6 @@ object ApprovalNotifier {
     const val ACTION_OPEN_APPROVAL = "com.jarvis.client.OPEN_APPROVAL"
     const val EXTRA_APPROVAL_ID = "approval_id"
     private const val GROUP = "jarvis_approvals"
-    private const val FIRST_ID = 0x4B00
-    private const val SUMMARY_ID = 0x4AFF
+    private const val FIRST_ID = NotificationIds.APPROVAL_FIRST
+    private const val SUMMARY_ID = NotificationIds.APPROVAL_SUMMARY
 }

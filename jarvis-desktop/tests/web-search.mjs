@@ -25,6 +25,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
+  ENABLED_DETAIL,
+  ENABLED_LABEL,
   keyLine,
   LABEL,
   PROVIDERS,
@@ -71,6 +73,13 @@ await check("readSearch reads every real answer, and a PC without it says so", a
   assert.equal(v.address, "http://127.0.0.1:8888");
   assert.equal(v.askEveryTime, false);
   assert.equal(readSearch(C.damaged).provider, null);
+  // The on/off switch (settings audit, 2026-09-30).
+  assert.equal(readSearch(C.default).enabled, true);
+  assert.equal(readSearch(C.switched_off).enabled, false);
+  assert.equal(readSearch(C.switched_off_card_waiting).enableWaiting, true);
+  assert.equal(readSearch({ ...C.default, enabled: undefined }).enabled, true, "an older PC reads as on");
+  assert.equal(ENABLED_LABEL, "Web search");
+  assert.match(ENABLED_DETAIL, /turning it back on asks you with an approval card/);
   const brave = readSearch(C.brave_no_key);
   assert.equal(brave.provider, "brave");
   assert.equal(keyLine(brave.providers.find((p) => p.id === "brave")), "No key saved yet.");
@@ -113,6 +122,14 @@ function wsBridge(scenario) {
         if (args.provider) {
           w.view.provider = args.provider;
           return { ok: true, said: `Web search now uses ${args.provider}.` };
+        }
+        if (args.enabled === false) {
+          w.view.enabled = false;
+          return { ok: true, said: "Web search is off. Jarvis searches nothing." };
+        }
+        if (args.enabled === true) {
+          w.view.enable_waiting = true;
+          return { ok: true, waiting: true, said: "Waiting for your approval." };
         }
         if (args.askEveryTime === false) {
           w.view.waiting = true;
@@ -193,6 +210,31 @@ await check("Settings: choosing one sends that ONE change; Ask-less waits for th
   assert.match(status, /Waiting for your approval card/);
 });
 
+await check("Settings: Web search off is at once; back on waits for the PC's card", async () => {
+  const page = await settings(PLAIN);
+  const firstOn = await page.locator("#ws-enabled").isChecked();
+  await page.locator("#ws-enabled").click();
+  await page.waitForTimeout(400);
+  const nowOff = await page.locator("#ws-enabled").isChecked();
+  const offLine = await page.locator("#ws-enabled-status").innerText();
+  // Back on: the box is put back to "off" until the PC's card is approved.
+  await page.locator("#ws-enabled").click();
+  await page.waitForTimeout(400);
+  const stillOff = await page.locator("#ws-enabled").isChecked();
+  const waiting = await page.locator("#ws-enabled-status").innerText();
+  const calls = await page.evaluate(() => window.__wsCalls);
+  await page.close();
+  assert.equal(firstOn, true, "web search ships on");
+  assert.equal(nowOff, false, "off is immediate");
+  assert.match(offLine, /Web search is off/);
+  assert.equal(stillOff, false, "the box claimed on before the card was approved");
+  assert.match(waiting, /Waiting for your approval card/);
+  assert.deepEqual(calls, [
+    { cmd: "set_web_search", enabled: false },
+    { cmd: "set_web_search", enabled: true },
+  ]);
+});
+
 await check("Settings: Test search says what happened, with the offer to switch", async () => {
   const page = await settings(PLAIN);
   await page.locator("#ws-test").click();
@@ -230,12 +272,16 @@ await check("Settings: on a stale link every change and the test are greyed; the
   const page = await settings(PLAIN, { link: { stale: true } });
   const radios = await page.locator("#ws-providers input").evaluateAll((els) => els.map((e) => e.disabled));
   const ask = await page.locator("#ws-ask").isDisabled();
+  const onOff = await page.locator("#ws-enabled").isDisabled();
+  const onOffTitle = await page.locator("#ws-enabled").getAttribute("title");
   const addr = await page.locator("#ws-address-save").isDisabled();
   const test = await page.locator("#ws-test").isDisabled();
   const key = await page.locator('#ws-keys [data-key="tavily"] button', { hasText: "Save key" }).isDisabled();
   await page.close();
   assert.ok(radios.length === 5 && radios.every(Boolean));
   assert.equal(ask, true);
+  assert.equal(onOff, true, "the on/off switch is greyed on a stale link");
+  assert.match(onOffTitle, /Waiting for the link/, "greyed with the reason, not silently");
   assert.equal(addr, true);
   assert.equal(test, true);
   assert.equal(key, false);

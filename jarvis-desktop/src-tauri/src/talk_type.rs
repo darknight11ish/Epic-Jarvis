@@ -163,7 +163,7 @@ fn set_listening(app: &AppHandle, on: bool) {
 }
 
 fn tell(app: &AppHandle, why: &str) {
-    crate::commands::notify(app, TITLE, why);
+    crate::commands::notify_guarded(app, TITLE, why, None);
 }
 
 /// Back to idle, if `gen` is still the session in charge.

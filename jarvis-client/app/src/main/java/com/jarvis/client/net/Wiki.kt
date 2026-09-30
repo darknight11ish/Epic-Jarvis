@@ -32,6 +32,10 @@ import kotlinx.serialization.json.intOrNull
  * with the reason in `error`, and is shown the same way.
  */
 object Wiki {
+    /** Why "Add to wiki" is greyed while the link is stale (settings audit 2026-09-30). */
+    const val STALE =
+        "Not connected to the desktop, so Add to wiki waits until the link is back."
+
     const val PATH = "/api/wiki"
     const val INGEST_PATH = "/api/wiki/ingest"
     const val POLL_MS = 3_000L

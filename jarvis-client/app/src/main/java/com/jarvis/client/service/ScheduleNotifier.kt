@@ -56,7 +56,7 @@ object ScheduleNotifier {
     private const val TAG = "ScheduleNotifier"
 
     /** The one id every schedule notification has; its tag tells them apart. */
-    const val NOTIFICATION_ID = 0x3100
+    const val NOTIFICATION_ID = NotificationIds.SCHEDULE
 
     /** The kinds that carry a Snooze (jarvis_schedule.SNOOZABLE). */
     private val SNOOZABLE = com.jarvis.client.net.Schedule.SNOOZABLE

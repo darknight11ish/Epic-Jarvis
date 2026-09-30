@@ -288,7 +288,7 @@ class LiveService : Service() {
         // (the review's bug 1). A pause that closes the microphone drops it.
         fun close(keepRing: Boolean = false) {
             runCatching { rec?.stop() }
-            rec?.release()
+            runCatching { rec?.release() }
             rec = null
             runCatching { canceller?.release() }
             canceller = null
@@ -616,7 +616,7 @@ class LiveService : Service() {
     companion object {
         private const val TAG = "JarvisLive"
         const val CHANNEL_ID = "jarvis_live"
-        private const val NOTIFICATION_ID = 0x4A4C
+        private const val NOTIFICATION_ID = NotificationIds.LIVE
         const val ACTION_END = "com.jarvis.client.LIVE_END"
         const val ACTION_MUTE = "com.jarvis.client.LIVE_MUTE"
         const val ACTION_UNMUTE = "com.jarvis.client.LIVE_UNMUTE"
@@ -624,7 +624,7 @@ class LiveService : Service() {
 
         /** The "Live is on your PC - move it here?" heads-up channel. */
         const val OFFER_CHANNEL_ID = "jarvis_live_offer"
-        private const val OFFER_ID = 0x4A4D
+        private const val OFFER_ID = NotificationIds.LIVE_OFFER
 
         /**
          * True while the service holds the microphone as a foreground
@@ -703,7 +703,7 @@ class LiveService : Service() {
 
         /** "Live ended - Resume" (the Jarvis Live extras): its channel and id. */
         const val RESUME_CHANNEL_ID = "jarvis_live_resume"
-        private const val RESUME_ID = 0x4A4E
+        private const val RESUME_ID = NotificationIds.LIVE_RESUME
 
         /**
          * "Jarvis Live ended" with Resume Live, for [forMs] (the rest of the
@@ -728,6 +728,10 @@ class LiveService : Service() {
                     context, 16,
                     Intent(context, MainActivity::class.java)
                         .setAction(MainActivity.ACTION_RESUME_LIVE)
+                        .putExtra(
+                            com.jarvis.client.InternalLaunch.EXTRA_PROOF,
+                            com.jarvis.client.InternalLaunch.token(context),
+                        )
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                 )

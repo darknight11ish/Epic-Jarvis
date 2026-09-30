@@ -182,11 +182,46 @@ impl Security {
     }
 }
 
-/// The stored value, read. Anything unreadable is the defaults.
+/// One stored on/off field, read on its own. A real true/false is taken as
+/// is; a value of the wrong type that still says "on" (`"true"`, `1`) stays
+/// ON - a lock never switches itself off because of a typo. Missing or
+/// anything else is off.
+fn stored_flag(raw: Option<&serde_json::Value>) -> bool {
+    match raw {
+        Some(serde_json::Value::Bool(b)) => *b,
+        Some(serde_json::Value::String(s)) => s.trim().eq_ignore_ascii_case("true"),
+        Some(serde_json::Value::Number(n)) => n.as_f64().is_some_and(|f| f != 0.0),
+        _ => false,
+    }
+}
+
+/// The stored value, read field by field, so one bad field falls back alone
+/// instead of throwing the whole record away (which used to read a lock as
+/// OFF). An unknown "approvals" word is the STRICTER choice (every approval
+/// asks); a bad lock time is the default, then rounded down by
+/// [`Security::normalised`]. A value that is not a record at all is the
+/// defaults.
 pub fn parse_stored(value: serde_json::Value) -> Security {
-    serde_json::from_value::<Security>(value)
-        .map(Security::normalised)
-        .unwrap_or_default()
+    let Some(map) = value.as_object() else {
+        return Security::default();
+    };
+    let relock_after_secs = map
+        .get("relockAfterSecs")
+        .and_then(serde_json::Value::as_u64)
+        .map_or(Security::default().relock_after_secs, |n| {
+            u32::try_from(n).unwrap_or(u32::MAX)
+        });
+    let approvals = match map.get("approvals") {
+        None | Some(serde_json::Value::Null) => ApprovalCheck::Risky,
+        Some(v) => serde_json::from_value(v.clone()).unwrap_or(ApprovalCheck::Every),
+    };
+    Security {
+        app_lock: stored_flag(map.get("appLock")),
+        relock_after_secs,
+        approvals,
+        private_answers: stored_flag(map.get("privateAnswers")),
+    }
+    .normalised()
 }
 
 /// True when `new` loosens anything `old` had: a lock turned off, a longer
@@ -639,10 +674,39 @@ mod tests {
     fn no_stored_value_can_mean_never() {
         // There is no third variant, so "never" (or anything else) does not
         // parse - and an unreadable value is the defaults, which ask.
+        // An unknown word is the STRICTER choice, never the looser one.
         let s = parse_stored(json!({ "approvals": "never" }));
-        assert_eq!(s.approvals, ApprovalCheck::Risky);
+        assert_eq!(s.approvals, ApprovalCheck::Every);
         assert_eq!(parse_stored(json!("rubbish")), Security::default());
         assert_eq!(parse_stored(json!({})), Security::default());
+    }
+
+    #[test]
+    fn one_bad_field_never_switches_a_lock_off() {
+        // Used to discard the whole record, reading app lock as OFF.
+        let s = parse_stored(json!({
+            "appLock": true, "privateAnswers": true,
+            "approvals": "sometimes", "relockAfterSecs": "soon"
+        }));
+        assert!(s.app_lock);
+        assert!(s.private_answers);
+        assert_eq!(s.approvals, ApprovalCheck::Every);
+        assert_eq!(s.relock_after_secs, 60);
+        // A wrong-typed "on" stays on.
+        let s = parse_stored(json!({ "appLock": "true", "privateAnswers": 1 }));
+        assert!(s.app_lock && s.private_answers);
+        // A wrong-typed "off" or a missing field is off.
+        let s = parse_stored(json!({ "appLock": "no", "approvals": null }));
+        assert!(!s.app_lock && !s.private_answers);
+        assert_eq!(s.approvals, ApprovalCheck::Risky);
+        // A good record round-trips.
+        let d = Security {
+            app_lock: true,
+            relock_after_secs: 900,
+            approvals: ApprovalCheck::Every,
+            private_answers: true,
+        };
+        assert_eq!(parse_stored(serde_json::to_value(d).unwrap()), d);
     }
 
     #[test]

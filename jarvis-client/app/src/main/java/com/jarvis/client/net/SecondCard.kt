@@ -19,7 +19,7 @@ import kotlinx.serialization.json.put
  * and `backend/jarvis_second_card.py`, docs/JARVIS-API.md section 12, the
  * owner's guide docs/SECOND-CARD.md. Everything here is OFF until the owner
  * turns it on, and it can only be turned on once the PC has found a capable
- * second card (Turing or newer, at least 10 GB).
+ * second card (Turing or newer, at least 8 GB; an 8 GB card runs fewer of the switches).
  *
  * WHAT THE PHONE DOES WITH IT. A handful of switches, one at a time, and
  * nothing else - not deep config editing. Turning a switch ON raises ONE

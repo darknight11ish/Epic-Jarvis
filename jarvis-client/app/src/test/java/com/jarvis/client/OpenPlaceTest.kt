@@ -25,14 +25,14 @@ class OpenPlaceTest {
 
     @Test
     fun `Settings rows still go to Settings, by the same id`() {
-        for (id in listOf("voice", "security", "manner", "web-search", "backup", "watch-notify")) {
+        for (id in listOf("voice", "security", "manner", "web-search", "backup", "watch-notify", "devices", "quick-tiles")) {
             assertEquals(id, OpenPlace.Where.Go(Screen.SETTINGS, id), OpenPlace.whereFor(id))
         }
     }
 
     @Test
     fun `a place only the PC has says so instead of opening a screen`() {
-        for (id in listOf("shortcuts", "account-secrets", "tool-updates", "more-options", "start-jarvis")) {
+        for (id in listOf("shortcuts", "account-secrets", "tool-updates", "more-options", "start-jarvis", "crash-notes")) {
             assertEquals(id, OpenPlace.Where.OnPc(OpenPlace.ON_PC), OpenPlace.whereFor(id))
         }
         assertTrue(OpenPlace.ON_PC.contains("your PC"))

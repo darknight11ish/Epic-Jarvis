@@ -47,6 +47,9 @@ import java.util.Locale
  * tools/gen_big_model_cases.py writes for both apps.
  */
 object BigModel {
+    /** Why the switches are greyed while the link is stale (settings audit 2026-09-30). */
+    const val STALE =
+        "Not connected to the desktop, so the switches wait until the link is back."
 
     const val PATH = "/api/big-model"
     const val DEEP_PATH = "/api/deep"

@@ -53,7 +53,7 @@ object ScreenWatch {
     const val START_LABEL = "Watch this phone with me"
     const val STOP_LABEL = "Stop watching"
     const val SIGN_TITLE = "Jarvis is watching this phone"
-    const val NOTIFICATION_TEXT = "Only when you ask a question · Stop ends it"
+    const val NOTIFICATION_TEXT = "Close pages with password boxes first. Jarvis cannot pause on them."
     const val NEEDS_USAGE = "Watching needs Android's Usage access, so Jarvis can tell which app " +
         "is in front and leave your private apps alone. It shows Jarvis which app is open - " +
         "nothing you do inside it."
@@ -66,12 +66,20 @@ object ScreenWatch {
             "Jarvis takes ONE picture, sends it only to your PC, and keeps nothing. It stops by " +
             "itself after 30 minutes, when the phone locks, or when you press Stop. Ask by voice " +
             "from another app: a question typed in Jarvis is about Jarvis's own screen, which it " +
-            "will not look at."
+            "will not look at. Jarvis cannot see a password box and cannot pause on one, so close " +
+            "any page with a password box before you ask."
+    const val ENDED_LINK = "Stopped watching: the link to your PC was lost."
     const val ENDED_LOCK = "Stopped watching: the phone locked."
     const val ENDED_TIME = "Stopped watching: 30 minutes are up."
     const val ENDED_ANDROID = "Stopped watching: Android ended the screen sharing."
     const val PRIVATE_SCREEN = "That app won't let anything see its screen, so I'm not looking."
     const val DARK_SCREEN = "The screen is off or locked, so I'm not looking."
+
+    /** How long the link to the PC may stay down or stale before Watch ends by itself. */
+    const val LINK_LOST_MS = 10_000L
+
+    /** The link is fine: connected AND not stale. Anything else counts toward [LINK_LOST_MS]. */
+    fun linkHealthy(connected: Boolean, stale: Boolean): Boolean = connected && !stale
 
     // ---------------------------------------------------------------- state
 

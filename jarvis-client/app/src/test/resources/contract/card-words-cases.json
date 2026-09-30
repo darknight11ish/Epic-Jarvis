@@ -339,6 +339,10 @@
       "title": "Jarvis wants to search GitHub"
     },
     {
+      "action": "web_search_enable",
+      "title": "Jarvis wants to turn web search back on"
+    },
+    {
       "action": "wiki_update",
       "title": "Jarvis wants to write pages in the Jarvis Wiki"
     },

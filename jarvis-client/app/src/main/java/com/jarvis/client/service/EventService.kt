@@ -481,7 +481,7 @@ class EventService : Service() {
     companion object {
         private const val TAG = "JarvisEventService"
         const val CHANNEL_ID = "jarvis_link"
-        private const val NOTIFICATION_ID = 0x4A56
+        private const val NOTIFICATION_ID = NotificationIds.EVENT_LINK
         const val ACTION_STOP = "com.jarvis.client.STOP_LINK"
         const val ACTION_DENY = "com.jarvis.client.DENY_APPROVAL"
         const val ACTION_SNOOZE = "com.jarvis.client.SNOOZE_JOB"
@@ -520,7 +520,11 @@ class EventService : Service() {
                     context,
                     Intent(context, EventService::class.java),
                 )
-            }.onFailure { Log.e(TAG, "could not start", it) }
+            }.onFailure {
+                Log.e(TAG, "could not start", it)
+                // Same field startInForeground sets, so the readiness screen shows it.
+                lastStartFailure = it.javaClass.simpleName
+            }
         }
 
         /**

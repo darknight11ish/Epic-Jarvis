@@ -636,9 +636,12 @@ body {
   background: rgb(var(--accent-rgb) / 0.16);
 }
 
+/* Focus is a solid bright outline, no fade (owner's choice): a faint glow
+   was easy to lose against the tinted fills, and a box-shadow is dropped
+   entirely in Windows high-contrast (forced-colors) mode. */
 .appr-option:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.35);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .appr-option .opt-label {
@@ -771,8 +774,8 @@ body {
 }
 
 .btn:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px rgb(var(--accent-rgb) / 0.35);
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 
@@ -1098,4 +1101,21 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+
+/* Windows high-contrast (forced-colors): the system palette replaces ours, so
+   box-shadows and tinted fills vanish. Keep every control's edge and its focus
+   outline visible, in the system's own colours. */
+@media (forced-colors: active) {
+  .btn,
+  .appr-option {
+    border: 1px solid ButtonText;
+  }
+
+  .btn:focus-visible,
+  .appr-option:focus-visible,
+  .icon-btn:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
 }
