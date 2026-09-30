@@ -108,7 +108,7 @@ await check("one card (today's PC): found in words, every switch shown and none 
   assert.match(s.cards[0], /The one chat runs on\. Everyday chat runs here: a monitor is plugged into it\./);
   assert.equal(s.blockedHidden, false);
   assert.match(s.blocked, /10 GB or more\): only one graphics card found \(the NVIDIA GeForce RTX 2080 SUPER\)\. /);
-  // The master switch and all five features, in the backend's order.
+  // The master switch and all seven features, in the backend's order.
   assert.deepEqual(s.rows.map((r) => r.id),
     ["master", ...SC.one_card.features.map((f) => f.id)]);
   for (const r of s.rows) {
@@ -182,6 +182,62 @@ await check("each feature says its model, whether it is installed, the exact nam
   // model, and legitimately lives in the same "sc-" naming convention
   // every element on this page already uses (#sc-third-section, below).
   assert.doesNotMatch(switchesHtml, /<select/, "a model picker appeared");
+});
+
+await check("Study helper and Referee suggestions: seven rows from features[], and Referee never mentions a model or memory (13.5 #2)", async () => {
+  const ids = ["long_context", "vision", "learning", "browser_control", "wiki", "study", "referee"];
+  for (const name of Object.keys(SC)) {
+    assert.deepEqual(SC[name].features.map((f) => f.id), ids, `${name}: not the seven rows`);
+  }
+  // Capable PC, everything off: Study has its model line, Referee has none.
+  const page = await open({ status: SC.capable_off });
+  const s = await section(page);
+  await page.close();
+  assert.deepEqual(s.rows.map((r) => r.id), ["master", ...ids]);
+  const study = row(s, "study").text;
+  assert.match(study, /Study helper/);
+  assert.match(study, /Model: qwen3:8b, installed\./);
+  assert.match(study, /Uses about 7\.7 GB/);
+  const ref = row(s, "referee").text;
+  assert.match(ref, /Referee suggestions/);
+  assert.ok(ref.includes(SC.capable_off.features.find((f) => f.id === "referee").what), "no 'what'");
+  assert.doesNotMatch(ref, /chosen once a capable second card/, "the wrong 'model is chosen once...' line");
+  assert.doesNotMatch(ref, /Model:|GB of the second card/, "a model or memory line under Referee");
+  noRaw(ref);
+});
+
+await check("Referee suggestions on one card: the plain reason is shown, and still no model line; Study keeps the 'chosen once' line", async () => {
+  const page = await open({ status: SC.one_card });
+  const s = await section(page);
+  await page.close();
+  const ref = row(s, "referee");
+  assert.equal(ref.disabled, true);
+  assert.match(ref.text, /Needs a capable second graphics card: only one graphics card found/);
+  // Not capable: the old wording stays for a model-using switch...
+  assert.match(row(s, "study").text, /The model is chosen once a capable second card is found\./);
+  // ...and a model-free switch never talks about a model (model_free, when the PC says it).
+  const status = JSON.parse(JSON.stringify(SC.one_card));
+  status.features.find((f) => f.id === "referee").model_free = true;
+  const page2 = await open({ status });
+  const s2 = await section(page2);
+  await page2.close();
+  assert.doesNotMatch(row(s2, "referee").text, /model is chosen|Model:|GB of the second/);
+});
+
+await check("Referee working: the backend's own 'Working' line, no model or memory line, and OFF is immediate", async () => {
+  const status = JSON.parse(JSON.stringify(SC.capable_off));
+  status.enabled = true;
+  const f = status.features.find((x) => x.id === "referee");
+  Object.assign(f, { enabled: true, active: true, available: true,
+    why: "Working: it compares the numbers you log with your targets on this PC and loads no model, so it uses none of the card's memory yet." });
+  const page = await open({ status });
+  const s = await section(page);
+  await page.close();
+  const r = row(s, "referee");
+  assert.equal(r.state, "on");
+  assert.equal(r.disabled, false, "a working switch cannot be turned off");
+  assert.ok(r.text.includes(f.why));
+  assert.doesNotMatch(r.text, /Model:|chosen once|GB of the second card/);
 });
 
 await check("the pin command: exactly the backend's line, read-only, with Copy and what it does", async () => {
@@ -800,7 +856,7 @@ await check("CONTROL: the route line passes second_card on, and nothing more", a
   // are not keys: drop them before reading the quoted strings.
   const body = list[1].replace(/\/\/[^\n]*/g, "");
   const keys = [...body.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
-  assert.deepEqual(keys, ["lane", "where", "gate", "second_card", "quick", "open_settings", "face_tuning", "offer", "open_brain"]);
+  assert.deepEqual(keys, ["lane", "where", "gate", "second_card", "quick", "open_settings", "face_tuning", "offer", "open_brain", "history_q"]);
 });
 
 await browser.close();

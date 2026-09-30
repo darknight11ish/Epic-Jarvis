@@ -367,13 +367,13 @@ CLASSIFICATION = {
     # section 8): the phone does not edit a topic's keywords (typing long lists
     # is deep configuration) and has no Galaxy; every route below is still
     # called by both apps.
-    "/api/topics": ("planned", "GET: the topics with counts, modes, unchecked labels and the week's skip counts. POST {op: add|rename|style|move|words|private|delete}: the owner's own topic list. Turning off / marking private is at once; clearing the private mark or deleting a private topic into a looser home is ONE card (topic_loosen). Held on a stale link. Hidden names under Hide memory lists."),
-    "/api/topics/mode": ("planned", "POST {id, mode}: Learn and use / Use but don't learn / Learn but don't use / Off. Stricter is at once; a private topic turned back on is 202 waiting with ONE card (topic_loosen). Held on a stale link."),
-    "/api/topics/preview": ("planned", "GET ?id=&mode=: what the change would do, in numbers and a plain line (the picker shows it); never any fact words."),
-    "/api/topics/review": ("planned", "GET ?after=&limit=: the facts Jarvis sorted by guessing and the owner has not checked, in batches of 10 grouped by topic. A memory list: hidden under Hide memory lists."),
-    "/api/topics/file": ("planned", "POST {ids, topic_id} files facts by the owner's tap; POST {ids, confirm: true} is \"These are right\". A batch out of a private topic into a looser one is ONE card."),
-    "/api/topics/hidden": ("planned", "GET ?id=: the facts of an Off topic (\"Show them\"). A memory list: hidden under Hide memory lists."),
-    "/api/topics/settings": ("planned", "POST {model_help}: let the local model suggest a topic for a few Unsorted facts a night (off to start; no card - it reads the owner's own facts with the local model, as the learner already does)."),
+    "/api/topics": ("ported", "GET: the topics with counts, modes, unchecked labels and the week's skip counts. POST {op: add|rename|style|move|words|private|delete}: the owner's own topic list. Turning off / marking private is at once; clearing the private mark or deleting a private topic into a looser home is ONE card (topic_loosen). Held on a stale link. Hidden names under Hide memory lists."),
+    "/api/topics/mode": ("ported", "POST {id, mode}: Learn and use / Use but don't learn / Learn but don't use / Off. Stricter is at once; a private topic turned back on is 202 waiting with ONE card (topic_loosen). Held on a stale link."),
+    "/api/topics/preview": ("ported", "GET ?id=&mode=: what the change would do, in numbers and a plain line (the picker shows it); never any fact words."),
+    "/api/topics/review": ("ported", "GET ?after=&limit=: the facts Jarvis sorted by guessing and the owner has not checked, in batches of 10 grouped by topic. A memory list: hidden under Hide memory lists."),
+    "/api/topics/file": ("ported", "POST {ids, topic_id} files facts by the owner's tap; POST {ids, confirm: true} is \"These are right\". A batch out of a private topic into a looser one is ONE card."),
+    "/api/topics/hidden": ("ported", "GET ?id=: the facts of an Off topic (\"Show them\"). A memory list: hidden under Hide memory lists."),
+    "/api/topics/settings": ("ported", "POST {model_help}: let the local model suggest a topic for a few Unsorted facts a night (off to start; no card - it reads the owner's own facts with the local model, as the learner already does)."),
     # Projects (the owner's decision of 2026-09-28; backend/jarvis_projects.py,
     # projects.patch; JARVIS-API section 88). Both apps since build step 3:
     # desktop Brain -> Projects (brain/projects.rs projects_read /
