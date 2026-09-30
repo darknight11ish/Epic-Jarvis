@@ -856,6 +856,24 @@
        "title": "Turn a private topic back on, or let it learn or be used again"
       },
       {
+       "action": "chat_tags_suggest_on",
+       "fixed": false,
+       "id": "chat_tags_suggest_on",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it read a few of your old chats at night to suggest tags"
+      },
+      {
+       "action": "chat_tag_suggest",
+       "fixed": false,
+       "id": "chat_tag_suggest",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "File one chat under a tag it suggests"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -1868,6 +1886,24 @@
        "title": "Turn a private topic back on, or let it learn or be used again"
       },
       {
+       "action": "chat_tags_suggest_on",
+       "fixed": false,
+       "id": "chat_tags_suggest_on",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it read a few of your old chats at night to suggest tags"
+      },
+      {
+       "action": "chat_tag_suggest",
+       "fixed": false,
+       "id": "chat_tag_suggest",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "File one chat under a tag it suggests"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -2875,6 +2911,24 @@
        "title": "Turn a private topic back on, or let it learn or be used again"
       },
       {
+       "action": "chat_tags_suggest_on",
+       "fixed": false,
+       "id": "chat_tags_suggest_on",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it read a few of your old chats at night to suggest tags"
+      },
+      {
+       "action": "chat_tag_suggest",
+       "fixed": false,
+       "id": "chat_tag_suggest",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "File one chat under a tag it suggests"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -3877,6 +3931,24 @@
        "title": "Turn a private topic back on, or let it learn or be used again"
       },
       {
+       "action": "chat_tags_suggest_on",
+       "fixed": false,
+       "id": "chat_tags_suggest_on",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it read a few of your old chats at night to suggest tags"
+      },
+      {
+       "action": "chat_tag_suggest",
+       "fixed": false,
+       "id": "chat_tag_suggest",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "File one chat under a tag it suggests"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -4877,6 +4949,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Turn a private topic back on, or let it learn or be used again"
+      },
+      {
+       "action": "chat_tags_suggest_on",
+       "fixed": false,
+       "id": "chat_tags_suggest_on",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it read a few of your old chats at night to suggest tags"
+      },
+      {
+       "action": "chat_tag_suggest",
+       "fixed": false,
+       "id": "chat_tag_suggest",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "File one chat under a tag it suggests"
       },
       {
        "action": "modify_own_code",
@@ -5895,6 +5985,24 @@
        "title": "Turn a private topic back on, or let it learn or be used again"
       },
       {
+       "action": "chat_tags_suggest_on",
+       "fixed": false,
+       "id": "chat_tags_suggest_on",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it read a few of your old chats at night to suggest tags"
+      },
+      {
+       "action": "chat_tag_suggest",
+       "fixed": false,
+       "id": "chat_tag_suggest",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "File one chat under a tag it suggests"
+      },
+      {
        "action": "modify_own_code",
        "fixed": false,
        "id": "modify_own_code",
@@ -6900,6 +7008,24 @@
        "says": "Asks you first, every time",
        "tier": "ask",
        "title": "Turn a private topic back on, or let it learn or be used again"
+      },
+      {
+       "action": "chat_tags_suggest_on",
+       "fixed": false,
+       "id": "chat_tags_suggest_on",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Let it read a few of your old chats at night to suggest tags"
+      },
+      {
+       "action": "chat_tag_suggest",
+       "fixed": false,
+       "id": "chat_tag_suggest",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "File one chat under a tag it suggests"
       },
       {
        "action": "modify_own_code",

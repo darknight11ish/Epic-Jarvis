@@ -1,0 +1,44 @@
+--- a/jarvis_gate.py
++++ b/jarvis_gate.py
+@@ -172,5 +172,7 @@
+     "obscura_enable",  # jarvis_browser_engine.py acts only on tier "ask": ONE card to turn on the headless browser, Obscura (browser-engine.patch)
+     "topic_loosen",  # jarvis_topics.py acts only on tier "ask": ONE card to turn a private topic back on (topics.patch)
+     "referee_tick",  # jarvis_referee.py acts only on tier "ask": ONE card per goal step whose number reached its target; only the owner's tap ticks it (referee.patch)
++    "chat_tags_suggest_on",  # jarvis_tag_suggest.py acts only on tier "ask": ONE card to let the local model read a few old chats at night to suggest tags (tag-suggest.patch)
++    "chat_tag_suggest",  # jarvis_tag_suggest.py acts only on tier "ask": ONE card per suggested tag for one chat; only the owner's tap files it (tag-suggest.patch)
+ })
+ 
+@@ -849,5 +849,13 @@
+     # owner's own tick would (and it can be unticked at once); the model never writes a tick and
+     # no test is run. Nothing leaves this PC. At most a few cards a day.
+     "referee_tick": ("yes", "local", "ticks one step of one of your goals whose number reached its target, exactly as if you had ticked it yourself; you can untick it at once, and it never runs a test or ticks anything on its own"),
++    # tag-suggest.patch (jarvis_tag_suggest.py, JARVIS-API section 104; the owner's decision of
++    # 2026-09-30). Two cards, both on this PC only: one to let the local model read a few old
++    # chats at night (never ones that read email or web pages, difficult moments, or Live,
++    # support and AI-chat records), and one per suggested tag, which files ONE chat under a tag
++    # that already exists when you tap Approve. Turning it off is instant; the tag can be moved
++    # or removed at once, and no chat words are kept or logged.
++    "chat_tags_suggest_on": ("yes", "local", "lets Jarvis's model on this PC read the first few messages you wrote in a few old chats each night to suggest a tag; it never reads chats that read email or web pages, difficult moments, or Live, support and AI-chat records, it can only pick a tag you already made, nothing is filed without your Approve, and turning it off is instant"),
++    "chat_tag_suggest": ("yes", "local", "files one chat under a tag you already made, exactly as if you had filed it yourself; you can move or remove the tag at once, and nothing else about the chat changes"),
+ }
+ 
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3695,7 +3695,17 @@
+     try:
+         import jarvis_second_card
+         print(jarvis_second_card.wire_study())
+     except Exception as exc:
+         print(f"  study      NOT WIRED ({type(exc).__name__}) - the quiz keeps using the everyday model")
++    # tag-suggest.patch ("Suggest tags overnight", the owner's decision of 2026-09-30; JARVIS-API
++    # section 104): keeps the quiet hourly look on the one scheduler in step with the switch.
++    # It adds no tool; jarvis_chat_log.py routes GET/POST /api/history/tags/suggest to it (the
++    # route names are in chat-history.patch). Its only output is approval cards.
++    try:
++        import jarvis_tag_suggest
++        print(jarvis_tag_suggest.install())
++    except Exception as exc:
++        print(f"  tag-suggest NOT ON ({type(exc).__name__}) - Suggest tags overnight is off")
++        print("             until jarvis_tag_suggest.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)

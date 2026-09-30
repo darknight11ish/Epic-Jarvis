@@ -959,6 +959,16 @@ $PATCHES = @(
     # copied in (and the rebuilt jarvis-framework.toml's `referee_tick = "ask"` line); without it, or on any
     # error, the banner says so and both switches simply do nothing.
     'referee.patch'
+    # "Suggest tags overnight" (the owner's decision of 2026-09-30; docs/OVERNIGHT-TAGS-DESIGN.md, JARVIS-API
+    # section 104): once a night the LOCAL model may suggest a tag for a few untagged chats, each one a card,
+    # filed only on a tap. THREE hunks: in jarvis_gate.py the two actions `chat_tags_suggest_on` and
+    # `chat_tag_suggest` join the "acts only on tier ask" set and get their _RISK lines (both right after
+    # referee.patch's own, so it goes after it); in jarvis_hud.py ONE block right after referee.patch's
+    # own (the last one before `_loopback_companion`) that keeps the quiet hourly look in step with the
+    # switch. It adds no tool; the two routes are in chat-history.patch. Needs jarvis_tag_suggest.py copied
+    # in (and the rebuilt jarvis-framework.toml's two `ask` lines); without it, or on any error, the banner
+    # says so and the switch simply does nothing.
+    'tag-suggest.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1190,6 +1200,7 @@ $SHIPPED = @(
     # --- "Topic controls" (2026-09-30, topics.patch) ---
     'jarvis_topics.py'           # topics.patch: per-topic mode (Learn and use / Use but don't learn / Learn but don't use / Off) - tables in memory.db, sorting by fixed rules with the local model only as an opt-in suggestion, one card (topic_loosen) for turning a private topic back on; the filter itself lives in the rebuilt jarvis_memory.py
     'jarvis_referee.py'          # referee.patch: "This looks done - tick it?" - one card per goal step whose number reached its target, at most three a day, no model, only the owner's tap ticks; a second-card switch (id referee)
+    'jarvis_tag_suggest.py'      # tag-suggest.patch: "Suggest tags overnight" - the local model may suggest a tag for a few untagged chats a night, each a card (chat_tag_suggest), filed only on a tap; off by default, turning it on is one card (chat_tags_suggest_on)
 )
 
 # The settings file. Installed only where none exists; never overwritten.

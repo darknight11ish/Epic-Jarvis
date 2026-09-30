@@ -74,7 +74,7 @@ object Topics {
     /** Every word of the shared fixture (`words`), in this app's source. `TopicsTest` holds them equal. */
     val WORDS: Map<String, String> = mapOf(
         "title" to "Topics",
-        "intro" to "A topic is a folder for things Jarvis knows. Pick what Jarvis may do with each folder.",
+        "intro" to "A topic is a folder for things Jarvis knows. Pick what Jarvis may do with each folder. Switching the money topic off, or to \"Learn, but don't use\", also stops spending summaries and the retirement calculator.",
         "sorted_guess" to "Jarvis sorted {n} of your {total} facts by guessing from the words. Check them so switching a topic off works as you expect.",
         "sorted_guess_one" to "Jarvis sorted 1 fact by guessing from the words. Check it so switching a topic off works as you expect.",
         "check_button" to "Check these ({n})",
@@ -169,11 +169,11 @@ object Topics {
     val MODES: List<Mode> = listOf(
         Mode("both", "Learn and use", "Jarvis remembers new things about this and uses them in answers."),
         Mode("use_only", "Use, but don't learn", "Jarvis keeps what it knows and uses it, but saves nothing new."),
-        Mode("learn_only", "Learn, but don't use", "Jarvis keeps learning quietly, but leaves this out of its answers."),
+        Mode("learn_only", "Learn, but don't use", "Jarvis keeps learning quietly, but leaves this out of its answers. For the money topic, that also stops spending summaries and the retirement calculator."),
         Mode(
             "off",
             "Off",
-            "Jarvis neither learns nor uses this. What it knows is kept, not deleted, and comes back when you switch it on.",
+            "Jarvis neither learns nor uses this. What it knows is kept, not deleted, and comes back when you switch it on. For the money topic, Off also stops spending summaries and the retirement calculator.",
         ),
     )
 

@@ -1,6 +1,6 @@
 # Overnight suggested tags, and a "new section here" marker: design (2026-09-30)
 
-Status: **designed, not built.** Queue item 6 (overnight tags, JARVIS-API section
+Status: **backend built and tested (2026-09-30); both apps still to build.** (Was: designed, not built.) Queue item 6 (overnight tags, JARVIS-API section
 104) and the marker half of queue item 8 (section 106, shared with the Galaxy
 panel in `docs/GALAXY-PANEL-DESIGN.md`). Both build on chat tags
 (`docs/CHAT-TAGS-DESIGN.md`, section 99, item 1) and cannot start until those
@@ -302,3 +302,79 @@ the messages before it?**
 
 - **Up to 3** (recommended). It stops earlier if you keep saying no.
 - **Just 1.** Quieter, but slow to catch up if you have many untagged chats.
+
+## 8. Owner's answers (2026-09-30)
+
+- **Marker: only a divider.** Jarvis still reads the whole chat the same way.
+- **Up to 3 tag suggestions a night.**
+
+## 9. Slice contract (frozen, for the app builders)
+
+The backend half is built (`docs/JARVIS-API.md` sections 104 and 106; tests
+`backend/test_tag_suggest.py`, `backend/test_chat_marks.py`). Everything below is what
+the PC sends and what the apps must do. Where this differs from sections 1-7, this wins.
+Shared words and worked examples are in `history-cases.json` (regenerate with
+`python3 tools/gen_history_cases.py`; keys `words.tag_suggest*`, `words.mark*`,
+`tag_suggest_state_cases`, `tag_suggest_card_cases`, `mark_error_cases`).
+
+**A. Suggest tags overnight (History -> Tags, last row).**
+
+- `GET /api/history/tags/suggest` -> `{"ok": true, "enabled": bool, "paused": bool,
+  "waiting": int, "last_day": "YYYY-MM-DD" | ""}`. Poll it when the Tags editor opens and
+  after a POST; no push.
+- `POST /api/history/tags/suggest` with exactly `{"enabled": true|false}`. On: `202
+  {"ok": true, "pending": true}` (an approval card is now on the PC; show
+  `words.tag_suggest_pending`; the switch stays visually OFF until a later GET says
+  `enabled`) or `200 {"ok": true, "enabled": true}` if it was already on. Off: `200
+  {"ok": true, "enabled": false}`, instant. Errors `{"ok": false, "error", "message"}` with
+  codes `bad_request` (400/503), `no_local_model` (409), `no_tags` (409); show the PC's
+  non-empty `message`, else `words.tag_suggest_errors[code]`, else
+  `words.tag_suggest_error_fallback`. Held on a stale link (rule 4).
+- State line (one line, same words both apps): paused -> `tag_suggest_paused`; else enabled
+  -> `tag_suggest_on`; else `tag_suggest_off`. Under it, when `waiting > 0`:
+  `tag_suggest_waiting_one` / `tag_suggest_waiting_other` (`{n}`). `paused` and `enabled`
+  are never both true: the third "no" switches the feature off and sets `paused`; turning
+  it on again raises a fresh card and clears the pause.
+- The row still shows under hidden lists (it holds no chat words).
+- **The suggestion card** arrives in the ordinary approvals flow (action
+  `chat_tag_suggest`, tier ask; the switch card is `chat_tags_suggest_on`). No new route,
+  no new card shape. The gate `detail` carries `text` (the whole card), **`text_hidden`**
+  (same, with the `Chat:` line reading `A chat from 28 Sep, 14:05`), `what`, and
+  `leaves_this_pc: false`. **Show `text_hidden` when "Hide memory lists and chat history"
+  (phone) or Windows Hello for memory lists (desktop) hides private lists; otherwise
+  `text`.** With App lock on, the desktop widget shows the short title only, as for every
+  card. Titles in `words` for the notice come from `jarvis_card_words.TITLES`.
+- Desktop: one Rust command in `brain/history.rs` (exactly the two keys), registered in
+  `lib.rs`, capabilities and permissions. Phone: `net/ChatLog.kt`, `JarvisApi.kt`,
+  `JarvisRuntime.kt`, `HistoryScreen.kt`. `tools/check_parity.py` has the row as
+  `planned`; change it to `ported` when both apps call it.
+
+**B. New section here.**
+
+- `POST /api/history/mark` with exactly `{"id": chat_id, "idx": int, "on": bool}` ->
+  `200 {"ok": true, "id", "idx", "on", "marks": [int, ...]}` (the whole list, sorted). `idx`
+  is a turn's `idx` from the conversation read; the divider sits ABOVE that turn. Adding
+  twice or removing a missing one is fine.
+- `GET /api/history/conversation` gains `marks: [int]`, `markable: bool`,
+  `mark_why: ""|sentence`. Draw the `New section here` button (`words.mark`, accessible
+  name `words.mark_label`) on each of the OWNER'S messages (role `user`) only when
+  `markable`; when not markable, draw nothing (the sentence is for the not_markable
+  error). Draw a divider (`words.mark_divider`, heading-level landmark) above every turn
+  whose `idx` is in `marks`, with `words.mark_remove` on it (same tap, both directions).
+  The button is offered from 10 turns (`mark_min_turns`), at most 20 per chat
+  (`mark_max`).
+- Errors `{"ok": false, "error", "message"}`: `bad_request`, `not_found`, `not_markable`
+  (409, also `mark_why`), `too_many_marks` (409). Show the PC's non-empty `message`; else
+  the fixed sentence (`words.mark_errors[code]`, `words.mark_no` for `not_markable`);
+  else `words.mark_error_fallback`. Successes are announced politely with `mark_done` /
+  `mark_removed`. Held on a stale link. No card. Hidden under "Hide memory lists and chat
+  history": the opened chat is already hidden.
+- Desktop: `brain_history_mark` (exactly the three keys) in `brain/history.rs`,
+  registered in `lib.rs`, capabilities and permissions; `brain.js` draws buttons and
+  dividers. Phone: `net/ChatLog.kt` parses `marks`, `markable`, `mark_why`;
+  `JarvisRuntime.markSection` calls the route; `HistoryScreen.kt` draws them.
+- Markers are view-only: never send them to the model, never change what "Continue
+  this chat" re-sends.
+
+**C. Not built yet (backend):** `backend/eval_tag_suggest.py` (informational, for the
+owner's PC); a voice/settings-registry door for the switch (not asked for).

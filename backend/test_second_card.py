@@ -1197,7 +1197,10 @@ def t_status_shape_and_no_secrets():
           set(st["detected"]) == {"capable", "why", "primary", "second", "cards"})
     check("each feature row has exactly its keys",
           all(set(f) == {"id", "name", "what", "enabled", "active", "available", "needs", "model",
-                         "model_installed", "memory_gib", "why"} for f in st["features"]))
+                         "model_installed", "memory_gib", "why", "model_free"} for f in st["features"]))
+    check("model_free is true for referee (loads no model) and false for every other row",
+          all(f["model_free"] is (f["id"] == "referee") for f in st["features"]),
+          [(f["id"], f["model_free"]) for f in st["features"]])
     check("the seven feature ids, in order (study and referee since 2026-09-30)",
           [f["id"] for f in st["features"]] == ["long_context", "vision", "learning",
                                                  "browser_control", "wiki", "study", "referee"])

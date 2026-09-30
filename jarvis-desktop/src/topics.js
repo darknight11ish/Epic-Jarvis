@@ -23,7 +23,7 @@ import { COLOURS, ICON_PATHS, ICONS as TAG_ICONS } from "./history-tags.js";
 
 export const WORDS = Object.freeze({
   title: "Topics",
-  intro: "A topic is a folder for things Jarvis knows. Pick what Jarvis may do with each folder.",
+  intro: "A topic is a folder for things Jarvis knows. Pick what Jarvis may do with each folder. Switching the money topic off, or to \"Learn, but don't use\", also stops spending summaries and the retirement calculator.",
   sorted_guess:
     "Jarvis sorted {n} of your {total} facts by guessing from the words. Check them so switching a topic off works as you expect.",
   sorted_guess_one:
@@ -87,12 +87,12 @@ export const WORDS = Object.freeze({
 export const MODES = Object.freeze([
   { id: "both", name: "Learn and use", sentence: "Jarvis remembers new things about this and uses them in answers." },
   { id: "use_only", name: "Use, but don't learn", sentence: "Jarvis keeps what it knows and uses it, but saves nothing new." },
-  { id: "learn_only", name: "Learn, but don't use", sentence: "Jarvis keeps learning quietly, but leaves this out of its answers." },
+  { id: "learn_only", name: "Learn, but don't use", sentence: "Jarvis keeps learning quietly, but leaves this out of its answers. For the money topic, that also stops spending summaries and the retirement calculator." },
   {
     id: "off",
     name: "Off",
     sentence:
-      "Jarvis neither learns nor uses this. What it knows is kept, not deleted, and comes back when you switch it on.",
+      "Jarvis neither learns nor uses this. What it knows is kept, not deleted, and comes back when you switch it on. For the money topic, Off also stops spending summaries and the retirement calculator.",
   },
 ]);
 

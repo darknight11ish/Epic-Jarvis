@@ -320,6 +320,14 @@ topic_loosen = "ask"
 # card at any other tier).
 referee_tick = "ask"
 
+# Overnight suggested tags (2026-09-30; JARVIS-API section 104): turning "Suggest
+# tags overnight" ON is ONE card (it lets the LOCAL model read a few kept chats);
+# each suggested tag for a chat is ONE more card, at most three a night. The chat
+# is filed only when a person taps Approve. Nothing leaves this PC. Both must stay
+# "ask": jarvis_tag_suggest.py files nothing and switches nothing on at any other tier.
+chat_tags_suggest_on = "ask"
+chat_tag_suggest = "ask"
+
 # --- Picture mode for "Look at this" and "Watch with me" (2026-09-29) -----
 # Lets a small picture model, running on the PROCESSOR (never the graphics
 # card) in its own copy of Ollama that only this PC can reach, also look at

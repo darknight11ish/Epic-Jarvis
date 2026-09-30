@@ -2570,7 +2570,10 @@ def _feature_row(f: dict, sw: dict, det: dict, lane_state: str, lane_why: str,
     return {"id": fid, "name": f["name"], "what": _what(f, det), "enabled": enabled,
             "active": active, "available": available, "needs": list(f["needs"]),
             "model": model, "model_installed": installed,
-            "memory_gib": gib, "why": why}
+            "memory_gib": gib, "why": why,
+            # True for a switch that loads no model at all (Referee suggestions):
+            # an app shows no "model" line for it. Optional for a reader.
+            "model_free": bool(free)}
 
 
 def status() -> dict:

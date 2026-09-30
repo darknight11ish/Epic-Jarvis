@@ -116,10 +116,12 @@ MODE_INFO = (
     ("use_only", "Use, but don't learn",
      "Jarvis keeps what it knows and uses it, but saves nothing new."),
     ("learn_only", "Learn, but don't use",
-     "Jarvis keeps learning quietly, but leaves this out of its answers."),
+     "Jarvis keeps learning quietly, but leaves this out of its answers. For the money topic, "
+     "that also stops spending summaries and the retirement calculator."),
     ("off", "Off",
      "Jarvis neither learns nor uses this. What it knows is kept, not deleted, "
-     "and comes back when you switch it on."),
+     "and comes back when you switch it on. For the money topic, Off also stops spending "
+     "summaries and the retirement calculator."),
 )
 MODE_NAME = {m[0]: m[1] for m in MODE_INFO}
 MODE_SENTENCE = {m[0]: m[2] for m in MODE_INFO}
@@ -161,7 +163,9 @@ ERRORS = {
 
 WORDS = {
     "title": "Topics",
-    "intro": "A topic is a folder for things Jarvis knows. Pick what Jarvis may do with each folder.",
+    "intro": ("A topic is a folder for things Jarvis knows. Pick what Jarvis may do with each folder. "
+              "Switching the money topic off, or to \"Learn, but don't use\", also stops spending "
+              "summaries and the retirement calculator."),
     "sorted_guess": ("Jarvis sorted {n} of your {total} facts by guessing from the words. "
                      "Check them so switching a topic off works as you expect."),
     "sorted_guess_one": ("Jarvis sorted 1 fact by guessing from the words. Check it so "
@@ -836,6 +840,25 @@ def blocked_ids(kind: str = "use", store=None) -> frozenset:
             return _memory().topic_blocked(c, kind)
     except Exception:
         return frozenset()
+
+
+def starter_use_blocked(key: str, store=None) -> bool:
+    """Is the ready-made topic `key` ("money", "health", ...) set so Jarvis may
+    not USE it in answers (Off, or Learn but don't use)? The model tools that
+    read the owner's own numbers (spending summaries, the retirement what-if)
+    ask this for "money". Follows the topic when it is renamed. False when
+    there is no such topic, none was ever set, or the settings cannot be read:
+    nothing configured means nothing changes."""
+    try:
+        with _db(store) as c:
+            ensure(c)
+            tid = _starters(c).get(key)
+            if tid is None:
+                return False
+            t = topic_of(c, tid)
+            return bool(t) and not mode_flags(t["mode"])[1]
+    except Exception:
+        return False
 
 
 def take_left_out() -> int:

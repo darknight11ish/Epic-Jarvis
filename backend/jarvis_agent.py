@@ -768,6 +768,10 @@ SPENDING_REFUSED_LINE = ("Jarvis did not open a bank file for this question. Ask
                          "spending in a message of its own.")
 
 
+SPENDING_MONEY_OFF_LINE = ("You set the Money topic to Off, so Jarvis did not open a bank file. "
+                           "Switch it back on in Brain, Topics to ask about your spending.")
+
+
 def _spending_hold(watch: "_TurnWatch", names) -> bool:
     """Are the model's words held back this round? Yes once my_spending has been
     called (a table or not), and - before any call - on a question that looks
@@ -794,12 +798,29 @@ def _spending_words_problem(text: str, owner_text: str) -> bool:
         return True                       # cannot be checked: not shown
 
 
+MONEY_TOPIC_OFF = ("refused: the owner set the Money topic to Off (or to \"Learn, but don't "
+                   "use\"), so Jarvis does not use their money numbers in answers. Nothing "
+                   "was opened or worked out. Tell the owner they can switch Money back on "
+                   "in Brain, Topics.")
+
+
+def _money_topic_off() -> bool:
+    """True when the Money topic may not be used in answers. Never raises."""
+    try:
+        import jarvis_topics as TOP
+        return TOP.starter_use_blocked("money")
+    except Exception:
+        return False
+
+
 def _spending_refusal(watch: "_TurnWatch", args: dict) -> str:
     """Why this turn may not open a bank file, or "". Outside text in THIS turn
     (a reading tool other than this one ran), a conversation that read outside
     text before, a message that was pasted or shared, or text the app added:
     the choice of file could be steered by planted words. And one table an
     answer, because the one sentence is checked against that table."""
+    if _money_topic_off():
+        return MONEY_TOPIC_OFF
     if watch.tainted or watch.provenance or watch.app_context:
         return SPENDING_OUTSIDE
     if any(n != SPENDING_TOOL for n in watch.read):
@@ -864,6 +885,8 @@ def _retirement_refusal(watch: "_TurnWatch") -> str:
     (any reading tool ran), a conversation that read outside text before, a
     message that was pasted or shared, or text the app added: planted words
     could have chosen the numbers. Checked BEFORE prepare and before any run."""
+    if _money_topic_off():
+        return MONEY_TOPIC_OFF
     if watch.tainted or watch.provenance or watch.app_context or watch.read:
         return RETIREMENT_OUTSIDE
     return ""
@@ -7086,7 +7109,8 @@ def _one_call(call: dict, names: list, convo: list, steps: list, checker,
         why = _spending_refusal(watch, args)
         if why:
             if watch.spending_table is None:
-                watch.spending_message = SPENDING_REFUSED_LINE
+                watch.spending_message = (SPENDING_MONEY_OFF_LINE if why == MONEY_TOPIC_OFF
+                                          else SPENDING_REFUSED_LINE)
             convo.append({"role": "tool", "tool_call_id": call.get("id", ""),
                           "content": _tool_content({"ok": False, "error": why})})
             steps.append({"tool": name, "ran": False, "ok": False, "outcome": "refused"})

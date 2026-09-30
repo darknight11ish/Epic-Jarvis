@@ -103,6 +103,11 @@ object SecondCard {
         val memoryGib: Double?,
         /** The PC's own sentence for the line under the switch. */
         val why: String,
+        /**
+         * True for a switch that loads no model at all (Referee suggestions).
+         * Optional: an older PC sends nothing, which reads as false.
+         */
+        val modelFree: Boolean = false,
     )
 
     data class Status(
@@ -344,6 +349,7 @@ object SecondCard {
                     modelInstalled = f.bool("model_installed"),
                     memoryGib = (f["memory_gib"] as? JsonPrimitive)?.doubleOrNull,
                     why = f.str("why").orEmpty(),
+                    modelFree = f.bool("model_free") ?: false,
                 )
             },
         )
@@ -608,6 +614,7 @@ object SecondCard {
      * as any other model. There is no catalogue to pick it from.
      */
     fun modelLine(f: Feature): String? {
+        if (f.modelFree) return null
         val model = f.model ?: return null
         val size = f.memoryGib?.let { " Uses about ${"%.1f".format(java.util.Locale.ROOT, it)} GB of the second card." }
             .orEmpty()

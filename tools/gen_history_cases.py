@@ -36,6 +36,7 @@ if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
 import jarvis_chat_log as H  # noqa: E402
+import jarvis_tag_suggest as TS  # noqa: E402
 
 DESKTOP = ROOT / "jarvis-desktop" / "tests" / "fixtures" / "history-cases.json"
 PHONE = (ROOT / "jarvis-client" / "app" / "src" / "test" / "resources" / "contract"
@@ -197,6 +198,26 @@ WORDS = {
     "fork_errors": dict(H.FORK_MESSAGES),
     # Said when the PC named no code the app knows and sent no sentence.
     "fork_error_fallback": "Your PC did not fork that chat.",
+    # -- New section here (section 106) --------------------------------------
+    "mark": "New section here",
+    # The screen-reader name of the button on one message: it contains the
+    # visible text, then says which message.
+    "mark_label": "New section here, before your message",
+    "mark_divider": "New section",
+    "mark_remove": "Remove section break",
+    "mark_done": "Section break added.",
+    "mark_removed": "Section break removed.",
+    "mark_limit": H.MARK_MESSAGES["too_many_marks"],
+    # Used when the PC said not_markable and sent no sentence of its own.
+    "mark_no": "This chat cannot have section breaks.",
+    "mark_why_short": H.MARK_WHY_SHORT,
+    "mark_why_kind": H.MARK_WHY_KIND,
+    "mark_why_crisis": H.MARK_WHY_CRISIS,
+    "mark_errors": dict(H.MARK_MESSAGES),
+    "mark_error_fallback": "Your PC did not save that section break.",
+    # -- Suggest tags overnight (section 104) --------------------------------
+    **TS.WORDS,
+    "tag_suggest_errors": dict(TS.ERRORS),
 }
 
 # The eight colour slots (contrast 4.5:1 or better against both themes, checked
@@ -260,6 +281,56 @@ def fork_error_words(answer: dict) -> str:
     if code in H.FORK_MESSAGES:
         return H.FORK_MESSAGES[code]
     return WORDS["fork_error_fallback"]
+
+
+MARK_ERROR_CASES = [
+    {"ok": False, "error": "not_markable", "mark_why": H.MARK_WHY_SHORT,
+     "message": H.MARK_WHY_SHORT},
+    {"ok": False, "error": "not_markable", "message": "  "},
+    {"ok": False, "error": "not_markable"},
+    {"ok": False, "error": "too_many_marks", "message": H.MARK_MESSAGES["too_many_marks"]},
+    {"ok": False, "error": "too_many_marks"},
+    {"ok": False, "error": "not_found"},
+    {"ok": False, "error": "not_found", "message": "A different sentence from the PC."},
+    {"ok": False, "error": "bad_request", "message": "Chat history is off. The section "
+                                                     "break was not saved."},
+    {"ok": False, "error": "bad_request"},
+    {},
+]
+
+
+def mark_error_words(answer: dict) -> str:
+    """The one sentence a refused section break shows, identical in both apps:
+    the PC's own `message` wins; else the sentence for the code; else the
+    fallback."""
+    code = answer.get("error") if isinstance(answer.get("error"), str) else ""
+    msg = answer.get("message").strip() if isinstance(answer.get("message"), str) else ""
+    if msg:
+        return msg
+    if code == "not_markable":
+        return WORDS["mark_no"]
+    if code in H.MARK_MESSAGES:
+        return H.MARK_MESSAGES[code]
+    return WORDS["mark_error_fallback"]
+
+
+#: (enabled, paused, waiting) -> the state line and the waiting line.
+SUGGEST_STATE_CASES = [(False, False, 0), (True, False, 0), (True, False, 1), (True, False, 3),
+                       (False, True, 0), (False, True, 2)]
+
+
+def suggest_state_words(enabled: bool, paused: bool, waiting: int) -> dict:
+    """The row under History -> Tags: one state line, and how many cards wait."""
+    line = WORDS["tag_suggest_paused"] if paused else \
+        WORDS["tag_suggest_on"] if enabled else WORDS["tag_suggest_off"]
+    wait = "" if waiting <= 0 else WORDS["tag_suggest_waiting_one"] if waiting == 1 \
+        else WORDS["tag_suggest_waiting_other"].format(n=waiting)
+    return {"state": line, "waiting": wait}
+
+
+#: (title, hidden) worked cards; 28 Sep 2026, 14:05 local is the card's date.
+SUGGEST_CARD_CASES = [("Roof repair budget", False), ("Roof repair budget", True)]
+_SUGGEST_WHEN = datetime(2026, 9, 28, 14, 5).timestamp()
 
 
 def tag_error_words(answer: dict) -> str:
@@ -591,6 +662,19 @@ def build() -> dict:
         "fork_labels": {"user": fork_label("user"), "assistant": fork_label("assistant")},
         "fork_error_cases": [{"answer": a, "expect": fork_error_words(a)}
                              for a in FORK_ERROR_CASES],
+        "mark_max": H.MARK_MAX,
+        "mark_min_turns": H.MARK_MIN_TURNS,
+        "mark_error_codes": ["bad_request", "not_found", "not_markable", "too_many_marks"],
+        "mark_error_cases": [{"answer": a, "expect": mark_error_words(a)}
+                             for a in MARK_ERROR_CASES],
+        "tag_suggest_error_codes": ["bad_request", "no_local_model", "no_tags"],
+        "tag_suggest_state_cases": [{"enabled": e, "paused": p, "waiting": w,
+                                     **suggest_state_words(e, p, w)}
+                                    for e, p, w in SUGGEST_STATE_CASES],
+        "tag_suggest_card_cases": [
+            {"title": t, "when": "28 Sep, 14:05", "tag": "Projects", "hidden": h,
+             "expect": TS.card_text(t, _SUGGEST_WHEN, "Projects", hidden=h)}
+            for t, h in SUGGEST_CARD_CASES],
         "tag_delete_cases": [{"name": "Work", "count": 3,
                               "expect": WORDS["tag_delete_confirm"].format(name="Work", count=3)}],
     }

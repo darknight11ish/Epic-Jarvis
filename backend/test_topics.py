@@ -1332,6 +1332,21 @@ def t_the_learner_cases():
     check("... and no older learner case got worse", not others, str(others))
 
 
+def t_starter_use_blocked_for_the_money_tools():
+    st = store()
+    check("nothing set: Money is not blocked", T.starter_use_blocked("money", st) is False)
+    for mode, blocked in (("off", True), ("learn_only", True), ("use_only", False), ("both", False)):
+        set_mode_raw(st, "Money", mode)
+        check(f"Money = {mode}: blocked is {blocked}", T.starter_use_blocked("money", st) is blocked)
+    set_mode_raw(st, "Money", "off")
+    check("... and Health is unaffected", T.starter_use_blocked("health", st) is False)
+    check("an unknown key is never blocked", T.starter_use_blocked("nope", st) is False)
+    with T._db(st) as c:
+        c.execute("UPDATE topics SET name='Finances' WHERE lower(name)='money'")
+    check("it follows the topic when it is renamed", T.starter_use_blocked("money", st) is True)
+    check("a broken store never raises", T.starter_use_blocked("money", object()) is False)
+
+
 def main() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("t_")]
     for fn in tests:

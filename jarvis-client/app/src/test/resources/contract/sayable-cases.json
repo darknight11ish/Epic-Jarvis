@@ -11,7 +11,9 @@
     "Remind me to call Mom at 6pm.",
     "Add milk to the shopping list.",
     "Brief me now.",
-    "Label this chat Work."
+    "Label this chat Work.",
+    "Open my topics.",
+    "Stop using my Money topic."
   ],
   "walkthrough_examples": [
     "Set a timer for 10 minutes.",
@@ -19,5 +21,5 @@
     "Remind me to call Mom at 6pm."
   ],
   "help_title": "What can I say?",
-  "help_body": "Jarvis answers some sentences straight away, without the AI model - so they work even when the model is slow, unloaded or asleep. A few real ones: Set a timer for 10 minutes. What did I miss? Tell me when an email from Alex arrives. Focus for 30 minutes. Remind me to call Mom at 6pm. Add milk to the shopping list. Brief me now. Label this chat Work. Type \"what can you do?\" any time to see this list again. Anything else goes to the AI model as before."
+  "help_body": "Jarvis answers some sentences straight away, without the AI model - so they work even when the model is slow, unloaded or asleep. A few real ones: Set a timer for 10 minutes. What did I miss? Tell me when an email from Alex arrives. Focus for 30 minutes. Remind me to call Mom at 6pm. Add milk to the shopping list. Brief me now. Label this chat Work. Open my topics. Stop using my Money topic. Type \"what can you do?\" any time to see this list again. Anything else goes to the AI model as before."
 }

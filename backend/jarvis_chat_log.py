@@ -428,6 +428,30 @@ FORK_MESSAGES = {
 }
 
 
+# ------------------------------------------------------------ New section here
+#
+# "New section here" (owner, 2026-09-30; docs/OVERNIGHT-TAGS-DESIGN.md
+# section 5, JARVIS-API section 106): a divider the owner puts above one of
+# their messages in a long chat. VIEW-ONLY (owner, 2026-09-30: "only a
+# divider"): Jarvis still reads the whole chat the same way, nothing here
+# reaches a model, the learner, memory or a search index. The marker is a turn
+# number kept in the `marks` table, sealed with the turns' own key
+# (AAD = id|"marks"), so a copy of the file shows how many chats have markers
+# but not which turns. No card: the owner's own layout of a chat already kept.
+MARK_MAX = 20                # markers in one chat
+MARK_MIN_TURNS = 10          # offered once a chat has this many turns
+MARK_WHY_KIND = ("A customer-support record, a chat with another AI and a comparison can't "
+                 "have section breaks: they hold another side's words, kept as your record.")
+MARK_WHY_CRISIS = ("This chat is kept as your own record. It can't have section breaks - "
+                   "start a new chat any time, and nothing from that moment is read again.")
+MARK_WHY_SHORT = "Section breaks are offered once a chat has 10 or more messages."
+MARK_MESSAGES = {
+    "bad_request": "Choose one of your messages in this chat.",
+    "not_found": "That chat is not kept any more, so no section break was saved.",
+    "too_many_marks": "You can have at most 20 section breaks in one chat.",
+}
+
+
 # ------------------------------------------------------------ chat tags
 #
 # "Chat tags and sections in History" (owner, 2026-09-30; docs/CHAT-TAGS-DESIGN.md,
@@ -491,6 +515,12 @@ TAG_MESSAGES = {
 
 def _tag_fail(code: str, message: str = "") -> dict:
     return _tag_err(code, message or TAG_MESSAGES.get(code, ""))
+
+
+def _mark_fail(code: str, message: str = "") -> dict:
+    """{"ok": false, "error", "message"} for POST /api/history/mark."""
+    return {"ok": False, "error": code,
+            "message": message or MARK_MESSAGES.get(code) or MARK_MESSAGES["bad_request"]}
 
 
 def _fork_fail(code: str, message: str = "") -> dict:
@@ -840,6 +870,10 @@ class ChatLog:
                   " role TEXT, provenance TEXT, device TEXT, lane TEXT,"
                   " read_outside INTEGER, answer_kept INTEGER, voice_check TEXT,"
                   " text BLOB, PRIMARY KEY (conversation_id, idx))")
+        # "New section here" (2026-09-30): the list of marked turn numbers,
+        # sealed (AAD id|"marks"). One row per chat that has any.
+        c.execute("CREATE TABLE IF NOT EXISTS marks ("
+                  " conversation_id TEXT PRIMARY KEY, v BLOB)")
         c.execute("CREATE INDEX IF NOT EXISTS conversations_updated"
                   " ON conversations (updated)")
         if not self._schema_ok:
@@ -968,6 +1002,7 @@ class ChatLog:
     def _drop(self, c, ids) -> None:
         for cid in ids:
             c.execute("DELETE FROM turns WHERE conversation_id=?", (cid,))
+            c.execute("DELETE FROM marks WHERE conversation_id=?", (cid,))
             c.execute("DELETE FROM conversations WHERE id=?", (cid,))
             c.execute("DELETE FROM meta WHERE k=?", (self._hush_key(cid),))
             c.execute("DELETE FROM meta WHERE k=?", (self._money_key(cid),))
@@ -1795,6 +1830,7 @@ class ChatLog:
         kind = conv["kind"] if conv["kind"] in KINDS else "chat"
         title = self._title(aead, cid, conv["title"])
         crisis = kind in CONTINUABLE and title == CRISIS_TITLE
+        marks, markable, mark_why = self._marks_view(cid, aead, kind, crisis, len(rows))
         return {"id": cid, "title": title, "history": self._keeping(),
                 "tainted": any(bool(r[4]) for r in rows), "turns": turns,
                 "kind": kind, "project": conv["project"] or None,
@@ -1807,7 +1843,10 @@ class ChatLog:
                 # works on, and `fork_why` in words when it does not.
                 "forkable": kind in CONTINUABLE and not crisis,
                 "fork_why": (FORK_WHY_CRISIS if crisis
-                             else "" if kind in CONTINUABLE else FORK_WHY_KIND)}
+                             else "" if kind in CONTINUABLE else FORK_WHY_KIND),
+                # "New section here" (section 106): the marked turn numbers,
+                # whether the apps may offer the button, and why not in words.
+                "marks": marks, "markable": markable, "mark_why": mark_why}
 
     def search(self, query, limit=SEARCH_DEFAULT, kind=None) -> dict:
         """Search what was said in the kept conversations (GET
@@ -1935,6 +1974,239 @@ class ChatLog:
                 "updated": int(cv["updated"] or 0),
                 "kind": cv["kind"] if cv["kind"] in KINDS else "chat",
                 "tag_id": _tag_id(cv["tag_id"])}
+
+    # -- "New section here" (docs/OVERNIGHT-TAGS-DESIGN.md section 5, section 106) --
+    @staticmethod
+    def _marks_clean(v) -> list:
+        """A stored/decoded marker list as sorted unique whole numbers >= 0,
+        at most MARK_MAX. Anything else is dropped."""
+        if not isinstance(v, list):
+            return []
+        return sorted({int(x) for x in v if _is_int(x) and 0 <= x <= _INT64_MAX})[:MARK_MAX]
+
+    def _marks_read(self, c, aead, cid: str) -> list:
+        """The chat's marker numbers, opened. [] when it has none. Raises when
+        a stored value will not open - never guesses."""
+        row = c.execute("SELECT v FROM marks WHERE conversation_id=?", (cid,)).fetchone()
+        if row is None:
+            return []
+        return self._marks_clean(json.loads(
+            self._open(aead, row[0], self._aad(cid, "marks")).decode("utf-8")))
+
+    def _marks_write(self, c, aead, cid: str, marks: list) -> None:
+        """Seal and store the list; an empty list removes the row."""
+        marks = self._marks_clean(marks)
+        if not marks:
+            c.execute("DELETE FROM marks WHERE conversation_id=?", (cid,))
+            return
+        c.execute("INSERT OR REPLACE INTO marks (conversation_id, v) VALUES (?, ?)",
+                  (cid, self._seal(aead, json.dumps(marks).encode("utf-8"),
+                                   self._aad(cid, "marks"))))
+
+    def _marks_raw(self, c, cid: str):
+        """The sealed row exactly as stored (take_out holds it so), or None."""
+        row = c.execute("SELECT v FROM marks WHERE conversation_id=?", (cid,)).fetchone()
+        return None if row is None else bytes(row[0])
+
+    @staticmethod
+    def _mark_block(kind: str, crisis: bool, turns: int) -> str:
+        """"" when a chat of this kind and length may have section breaks,
+        else the plain sentence saying why not (the same test as `forkable`,
+        plus the 10-turn floor)."""
+        if crisis:
+            return MARK_WHY_CRISIS
+        if kind not in CONTINUABLE:
+            return MARK_WHY_KIND
+        if turns < MARK_MIN_TURNS:
+            return MARK_WHY_SHORT
+        return ""
+
+    def _marks_view(self, cid, aead, kind, crisis, turns) -> tuple:
+        """(marks, markable, mark_why) for GET /api/history/conversation."""
+        why = self._mark_block(kind, crisis, turns)
+        try:
+            with closing(self._connect()) as c:
+                marks = self._marks_read(c, aead, cid)
+        except Exception:
+            marks = []
+        return marks, not why, why
+
+    def set_mark(self, cid, idx, on) -> tuple:
+        """POST /api/history/mark: put a "New section" divider above turn
+        `idx` of chat `cid` (on=True), or take it away (on=False). (http code,
+        answer). Idempotent both ways. View-only: no turn is touched and no
+        model, learner or memory hears of it. No card; works while recording is
+        switched off (it marks an already-kept chat); needs the key."""
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not _is_int(idx) \
+                or idx < 0 or idx > _INT64_MAX or not isinstance(on, bool):
+            return 400, _mark_fail("bad_request")
+        aead, why = self._tag_cipher()
+        if aead is None:
+            return 503, _mark_fail("bad_request",
+                                   _off_message(why, "The section break was not saved."))
+        if not self.db_path.exists():
+            return 404, _mark_fail("not_found")
+        with self._lock, closing(self._connect()) as c:
+            got = c.execute(f"SELECT {_conv_cols()} FROM conversations WHERE id=?",
+                            (cid,)).fetchone()
+            if got is None:
+                return 404, _mark_fail("not_found")
+            conv = _conv_named(got)
+            kind = conv["kind"] if conv["kind"] in KINDS else "chat"
+            crisis = kind in CONTINUABLE and self._title(aead, cid, conv["title"]) == CRISIS_TITLE
+            n = c.execute("SELECT COUNT(*) FROM turns WHERE conversation_id=?",
+                          (cid,)).fetchone()[0]
+            block = self._mark_block(kind, crisis, int(n))
+            if block:
+                return 409, dict(_mark_fail("not_markable", block), mark_why=block)
+            try:
+                marks = self._marks_read(c, aead, cid)
+            except Exception:
+                return 503, _mark_fail("bad_request", "The section breaks could not be "
+                                       "opened, so nothing was changed.")
+            exists = c.execute("SELECT 1 FROM turns WHERE conversation_id=? AND idx=?",
+                               (cid, idx)).fetchone() is not None
+            if not exists and not (not on and idx in marks):
+                return 400, _mark_fail("bad_request")
+            if on:
+                if idx not in marks:
+                    if len(marks) >= MARK_MAX:
+                        return 409, _mark_fail("too_many_marks")
+                    marks = sorted(marks + [idx])
+            else:
+                marks = [m for m in marks if m != idx]
+            with c:
+                self._marks_write(c, aead, cid, marks)
+        return 200, {"ok": True, "id": cid, "idx": idx, "on": on, "marks": marks}
+
+    # -- what jarvis_tag_suggest.py needs (docs/OVERNIGHT-TAGS-DESIGN.md, section 104) --
+    #
+    # The ONE place chat words are opened for the overnight tag suggestion, so
+    # the rules about which chats may be read live beside the key, not in the
+    # module that talks to the model. Nothing here writes a word anywhere.
+    SUGGEST_META = ("tag_suggest_on", "tag_suggest_day", "tag_suggest_denied_streak",
+                    "tag_suggest_paused", "tag_suggest_declined", "tag_suggest_offered",
+                    "tag_suggest_looked")
+    SUGGEST_MIN_TURNS = 2
+    SUGGEST_MIN_AGE = 30 * 60
+    SUGGEST_USER_MSGS = 6
+    SUGGEST_SCAN = 500
+
+    def meta_get(self, key: str) -> str:
+        """One of SUGGEST_META, as text ("" when unset). Opaque values only:
+        a switch, a date, a count, chat ids. Any other key is refused."""
+        if key not in self.SUGGEST_META:
+            raise KeyError(key)
+        if not self.db_path.exists():
+            return ""
+        with self._lock, closing(self._connect()) as c:
+            row = c.execute("SELECT v FROM meta WHERE k=?", (key,)).fetchone()
+        return "" if row is None else bytes(row[0]).decode("utf-8", "replace")
+
+    def meta_put(self, key: str, value: str) -> None:
+        if key not in self.SUGGEST_META:
+            raise KeyError(key)
+        with self._lock, closing(self._connect()) as c:
+            with c:
+                c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
+                          (key, str(value).encode("utf-8")))
+
+    def tag_names(self) -> list:
+        """[(id, name)] of the owner's tags, or [] when they cannot be read
+        (no key, nothing to open). Names are the owner's words; the caller
+        keeps them in memory for one pass only."""
+        aead, _why = self._tag_cipher()
+        if aead is None or not self.db_path.exists():
+            return []
+        try:
+            with self._lock, closing(self._connect()) as c:
+                reg = self._load_tags(c, aead)
+        except Exception:
+            return []
+        return [(t["id"], t["name"]) for t in reg["tags"]]
+
+    def chat_state(self, cid) -> Optional[dict]:
+        """{"tag_id": int | None} for a kept chat, or None when it is gone."""
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
+            return None
+        with self._lock, closing(self._connect()) as c:
+            row = c.execute("SELECT tag_id FROM conversations WHERE id=?", (cid,)).fetchone()
+        return None if row is None else {"tag_id": _tag_id(row[0])}
+
+    def suggest_candidates(self, *, exclude=(), limit: int = 5,
+                           now: Optional[float] = None) -> dict:
+        """Up to `limit` kept chats the overnight tagger may read, newest
+        first: {"ok", "why", "chats": [{"id", "title", "updated", "texts"}]}.
+        `texts`: the owner's first SUGGEST_USER_MSGS own typed or spoken
+        messages, opened - never an answer, never another chat.
+
+        A chat qualifies only if ALL of these hold: it has no tag; it is an
+        ordinary chat (not live, support, chatbot or comparison); it is not
+        titled "A difficult moment" and none of its first messages trips the
+        crisis check (the same _crisis_turn that titles a chat that way); no
+        turn read outside text (read_outside) and every message of the owner's
+        was typed or spoken (never shared, pasted, clipboard or a picture
+        caption); it has at least 2 turns and was last updated over 30 minutes
+        ago; it is not under a Forget/Erase hush and is not marked as having
+        added up bank spending; and its id is not in `exclude`. Needs history
+        to be ON and the key (this READS chat words): otherwise ok is False and
+        nothing is opened."""
+        out = {"ok": False, "why": "", "chats": []}
+        aead, why = self._recording()
+        if aead is None:
+            out["why"] = why
+            return out
+        out["ok"] = True
+        if not self.db_path.exists():
+            return out
+        now = float(now) if isinstance(now, (int, float)) and not isinstance(now, bool) \
+            else self._clock()
+        skip = set(exclude or ())
+        with self._lock, closing(self._connect()) as c:
+            rows = c.execute(
+                "SELECT id, title, updated FROM conversations WHERE tag_id IS NULL"
+                " AND COALESCE(kind, 'chat') = 'chat' AND updated < ?"
+                " ORDER BY updated DESC, id DESC LIMIT ?",
+                (now - self.SUGGEST_MIN_AGE, self.SUGGEST_SCAN)).fetchall()
+            for cid, title_blob, updated in rows:
+                if len(out["chats"]) >= max(0, int(limit)):
+                    break
+                if cid in skip or not _CID.fullmatch(cid):
+                    continue
+                if self._hush_read(c, cid) is not None:
+                    continue
+                if c.execute("SELECT 1 FROM meta WHERE k=?",
+                             (self._money_key(cid),)).fetchone() is not None:
+                    continue
+                n = c.execute("SELECT COUNT(*) FROM turns WHERE conversation_id=?",
+                              (cid,)).fetchone()[0]
+                if n < self.SUGGEST_MIN_TURNS:
+                    continue
+                if c.execute(
+                        "SELECT 1 FROM turns WHERE conversation_id=? AND (read_outside=1"
+                        " OR role NOT IN ('user','assistant')"
+                        " OR (role='user' AND COALESCE(provenance,'') NOT IN ('typed','voice')))"
+                        " LIMIT 1", (cid,)).fetchone() is not None:
+                    continue
+                title = self._title(aead, cid, title_blob)
+                if title == CRISIS_TITLE:
+                    continue
+                trows = c.execute("SELECT idx, provenance, text FROM turns WHERE"
+                                  " conversation_id=? AND role='user' ORDER BY idx LIMIT ?",
+                                  (cid, self.SUGGEST_USER_MSGS)).fetchall()
+                try:
+                    texts = [self._open(aead, blob, self._aad(cid, idx)).decode("utf-8")
+                             for idx, _prov, blob in trows]
+                except Exception:
+                    continue
+                texts = [t for t in texts if t.strip()]
+                if not texts:
+                    continue
+                if _crisis_turn([(t, "typed", None) for t in texts], None):
+                    continue
+                out["chats"].append({"id": cid, "title": title, "updated": float(updated or 0),
+                                     "texts": texts})
+        return out
 
     # -- chat tags (docs/CHAT-TAGS-DESIGN.md, JARVIS-API section 99) --------
     def _tag_cipher(self):
@@ -2242,6 +2514,14 @@ class ChatLog:
                                 for col in CONV_COLS))
                 marks = ",".join("?" * len(cols))
                 last_user = -1
+                old_marks = []
+                try:
+                    old_marks = self._marks_read(c, aead, cid)
+                except Exception:
+                    old_marks = []          # unreadable: the fork simply has none
+                renumber = {int(r[ix["idx"]]): n for n, r in enumerate(rows)}
+                self._marks_write(c, aead, new, [renumber[m] for m in old_marks
+                                                 if m in renumber])
                 for n, (r, text) in enumerate(zip(rows, plain)):
                     row = list(r)
                     row[ix["conversation_id"]] = new
@@ -2424,6 +2704,11 @@ class ChatLog:
                                      (self._hush_key(cid),)).fetchone()
                     if hush is not None:
                         held[cid]["hush"] = bytes(hush[0])
+                    sealed_marks = self._marks_raw(c, cid)
+                    if sealed_marks is not None:
+                        # Still sealed as on disk (AAD id|"marks" needs no key
+                        # to hold, only to open when the chat is joined back).
+                        held[cid]["marks"] = sealed_marks
                     if c.execute("SELECT 1 FROM meta WHERE k=?",
                                  (self._money_key(cid),)).fetchone() is not None:
                         held[cid]["money"] = True
@@ -2476,6 +2761,9 @@ class ChatLog:
                       % (", ".join(CONV_COLS), ",".join("?" * n)), conv[:n])
             for t in turns:
                 c.execute(f"INSERT INTO turns ({self._TURN_COLS}) VALUES ({marks})", t)
+            if isinstance(h.get("marks"), (bytes, bytearray)):
+                c.execute("INSERT OR REPLACE INTO marks (conversation_id, v) VALUES (?, ?)",
+                          (cid, bytes(h["marks"])))
             return
         aead = self._cipher()
         newer = c.execute(f"SELECT {self._TURN_COLS} FROM turns WHERE conversation_id=?"
@@ -2490,13 +2778,27 @@ class ChatLog:
         # otherwise appear twice.
         last_held = max((float(t[2] or 0) for t in turns), default=0.0)
         newer = [t for t in newer if float(t[2] or 0) > last_held]
+        moved = {}                      # a newer message's old number -> its new one
         for t in newer:
             plain = self._open(aead, t[10], self._aad(cid, t[1]))
             row = list(t)
+            moved[int(t[1])] = nxt
             row[1] = nxt
             row[10] = self._seal(aead, plain, self._aad(cid, nxt))
             c.execute(f"INSERT INTO turns ({self._TURN_COLS}) VALUES ({marks})", row)
             nxt += 1
+        # Section breaks: the held ones come back as they were; ones made since
+        # follow their messages to the new numbers (a break above a message
+        # that was already among the held ones is dropped with the duplicate).
+        held_marks, now_marks = [], []
+        try:
+            if isinstance(h.get("marks"), (bytes, bytearray)):
+                held_marks = self._marks_clean(json.loads(self._open(
+                    aead, bytes(h["marks"]), self._aad(cid, "marks")).decode("utf-8")))
+            now_marks = [moved[m] for m in self._marks_read(c, aead, cid) if m in moved]
+            self._marks_write(c, aead, cid, held_marks + now_marks)
+        except Exception:
+            pass        # a section break that will not open never blocks Undo
         # The old title and first moment; the newer last moment stays.
         c.execute("UPDATE conversations SET title=?, started=? WHERE id=?",
                   (conv[CONV_COLS.index("title")], conv[CONV_COLS.index("started")], cid))
@@ -2647,6 +2949,11 @@ def tag_chat(cid, tag_id) -> tuple:
 def fork_chat(cid, upto) -> tuple:
     """POST /api/history/fork: (http code, answer). See ChatLog.fork."""
     return _log().fork(cid, upto)
+
+
+def mark_chat(cid, idx, on) -> tuple:
+    """POST /api/history/mark: (http code, answer). See ChatLog.set_mark."""
+    return _log().set_mark(cid, idx, on)
 
 
 def search(query, limit=SEARCH_DEFAULT, kind=None) -> dict:
@@ -2905,6 +3212,13 @@ def handle_get(path: str, query: str = "") -> tuple:
                              tag=q.get("tag") or None)
     if path == "/api/history/tags":
         return 200, log.tags()
+    if path == "/api/history/tags/suggest":
+        # Overnight suggested tags (section 104): the switch's state only.
+        try:
+            import jarvis_tag_suggest
+        except Exception:
+            return 404, {"error": "no such route"}
+        return jarvis_tag_suggest.handle_get()
     if path == SEARCH_PATH:
         # "Search what was said" (section 71). The words arrive in ?q=, are
         # used for this one scan and dropped: never logged, never audited,
@@ -2930,7 +3244,7 @@ def handle_get(path: str, query: str = "") -> tuple:
 
 
 def handle_post(route: str, body) -> tuple:
-    """POST /api/history/delete, /settings, /tags, /tag and /fork. (code, body)."""
+    """POST /api/history/delete, /settings, /tags, /tag, /fork, /mark and /tags/suggest. (code, body)."""
     if route == "/api/history/delete":
         if not isinstance(body, dict) or set(body) != {"id"} or not isinstance(body["id"], str):
             return 400, {"error": 'need {"id": "<conversation id>"} - one conversation '
@@ -2948,6 +3262,22 @@ def handle_post(route: str, body) -> tuple:
         if not isinstance(body, dict) or set(body) != {"id", "tag_id"}:
             return 400, _tag_fail("bad_request")
         return _log().set_tag(body["id"], body["tag_id"])
+    if route == "/api/history/tags/suggest":
+        # Overnight suggested tags (section 104): on = ONE card, off = at once.
+        try:
+            import jarvis_tag_suggest
+        except Exception:
+            return 404, {"error": "no such route"}
+        return jarvis_tag_suggest.handle_post(body)
+    if route == "/api/history/mark":
+        # New section here (section 106): a divider, view-only, no card. The
+        # audit line holds no words and no turn number.
+        if not isinstance(body, dict) or set(body) != {"id", "idx", "on"}:
+            return 400, _mark_fail("bad_request")
+        code, out = _log().set_mark(body["id"], body["idx"], body["on"])
+        if code == 200:
+            _audit("history.mark", {"on": out["on"]})
+        return code, out
     if route == "/api/history/fork":
         # Fork from here (section 110): the owner's own kept words, copied
         # on this PC; no card. The audit line holds counts, never words.

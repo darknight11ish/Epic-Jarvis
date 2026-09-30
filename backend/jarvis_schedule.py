@@ -330,9 +330,13 @@ KINDS: dict = {}
 #: jarvis_referee (2026-09-30): the quiet hourly look for "This looks done - tick
 #: it?" (Referee suggestions, a second-card switch). Not listed in Coming up, tells
 #: nobody; it only ever raises a card and ticks nothing by itself.
+#: jarvis_tag_suggest (2026-09-30): the quiet hourly `tag_suggest` step behind
+#: "Suggest tags overnight" (once a night, 01:00-06:00 local, only while the owner's
+#: switch is on). Not listed in Coming up, tells nobody; it only raises cards and
+#: files nothing by itself.
 KIND_MODULES = ("jarvis_standby_schedule", "jarvis_briefing", "jarvis_tellme", "jarvis_focus",
                 "jarvis_next_time", "jarvis_tidy", "jarvis_today", "jarvis_decks",
-                "jarvis_topics", "jarvis_referee")
+                "jarvis_topics", "jarvis_referee", "jarvis_tag_suggest")
 
 
 def register_kind(name: str, noun: str, lock_screen: str, *, has_text: bool = False,

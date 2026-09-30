@@ -45,7 +45,7 @@ check("TITLE, DETAIL and FOOTER are the backend's own words", () => {
 
 check("SENTENCES is the backend's list, in the same order", () => {
   assert.deepEqual(SENTENCES, CASES.sentences);
-  assert.ok(SENTENCES.length >= 5 && SENTENCES.length <= 8, `${SENTENCES.length} sentences`);
+  assert.ok(SENTENCES.length >= 5 && SENTENCES.length <= 10, `${SENTENCES.length} sentences`);
 });
 
 check("WALKTHROUGH_EXAMPLES is exactly the backend's 3, a subset of SENTENCES", () => {

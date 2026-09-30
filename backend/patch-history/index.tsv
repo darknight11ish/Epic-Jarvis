@@ -23,6 +23,7 @@ briefing.patch	briefing/5a84390.patch	5a84390453709180a51bef119ff1d4c3e5ec6f4f	2
 briefing.patch	briefing/a0305da.patch	a0305dabd58fb35767fc11f2cbc914701eaf2057	2026-09-25T05:06:37+00:00	Merge the morning briefing and the back-off for offers
 briefing.patch	briefing/5350f7f.patch	5350f7f719f299875b3529c2304821dbf9176bce	2026-09-25T04:20:17+00:00	Morning briefing and the back-off for offers (backend)
 browser-engine.patch	browser-engine/cc915b7.patch	cc915b7886c815291cd20daca463d9965203c3d3	2026-09-29T17:43:09+00:00	Add the headless browser, Obscura, as a second browser Jarvis may choose
+chat-history.patch	chat-history/878d28e.patch	878d28eab5982580248ceff2b7226d298be3d2de	2026-09-30T06:17:52+00:00	Fork from here: backend built (JARVIS-API 110), apps next
 chat-history.patch	chat-history/d42ede8.patch	d42ede85239584fdb8f7e68db54924ced2ce475d	2026-09-30T05:32:01+00:00	Design: quiz decks and Spanish practice; record owner answers and second-card list verdicts
 chat-history.patch	chat-history/d1d2515.patch	d1d2515f681cdee0e95267f3c64b41f2e2294df1	2026-09-25T01:15:59+00:00	Voice in both apps: interrupt by talking, "One moment.", "I heard you"
 chat-history.patch	chat-history/92cbd90.patch	92cbd906388bfa9a2b6b9c7f7377e621ae5bcd30	2026-09-24T17:50:35+00:00	Merge branch 'worktree-agent-a6ef7f4f8bec69b97' into claude/admiring-ritchie-5urg5h

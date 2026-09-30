@@ -1544,7 +1544,40 @@ reads from on its own. Three things about it are invariants:
   "Find in this chat" is in the apps, over a conversation already open.
   What still waits on the memory self-test is the other half of the
   2026-09-26 rule: a chat turn that can ask Jarvis to search its own past
-  conversations, or anything that hands past chat words to the model.
+  conversations. "Anything that hands past chat words to the model" is no
+  longer a flat no: the one exception is the next bullet, and nothing else.
+- **Overnight suggested tags: the ONE way past chat words reach a model, and
+  it is the local model, for cards only** (the owner's decision of
+  2026-09-30, "any rule can change if the change is worth it";
+  `docs/OVERNIGHT-TAGS-DESIGN.md`, docs/JARVIS-API.md §104). This changes the
+  rule "nothing hands past chat words to the model", and says how far. With
+  "Suggest tags overnight" on (off by default; turning it on is ONE approval
+  card), `jarvis_tag_suggest.py` may, once a night between 01:00 and 06:00,
+  give **this PC's own model** (`jarvis_sensitive.learner_model()`, checked
+  loopback and not an Ollama cloud model by `jarvis_auto_learn.check_local_model`;
+  never a cloud lane, so rule 1 holds) the owner's OWN first six typed or
+  spoken messages of up to five untagged chats, at most 1,500 characters
+  in all per chat, with the tag names. Never Jarvis's answers, never another chat, never
+  memory. Which chats may be read is decided in `ChatLog.suggest_candidates`,
+  beside the key: not one that read outside text or holds shared, pasted or
+  picture-caption words, not a crisis chat, not Live, support, chatbot or
+  comparison, not one under a Forget/Erase hush or marked as bank spending,
+  not one still in use (idle over 30 minutes), not a declined one. The model's
+  reply can only PICK a tag name that already exists (checked exactly, by code);
+  it can neither make a tag nor do anything else, and what it returns is
+  never stored, logged or shown. The result is a card per suggestion
+  (`chat_tag_suggest`, tier `ask`; at most three a night; a chat is filed
+  only when a person taps Approve, through the same function the owner's own
+  tap uses). Everything above about **no index, no summary, nothing kept
+  beside the encrypted file** still stands: no embedding, no stored model
+  output, no chat words in `meta` (only opaque chat ids, counts and dates).
+  It is not a tool or a chat turn: only the scheduler's quiet hourly step
+  (`tag_suggest`) reaches it. Searching the owner's own past chat words for a
+  chat TURN still waits, as above.
+- **"New section here" is a divider, not a fork in what Jarvis reads** (owner,
+  2026-09-30, JARVIS-API §106): a sealed list of turn numbers in the `marks`
+  table. View-only: Jarvis still reads the whole chat the same way, and a
+  marker reaches no model, learner, memory or index.
 
 ### Money-sensitive conversations — a mark, not a taint
 
@@ -1560,8 +1593,12 @@ conversation looked at bank spending) and `POST /api/chatbot/start` with that
 other tool works as before, and `my_spending` is still left out of `tools_ran`, so the
 memory-writing rules that read `tools_ran` do not change. Inside the turn itself the
 model's words are held until code has checked them (with a table: the sentence rule; with
-none: no amount of money may pass; JARVIS-API 100.5). Open: spending should also stop when
-the Money topic is Off - the topic-controls work has no helper for that yet.
+none: no amount of money may pass; JARVIS-API 100.5). Closed 2026-09-30: `my_spending` and
+`retirement_whatif` are both refused, with a plain reason, while the Money topic is Off or
+"Learn, but don't use" (`jarvis_topics.starter_use_blocked("money")`, checked in
+`jarvis_agent._spending_refusal` / `_retirement_refusal`); no table is made, so the chat-table
+route has nothing to serve. Project benchmark numbers are unchanged: they are already kept on
+screen and never reach the model.
 
 ### Review decks — a third sealed store, kept apart from memory and from chat history
 

@@ -390,6 +390,8 @@ SHIPPED = (
     # "Referee suggestions" (2026-09-30; referee.patch): the propose-only
     # "This looks done - tick it?" card. No route, no tool, no model.
     "jarvis_referee.py",
+    # "Suggest tags overnight" (2026-09-30; tag-suggest.patch): cards only.
+    "jarvis_tag_suggest.py",
 )
 
 

@@ -234,6 +234,46 @@ def t_refused_after_outside_text():
         R.run = real_run
 
 
+# ------------------------------------------------------------------ 3b. the Money topic
+
+def t_money_topic_off_refuses_both_money_tools():
+    real = AG._money_topic_off
+    try:
+        AG._money_topic_off = lambda: True
+        w = AG._TurnWatch(TYPED, tainted=False)
+        check("Money off: the what-if is refused with a plain reason",
+              AG._retirement_refusal(w) == AG.MONEY_TOPIC_OFF and "Money topic" in AG.MONEY_TOPIC_OFF)
+        check("Money off: my_spending is refused with the same reason",
+              AG._spending_refusal(w, {"action": "summary"}) == AG.MONEY_TOPIC_OFF)
+        ran = []
+        real_run = R.run
+        R.run = lambda *a, **k: (ran.append(a), real_run(*a, **k))[1]
+        try:
+            stream, out, calls = turn(TYPED, [call(**numbers()), say("no")])
+        finally:
+            R.run = real_run
+        check("Money off: through the whole loop the what-if never ran, no code text, model told why",
+              ran == [] and R.DISCLAIMER not in words(stream)
+              and "Money topic" in json.dumps(calls[-1]["messages"]))
+        AG._money_topic_off = lambda: False
+        check("Money on: the what-if is allowed again",
+              AG._retirement_refusal(AG._TurnWatch(TYPED, tainted=False)) == "")
+        check("Money on: my_spending is allowed again",
+              AG._spending_refusal(AG._TurnWatch(TYPED, tainted=False), {"action": "summary"}) == "")
+    finally:
+        AG._money_topic_off = real
+    # the real lookup: fails open (nothing configured) and never raises
+    import jarvis_topics as TOP
+    real_b = TOP.starter_use_blocked
+    try:
+        TOP.starter_use_blocked = lambda key, store=None: key == "money"
+        check("the real helper is asked about the money topic", AG._money_topic_off() is True)
+        TOP.starter_use_blocked = lambda key, store=None: (_ for _ in ()).throw(RuntimeError("x"))
+        check("a topics failure changes nothing (not blocked)", AG._money_topic_off() is False)
+    finally:
+        TOP.starter_use_blocked = real_b
+
+
 # ------------------------------------------------------------------ 3. missing and unknown
 
 def t_missing_and_unknown_numbers():
@@ -429,7 +469,8 @@ def t_chat_and_form_share_one_lock():
 
 if __name__ == "__main__":
     for fn in (t_the_answer_is_code_written_text, t_no_card_and_a_calculator_gate,
-               t_refused_after_outside_text, t_missing_and_unknown_numbers, t_a_spoken_question,
+               t_refused_after_outside_text, t_money_topic_off_refuses_both_money_tools,
+               t_missing_and_unknown_numbers, t_a_spoken_question,
                t_the_short_list, t_no_figures_are_written_down, t_chat_and_form_share_one_lock):
         print(f"\n--- {fn.__name__} ---")
         try:

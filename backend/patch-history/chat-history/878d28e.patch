@@ -6,7 +6,7 @@
              return self._send(code, out)
  
 +        if path in ("/api/history", "/api/history/conversation",
-+                    "/api/history/tags", "/api/history/tags/suggest"):
++                    "/api/history/tags"):
 +            # chat-history.patch - the chats this PC has kept (jarvis_chat_log.py):
 +            # the list, newest first (?limit=&before=), and one conversation
 +            # (?id=). Read-only. Behind the token like every memory route:
@@ -37,8 +37,8 @@
              return self._send(code, out)
  
 +        if route in ("/api/history/delete", "/api/history/settings",
-+                     "/api/history/tags", "/api/history/tags/suggest", "/api/history/tag",
-+                     "/api/history/fork", "/api/history/mark"):
++                     "/api/history/tags", "/api/history/tag",
++                     "/api/history/fork"):
 +            # chat-history.patch (jarvis_chat_log.py).
 +            #   delete {"id": "<conversation id>"}: that one conversation is
 +            #   deleted. One per request; there is no delete-all.

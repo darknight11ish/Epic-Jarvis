@@ -16234,6 +16234,41 @@ The apps do not draw a chat answer's figures in a special way (there is no `: ja
 this): the text is the answer.
 
 
+## 104. Overnight suggested tags (added 2026-09-30; backend built and tested, apps planned)
+
+The owner's decision (2026-09-30, `docs/OVERNIGHT-TAGS-DESIGN.md`; build queue item 6, which reversed "no automatic tagging" to "no tagging without a tap"; the owner's answer: **up to 3 cards a night**): while the owner sleeps, Jarvis's model **on this PC** may look at a few untagged chats and **suggest** a tag. Each suggestion is a card. Nothing is filed until a person taps Approve. Built in `backend/jarvis_tag_suggest.py` (shipped whole), `ChatLog.suggest_candidates` and the `meta` accessors in `jarvis_chat_log.py`, `tag-suggest.patch` (two gate lines, one startup block) and the route names in `chat-history.patch`. **This moves a written rule** (ARCHITECTURE section 5, "Overnight suggested tags: the ONE way past chat words reach a model"); nothing else about "no index, ever" changed.
+
+### 104.1 Routes
+
+| route | body | answer |
+|---|---|---|
+| `GET /api/history/tags/suggest` | - | `{"ok": true, "enabled": bool, "paused": bool, "waiting": int, "last_day": "YYYY-MM-DD" \| ""}`. `waiting` is how many suggestion cards wait now. `paused` is true after three "Deny" answers in a row (then `enabled` is false). |
+| `POST /api/history/tags/suggest` | exactly `{"enabled": bool}` | on: `202 {"ok": true, "pending": true}` and ONE card (`chat_tags_suggest_on`); already on: `200 {"ok": true, "enabled": true}`; off: `200 {"ok": true, "enabled": false}` at once, and any waiting card is withdrawn (approving it later files nothing) |
+
+Errors are `{"ok": false, "error": <code>, "message": <one plain sentence>}`: `bad_request` (400: a body that is not exactly `enabled` as a boolean; also 503 when the `chat_tags_suggest_on` line in the toml is not `ask`, or the card could not be raised), `no_local_model` (409: no model on this PC answered the local-model check; the switch refuses to turn on rather than raise a card), `no_tags` (409, "Make a tag first."). Every write is held on a stale link (rule 4) by the apps. The card for a suggestion is decided in the ordinary approvals flow; there is no route for it. Turning it on again after a pause raises a fresh card and clears the pause.
+
+### 104.2 The rules (each has a test in `backend/test_tag_suggest.py`)
+
+* **Off by default; local model only.** The model is `jarvis_sensitive.learner_model()` behind `jarvis_auto_learn.check_local_model` (loopback address AND not an Ollama cloud model). Not local: nothing runs, the switch will not turn on.
+* **One shared scheduler.** Kind `tag_suggest` (module `jarvis_tag_suggest` is in `jarvis_schedule.KIND_MODULES`): `owner_listed=False`, `notify=False`, `silent=True`, `single=True`, `plain_repeat=True`, one hourly job added by `ensure_job()` while the switch is on and removed when it is off. The job runs **at most once per local day and only between 01:00 and 06:00 local**; a PC that is off just skips that night, nothing piles up.
+* **Which chats** (`ChatLog.suggest_candidates`, next to the key): untagged, kind `chat`, not titled "A difficult moment" and none of its first messages trips the crisis check (`_crisis_turn`, the same one that titles a crisis chat), no turn with `read_outside`, every message of the owner's typed or spoken (never shared, pasted, clipboard or picture-caption), at least 2 turns, idle over 30 minutes, no Forget/Erase hush, not marked as bank spending; and here: not declined, offered fewer than 2 times, not passed on by the model in the last 14 days. Needs chat history ON and the key (this READS chat words, unlike plain tagging); history off or no key: nothing is opened.
+* **What the model sees:** the owner's own first 6 messages, cut to 1,500 characters in all, plus the tag names, in a prompt that says the chat is data. **Code checks the reply**: exactly a real tag name (case ignored), alone or as the `"tag"` of a JSON object; anything else ("none", a new name, a sentence, over 120 characters) gives no card. The model cannot make a tag.
+* **Limits:** 5 chats looked at and 3 cards a night; no new card while 3 wait; after 3 Deny answers in a row it switches itself off with "Paused after three 'no' answers. Turn it on again to carry on." (Approve resets the count; a timed-out card does not change it.)
+* **Never files without a tap.** The chat is filed only when the gate's verdict is a real person saying yes at tier `ask` (copied from `jarvis_referee.py`), after re-checking that the switch is still on, the chat still exists and is still untagged, and the tag still exists with the same name; then by the same function `POST /api/history/tag` calls (`jarvis_chat_log.tag_chat`). Deny remembers the chat as declined for good. A card that times out counts as one offer.
+* **What is stored** (opaque values in the chat history file's `meta`; `ChatLog.SUGGEST_META` is the whole allow-list): `tag_suggest_on` ("1"/"0"), `tag_suggest_day`, `tag_suggest_denied_streak`, `tag_suggest_paused`, and three id lists: `tag_suggest_declined`, `tag_suggest_offered` (id to count) and `tag_suggest_looked` (id to the date the model was asked; **added by the build**: without it a chat the model said "none" about would be asked again every night and the same five chats would fill it). No chat words, titles or model replies are stored, logged or shown. Audit lines are `tag_suggest.asked` / `tag_suggest.card` with a chat id, a tag id and an outcome (`filed`, `denied`, `timed_out`, `stale`, `withdrawn`, `refused`, `failed`), never a title.
+
+### 104.3 The cards (built by the backend; the apps only show them)
+
+**A suggestion** (`chat_tag_suggest`, tier `ask`, in `NEEDS_A_PERSON`): title `Suggested tag for a chat`; body `Jarvis thinks this chat belongs under "{tag}". Approve to file it there. Nothing else changes. Deny and Jarvis will not suggest a tag for this chat again.`; then `Chat: "{title}" (last updated 28 Sep, 14:05)` and `Tag: {tag}`. The gate's `detail` carries `text` (the whole card), **`text_hidden`** (the same with the `Chat:` line replaced by `Chat: A chat from 28 Sep, 14:05`), `what` (`file one chat under a tag`, no words) and `leaves_this_pc: false`. **Under "Hide memory lists and chat history" (phone) or Windows Hello for memory lists (desktop) the apps show `text_hidden`.** The card never says why the model chose the tag. The tag name is still on the hidden card (the design replaces only the title; the card cannot be decided without it).
+
+**The switch** (`chat_tags_suggest_on`, tier `ask`): `Let Jarvis read a few of your old chats at night, on this PC only, to suggest a tag? It only ever suggests: each one needs your Approve. It never reads chats that read email or web pages, difficult moments, or Live, support and AI-chat records. Turn it off any time.` Neither action is on the "loosen from the PC only" list; neither is risky (the fingerprint/PIN step does not apply). Both are in `jarvis_asks_first.HARD_LIMITS` and `MUST_ASK`, and have plain phrases in `jarvis_card_words.TITLES`.
+
+### 104.4 Shared words
+
+`words.tag_suggest_*` in `history-cases.json` (from `jarvis_tag_suggest.WORDS` through `tools/gen_history_cases.py`), word for word in both apps: the row label `Suggest tags overnight`; the state line `Off` / `On. Looks at up to 5 chats a night.` / `Paused after three 'no' answers. Turn it on again to carry on.`; `1 suggestion is waiting for your Approve.` / `{n} suggestions are waiting for your Approve.`; the pending line; and the error fallback `Your PC did not change that setting.` Errors use the PC's non-empty `message`, then this fallback. The row sits at the bottom of History -> Tags and still shows under hidden lists (it holds no chat words).
+
+Tests: `backend/test_tag_suggest.py`. `backend/eval_tag_suggest.py` (informational, for the owner's PC) is a later step.
+
 ## 105. Activity heatmap and balance chart (added 2026-09-30; backend and both apps built)
 
 The owner ticked this on 2026-09-30 (`docs/BUILD-QUEUE-2026-09-30.md` item 7;
@@ -16394,6 +16429,30 @@ it runs in (the tests pass a zone in); the phone's Compose screens (no local
 Android build; `ProgressTest` runs the pure Kotlin only, and CI compiles the
 rest).
 
+## 106. New section here (added 2026-09-30; backend built and tested, apps planned)
+
+The owner's decision (2026-09-30, `docs/OVERNIGHT-TAGS-DESIGN.md` section 5; shared with the Galaxy panel, `docs/GALAXY-PANEL-DESIGN.md`): in an opened chat in History, once it has **10 or more turns**, every message the owner sent gets a **New section here** button that draws a divider above it. **The owner's answer: it is only a divider** - Jarvis still reads the whole chat the same way; nothing about what it reads or remembers changes, and a marker reaches no model, learner, memory or index. No card (the owner's own layout of a chat already kept); held on a stale link.
+
+### 106.1 Route and read
+
+`POST /api/history/mark` with exactly `{"id": "<chat id>", "idx": <int>, "on": <bool>}`. `idx` is the `idx` of a turn as `GET /api/history/conversation` sends it (the divider sits **above** that turn). `on: true` adds, `on: false` removes; both are idempotent. Answer `200`: `{"ok": true, "id", "idx", "on", "marks": [int, ...]}` (the chat's whole list, sorted).
+
+`GET /api/history/conversation` gains `"marks": [int, ...]`, `"markable": bool` and `"mark_why": ""` (a plain sentence when `markable` is false: `H.MARK_WHY_SHORT` under 10 turns, `H.MARK_WHY_KIND` for a support, chatbot or comparison record, `H.MARK_WHY_CRISIS` for "A difficult moment"). Markable means what `forkable` means (kind `chat` or `live`, not a crisis chat) **and** at least 10 turns.
+
+Errors are `{"ok": false, "error", "message"}`: `bad_request` (400: a body that is not exactly `id`, `idx`, `on`; `idx` not a whole number, negative, a bool, or not one of this chat's turns; `on` not a boolean; also 503 with a sentence when the key is missing or the stored list will not open: "...The section break was not saved."), `not_found` (404), `not_markable` (409, with `mark_why` in the answer and as the `message`), `too_many_marks` (409, "You can have at most 20 section breaks in one chat."). A break already there may be removed even if its turn number no longer exists. The PC's non-empty `message` wins, then the code's fixed sentence, then the apps' fallback.
+
+### 106.2 Storage
+
+A new table `marks (conversation_id TEXT PRIMARY KEY, v BLOB)`; `v` is the sorted list of turn numbers as JSON, sealed with the turns' own AEAD and the additional data `id|marks` (so a copy of the file shows how many chats have markers, not which turns). At most **20** per chat. Never in memory, facts, the learner or an index. Works while chat history is off (like tagging) and needs the key.
+
+**Every path that moves or copies a chat carries it:** `take_out` holds the row still sealed and `put_back` restores it (and when the owner went on with the chat meanwhile, the held breaks come back as they were and newer breaks follow their messages to the new numbers); `fork` copies only the breaks at or below `upto`, sealed again for the new id; `delete`, the keep-days sweep and "Forget a time frame" remove the row with the chat (`secure_delete` is on). The audit line is `history.mark` with `{"on": bool}`, never a chat id or a turn number.
+
+### 106.3 Shared words
+
+`words.mark*` in `history-cases.json`, word for word in both apps: button `New section here` (`mark`; its screen-reader name is `New section here, before your message`), divider `New section` (`mark_divider`, a heading-level landmark reading `New section`), `Remove section break` (`mark_remove`), `Section break added.` (`mark_done`), `Section break removed.` (`mark_removed`), `You can have at most 20 section breaks in one chat.` (`mark_limit`), `This chat cannot have section breaks.` (`mark_no`, used when the PC gave no `mark_why`), and the fallback `Your PC did not save that section break.` Results are announced politely. The opened chat is already hidden under "Hide memory lists and chat history", so no marker is reachable there.
+
+Tests: `backend/test_chat_marks.py` (add, remove, idempotent add, bad `idx`, the 21st, sealed with no plain list in the file and only its own additional data opening it, no turn or conversation row touched, `take_out`/`put_back` including the joined chat, fork, delete, sweep, the four refused kinds and a Live session, history off and no key, the routes, the audit line).
+
 ## 107. Topic controls: include or exclude topics in Jarvis's brain (added 2026-09-30; backend and both apps built)
 
 The owner's request (2026-09-30): "add the ability to adjust the brain of Jarvis to include or exclude different topics". Designed in `docs/TOPIC-CONTROLS-DESIGN.md` (its last section, "Slice contract (frozen)", is what the two apps are built against); the owner's answers are in `docs/BUILD-QUEUE-2026-09-30.md`. Backend: `jarvis_topics.py` (shipped whole), the tables and the search filter in the rebuilt `jarvis_memory.py`, `topics.patch` (an install block, the route-header line, and the `topic_loosen` gate lines), and small changes in `jarvis_intake.py`, `jarvis_auto_learn.py`, `jarvis_places.py`, `jarvis_tidy.py`, `jarvis_briefing.py`, `jarvis_entities.py`, `jarvis_chatbot.py`, `jarvis_search.py`, `jarvis_quick.py` and `jarvis_settings_registry.py`. Tests: `test_topics.py`, `test_topics_leaks.py` (the guard), the `topic` cases in `eval/learner_cases.jsonl`, and `eval_topics.py` (run by the memory self-test).
@@ -16520,6 +16579,12 @@ has the exact rows and words).
 
 On a one-card PC both are shown, cannot be turned on, and say why in the same words as the others
 (`Needs a capable second graphics card: only one graphics card found (...)`).
+
+Every `features[]` row also carries **`model_free`** (boolean, added 2026-09-30): `true` for a switch that
+loads no model at all (today only `referee`), `false` for the rest. An app shows no "Model: ..." line for a
+`model_free` row (on a capable PC a `null` model otherwise reads as "not chosen yet"). The key is optional
+for a reader: a PC from before it sends none, which means `false`. The desktop's `scModelLine` and the
+phone's `SecondCard.Feature.modelFree` both read it that way.
 
 ### 108.2 Turning them on and off
 

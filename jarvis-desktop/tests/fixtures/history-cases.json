@@ -156,7 +156,41 @@
       "bad_upto": "That message is not in this chat, so it was not forked.",
       "not_found": "That chat is not kept any more, so it was not forked."
     },
-    "fork_error_fallback": "Your PC did not fork that chat."
+    "fork_error_fallback": "Your PC did not fork that chat.",
+    "mark": "New section here",
+    "mark_label": "New section here, before your message",
+    "mark_divider": "New section",
+    "mark_remove": "Remove section break",
+    "mark_done": "Section break added.",
+    "mark_removed": "Section break removed.",
+    "mark_limit": "You can have at most 20 section breaks in one chat.",
+    "mark_no": "This chat cannot have section breaks.",
+    "mark_why_short": "Section breaks are offered once a chat has 10 or more messages.",
+    "mark_why_kind": "A customer-support record, a chat with another AI and a comparison can't have section breaks: they hold another side's words, kept as your record.",
+    "mark_why_crisis": "This chat is kept as your own record. It can't have section breaks - start a new chat any time, and nothing from that moment is read again.",
+    "mark_errors": {
+      "bad_request": "Choose one of your messages in this chat.",
+      "not_found": "That chat is not kept any more, so no section break was saved.",
+      "too_many_marks": "You can have at most 20 section breaks in one chat."
+    },
+    "mark_error_fallback": "Your PC did not save that section break.",
+    "tag_suggest_label": "Suggest tags overnight",
+    "tag_suggest_off": "Off",
+    "tag_suggest_on": "On. Looks at up to 5 chats a night.",
+    "tag_suggest_paused": "Paused after three 'no' answers. Turn it on again to carry on.",
+    "tag_suggest_pending": "Waiting for your approval. It turns on only if you approve the card, on your PC or phone.",
+    "tag_suggest_waiting_one": "1 suggestion is waiting for your Approve.",
+    "tag_suggest_waiting_other": "{n} suggestions are waiting for your Approve.",
+    "tag_suggest_card_title": "Suggested tag for a chat",
+    "tag_suggest_card_body": "Jarvis thinks this chat belongs under \"{tag}\". Approve to file it there. Nothing else changes. Deny and Jarvis will not suggest a tag for this chat again.",
+    "tag_suggest_switch_card": "Let Jarvis read a few of your old chats at night, on this PC only, to suggest a tag? It only ever suggests: each one needs your Approve. It never reads chats that read email or web pages, difficult moments, or Live, support and AI-chat records. Turn it off any time.",
+    "tag_suggest_chat_hidden": "A chat from {when}",
+    "tag_suggest_error_fallback": "Your PC did not change that setting.",
+    "tag_suggest_errors": {
+      "bad_request": "That request was not understood.",
+      "no_local_model": "Jarvis needs a model on this PC to do this, and none answered. It does not use a cloud model for this.",
+      "no_tags": "Make a tag first."
+    }
   },
   "kinds": [
     "chat",
@@ -1465,6 +1499,148 @@
     {
       "answer": {},
       "expect": "Your PC did not fork that chat."
+    }
+  ],
+  "mark_max": 20,
+  "mark_min_turns": 10,
+  "mark_error_codes": [
+    "bad_request",
+    "not_found",
+    "not_markable",
+    "too_many_marks"
+  ],
+  "mark_error_cases": [
+    {
+      "answer": {
+        "ok": false,
+        "error": "not_markable",
+        "mark_why": "Section breaks are offered once a chat has 10 or more messages.",
+        "message": "Section breaks are offered once a chat has 10 or more messages."
+      },
+      "expect": "Section breaks are offered once a chat has 10 or more messages."
+    },
+    {
+      "answer": {
+        "ok": false,
+        "error": "not_markable",
+        "message": "  "
+      },
+      "expect": "This chat cannot have section breaks."
+    },
+    {
+      "answer": {
+        "ok": false,
+        "error": "not_markable"
+      },
+      "expect": "This chat cannot have section breaks."
+    },
+    {
+      "answer": {
+        "ok": false,
+        "error": "too_many_marks",
+        "message": "You can have at most 20 section breaks in one chat."
+      },
+      "expect": "You can have at most 20 section breaks in one chat."
+    },
+    {
+      "answer": {
+        "ok": false,
+        "error": "too_many_marks"
+      },
+      "expect": "You can have at most 20 section breaks in one chat."
+    },
+    {
+      "answer": {
+        "ok": false,
+        "error": "not_found"
+      },
+      "expect": "That chat is not kept any more, so no section break was saved."
+    },
+    {
+      "answer": {
+        "ok": false,
+        "error": "not_found",
+        "message": "A different sentence from the PC."
+      },
+      "expect": "A different sentence from the PC."
+    },
+    {
+      "answer": {
+        "ok": false,
+        "error": "bad_request",
+        "message": "Chat history is off. The section break was not saved."
+      },
+      "expect": "Chat history is off. The section break was not saved."
+    },
+    {
+      "answer": {
+        "ok": false,
+        "error": "bad_request"
+      },
+      "expect": "Choose one of your messages in this chat."
+    },
+    {
+      "answer": {},
+      "expect": "Your PC did not save that section break."
+    }
+  ],
+  "tag_suggest_error_codes": [
+    "bad_request",
+    "no_local_model",
+    "no_tags"
+  ],
+  "tag_suggest_state_cases": [
+    {
+      "enabled": false,
+      "paused": false,
+      "waiting": "",
+      "state": "Off"
+    },
+    {
+      "enabled": true,
+      "paused": false,
+      "waiting": "",
+      "state": "On. Looks at up to 5 chats a night."
+    },
+    {
+      "enabled": true,
+      "paused": false,
+      "waiting": "1 suggestion is waiting for your Approve.",
+      "state": "On. Looks at up to 5 chats a night."
+    },
+    {
+      "enabled": true,
+      "paused": false,
+      "waiting": "3 suggestions are waiting for your Approve.",
+      "state": "On. Looks at up to 5 chats a night."
+    },
+    {
+      "enabled": false,
+      "paused": true,
+      "waiting": "",
+      "state": "Paused after three 'no' answers. Turn it on again to carry on."
+    },
+    {
+      "enabled": false,
+      "paused": true,
+      "waiting": "2 suggestions are waiting for your Approve.",
+      "state": "Paused after three 'no' answers. Turn it on again to carry on."
+    }
+  ],
+  "tag_suggest_card_cases": [
+    {
+      "title": "Roof repair budget",
+      "when": "28 Sep, 14:05",
+      "tag": "Projects",
+      "hidden": false,
+      "expect": "Suggested tag for a chat\n\nJarvis thinks this chat belongs under \"Projects\". Approve to file it there. Nothing else changes. Deny and Jarvis will not suggest a tag for this chat again.\n\nChat: \"Roof repair budget\" (last updated 28 Sep, 14:05)\nTag: Projects"
+    },
+    {
+      "title": "Roof repair budget",
+      "when": "28 Sep, 14:05",
+      "tag": "Projects",
+      "hidden": true,
+      "expect": "Suggested tag for a chat\n\nJarvis thinks this chat belongs under \"Projects\". Approve to file it there. Nothing else changes. Deny and Jarvis will not suggest a tag for this chat again.\n\nChat: A chat from 28 Sep, 14:05\nTag: Projects"
     }
   ],
   "tag_delete_cases": [

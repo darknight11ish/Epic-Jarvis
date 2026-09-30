@@ -2,7 +2,7 @@
   "schema": 1,
   "words": {
     "title": "Topics",
-    "intro": "A topic is a folder for things Jarvis knows. Pick what Jarvis may do with each folder.",
+    "intro": "A topic is a folder for things Jarvis knows. Pick what Jarvis may do with each folder. Switching the money topic off, or to \"Learn, but don't use\", also stops spending summaries and the retirement calculator.",
     "sorted_guess": "Jarvis sorted {n} of your {total} facts by guessing from the words. Check them so switching a topic off works as you expect.",
     "sorted_guess_one": "Jarvis sorted 1 fact by guessing from the words. Check it so switching a topic off works as you expect.",
     "check_button": "Check these ({n})",
@@ -95,12 +95,12 @@
     {
       "id": "learn_only",
       "name": "Learn, but don't use",
-      "sentence": "Jarvis keeps learning quietly, but leaves this out of its answers."
+      "sentence": "Jarvis keeps learning quietly, but leaves this out of its answers. For the money topic, that also stops spending summaries and the retirement calculator."
     },
     {
       "id": "off",
       "name": "Off",
-      "sentence": "Jarvis neither learns nor uses this. What it knows is kept, not deleted, and comes back when you switch it on."
+      "sentence": "Jarvis neither learns nor uses this. What it knows is kept, not deleted, and comes back when you switch it on. For the money topic, Off also stops spending summaries and the retirement calculator."
     }
   ],
   "limits": {
