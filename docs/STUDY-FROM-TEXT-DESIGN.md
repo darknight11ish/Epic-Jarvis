@@ -348,3 +348,167 @@ fine-tuned by its author and is not Spanish.
 
 The pasted "pipeline assembly" was pasted twice; its download steps
 (yt-dlp, faster-whisper on a downloaded stream) stay refused (section 7).
+
+
+## 13. Slice contract (frozen 2026-09-30): Study helper and Referee suggestions
+
+The owner's decisions of 2026-09-30: **Study helper = yes** (section 9 above); **Referee suggestions = yes,
+built switched off, propose-only**. Both are the second graphics card's sixth and seventh switches, built OFF
+until the 12 GB card is installed and measured. Backend built (`backend/jarvis_second_card.py`,
+`backend/jarvis_referee.py`, `backend/referee.patch`; `docs/JARVIS-API.md` section 108 is the full account).
+**No new route.** This section is what the two apps build against; the words below are the backend's own and
+both apps say them word for word.
+
+### 13.1 The switch rows (`GET /api/second-card`, `features[]`)
+
+`features[]` now has seven rows in this order: `long_context`, `vision`, `learning`, `browser_control`,
+`wiki`, `study`, `referee`. The two new rows, exactly as the backend sends them.
+
+A one-card PC (the same `why` as every other switch; nothing can be turned on):
+
+```json
+{"id": "study", "name": "Study helper", "what": "Quiz questions are written, and your answers marked, on the second card, so a quiz never slows the everyday chat. The text you paste and the answers you type stay on this PC.", "enabled": false, "active": false, "available": false, "needs": [], "model": null, "model_installed": null, "memory_gib": null, "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."}
+{"id": "referee", "name": "Referee suggestions", "what": "When a goal step's number reaches your target, Jarvis asks \"This looks done - tick it?\" on a card that shows the numbers. Only your tap ticks it: Jarvis never ticks a step by itself and never runs a test. Today it compares numbers on this PC and loads no model.", "enabled": false, "active": false, "available": false, "needs": [], "model": null, "model_installed": null, "memory_gib": null, "why": "Needs a capable second graphics card: only one graphics card found (the NVIDIA GeForce RTX 2080 SUPER)."}
+```
+
+A capable second card, everything off (the default):
+
+```json
+{"id": "study", "name": "Study helper", "what": "Quiz questions are written, and your answers marked, on the second card, so a quiz never slows the everyday chat. The text you paste and the answers you type stay on this PC.", "enabled": false, "active": false, "available": false, "needs": [], "model": "qwen3:8b", "model_installed": true, "memory_gib": 7.69, "why": "Off."}
+{"id": "referee", "name": "Referee suggestions", "what": "When a goal step's number reaches your target, Jarvis asks \"This looks done - tick it?\" on a card that shows the numbers. Only your tap ticks it: Jarvis never ticks a step by itself and never runs a test. Today it compares numbers on this PC and loads no model.", "enabled": false, "active": false, "available": false, "needs": [], "model": null, "model_installed": null, "memory_gib": null, "why": "Off."}
+```
+
+Both on and working (main switch on, the model installed; `referee` needs no lane, so it is `available`
+whenever it is `active`):
+
+```json
+{"id": "study", "name": "Study helper", "what": "Quiz questions are written, and your answers marked, on the second card, so a quiz never slows the everyday chat. The text you paste and the answers you type stay on this PC.", "enabled": true, "active": true, "available": true, "needs": [], "model": "qwen3:8b", "model_installed": true, "memory_gib": 7.69, "why": "Working: qwen3:8b on the NVIDIA GeForce RTX 2060, with room for 32,768 tokens of conversation."}
+{"id": "referee", "name": "Referee suggestions", "what": "When a goal step's number reaches your target, Jarvis asks \"This looks done - tick it?\" on a card that shows the numbers. Only your tap ticks it: Jarvis never ticks a step by itself and never runs a test. Today it compares numbers on this PC and loads no model.", "enabled": true, "active": true, "available": true, "needs": [], "model": null, "model_installed": null, "memory_gib": null, "why": "Working: it compares the numbers you log with your targets on this PC and loads no model, so it uses none of the card's memory yet."}
+```
+
+While a card waits, `pending` lists the id and the row's `why` is `Off. A card to turn it on is waiting for your answer.`
+Other `why` texts are the existing ones (`On, but the main second-card switch is off.`, `On, but qwen3:8b is not
+installed yet. Install it (Brain, Models, or 'ollama pull qwen3:8b' in a terminal) and it starts working.`, `On, but
+it cannot run: ... Your choice is kept; it works again once a capable second card is back.`). For `referee` the
+model and lane texts never appear: it has no model, so `model`, `model_installed` and `memory_gib` are `null`
+even on a capable PC. `third.assignable` never lists `referee`.
+
+### 13.2 POST bodies and answers (the existing route, unchanged)
+
+`POST /api/second-card`, header `X-Jarvis-Client: hud`, body `{"feature": "study" | "referee", "enabled": true | false}`.
+
+| Situation | Status | Body |
+|---|---|---|
+| OFF | 200 | `{"ok": true, "enabled": false, "pending": false, "message": "\"Study helper\" is off."}` (or `"\"Referee suggestions\" is off."`) |
+| ON, a card is raised | 200 | `{"ok": true, "enabled": false, "pending": true, "message": "Approve the card on your PC or phone to turn it on. Nothing changes until you do."}` |
+| ON, already on | 200 | `{"ok": true, "enabled": true, "pending": false, "message": "\"Study helper\" is already on."}` |
+| unknown id | 400 | `{"error": "there is no second-card feature called 'x'"}` |
+| the main switch is off | 400 | `{"error": "Turn on the second graphics card itself first (the main switch), then this one."}` |
+| a card for it is already waiting | 409 | `{"error": "a card to turn on \"Study helper\" is already waiting - approve or deny that one"}` |
+| "One bigger model on both cards" is on | 409 | `{"error": "\"Study helper\" cannot be turned on: \"One bigger model on both cards\" is on, and needs both cards to itself. Turn that off first."}` (`referee` is not blocked by it, and never blocks it) |
+| no capable second card | 503 | `{"error": "\"Study helper\" cannot be turned on: <the reason>."}` |
+| the gate line is not `ask` | 503 | `{"error": "second_card_enable is tier '<tier>' in jarvis-framework.toml; turning this on needs a person to say yes, so it must be 'ask'"}` |
+| `{"feature": "third", "assign": "referee"}` | 400 | `{"error": "\"Referee suggestions\" loads no model, so there is nothing to move to the third card."}` |
+
+The apps send only what they already send for the five older switches; the errors are shown as the backend
+words them. On a stale link the switches are held (rule 4), as for the other five.
+
+### 13.3 The enable cards (action `second_card_enable`, tier `ask`; the card is shown by the existing approval screens)
+
+Study helper (`<card>` is the detected card's name, memory and id):
+
+```
+Turn on "Study helper" on the second graphics card?
+
+What it does: Quiz questions are written, and your answers marked, on the second card, so a quiz never slows the everyday chat. The text you paste and the answers you type stay on this PC.
+
+Which card: the NVIDIA GeForce RTX 2060 (12 GB, id GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23).
+Which model: qwen3:8b, with room for 32,768 tokens - about 7.7 GB of the card's 12 GB.
+
+Jarvis starts a second copy of Ollama that uses only that card and listens on 127.0.0.1:11435 - this PC only, not your network or the internet. Nothing leaves this PC.
+
+If you did not just ask for this, say no.
+
+If you say no: nothing changes. This keeps working the way it does today, on the NVIDIA GeForce RTX 2080 SUPER.
+```
+
+Referee suggestions:
+
+```
+Turn on "Referee suggestions"?
+
+What it does: When a goal step's number reaches your target, Jarvis asks "This looks done - tick it?" on a card that shows the numbers. Only your tap ticks it: Jarvis never ticks a step by itself and never runs a test. Today it compares numbers on this PC and loads no model.
+
+Which card: the NVIDIA GeForce RTX 2060 (12 GB, id GPU-8b7e2d44-1c9a-4f3e-a2b6-5e9d0c7f1a23) - it must be there to switch this on, because the later version (reading a project's changes) will use its model.
+Which model: none yet. Nothing is loaded and no second copy of Ollama is started for this. Nothing leaves this PC.
+
+How it asks: at most a few cards a day, one at a time, never while you are in a focus session or Jarvis is in Quiet or Standby. Each card shows the numbers and says "a suggestion from a number, not a check". Your tap ticks the step, the same as ticking it yourself, and you can untick it at once. It never runs a test, and it only looks at your own goals.
+
+If you did not just ask for this, say no.
+
+If you say no: nothing changes. Goal steps are ticked only by you, as today.
+```
+
+### 13.4 The "This looks done" card (action `referee_tick`, tier `ask`, reversible and local: not a risky approval)
+
+Raised by the backend only, at most 3 in 24 hours, never during a focus session, Quiet, Standby or mid-chat.
+It arrives as an ordinary approval card (`GET /api/pending`); the apps need no new screen for it. Words, exactly:
+
+```
+This looks done - tick it?
+
+Goal: "run a 5k"
+Step: "get under 30 minutes"
+Evidence: "5k time" is now 29.5 min, and your target is 30 min (lower is better).
+
+This is a suggestion from a number, not a check. Jarvis only compared the latest number you logged with your target. It did not run a test, and it cannot tell whether the work is really finished - only you can say that.
+
+If you say yes: this step is ticked, the same as if you had ticked it yourself. You can untick it at once in Goals.
+If you say no: nothing changes, and Jarvis will not ask about this step again for a day, then a week, then a month.
+```
+
+For a health or money number the block `This number is private (health or money): it is shown on this screen only and is never read aloud or sent anywhere.` is added before the "If you say yes" line, and the
+gate `detail` carries `"keep_on_screen": true`. The card's title on lock screens and in the approval widget is
+built from the action's plain words (`jarvis_card_words.py`): `tick a goal step whose number reached its target`.
+**Yes** ticks the step (the PC sets `done_at`); **No** and a timeout change nothing. Undo is the ordinary
+untick, `POST /api/goals/<id>/step` with `{"id": "<step id>", "done": false}`. How it ended
+(`ticked`, `denied`, `timed_out`, `stale`, `withdrawn`, `refused`, `failed`) is kept on the PC in words
+(`jarvis_referee.status()`), and no route serves it: the Goals screen simply shows the step ticked or not.
+"What asks first" lists `referee_tick` under "Timers and reminders" (never loosenable).
+
+### 13.5 What each app must build
+
+**Nothing new for the switches.** Both apps build their second-card list from `features[]` (the desktop from
+`status.features` in `settings.js`, `scPaint`; the phone from `SecondCard.switches(status)`), and the Rust
+shell passes `GET /api/second-card` through unchanged, so **Study helper and Referee suggestions appear
+in both apps with no code change**, with their names, `what`, `why` and the ordinary card flow. Checked by
+reading; no app was run against a real PC.
+
+Edits that are needed, exactly:
+
+1. **Phone test** `jarvis-client/app/src/test/java/com/jarvis/client/SecondCardContractTest.kt`: the lists
+   `listOf("long_context", "vision", "learning", "browser_control", "wiki")` at the test
+   ``all eight cases are read, with the five features in the PC's order`` (line ~60) and at
+   ``combined - its own row, not one of the five features...`` (line ~207) become
+   `listOf("long_context", "vision", "learning", "browser_control", "wiki", "study", "referee")`
+   (rename the first test to "seven features"). The regenerated `second-card-cases.json` (desktop and phone
+   copies, additions only) already has the two rows in all eight cases; the case count is still eight.
+2. **Desktop model line** `jarvis-desktop/src/settings.js`, `scModelLine` (it needs `scPaint`'s `detected` passed in): for a feature with `model === null`
+   on a PC where `status.detected.capable === true` (only `referee`), show no model line and no memory line.
+   Today it would print "The model is chosen once a capable second card is found." under Referee
+   suggestions on a capable PC, which is wrong. (The phone already shows no model line for `model: null`.)
+3. Optional, both apps' checklist text ("five switches" -> "seven") wherever it is written in words.
+
+The apps do **not** read `referee`'s outcome and show no second screen for it. If the apps ever show the
+`keep_on_screen` mark, note that whether the gate's `/api/pending` row passes `detail.keep_on_screen` on is in
+the owner's `jarvis_gate.py`, which this repository does not hold - **not checked**.
+
+### 13.6 What is not built (follow-ups, written down)
+
+* **The diff candidate.** "This looks done" for a coding task from its change summary, using the second card's
+  model, labelled "a guess by the small model, not a check". A goal step can only follow a number today, and
+  `jarvis_apps.py`'s per-task summary has nothing to be linked to, so only the number candidate is built.
+* **Marking with the bigger local model** (`qwen3:14b`, "One bigger model on both cards"): out of scope for
+  `study`. It ties up both cards, so it could not run beside the quiz's lane.
+* The quiz's grader has not been run on the second card's model; marks made there stay "Jarvis's guess".
+* Nothing has run on the real second card.

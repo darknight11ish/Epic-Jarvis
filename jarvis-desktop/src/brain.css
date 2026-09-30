@@ -2841,6 +2841,7 @@ mark.find-current {
 
 .topics-choice input {
   grid-row: 1 / span 2;
+  align-self: start;
   margin-top: 3px;
 }
 

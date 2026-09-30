@@ -2973,6 +2973,7 @@ function takeTopics(view) {
     refreshMemory();
   }
   ensureTopicsPoll();
+  if (state.view === "memory") paintTopics();
 }
 
 function ensureTopicsPoll() {
@@ -3161,6 +3162,12 @@ function openTopicDialog(title, build) {
   return api;
 }
 
+/** A dialog's main button: off while nothing is chosen yet, while it works, and
+ *  while the link cannot be confirmed (rule 4) - a choice never re-enables it. */
+function topicGoState(go, nothingChosen) {
+  go.disabled = nothingChosen || go.dataset.busy === "true" || !linkWords(currentLink()).canAct;
+}
+
 function cancelButton() {
   return button(Topics.APP_WORDS.cancel, () => closeTopicDialog());
 }
@@ -3208,7 +3215,7 @@ function openModePicker(id) {
         preview.line = "";
         preview.card = "";
         paintLines();
-        if (go) go.disabled = m.id === t.mode || go.dataset.busy === "true";
+        if (go) topicGoState(go, m.id === t.mode);
         if (m.id === t.mode) return;
         const mine = ++token;
         try {
@@ -3240,7 +3247,7 @@ function openModePicker(id) {
       }
       closeTopicDialog();
     }, { live: true });
-    go.disabled = true;
+    topicGoState(go, true);
     go.dataset.fkey = "topics-change";
     return [go, cancelButton()];
   });
@@ -3400,7 +3407,7 @@ function openDeleteDialog(id) {
         const words = Topics.deleteWarning(v, t, home);
         warn.textContent = words;
         warn.hidden = !words;
-        if (go) go.disabled = go.dataset.busy === "true";
+        if (go) topicGoState(go, false);
       });
       set.append(label);
     });
@@ -3419,7 +3426,7 @@ function openDeleteDialog(id) {
       tp.menu = 0;
       closeTopicDialog();
     }, { live: true, danger: true });
-    go.disabled = true;
+    topicGoState(go, true);
     return [go, cancelButton()];
   });
 }
@@ -3854,6 +3861,13 @@ if (IS_TAURI && TAURI.event && TAURI.event.listen) {
   TAURI.event.listen("security-changed", rereadTopics);
   TAURI.event.listen("private-hidden", rereadTopics);
 }
+
+// The approvals list changed (a card was decided on this PC or the phone, or
+// timed out): while one of ours waits, read the topics now rather than at the
+// next tick, so the row does not say "waiting" longer than it has to.
+onQueue(() => {
+  if (tp.view && tp.view.waiting && !tp.loading) loadTopics();
+});
 
 /** The Jarvis bar sent the owner here (`open_brain: "topics"`), maybe with a
  *  topic to open the picker for. Changes nothing until Change is tapped. */
