@@ -1755,6 +1755,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
             const a = String(args.answer || "");
             if (!a.trim()) return no("answer_empty");
             if (a.length > 2000) return no("answer_too_long");
+            // A crisis answer (JARVIS-API 98.4): the scenario's `crisisWord`
+            // stands in for the PC's check. No mark, question stays open, the
+            // PC's own (stand-in) help words come back.
+            if (z.crisisWord && a.includes(z.crisisWord)) {
+              return { ok: true, crisis: true, message: "STAND-IN HELP WORDS.\n\nCall **988** any time.",
+                quiz: view() };
+            }
             const levels = z.levels || ["got_it", "partly", "not_yet"];
             item.mark = { level: levels[z.quiz.answered % levels.length],
               comment: "The passage says otherwise.", passage: "SOURCE PASSAGE " + item.n };
@@ -2159,9 +2166,13 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               return { available: false, why: "This PC's Jarvis does not keep chat history yet. " +
                 "Update the backend by running apply-patches.ps1, then open this again." };
             }
-            // `kind` narrows the list, as GET /api/history?kind= does.
+            if (args.tag) h.reads[h.reads.length - 1].tag = args.tag;
+            // `kind` narrows the list, as GET /api/history?kind= does; `tag`
+            // (docs/CHAT-TAGS-DESIGN.md) as GET /api/history?tag= does.
             const all = [...h.conversations]
               .filter((c) => !args.kind || (c.kind || "chat") === args.kind)
+              .filter((c) => !args.tag || (args.tag === "none"
+                ? c.tag_id == null : c.tag_id === Number(args.tag)))
               .sort((a, b) => b.updated - a.updated);
             const older = args.before == null ? all : all.filter((c) => c.updated < args.before);
             const page = older.slice(0, args.limit || 30);
@@ -2173,6 +2184,86 @@ export function bridge({ link, pending, attention, digest, telemetry, prefs, ans
               out.conversations = [];
             }
             return out;
+          }
+          // Chat tags (brain/history.rs brain_history_tags, _tags_edit,
+          // _tag; JARVIS-API.md section 99). `history.tags` is the registry
+          // ([{id, name, colour, icon, order}]); unset is a PC without tags
+          // (Rust answers {available: false}). Every write is kept in
+          // `__history.tagEdits` / `.tagged`; refusals use the contract's codes.
+          case "brain_history_tags": {
+            const h = window.__history;
+            h.tagReads = (h.tagReads || 0) + 1;
+            if (!h.tags) {
+              return { available: false, why: "This PC's Jarvis cannot sort chats under tags yet. " +
+                "Update the backend by running apply-patches.ps1, then open this again." };
+            }
+            const sec = window.__security;
+            const count = (id) => h.conversations.filter((c) => c.tag_id === id).length;
+            const tags = h.tags.map((t) => ({ ...t, count: count(t.id) }))
+              .sort((a, b) => a.order - b.order);
+            const untagged = h.conversations.filter((c) => c.tag_id == null).length;
+            if (sec.hidden && !sec.revealed) {
+              return { ok: true, hidden: true, untagged,
+                tags: tags.map((t) => ({ id: t.id, order: t.order, count: t.count })) };
+            }
+            return JSON.parse(JSON.stringify({ ok: true, tags, untagged }));
+          }
+          case "brain_history_tags_edit": {
+            const h = window.__history;
+            (h.tagEdits = h.tagEdits || []).push({ ...args });
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) throw new Error("Your chat history is hidden, and so are your tag names.");
+            const fail = (error) => ({ ok: false, error, message: error });
+            const find = (id) => h.tags.find((t) => t.id === id);
+            const nameTaken = (name, except) => h.tags.some((t) =>
+              t.id !== except && t.name.toLowerCase() === name.toLowerCase());
+            const renumber = () => h.tags.forEach((t, i) => { t.order = i; });
+            const done = (tag) => ({ ok: true, tag, tags: h.tags.map((t) => ({ ...t })) });
+            h.tags.sort((a, b) => a.order - b.order);
+            if (args.op === "add") {
+              const name = String(args.name || "").trim();
+              if (!name || name.length > 24) return fail("bad_name");
+              if (nameTaken(name)) return fail("name_taken");
+              if (h.tags.length >= 12) return fail("too_many_tags");
+              const id = (h.nextTagId = Math.max(h.nextTagId || 0, ...h.tags.map((t) => t.id)) + 1);
+              const tag = { id, name, colour: args.colour ?? 0, icon: args.icon || "folder", order: h.tags.length };
+              h.tags.push(tag);
+              return done(tag);
+            }
+            const t = find(args.id);
+            if (!t) return fail("tag_not_found");
+            if (args.op === "rename") {
+              const name = String(args.name || "").trim();
+              if (!name || name.length > 24) return fail("bad_name");
+              if (nameTaken(name, t.id)) return fail("name_taken");
+              t.name = name;
+            } else if (args.op === "style") {
+              if (args.colour != null) t.colour = args.colour;
+              if (args.icon != null) t.icon = args.icon;
+            } else if (args.op === "move") {
+              h.tags = h.tags.filter((x) => x.id !== t.id);
+              const at = args.before == null ? h.tags.length : h.tags.findIndex((x) => x.id === args.before);
+              h.tags.splice(at < 0 ? h.tags.length : at, 0, t);
+              renumber();
+            } else if (args.op === "delete") {
+              h.tags = h.tags.filter((x) => x.id !== t.id);
+              h.conversations.forEach((c) => { if (c.tag_id === t.id) c.tag_id = null; });
+              renumber();
+            } else return fail("bad_request");
+            return done(t);
+          }
+          case "brain_history_tag": {
+            const h = window.__history;
+            (h.tagged = h.tagged || []).push({ id: args.id, tagId: args.tagId ?? null });
+            const sec = window.__security;
+            if (sec.hidden && !sec.revealed) throw new Error("Your chat history is hidden, and so are your tag names.");
+            const c = h.conversations.find((x) => x.id === args.id);
+            if (!c) return { ok: false, error: "not_found", message: "not_found" };
+            if (args.tagId != null && !(h.tags || []).some((t) => t.id === args.tagId)) {
+              return { ok: false, error: "tag_not_found", message: "tag_not_found" };
+            }
+            c.tag_id = args.tagId ?? null;
+            return { ok: true, id: args.id, tag_id: c.tag_id };
           }
           case "brain_history_open": {
             const h = window.__history;

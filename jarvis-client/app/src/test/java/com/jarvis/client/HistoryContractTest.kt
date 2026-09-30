@@ -2,11 +2,13 @@ package com.jarvis.client
 
 import com.jarvis.client.net.ChatHistory
 import com.jarvis.client.net.ChatLog
+import com.jarvis.client.net.ChatTags
 import com.jarvis.client.net.ForgetRange
 import com.jarvis.client.net.MemoryErase
 import com.jarvis.client.net.Projects
 import com.jarvis.client.net.TemporaryChat
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -15,6 +17,7 @@ import kotlinx.serialization.json.long
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
 import java.time.Instant
@@ -74,6 +77,57 @@ class HistoryContractTest {
         assertEquals(w("history_settings_title"), ChatLog.HISTORY_SETTINGS_TITLE)
         assertEquals(w("messages_one"), ChatLog.messagesWords(1))
         assertEquals(w("messages_many").replace("{n}", "7"), ChatLog.messagesWords(7))
+    }
+
+    /**
+     * Chat tags (docs/CHAT-TAGS-DESIGN.md section 10). The backend builder's
+     * tools/gen_history_cases.py adds the tag words, palette and icon list to
+     * this fixture; its key names were not fixed when this test was written,
+     * so it looks for an object under `tags` (with any of `words`, `palette`,
+     * `icons`, `max_tags`, `name_max`) and checks whatever is there, word for
+     * word against [ChatTags]. With no such key it is skipped - the same values
+     * are held to section 10 directly by TagsTest.
+     */
+    @Test
+    fun `tag words, palette and icons are the fixture's when it carries them`() {
+        val tags = doc["tags"] as? JsonObject
+        assumeTrue("history-cases.json has no 'tags' object yet", tags != null)
+        tags!!
+        (tags["words"] as? JsonObject)?.let { tw ->
+            val mine = mapOf(
+                "untagged" to ChatTags.UNTAGGED,
+                "all" to ChatTags.ALL,
+                "editor_title" to ChatTags.EDITOR_TITLE,
+                "add" to ChatTags.ADD,
+                "rename" to ChatTags.RENAME,
+                "delete" to ChatTags.DELETE,
+                "move_to" to ChatTags.MOVE_TO,
+                "no_tag" to ChatTags.NO_TAG,
+            )
+            for ((key, expect) in mine) {
+                val theirs = (tw[key] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: continue
+                assertEquals("tag word $key", theirs, expect)
+            }
+        }
+        (tags["icons"] as? JsonArray)?.let { arr ->
+            assertEquals(arr.map { it.jsonPrimitive.content }, ChatTags.ICONS)
+        }
+        (tags["max_tags"] as? kotlinx.serialization.json.JsonPrimitive)?.let {
+            assertEquals(it.content.toInt(), ChatTags.MAX_TAGS)
+        }
+        (tags["name_max"] as? kotlinx.serialization.json.JsonPrimitive)?.let {
+            assertEquals(it.content.toInt(), ChatTags.NAME_MAX)
+        }
+        (tags["palette"] as? JsonArray)?.let { arr ->
+            assertEquals(ChatTags.COLOUR_NAMES.size, arr.size)
+            arr.forEachIndexed { i, el ->
+                val o = el as? JsonObject ?: return@forEachIndexed
+                fun hex(key: String): Int? = (o[key] as? kotlinx.serialization.json.JsonPrimitive)?.content
+                    ?.removePrefix("#")?.toIntOrNull(16)
+                hex("light")?.let { assertEquals("light ink $i", it, ChatTags.INK_LIGHT[i]) }
+                hex("dark")?.let { assertEquals("dark ink $i", it, ChatTags.INK_DARK[i]) }
+            }
+        }
     }
 
     @Test

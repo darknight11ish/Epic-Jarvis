@@ -15,6 +15,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import com.jarvis.client.JarvisRuntime
 import com.jarvis.client.net.Quiz
 import com.jarvis.client.ui.parts.Gap
@@ -64,6 +68,9 @@ internal fun QuizSection(
     var pasted by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var said by remember { mutableStateOf<String?>(null) }
+    // A crisis answer's help words (the PC's own text, JARVIS-API 98.4), shown
+    // in place of a mark until the next action. Memory of this screen only.
+    var crisis by remember { mutableStateOf<String?>(null) }
     var draft by remember { mutableStateOf("") }
     // The question just marked, shown with its mark until "Next question".
     var reviewing by remember { mutableStateOf<Int?>(null) }
@@ -90,6 +97,7 @@ internal fun QuizSection(
             try {
                 val (ok, sentence) = JarvisRuntime.startQuiz(pasted)
                 if (ok) {
+                    crisis = null
                     // The text is not kept: it is cleared the moment it is sent on.
                     pasted = ""
                     draft = ""
@@ -136,6 +144,8 @@ internal fun QuizSection(
                     },
                 )
                 quiz != null -> {
+                    val help = crisis
+                    if (help != null) CrisisView(help)
                     val reviewN = reviewing
                     val current = if (reviewN != null) quiz.questions.firstOrNull { it.n == reviewN } else Quiz.next(quiz)
                     if (current != null) {
@@ -152,12 +162,20 @@ internal fun QuizSection(
                                 if (canAct && !busy && Quiz.validAnswer(draft)) {
                                     busy = true
                                     said = null
+                                    crisis = null
                                     val n = current.n
                                     val typed = draft
                                     scope.launch {
                                         try {
-                                            val (mark, sentence) = JarvisRuntime.answerQuiz(n, typed)
-                                            if (mark != null) {
+                                            val (result, sentence) = JarvisRuntime.answerQuiz(n, typed)
+                                            val help = result?.crisis
+                                            if (help != null) {
+                                                // Not marked: the PC's help words, the question stays
+                                                // open, and the typed words are let go.
+                                                crisis = help
+                                                reviewing = null
+                                                draft = ""
+                                            } else if (result?.mark != null) {
                                                 reviewing = n
                                                 draft = ""
                                             } else {
@@ -173,6 +191,7 @@ internal fun QuizSection(
                                 reviewing = null
                                 draft = ""
                                 said = null
+                                crisis = null
                             },
                             moreToAnswer = quiz.questions.any { it.mark == null },
                         )
@@ -196,6 +215,7 @@ internal fun QuizSection(
                                     try {
                                         val (s, sentence) = JarvisRuntime.finishQuiz()
                                         if (s != null) {
+                                            crisis = null
                                             summaryQuestions = questions
                                             summary = s
                                             reviewing = null
@@ -221,6 +241,7 @@ internal fun QuizSection(
                                         val (ok, sentence) = JarvisRuntime.stopQuiz()
                                         said = sentence
                                         if (ok) {
+                                            crisis = null
                                             reviewing = null
                                             draft = ""
                                         }
@@ -289,6 +310,30 @@ internal fun QuizSection(
                     color = chrome.textLo,
                 )
             }
+        }
+    }
+}
+
+/**
+ * A crisis answer's help words, in place of a mark: the PC's own text (the same
+ * words chat shows), drawn calmly - no warning colour, no mark, no "Jarvis's
+ * guess". `**bold**` in the text is drawn bold; nothing else is interpreted.
+ */
+@Composable
+private fun CrisisView(message: String) {
+    val chrome = LocalChrome.current
+    Column(Modifier.fillMaxWidth().liveStatus()) {
+        for (para in Quiz.crisisParagraphs(message)) {
+            Text(
+                buildAnnotatedString {
+                    for (run in para) {
+                        if (run.bold) withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(run.text) }
+                        else append(run.text)
+                    }
+                },
+                style = MaterialTheme.typography.bodyMedium, color = chrome.textHi,
+            )
+            Gap(6)
         }
     }
 }

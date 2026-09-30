@@ -84,7 +84,8 @@ fn backend_refusal_body(body: &str) -> Option<serde_json::Value> {
 /// A crisis answer: `{"ok": true, "crisis": true, "message": "<words>", ...}`.
 fn is_crisis(v: &serde_json::Value) -> bool {
     v.get("crisis").and_then(|c| c.as_bool()) == Some(true)
-        && v.get("message").is_some_and(|m| m.as_str().is_some_and(|s| !s.is_empty()))
+        && v.get("message")
+            .is_some_and(|m| m.as_str().is_some_and(|s| !s.is_empty()))
 }
 
 /// The reading of any of the five answers. `need` is the field a success
@@ -387,11 +388,20 @@ mod tests {
         // A crisis flag with no words is not readable; an ordinary answer with
         // no mark still is not either.
         let bare = r#"{"ok": true, "crisis": true, "quiz": {}}"#;
-        assert_eq!(quiz_answer(200, bare, Some("mark")).unwrap_err(), UNREADABLE);
+        assert_eq!(
+            quiz_answer(200, bare, Some("mark")).unwrap_err(),
+            UNREADABLE
+        );
         let plain = r#"{"ok": true, "quiz": {}}"#;
-        assert_eq!(quiz_answer(200, plain, Some("mark")).unwrap_err(), UNREADABLE);
+        assert_eq!(
+            quiz_answer(200, plain, Some("mark")).unwrap_err(),
+            UNREADABLE
+        );
         // The crisis pass-through applies to the answer route only.
-        assert_eq!(quiz_answer(200, body, Some("summary")).unwrap_err(), UNREADABLE);
+        assert_eq!(
+            quiz_answer(200, body, Some("summary")).unwrap_err(),
+            UNREADABLE
+        );
     }
 
     #[test]

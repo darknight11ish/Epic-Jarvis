@@ -44,14 +44,14 @@ fun TagIcon(name: String, tint: Color, modifier: Modifier = Modifier, size: Dp =
 private fun DrawScope.line(c: Color, s: Stroke, u: Float, x1: Float, y1: Float, x2: Float, y2: Float) =
     drawLine(c, Offset(x1 * u, y1 * u), Offset(x2 * u, y2 * u), strokeWidth = s.width, cap = StrokeCap.Round)
 
-private fun poly(u: Float, close: Boolean, vararg xy: Float): Path = Path().apply {
+private fun poly(u: Float, shut: Boolean, vararg xy: Float): Path = Path().apply {
     moveTo(xy[0] * u, xy[1] * u)
     var i = 2
     while (i + 1 < xy.size) {
         lineTo(xy[i] * u, xy[i + 1] * u)
         i += 2
     }
-    if (close) close()
+    if (shut) close()
 }
 
 private fun DrawScope.drawTag(name: String, c: Color, s: Stroke, u: Float) {

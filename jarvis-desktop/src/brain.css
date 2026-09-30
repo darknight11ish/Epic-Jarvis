@@ -1350,9 +1350,9 @@ body {
 .quiz-crisis {
   padding: 0.75rem 1rem;
   margin: 0.5rem 0;
-  border-left: 3px solid var(--border, currentColor);
+  border-left: 3px solid var(--border-strong);
   border-radius: 6px;
-  background: var(--surface-2, transparent);
+  background: var(--surface-1);
 }
 
 .quiz-passage {

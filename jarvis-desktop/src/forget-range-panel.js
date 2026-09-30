@@ -253,6 +253,7 @@ export function takePlace(freshMs = 60_000) {
  */
 export function takeAnyPlace(freshMs = 60_000) {
   let left = null;
+  lastLeft = null;
   try {
     left = JSON.parse(localStorage.getItem(BRAIN_PLACE_KEY) || "null");
     if (left) localStorage.removeItem(BRAIN_PLACE_KEY);
@@ -260,8 +261,23 @@ export function takeAnyPlace(freshMs = 60_000) {
     return "";
   }
   if (!left || Date.now() - Number(left.at) >= freshMs) return "";
-  return left.place === PLACE || left.place === HISTORY_PLACE ? left.place : "";
+  if (left.place === PLACE || left.place === HISTORY_PLACE) {
+    lastLeft = left;
+    return left.place;
+  }
+  return "";
 }
+
+/** What the place was left with, taken once: the History place can carry
+ *  `file_under` (a tag id) and `history_q` (search words) for "label my chat
+ *  about the boiler as Home" (docs/CHAT-TAGS-DESIGN.md). Null when the last
+ *  [takeAnyPlace] left nothing extra, or it was already taken. */
+export function takePlaceExtras() {
+  const left = lastLeft;
+  lastLeft = null;
+  return left;
+}
+let lastLeft = null;
 
 /** After the History tab is shown for the Jarvis bar's request. */
 export async function openForgetRange() {

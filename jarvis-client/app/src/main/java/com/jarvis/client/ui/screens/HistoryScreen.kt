@@ -233,6 +233,8 @@ fun HistoryScreen(
             is ApiResult.Failed -> if (r.error == ApiError.NotFound) {
                 tagView = null
                 tagsOld = true
+            } else {
+                Unit
             }
         }
     }
@@ -400,6 +402,31 @@ fun HistoryScreen(
             } else {
                 val shown = rows
                 val err = readError
+                val view = tagView
+                val groupedTags = view != null && view.tags.isNotEmpty()
+                val wanted = filing
+                // "Tap the chat to file it under Home." Nothing is filed until a tap.
+                if (wanted != null) {
+                    item(key = "filing") {
+                        val target = view?.tags?.firstOrNull { it.id == wanted.tagId }
+                        Plate {
+                            Text(
+                                when {
+                                    target != null -> ChatTags.banner(target.name)
+                                    view != null -> ChatTags.errorSentence("tag_not_found")
+                                    else -> "Reading…"
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = chrome.textHi,
+                                modifier = Modifier.liveStatus(),
+                            )
+                            Quiet(ChatTags.CANCEL, color = chrome.textMid, onClick = {
+                                filing = null
+                                onFileUnderDone()
+                            })
+                        }
+                    }
+                }
                 // One letter, or a PC without the word search: the box
                 // narrows `shown` by title, for display only - paging ("Load
                 // older") still works from the full, unfiltered list. Two
@@ -413,9 +440,15 @@ fun HistoryScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Kicker("Conversations")
-                            // At the top of History, not only deep in Brain
-                            // (the chat audit, 2026-09-28).
-                            Quiet(ChatLog.FORGET_RANGE_LINK, color = chrome.textMid, onClick = onOpenForgetRange)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // The tag editor (docs/CHAT-TAGS-DESIGN.md).
+                                if (!tagsOld) {
+                                    Quiet(ChatTags.EDITOR_TITLE, color = chrome.textMid, onClick = { editorOpen = true })
+                                }
+                                // At the top of History, not only deep in Brain
+                                // (the chat audit, 2026-09-28).
+                                Quiet(ChatLog.FORGET_RANGE_LINK, color = chrome.textMid, onClick = onOpenForgetRange)
+                            }
                         }
                         Gap(4)
                         // "Show": every kind, Live only, support chats, chats
@@ -446,6 +479,18 @@ fun HistoryScreen(
                                 )
                             }
                         }
+                        // "All" and one chip per tag: shows one tag's chats.
+                        if (view != null && groupedTags) {
+                            Gap(2)
+                            TagFilterChips(view.tags, tagFilter, onPick = { picked ->
+                                if (picked != tagFilter) {
+                                    tagFilter = picked
+                                    rows = null
+                                    mayHaveOlder = false
+                                    readError = null
+                                }
+                            })
+                        }
                         Gap(6)
                         if (shown != null && shown.isNotEmpty()) {
                             TextInput(
@@ -464,7 +509,7 @@ fun HistoryScreen(
                                 color = if (err != null) chrome.warnInk else chrome.textLo,
                             )
                             shown.isEmpty() -> Text(
-                                if (kind.isNotEmpty()) ChatLog.FILTER_NONE else ChatLog.EMPTY,
+                                if (kind.isNotEmpty() || tagFilter.isNotEmpty()) ChatLog.FILTER_NONE else ChatLog.EMPTY,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = chrome.textMid,
                             )
@@ -519,11 +564,21 @@ fun HistoryScreen(
                 if (wordSearch && !searching) {
                     val f = found
                     if (f != null && f.queryOk) {
-                        items(f.found, key = { "f-" + it.row.id }) { hit ->
-                            FoundRow(hit, onOpen = {
-                                findFirst = search.trim()
-                                openId = hit.row.id
-                            })
+                        // A tag chosen narrows the words too (the PC's search takes no tag).
+                        val hits = tagFilter.toIntOrNull()?.let { t -> f.found.filter { it.row.tagId == t } } ?: f.found
+                        items(hits, key = { "f-" + it.row.id }) { hit ->
+                            FoundRow(
+                                hit,
+                                tag = view?.tags?.firstOrNull { it.id == hit.row.tagId },
+                                onOpen = {
+                                    if (wanted != null) {
+                                        fileChat(hit.row.id, wanted.tagId, fromBanner = true)
+                                    } else {
+                                        findFirst = search.trim()
+                                        openId = hit.row.id
+                                    }
+                                },
+                            )
                         }
                         ChatLog.searchMoreLine(f)?.let { more ->
                             item(key = "search-more") {
@@ -533,11 +588,56 @@ fun HistoryScreen(
                     }
                 }
                 if (visible != null) {
-                    items(visible, key = { "c-" + it.id }) { row ->
-                        ConversationRow(row, onOpen = {
-                            findFirst = ""
-                            openId = row.id
-                        })
+                    // One row: opens the chat - or, with the "file it" banner up, files it.
+                    val rowContent: @Composable (ChatLog.Summary) -> Unit = { row ->
+                        val here = view?.tags?.firstOrNull { it.id == row.tagId }
+                        ConversationRow(
+                            row,
+                            tag = here,
+                            tags = if (wanted == null) view?.tags.orEmpty() else emptyList(),
+                            moveOpen = moveFor == row.id,
+                            onToggleMove = { moveFor = if (moveFor == row.id) null else row.id },
+                            onMove = { tagId -> fileChat(row.id, tagId, fromBanner = false) },
+                            onOpen = {
+                                if (wanted != null) {
+                                    fileChat(row.id, wanted.tagId, fromBanner = true)
+                                } else {
+                                    findFirst = ""
+                                    openId = row.id
+                                }
+                            },
+                        )
+                    }
+                    if (view != null && groupedTags && !wordSearch) {
+                        // Sections, one per tag in the owner's order, newest
+                        // first inside, Untagged last. Each header says its
+                        // name, icon and count, and folds shut.
+                        val sections = ChatTags.group(visible, view.tags, view.untagged, tagFilter.toIntOrNull())
+                        sections.forEach { sec ->
+                            val isOpen = sec.key !in closed
+                            val count = ChatTags.countOf(sec, view.untagged)
+                            item(key = "sec-${sec.key}") {
+                                TagSectionHeader(sec.tag, count, isOpen, onToggle = {
+                                    val next = if (isOpen) closed + sec.key else closed - sec.key
+                                    closed = next
+                                    viewPrefs.saveClosed(next)
+                                })
+                            }
+                            if (isOpen) {
+                                if (sec.rows.isEmpty()) {
+                                    item(key = "sec-${sec.key}-none") {
+                                        Text(
+                                            if (count > 0) ChatTags.NONE_LOADED else ChatTags.NONE_HERE,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = chrome.textLo,
+                                        )
+                                    }
+                                }
+                                items(sec.rows, key = { "c-" + it.id }) { row -> rowContent(row) }
+                            }
+                        }
+                    } else {
+                        items(visible, key = { "c-" + it.id }) { row -> rowContent(row) }
                     }
                     if (mayHaveOlder && shown != null && shown.isNotEmpty()) {
                         item(key = "older") {
@@ -552,7 +652,7 @@ fun HistoryScreen(
                                         loadingOlder = true
                                         scope.launch {
                                             try {
-                                                when (val r = JarvisRuntime.history(before, kind.ifEmpty { null })) {
+                                                when (val r = JarvisRuntime.history(before, kind.ifEmpty { null }, tagFilter.ifEmpty { null })) {
                                                     is ApiResult.Ok -> {
                                                         val page = ChatLog.page(r.value)
                                                         val had = rows.orEmpty()
@@ -705,19 +805,42 @@ fun HistoryScreen(
 
 /** One row of the list: the title, when and where, and its marks in words. */
 @Composable
-private fun ConversationRow(row: ChatLog.Summary, onOpen: () -> Unit) {
+private fun ConversationRow(
+    row: ChatLog.Summary,
+    tag: ChatTags.Tag?,
+    tags: List<ChatTags.Tag>,
+    moveOpen: Boolean,
+    onToggleMove: () -> Unit,
+    onMove: (Int?) -> Unit,
+    onOpen: () -> Unit,
+) {
     val chrome = LocalChrome.current
     val zone = remember { ZoneId.systemDefault() }
     val today = LocalDate.now(zone)
-    Plate(Modifier.pressable(onClick = onOpen)) {
-        Text(row.title, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi, maxLines = 2)
-        Gap(2)
-        Text(
-            ChatLog.rowLine(row, zone, today),
-            style = MaterialTheme.typography.labelSmall,
-            color = chrome.textLo,
-        )
-        RowMarks(row)
+    Column(Modifier.fillMaxWidth()) {
+        Plate(Modifier.pressable(onClick = onOpen)) {
+            Text(row.title, style = MaterialTheme.typography.bodyMedium, color = chrome.textHi, maxLines = 2)
+            Gap(2)
+            Text(
+                ChatLog.rowLine(row, zone, today),
+                style = MaterialTheme.typography.labelSmall,
+                color = chrome.textLo,
+            )
+            RowMarks(row, tag)
+        }
+        // "Move to": the tags and "No tag" - only when the PC has tags, and not
+        // while the "file it" banner is up (a tap on the row files it then).
+        if (tags.isNotEmpty()) {
+            Quiet(
+                if (moveOpen) ChatTags.CANCEL else ChatTags.MOVE_TO,
+                color = chrome.textMid,
+                modifier = Modifier.semantics {
+                    contentDescription = (if (moveOpen) "Close move list for " else "${ChatTags.MOVE_TO}: ") + row.title
+                },
+                onClick = onToggleMove,
+            )
+            if (moveOpen) MoveToList(tags, row.tagId, onPick = onMove)
+        }
     }
 }
 
@@ -726,13 +849,17 @@ private fun ConversationRow(row: ChatLog.Summary, onOpen: () -> Unit) {
  * says so in its line instead - "Live · 12 min · Today 14:05"), said aloud,
  * read outside text.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun RowMarks(row: ChatLog.Summary) {
+private fun RowMarks(row: ChatLog.Summary, chatTag: ChatTags.Tag? = null) {
     val chrome = LocalChrome.current
     val tag = ChatLog.KIND_TAG[row.kind].orEmpty().takeIf { row.kind != "live" && it.isNotEmpty() }
-    if (tag == null && !row.hasVoice && !row.tainted) return
+    if (tag == null && chatTag == null && !row.hasVoice && !row.tainted) return
     Gap(4)
-    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+    // FlowRow: a tag chip beside the kind and voice marks wraps rather than squeezes.
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        // The chat's own tag: icon and name, so colour is never the only clue.
+        if (chatTag != null) TagChip(chatTag)
         if (tag != null) {
             Pill(tag, modifier = Modifier.semantics { contentDescription = ChatLog.KIND_TITLE[row.kind].orEmpty() })
         }
@@ -751,7 +878,7 @@ private fun hitStyle(current: Boolean = false): SpanStyle = SpanStyle(
 
 /** One search result: the row, then the snippet with the search words marked. */
 @Composable
-private fun FoundRow(hit: ChatLog.Found, onOpen: () -> Unit) {
+private fun FoundRow(hit: ChatLog.Found, tag: ChatTags.Tag?, onOpen: () -> Unit) {
     val chrome = LocalChrome.current
     val zone = remember { ZoneId.systemDefault() }
     val today = LocalDate.now(zone)
@@ -776,7 +903,7 @@ private fun FoundRow(hit: ChatLog.Found, onOpen: () -> Unit) {
         )
         Gap(4)
         Text(snippet, style = MaterialTheme.typography.bodySmall, color = chrome.textMid)
-        RowMarks(hit.row)
+        RowMarks(hit.row, tag)
     }
 }
 

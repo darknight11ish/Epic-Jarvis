@@ -306,7 +306,6 @@ import {
   ALL as TAG_ALL,
   bannerText as tagBannerText,
   BANNER_CANCEL,
-  colourName,
   COLOURS as TAG_COLOURS,
   deleteConfirm as tagDeleteConfirm,
   DELETE_TAG,
@@ -3404,6 +3403,8 @@ async function revealHistory() {
   await loadHistory();
   // A search typed before the list was hidden runs again, now it may.
   if (chats.search.query.length >= SEARCH_MIN) onHistorySearch();
+  // An older chat to file was waiting for the tag names to be shown.
+  if (chats.filingPending) await resolveFilingPending();
 }
 
 /* ---- "Search what was said" and "Find in this chat" (section 71) -------- */
@@ -3602,6 +3603,12 @@ function conversationRow(c, { needle = "", snippet = null } = {}) {
     ],
   });
   item.dataset.id = c.id;
+  // Chat tags: the tag pill under the title, a "Move to" menu, and - while
+  // an older chat is being found to file - a button (and a tap on the row)
+  // that files this one.
+  const tagView = chats.tags && chats.tags.available && !chats.tags.hidden ? chats.tags : null;
+  const tagOf = tagView ? tagById(tagView, c.tagId) : null;
+
   if (device.words) item.querySelector(".row-tag").title = device.words;
   // Every row's buttons say WHICH chat they are for (the second chat audit,
   // 2026-09-28, desktop A1): "Open" ten times over names nothing.
@@ -3610,6 +3617,22 @@ function conversationRow(c, { needle = "", snippet = null } = {}) {
   if (buttons[0]) buttons[0].setAttribute("aria-label", `${open ? "Close" : "Open"} ${named}`);
   if (buttons[1]) buttons[1].setAttribute("aria-label", `Delete ${named}`);
   const main = item.querySelector(".row-main");
+  if (tagOf) main.append(tagPillNode(tagOf));
+  const actionsBox = item.querySelector(".row-actions");
+  if (chats.filing && tagView) {
+    const go = button(`File under ${chats.filing.name}`, () => fileChat(c.id, chats.filing.tagId),
+      { live: true, title: tagBannerText(chats.filing.name) });
+    go.classList.add("history-file-here");
+    go.setAttribute("aria-label", `File ${named} under ${chats.filing.name}`);
+    actionsBox.prepend(go);
+    item.dataset.filing = "true";
+    item.addEventListener("click", (e) => {
+      if (e.target.closest("button, select, input, a, textarea")) return;
+      go.click();
+    });
+  }
+  const move = moveControl(c, tagView);
+  if (move) actionsBox.insertBefore(move, actionsBox.lastElementChild);
   if (snippet) {
     const p = el("p", "search-snippet");
     renderSnippet(p, snippet, { el });
@@ -3669,7 +3692,7 @@ function paintSearchResults(box) {
     status.textContent = `${n} ${n === 1 ? "conversation matches" : "conversations match"}.`;
   }
   const list = el("div", "rows history-rows history-search-rows");
-  for (const c of v.conversations) {
+  for (const c of v.conversations.filter(matchesTagChip)) {
     list.append(conversationRow(c, { needle: s.query, snippet: c.snippet }));
     if (chats.deleting && chats.deleting.id === c.id) list.append(deletingNode(c));
     if (chats.openId === c.id) list.append(transcriptNode());
@@ -3849,7 +3872,7 @@ function paintHistoryListNow(box) {
     return;
   }
   if (!chats.rows.length) {
-    box.append(el("p", "empty", chats.kind ? HISTORY_FILTER_NONE : v.enabled
+    box.append(el("p", "empty", chats.tag ? NO_TAG_CHATS : chats.kind ? HISTORY_FILTER_NONE : v.enabled
       ? "No conversations kept yet."
       : "No conversations kept. Chat history is off."));
     return;
@@ -3867,19 +3890,435 @@ function paintHistoryListNow(box) {
       ? "No loaded conversations match that search. \"Load older\" may bring in more to search."
       : "No conversations match that search."));
   }
-  const list = el("div", "rows history-rows");
-  for (const c of shown) {
+  const appendRow = (list, c) => {
     list.append(conversationRow(c));
     if (chats.deleting && chats.deleting.id === c.id) list.append(deletingNode(c));
     if (chats.openId === c.id) list.append(transcriptNode());
+  };
+  const tagView = chats.tags && chats.tags.available && !chats.tags.hidden ? chats.tags : null;
+  if (tagView && !chats.tag) {
+    // Sections, one per tag in the owner's order, "Untagged" last
+    // (docs/CHAT-TAGS-DESIGN.md sections 1 and 6). Each header is a button.
+    const exact = !chats.kind && !needle;
+    for (const sec of groupRows(shown, tagView, { exact })) {
+      box.append(sectionNode(sec, appendRow));
+    }
+  } else {
+    const list = el("div", "rows history-rows");
+    for (const c of shown.filter(matchesTagChip)) appendRow(list, c);
+    box.append(list);
   }
-  box.append(list);
   if (chats.more) {
     const more = el("div", "row-actions history-more");
     more.append(button(chats.older ? "Loading…" : "Load older", loadOlderHistory,
       { title: "Show the next page of older conversations." }));
     box.append(more);
   }
+}
+
+/* ---- Chat tags and sections (history-tags.js; docs/CHAT-TAGS-DESIGN.md) --- */
+
+/** Whether a row belongs under the chip chosen ("" is every chat). */
+function matchesTagChip(c) {
+  if (!chats.tag) return true;
+  if (chats.tag === "none") return c.tagId === null || c.tagId === undefined;
+  return c.tagId === Number(chats.tag);
+}
+
+/** A tag's small pill: its icon and its name, in its colour. */
+function tagPillNode(tag) {
+  const pill = el("span", "history-tagpill");
+  pill.dataset.colour = String(tag.colour);
+  pill.append(iconNode(tag.icon), el("span", "", tag.name));
+  pill.title = `Tag: ${tag.name}`;
+  return pill;
+}
+
+/** One collapsible section: a header button (icon, name, count, chevron)
+ *  and the rows below it. Open or closed is remembered on this device. */
+function sectionNode(sec, appendRow) {
+  const wrap = el("div", "history-section");
+  wrap.dataset.key = sec.key;
+  if (sec.tag) wrap.dataset.colour = String(sec.tag.colour);
+  const name = sec.tag ? sec.tag.name : UNTAGGED;
+  let open = sectionIsOpen(chats.sectionFlags, sec.key);
+  const head = el("button", "history-section-head");
+  head.type = "button";
+  const bodyId = `history-section-${sec.key}`;
+  head.setAttribute("aria-controls", bodyId);
+  head.append(
+    iconNode(sec.tag ? sec.tag.icon : "folder"),
+    el("span", "history-section-name", tagHeaderText(name, sec.count)),
+    el("span", "history-section-chevron"),
+  );
+  head.querySelector(".history-section-chevron").setAttribute("aria-hidden", "true");
+  const body = el("div", "history-section-body");
+  body.id = bodyId;
+  if (sec.rows.length) {
+    const list = el("div", "rows history-rows");
+    for (const c of sec.rows) appendRow(list, c);
+    body.append(list);
+  } else {
+    body.append(el("p", "empty", NOT_LOADED_LINE));
+  }
+  const apply = () => {
+    head.setAttribute("aria-expanded", String(open));
+    head.setAttribute("aria-label", sectionSpeech(name, sec.count, open));
+    body.hidden = !open;
+  };
+  apply();
+  head.addEventListener("click", () => {
+    open = !open;
+    chats.sectionFlags = saveOpenFlag(sec.key, open);
+    apply();
+  });
+  wrap.append(head, body);
+  return wrap;
+}
+
+/** "Move to": a menu of the tags and "No tag", on a row. Null when there
+ *  are no tags to move to (an older PC, or the list is hidden). */
+function moveControl(c, tagView) {
+  if (!tagView || !tagView.tags.length) return null;
+  const select = document.createElement("select");
+  select.className = "field history-move";
+  select.setAttribute("aria-label", `${MOVE_TO}: ${c.title || NO_TITLE}`);
+  const first = document.createElement("option");
+  first.value = "";
+  first.textContent = MOVE_PLACEHOLDER;
+  select.append(first);
+  for (const t of tagView.tags) {
+    const o = document.createElement("option");
+    o.value = String(t.id);
+    o.textContent = t.name;
+    o.disabled = t.id === c.tagId;
+    select.append(o);
+  }
+  const none = document.createElement("option");
+  none.value = "none";
+  none.textContent = NO_TAG;
+  none.disabled = c.tagId === null || c.tagId === undefined;
+  select.append(none);
+  select.value = "";
+  select.dataset.title = `${MOVE_TO}… Files this chat under a tag, or takes its tag off. Nothing else changes.`;
+  liveButtons.add(select);
+  syncLiveButton(select);
+  select.addEventListener("change", async () => {
+    const value = select.value;
+    select.value = "";
+    if (!value) return;
+    select.disabled = true;
+    await fileChat(c.id, value === "none" ? null : Number(value));
+  });
+  return select;
+}
+
+/** Files ONE chat under a tag (tagId a number) or takes its tag off (null).
+ *  No card; Rust holds it on a stale link. Returns whether it worked. */
+async function fileChat(id, tagId) {
+  let ok = false;
+  try {
+    const out = await invoke("brain_history_tag", { id, tagId });
+    if (out && out.ok === false) {
+      toast(tagErrorWords(out), "bad");
+    } else {
+      ok = true;
+      const t = tagById(chats.tags, tagId);
+      toast(tagId === null ? UNFILED_WORDS : filedWords(t ? t.name : "that tag"), "ok");
+      const setTag = (r) => { if (r.id === id) r.tagId = tagId; };
+      chats.rows.forEach(setTag);
+      if (chats.search.view) chats.search.view.conversations.forEach(setTag);
+      // Filing from the banner is done: the banner goes, the search stays.
+      if (chats.filing && chats.filing.tagId === tagId) chats.filing = null;
+    }
+  } catch (error) {
+    toast(errorText(error), "bad");
+  }
+  chats.at = 0;
+  await loadHistory();
+  return ok;
+}
+
+/** The chip row, the Tags editor and the banner, above the search box. */
+function paintHistoryTagBar() {
+  const box = $("history-tagbar");
+  if (!box) return;
+  const v = chats.view;
+  const tv = chats.tags;
+  const show = Boolean(v && v.available && !v.hidden && tv && tv.available && !tv.hidden);
+  box.hidden = !show;
+  // Typing in the editor survives the 15-second repaint: remember the
+  // focused box and where its caret was, and put both back.
+  const active = document.activeElement;
+  const refocus = active && box.contains(active) && active.id
+    ? { id: active.id, start: active.selectionStart, end: active.selectionEnd } : null;
+  box.replaceChildren();
+  if (!show) return;
+
+  if (chats.filing) {
+    const t = tagById(tv, chats.filing.tagId);
+    const banner = el("div", "history-file-banner");
+    banner.setAttribute("role", "status");
+    if (t) banner.dataset.colour = String(t.colour);
+    banner.append(el("p", "", tagBannerText(chats.filing.name)));
+    banner.append(button(BANNER_CANCEL, () => { chats.filing = null; paintHistory(); }));
+    box.append(banner);
+  }
+
+  const chips = el("div", "tag-chips");
+  chips.setAttribute("role", "group");
+  chips.setAttribute("aria-label", TAG_CHIPS_LABEL);
+  const chip = (value, label, count, tag) => {
+    const b = el("button", "tag-chip");
+    b.type = "button";
+    if (tag) {
+      b.dataset.colour = String(tag.colour);
+      b.append(iconNode(tag.icon));
+    }
+    b.append(el("span", "", label));
+    if (count !== null) b.append(el("span", "tag-chip-count", String(count)));
+    b.setAttribute("aria-pressed", String(chats.tag === value));
+    b.addEventListener("click", () => setTagChip(value));
+    return b;
+  };
+  chips.append(chip("", TAG_ALL, null, null));
+  for (const t of tv.tags) chips.append(chip(String(t.id), t.name, t.count, t));
+  chips.append(chip("none", UNTAGGED, tv.untagged, null));
+  const edit = el("button", "btn small tag-editor-toggle", TAGS_TITLE);
+  edit.type = "button";
+  edit.id = "tag-editor-toggle";
+  edit.setAttribute("aria-expanded", String(chats.editor.open));
+  edit.setAttribute("aria-controls", "tag-editor");
+  edit.addEventListener("click", () => {
+    chats.editor.open = !chats.editor.open;
+    chats.editor.error = "";
+    paintHistoryTagBar();
+  });
+  chips.append(edit);
+  box.append(chips);
+  if (chats.editor.open) box.append(tagEditorNode(tv));
+
+  if (refocus) {
+    const input = document.getElementById(refocus.id);
+    if (input) {
+      input.focus({ preventScroll: true });
+      try {
+        if (refocus.start !== null && refocus.start !== undefined) {
+          input.setSelectionRange(refocus.start, refocus.end);
+        }
+      } catch { /* a select has no caret */ }
+    }
+  }
+}
+
+/** A chip was pressed: show one tag's chats (the PC filters), or all. */
+function setTagChip(value) {
+  chats.tag = chats.tag === value ? "" : value;
+  chats.rows = [];
+  chats.more = false;
+  chats.openId = null;
+  chats.open = null;
+  chats.openFacts = null;
+  chats.view = chats.view ? { ...chats.view, conversations: [] } : null;
+  paintHistory();
+  loadHistory();
+  if (chats.search.query.length >= SEARCH_MIN) onHistorySearch();
+}
+
+/** One edit to the tags (add, rename, style, move, delete). Says the PC's
+ *  refusal as one plain sentence, in the editor. */
+async function editTags(args) {
+  const editor = chats.editor;
+  editor.error = "";
+  try {
+    const out = await invoke("brain_history_tags_edit", {
+      op: args.op, id: args.id ?? null, name: args.name ?? null, colour: args.colour ?? null,
+      icon: args.icon ?? null, before: args.before ?? null,
+    });
+    if (out && out.ok === false) {
+      editor.error = tagErrorWords(out);
+      paintHistoryTagBar();
+      return false;
+    }
+  } catch (error) {
+    editor.error = errorText(error);
+    paintHistoryTagBar();
+    return false;
+  }
+  chats.at = 0;
+  await loadHistory();
+  return true;
+}
+
+function optionsFor(select, items, current) {
+  for (const [value, label] of items) {
+    const o = document.createElement("option");
+    o.value = String(value);
+    o.textContent = label;
+    select.append(o);
+  }
+  select.value = String(current);
+}
+
+const COLOUR_ITEMS = TAG_COLOURS.map((c) => [c.slot, c.name[0].toUpperCase() + c.name.slice(1)]);
+const ICON_ITEMS = TAG_ICONS.map((n) => [n, n[0].toUpperCase() + n.slice(1)]);
+
+/** The Tags editor: add, rename, recolour, pick an icon, reorder, delete. */
+function tagEditorNode(tv) {
+  const editor = chats.editor;
+  const box = el("div", "tag-editor");
+  box.id = "tag-editor";
+  box.append(el("h3", "", TAGS_TITLE), el("p", "note", TAGS_EDITOR_NOTE));
+  tv.tags.forEach((t, i) => {
+    const line = el("div", "tag-editor-row");
+    line.dataset.colour = String(t.colour);
+    line.dataset.tag = String(t.id);
+    line.append(tagPillNode(t));
+    const input = document.createElement("input");
+    input.className = "field";
+    input.id = `tag-name-${t.id}`;
+    input.type = "text";
+    input.maxLength = NAME_MAX;
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.setAttribute("aria-label", `${NAME_LABEL}: ${t.name}`);
+    input.value = editor.drafts.names[t.id] ?? t.name;
+    input.addEventListener("input", () => { editor.drafts.names[t.id] = input.value; });
+    const rename = async () => {
+      const name = input.value.trim();
+      if (name === t.name) { delete editor.drafts.names[t.id]; return; }
+      if (await editTags({ op: "rename", id: t.id, name })) delete editor.drafts.names[t.id];
+    };
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); rename(); } });
+    const colour = document.createElement("select");
+    colour.className = "field";
+    colour.setAttribute("aria-label", `Colour for ${t.name}`);
+    optionsFor(colour, COLOUR_ITEMS, t.colour);
+    colour.addEventListener("change", () => editTags({ op: "style", id: t.id, colour: Number(colour.value) }));
+    const icon = document.createElement("select");
+    icon.className = "field";
+    icon.setAttribute("aria-label", `Icon for ${t.name}`);
+    optionsFor(icon, ICON_ITEMS, t.icon);
+    icon.addEventListener("change", () => editTags({ op: "style", id: t.id, icon: icon.value }));
+    for (const s of [colour, icon]) { liveButtons.add(s); syncLiveButton(s); }
+    const up = button(MOVE_UP,
+      () => (i === 0 ? null : editTags({ op: "move", id: t.id, before: tv.tags[i - 1].id })),
+      { live: true, title: `${MOVE_UP}: ${t.name}` });
+    up.disabled = i === 0;
+    up.setAttribute("aria-label", `${MOVE_UP}: ${t.name}`);
+    const down = button(MOVE_DOWN,
+      () => editTags({ op: "move", id: t.id, before: tv.tags[i + 2] ? tv.tags[i + 2].id : null }),
+      { live: true, title: `${MOVE_DOWN}: ${t.name}` });
+    down.setAttribute("aria-label", `${MOVE_DOWN}: ${t.name}`);
+    const del = button(DELETE_TAG, async () => {
+      if (!window.confirm(tagDeleteConfirm(t.name, t.count))) return;
+      if (await editTags({ op: "delete", id: t.id })) {
+        if (chats.tag === String(t.id)) setTagChip(String(t.id));
+      }
+    }, { danger: true, live: true, title: `${DELETE_TAG}: ${t.name}` });
+    del.setAttribute("aria-label", `${DELETE_TAG}: ${t.name}`);
+    const renameBtn = button(TAG_RENAME, rename, { live: true, title: `${TAG_RENAME}: ${t.name}` });
+    renameBtn.setAttribute("aria-label", `${TAG_RENAME}: ${t.name}`);
+    line.append(input, renameBtn, colour, icon, up, down, del);
+    box.append(line);
+  });
+
+  // Add a tag.
+  const add = el("div", "tag-editor-row tag-editor-add");
+  const draft = editor.drafts.add;
+  const name = document.createElement("input");
+  name.className = "field";
+  name.id = "tag-add-name";
+  name.type = "text";
+  name.maxLength = NAME_MAX;
+  name.autocomplete = "off";
+  name.spellcheck = false;
+  name.placeholder = ADD_TAG;
+  name.setAttribute("aria-label", `${ADD_TAG}: ${NAME_LABEL}`);
+  name.value = draft.name;
+  name.addEventListener("input", () => { draft.name = name.value; });
+  const colour = document.createElement("select");
+  colour.className = "field";
+  colour.id = "tag-add-colour";
+  colour.setAttribute("aria-label", `${ADD_TAG}: colour`);
+  optionsFor(colour, COLOUR_ITEMS, draft.colour);
+  colour.addEventListener("change", () => { draft.colour = Number(colour.value); });
+  const icon = document.createElement("select");
+  icon.className = "field";
+  icon.id = "tag-add-icon";
+  icon.setAttribute("aria-label", `${ADD_TAG}: icon`);
+  optionsFor(icon, ICON_ITEMS, draft.icon);
+  icon.addEventListener("change", () => { draft.icon = icon.value; });
+  const addNow = async () => {
+    const wanted = draft.name.trim();
+    if (!wanted) { editor.error = tagErrorWords({ error: "bad_name" }); paintHistoryTagBar(); return; }
+    if (await editTags({ op: "add", name: wanted, colour: draft.colour, icon: draft.icon })) {
+      draft.name = "";
+      paintHistoryTagBar();
+    }
+  };
+  name.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); addNow(); } });
+  const addBtn = button(ADD_TAG, addNow, { live: true, title: `${ADD_TAG}. Up to ${MAX_TAGS} tags.` });
+  addBtn.disabled = tv.tags.length >= MAX_TAGS;
+  add.append(name, colour, icon, addBtn);
+  liveButtons.add(colour); liveButtons.add(icon); syncLiveButton(colour); syncLiveButton(icon);
+  box.append(add);
+  if (tv.tags.length >= MAX_TAGS) {
+    box.append(el("p", "hint", tagErrorWords({ error: "too_many_tags" })));
+  }
+  const err = el("p", "tag-editor-error failed", editor.error);
+  err.setAttribute("role", "alert");
+  err.hidden = !editor.error;
+  box.append(err);
+  return box;
+}
+
+/* ---- Filing an older chat: "label my chat about the boiler as Home" ------- */
+
+/**
+ * The Jarvis bar left `open_brain: "history"` with `file_under` (a tag id)
+ * and `history_q` (search words). Open History with the words in the search
+ * box and the banner "Tap the chat to file it under {name}."; nothing is
+ * filed until the owner taps a chat.
+ */
+async function applyHistoryFilePlace(extras) {
+  const place = readFilePlace(extras);
+  if (!place) return;
+  chats.filingPending = place;
+  await resolveFilingPending();
+}
+
+async function resolveFilingPending() {
+  const pending = chats.filingPending;
+  if (!pending || !IS_TAURI) return;
+  let tv = null;
+  try {
+    tv = readTags(await invoke("brain_history_tags"));
+  } catch (error) {
+    toast(errorText(error), "bad");
+    chats.filingPending = null;
+    return;
+  }
+  // The tag names are hidden with the list: wait for Show, then come back.
+  if (tv.hidden) return;
+  chats.filingPending = null;
+  const t = tagById(tv, pending.tagId);
+  if (!t) {
+    toast(tagErrorWords({ error: "tag_not_found" }), "bad");
+    return;
+  }
+  chats.tags = tv;
+  chats.filing = { tagId: t.id, name: t.name };
+  const box = $("history-filter");
+  if (box) box.value = pending.q;
+  if (chats.tag) {
+    chats.tag = "";
+    chats.rows = [];
+    chats.more = false;
+    loadHistory();
+  }
+  onHistorySearch();
+  paintHistory();
 }
 
 /**
@@ -3941,6 +4380,7 @@ window.addEventListener(HISTORY_CHANGED, historyChanged);
 
 function paintHistory() {
   paintHistoryTools();
+  paintHistoryTagBar();
   paintHistorySettings();
   paintHistoryList();
 }
@@ -9316,6 +9756,7 @@ onEvent((frame) => {
     await openForgetRange();
   } else if (place === HISTORY_PLACE) {
     await showView("history");
+    await applyHistoryFilePlace(takePlaceExtras());
   } else {
     await showView("memory");
   }
@@ -9328,6 +9769,7 @@ async function goToPlace(place = takeAnyPlace()) {
     await openForgetRange();
   } else if (place === HISTORY_PLACE) {
     await showView("history");
+    await applyHistoryFilePlace(takePlaceExtras());
   }
 }
 window.addEventListener("focus", () => goToPlace());

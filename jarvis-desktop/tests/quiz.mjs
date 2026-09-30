@@ -41,6 +41,9 @@ import {
   HIDDEN_WORDS,
   KIND_LABELS,
   countsLine,
+  crisisParagraphs,
+  isCrisis,
+  readCrisis,
   ERROR_WORDS,
   errorWords,
   FINISH_LABEL,
@@ -159,6 +162,20 @@ await check("the words both apps share beyond the first list", async () => {
   assert.equal(progressLine({ questions: [{ n: 1, mark: {} }, { n: 2, mark: null }] }), "Question 2 of 2 · 1 answered");
 });
 
+await check("a crisis answer is read from the PC's words, never written here", async () => {
+  assert.equal(readCrisis({ ok: true, crisis: true, message: "  Help words.  " }), "Help words.");
+  assert.equal(readCrisis({ ok: true, mark: { level: "got_it" } }), "");
+  assert.equal(readCrisis({ ok: true, crisis: false, message: "x" }), "");
+  assert.equal(readCrisis(null), "");
+  assert.equal(isCrisis({ crisis: true }), true);
+  assert.equal(isCrisis({ ok: true }), false);
+  assert.deepEqual(crisisParagraphs("A **988** b.\n\nSecond."),
+    [[{ text: "A ", bold: false }, { text: "988", bold: true }, { text: " b.", bold: false }],
+     [{ text: "Second.", bold: false }]]);
+  const src = read("src/quiz.js") + read("src/brain.js");
+  assert.doesNotMatch(src, /Suicide|Crisis Lifeline|call 911/i, "help words are hard-coded in the app");
+});
+
 /* ── The Brain window ─────────────────────────────────────────────────── */
 
 const { base, close } = await K.serve();
@@ -235,6 +252,37 @@ await check("one question at a time: Check my answer sends ONE answer, then the 
   assert.match(text, /SOURCE PASSAGE 1/);
   assert.match(text, new RegExp(GUESS_LABEL), "Jarvis's guess is missing while the grader is not verified");
   assert.doesNotMatch(text, /\d+ ?%|streak|score/i);
+});
+
+await check("a crisis answer shows the PC's words calmly, no mark, keeps the question open, keeps no text", async () => {
+  const page = await workTab({ quiz: { crisisWord: "HELPME" } });
+  await start(page);
+  const box = page.locator("#quiz-run textarea");
+  await box.fill("HELPME I feel awful");
+  await page.locator("#quiz-run").getByRole("button", { name: ANSWER_LABEL }).click();
+  await page.waitForTimeout(400);
+  const text = await page.locator("#quiz-run").innerText();
+  const bold = await page.locator("#quiz-run .quiz-crisis strong").allInnerTexts();
+  const left = await page.locator("#quiz-run textarea").inputValue();
+  const stillQ1 = /Question 1 of 3 · 0 answered/.test(text);
+  const html = await page.locator("#quiz-run").innerHTML();
+  // the same question can be answered afterwards and is marked normally
+  await page.locator("#quiz-run textarea").fill("Flour.");
+  await page.locator("#quiz-run").getByRole("button", { name: ANSWER_LABEL }).click();
+  await page.waitForTimeout(400);
+  const after = await page.locator("#quiz-run").innerText();
+  const storage = await page.evaluate(() => JSON.stringify([localStorage, sessionStorage]));
+  await page.close();
+  assert.match(text, /STAND-IN HELP WORDS\./);
+  assert.deepEqual(bold, ["988"]);
+  assert.doesNotMatch(text, /Not yet|Got it|Partly/);
+  assert.doesNotMatch(text, new RegExp(GUESS_LABEL));
+  assert.ok(stillQ1, "the quiz did not stay on question 1");
+  assert.equal(left, "", "the typed words stayed in the answer box");
+  assert.doesNotMatch(html, /HELPME|feel awful|color: ?red/);
+  assert.match(after, /Got it/);
+  assert.doesNotMatch(after, /STAND-IN HELP WORDS/);
+  assert.doesNotMatch(storage, /HELPME|awful/);
 });
 
 await check("\"Jarvis's guess\" is gone once the grader is verified", async () => {

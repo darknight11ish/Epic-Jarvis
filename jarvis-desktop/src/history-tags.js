@@ -50,21 +50,21 @@ export const MOVE_UP = "Move up";
 export const MOVE_DOWN = "Move down";
 export const TAG_CHIPS_LABEL = "Show chats with this tag";
 export const NO_TAG_CHATS = "No chats are filed under this tag yet.";
-export const NOT_LOADED_LINE = "Older chats under this tag load with Load older.";
+export const NOT_LOADED_LINE = "Older chats here load with Load older.";
 export const MOVE_PLACEHOLDER = "Move to…";
 export const TAGS_HIDDEN_LINE =
   "Tags are hidden along with your chat titles until Windows Hello confirms it is you.";
 
 /** One plain sentence per error code the PC answers with. */
 export const TAG_ERRORS = Object.freeze({
-  bad_name: "Give the tag a name of 1 to 24 characters.",
+  bad_name: "A tag name needs 1 to 24 letters or numbers.",
   name_taken: "You already have a tag with that name.",
   too_many_tags: "You can have up to 12 tags. Delete one to make room.",
-  bad_colour: "Pick one of the eight colours.",
-  bad_icon: "Pick one of the icons in the list.",
-  tag_not_found: "That tag is gone. Close the editor and open it again.",
-  not_found: "That chat is no longer kept on this PC.",
-  bad_request: "Jarvis could not read that change. Try again.",
+  bad_colour: "That colour is not one of the eight.",
+  bad_icon: "That icon is not on the list.",
+  tag_not_found: "That tag is gone. Reload History to see your tags.",
+  not_found: "That chat is gone - it may have been deleted.",
+  bad_request: "That request was not understood.",
 });
 
 export function errorWords(answer) {

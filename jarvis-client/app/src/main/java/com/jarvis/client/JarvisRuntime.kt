@@ -4818,10 +4818,11 @@ object JarvisRuntime {
 
     /**
      * Sends one typed answer to be marked against the passage. No card. Held
-     * on a stale link. @return the mark if it was checked, and the sentence
-     * to show when it was not. The quiz held here moves on with it.
+     * on a stale link. @return the answer if it was checked (a mark, or for a crisis
+     * answer the PC's own help words and no mark - JARVIS-API 98.4), and the
+     * sentence to show when it was not. The quiz held here moves on with it.
      */
-    suspend fun answerQuiz(n: Int, answer: String): Pair<com.jarvis.client.net.Quiz.Mark?, String> {
+    suspend fun answerQuiz(n: Int, answer: String): Pair<com.jarvis.client.net.Quiz.Answer?, String> {
         actionBlocker()?.let { return null to it }
         val id = _quiz.value?.id
         if (id == null || !com.jarvis.client.net.Quiz.validId(id)) {
@@ -4838,10 +4839,10 @@ object JarvisRuntime {
             is ApiResult.Ok -> com.jarvis.client.net.Quiz.answeredSaid(r.value)
             is ApiResult.Failed -> return null to ("Not checked. " + describe(r.error))
         }
-        val pair = out.value
-        if (out.ok && pair != null) {
-            _quiz.value = pair.second
-            return pair.first to ""
+        val result = out.value
+        if (out.ok && result != null) {
+            _quiz.value = result.quiz
+            return result to ""
         }
         if (out.gone) _quiz.value = null
         return null to out.said

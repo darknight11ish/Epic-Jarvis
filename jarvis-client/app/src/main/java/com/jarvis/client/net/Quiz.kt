@@ -99,6 +99,16 @@ object Quiz {
         val answered: Int,
     )
 
+    /**
+     * One answer's result: either a [mark], or (a crisis answer, JARVIS-API
+     * 98.4) the PC's own help words in [crisis] and NO mark. The quiz is the
+     * PC's view after the call; a crisis answer leaves its question unanswered.
+     */
+    data class Answer(val mark: Mark?, val crisis: String?, val quiz: Session)
+
+    /** A run of the help message: its words, and whether they are bold (`**988**`). */
+    data class Run(val text: String, val bold: Boolean)
+
     data class Summary(val gotIt: Int, val partly: Int, val notYet: Int, val again: List<Int>)
 
     /** What the PC answered a call, kept whole: the status and the JSON body, if any. */
@@ -149,6 +159,32 @@ object Quiz {
         val q = parseQuiz(body) ?: return null
         return m to q
     }
+
+    /**
+     * The result of an answer: a mark (`{"mark","quiz"}`) or a crisis answer
+     * (`{"crisis":true,"message":"<the PC's words>","quiz"}`). A crisis flag
+     * without words, or without a quiz, is unreadable (null) - the help
+     * words are the PC's, never written on this phone.
+     */
+    fun parseAnswer(body: JsonObject): Answer? {
+        if (body.flag("crisis") == true) {
+            val words = body.text("message") ?: return null
+            val q = parseQuiz(body) ?: return null
+            return Answer(null, words, q)
+        }
+        val (m, q) = parseAnswered(body) ?: return null
+        return Answer(m, null, q)
+    }
+
+    /**
+     * The PC's help message as paragraphs of runs, so it can be drawn as text
+     * only: `**bold**` becomes a bold run, a blank line a new paragraph.
+     * Word for word the desktop's crisisParagraphs (src/quiz.js).
+     */
+    fun crisisParagraphs(message: String): List<List<Run>> =
+        message.split(Regex("\\n{2,}")).map { it.trim() }.filter { it.isNotEmpty() }.map { para ->
+            para.split("**").mapIndexed { i, t -> Run(t, i % 2 == 1) }.filter { it.text.isNotEmpty() }
+        }
 
     /** `{"ok":true,"summary":{...}}` -> the summary; "again" numbers are kept sorted and de-duplicated. */
     fun parseSummary(body: JsonObject): Summary? {
@@ -253,9 +289,9 @@ object Quiz {
     }
 
     /** Checking one answer. */
-    fun answeredSaid(reply: Reply): Outcome<Pair<Mark, Session>> {
+    fun answeredSaid(reply: Reply): Outcome<Answer> {
         if (succeeded(reply)) {
-            val a = reply.body?.let(::parseAnswered)
+            val a = reply.body?.let(::parseAnswer)
             return if (a != null) Outcome(true, a, "") else Outcome(false, null, "Not checked. $UNREADABLE")
         }
         return failed(reply, "Not checked.")

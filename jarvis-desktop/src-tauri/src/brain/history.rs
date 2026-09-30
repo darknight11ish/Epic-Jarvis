@@ -406,9 +406,7 @@ fn checked_tag_name(name: &str) -> Result<String, String> {
     let name = name.trim();
     let n = name.chars().count();
     if n == 0 || n > TAG_NAME_MAX || name.chars().any(|c| c.is_control()) {
-        return Err(format!(
-            "Give the tag a name of 1 to {TAG_NAME_MAX} characters."
-        ));
+        return Err("A tag name needs 1 to 24 letters or numbers.".to_string());
     }
     Ok(name.to_string())
 }
@@ -417,7 +415,7 @@ fn checked_tag_colour(colour: i64) -> Result<i64, String> {
     if (0..TAG_COLOURS).contains(&colour) {
         Ok(colour)
     } else {
-        Err("Pick one of the eight colours.".to_string())
+        Err("That colour is not one of the eight.".to_string())
     }
 }
 
@@ -425,7 +423,7 @@ fn checked_tag_icon(icon: &str) -> Result<&str, String> {
     if TAG_ICONS.contains(&icon) {
         Ok(icon)
     } else {
-        Err("Pick one of the icons in the list.".to_string())
+        Err("That icon is not on the list.".to_string())
     }
 }
 

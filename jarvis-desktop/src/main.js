@@ -1512,7 +1512,27 @@ function cloudOfferFromRoute(route) {
  * approves the card.
  */
 function openBrainFromRoute(route) {
-  if (!route || route.open_brain !== FORGET_RANGE_PLACE) return;
+  if (!route) return;
+  // "Label my chat about the boiler as Home" (docs/CHAT-TAGS-DESIGN.md
+  // section 10): History opens with the search words filled in and a banner
+  // to file the tapped chat under the tag `file_under`. Only those two
+  // fields ride along, and the Brain checks them again; nothing is filed
+  // until the owner taps a chat.
+  if (route.open_brain === "history") {
+    const left = { place: "history", at: Date.now() };
+    if (typeof route.file_under === "string" && typeof route.history_q === "string") {
+      left.file_under = route.file_under;
+      left.history_q = route.history_q;
+    }
+    try {
+      localStorage.setItem(BRAIN_PLACE_KEY, JSON.stringify(left));
+    } catch {
+      /* no storage: the Brain opens where it was, and the answer's own words say where */
+    }
+    invoke("open_fix_place", { place: "brain" });
+    return;
+  }
+  if (route.open_brain !== FORGET_RANGE_PLACE) return;
   try {
     localStorage.setItem(BRAIN_PLACE_KEY, JSON.stringify({ place: FORGET_RANGE_PLACE, at: Date.now() }));
   } catch {

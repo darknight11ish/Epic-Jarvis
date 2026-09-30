@@ -94,6 +94,45 @@ class QuizTest {
     }
 
     @Test
+    fun aCrisisAnswerHasTheOnesWordsAndNoMark() {
+        val body = obj(
+            """{"ok":true,"crisis":true,"message":"Words from the PC.\n\nCall **988** any time.",
+                "quiz":{"id":"a1","questions":[{"n":1,"prompt":"q","mark":null}]}}""",
+        )
+        val a = Quiz.parseAnswer(body)!!
+        assertNull(a.mark)
+        assertEquals("Words from the PC.\n\nCall **988** any time.", a.crisis)
+        assertNull(a.quiz.questions[0].mark)
+        // The help words are the PC's: a crisis flag with none, or with no quiz, is unreadable.
+        assertNull(Quiz.parseAnswer(obj("""{"ok":true,"crisis":true,"quiz":{"id":"a1","questions":[]}}""")))
+        assertNull(Quiz.parseAnswer(obj("""{"ok":true,"crisis":true,"message":"x"}""")))
+        // An ordinary answer is a mark and no crisis; crisis:false is an ordinary answer.
+        val plain = Quiz.parseAnswer(
+            obj("""{"ok":true,"crisis":false,"mark":{"level":"got_it"},"quiz":{"id":"a1","questions":[]}}"""),
+        )!!
+        assertEquals("got_it", plain.mark!!.level)
+        assertNull(plain.crisis)
+        assertNull(Quiz.parseAnswer(obj("""{"ok":true,"quiz":{"id":"a1","questions":[]}}""")))
+        // Through the outcome: ok, with the words, and no mark.
+        val out = Quiz.answeredSaid(Quiz.Reply(200, body))
+        assertTrue(out.ok)
+        assertNull(out.value!!.mark)
+        assertNotNull(out.value!!.crisis)
+    }
+
+    @Test
+    fun theHelpWordsAreDrawnAsParagraphsOfRuns() {
+        val p = Quiz.crisisParagraphs("A **988** b.\n\nSecond.")
+        assertEquals(2, p.size)
+        assertEquals(
+            listOf(Quiz.Run("A ", false), Quiz.Run("988", true), Quiz.Run(" b.", false)),
+            p[0],
+        )
+        assertEquals(listOf(Quiz.Run("Second.", false)), p[1])
+        assertTrue(Quiz.crisisParagraphs("").isEmpty())
+    }
+
+    @Test
     fun theSummaryIsReadSortedAndTolerant() {
         val s = Quiz.parseSummary(
             obj("""{"ok":true,"summary":{"counts":{"got_it":2,"partly":1,"not_yet":2},"again":[4,2,2,0,"x",3.0]}}"""),
