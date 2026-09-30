@@ -118,3 +118,9 @@ to GitHub") then Jarvis pushes a branch and opens a pull request on the Jarvis r
 Jarvis never merges; the owner presses Merge. Uses a fine-grained GitHub key limited to
 that one repo (code write + pull requests only), stored under rule 3. Part of
 `docs/GITHUB-TOOLS-DESIGN.md`.
+
+Owner answers, 2026-09-30 (design docs): **Galaxy panel on the PC, plus a plain "People and
+things" list on the phone (no map)** - this bends the "no memory graph on the phone" rule for a
+list only, hidden under "Hide memory lists". **"New section here" marker: divider only** (Jarvis
+still reads the whole chat). Overnight tags: `docs/OVERNIGHT-TAGS-DESIGN.md` (edits ARCHITECTURE §5
+in the same PR). GitHub tools: `docs/GITHUB-TOOLS-DESIGN.md` written; its 3 owner questions pending.
