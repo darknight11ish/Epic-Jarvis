@@ -455,6 +455,15 @@ fn main() {
             "brain_goals_accept",
             "brain_goals_step",
             "brain_goals_stop",
+            // Quiz me on a text (docs/STUDY-FROM-TEXT-DESIGN.md section 11,
+            // JARVIS-API.md section 98): write questions for a pasted text,
+            // read the quiz again, check one answer, finish, stop. No card,
+            // nothing saved; every write held on a stale link. Brain only.
+            "brain_quiz_start",
+            "brain_quiz_get",
+            "brain_quiz_answer",
+            "brain_quiz_finish",
+            "brain_quiz_stop",
             // "Photo to reminder" (photo-reminder.patch, 2026-09-28): the
             // dates in a picture, read on the PC and PROPOSED (a scan sets
             // nothing up), and the owner's tap adding ONE reminder - no

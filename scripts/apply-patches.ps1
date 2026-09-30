@@ -899,6 +899,14 @@ $PATCHES = @(
     # says so and the route is simply not there - the visible browser is
     # unchanged.
     'browser-engine.patch'
+    # "Quiz me on a text" (the owner's decision of 2026-09-30; docs/STUDY-FROM-TEXT-DESIGN.md,
+    # JARVIS-API section 98): POST /api/quiz and GET /api/quiz/<id>, .../answer, .../finish,
+    # .../stop. ONE hunk in jarvis_hud.py, an install block right after browser-engine.patch's
+    # own (the last one before `_loopback_companion`), so it goes last, like every new patch.
+    # No card: the owner's own pasted words, the local model only, kept in memory only. Needs
+    # jarvis_quiz.py copied in; without it, or on any error, the banner says so and the routes
+    # are simply not there.
+    'quiz.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------
@@ -1114,6 +1122,8 @@ $SHIPPED = @(
     'jarvis_animal.py'           # animal.patch: GET/POST /api/animal - "Keep the animal still" and the behaviour switches, shared by both apps, no card
     # --- pairing a phone by QR code, a key per device (2026-09-28, devices.patch) ---
     'jarvis_devices.py'          # devices.patch: every request's key checked (a device key never falls back to the shared one), the registry of key hashes, ONE pairing at a time, the pair_device card (PC only, Windows Hello), Remove and Retire
+    # --- "Quiz me on a text" (2026-09-30, quiz.patch) ---
+    'jarvis_quiz.py'             # quiz.patch: questions written from a pasted text and answers marked against the passage, by the local model only; in memory only, no card, never learned from
 )
 
 # The settings file. Installed only where none exists; never overwritten.

@@ -1011,6 +1011,49 @@ class JarvisApi(
         }
 
     /**
+     * The quiz calls wait for the PC's local model (writing questions,
+     * marking an answer), so they get the long client's time. Lazy, like the
+     * other longer clients here.
+     */
+    private val quizCallClient: OkHttpClient by lazy {
+        client.newBuilder()
+            .readTimeout(120, TimeUnit.SECONDS)
+            .callTimeout(130, TimeUnit.SECONDS)
+            .build()
+    }
+
+    /**
+     * Every "Quiz me on a text" call (`/api/quiz`, docs/STUDY-FROM-TEXT-DESIGN.md
+     * section 11): [json] null makes it a GET, otherwise a POST. The status and
+     * body come back whole ([Quiz.Reply]) because the PC's error CODE (not the
+     * status alone) says what went wrong. The pasted text and the answers are
+     * in the request body only - never in a URL, never logged.
+     */
+    suspend fun quizCall(path: String, json: String?): ApiResult<Quiz.Reply> =
+        withContext(Dispatchers.IO) {
+            val target = url(path) ?: return@withContext ApiResult.Failed(noAddress())
+            val builder = Request.Builder().url(target)
+            if (json == null) {
+                builder.get()
+            } else {
+                builder.post(json.toRequestBody("application/json".toMediaType()))
+            }
+            val req = builder.authed().build()
+            runCatching {
+                quizCallClient.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }
+                        .getOrNull()
+                    if (resp.code == 401 || resp.code == 403) {
+                        ApiResult.Failed(ApiError.BadToken)
+                    } else {
+                        ApiResult.Ok(Quiz.Reply(resp.code, obj))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
+
+    /**
      * `GET /api/memory/used?ids=`: the words of the few facts an answer used
      * (its `X-Jarvis-Route` names them by id only), or that automatic
      * learning just saved (the `memory_saved` event's ids) - the owner's

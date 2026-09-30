@@ -1,0 +1,23 @@
+--- a/jarvis_hud.py
++++ b/jarvis_hud.py
+@@ -3525,6 +3525,20 @@
+     except Exception as exc:
+         print(f"  browser    NOT ON ({type(exc).__name__}) - the headless browser setting is off")
+         print("             until jarvis_browser_engine.py is back: run apply-patches.ps1 again")
++    # quiz.patch ("Quiz me on a text", the owner's decision of 2026-09-30;
++    # docs/STUDY-FROM-TEXT-DESIGN.md sections 3 and 11, JARVIS-API section
++    # 98): POST /api/quiz, GET /api/quiz/<id>, POST /api/quiz/<id>/answer|
++    # finish|stop. No card: the owner's own pasted words, asked of the local
++    # model only, kept in memory only (never on disk, never learned from,
++    # never in chat history). Wrapped round Handler here, before anything
++    # listens, like browser above; the rules are all in jarvis_quiz.py.
++    try:
++        import jarvis_quiz
++        print(jarvis_quiz.install(Handler, origin_ok=_origin_ok,
++                                  token_ok=_token_ok, read_body=_read_body))
++    except Exception as exc:
++        print(f"  quiz       NOT ON ({type(exc).__name__}) - Quiz me on a text is off")
++        print("             until jarvis_quiz.py is back: run apply-patches.ps1 again")
+     # Before the main socket, so the banner lists every address together.
+     _loopback_companion(bind, HUD_PORT, Handler)
+     print(f"\n  open  ->   http://localhost:{HUD_PORT}\n")

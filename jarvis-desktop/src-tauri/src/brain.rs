@@ -49,6 +49,7 @@ pub mod inbox_tidy;
 pub mod photo_reminder;
 pub mod profile;
 pub mod projects;
+pub mod quiz;
 mod routes;
 pub mod schedule;
 pub mod shared;

@@ -858,6 +858,23 @@ permissions = [
   "allow-brain-goals-stop",
 ]
 
+# Quiz me on a text (docs/STUDY-FROM-TEXT-DESIGN.md section 11; brain/quiz.rs,
+# backend jarvis_quiz.py; JARVIS-API.md section 98). The owner pastes a text,
+# the PC's local model writes questions, the owner types answers and gets a
+# mark. No approval card and nothing saved: the quiz lives in the PC's memory
+# only. Every change held on a stale link; the words hidden with the private
+# lists.
+[[set]]
+identifier = "brain-quiz"
+description = "Write quiz questions for a pasted text, read the open quiz, check one typed answer, finish, and stop and forget the quiz - no card, nothing saved, every change held on a stale link."
+permissions = [
+  "allow-brain-quiz-start",
+  "allow-brain-quiz-get",
+  "allow-brain-quiz-answer",
+  "allow-brain-quiz-finish",
+  "allow-brain-quiz-stop",
+]
+
 # "Widgets you describe" (the owner's choice of 2026-09-28, the SAFE
 # version; brain/widgets.rs, backend jarvis_widgets.py; JARVIS-API.md section
 # 87). The Brain lists the widgets, asks the PC for a PREVIEW from the

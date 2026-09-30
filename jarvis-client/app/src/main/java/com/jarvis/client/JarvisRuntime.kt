@@ -4741,6 +4741,161 @@ object JarvisRuntime {
         return result
     }
 
+    // --------------------------------------------------------------- Quiz ----
+    // "Quiz me on a text" (docs/STUDY-FROM-TEXT-DESIGN.md sections 3 and 11) -
+    // see [com.jarvis.client.net.Quiz] and ui/screens/QuizPlate.kt. The open
+    // quiz is held HERE, in memory only, so leaving Brain and coming back
+    // does not orphan it on the PC. Nothing is written to disk: not the
+    // pasted text (it is never kept at all), not the questions, not an
+    // answer or a mark.
+
+    private val _quiz = MutableStateFlow<com.jarvis.client.net.Quiz.Session?>(null)
+
+    /** The quiz that is open on the PC, if this phone started one. Process memory only. */
+    val quiz: StateFlow<com.jarvis.client.net.Quiz.Session?> = _quiz.asStateFlow()
+
+    /** Drops the open quiz from this phone's memory (it is already gone on the PC, or being stopped). */
+    fun forgetQuiz() {
+        _quiz.value = null
+    }
+
+    /**
+     * Sends the pasted text to the PC and takes the questions it writes. No
+     * card: the owner's own words, the local model only. Held on a stale
+     * link (rule 4). @return whether it started, and the sentence to show.
+     */
+    suspend fun startQuiz(text: String, count: Int = com.jarvis.client.net.Quiz.DEFAULT_COUNT): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        if (!com.jarvis.client.net.Quiz.validText(text)) {
+            return false to (com.jarvis.client.net.Quiz.messageFor(
+                if (text.trim().length < com.jarvis.client.net.Quiz.MIN_TEXT) com.jarvis.client.net.Quiz.E_TEXT_SHORT
+                else com.jarvis.client.net.Quiz.E_TEXT_LONG,
+            ) ?: "That text does not fit.")
+        }
+        if (!com.jarvis.client.net.Quiz.validCount(count)) {
+            return false to (com.jarvis.client.net.Quiz.messageFor(com.jarvis.client.net.Quiz.E_BAD_COUNT) ?: "")
+        }
+        val out = when (val r = api.quizCall(com.jarvis.client.net.Quiz.PATH,
+            com.jarvis.client.net.Quiz.startBody(text, count))) {
+            is ApiResult.Ok -> com.jarvis.client.net.Quiz.startedSaid(r.value)
+            is ApiResult.Failed -> return false to ("Not started. " + describe(r.error))
+        }
+        val q = out.value
+        if (out.ok && q != null) {
+            _quiz.value = q
+            return true to ""
+        }
+        return false to out.said
+    }
+
+    /**
+     * Reads the open quiz again from the PC (a read: never held). If the PC
+     * no longer has it (60 minutes unused, a restart), it is forgotten here
+     * too. @return the sentence to show, or null when all is well.
+     */
+    suspend fun refreshQuiz(): String? {
+        val id = _quiz.value?.id ?: return null
+        if (!com.jarvis.client.net.Quiz.validId(id)) return null
+        return when (val r = api.quizCall("${com.jarvis.client.net.Quiz.PATH}/$id", null)) {
+            is ApiResult.Ok -> {
+                val out = com.jarvis.client.net.Quiz.readSaid(r.value)
+                val q = out.value
+                when {
+                    out.ok && q != null -> {
+                        _quiz.value = q
+                        null
+                    }
+                    out.gone -> {
+                        _quiz.value = null
+                        out.said
+                    }
+                    else -> out.said
+                }
+            }
+            is ApiResult.Failed -> noticeFor(r.error)
+        }
+    }
+
+    /**
+     * Sends one typed answer to be marked against the passage. No card. Held
+     * on a stale link. @return the mark if it was checked, and the sentence
+     * to show when it was not. The quiz held here moves on with it.
+     */
+    suspend fun answerQuiz(n: Int, answer: String): Pair<com.jarvis.client.net.Quiz.Mark?, String> {
+        actionBlocker()?.let { return null to it }
+        val id = _quiz.value?.id
+        if (id == null || !com.jarvis.client.net.Quiz.validId(id)) {
+            return null to (com.jarvis.client.net.Quiz.messageFor(com.jarvis.client.net.Quiz.E_NOT_FOUND) ?: "")
+        }
+        if (!com.jarvis.client.net.Quiz.validAnswer(answer)) {
+            return null to (com.jarvis.client.net.Quiz.messageFor(
+                if (answer.trim().isEmpty()) com.jarvis.client.net.Quiz.E_ANSWER_EMPTY
+                else com.jarvis.client.net.Quiz.E_ANSWER_LONG,
+            ) ?: "")
+        }
+        val out = when (val r = api.quizCall("${com.jarvis.client.net.Quiz.PATH}/$id/answer",
+            com.jarvis.client.net.Quiz.answerBody(n, answer))) {
+            is ApiResult.Ok -> com.jarvis.client.net.Quiz.answeredSaid(r.value)
+            is ApiResult.Failed -> return null to ("Not checked. " + describe(r.error))
+        }
+        val pair = out.value
+        if (out.ok && pair != null) {
+            _quiz.value = pair.second
+            return pair.first to ""
+        }
+        if (out.gone) _quiz.value = null
+        return null to out.said
+    }
+
+    /**
+     * Ends the quiz and takes the short "look at these again" summary. The PC
+     * deletes the session. Held on a stale link. @return the summary if it
+     * finished, and the sentence to show when it did not.
+     */
+    suspend fun finishQuiz(): Pair<com.jarvis.client.net.Quiz.Summary?, String> {
+        actionBlocker()?.let { return null to it }
+        val id = _quiz.value?.id
+        if (id == null || !com.jarvis.client.net.Quiz.validId(id)) {
+            return null to (com.jarvis.client.net.Quiz.messageFor(com.jarvis.client.net.Quiz.E_NOT_FOUND) ?: "")
+        }
+        val out = when (val r = api.quizCall("${com.jarvis.client.net.Quiz.PATH}/$id/finish",
+            com.jarvis.client.net.Quiz.EMPTY_BODY)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Quiz.finishedSaid(r.value)
+            is ApiResult.Failed -> return null to ("Not finished. " + describe(r.error))
+        }
+        val s = out.value
+        if (out.ok && s != null) {
+            _quiz.value = null
+            return s to ""
+        }
+        if (out.gone) _quiz.value = null
+        return null to out.said
+    }
+
+    /**
+     * Stops the quiz and forgets it: the PC deletes the session. Held on a
+     * stale link. @return whether it stopped, and the sentence to show.
+     */
+    suspend fun stopQuiz(): Pair<Boolean, String> {
+        actionBlocker()?.let { return false to it }
+        val id = _quiz.value?.id
+        if (id == null || !com.jarvis.client.net.Quiz.validId(id)) {
+            _quiz.value = null
+            return true to "Stopped. Nothing was kept."
+        }
+        val out = when (val r = api.quizCall("${com.jarvis.client.net.Quiz.PATH}/$id/stop",
+            com.jarvis.client.net.Quiz.EMPTY_BODY)) {
+            is ApiResult.Ok -> com.jarvis.client.net.Quiz.stoppedSaid(r.value)
+            is ApiResult.Failed -> return false to ("Not stopped. " + describe(r.error))
+        }
+        // "Not found" means it is already gone on the PC: that is what stopping wanted.
+        if (out.ok || out.gone) {
+            _quiz.value = null
+            return true to "Stopped. Nothing was kept."
+        }
+        return false to out.said
+    }
+
     /**
      * One Today card (backend jarvis_today.py, 2026-09-28): the owner's own
      * [text], shown from [at] ("HH:MM") on [days] (0 = Monday). The PC sets it
