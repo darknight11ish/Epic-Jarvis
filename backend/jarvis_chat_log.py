@@ -402,13 +402,107 @@ CRISIS_CONTINUE_WHY = ("This chat is kept as your own record. It is not carried 
                        "new chat any time, and nothing from that moment is read again.")
 
 
-def _row(cid, title, started, updated, turns, device, voice, outside, kind, project) -> dict:
-    """One History list row, as GET /api/history and the search send it."""
+# ------------------------------------------------------------ chat tags
+#
+# "Chat tags and sections in History" (owner, 2026-09-30; docs/CHAT-TAGS-DESIGN.md,
+# JARVIS-API section 99). Tag NAMES are the owner's words, so the whole registry
+# is one sealed value in `meta` (key "tags"); a chat carries only an opaque
+# `tag_id` number in a plain column. Nothing here is ever an index, a fact, or
+# read by the learner or a model.
+
+TAG_MAX = 12
+TAG_NAME_MAX = 24
+TAG_COLOURS = 8
+TAG_ICONS = ("briefcase", "book", "home", "folder", "lightbulb", "star", "flag",
+             "wrench", "leaf", "music")
+#: The starter tags, written the first time the registry is read (ids 1-5).
+TAG_STARTERS = (("Work", 0, "briefcase"), ("Learning", 1, "book"), ("Personal", 2, "home"),
+                ("Projects", 3, "folder"), ("Ideas", 4, "lightbulb"))
+_TAGS_KEY = "tags"
+_TAGS_AAD = b"meta|tags"
+
+
+def _tag_filter(tag):
+    """GET /api/history's `tag=` value: an int id, "none", or None (no filter;
+    anything else is ignored, like `kind`)."""
+    if isinstance(tag, bool):
+        return None
+    if isinstance(tag, int):
+        return tag if tag > 0 else None
+    if isinstance(tag, str):
+        t = tag.strip()
+        if t.lower() == "none":
+            return "none"
+        if t.isascii() and t.isdigit() and len(t) <= 9 and int(t) > 0:
+            return int(t)
+    return None
+
+
+def _tag_where(tag):
+    """(sql or "", args) for an already-checked tag filter."""
+    if tag == "none":
+        return "c.tag_id IS NULL", []
+    if isinstance(tag, int):
+        return "c.tag_id = ?", [tag]
+    return "", []
+
+
+def _tag_err(code: str, message: str) -> dict:
+    return {"ok": False, "error": code, "message": message}
+
+
+_TAG_MESSAGES = {
+    "bad_name": "A tag name needs 1 to 24 letters or numbers.",
+    "name_taken": "You already have a tag with that name.",
+    "too_many_tags": "You can have up to 12 tags. Delete one to make room.",
+    "bad_colour": "That colour is not one of the eight.",
+    "bad_icon": "That icon is not on the list.",
+    "tag_not_found": "That tag is gone. Reload History to see your tags.",
+    "not_found": "That chat is gone - it may have been deleted.",
+    "bad_request": "That request was not understood.",
+}
+
+
+def _tag_fail(code: str, message: str = "") -> dict:
+    return _tag_err(code, message or _TAG_MESSAGES.get(code, ""))
+
+
+def _clean_tag_name(v):
+    """The trimmed name, or None if it is not 1-24 printable characters."""
+    if not isinstance(v, str):
+        return None
+    n = v.strip()
+    if not (1 <= len(n) <= TAG_NAME_MAX) or not n.isprintable():
+        return None
+    return n
+
+
+def _off_message(why: str, tail: str) -> str:
+    """Why history cannot take a change right now, in one plain sentence pair."""
+    why = (why or "Chat history is off.").strip()
+    return why[:1].upper() + why[1:].rstrip(".") + ". " + tail
+
+
+def _is_int(v) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+
+def _tag_id(v):
+    """A stored tag_id column value as an int, or None (no tag)."""
+    return v if isinstance(v, int) and not isinstance(v, bool) else None
+
+
+def _row(cid, title, started, updated, turns, device, voice, outside, kind, project,
+         tag_id=None) -> dict:
+    """One History list row, as GET /api/history and the search send it.
+    `tag_id`: the chat's one tag (chat tags, 2026-09-30), or None."""
     return {"id": cid, "title": title,
             "started": int(started or 0), "updated": int(updated or 0),
             "turns": int(turns), "device": device or "unknown",
             "has_voice": bool(voice), "tainted": bool(outside),
-            "kind": kind if kind in KINDS else "chat", "project": project or None}
+            "kind": kind if kind in KINDS else "chat", "project": project or None,
+            "tag_id": _tag_id(tag_id)}
 
 
 def _title_from(rows) -> str:
@@ -646,7 +740,7 @@ class ChatLog:
         c.execute("CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v BLOB)")
         c.execute("CREATE TABLE IF NOT EXISTS conversations ("
                   " id TEXT PRIMARY KEY, title BLOB, started REAL, updated REAL,"
-                  " device TEXT, kind TEXT, project TEXT)")
+                  " device TEXT, kind TEXT, project TEXT, tag_id INTEGER)")
         c.execute("CREATE TABLE IF NOT EXISTS turns ("
                   " conversation_id TEXT NOT NULL, idx INTEGER NOT NULL, at REAL,"
                   " role TEXT, provenance TEXT, device TEXT, lane TEXT,"
@@ -673,6 +767,10 @@ class ChatLog:
                 c.execute("ALTER TABLE conversations ADD COLUMN kind TEXT")
             if "project" not in cols:
                 c.execute("ALTER TABLE conversations ADD COLUMN project TEXT")
+            # Chat tags (2026-09-30): the chat's one tag, an opaque number.
+            # The names live sealed in `meta` (key "tags"), never here.
+            if "tag_id" not in cols:
+                c.execute("ALTER TABLE conversations ADD COLUMN tag_id INTEGER")
             c.execute("UPDATE conversations SET kind='support' WHERE kind IS NULL AND id IN"
                       " (SELECT DISTINCT conversation_id FROM turns WHERE role='support')")
             c.execute("UPDATE conversations SET kind='chat' WHERE kind IS NULL")
@@ -1411,9 +1509,11 @@ class ChatLog:
             return {"enabled": False, "recording": False,
                     "why_not": f"the chat history could not be checked ({type(exc).__name__})"}
 
-    def list(self, limit=LIST_DEFAULT, before=None, kind=None) -> dict:
+    def list(self, limit=LIST_DEFAULT, before=None, kind=None, tag=None) -> dict:
         """One page of the History list, newest first. `kind`: only that
-        kind (KINDS) - "Live only" in both apps; anything else is ignored."""
+        kind (KINDS) - "Live only" in both apps; anything else is ignored.
+        `tag`: an int (only that tag's chats) or "none" (untagged); anything
+        else is ignored."""
         self._housekeeping()
         out = self.status()
         out["conversations"] = []
@@ -1435,7 +1535,7 @@ class ChatLog:
                "   t.provenance IN ('voice','voice_unverified')),"
                " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id AND"
                "   t.read_outside=1),"
-               " COALESCE(c.kind, 'chat'), c.project"
+               " COALESCE(c.kind, 'chat'), c.project, c.tag_id"
                " FROM conversations c")
         # Paging by whole seconds (`updated` goes out as one, and comes back
         # as `before`). A page never splits a second: when its last row shares
@@ -1453,6 +1553,11 @@ class ChatLog:
             where.append("COALESCE(c.kind, 'chat') = ?")
             args.append(kind)
         out["kind"] = kind
+        tag = _tag_filter(tag)
+        tag_sql, tag_args = _tag_where(tag)
+        if tag_sql:
+            where.append(tag_sql)
+            args += tag_args
         clause = (" WHERE " + " AND ".join(where)) if where else ""
         with self._lock, closing(self._connect()) as c:
             rows = c.execute(sql + clause + " ORDER BY c.updated DESC, c.id DESC LIMIT ?",
@@ -1461,15 +1566,18 @@ class ChatLog:
                 sec = math.floor(rows[-1][3] or 0)
                 have = {r[0] for r in rows}
                 extra = " AND COALESCE(c.kind, 'chat') = ?" if kind is not None else ""
+                if tag_sql:
+                    extra += " AND " + tag_sql
                 rest = c.execute(sql + " WHERE c.updated >= ? AND c.updated < ?" + extra
                                  + " ORDER BY c.updated DESC, c.id DESC",
                                  [float(sec), float(sec + 1)]
-                                 + ([kind] if kind is not None else [])).fetchall()
+                                 + ([kind] if kind is not None else [])
+                                 + tag_args).fetchall()
                 rows += [r for r in rest if r[0] not in have]
-        for cid, title, started, updated, device, n, voice, outside, rkind, project in rows:
+        for cid, title, started, updated, device, n, voice, outside, rkind, project, tid in rows:
             out["conversations"].append(_row(
                 cid, self._title(aead, cid, title), started, updated, n, device,
-                bool(voice), bool(outside), rkind, project))
+                bool(voice), bool(outside), rkind, project, tid))
         return out
 
     def _title(self, aead, cid, blob) -> str:
@@ -1490,8 +1598,8 @@ class ChatLog:
         if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
             return None
         with self._lock, closing(self._connect()) as c:
-            conv = c.execute("SELECT title, COALESCE(kind, 'chat'), project, started, updated"
-                             " FROM conversations WHERE id=?", (cid,)).fetchone()
+            conv = c.execute("SELECT title, COALESCE(kind, 'chat'), project, started, updated,"
+                             " tag_id FROM conversations WHERE id=?", (cid,)).fetchone()
             if conv is None:
                 return None
             rows = c.execute("SELECT idx, at, role, provenance, read_outside, answer_kept,"
@@ -1521,7 +1629,7 @@ class ChatLog:
         crisis = kind in CONTINUABLE and title == CRISIS_TITLE
         return {"id": cid, "title": title, "history": self._keeping(),
                 "tainted": any(bool(r[4]) for r in rows), "turns": turns,
-                "kind": kind, "project": conv[2] or None,
+                "kind": kind, "project": conv[2] or None, "tag_id": _tag_id(conv[5]),
                 "started": int(conv[3] or 0), "updated": int(conv[4] or 0),
                 "continuable": kind in CONTINUABLE and not crisis,
                 "continue_why": (CRISIS_CONTINUE_WHY if crisis
@@ -1587,7 +1695,7 @@ class ChatLog:
         with self._lock, closing(self._connect()) as c:
             convs = c.execute(
                 "SELECT c.id, c.title, c.started, c.updated, c.device,"
-                " COALESCE(c.kind, 'chat'), c.project FROM conversations c"
+                " COALESCE(c.kind, 'chat'), c.project, c.tag_id FROM conversations c"
                 + (" WHERE COALESCE(c.kind, 'chat') = ?" if kind is not None else "")
                 + " ORDER BY c.updated DESC, c.id DESC LIMIT ?",
                 ([kind] if kind is not None else []) + [SEARCH_SCAN_MAX + 1]).fetchall()
@@ -1598,7 +1706,7 @@ class ChatLog:
         deadline = time.monotonic() + SEARCH_SECONDS
         found = []
         with closing(self._connect()) as c:
-            for n, (cid, title_blob, started, updated, device, rkind, project) \
+            for n, (cid, title_blob, started, updated, device, rkind, project, tid) \
                     in enumerate(convs):
                 if time.monotonic() > deadline:
                     out["partial"] = True
@@ -1627,7 +1735,7 @@ class ChatLog:
                     break
                 snippet, hits = hit
                 row = _row(cid, title, started, updated, len(rows), device, voice, outside,
-                           rkind, project)
+                           rkind, project, tid)
                 row.update(snippet=snippet, hits=hits)
                 found.append(row)
         out["conversations"] = found
@@ -1642,13 +1750,220 @@ class ChatLog:
         if not (isinstance(cid, str) and _CID.fullmatch(cid)) or not self.db_path.exists():
             return None
         with self._lock, closing(self._connect()) as c:
-            row = c.execute("SELECT title, updated, COALESCE(kind, 'chat') FROM conversations"
+            row = c.execute("SELECT title, updated, COALESCE(kind, 'chat'), tag_id FROM conversations"
                             " WHERE id=?", (cid,)).fetchone()
         if row is None:
             return None
         aead = self._cipher()
         return {"id": cid, "title": self._title(aead, cid, row[0]),
-                "updated": int(row[1] or 0), "kind": row[2] if row[2] in KINDS else "chat"}
+                "updated": int(row[1] or 0), "kind": row[2] if row[2] in KINDS else "chat",
+                "tag_id": _tag_id(row[3])}
+
+    # -- chat tags (docs/CHAT-TAGS-DESIGN.md, JARVIS-API section 99) --------
+    def _load_tags(self, c, aead) -> dict:
+        """The registry {"next_id", "tags": [{"id","name","colour","icon"}]}
+        from `meta` (or the starter tags, not yet written). Raises on a value
+        that will not open - never guesses."""
+        row = c.execute("SELECT v FROM meta WHERE k=?", (_TAGS_KEY,)).fetchone()
+        if row is None:
+            return {"next_id": len(TAG_STARTERS) + 1, "fresh": True,
+                    "tags": [{"id": i + 1, "name": n, "colour": col, "icon": ic}
+                             for i, (n, col, ic) in enumerate(TAG_STARTERS)]}
+        d = json.loads(self._open(aead, row[0], _TAGS_AAD).decode("utf-8"))
+        tags = [{"id": int(t["id"]), "name": str(t["name"]), "colour": int(t["colour"]),
+                 "icon": str(t["icon"])} for t in d["tags"]]
+        return {"next_id": max(int(d["next_id"]), max((t["id"] for t in tags), default=0) + 1),
+                "fresh": False, "tags": tags}
+
+    def _save_tags(self, c, aead, reg: dict) -> None:
+        plain = json.dumps({"next_id": reg["next_id"], "tags": reg["tags"]},
+                           ensure_ascii=False).encode("utf-8")
+        c.execute("INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)",
+                  (_TAGS_KEY, self._seal(aead, plain, _TAGS_AAD)))
+        reg["fresh"] = False
+
+    def _tags_answer(self, c, reg: dict) -> dict:
+        counts = {int(r[0]): int(r[1]) for r in c.execute(
+            "SELECT tag_id, COUNT(*) FROM conversations WHERE tag_id IS NOT NULL"
+            " GROUP BY tag_id")}
+        ids = {t["id"] for t in reg["tags"]}
+        total = int(c.execute("SELECT COUNT(*) FROM conversations").fetchone()[0])
+        tagged = sum(n for i, n in counts.items() if i in ids)
+        return {"ok": True,
+                "tags": [dict(t, order=i, count=counts.get(t["id"], 0))
+                         for i, t in enumerate(reg["tags"])],
+                "untagged": total - tagged}
+
+    def tags(self) -> dict:
+        """GET /api/history/tags: {"ok", "tags": [Tag + count], "untagged"}.
+        The starter tags are written the first time this is read with the
+        key. Without the key: the tags cannot be opened, so none are listed
+        and `why_not` says why (the chats still list, untagged)."""
+        self._housekeeping()
+        try:
+            aead = self._cipher()
+        except KeyUnavailable as exc:
+            return {"ok": True, "tags": [], "untagged": 0, "why_not": str(exc)}
+        except Exception as exc:
+            return {"ok": True, "tags": [], "untagged": 0,
+                    "why_not": f"the chat history could not be opened ({type(exc).__name__})"}
+        try:
+            with self._lock, closing(self._connect()) as c:
+                reg = self._load_tags(c, aead)
+                if reg["fresh"]:
+                    with c:
+                        self._save_tags(c, aead, reg)
+                return self._tags_answer(c, reg)
+        except Exception as exc:
+            return {"ok": True, "tags": [], "untagged": 0,
+                    "why_not": f"the tags could not be opened ({type(exc).__name__})"}
+
+    def tag_op(self, body) -> tuple:
+        """POST /api/history/tags: add / rename / style / move / delete.
+        (http code, answer). Nothing is written without the key or while
+        history is off; nothing is guessed."""
+        if not isinstance(body, dict) or not isinstance(body.get("op"), str):
+            return 400, _tag_fail("bad_request")
+        op = body["op"]
+        if op not in ("add", "rename", "style", "move", "delete"):
+            return 400, _tag_fail("bad_request")
+        aead, why = self._recording()
+        if aead is None:
+            return 503, _tag_fail("bad_request", _off_message(why, "Tags are not changed."))
+        with self._lock, closing(self._connect()) as c:
+            try:
+                reg = self._load_tags(c, aead)
+            except Exception:
+                return 503, _tag_fail("bad_request", "The tags could not be opened, so "
+                                      "they are not changed.")
+            tags = reg["tags"]
+
+            def find(v):
+                if not _is_int(v):
+                    return None
+                return next((t for t in tags if t["id"] == v), None)
+
+            def taken(name, skip=None):
+                return any(t["name"].casefold() == name.casefold() and t is not skip
+                           for t in tags)
+
+            with c:
+                if op == "add":
+                    if len(tags) >= TAG_MAX:
+                        return 409, _tag_fail("too_many_tags")
+                    name = _clean_tag_name(body.get("name"))
+                    if name is None:
+                        return 400, _tag_fail("bad_name")
+                    colour = body.get("colour", len(tags) % TAG_COLOURS)
+                    if not _is_int(colour) or not 0 <= colour < TAG_COLOURS:
+                        return 400, _tag_fail("bad_colour")
+                    icon = body.get("icon", "star")
+                    if icon not in TAG_ICONS:
+                        return 400, _tag_fail("bad_icon")
+                    if taken(name):
+                        return 409, _tag_fail("name_taken")
+                    tag = {"id": reg["next_id"], "name": name, "colour": colour, "icon": icon}
+                    reg["next_id"] += 1
+                    tags.append(tag)
+                elif op == "rename":
+                    tag = find(body.get("id"))
+                    if tag is None:
+                        return 404, _tag_fail("tag_not_found")
+                    name = _clean_tag_name(body.get("name"))
+                    if name is None:
+                        return 400, _tag_fail("bad_name")
+                    if taken(name, skip=tag):
+                        return 409, _tag_fail("name_taken")
+                    tag["name"] = name
+                elif op == "style":
+                    tag = find(body.get("id"))
+                    if tag is None:
+                        return 404, _tag_fail("tag_not_found")
+                    if "colour" not in body and "icon" not in body:
+                        return 400, _tag_fail("bad_request")
+                    if "colour" in body:
+                        col = body["colour"]
+                        if not _is_int(col) or not 0 <= col < TAG_COLOURS:
+                            return 400, _tag_fail("bad_colour")
+                    if "icon" in body and body["icon"] not in TAG_ICONS:
+                        return 400, _tag_fail("bad_icon")
+                    if "colour" in body:
+                        tag["colour"] = body["colour"]
+                    if "icon" in body:
+                        tag["icon"] = body["icon"]
+                elif op == "move":
+                    tag = find(body.get("id"))
+                    if tag is None:
+                        return 404, _tag_fail("tag_not_found")
+                    before = body.get("before")
+                    if before is not None:
+                        anchor = find(before)
+                        if anchor is None:
+                            return 404, _tag_fail("tag_not_found")
+                    if before is None:
+                        tags.remove(tag)
+                        tags.append(tag)
+                    elif anchor is not tag:
+                        tags.remove(tag)
+                        tags.insert(tags.index(anchor), tag)
+                else:   # delete
+                    tag = find(body.get("id"))
+                    if tag is None:
+                        return 404, _tag_fail("tag_not_found")
+                    tags.remove(tag)
+                    c.execute("UPDATE conversations SET tag_id=NULL WHERE tag_id=?",
+                              (tag["id"],))
+                self._save_tags(c, aead, reg)
+            out = self._tags_answer(c, reg)
+            out["tag"] = next((dict(t, order=i, count=0) for i, t in enumerate(tags)
+                               if t["id"] == tag["id"]), None) if op != "delete" else None
+            if out["tag"] is not None:
+                out["tag"]["count"] = next(t["count"] for t in out["tags"]
+                                           if t["id"] == tag["id"])
+            return 200, out
+
+    def set_tag(self, cid, tag_id) -> tuple:
+        """POST /api/history/tag: file one chat under a tag, or (None) unfile
+        it. (http code, answer). One tag per chat; moving is just setting."""
+        if not (isinstance(cid, str) and _CID.fullmatch(cid)) \
+                or not (tag_id is None or _is_int(tag_id)):
+            return 400, _tag_fail("bad_request")
+        aead, why = self._recording()
+        if aead is None:
+            return 503, _tag_fail("bad_request", _off_message(why, "The chat is not filed."))
+        if not self.db_path.exists():
+            return 404, _tag_fail("not_found")
+        with self._lock, closing(self._connect()) as c:
+            if c.execute("SELECT 1 FROM conversations WHERE id=?", (cid,)).fetchone() is None:
+                return 404, _tag_fail("not_found")
+            if tag_id is not None:
+                try:
+                    reg = self._load_tags(c, aead)
+                except Exception:
+                    return 503, _tag_fail("bad_request", "The tags could not be opened, so "
+                                          "the chat is not filed.")
+                if not any(t["id"] == tag_id for t in reg["tags"]):
+                    return 404, _tag_fail("tag_not_found")
+                if reg["fresh"]:
+                    with c:
+                        self._save_tags(c, aead, reg)
+            with c:
+                c.execute("UPDATE conversations SET tag_id=? WHERE id=?", (tag_id, cid))
+        return 200, {"ok": True, "id": cid, "tag_id": tag_id}
+
+    def _drop_unknown_tag(self, c, cid: str) -> None:
+        """After a chat was put back: a tag deleted while it was held is
+        gone, so the chat comes back untagged rather than under a number
+        nothing explains. Leaves it alone if the registry cannot be read."""
+        try:
+            row = c.execute("SELECT tag_id FROM conversations WHERE id=?", (cid,)).fetchone()
+            if row is None or row[0] is None:
+                return
+            ids = {t["id"] for t in self._load_tags(c, self._cipher())["tags"]}
+        except Exception:
+            return
+        if row[0] not in ids:
+            c.execute("UPDATE conversations SET tag_id=NULL WHERE id=?", (cid,))
 
     def tainted_from(self, cid):
         """The number of the first turn that read outside text, or None. Every
@@ -1720,6 +2035,7 @@ class ChatLog:
             # A conversation's own first and last message, from its turns
             # (`started`/`updated` are the same moments, kept on the row).
             sql = ("SELECT c.id, c.title, c.started, c.updated, COALESCE(c.kind, 'chat'),"
+                   " c.tag_id,"
                    " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id),"
                    " (SELECT COUNT(*) FROM turns t WHERE t.conversation_id=c.id"
                    "   AND t.at >= ? AND t.at < ?),"
@@ -1750,14 +2066,14 @@ class ChatLog:
         except Exception as exc:
             out["why_not"] = f"the chat history could not be opened ({type(exc).__name__})"
             return out
-        for cid, title, started, updated, kind, n, inside, first, last in rows:
+        for cid, title, started, updated, kind, tid, n, inside, first, last in rows:
             first = first if first is not None else started
             last = last if last is not None else updated
             out["items"].append({
                 "id": cid, "title": self._title(aead, cid, title),
                 "started": float(started or first or 0), "updated": float(updated or last or 0),
                 "turns": int(n), "in_frame": int(inside),
-                "kind": kind if kind in KINDS else "chat",
+                "kind": kind if kind in KINDS else "chat", "tag_id": _tag_id(tid),
                 "spills": bool((first is not None and first < start)
                                or (last is not None and last >= end))})
         return out
@@ -1777,7 +2093,7 @@ class ChatLog:
                     if not (isinstance(cid, str) and _CID.fullmatch(cid)):
                         continue
                     conv = c.execute("SELECT id, title, started, updated, device, kind,"
-                                     " project FROM conversations WHERE id=?",
+                                     " project, tag_id FROM conversations WHERE id=?",
                                      (cid,)).fetchone()
                     if conv is None:
                         continue
@@ -1809,6 +2125,7 @@ class ChatLog:
                 try:
                     with c:
                         self._put_one(c, cid, h)
+                        self._drop_unknown_tag(c, cid)
                     out["restored"].append(cid)
                 except KeyUnavailable as exc:
                     out["failed"][cid] = str(exc)
@@ -1826,9 +2143,9 @@ class ChatLog:
         marks = ",".join("?" * 11)
         now_conv = c.execute("SELECT updated FROM conversations WHERE id=?", (cid,)).fetchone()
         if now_conv is None:
-            conv = tuple(conv) + (None,) * (7 - len(conv))    # held before kind existed
+            conv = tuple(conv) + (None,) * (8 - len(conv))    # held before kind/tag existed
             c.execute("INSERT INTO conversations (id, title, started, updated, device, kind,"
-                      " project) VALUES (?,?,?,?,?,?,?)", conv[:7])
+                      " project, tag_id) VALUES (?,?,?,?,?,?,?,?)", conv[:8])
             for t in turns:
                 c.execute(f"INSERT INTO turns ({self._TURN_COLS}) VALUES ({marks})", t)
             return
@@ -1855,6 +2172,10 @@ class ChatLog:
         # The old title and first moment; the newer last moment stays.
         c.execute("UPDATE conversations SET title=?, started=? WHERE id=?",
                   (conv[1], conv[2], cid))
+        # The tag it had, unless the owner filed it somewhere since.
+        if len(conv) > 7 and conv[7] is not None:
+            c.execute("UPDATE conversations SET tag_id=? WHERE id=? AND tag_id IS NULL",
+                      (conv[7], cid))
 
 
 # ------------------------------------------------------ the module's own log
@@ -1969,6 +2290,17 @@ def take_out(cids) -> dict:
 def put_back(held: dict) -> dict:
     """The Undo of take_out(). See ChatLog.put_back."""
     return _log().put_back(held)
+
+
+def tags() -> dict:
+    """GET /api/history/tags's answer (ChatLog.tags)."""
+    return _log().tags()
+
+
+def tag_chat(cid, tag_id) -> tuple:
+    """POST /api/history/tag: (http code, answer). See ChatLog.set_tag. The
+    same call "label this chat Work" makes (jarvis_quick.py)."""
+    return _log().set_tag(cid, tag_id)
 
 
 def search(query, limit=SEARCH_DEFAULT, kind=None) -> dict:
@@ -2206,8 +2538,8 @@ SEARCH_PATH = "/api/history/search"
 
 
 def handle_get(path: str, query: str = "") -> tuple:
-    """GET /api/history, /api/history/conversation and /api/history/search.
-    (code, body)."""
+    """GET /api/history, /api/history/conversation, /api/history/search and
+    /api/history/tags. (code, body)."""
     q = _query(query)
     log = _log()
     if path == "/api/history":
@@ -2223,7 +2555,10 @@ def handle_get(path: str, query: str = "") -> tuple:
                 before = b
         except (TypeError, ValueError):
             before = None
-        return 200, log.list(limit=limit, before=before, kind=q.get("kind") or None)
+        return 200, log.list(limit=limit, before=before, kind=q.get("kind") or None,
+                             tag=q.get("tag") or None)
+    if path == "/api/history/tags":
+        return 200, log.tags()
     if path == SEARCH_PATH:
         # "Search what was said" (section 71). The words arrive in ?q=, are
         # used for this one scan and dropped: never logged, never audited,
@@ -2249,7 +2584,7 @@ def handle_get(path: str, query: str = "") -> tuple:
 
 
 def handle_post(route: str, body) -> tuple:
-    """POST /api/history/delete and /api/history/settings. (code, body)."""
+    """POST /api/history/delete, /settings, /tags and /tag. (code, body)."""
     if route == "/api/history/delete":
         if not isinstance(body, dict) or set(body) != {"id"} or not isinstance(body["id"], str):
             return 400, {"error": 'need {"id": "<conversation id>"} - one conversation '
@@ -2260,4 +2595,11 @@ def handle_post(route: str, body) -> tuple:
         return 200, {"ok": True}
     if route == "/api/history/settings":
         return request_settings(body)
+    if route == "/api/history/tags":
+        # Chat tags (section 99): the owner's own organisation, no card.
+        return _log().tag_op(body)
+    if route == "/api/history/tag":
+        if not isinstance(body, dict) or set(body) != {"id", "tag_id"}:
+            return 400, _tag_fail("bad_request")
+        return _log().set_tag(body["id"], body["tag_id"])
     return 404, {"error": "no such route"}

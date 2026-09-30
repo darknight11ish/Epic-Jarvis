@@ -109,9 +109,12 @@ object ChatLog {
      * already shown; [kind], one of [KINDS] ("Live only" and the other
      * filters, the chat audit 2026-09-28) - anything else is not sent.
      */
-    fun listPath(before: Long? = null, limit: Int = PAGE, kind: String? = null): String =
+    fun listPath(before: Long? = null, limit: Int = PAGE, kind: String? = null, tag: String? = null): String =
         "$LIST_PATH?limit=${limit.coerceIn(1, 100)}" + (before?.let { "&before=$it" } ?: "") +
-            (kind?.takeIf { it in KINDS }?.let { "&kind=$it" } ?: "")
+            (kind?.takeIf { it in KINDS }?.let { "&kind=$it" } ?: "") +
+            // `tag=<id>` or `tag=none` (section 10); anything else is not sent.
+            (tag?.takeIf { it == "none" || (it.isNotEmpty() && it.length <= 9 && it.all { c -> c in '0'..'9' } && it.toInt() > 0) }
+                ?.let { "&tag=$it" } ?: "")
 
     fun conversationPath(id: String): String = "$CONVERSATION_PATH?id=${URLEncoder.encode(id, "UTF-8")}"
 
@@ -164,6 +167,8 @@ object ChatLog {
         val tainted: Boolean,
         /** What kind of conversation it is ([KINDS]); an older PC's rows are "chat". */
         val kind: String = "chat",
+        /** The tag it is filed under (docs/CHAT-TAGS-DESIGN.md section 10), or null: untagged, or an older PC. */
+        val tagId: Int? = null,
     )
 
     /** One page: the settings, its rows, and whether there may be older ones. */
@@ -197,6 +202,8 @@ object ChatLog {
          * from it ([ChatHistory.continuedHistoryLine], the owner, 2026-09-29).
          */
         val keeping: Keeping? = null,
+        /** The tag it is filed under, or null (section 10 of docs/CHAT-TAGS-DESIGN.md). */
+        val tagId: Int? = null,
     )
 
     /** `history.enabled` / `history.recording` on a conversation; each null when not clearly a yes or a no. */
@@ -239,6 +246,7 @@ object ChatLog {
                 hasVoice = o.flag("has_voice") == true,
                 tainted = o.flag("tainted") == true,
                 kind = kindOf(o.str("kind")),
+                tagId = o.whole("tag_id")?.toInt(),
             )
         }
         val raw = (body["conversations"] as? JsonArray)?.size ?: 0
@@ -282,6 +290,7 @@ object ChatLog {
             continueWhy = if (continuable) null else body.str("continue_why") ?: CONTINUE_WHY[kind]
                 ?: CONTINUE_WHY.getValue("support"),
             keeping = (body["history"] as? JsonObject)?.let { Keeping(it.flag("enabled"), it.flag("recording")) },
+            tagId = body.whole("tag_id")?.toInt(),
         )
     }
 
@@ -363,6 +372,7 @@ object ChatLog {
                     hasVoice = o.flag("has_voice") == true,
                     tainted = o.flag("tainted") == true,
                     kind = kindOf(o.str("kind")),
+                    tagId = o.whole("tag_id")?.toInt(),
                 ),
                 hits = o.whole("hits")?.toInt() ?: 0,
                 snippet = Snippet(

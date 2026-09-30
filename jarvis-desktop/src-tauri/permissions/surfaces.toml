@@ -760,17 +760,26 @@ permissions = [
 # too, held back the same way: the PC opens each kept turn in memory for
 # that one search, keeps no index, and nothing reaches the AI model.
 #
+# Chat tags (docs/CHAT-TAGS-DESIGN.md section 10, 2026-09-30): read the
+# owner's tags, add/rename/restyle/reorder/delete one, and file one chat under
+# one. No approval card (the owner's own tidying, nothing leaves the PC); the
+# names are the owner's words, so Rust hides them with the private lists and
+# holds every write on a stale link.
+#
 # "Continue this chat" (the chat audit, 2026-09-28) brings up the Jarvis bar
 # and names the chat to carry on - the id only; the bar reads it itself
 # (chat_continue_open, in quickbar-surface). Copy on an opened old answer
 # uses the same private copy as the bar's own Copy (clipboard_privacy.rs).
 [[set]]
 identifier = "brain-history"
-description = "List, read and search the chat history kept on the PC, delete one conversation, change its two settings (turning it on only raises an approval card), hand a chat to the Jarvis bar to continue, and copy an old answer. No bulk delete."
+description = "List, read and search the chat history kept on the PC, sort chats under the owner's own tags, delete one conversation, change its two settings (turning it on only raises an approval card), hand a chat to the Jarvis bar to continue, and copy an old answer. No bulk delete."
 permissions = [
   "allow-brain-history-list",
   "allow-brain-history-open",
   "allow-brain-history-search",
+  "allow-brain-history-tags",
+  "allow-brain-history-tags-edit",
+  "allow-brain-history-tag",
   "allow-brain-history-delete",
   "allow-brain-history-settings",
   "allow-brain-continue-chat",

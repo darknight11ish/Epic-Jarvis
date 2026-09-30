@@ -30,3 +30,26 @@ Standing limits that hold for every item (from the checks of 2026-09-30):
 - Nothing to a cloud lane; no bank connections; no new server or port.
 - Forecasts say "about N to M weeks" and "not enough numbers yet" under 5 points;
   "never reached" is its own answer (the argmax pitfall was reproduced).
+
+## Owner's answers on the design docs (2026-09-30)
+
+- Spending answers appear **in the chat as a small table**, in both apps (no Spending page yet).
+  The question and one sentence are kept in chat history, not the table.
+- The heatmap shades a day for a sensitive (health or money) number **without naming it**.
+- Other open questions in FINANCE-DESIGN, GOALS-PROGRESS-DESIGN and QUIZ-DECKS-DESIGN use the
+  recommended answer (first option) unless the owner says otherwise.
+
+## Second-card list, checked (Gemini, 2026-09-30)
+
+Facts: voice runs on the processor (0 GB of graphics memory), not on the card; lanes are a
+second `ollama serve` on its own port pinned by card UUID, not a "worker on port 4720"; the
+paths `backend/workers/`, `src/views/*.jsx`, `App.jsx` do not exist; `DeepSeek-R1-Distill-Qwen-8B`
+is not a real model name; beautiful-skill-tree is **GPL-3.0** (not MIT; no sound effects);
+X6 is MIT (not Apache) and framework-free (UMD `x6.min.js`, 583 KB); emerge is a Python CLI
+with static HTML output (no Rust support); ComfyUI is GPL-3.0 (run beside only; no login;
+keep on 127.0.0.1 with API nodes off); SDXL-Turbo is a non-commercial licence (fine under rule 5).
+Verdicts: "Referee" = a propose-only "looks done - tick it?" card switch on the second card
+(only if the owner wants it; the model never writes a tick or VERIFIED); screenshot notes wait for
+app-builder milestone C and reuse the existing Pictures model; ComfyUI/badges wait for the "making
+pictures" plan (badges for ticked steps only, never streaks); the skill tree is already the
+step-locks item; X6 is optional later if the plain rows are not enough.

@@ -93,6 +93,8 @@ def t_kinds_on_new_rows():
           rows["conv-live-00002"]["kind"] == "live", rows)
     check("every row carries project, empty until Projects step 4",
           all(r["project"] is None for r in rows.values()), rows)
+    check("every row carries tag_id, empty until the owner files it",
+          all(r["tag_id"] is None for r in rows.values()), rows)
     got = log.list(kind="live")["conversations"]
     check("the list can be filtered to Live sessions only",
           [c["id"] for c in got] == ["conv-live-00002"], got)
@@ -152,7 +154,8 @@ def t_migration():
           rows["conv-old-00005"]["title"] == "an old chat", rows)
     with closing(sqlite3.connect(log.db_path)) as c:
         cols = {r[1] for r in c.execute("PRAGMA table_info(conversations)")}
-    check("the file now has kind and project", {"kind", "project"} <= cols, cols)
+    check("the file now has kind, project and tag_id (chat tags, 2026-09-30)",
+          {"kind", "project", "tag_id"} <= cols, cols)
 
 
 def t_chatbot_and_compare_records():

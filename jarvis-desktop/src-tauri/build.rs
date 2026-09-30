@@ -115,6 +115,12 @@ fn main() {
             // "Search what was said" (JARVIS-API.md section 71): a read,
             // refused while the private lists are hidden. Brain only.
             "brain_history_search",
+            // Chat tags (docs/CHAT-TAGS-DESIGN.md section 10): read them,
+            // change one, file one chat. No card; hidden under "Hide memory
+            // lists"; edits held on a stale link. Brain only.
+            "brain_history_tags",
+            "brain_history_tags_edit",
+            "brain_history_tag",
             // "Continue this chat" (the chat audit, 2026-09-28): the Brain
             // tells the Jarvis bar which chat to carry on (the id only), and
             // the bar reads that one chat - never a support, chatbot or

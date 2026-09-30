@@ -6640,8 +6640,57 @@ object JarvisRuntime {
 
     /** `GET /api/history`, one page, newest first. A read: never held. [kind]:
      *  one kind of conversation ("Live only" and the other filters), or all. */
-    suspend fun history(before: Long? = null, kind: String? = null): ApiResult<JsonObject> =
-        api.history(before, kind)
+    suspend fun history(before: Long? = null, kind: String? = null, tag: String? = null): ApiResult<JsonObject> =
+        api.history(before, kind, tag)
+
+    // ------------------------------------------------ chat tags ----
+    // docs/CHAT-TAGS-DESIGN.md section 10. The tag list and each chat's tag
+    // live on the PC; the phone keeps none of it. No approval card.
+
+    /**
+     * `GET /api/history/tags`: a read, never held on a stale link. Nothing is
+     * asked while the private lists are hidden (tag names are the owner's
+     * words, hidden along with titles) - null then, and the screen shows no
+     * names. A PC without tags comes back as a NotFound failure.
+     */
+    suspend fun historyTags(): ApiResult<JsonObject>? {
+        if (privateListsHidden) return null
+        return api.historyTags()
+    }
+
+    /**
+     * One change to the tag list (add, rename, style, move, delete): [json] is
+     * a body from [com.jarvis.client.net.ChatTags]. Held on a stale link
+     * (rule 4), and refused while the lists are hidden.
+     */
+    suspend fun tagsWrite(json: String): com.jarvis.client.net.ChatTags.Write {
+        actionBlocker()?.let { return com.jarvis.client.net.ChatTags.Write(false, it) }
+        if (privateListsHidden) return com.jarvis.client.net.ChatTags.Write(false, com.jarvis.client.net.ChatTags.FILED_HIDDEN)
+        return tagsPost(com.jarvis.client.net.ChatTags.TAGS_PATH, json)
+    }
+
+    /**
+     * File ONE chat under a tag, or unfile it with null tag (`POST
+     * /api/history/tag`). Held on a stale link; refused while the lists are
+     * hidden. Nothing about the chat's words is sent - only its id.
+     */
+    suspend fun fileChat(chatId: String, tagId: Int?): com.jarvis.client.net.ChatTags.Write {
+        actionBlocker()?.let { return com.jarvis.client.net.ChatTags.Write(false, it) }
+        if (privateListsHidden) return com.jarvis.client.net.ChatTags.Write(false, com.jarvis.client.net.ChatTags.FILED_HIDDEN)
+        if (!com.jarvis.client.net.ChatHistory.validConversationId(chatId)) {
+            return com.jarvis.client.net.ChatTags.Write(false, com.jarvis.client.net.ChatTags.errorSentence("not_found"))
+        }
+        return tagsPost(com.jarvis.client.net.ChatTags.TAG_PATH, com.jarvis.client.net.ChatTags.fileBody(chatId, tagId))
+    }
+
+    private suspend fun tagsPost(path: String, json: String): com.jarvis.client.net.ChatTags.Write =
+        when (val r = api.tagsPost(path, json)) {
+            is ApiResult.Ok -> com.jarvis.client.net.ChatTags.write(r.value.first, r.value.second)
+            is ApiResult.Failed -> com.jarvis.client.net.ChatTags.Write(
+                false,
+                if (r.error == ApiError.NotFound) com.jarvis.client.net.ChatTags.OLD_PC else "Not changed. " + describe(r.error),
+            )
+        }
 
     /** The chat Home is in, when it was kept on the PC (so History can say "this is the one you are in"). */
     fun homeKeptChatId(): String? = if (chat.hasKeptChat()) chat.conversationIdNow() else null

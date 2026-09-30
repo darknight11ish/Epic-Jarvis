@@ -273,6 +273,23 @@ class ChatSession(
 
     private val _openSettings = MutableStateFlow<String?>(null)
 
+    private val _fileUnder = MutableStateFlow<ChatTags.FileUnder?>(null)
+
+    /**
+     * "Label my chat about the boiler as Home" (docs/CHAT-TAGS-DESIGN.md
+     * section 10): the tag to file under and the words to search for, read off
+     * the answer's `X-Jarvis-Route` (`open_brain: "history"`, `file_under`,
+     * `history_q` - [ChatTags.fileUnderFromRoute]), or null. Pure navigation:
+     * MainActivity opens History with the search filled in and a banner, and
+     * nothing is filed until the owner taps a chat. Cleared with the answer,
+     * like [openSettings]; consumed once by [consumeFileUnder].
+     */
+    val fileUnder: StateFlow<ChatTags.FileUnder?> = _fileUnder.asStateFlow()
+
+    fun consumeFileUnder() {
+        _fileUnder.value = null
+    }
+
     private val _faceTuningChange = MutableStateFlow<String?>(null)
 
     /**
@@ -478,6 +495,7 @@ class ChatSession(
         _usedIds.value = emptyList()
         _crisis.value = false
         _openSettings.value = null
+        _fileUnder.value = null
         _cloudOffer.value = null
         // A temporary question goes only to a PC that says it can hold one -
         // asked again now, since the PC may have changed since it was turned on.
@@ -671,6 +689,9 @@ class ChatSession(
                         // through OpenPlace. Nothing is removed by it.
                         _openSettings.value = Schedule.openSettingsFromRoute(routeHeader)
                             ?: ForgetRange.openFromRoute(routeHeader)
+                        // "Label my chat about the boiler as Home": History,
+                        // the search filled in, a banner (ChatTags).
+                        _fileUnder.value = ChatTags.fileUnderFromRoute(routeHeader)
                         // Sharpness or frame rate, for this phone only.
                         _faceTuningChange.value = AnimalOptions.fromRoute(routeHeader)
                         // "A cloud model could give this one a second
@@ -951,6 +972,7 @@ class ChatSession(
         _usedIds.value = emptyList()
         _crisis.value = false
         _openSettings.value = null
+        _fileUnder.value = null
         _cloudOffer.value = null
     }
 

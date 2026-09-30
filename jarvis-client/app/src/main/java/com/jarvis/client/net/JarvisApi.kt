@@ -1299,8 +1299,48 @@ class JarvisApi(
     // shapes, the words and the rules; these only carry them.
 
     /** `GET /api/history`: the switch and one page of conversations, newest first. */
-    suspend fun history(before: Long? = null, kind: String? = null): ApiResult<JsonObject> =
-        probe(ChatLog.listPath(before, kind = kind))
+    suspend fun history(before: Long? = null, kind: String? = null, tag: String? = null): ApiResult<JsonObject> =
+        probe(ChatLog.listPath(before, kind = kind, tag = tag))
+
+    /**
+     * `GET /api/history/tags` (docs/CHAT-TAGS-DESIGN.md section 10): the
+     * owner's tags with a count each. A read; a PC without tags answers 404,
+     * which comes back as [ApiError.NotFound].
+     */
+    suspend fun historyTags(): ApiResult<JsonObject> = probe("/api/history/tags")
+
+    /**
+     * `POST /api/history/tags` (add, rename, style, move, delete) or
+     * `POST /api/history/tag` (file one chat): the status and body come back
+     * whole, so a refusal ({"ok": false, "error", "message"}) reaches the
+     * owner as the PC wrote it. [path] is one of the two, nothing else is
+     * sent. A 404 without `ok` in the body is a PC without the routes.
+     */
+    suspend fun tagsPost(path: String, json: String): ApiResult<Pair<Int, JsonObject?>> =
+        withContext(Dispatchers.IO) {
+            if (path != ChatTags.TAGS_PATH && path != ChatTags.TAG_PATH) {
+                return@withContext ApiResult.Failed(ApiError.Malformed("not a tags route"))
+            }
+            val target = url(path) ?: return@withContext ApiResult.Failed(
+                noAddress(),
+            )
+            val body = json.toRequestBody("application/json".toMediaType())
+            val req = Request.Builder().url(target).post(body).authed().build()
+            runCatching {
+                shortCall.newCall(req).execute().use { resp ->
+                    val text = resp.body?.string().orEmpty()
+                    val obj = runCatching { JarvisJson.parseToJsonElement(text) as? JsonObject }.getOrNull()
+                    when {
+                        resp.code == 401 || resp.code == 403 -> ApiResult.Failed(ApiError.BadToken)
+                        resp.code == 404 && obj?.containsKey("ok") != true -> ApiResult.Failed(ApiError.NotFound)
+                        obj != null -> ApiResult.Ok(resp.code to obj)
+                        resp.isSuccessful -> ApiResult.Ok(resp.code to null)
+                        resp.code == 503 -> ApiResult.Failed(ApiError.NotAvailable)
+                        else -> ApiResult.Failed(ApiError.Server(resp.code, ""))
+                    }
+                }
+            }.getOrElse { ApiResult.Failed(ApiError.Unreachable(it.readableMessage(), PlainErrors.networkKind(it))) }
+        }
 
     /**
      * `GET /api/memory/fact-chat?id=` (the chat audit, 2026-09-28): which chat

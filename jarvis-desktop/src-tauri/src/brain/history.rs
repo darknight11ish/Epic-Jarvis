@@ -62,6 +62,48 @@ pub(crate) const HISTORY_STILL_HIDDEN: &str = "Your chat history is hidden. Pres
 /// only `kind` a list may be narrowed to. Anything else is not sent.
 pub(crate) const KINDS: [&str; 5] = ["chat", "live", "support", "chatbot", "compare"];
 
+/// Chat tags (docs/CHAT-TAGS-DESIGN.md section 10, the frozen contract): a
+/// tag is `{id, name, colour 0-7, icon, order}`, one per chat, at most 12,
+/// names 1-24 characters. The owner's tag names are their own words, so
+/// every tag command below asks [`crate::lock::private_hidden`] first.
+pub(crate) const MAX_TAGS: usize = 12;
+pub(crate) const TAG_NAME_MAX: usize = 24;
+pub(crate) const TAG_COLOURS: i64 = 8;
+/// The shared icon list; each app draws them with its own icons.
+pub(crate) const TAG_ICONS: [&str; 10] = [
+    "briefcase",
+    "book",
+    "home",
+    "folder",
+    "lightbulb",
+    "star",
+    "flag",
+    "wrench",
+    "leaf",
+    "music",
+];
+/// The `error` codes the PC's tag routes answer with. The page maps each to
+/// one plain sentence; anything else is not passed on as a code.
+pub(crate) const TAG_ERROR_CODES: [&str; 8] = [
+    "bad_name",
+    "name_taken",
+    "too_many_tags",
+    "bad_colour",
+    "bad_icon",
+    "tag_not_found",
+    "not_found",
+    "bad_request",
+];
+
+/// What a backend without chat tags is told to do about it.
+pub(crate) const TAGS_UPDATE: &str = "This PC's Jarvis cannot sort chats under tags yet. \
+     Update the backend by running apply-patches.ps1, then open this again.";
+
+/// What a tag read or edit is refused with while the private lists are
+/// hidden: tag names are the owner's words, like titles.
+pub(crate) const TAGS_STILL_HIDDEN: &str = "Your chat history is hidden, and so are your tag \
+     names. Press Show on the Brain's History tab and confirm it is you with Windows Hello first.";
+
 /// The kinds "Continue this chat" may carry on (`jarvis_chat_log.CONTINUABLE`).
 pub(crate) const CONTINUABLE: [&str; 2] = ["chat", "live"];
 
@@ -158,6 +200,28 @@ pub(crate) fn list_path(
     before: Option<f64>,
     kind: Option<&str>,
 ) -> Result<String, String> {
+    list_path_tagged(limit, before, kind, None)
+}
+
+/// A tag filter for the list: `none` (untagged) or a whole tag id. Anything
+/// else is not sent, so nothing typed can start a second parameter.
+pub(crate) fn tag_filter(tag: &str) -> Result<String, String> {
+    if tag == "none" {
+        return Ok("none".to_string());
+    }
+    match tag.parse::<u32>() {
+        Ok(n) if n > 0 && tag == n.to_string() => Ok(n.to_string()),
+        _ => Err(format!("{tag:?} is not a tag this PC keeps")),
+    }
+}
+
+/// [`list_path`] narrowed to one tag (`tag=<id>` or `tag=none`).
+pub(crate) fn list_path_tagged(
+    limit: Option<u32>,
+    before: Option<f64>,
+    kind: Option<&str>,
+    tag: Option<&str>,
+) -> Result<String, String> {
     let limit = limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
     let mut path = format!("/api/history?limit={limit}");
     if let Some(b) = before {
@@ -170,6 +234,9 @@ pub(crate) fn list_path(
         None => {}
         Some(k) if KINDS.contains(&k) => path.push_str(&format!("&kind={k}")),
         Some(k) => return Err(format!("{k:?} is not a kind of conversation History keeps")),
+    }
+    if let Some(t) = tag.filter(|t| !t.is_empty()) {
+        path.push_str(&format!("&tag={}", tag_filter(t)?));
     }
     Ok(path)
 }
@@ -331,6 +398,184 @@ pub(crate) fn redact_list(mut list: serde_json::Value) -> serde_json::Value {
 }
 
 // ---------------------------------------------------------------------------
+// Chat tags (docs/CHAT-TAGS-DESIGN.md section 10)
+// ---------------------------------------------------------------------------
+
+/// A tag name as the PC takes it: trimmed, 1-24 characters.
+fn checked_tag_name(name: &str) -> Result<String, String> {
+    let name = name.trim();
+    let n = name.chars().count();
+    if n == 0 || n > TAG_NAME_MAX || name.chars().any(|c| c.is_control()) {
+        return Err(format!(
+            "Give the tag a name of 1 to {TAG_NAME_MAX} characters."
+        ));
+    }
+    Ok(name.to_string())
+}
+
+fn checked_tag_colour(colour: i64) -> Result<i64, String> {
+    if (0..TAG_COLOURS).contains(&colour) {
+        Ok(colour)
+    } else {
+        Err("Pick one of the eight colours.".to_string())
+    }
+}
+
+fn checked_tag_icon(icon: &str) -> Result<&str, String> {
+    if TAG_ICONS.contains(&icon) {
+        Ok(icon)
+    } else {
+        Err("Pick one of the icons in the list.".to_string())
+    }
+}
+
+fn checked_tag_id(id: Option<i64>) -> Result<i64, String> {
+    match id {
+        Some(n) if n > 0 => Ok(n),
+        _ => Err("That is not a tag this PC keeps.".to_string()),
+    }
+}
+
+/// The body for `POST /api/history/tags`: one `op` with exactly its own
+/// fields, checked here so nothing else can ride along. `before` matters
+/// only for `move` (`null` puts the tag last).
+pub(crate) fn tags_body(
+    op: &str,
+    id: Option<i64>,
+    name: Option<&str>,
+    colour: Option<i64>,
+    icon: Option<&str>,
+    before: Option<i64>,
+) -> Result<serde_json::Value, String> {
+    let mut body = serde_json::Map::new();
+    body.insert("op".into(), serde_json::json!(op));
+    match op {
+        "add" => {
+            body.insert(
+                "name".into(),
+                serde_json::json!(checked_tag_name(name.unwrap_or(""))?),
+            );
+            if let Some(c) = colour {
+                body.insert("colour".into(), serde_json::json!(checked_tag_colour(c)?));
+            }
+            if let Some(i) = icon {
+                body.insert("icon".into(), serde_json::json!(checked_tag_icon(i)?));
+            }
+        }
+        "rename" => {
+            body.insert("id".into(), serde_json::json!(checked_tag_id(id)?));
+            body.insert(
+                "name".into(),
+                serde_json::json!(checked_tag_name(name.unwrap_or(""))?),
+            );
+        }
+        "style" => {
+            body.insert("id".into(), serde_json::json!(checked_tag_id(id)?));
+            if colour.is_none() && icon.is_none() {
+                return Err("Pick a colour or an icon to change.".to_string());
+            }
+            if let Some(c) = colour {
+                body.insert("colour".into(), serde_json::json!(checked_tag_colour(c)?));
+            }
+            if let Some(i) = icon {
+                body.insert("icon".into(), serde_json::json!(checked_tag_icon(i)?));
+            }
+        }
+        "move" => {
+            body.insert("id".into(), serde_json::json!(checked_tag_id(id)?));
+            body.insert(
+                "before".into(),
+                match before {
+                    None => serde_json::Value::Null,
+                    Some(b) => serde_json::json!(checked_tag_id(Some(b))?),
+                },
+            );
+        }
+        "delete" => {
+            body.insert("id".into(), serde_json::json!(checked_tag_id(id)?));
+        }
+        other => return Err(format!("{other:?} is not something tags can do")),
+    }
+    Ok(serde_json::Value::Object(body))
+}
+
+/// The body for `POST /api/history/tag`: file one chat under a tag, or
+/// (`None`) take its tag off.
+pub(crate) fn tag_chat_body(id: &str, tag_id: Option<i64>) -> Result<serde_json::Value, String> {
+    let id = checked_id(id)?;
+    let tag_id = match tag_id {
+        None => serde_json::Value::Null,
+        Some(n) => serde_json::json!(checked_tag_id(Some(n))?),
+    };
+    Ok(serde_json::json!({ "id": id, "tag_id": tag_id }))
+}
+
+/// A refusal the PC classified: `{"ok": false, "error": <one of the known
+/// codes>, ...}`. Passed on intact so the page can say one plain sentence
+/// per code; an `error` that is not a known code is not treated as one.
+fn tag_refusal(body: &str) -> Option<serde_json::Value> {
+    let v = parsed(body)?;
+    if v.get("ok").and_then(|o| o.as_bool()) != Some(false) {
+        return None;
+    }
+    let code = v.get("error").and_then(|e| e.as_str())?;
+    TAG_ERROR_CODES.contains(&code).then_some(v)
+}
+
+/// [`brain_history_tags`]'s reading of `GET /api/history/tags`: the PC's
+/// `{"ok": true, "tags": [...], "untagged": n}`. A backend without the route
+/// (404, 501) is `{"available": false, "why": TAGS_UPDATE}`, not an error.
+pub(crate) fn tags_read_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return parsed(body)
+            .filter(|v| v.get("tags").is_some_and(|t| t.is_array()))
+            .ok_or_else(|| UNREADABLE.to_string());
+    }
+    if status == 404 || status == 501 {
+        return Ok(serde_json::json!({ "available": false, "why": TAGS_UPDATE }));
+    }
+    Err(commands::backend_refusal(status, body))
+}
+
+/// The reading of a tag write (`POST /api/history/tags` or `/tag`). A 2xx
+/// with `ok: true` is passed on; a refusal the PC classified comes back as
+/// `Ok` with `ok: false` intact; a backend with no route is [`TAGS_UPDATE`].
+pub(crate) fn tag_write_answer(status: u16, body: &str) -> Result<serde_json::Value, String> {
+    if (200..300).contains(&status) {
+        return parsed(body)
+            .filter(|v| v.get("ok").and_then(|o| o.as_bool()) == Some(true))
+            .ok_or_else(|| UNREADABLE.to_string());
+    }
+    if let Some(v) = tag_refusal(body) {
+        return Ok(v);
+    }
+    if status == 404 || status == 501 {
+        return Err(TAGS_UPDATE.to_string());
+    }
+    Err(commands::backend_refusal(status, body))
+}
+
+/// The tag read with the names taken out, for while the private lists are
+/// hidden: only each tag's id, place and how many chats it holds stay
+/// (counts only). Colour and icon go too, so a tag is nothing but a number.
+pub(crate) fn redact_tags(mut v: serde_json::Value) -> serde_json::Value {
+    if let Some(obj) = v.as_object_mut() {
+        if let Some(serde_json::Value::Array(tags)) = obj.get_mut("tags") {
+            for t in tags.iter_mut() {
+                let kept = serde_json::json!({
+                    "id": t.get("id").cloned().unwrap_or(serde_json::Value::Null),
+                    "order": t.get("order").cloned().unwrap_or(serde_json::Value::Null),
+                    "count": t.get("count").cloned().unwrap_or(serde_json::json!(0)),
+                });
+                *t = kept;
+            }
+        }
+        obj.insert("hidden".into(), serde_json::json!(true));
+    }
+    v
+}
+
+// ---------------------------------------------------------------------------
 // The commands
 // ---------------------------------------------------------------------------
 
@@ -371,8 +616,9 @@ pub async fn brain_history_list(
     before: Option<f64>,
     limit: Option<u32>,
     kind: Option<String>,
+    tag: Option<String>,
 ) -> Result<serde_json::Value, String> {
-    let path = list_path(limit, before, kind.as_deref())?;
+    let path = list_path_tagged(limit, before, kind.as_deref(), tag.as_deref())?;
     let (status, body) = get(&app, &path).await?;
     let answer = list_answer(status, &body)?;
     Ok(if crate::lock::private_hidden(&app) {
@@ -506,6 +752,62 @@ pub async fn brain_history_search(
     search_answer(status, &body)
 }
 
+/// The owner's tags with how many chats each holds (`GET /api/history/tags`).
+/// A read. While the private lists are hidden the names are taken out here,
+/// in Rust, and only the counts come back.
+#[tauri::command]
+pub async fn brain_history_tags(app: AppHandle) -> Result<serde_json::Value, String> {
+    let (status, body) = get(&app, "/api/history/tags").await?;
+    let answer = tags_read_answer(status, &body)?;
+    Ok(if crate::lock::private_hidden(&app) {
+        redact_tags(answer)
+    } else {
+        answer
+    })
+}
+
+/// Adds, renames, restyles, moves or deletes ONE tag (`POST
+/// /api/history/tags`). No approval card: it is the owner's own tidying and
+/// nothing leaves the PC. Refused while the private lists are hidden (the
+/// names are the owner's words) and held while the event stream is stale
+/// (rule 4). Deleting makes the tag's chats untagged; the page asks first.
+#[tauri::command]
+pub async fn brain_history_tags_edit(
+    app: AppHandle,
+    op: String,
+    id: Option<i64>,
+    name: Option<String>,
+    colour: Option<i64>,
+    icon: Option<String>,
+    before: Option<i64>,
+) -> Result<serde_json::Value, String> {
+    let body = tags_body(&op, id, name.as_deref(), colour, icon.as_deref(), before)?;
+    if crate::lock::private_hidden(&app) {
+        return Err(TAGS_STILL_HIDDEN.to_string());
+    }
+    require_link_live(&app)?;
+    let (status, text) = post(&app, "/api/history/tags", body).await?;
+    tag_write_answer(status, &text)
+}
+
+/// Files ONE chat under a tag, or (`tag_id` empty) takes its tag off
+/// (`POST /api/history/tag`). No card. Refused while the private lists are
+/// hidden and held while the event stream is stale.
+#[tauri::command]
+pub async fn brain_history_tag(
+    app: AppHandle,
+    id: String,
+    tag_id: Option<i64>,
+) -> Result<serde_json::Value, String> {
+    let body = tag_chat_body(&id, tag_id)?;
+    if crate::lock::private_hidden(&app) {
+        return Err(TAGS_STILL_HIDDEN.to_string());
+    }
+    require_link_live(&app)?;
+    let (status, text) = post(&app, "/api/history/tag", body).await?;
+    tag_write_answer(status, &text)
+}
+
 /// Deletes ONE conversation. It cannot be undone, and the page asks first.
 /// Held while the event stream is stale, like forgetting a fact
 /// ([`super::brain_memory_forget`]): it acts on a list read from a link
@@ -584,6 +886,198 @@ mod tests {
         );
         assert!(list_path(None, None, Some("live&limit=100")).is_err());
         assert!(list_path(None, None, Some("imported")).is_err());
+    }
+
+    #[test]
+    fn a_tag_filter_is_a_whole_id_or_none() {
+        assert_eq!(
+            list_path_tagged(None, None, None, Some("3")).unwrap(),
+            "/api/history?limit=30&tag=3"
+        );
+        assert_eq!(
+            list_path_tagged(None, None, Some("live"), Some("none")).unwrap(),
+            "/api/history?limit=30&kind=live&tag=none"
+        );
+        assert_eq!(
+            list_path_tagged(None, None, None, Some("")).unwrap(),
+            "/api/history?limit=30"
+        );
+        for bad in ["3&limit=100", "-1", "0", "03", "all", "1.5", "None"] {
+            assert!(
+                list_path_tagged(None, None, None, Some(bad)).is_err(),
+                "{bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_tag_edit_sends_only_its_own_fields() {
+        let add = tags_body(
+            "add",
+            None,
+            Some("  Garage "),
+            Some(7),
+            Some("wrench"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            add,
+            serde_json::json!({"op": "add", "name": "Garage", "colour": 7, "icon": "wrench"})
+        );
+        let bare = tags_body("add", Some(9), Some("Garage"), None, None, Some(4)).unwrap();
+        assert_eq!(bare, serde_json::json!({"op": "add", "name": "Garage"}));
+        let rename = tags_body("rename", Some(2), Some("Study"), Some(1), None, None).unwrap();
+        assert_eq!(
+            rename,
+            serde_json::json!({"op": "rename", "id": 2, "name": "Study"})
+        );
+        let style = tags_body("style", Some(2), None, Some(5), None, None).unwrap();
+        assert_eq!(
+            style,
+            serde_json::json!({"op": "style", "id": 2, "colour": 5})
+        );
+        let last = tags_body("move", Some(2), None, None, None, None).unwrap();
+        assert_eq!(
+            last,
+            serde_json::json!({"op": "move", "id": 2, "before": null})
+        );
+        let before = tags_body("move", Some(2), None, None, None, Some(4)).unwrap();
+        assert_eq!(
+            before,
+            serde_json::json!({"op": "move", "id": 2, "before": 4})
+        );
+        let del = tags_body("delete", Some(5), Some("x"), None, None, None).unwrap();
+        assert_eq!(del, serde_json::json!({"op": "delete", "id": 5}));
+    }
+
+    #[test]
+    fn a_bad_tag_edit_is_refused_before_it_is_sent() {
+        let long = "x".repeat(TAG_NAME_MAX + 1);
+        for (op, id, name, colour, icon) in [
+            ("add", None, Some(""), None, None),
+            ("add", None, Some("   "), None, None),
+            ("add", None, None, None, None),
+            ("add", None, Some(long.as_str()), None, None),
+            ("add", None, Some("a\nb"), None, None),
+            ("add", None, Some("ok"), Some(8), None),
+            ("add", None, Some("ok"), Some(-1), None),
+            ("add", None, Some("ok"), None, Some("smiley")),
+            ("rename", None, Some("ok"), None, None),
+            ("rename", Some(0), Some("ok"), None, None),
+            ("style", Some(1), None, None, None),
+            ("move", Some(-3), None, None, None),
+            ("delete", None, None, None, None),
+            ("erase-everything", Some(1), None, None, None),
+        ] {
+            assert!(
+                tags_body(op, id, name, colour, icon, None).is_err(),
+                "{op} {id:?} {name:?} {colour:?} {icon:?}"
+            );
+        }
+        // 24 characters exactly is fine.
+        let edge = "x".repeat(TAG_NAME_MAX);
+        assert!(tags_body("add", None, Some(&edge), None, None, None).is_ok());
+        // Every icon in the shared list is accepted, and colours 0-7.
+        for icon in TAG_ICONS {
+            assert!(tags_body("add", None, Some("a"), None, Some(icon), None).is_ok());
+        }
+        for c in 0..8 {
+            assert!(tags_body("add", None, Some("a"), Some(c), None, None).is_ok());
+        }
+    }
+
+    #[test]
+    fn filing_a_chat_names_a_real_chat_and_a_real_tag() {
+        assert_eq!(
+            tag_chat_body("conv-0001-abcd", Some(2)).unwrap(),
+            serde_json::json!({"id": "conv-0001-abcd", "tag_id": 2})
+        );
+        assert_eq!(
+            tag_chat_body("conv-0001-abcd", None).unwrap(),
+            serde_json::json!({"id": "conv-0001-abcd", "tag_id": null})
+        );
+        assert!(tag_chat_body("../etc", Some(2)).is_err());
+        assert!(tag_chat_body("conv-0001-abcd", Some(0)).is_err());
+    }
+
+    #[test]
+    fn the_tag_answers_are_read_as_the_contract_says() {
+        let read = tags_read_answer(
+            200,
+            r#"{"ok":true,"tags":[{"id":1,"name":"Work","colour":0,"icon":"briefcase","order":0,"count":3}],"untagged":4}"#,
+        )
+        .unwrap();
+        assert_eq!(read["untagged"], 4);
+        assert!(tags_read_answer(200, r#"{"ok":true}"#).is_err());
+        assert_eq!(tags_read_answer(404, "").unwrap()["why"], TAGS_UPDATE);
+        // A write: success passes on, a classified refusal keeps its code,
+        // a made-up code does not count as one.
+        assert_eq!(
+            tag_write_answer(200, r#"{"ok":true,"id":"c","tag_id":2}"#).unwrap()["tag_id"],
+            2
+        );
+        let taken = tag_write_answer(
+            409,
+            r#"{"ok":false,"error":"name_taken","message":"already"}"#,
+        )
+        .unwrap();
+        assert_eq!(taken["ok"], false);
+        assert_eq!(taken["error"], "name_taken");
+        let gone = tag_write_answer(404, r#"{"ok":false,"error":"not_found"}"#).unwrap();
+        assert_eq!(gone["error"], "not_found");
+        assert!(tag_write_answer(400, r#"{"ok":false,"error":"made_up"}"#).is_err());
+        assert_eq!(tag_write_answer(404, "Not Found").unwrap_err(), TAGS_UPDATE);
+        assert!(tag_write_answer(200, "<html>").is_err());
+        assert!(tag_write_answer(200, r#"{"ok":false}"#).is_err());
+    }
+
+    #[test]
+    fn hidden_tags_keep_counts_and_nothing_else() {
+        let hidden = redact_tags(serde_json::json!({
+            "ok": true, "untagged": 4,
+            "tags": [
+                {"id": 1, "name": "Health worries", "colour": 3, "icon": "star", "order": 0, "count": 3},
+                {"id": 2, "name": "Boiler", "colour": 1, "icon": "home", "order": 1, "count": 1},
+            ],
+        }));
+        assert_eq!(hidden["hidden"], true);
+        assert_eq!(hidden["untagged"], 4);
+        let text = hidden.to_string();
+        assert!(
+            !text.contains("Health") && !text.contains("Boiler"),
+            "{text}"
+        );
+        let first = &hidden["tags"][0];
+        assert_eq!(first["count"], 3);
+        assert!(first.get("name").is_none() && first.get("icon").is_none());
+    }
+
+    #[test]
+    fn every_tag_command_asks_the_lock_and_the_link() {
+        // Source check: the three commands share one shape.
+        let src = include_str!("history.rs");
+        for name in [
+            "pub async fn brain_history_tags(",
+            "pub async fn brain_history_tags_edit(",
+            "pub async fn brain_history_tag(",
+        ] {
+            let at = src.find(name).expect(name);
+            let body = &src[at..at + 900.min(src.len() - at)];
+            assert!(body.contains("private_hidden"), "{name} ignores the lock");
+        }
+        for name in [
+            "pub async fn brain_history_tags_edit(",
+            "pub async fn brain_history_tag(",
+        ] {
+            let at = src.find(name).unwrap();
+            let body = &src[at..at + 900.min(src.len() - at)];
+            let live = body.find("require_link_live").expect(name);
+            assert!(
+                live < body.find("post(").unwrap(),
+                "{name} posts before rule 4"
+            );
+        }
     }
 
     #[test]

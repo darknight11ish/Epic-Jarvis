@@ -1844,6 +1844,14 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
         // Brain place main.js opens (openBrainFromRoute) after "forget what
         // you learned last week" filled in its list. Navigation only.
         "open_brain",
+        // "Label my chat about the boiler as Home" (jarvis_quick.py,
+        // docs/CHAT-TAGS-DESIGN.md section 10): with `open_brain: "history"`
+        // the Brain opens History with the search words filled in
+        // (`history_q`) and a banner to file the tapped chat under the tag
+        // whose id is `file_under` (below: a whole number or a string of
+        // one). The page checks both again, and nothing is filed until the
+        // owner taps a chat.
+        "history_q",
     ] {
         if let Some(value) = route.get(key).and_then(|v| v.as_str()) {
             out.insert(
@@ -1851,6 +1859,19 @@ pub fn route_line_from_header(header: &str) -> Option<String> {
                 serde_json::Value::String(value.to_string()),
             );
         }
+    }
+    // `file_under`: a tag's id, sent by the PC as a whole number (the frozen
+    // contract) - passed on as the digits alone, and a string of digits is
+    // accepted too. Anything else is left out.
+    let file_under = route.get("file_under").and_then(|v| {
+        v.as_u64()
+            .map(|n| n.to_string())
+            .or_else(|| v.as_str().map(str::to_string))
+    });
+    if let Some(id) = file_under
+        .filter(|s| !s.is_empty() && s.len() <= 6 && s.bytes().all(|b| b.is_ascii_digit()))
+    {
+        out.insert("file_under".to_string(), serde_json::Value::String(id));
     }
     // How many remembered facts went into the question - a count, never
     // which ones. With `gate: "private"` it is how the quickbar knows not to
@@ -5942,6 +5963,37 @@ mod turn_tests {
         assert_eq!(got["quick"], "forget_range");
         let odd = super::route_line_from_header(r#"{"lane": "x", "open_brain": 3}"#).unwrap();
         assert!(!odd.contains("open_brain"), "{odd}");
+    }
+
+    /// "Label my chat about the boiler as Home" (2026-09-30): `file_under` and
+    /// `history_q` reach the page as strings beside `open_brain: "history"`.
+    #[test]
+    fn the_route_line_carries_the_older_chat_tag_fields_as_strings() {
+        let line = super::route_line_from_header(
+            r#"{"lane": "x", "quick": "chat_tag", "open_brain": "history", "file_under": "3", "history_q": "boiler"}"#,
+        )
+        .unwrap();
+        let got: serde_json::Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(got["open_brain"], "history");
+        assert_eq!(got["file_under"], "3");
+        assert_eq!(got["history_q"], "boiler");
+        // The contract sends the tag id as a whole number; it arrives as digits.
+        let num = super::route_line_from_header(
+            r#"{"lane": "x", "open_brain": "history", "file_under": 3, "history_q": "boiler"}"#,
+        )
+        .unwrap();
+        let num: serde_json::Value = serde_json::from_str(&num).unwrap();
+        assert_eq!(num["file_under"], "3");
+        for odd in [r#""a&b""#, "-3", "1.5", "true", "null", r#""""#, "1234567"] {
+            let header = format!(
+                r#"{{"lane": "x", "open_brain": "history", "file_under": {odd}, "history_q": null}}"#
+            );
+            let line = super::route_line_from_header(&header).unwrap();
+            assert!(
+                !line.contains("file_under") && !line.contains("history_q"),
+                "{odd}: {line}"
+            );
+        }
     }
 
     /// Temporary chat and "Used in this answer" (2026-09-25): the two marks

@@ -1346,8 +1346,8 @@ def t_the_patch():
           "\n".join(frag).index("record_turn(") < "\n".join(frag).index("LEARNER.offer("))
 
     # The routes.
-    get_i = hud.find('if path in ("/api/history", "/api/history/conversation"):')
-    post_i = hud.find('if route in ("/api/history/delete", "/api/history/settings"):')
+    get_i = hud.find('if path in ("/api/history", "/api/history/conversation",')
+    post_i = hud.find('if route in ("/api/history/delete", "/api/history/settings",')
     check("GET /api/history and /api/history/conversation are routed", get_i >= 0)
     check("POST /api/history/delete and /api/history/settings are routed", post_i >= 0)
     for name, at, call in (("GET", get_i, "jarvis_chat_log.handle_get("),
