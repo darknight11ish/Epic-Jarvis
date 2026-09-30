@@ -65,3 +65,17 @@ Owner's answers on topic controls (2026-09-30): an unsure fact for a "don't lear
 with a card** (save under Unsorted, or skip); turning **Health or Money back on raises one card**.
 The other questions in TOPIC-CONTROLS-DESIGN use the recommended answer (off-topic facts hidden
 with "Show them"; turning a normal topic on is instant; a pinned fact in an Off topic: the topic wins).
+
+## Menu and section visibility (owner, 2026-09-30)
+
+| # | Item | Design doc | JARVIS-API § |
+|---|---|---|---|
+| 11 | Collapse settings sections; hide whole feature menus; easy unhide, in both apps | MENU-VISIBILITY-DESIGN (to write) | 108 if a backend route is needed |
+
+Owner's answers: **hiding only tidies the menu** - the feature keeps working if the owner asks
+Jarvis (nothing is turned off, nothing is lost, no card needed either way). **One "Show or hide
+menus" list in Settings** with a switch per menu, a small "N hidden - Show" line where they were,
+and "show the Finance menu" by asking Jarvis. Sections can also be collapsed to a single line.
+Safety-critical areas can never be hidden: approvals, security and App lock, "What asks first",
+connection/stale-link status, crisis help, Stop everything. Deep links (open_settings / open_brain)
+to a hidden menu must still work by opening it for that visit.
