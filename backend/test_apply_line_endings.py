@@ -92,16 +92,19 @@ def t_crlf_backend():
               (crlf / "jarvis_hud.py").read_bytes() == before
               and not list(crlf.glob("_jarvis-backup-*-endings")))
 
+        # The full patch list cannot be applied forward to this stand-in (it is the
+        # state AFTER the stack), so the rehearsal fails - and since 2026-09-30 a
+        # failed rehearsal means the owner's files were NOT rewritten. (The
+        # switch's success path is checked in test_apply_outcomes.py, on a backend
+        # a forward run can really take.)
         fixed = run(crlf, "-FixLineEndings")
-        hud = (crlf / "jarvis_hud.py").read_bytes()
-        check("-FixLineEndings: the file is LF now", b"\r\n" not in hud and hud.count(b"\n") > 100)
-        check("-FixLineEndings: same content, only the endings changed",
-              hud == before.replace(b"\r\n", b"\n"))
-        backups = list(crlf.glob("_jarvis-backup-*-endings/jarvis_hud.py"))
-        check("-FixLineEndings: the original was kept in a backup folder, CRLF as it was",
-              len(backups) == 1 and backups[0].read_bytes() == before)
+        check("-FixLineEndings, rehearsal fails: the CRLF files are exactly as they were",
+              (crlf / "jarvis_hud.py").read_bytes() == before
+              and not list(crlf.glob("_jarvis-backup-*-endings")), fixed[-500:])
+        check("-FixLineEndings, rehearsal fails: it says NOTHING HAS BEEN CHANGED (and it is true)",
+              "NOTHING HAS BEEN CHANGED" in fixed)
         fixed_on = re.search(r"(\d+) of these are already on your backend", fixed)
-        check("-FixLineEndings: the result matches the LF backend's",
+        check("-FixLineEndings: the rehearsal saw the files converted (same result as the LF backend's)",
               bool(fixed_on) and bool(ref_on) and fixed_on.group(1) == ref_on.group(1),
               (fixed_on and fixed_on.group(0), ref_on and ref_on.group(0)))
     finally:
@@ -113,7 +116,12 @@ def t_script_says_so():
     check("the script has the switch and documents it",
           "[switch] $FixLineEndings" in ps1 and ".PARAMETER FixLineEndings" in ps1)
     check("it backs up before it rewrites",
-          ps1.index("_jarvis-backup-$Stamp-endings") < ps1.index("Copy-AsLf -Src $cf.Path"))
+          ps1.index('Copy-Item -LiteralPath $cf.Path -Destination (Join-Path $endBackup $cf.Name)')
+          < ps1.index("Copy-AsLf -Src $cf.Path -Dest $tmpLf"))
+    check("the real files are converted only AFTER the rehearsal and the other checks",
+          ps1.rindex("Convert-BackendEndings -Files $crlfFiles }") > ps1.index("Assert-JarvisClosed\n\n    # -FixLineEndings")
+          and ps1.index("Assert-JarvisClosed\n\n    # -FixLineEndings") > ps1.index("will not apply. NOTHING HAS BEEN CHANGED")
+          and ps1.count("Convert-BackendEndings -Files") == 2)  # -Revert and apply
 
 
 def main():

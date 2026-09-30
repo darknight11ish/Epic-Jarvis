@@ -53,10 +53,46 @@ backend folder as written in INSTALL.md; change it if yours moved.
    `_jarvis-backup-<date>-endings` folder first, then only its line endings
    change (2026-09-30). Also make sure the clone is on the real `main`
    (`git status -sb` shows `## main...origin/main`), not an old branch.
+   Your files are converted only **after** the whole rehearsal has worked and
+   every other check has passed (changed 2026-09-30; before that they were
+   rewritten first, so a run that then stopped had still changed them). If a
+   file cannot be replaced (Jarvis still has it open), the run puts the files
+   it already converted back, names the locked file, and says to close Jarvis.
 
-   **Worked if:** it ends with a test summary and no `FAIL` lines, and a
-   line naming the log file (in `_jarvis-logs` inside your backend folder).
-   **If not:** send back that log file. Nothing was changed if it says so.
+   **How to read the end of the run (changed 2026-09-30).** The last lines
+   are one of three things, in plain words:
+
+   - a **green "ALL DONE - the backend is patched and proven"**: the patches
+     are on, every test suite ran, none was skipped. Restart Jarvis.
+   - a **yellow "DONE - no problems, but NOT fully proven"**: the patches are
+     on, but the tests were skipped (`-SkipTests`), or some suites skipped
+     parts of themselves (it names them), or it was a partial install
+     (`-SkipMissing`). The line under it says which.
+   - a **red "DONE WITH PROBLEMS"** with a numbered list, and the window's
+     exit code is 1. It says whether any of your files were changed. If the
+     patched files may be **half updated**, it says so, says **not to start
+     Jarvis**, and prints **one line** that puts every file back exactly as it
+     was (copy it whole, paste, press Enter); after that, close Jarvis and
+     start it again.
+
+   Two new checks: the script stops and says **Close Jarvis first** if a
+   Python program that looks like Jarvis is running (add `-Force` to go ahead
+   anyway), and after the patches go on it checks the real files a second
+   time instead of trusting the patch tool's "ok". If your backend folder sits
+   inside another git repository, the script tells git to ignore that
+   repository for the run, so the rehearsal and the real run behave the same.
+
+   **Old backups pile up.** Every run that changes something makes a
+   `_jarvis-backup-<date>` folder (and `-endings` ones) inside your backend
+   folder, and nothing deletes them. The last screen prints where this run's
+   backup is. After a good run you can delete the old `_jarvis-backup-*`
+   folders (keep the newest one for a while).
+
+   **Worked if:** it ends with the green "ALL DONE" (or the yellow "DONE" and
+   you understand the line under it), and a line naming the log file (in
+   `_jarvis-logs` inside your backend folder).
+   **If not:** send back that log file. The red screen says whether anything
+   was changed: "None of your backend files were changed" means nothing was.
 3. Make Ollama refuse its own cloud models (a second lock behind rule 1,
    decided 2026-09-26; the second-card setup lines already set it for that
    card, but the patch script does not set it for your main Ollama).
