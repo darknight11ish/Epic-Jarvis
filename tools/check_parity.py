@@ -206,8 +206,8 @@ CLASSIFICATION = {
     "/api/spending/suggest": ("planned", "Category proposals for shop names no rule catches, from the local model (PC only). Nothing is saved until the owner taps Add these rules. Desktop only, like the categories editor."),
     # "Retirement what-if" (2026-09-30; backend jarvis_retirement.py, retirement.patch;
     # JARVIS-API section 103, docs/FINANCE-DESIGN.md "Retirement contract (frozen)").
-    "/api/retirement/defaults": ("planned", "The Retirement what-if form: its fields, limits, units, the made-up default figures marked as placeholders, the fixed disclaimer and the words. A read, any paired device. Both apps draw the same form from it (desktop: Brain -> Work, Retirement; phone: Brain, Retirement)."),
-    "/api/retirement/run": ("planned", "Play out the what-if from the numbers typed in the form: the answer only as ranges, with the sentence \"This is a simplified what-if, not financial advice.\" added by the backend. Nothing is computed or stored on the phone, and the backend stores nothing either; screen only, never read aloud, hidden under \"Hide memory lists and chat history\". Both apps."),
+    "/api/retirement/defaults": ("ported", "The Retirement what-if form: its fields, limits, units, the made-up default figures marked as placeholders, the fixed disclaimer and the words. A read, any paired device. Both apps draw the same form from it (desktop: Brain -> Work, Retirement; phone: Brain, Retirement)."),
+    "/api/retirement/run": ("ported", "Play out the what-if from the numbers typed in the form: the answer only as ranges, with the sentence \"This is a simplified what-if, not financial advice.\" added by the backend. Nothing is computed or stored on the phone, and the backend stores nothing either; screen only, never read aloud, hidden under \"Hide memory lists and chat history\". Both apps."),
     # "Activity heatmap and balance chart" (2026-09-30; backend jarvis_progress.py, progress.patch;
     # JARVIS-API section 105, docs/GOALS-PROGRESS-DESIGN.md "Progress contract (frozen)").
     # Both apps build in Brain -> Projects (desktop brain/progress.rs + projects-panel.js; phone
