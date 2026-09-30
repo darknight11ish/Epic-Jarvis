@@ -205,10 +205,12 @@ class AvatarOverlayService : Service() {
             y = dp(120)
         }
         root.setOnTouchListener(DragAndTap(layoutParams))
-        return runCatching { windowManager.addView(root, layoutParams) }
+        val added = runCatching { windowManager.addView(root, layoutParams) }
             .onFailure { Log.w(TAG, "could not add the overlay window", it) }
-            .also { avatarView = root }
             .isSuccess
+        // Only a window that was really added is remembered (and removed later).
+        if (added) avatarView = root else dot = null
+        return added
     }
 
     private fun removeAvatarView() {
@@ -371,7 +373,7 @@ class AvatarOverlayService : Service() {
     companion object {
         private const val TAG = "JarvisAvatarOverlay"
         const val CHANNEL_ID = "jarvis_avatar_overlay"
-        private const val NOTIFICATION_ID = 0x4A58
+        private const val NOTIFICATION_ID = NotificationIds.AVATAR_OVERLAY
         private const val ACTION_STOP = "com.jarvis.client.STOP_AVATAR_OVERLAY"
         private const val AVATAR_SIZE_DP = 56
         private const val BADGE_SIZE_DP = 16

@@ -97,7 +97,16 @@ class LiveTileService : TileService() {
 
     private fun open(action: String?) {
         val intent = Intent(this, MainActivity::class.java)
-            .apply { if (action != null) setAction(action) }
+            .apply {
+                if (action != null) {
+                    setAction(action)
+                    // The proof MainActivity needs before it will start Live.
+                    putExtra(
+                        com.jarvis.client.InternalLaunch.EXTRA_PROOF,
+                        com.jarvis.client.InternalLaunch.token(this@LiveTileService),
+                    )
+                }
+            }
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         // minSdk 33: the PendingIntent overload is there from API 34; the
         // Intent one before it (deprecated at 34).

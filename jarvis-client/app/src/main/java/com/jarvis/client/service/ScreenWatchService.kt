@@ -34,12 +34,22 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.jarvis.client.JarvisRuntime
+import com.jarvis.client.LinkState
 import com.jarvis.client.MainActivity
 import com.jarvis.client.R
 import com.jarvis.client.assistant.LookGate
 import com.jarvis.client.net.ScreenWatch
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicBoolean
 import java.io.ByteArrayOutputStream
 
 /**
@@ -81,7 +91,10 @@ class ScreenWatchService : Service() {
     private val lock = Any()
 
     @Volatile private var running = false
-    @Volatile private var ended = false
+    private val ended = AtomicBoolean(false)
+
+    /** Watches the link to the PC while a session runs; cancelled when it ends. */
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     private val timeUp = Runnable { end(ScreenWatch.ENDED_TIME) }
 
@@ -119,7 +132,7 @@ class ScreenWatchService : Service() {
     }
 
     override fun onDestroy() {
-        if (!ended) end(null)
+        if (!ended.get()) end(null)
         super.onDestroy()
     }
 
@@ -161,7 +174,7 @@ class ScreenWatchService : Service() {
             } ?: return@setOnImageAvailableListener
             synchronized(lock) {
                 latest?.close()
-                latest = if (ended) { next.close(); null } else next
+                latest = if (ended.get()) { next.close(); null } else next
             }
         }, handler)
         display = try {
@@ -184,7 +197,27 @@ class ScreenWatchService : Service() {
         ScreenWatch.stopHook = { end(null) }
         ScreenWatch.grabber = { grab() }
         ScreenWatch.started()
+        watchLink()
         return true
+    }
+
+    /**
+     * The link to the PC cut (down, or up but stale) for [ScreenWatch.LINK_LOST_MS]
+     * ends the session: a look is answered by the PC, so with no trusted link
+     * there is nothing to watch for. A link that comes back in time cancels the
+     * countdown (collectLatest drops the old one).
+     */
+    private fun watchLink() {
+        scope.launch {
+            combine(JarvisRuntime.link, JarvisRuntime.stale) { link, stale ->
+                ScreenWatch.linkHealthy(link == LinkState.CONNECTED, stale)
+            }.distinctUntilChanged().collectLatest { healthy ->
+                if (!healthy) {
+                    delay(ScreenWatch.LINK_LOST_MS)
+                    end(ScreenWatch.ENDED_LINK)
+                }
+            }
+        }
     }
 
     // ----------------------------------------------------------------- one picture
@@ -293,9 +326,9 @@ class ScreenWatchService : Service() {
 
     /** Ends the session, whatever the reason; [said] (when there is one) goes to the notice line. */
     private fun end(said: String?) {
-        if (ended) return
-        ended = true
+        if (!ended.compareAndSet(false, true)) return
         running = false
+        scope.cancel()
         main.removeCallbacks(timeUp)
         runCatching { unregisterReceiver(screenOff) }
         ScreenWatch.grabber = null
@@ -366,7 +399,7 @@ class ScreenWatchService : Service() {
     companion object {
         private const val TAG = "JarvisWatch"
         const val CHANNEL_ID = "jarvis_watch"
-        private const val NOTIFICATION_ID = 0x4A57
+        private const val NOTIFICATION_ID = NotificationIds.SCREEN_WATCH
         const val ACTION_STOP = "com.jarvis.client.WATCH_STOP"
         private const val EXTRA_CODE = "com.jarvis.client.extra.WATCH_CODE"
         private const val EXTRA_DATA = "com.jarvis.client.extra.WATCH_DATA"
