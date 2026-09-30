@@ -126,3 +126,11 @@ still reads the whole chat). Overnight tags: `docs/OVERNIGHT-TAGS-DESIGN.md` (ed
 in the same PR). GitHub tools: `docs/GITHUB-TOOLS-DESIGN.md` written; its 3 owner questions pending.
 
 Owner answers, 2026-09-30 (before bed): GitHub tools: **two cards** (Try, then Pull request), **only tools with no installer are test-run**, **phone may approve with fingerprint/PIN** (never widget/notification). Overnight tags: **up to 3 cards a night**. Topics: **Money Off also stops spending summaries and the retirement calculator**; **topic phrases join "what can I say"**.
+
+## Status at the usage limit (2026-09-30/10-01)
+
+The account's weekly usage limit was hit (resets 2 Oct, 21:00 UTC); two builders stopped mid-edit.
+**Done and committed:** topic controls (+ audit fixes, Money-Off, phrases), Study helper/Referee rows, quiz + Spanish/decks (earlier), overnight tags + section marker (backend, phone, desktop), Galaxy panel (desktop) + phone People and things list, YouTube captions (backend + phone), cloud "grade this better" (backend only).
+**Unfinished / not started:** menu visibility - phone half PARTIAL and uncompiled (MenuVisibilityTest.kt, BrainScreen/SettingsScreen/HomeScreen/MainActivity edits), backend and desktop not done; desktop YouTube screens not built (4 /api/youtube parity rows still planned); cloud-grade phone + desktop screens not built; GitHub tools not built (design only); Keep-on-outside-quiz owner question open.
+**Then:** whole-branch checks, cohesiveness audit, conflict check with PR #38/#39, ONE PR + merge on green, 3-PR bug audit.
+The branch is NOT ready for the PR: do not open it until menu visibility is finished or its partial edits are backed out.
