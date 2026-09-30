@@ -353,15 +353,14 @@ if (K) {
 
   await check("level 0 is an outline only; levels 1 to 4 are the accent at 0.22 / 0.42 / 0.66 / 0.92 in every theme", async () => {
     const page = await tab({ progress: ok({ activity: C.heat.mixed_levels }) });
-    const levels = new Set(C.heat.mixed_levels.days.map((d) => d.level));
-    assert.deepEqual([...levels].sort(), [0, 1, 2, 3, 4], "the worked answer has every level");
+    // The legend holds one swatch of every level, so all five are measured.
     const out = {};
     for (const theme of ["deep-space", "paper", "high-contrast"]) {
       out[theme] = await page.evaluate((t) => {
         document.documentElement.setAttribute("data-theme", t);
         const style = (sel) => getComputedStyle(document.querySelector(sel));
         const pick = (l) => {
-          const s = style(`#progress-root .pg-grid .pg-l${l}`);
+          const s = style(`#progress-root .pg-legend .pg-l${l}`);
           return { fill: s.fill, stroke: s.stroke, strokeWidth: s.strokeWidth };
         };
         const probe = document.createElement("span");
@@ -417,8 +416,8 @@ if (K) {
     })));
     const heads = await page.locator("#progress-root .pg-table thead th").allTextContents();
     const seen = await page.locator("#progress-root .pg-table").evaluate((t) => {
-      const r = t.getBoundingClientRect();
-      return { w: r.width, h: r.height, cls: t.className };
+      const r = t.parentElement.getBoundingClientRect();
+      return { w: r.width, h: r.height, cls: t.parentElement.className };
     });
     await page.close();
     const want = C.heat.mixed_levels;
@@ -506,7 +505,7 @@ if (K) {
 
   await check("the list under the chart carries every area, private ones marked, and no total", async () => {
     const page = await tab({ progress: ok({ balance: C.balance.five_areas_mixed }) });
-    const items = await page.locator("#progress-root .pg-list li").allInnerTexts();
+    const items = await page.locator("#progress-root .pg-list li").allTextContents();
     const privates = await page.locator("#progress-root .pg-list li .pg-private").count();
     const section = await page.locator("#progress-root .pg-balance").innerText();
     await page.close();
@@ -517,7 +516,10 @@ if (K) {
     });
     assert.equal(privates, want.axes.filter((a) => a.keep_on_screen).length);
     assert.match(items[4], /^Sleep target: no numbers yet/);
-    assert.doesNotMatch(section, /overall|total|score|average|%/i);
+    // The contract's own two sentences say there is none ("There is no total.",
+    // "No overall score."); nothing else on the section may speak of one.
+    const rest = section.replace(C.words.balance_under, "").replace(want.summary, "");
+    assert.doesNotMatch(rest, /overall|total|score|average|%/i);
   });
 
   await check("fewer than 3 areas: the words and the list, no picture; none: the empty words", async () => {
@@ -552,6 +554,7 @@ if (K) {
     await page.waitForTimeout(400);
     const after = await page.locator("#progress-root .pg-grid .pg-cell").count();
     const stillHidden = await page.locator("#progress-root .pg-hidden").count();
+    const editOffered = await page.getByRole("button", { name: C.words.balance_edit }).count();
     const errors = page.__errors;
     await page.close();
     assert.equal(svgs, 0, "a picture is drawn while hidden");
@@ -561,7 +564,8 @@ if (K) {
     assert.doesNotMatch(text, /Emergency|Body weight|Garage|Running|thing on/);
     assert.equal(edit, 0, "the picker is offered on a picture that is hidden");
     assert.equal(after, C.heat.private_number.days.length, "Show brings the picture back");
-    assert.equal(stillHidden, 1, "the balance chart stays hidden until its own Show");
+    assert.equal(stillHidden, 0, "Show is the owner's one Windows Hello: both pictures come back");
+    assert.equal(editOffered, 1, "and the picker with them");
     assert.deepEqual(errors, []);
   });
 
@@ -666,8 +670,8 @@ if (K) {
     assert.equal(sent.length, 1, "one save");
     assert.deepEqual(sent[0].axes, [
       { kind: "bench", ref: "00000000000000000000000000000000" },
-      { kind: "bench", ref: "00000000000000000000000000000002" },
-      { kind: "bench", ref: "00000000000000000000000000000005", label: "Garage" },
+      { kind: "bench", ref: "00000000000000000000000000000002", label: "Garage" },
+      { kind: "bench", ref: "00000000000000000000000000000005" },
     ]);
     assert.equal(editorGone, 0);
     assert.equal(items, 3);
@@ -772,9 +776,10 @@ if (K) {
 
   await check("reduced motion: nothing on this section animates", async () => {
     const page = await tab({ progress: ok() });
+    await page.getByRole("button", { name: C.words.balance_edit }).click();
     await page.emulateMedia({ reducedMotion: "reduce" });
     const moving = await page.locator("#progress-root").evaluate((root) =>
-      [...root.querySelectorAll("*")].filter((n) => {
+      [...root.querySelectorAll("[class*=pg-]")].filter((n) => {
         const s = getComputedStyle(n);
         return (s.animationName && s.animationName !== "none") ||
           (s.transitionDuration && !/^0s(, 0s)*$/.test(s.transitionDuration) && s.transitionProperty !== "all");

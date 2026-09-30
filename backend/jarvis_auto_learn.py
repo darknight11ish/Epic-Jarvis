@@ -1861,20 +1861,6 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                 if row is None or row.get("state") != "pending":
                     continue
                 fact = str(row.get("text") or "")
-                why = batch or check_source(row.get("source"))
-                if not why and row.get("source") != "conversation":
-                    why = "not from something you said"
-                if not why and topic_why:
-                    why = topic_why
-                src = source_turns(fact, texts) if not why else []
-                # Forgotten stays forgotten, layer 1 - whatever else the
-                # checks say, and also while automatic learning is off, so a
-                # just-forgotten fact is not back as a card a minute later.
-                gone = hushed(conversation_id, src or source_turns(fact, texts))
-                if gone:
-                    _drop(c, pid, gone)
-                    result.setdefault("dropped", []).append(pid)
-                    continue
                 # Topic controls (docs/TOPIC-CONTROLS-DESIGN.md 4.1, 4.3): a fact
                 # sure to belong to a topic set to not learn is not saved, and
                 # not a card either - dropped and counted (the intake hook
@@ -1898,6 +1884,20 @@ def after_pass(out, turns, *, conversation_id=None, model=None, ollama=None,
                         _drop(c, pid, "topic")
                         result.setdefault("dropped", []).append(pid)
                         continue
+                why = batch or check_source(row.get("source"))
+                if not why and row.get("source") != "conversation":
+                    why = "not from something you said"
+                if not why and topic_why:
+                    why = topic_why
+                src = source_turns(fact, texts) if not why else []
+                # Forgotten stays forgotten, layer 1 - whatever else the
+                # checks say, and also while automatic learning is off, so a
+                # just-forgotten fact is not back as a card a minute later.
+                gone = hushed(conversation_id, src or source_turns(fact, texts))
+                if gone:
+                    _drop(c, pid, gone)
+                    result.setdefault("dropped", []).append(pid)
+                    continue
                 # "Where did I put ...?" (jarvis_places.py, 2026-09-28): a
                 # thing that only MOVED ("the passport is in the desk now",
                 # when Jarvis keeps "in the top drawer") is not a correction

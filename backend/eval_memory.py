@@ -794,6 +794,12 @@ def run(sizes: list, words_only: bool, scratch: Path, *, learner_model=None,
         out["tidy"] = eval_tidy.run(M, scratch, model=learner_model, ollama=ollama)
     except Exception as exc:
         out["tidy"] = {"available": False, "why": f"{type(exc).__name__}: {exc}"}
+    # Topic controls (2026-09-30): eval_topics.py says what it checks.
+    try:
+        import eval_topics
+        out["topics"] = eval_topics.run(M, scratch, sizes=sizes, words_only=words_only)
+    except Exception as exc:
+        out["topics"] = {"available": False, "why": f"{type(exc).__name__}: {exc}"}
     return out
 
 
@@ -1024,6 +1030,9 @@ def markdown(res: dict) -> str:
     if "learner" in res:
         import eval_learner
         lines += eval_learner.markdown(res["learner"])
+    if "topics" in res:
+        import eval_topics
+        lines += eval_topics.markdown(res["topics"])
     if "tidy" in res:
         import eval_tidy
         if res["tidy"].get("available") is False:
@@ -1162,6 +1171,14 @@ def compare(old: dict, new: dict) -> tuple:
         for name, a, b, how, gate in eval_tidy.compared(old.get("tidy"), new.get("tidy")):
             worse = worse or (how == "WORSE" and gate)
             lines.append(f"| tidy | - | {name} | {a} | {b} | {how} |")
+    except Exception:
+        pass
+    try:
+        import eval_topics
+        for name, a, b, how, gate in eval_topics.compared(old.get("topics"), new.get("topics")):
+            how = "unchanged" if a == b else ("better" if (b < a) == (how == "down") else "WORSE")
+            worse = worse or (how == "WORSE" and gate)
+            lines.append(f"| topics | - | {name} | {a} | {b} | {how} |")
     except Exception:
         pass
     head = ["", "**Against an earlier run** (--against): the same numbers, earlier -> now. "

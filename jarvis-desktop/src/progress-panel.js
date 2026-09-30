@@ -367,7 +367,7 @@ function legend(a) {
 
 /** The week-per-row table for a screen reader: "Week of 6 Oct" rows. */
 function heatTable(a) {
-  const table = el("table", "sr-only pg-table");
+  const table = el("table", "pg-table");
   table.append(el("caption", "", a.summary || `${WORDS.heat_title}. ${a.words}`));
   const head = el("tr");
   const corner = el("th", "", SCREEN_WORDS.week_col);
@@ -390,7 +390,10 @@ function heatTable(a) {
     tbody.append(tr);
   }
   table.append(thead, tbody);
-  return table;
+  // A table ignores a one pixel width, so the visually hidden box is its wrapper.
+  const hidden = el("div", "sr-only");
+  hidden.append(table);
+  return hidden;
 }
 
 /* The balance chart ------------------------------------------------------ */
@@ -415,8 +418,8 @@ function balanceBlock(b) {
     for (const row of list) {
       const li = el("li", "pg-item");
       li.append(el("span", "pg-item-label", row.label));
-      if (row.value) li.append(el("span", "pg-item-value", row.value));
-      if (row.private) li.append(el("span", "pg-private", WORDS.private));
+      if (row.value) li.append(document.createTextNode(": "), el("span", "pg-item-value", row.value));
+      if (row.private) li.append(document.createTextNode(" "), el("span", "pg-private", WORDS.private));
       ul.append(li);
     }
     block.append(ul);
