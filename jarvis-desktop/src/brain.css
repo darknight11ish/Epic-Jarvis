@@ -548,6 +548,57 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* Facts behind this dot (galaxy-panel.js): plain rows, existing tokens. */
+.galaxy-facts-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.galaxy-fact {
+  padding: 6px 8px;
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-1);
+  font-size: var(--text-sm);
+}
+
+.galaxy-fact p {
+  margin: 0 0 4px;
+  overflow-wrap: anywhere;
+}
+
+.galaxy-fact-text.erased {
+  color: var(--text-muted);
+}
+
+.galaxy-fact-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: var(--text-2xs);
+  color: var(--text-muted);
+}
+
+.galaxy-fact-mark {
+  border: var(--stroke-hair) solid var(--border-strong);
+  border-radius: var(--radius-chip);
+  padding: 0 6px;
+}
+
+.galaxy-facts-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-top: 6px;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
 .inspector-links {
   list-style: none;
   margin: 0;

@@ -210,6 +210,8 @@ object MemoryUsed {
          * words, and the list says [Topics.usedLeftOutLine] instead.
          */
         val leftOut: Boolean = false,
+        /** When it was saved, seconds since 1970 (`created`); null when the PC sent none. */
+        val created: Double? = null,
     ) {
         /** Forget only on a fact still in use: a forgotten one has nothing to forget. */
         val canForget: Boolean get() = current && erasedAt == null
@@ -246,6 +248,7 @@ object MemoryUsed {
                 validTo = o.number("valid_to")?.doubleOrNull?.takeIf { it.isFinite() },
                 erasedAt = erasedAt,
                 leftOut = erasedAt == null && o.flag("left_out") == true,
+                created = o.number("created")?.doubleOrNull?.takeIf { it.isFinite() && it > 0 },
             )
         }
         val missing = (body["missing"] as? JsonArray).orEmpty().mapNotNull {

@@ -110,6 +110,8 @@ links**, only a list, so the "memory graph" rule stays true in spirit:
 - Parity row for `/api/memory/entities` changes from `no - by rule` to `ported`,
   with the desktop's Galaxy noted as picture-only there.
 
+**Standing rule changed (owner, 2026-09-30):** option B was chosen, so the phone reads `/api/memory/entities` for a plain "People and things" list (built: `net/Entities.kt`, `ui/screens/EntitiesPlate.kt`, `EntitiesTest.kt`); the phone still has no map, picture or links.
+
 ## 5. Gate, routes, parity summary
 
 | Item | Desktop | Phone (option A) | Phone (option B) |

@@ -799,6 +799,13 @@ class JarvisApi(
     suspend fun memoryShared(): ApiResult<JsonObject> = probe(MemoryShared.PATH)
 
     /**
+     * `GET /api/memory/entities`: "People and things" - the names saved facts
+     * are linked to, with the fact ids behind each and no words
+     * ([Entities.parse]). The words come from [memoryUsed]. A read.
+     */
+    suspend fun memoryEntities(): ApiResult<JsonObject> = probe(Entities.PATH)
+
+    /**
      * `GET /api/schedule`: "Coming up" - the timers, alarms, reminders and
      * the to-do list ([Schedule.parse]). A 404 or 501 is a PC without the
      * scheduler ([Schedule.missing]). A read.

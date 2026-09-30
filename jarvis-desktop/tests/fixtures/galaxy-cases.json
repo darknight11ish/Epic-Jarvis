@@ -1,0 +1,20 @@
+{
+  "_comment": "Made by tools/gen_galaxy_cases.py from docs/GALAXY-PANEL-DESIGN.md section 3. Do not edit by hand. Not shipped in the app.",
+  "page_size": 20,
+  "max_ids_per_read": 100,
+  "words": {
+    "galaxy_panel": "Facts behind this dot ({count})",
+    "galaxy_panel_more": "Show 20 more",
+    "galaxy_panel_showing": "Showing {n} of {total}",
+    "galaxy_panel_reading": "Reading the facts...",
+    "galaxy_panel_erased": "Erased. Only the dates are kept.",
+    "galaxy_panel_forgotten": "Forgotten",
+    "galaxy_panel_pinned": "Pinned",
+    "galaxy_panel_hidden": "Hidden. Show memory lists to see these facts.",
+    "galaxy_panel_empty": "No facts to show.",
+    "galaxy_panel_failed": "Your PC could not read these facts.",
+    "galaxy_panel_retry": "Try again",
+    "galaxy_panel_open": "Open in Memory",
+    "galaxy_panel_topics_hidden": "{n} hidden by topic settings"
+  }
+}

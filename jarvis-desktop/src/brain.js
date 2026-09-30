@@ -278,6 +278,7 @@ import {
   renderFactHistory,
   REPLACED_MARK,
 } from "./fact-history.js";
+import { createGalaxyPanel } from "./galaxy-panel.js";
 import {
   buildEntityGraph,
   findNames,
@@ -579,6 +580,13 @@ const dom = {
   graphFind: $("graph-find"),
   graphEmptyActions: $("graph-empty-actions"),
   nodeActions: $("node-actions"),
+  galaxyFacts: $("galaxy-facts"),
+  galaxyFactsTitle: $("galaxy-facts-title"),
+  galaxyFactsNote: $("galaxy-facts-note"),
+  galaxyFactsList: $("galaxy-facts-list"),
+  galaxyFactsCount: $("galaxy-facts-count"),
+  galaxyFactsLive: $("galaxy-facts-live"),
+  galaxyFactsFoot: $("galaxy-facts-foot"),
   graphRefit: $("graph-refit"),
   legend: $("legend"),
   inspector: $("inspector"),
@@ -11476,6 +11484,7 @@ function graphEmptyWith(words, action = null) {
   dom.graphStat.textContent = "—";
   dom.legend.replaceChildren();
   dom.inspector.hidden = true;
+  galaxyPanel.clear();
   selected = null;
   state.graph = null;
   draw();
@@ -11526,6 +11535,8 @@ function renderGraph() {
       // Dot size: how many saved facts name it (radiusOf).
       weight: Math.max(1, n.weight),
       facts: n.weight,
+      // Newest first: "Facts behind this dot" reads their words by id.
+      factIds: n.factIds,
       aliases: n.aliases,
       also: n.also,
       // Most facts first: the names worth labelling at a glance.
@@ -11568,6 +11579,7 @@ function renderGraph() {
   state.graph = { nodes: N, links: L, byId, signature };
   selected = null;
   dom.inspector.hidden = true;
+  galaxyPanel.clear();
   buildLegend();
   dom.graphStat.textContent =
     `${N.length} ${N.length === 1 ? "name" : "names"} · ${L.length} ${L.length === 1 ? "link" : "links"}`;
@@ -12004,10 +12016,27 @@ function nodeAt(clientX, clientY) {
   return best;
 }
 
+// The panel under a picked dot (galaxy-panel.js). Read-only; "Open in Memory"
+// is the same "About <name>" page the button above it opens.
+const galaxyPanel = createGalaxyPanel({
+  invoke: IS_TAURI ? invoke : null,
+  dom: {
+    root: dom.galaxyFacts,
+    title: dom.galaxyFactsTitle,
+    note: dom.galaxyFactsNote,
+    list: dom.galaxyFactsList,
+    count: dom.galaxyFactsCount,
+    live: dom.galaxyFactsLive,
+    foot: dom.galaxyFactsFoot,
+  },
+  onOpen: (entityId) => openAboutFromGalaxy(entityId),
+});
+
 function select(node) {
   selected = node;
   if (!node) {
     dom.inspector.hidden = true;
+    galaxyPanel.clear();
     draw();
     return;
   }
@@ -12030,6 +12059,9 @@ function select(node) {
   dom.nodeActions?.replaceChildren(
     button(aboutTitle(node.label), () => openAboutFromGalaxy(node.entityId),
       { title: "Opens the Memory tab at this name: its facts, word for word." }));
+
+  // "Facts behind this dot": their words, read by id, newest 20 first.
+  galaxyPanel.show(node);
 
   const g = state.graph;
   const neighbours = [];

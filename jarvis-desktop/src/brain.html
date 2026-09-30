@@ -231,6 +231,17 @@
               <h2 class="inspector-title" id="node-label" tabindex="-1"></h2>
               <dl class="inspector-facts" id="node-facts"></dl>
               <div class="row-actions" id="node-actions"></div>
+              <!-- Facts behind this dot (galaxy-panel.js): read-only. -->
+              <section class="galaxy-facts" id="galaxy-facts" aria-labelledby="galaxy-facts-title" hidden>
+                <h3 class="inspector-sub" id="galaxy-facts-title"></h3>
+                <p class="empty" id="galaxy-facts-note" hidden></p>
+                <ul class="galaxy-facts-list" id="galaxy-facts-list"></ul>
+                <div class="galaxy-facts-foot">
+                  <span class="galaxy-facts-count" id="galaxy-facts-count"></span>
+                  <span id="galaxy-facts-foot"></span>
+                </div>
+                <p class="sr-only" id="galaxy-facts-live" aria-live="polite"></p>
+              </section>
               <h3 class="inspector-sub">Shares facts with</h3>
               <ul class="inspector-links" id="node-links"></ul>
             </aside>

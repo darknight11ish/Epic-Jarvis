@@ -4230,6 +4230,15 @@ object JarvisRuntime {
             }
         }
 
+    // -------------------------------- "People and things" (2026-09-30) ----
+    // See [com.jarvis.client.net.Entities] and docs/GALAXY-PANEL-DESIGN.md: a
+    // plain list of the names saved facts are linked to, read when Brain shows
+    // it. The words behind a name come from [memoryUsed], 20 ids at a time.
+    // Nothing is kept on the phone; a read, so never held on a stale link.
+
+    /** `GET /api/memory/entities`. */
+    suspend fun memoryEntities(): ApiResult<JsonObject> = api.memoryEntities()
+
     // ----------------------------- "Where this came from" (I42/I132, 2026-09-27) ----
     // See [com.jarvis.client.net.ChatSources]: this answer's own reading-tool
     // receipts and its quote check, read by turn_id when the owner opens the

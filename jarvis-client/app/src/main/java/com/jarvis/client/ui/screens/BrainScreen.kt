@@ -703,6 +703,18 @@ fun BrainScreen(
                     onShowPrivate = onShowPrivate,
                 )
             }
+            // People and things (the owner's decision of 2026-09-30;
+            // EntitiesPlate.kt, docs/GALAXY-PANEL-DESIGN.md option B): a plain
+            // grouped list of the names saved facts are linked to and the facts
+            // behind each - a list, not the Galaxy's map. Hidden under "Hide
+            // memory lists and chat history" like the other memory lists.
+            item(key = "people-and-things") {
+                PeopleAndThingsSection(
+                    privateHidden = privateHidden,
+                    showPrivateBusy = showPrivateBusy,
+                    onShowPrivate = onShowPrivate,
+                )
+            }
             // Chat history on the PC: its own screen (HistoryScreen.kt), next
             // to Memory, as the desktop puts it in the Brain window.
             if (onOpenHistory != null) {

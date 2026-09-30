@@ -161,6 +161,8 @@ export function readUsed(answer) {
         current: f.current === true && !erasedAt,
         pinned: f.pinned === true && f.current === true && !erasedAt,
         validTo: num(f.valid_to),
+        // When it was saved (unix seconds), for the Galaxy panel's date.
+        created: num(f.created),
         erasedAt,
         // Topic controls: the fact's topic was switched off since the answer;
         // the PC sends no words for it (`left_out`).
