@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-brain-retirement-defaults"
+description = "Enables the brain_retirement_defaults command without any pre-configured scope."
+commands.allow = ["brain_retirement_defaults"]
+
+[[permission]]
+identifier = "deny-brain-retirement-defaults"
+description = "Denies the brain_retirement_defaults command without any pre-configured scope."
+commands.deny = ["brain_retirement_defaults"]

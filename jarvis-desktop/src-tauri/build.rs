@@ -488,6 +488,12 @@ fn main() {
             "brain_quiz_answer",
             "brain_quiz_finish",
             "brain_quiz_stop",
+            // Retirement what-if (docs/FINANCE-DESIGN.md part B, JARVIS-API.md
+            // section 103): read the form, play out the typed numbers. No card,
+            // nothing saved; the run held on a stale link; nothing asked or sent
+            // while the private lists are hidden or App lock is on. Brain only.
+            "brain_retirement_defaults",
+            "brain_retirement_run",
             // Review decks (JARVIS-API section 102): the owner's kept questions,
             // asked again on a schedule the PC works out. No card; every write
             // held on a stale link; words hidden with the private lists. Brain only.

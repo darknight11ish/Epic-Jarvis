@@ -866,6 +866,8 @@ pub fn run() {
             brain::quiz::brain_quiz_answer,
             brain::quiz::brain_quiz_finish,
             brain::quiz::brain_quiz_stop,
+            brain::retirement::brain_retirement_defaults,
+            brain::retirement::brain_retirement_run,
             brain::decks::brain_decks,
             brain::decks::brain_decks_create,
             brain::decks::brain_decks_settings,

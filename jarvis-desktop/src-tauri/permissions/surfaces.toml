@@ -885,6 +885,19 @@ permissions = [
   "allow-brain-quiz-stop",
 ]
 
+# Retirement what-if (docs/FINANCE-DESIGN.md part B; brain/retirement.rs,
+# backend jarvis_retirement.py; JARVIS-API.md section 103). The owner types a
+# few numbers, the PC plays out 10,000 made-up futures and answers with ranges.
+# No approval card and nothing saved; the run is held on a stale link; nothing
+# is asked or sent while the private lists are hidden or App lock is on.
+[[set]]
+identifier = "brain-retirement"
+description = "Read the retirement what-if's form and play out the numbers the owner typed - no card, nothing saved, the run held on a stale link, nothing sent while the private lists are hidden or App lock is on."
+permissions = [
+  "allow-brain-retirement-defaults",
+  "allow-brain-retirement-run",
+]
+
 # Review decks (docs/QUIZ-DECKS-DESIGN.md; brain/decks.rs, backend
 # jarvis_decks.py; JARVIS-API.md section 102). Questions the owner kept from a
 # quiz, asked again on a schedule the PC works out. No approval card: the

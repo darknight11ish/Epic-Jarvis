@@ -1457,6 +1457,14 @@ reads from on its own. Three things about it are invariants:
   works while history is off, since it records nothing new; with no key
   nothing is read or written. Tag names never reach memory, the learner, a
   search index or a log. The apps keep only which sections are folded.
+- **"Fork from here" copies a chat up to a message (2026-09-30;
+  `docs/CHAT-TAGS-DESIGN.md` section 8, docs/JARVIS-API.md §110).** A new chat
+  "Fork of <title>", each turn sealed again under the new id; it counts as new
+  (`updated` = the fork's moment) and keeps the source's tag and outside-text
+  marks. No card - nothing leaves the PC. It gets its own learning hush (with
+  the source's Erase flag), so copied words are neither learned nor counted
+  as "said again" twice. Never for a support, chatbot or comparison record, or
+  a chat titled "A difficult moment".
 - **A temporary chat is never kept** (2026-09-25): nothing of it reaches
   `chat-history.db`, whether history is on or off (§5, "A temporary chat
   uses and makes no memory"). Since 2026-09-27 a game or role-play the PC

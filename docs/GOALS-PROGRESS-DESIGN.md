@@ -1,8 +1,9 @@
 # Goals that show progress: design (2026-09-30)
 
 Status: **parts A and B: backend built 2026-09-30 (JARVIS-API §101), screens
-next, from the "Slice contract (frozen)" at the end of this file; part C
-designed, not built.** The owner ticked three things on 2026-09-30
+next, from the "Slice contract (frozen)" at the end of this file; part C:
+backend built 2026-09-30 (JARVIS-API §105), screens next, from the "Progress
+contract (frozen)" at the very end.** The owner ticked three things on 2026-09-30
 (build queue items 3 and 7, `docs/BUILD-QUEUE-2026-09-30.md`): (A) goal steps
 that are locked until the steps or numbers they depend on are done, (B) a
 finish-time range on the benchmark chart, (C) an activity heatmap and a
@@ -657,3 +658,189 @@ line, band path, bracket, arrow, words), `ProjectsTest.kt` (compare with
 The activity heatmap and the balance chart (part C, queue item 7, section
 105); a plan editor for an accepted goal; any new route. The pace line in the
 weekly check-in is the PC's and needs no screen.
+
+
+## Progress contract (frozen)
+
+Written 2026-09-30, after the backend for part C was built and tested
+(`backend/jarvis_progress.py`, `backend/progress.patch`,
+`backend/test_progress.py`, `docs/JARVIS-API.md` section 105). Two builders
+(desktop, phone) build the screens from this alone. **Where this and the design
+text above differ, this wins.** The real answers of the real code, in named
+situations, are in `progress-cases.json` (desktop: `jarvis-desktop/tests/
+fixtures/`, phone: `jarvis-client/app/src/test/resources/contract/`;
+byte-identical, made by `python3 tools/gen_progress_cases.py`, checked by
+`--check` and by `backend/test_progress.py`). Read it before writing a parser.
+Its keys: `words`, `levels`, `shading`, `limits`, `heat_grid`, `radar_constants`,
+`radar_worked` (five worked polygons), `heat.{empty,one_day,mixed_levels,
+dst_weekend,private_number}` (each a real activity answer plus `rects` and
+`size`), `balance.{nothing_picked,three_areas,five_areas_mixed,
+target_reached_private,after_a_benchmark_is_deleted}` (each a real balance
+answer plus `radar`) and `refusals`.
+
+### What changed from the design text above
+
+- Routes are exactly the two in section 6.3 (`/api/progress/activity`,
+  `/api/progress/balance`); the answers carry more than 6.3 lists: every day
+  has `col`, `row`, `level` and `words`; the answer has `columns`, `summary`,
+  `keep_on_screen`, `hidden_words`. The apps never work a shade, a column or a
+  sentence out themselves.
+- The heatmap has **no per-day private marker.** A private (health or money)
+  number is counted like any other and the day is shaded; the whole answer says
+  `keep_on_screen: true` when any private item is in the window. That is the
+  owner's answer of 2026-09-30 ("shades a day without naming it").
+- A goal axis is steps DONE out of steps (a step met by its number, not
+  ticked, is not counted). Goals stay off a chart until accepted.
+- A balance chart with fewer than 3 areas left (a benchmark was deleted) keeps
+  them, `drawable: false`: show `words` ("Pick at least 3 to see the chart.")
+  and the list, no picture.
+- Days are the PC's local days (its time zone, with daylight saving for that
+  date). A phone in another time zone sees the PC's days, on purpose.
+
+### 1. The JSON (see section 105.1 to 105.3 for every key)
+
+```
+GET /api/progress/activity?weeks=12     weeks 4..26 (12 if left out)
+{"ok", "available", "title": "Activity", "weeks",
+ "from": "2026-07-27", "to"/"today": "2026-10-14",
+ "columns": [{"col": 0, "label": "Week of 27 Jul"}, ...],
+ "days": [{"date", "col": 0..weeks-1, "row": 0..6 (0 = Monday), "count", "level": 0..4,
+           "words": "3 things on 12 Oct" | "Nothing on 12 Oct"}, ...],   // oldest first, ends today
+ "total", "days_active", "empty": bool,
+ "words": "Last 12 weeks: 23 things on 14 days." | "Nothing here yet. ...",
+ "note": "Steps ticked before this was added have no date, so they are not shown.",
+ "summary": "Activity, last 12 weeks. <words>", "levels": [...],
+ "keep_on_screen": bool, "hidden_words": "Hidden while memory lists and chat history are hidden."}
+
+GET  /api/progress/balance
+{"ok", "available", "title": "Balance",
+ "axes": [{"label" (<=24), "short" (<=12, with "..."), "name", "kind": "bench"|"goal", "ref",
+           "project", "state": "progress"|"reached"|"no_numbers"|"no_target"|"no_steps",
+           "value_words": "72.5 of 70 kg", "fraction": 0..1 | null, "keep_on_screen": bool}],
+ "drawable": bool (>= 3 axes), "min": 3, "max": 8, "max_label": 24,
+ "words": ""|"Nothing picked yet."|"Pick at least 3 to see the chart.",
+ "summary": "Balance chart, 3 areas. Running: 12.5 of 20 km. ... No overall score.",
+ "choices": [{"kind", "ref", "project", "project_name", "name", "picked": bool, "keep_on_screen": bool}],
+ "keep_on_screen": bool, "hidden_words": "..."}
+
+POST /api/progress/balance   {"axes": [{"kind", "ref", "label"?}]}    3..8 items, or [] to clear
+  -> 200 the same answer as the GET       -> 400 {"ok": false, "error": <sentence, show as sent>}
+```
+
+Parsers ignore keys they do not know and give a missing key its empty value (an
+older PC has no such route: a `404` means "draw nothing", the section is simply
+not shown). A refused POST changes nothing; keep the editor open with the
+sentence beside it. No card ever. Nothing is on the event stream: read when the
+Projects screen opens and after the app's own POST; no polling.
+
+### 2. The words
+
+The fixed labels are `words` in the fixture (both apps' own list must equal it
+key for key, word for word): `heat_title` "Activity", `heat_under`, `heat_undated`
+(shown once, small, under the grid), `balance_title` "Balance", `balance_under`,
+`balance_edit` "Choose what to show", `balance_save` "Save the chart",
+`balance_clear` "Clear the chart", `balance_rename` "Name on the chart",
+`balance_limit`, `no_choices`, `hidden`, `private`. `{weeks}` `{things}` `{days}`
+`{date}` `{n}` `{items}` are filled in by the PC: the apps show `words`,
+`summary`, `value_words`, the day `words` and the refusal sentence **as sent**,
+and never build them. No streak, "in a row", "longest", "missed", percentage,
+average or "score" word may appear in an app's own strings either
+(`FORBIDDEN_WORDS` in `jarvis_progress.py` is the list).
+
+### 3. Heatmap geometry and colour
+
+- Grid: cell 14, gap 3, so `x = col * 17`, `y = row * 17`, size 14; total
+  `width = weeks * 17 - 3`, `height = 116` (`heat_grid`, and `heat.*.rects` are the
+  worked answer per day). The grid is drawn in the answer's order; future days
+  do not exist, so the last column may be short. Desktop: an SVG `<rect rx="3">`
+  per day. Phone: `drawRoundRect` (corner 3 dp) on a Compose `Canvas`; a dp is
+  a px in the fixture's units.
+- Fill: level 0 has **no fill**, only a 1 px outline in the border-strong token
+  over the panel surface: neutral, never red, never a cross. Levels 1 to 4 lay the
+  accent over the surface at `shading.alpha` = 0.22, 0.42, 0.66, 0.92 (the
+  generator asserts neighbouring steps differ by at least 0.20 so the ladder holds
+  in every theme). Desktop: `rgb(var(--accent-rgb) / <alpha>)` on `var(--surface-2)`,
+  outline `var(--border-strong)`. Phone: `LocalAccent.current.copy(alpha = ...)` on
+  `chrome.surface2`, outline `chrome.hairlineStrong`. These are existing tokens, so
+  both themes (light and dark) keep the app's own accent contrast; level 4 is
+  the accent itself. No new colour is added and **no red anywhere**.
+- A small legend under the grid: five swatches only, no words but the level
+  wording from the tooltip. (No "less" or "more" label is required.)
+- Tooltip/hover and long-press/tap on a cell: the day's `words`. The line under
+  the grid is `words`; `heat_undated` beside it in the small tone. When `empty`,
+  show `words` (the empty sentence) and still draw the grid, all neutral.
+
+### 4. Balance geometry and colour
+
+- Box `size` 260 square, centre (130, 130), outer ring radius 80. Spoke `i` of
+  `n` points at angle `-90 degrees + i * 360 / n` (first spoke straight up, then
+  clockwise). Rings at 25%, 50%, 75%, 100% of the radius (`radar_constants.rings`);
+  the outer ring is the **target**. A vertex is at `radius * fraction` along its
+  spoke; `fraction: null` puts the vertex at the centre and draws a small hollow
+  circle (radius 4) there. Labels: at radius 94 plus the `dy` and `anchor` in
+  `radar_worked[*].labels` (`short` text, the value words on a second line in the
+  smaller tone). `radar[*]` in every `balance.*` case and `radar_worked.*` are the
+  worked answers (rounded to 2 places; tests allow 0.01).
+- Colour: rings `var(--border)` / `chrome.hairline`, the outer (target) ring dashed
+  `var(--warn)` / `chrome.warnMark` (the same as the benchmark chart's target
+  line - amber, not red), spokes `var(--border)`, polygon fill accent at 0.20
+  with an accent 2 px outline, vertex dots accent radius 3, labels
+  `var(--text-muted)` / `chrome.textMid`, value words `var(--text)` / `chrome.textHi`.
+  A private area draws the same as any other on the owner's own screen.
+- Under the picture, always: **the list**, one row per axis (`label`, `value_words`,
+  and `private` in small type when `keep_on_screen`), then nothing else. **No
+  total, no average, no area, no score line.** Rows are not sorted or ranked.
+- Editor ("Choose what to show"): every `choices` row as a check row (its
+  `project_name` beside the name); up to 8 checked (the 9th is disabled); a name
+  field (`balance_rename`, max 24) for each checked row; Save enabled at 3 to 8
+  checked, or at 0 checked as "Clear the chart"; the PC's refusal sentence is shown
+  as sent. No card.
+
+### 5. Screen-reader text
+
+- Heatmap: a table. Caption = `summary`. One row per week (row header =
+  `columns[i].label`, "Week of 6 Oct"), seven cells Monday to Sunday, each cell's
+  text = that day's `words` (a day after today has no cell). The SVG squares are
+  `aria-hidden`; the table is visually hidden. Phone: the `Canvas` has
+  `contentDescription = summary`, and each week is one focusable row with the
+  description "Week of 6 Oct: " followed by its days' `words` joined with ". ".
+- Balance: the picture is `aria-hidden` / has no content description of its own;
+  the list under it is the text, and the figure's caption/label is `summary`.
+  A `no_numbers` row reads "<label>: no numbers yet".
+
+### 6. Hide memory lists and chat history
+
+- When the setting is on: an answer with `keep_on_screen: true` is not drawn at
+  all; show only `hidden_words` in its place (heatmap and balance separately).
+  On the desktop this is the same Windows Hello gate Goals uses to reveal; on
+  the phone the section is simply replaced and screenshots are already blocked by
+  the same setting.
+- The balance picker: a `choices` row with `keep_on_screen` shows "(hidden)" in
+  place of its name and cannot be ticked while the setting is on.
+- Nothing from either section is ever spoken, put in a notification, sent in a
+  chat answer or a search, or written to disk by an app. Not cached.
+
+### 7. Which app builds what
+
+Both live in **Brain -> Projects**, a "Progress" section at the top of the
+Projects screen (not a floating widget, not the Home screen).
+- **Desktop** builds: `jarvis-desktop/src/progress.js` (parsing, `heatRects`,
+  `radar` geometry, the word list), `src/projects-panel.js` (the section and
+  the editor), `src/brain.css`, `src-tauri/src/brain/progress.rs` (three pass-through
+  commands - read activity, read balance, save balance - with their permission
+  files and the allow-list entries), `tests/progress.mjs` (against
+  `progress-cases.json`: words, rects, radar, and that no forbidden word appears).
+- **Phone** builds: `net/Progress.kt` (parsers with defaults, `heatRects`,
+  `radar`, the word list), `ui/screens/ProgressPlate.kt` (hosted at the top of
+  `ProjectsPlate`), `JarvisRuntime.kt` and `net/JarvisApi.kt` methods,
+  `src/test/.../ProgressTest.kt` (same comparisons).
+- **Both:** when each app calls the two routes, flip them in `tools/check_parity.py`
+  from `planned` to `ported`. The POST buttons are held on a stale link (rule 4);
+  a read shows the last answer with the app's usual stale marking.
+
+### 8. Not part of this slice
+
+A floating widget; a per-day list of what was done (the grid shows counts only,
+by design); editing a goal's plan; any streak, goal-slipping alert or "weekly
+score"; a radar for a single project's coding tests (a coding benchmark can be
+an area only if it is a logged number with a target).

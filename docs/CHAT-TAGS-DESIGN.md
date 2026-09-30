@@ -193,7 +193,7 @@ tests read; colour is never the only clue (icon + name + count always show).
 | `POST /api/history/tag` | `{"id": chat_id, "tag_id": int \| null}` | `{"ok": true, "id", "tag_id"}` |
 | `GET /api/history` | new `tag=<id>` or `tag=none` filter | rows and the single-conversation read gain `"tag_id": int \| null` |
 
-Errors (sentence choice in JARVIS-API §99.2) `{"ok": false, "error", "message"}`: `bad_name`, `name_taken`, `too_many_tags`,
+Errors (sentence choice in JARVIS-API §99.2: **the PC's `message` wins when it is not empty, then the code's fixed sentence, then the fallback** - one rule for tags and fork, both apps) `{"ok": false, "error", "message"}`: `bad_name`, `name_taken`, `too_many_tags`,
 `bad_colour`, `bad_icon`, `tag_not_found`, `not_found` (chat), `bad_request`.
 No card anywhere (the owner's own organisation, nothing leaves the PC). Every
 write is held on a stale link (rule 4).
@@ -260,6 +260,8 @@ decision; this is the exact shape. Where this and section 8 differ, this wins.
 `turns[].idx` (a new field on every turn of `GET /api/history/conversation`).
 Turns `0..upto` are copied. Answer `200`:
 `{"ok": true, "id": "<new id>", "title": "Fork of ...", "turns": <int>, "tag_id": <int | null>}`.
+After a fork the desktop clears any kind, tag chip and search words so the new chat
+cannot be filtered out, and keeps it open (the phone already opens it by id).
 
 **The opened chat** (`GET /api/history/conversation`) also gains, on the chat,
 `"forkable": true | false` and `"fork_why": ""` (or a sentence when not
@@ -268,14 +270,20 @@ Apps show the button only when `forkable` is true; when false they show
 `fork_why` where the button would be (like `continue_why`) and no button.
 
 **Errors** `{"ok": false, "error", "message"}` (one plain sentence, show
-`message`; fixture `fork_error_cases` gives the exact rule): `bad_request` (400,
+`message`; the rule is: the PC's `message` wins when it is not empty, then the
+code's fixed sentence, then the shared fallback - the same as for tags; fixture
+`fork_error_cases` has worked cases, including a known code plus a different
+message): `bad_request` (400, also for an `upto` that is not a whole number or is
+absurdly large,
 or 503 when the key is missing or wrong: "... The chat was not forked."),
 `not_found` (404), `not_forkable` (409). Nothing is retried. No card anywhere.
 
 **What the backend decided** (the apps need not re-check, but must not contradict):
 the fork is kind `chat` (also from a Live session), keeps the source's tag,
-outside-text marks, device and times, sits beside the original in the list
-(same `updated`), has its own learning hush so its copied messages are not
+outside-text marks and device, keeps the source's `started`, has `updated` = the
+moment of the fork (owner, 2026-09-30: it counts as new, so it is at the top of
+History with a full keep period), has its own learning hush (copying the
+source's `erased` flag) so its copied messages are not
 learned twice, and works while chat history is off (only the key matters).
 A user message as fork point is copied without its answer.
 
@@ -298,7 +306,7 @@ build it.
   forkable anyway). Pressing it sends the route with that turn's `idx`. On
   success the app **opens the new chat in History** (the same open as tapping
   its row: read `GET /api/history/conversation?id=<new id>`), refreshes the list
-  so the fork appears (it sits beside the original), and shows `fork_done`. The
+  so the fork appears (at the top, as it counts as new), and shows `fork_done`. The
   original stays as it was. On a refusal the app stays on the original chat and
   shows the sentence. The button is disabled with `Forking…` while the request
   runs (one at a time). A fork is offered to nothing else: no card, no undo (a
