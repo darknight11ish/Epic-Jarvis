@@ -31,7 +31,7 @@
     {
      "asks": "-",
      "id": "calendar",
-     "line": "Set up on this PC, but the AI model is not offered it yet: switch it on in Settings, \"What asks first\" (one approval card and Windows Hello), or add \"calendar_read\" to [tools].enabled in jarvis-framework.toml by hand.",
+     "line": "Set up on this PC, but the AI model is not offered it yet. Switch it on in Settings, \"What asks first\", on your PC (one approval card and Windows Hello).",
      "name": "Calendar (reading)",
      "on": false,
      "state": "off",
@@ -51,7 +51,7 @@
     {
      "asks": "-",
      "id": "email_send",
-     "line": "Set up on this PC, but the AI model is not offered it: \"send_email\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Set up on this PC, but the AI model is not offered it. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"send_email\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can send email from your account, so it stays a step you take on the PC.",
      "name": "Email (sending)",
      "on": false,
      "state": "off",
@@ -61,7 +61,7 @@
     {
      "asks": "-",
      "id": "email_tidy",
-     "line": "Set up on this PC, but the AI model is not offered it: \"tidy_inbox\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Set up on this PC, but the AI model is not offered it. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"tidy_inbox\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can change your mailbox (archive, star, move to Trash), so it stays a step you take on the PC.",
      "name": "Email (tidying)",
      "on": false,
      "state": "off",
@@ -111,7 +111,7 @@
     {
      "asks": "-",
      "id": "github",
-     "line": "Off: \"github_search\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"github_search\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can send search words to GitHub, so it stays a step you take on the PC.",
      "name": "GitHub research",
      "on": false,
      "state": "off",
@@ -131,7 +131,7 @@
     {
      "asks": "-",
      "id": "computer",
-     "line": "Off: \"control_computer\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"control_computer\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can click and type in other programs on this PC, so it stays a step you take on the PC.",
      "name": "Computer control",
      "on": false,
      "state": "off",
@@ -181,7 +181,7 @@
     {
      "asks": "-",
      "id": "phone_control",
-     "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"control_phone\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can tap and type on your phone, so it stays a step you take on the PC.",
      "name": "Phone control",
      "on": false,
      "state": "off",
@@ -191,7 +191,7 @@
     {
      "asks": "-",
      "id": "shell",
-     "line": "Off: \"shell_exec\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"shell_exec\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can run commands on this PC, so it stays a step you take on the PC.",
      "name": "Commands on this PC",
      "on": false,
      "state": "off",
@@ -375,7 +375,7 @@
     {
      "asks": "-",
      "id": "github",
-     "line": "Off: \"github_search\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"github_search\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can send search words to GitHub, so it stays a step you take on the PC.",
      "name": "GitHub research",
      "on": false,
      "state": "off",
@@ -395,7 +395,7 @@
     {
      "asks": "-",
      "id": "computer",
-     "line": "Off: \"control_computer\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"control_computer\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can click and type in other programs on this PC, so it stays a step you take on the PC.",
      "name": "Computer control",
      "on": false,
      "state": "off",
@@ -405,7 +405,7 @@
     {
      "asks": "-",
      "id": "browser",
-     "line": "Off: \"browser_control\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"browser_control\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can open web pages and click and type in them, so it stays a step you take on the PC.",
      "name": "Browser control",
      "on": false,
      "state": "off",
@@ -445,7 +445,7 @@
     {
      "asks": "-",
      "id": "phone_control",
-     "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"control_phone\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can tap and type on your phone, so it stays a step you take on the PC.",
      "name": "Phone control",
      "on": false,
      "state": "off",
@@ -455,7 +455,7 @@
     {
      "asks": "-",
      "id": "shell",
-     "line": "Off: \"shell_exec\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"shell_exec\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can run commands on this PC, so it stays a step you take on the PC.",
      "name": "Commands on this PC",
      "on": false,
      "state": "off",
@@ -575,7 +575,7 @@
     {
      "asks": "-",
      "id": "email_send",
-     "line": "Set up on this PC, but the AI model is not offered it: \"send_email\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Set up on this PC, but the AI model is not offered it. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"send_email\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can send email from your account, so it stays a step you take on the PC.",
      "name": "Email (sending)",
      "on": false,
      "state": "off",
@@ -585,7 +585,7 @@
     {
      "asks": "-",
      "id": "email_tidy",
-     "line": "Set up on this PC, but the AI model is not offered it: \"tidy_inbox\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Set up on this PC, but the AI model is not offered it. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"tidy_inbox\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can change your mailbox (archive, star, move to Trash), so it stays a step you take on the PC.",
      "name": "Email (tidying)",
      "on": false,
      "state": "off",
@@ -635,7 +635,7 @@
     {
      "asks": "-",
      "id": "github",
-     "line": "Off: \"github_search\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"github_search\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can send search words to GitHub, so it stays a step you take on the PC.",
      "name": "GitHub research",
      "on": false,
      "state": "off",
@@ -665,7 +665,7 @@
     {
      "asks": "-",
      "id": "browser",
-     "line": "Off: \"browser_control\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"browser_control\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can open web pages and click and type in them, so it stays a step you take on the PC.",
      "name": "Browser control",
      "on": false,
      "state": "off",
@@ -705,7 +705,7 @@
     {
      "asks": "-",
      "id": "phone_control",
-     "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"control_phone\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can tap and type on your phone, so it stays a step you take on the PC.",
      "name": "Phone control",
      "on": false,
      "state": "off",
@@ -715,7 +715,7 @@
     {
      "asks": "-",
      "id": "shell",
-     "line": "Off: \"shell_exec\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"shell_exec\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can run commands on this PC, so it stays a step you take on the PC.",
      "name": "Commands on this PC",
      "on": false,
      "state": "off",
@@ -1189,7 +1189,7 @@
     {
      "asks": "-",
      "id": "web_search",
-     "line": "Off: \"web_search\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off: \"web_search\" is missing from the tool list in the settings file on your PC (jarvis-framework.toml, [tools] enabled), so the AI model is not offered it. Adding it back is done in that file on the PC.",
      "name": "Web search",
      "on": false,
      "state": "off",
@@ -1279,7 +1279,7 @@
     {
      "asks": "-",
      "id": "github",
-     "line": "Off: \"github_search\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"github_search\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can send search words to GitHub, so it stays a step you take on the PC.",
      "name": "GitHub research",
      "on": false,
      "state": "off",
@@ -1299,7 +1299,7 @@
     {
      "asks": "-",
      "id": "computer",
-     "line": "Off: \"control_computer\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"control_computer\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can click and type in other programs on this PC, so it stays a step you take on the PC.",
      "name": "Computer control",
      "on": false,
      "state": "off",
@@ -1309,7 +1309,7 @@
     {
      "asks": "-",
      "id": "browser",
-     "line": "Off: \"browser_control\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"browser_control\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can open web pages and click and type in them, so it stays a step you take on the PC.",
      "name": "Browser control",
      "on": false,
      "state": "off",
@@ -1349,7 +1349,7 @@
     {
      "asks": "-",
      "id": "phone_control",
-     "line": "Off: \"control_phone\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"control_phone\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can tap and type on your phone, so it stays a step you take on the PC.",
      "name": "Phone control",
      "on": false,
      "state": "off",
@@ -1359,7 +1359,7 @@
     {
      "asks": "-",
      "id": "shell",
-     "line": "Off: \"shell_exec\" is not in [tools].enabled in jarvis-framework.toml. This one is file-only - it cannot be switched on from either app.",
+     "line": "Off. It can only be switched on in the settings file on your PC (jarvis-framework.toml: add \"shell_exec\" to the [tools] enabled list). You chose that only reading tools (calendar, email, notes, home status) can be switched on from an app; this one can run commands on this PC, so it stays a step you take on the PC.",
      "name": "Commands on this PC",
      "on": false,
      "state": "off",

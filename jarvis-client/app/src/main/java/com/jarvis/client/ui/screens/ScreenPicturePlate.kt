@@ -44,7 +44,7 @@ import kotlinx.coroutines.launch
  * @param canAct the link is up and fresh: turning the switch ON waits for it.
  */
 @Composable
-internal fun ScreenPictureSection(canAct: Boolean = false) {
+internal fun ScreenPictureSection(canAct: Boolean = false, onOpenLookSwitch: (() -> Unit)? = null) {
     val chrome = LocalChrome.current
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
@@ -110,6 +110,7 @@ internal fun ScreenPictureSection(canAct: Boolean = false) {
                         }
                     },
                     onCopy = { line -> clipboard.setText(AnnotatedString(line)) },
+                    onOpenLookSwitch = onOpenLookSwitch,
                 )
             }
         }
@@ -127,6 +128,7 @@ private fun PictureBody(
     canAct: Boolean,
     onChange: (Boolean) -> Unit,
     onCopy: (String) -> Unit,
+    onOpenLookSwitch: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
     Text(ScreenPicture.TITLE, style = MaterialTheme.typography.labelLarge, color = chrome.textHi)
@@ -168,6 +170,11 @@ private fun PictureBody(
     }
     Gap(4)
     Text(ScreenPlateText.PICTURE_POINTER, style = MaterialTheme.typography.bodySmall, color = chrome.textLo)
+    // The other half of "Look at this": its switch is on the Security screen.
+    // A button, so nobody has to hunt for it (settings audit 2026-09-30).
+    if (onOpenLookSwitch != null) {
+        Quiet(ScreenPlateText.OPEN_LOOK_SWITCH, onClick = onOpenLookSwitch)
+    }
     readError?.let {
         Text(
             "Couldn't read this switch: $it",

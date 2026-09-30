@@ -423,7 +423,7 @@ def t_the_hunk_comes_before_every_token_ok():
           "screen.patch, screen-picture.patch and browser-engine.patch (which leave them alone) "
           "come after it",
           after_it is not None
-          and set(after_it) <= {"apps-in-projects.patch", "inbox-tidy.patch", "screen.patch",
+          and set(after_it) <= {"apps-in-projects.patch", "inbox-tidy.patch", "screen.patch", "web-search-switch.patch",
                                 "screen-picture.patch", "browser-engine.patch"}
           and not _stack.later_rewriting("devices.patch", "register_approval_key"), order[-3:])
     text, log = _stack.stand_in("jarvis_hud.py")

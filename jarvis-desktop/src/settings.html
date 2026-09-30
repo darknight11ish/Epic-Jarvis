@@ -1260,6 +1260,15 @@
         <p class="state" id="ws-state" role="status">Checking web search…</p>
 
         <div id="ws-body" hidden>
+          <label class="toggle">
+            <input id="ws-enabled" type="checkbox" />
+            <span>
+              <span id="ws-enabled-label">Web search</span>
+              <span class="toggle-detail" id="ws-enabled-detail"></span>
+            </span>
+          </label>
+          <p class="sc-line" id="ws-enabled-status" role="status"></p>
+
           <fieldset class="theme-list" id="ws-provider-list">
             <legend class="label">Search with</legend>
             <div id="ws-providers"></div>

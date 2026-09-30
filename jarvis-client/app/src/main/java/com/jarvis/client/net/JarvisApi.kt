@@ -1720,8 +1720,8 @@ class JarvisApi(
 
     /**
      * One of web search's two POSTs: ONE setting ([WebSearch.SETTINGS_PATH],
-     * a body made by [WebSearch.providerBody], [WebSearch.addressBody] or
-     * [WebSearch.askBody]) or a test search ([WebSearch.TEST_PATH]). Anything
+     * a body made by [WebSearch.providerBody], [WebSearch.addressBody],
+     * [WebSearch.askBody] or [WebSearch.enabledBody]) or a test search ([WebSearch.TEST_PATH]). Anything
      * else is refused here, before anything is sent - there is no route for a
      * key, and this phone never sends one (CLAUDE.md rule 3).
      */

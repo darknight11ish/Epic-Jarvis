@@ -2175,9 +2175,9 @@ object JarvisRuntime {
 
     /**
      * ONE web search setting, with [body] from [com.jarvis.client.net.WebSearch]'s
-     * providerBody / addressBody / askBody. Held on a stale link ([actionBlocker],
-     * rule 4). Turning "Ask before every web search" off raises a card on the PC,
-     * which this phone's approvals show too.
+     * providerBody / addressBody / askBody / enabledBody. Held on a stale link
+     * ([actionBlocker], rule 4). Turning "Ask before every web search" off, or web
+     * search back on, raises a card on the PC, which this phone's approvals show too.
      */
     suspend fun setWebSearch(body: String?): String {
         actionBlocker()?.let { return it }

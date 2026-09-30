@@ -115,6 +115,32 @@ internal fun WebSearchSection(canAct: Boolean) {
                     if (v.why.isNotEmpty()) {
                         Text(v.why, style = MaterialTheme.typography.bodySmall, color = chrome.warnInk)
                     }
+
+                    // ---- The on/off switch ----
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(v.enabledLabel, style = MaterialTheme.typography.titleSmall,
+                            color = chrome.textHi, modifier = Modifier.weight(1f))
+                        Spacer(Modifier.width(8.dp))
+                        Toggle(
+                            // Shown as the PC says it is: turning it back on waits
+                            // for a card, so the switch does not claim "on" before that.
+                            checked = v.enabled,
+                            onCheckedChange = { want -> change(WebSearch.enabledBody(want)) },
+                            enabled = canAct && !busy,
+                            modifier = Modifier.semantics { contentDescription = v.enabledLabel },
+                        )
+                    }
+                    Text(v.enabledDetail, style = MaterialTheme.typography.labelSmall, color = chrome.textLo)
+                    val onOffLine = when {
+                        v.enableWaiting -> WebSearch.WAITING_CARD
+                        !v.enabled && v.enableLast.isNotEmpty() -> v.enableLast
+                        !v.enabled -> WebSearch.OFF_LINE
+                        else -> ""
+                    }
+                    if (onOffLine.isNotEmpty()) {
+                        Text(onOffLine, style = MaterialTheme.typography.labelSmall, color = chrome.warnInk,
+                            modifier = Modifier.liveStatus())
+                    }
                     v.providers.forEach { p ->
                         Gap(8)
                         val chosen = p.id == v.provider

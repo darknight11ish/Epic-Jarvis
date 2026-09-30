@@ -65,6 +65,8 @@ object OpenPlace {
         "browser-engine" to Where.Go(Screen.SETTINGS, "browser-engine"),
         // Settings -> Devices (docs/PAIRING-DESIGN.md section 7.2).
         "devices" to Where.Go(Screen.SETTINGS, "devices"),
+        // The phone's Quick Settings tiles (SettingsScreen.kt, item "quick-tiles").
+        "quick-tiles" to Where.Go(Screen.SETTINGS, "quick-tiles"),
         // "Platform checks": its Connection card, and "This app" with the
         // phone's own "Check for new versions" (the desktop's "updates" card
         // is the desktop app's; this is the nearest thing the phone has).
@@ -101,6 +103,7 @@ object OpenPlace {
         "account-secrets",
         "tool-updates",
         "more-options",
+        "crash-notes",
         "start-jarvis",
     )
 

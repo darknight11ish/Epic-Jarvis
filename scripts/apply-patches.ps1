@@ -899,6 +899,15 @@ $PATCHES = @(
     # says so and the route is simply not there - the visible browser is
     # unchanged.
     'browser-engine.patch'
+    # The web search on/off switch (the settings audit of 2026-09-30): turning
+    # web search back ON after the owner switched it off is ONE card
+    # (web_search_enable, tier ask); turning it off is instant. Two gate hunks
+    # only - the new action joins the "a no is not a standing rule" list and
+    # gets its _RISK line - both right after browser-engine.patch's own last
+    # lines, so it goes after it (last, like every new patch). It touches no
+    # route: POST /api/search/settings already exists (web-search.patch) and
+    # jarvis_search.py answers the new {"enabled": ...} body.
+    'web-search-switch.patch'
 )
 
 # --- every module this repository ships WHOLE ------------------------------

@@ -8,7 +8,8 @@
  *    "Ask before every web search", and Whoogle's reason for being left out;
  *  - set_web_search: ONE change - the provider or the address at once, "Ask
  *    before every web search" on at once, off through ONE approval card on
- *    the PC. Held on a stale link, here (greyed) and in Rust;
+ *    the PC; the Web search on/off switch off at once, back on through ONE
+ *    approval card. Held on a stale link, here (greyed) and in Rust;
  *  - test_web_search: one search for a fixed word through the chosen
  *    provider, and what happened in plain words. Held on a stale link too;
  *  - save_search_key / forget_search_key: the Exa, Tavily or Brave Search key,
@@ -24,6 +25,8 @@
 
 import { announce, currentLink, linkWords, onLink, onQueue } from "./jarvis-link.js";
 import {
+  OFF_LINE,
+  WAITING_CARD,
   ADDRESS_LABEL,
   ADDRESS_NOTE,
   ADDRESS_SAVE,
@@ -64,6 +67,10 @@ const ws = {
   addressSave: $("ws-address-save"),
   keyEntry: $("ws-key-entry"),
   keys: $("ws-keys"),
+  enabled: $("ws-enabled"),
+  enabledLabel: $("ws-enabled-label"),
+  enabledDetail: $("ws-enabled-detail"),
+  enabledStatus: $("ws-enabled-status"),
   ask: $("ws-ask"),
   askLabel: $("ws-ask-label"),
   askDetail: $("ws-ask-detail"),
@@ -202,6 +209,19 @@ function paint() {
   ws.addressSave.dataset.live = "true";
   say(ws.keyEntry, view.keyEntry);
   paintKeys();
+  ws.enabled.checked = view.enabled;
+  ws.enabled.dataset.live = "true";
+  ws.enabledLabel.textContent = view.enabledLabel;
+  ws.enabledDetail.textContent = view.enabledDetail;
+  say(
+    ws.enabledStatus,
+    view.enableWaiting
+      ? WAITING_CARD
+      : !view.enabled
+        ? view.enableLast || OFF_LINE
+        : "",
+    view.enabled ? null : "bad",
+  );
   ws.ask.checked = view.askEveryTime;
   ws.ask.dataset.live = "true";
   ws.askLabel.textContent = view.askLabel;
@@ -306,6 +326,13 @@ if (ws.section) {
     // waits for a card, so the box does not claim "off" before that.
     if (view) ws.ask.checked = view.askEveryTime;
     change({ askEveryTime: on });
+  });
+  ws.enabled.addEventListener("change", () => {
+    const on = ws.enabled.checked;
+    // Shown as it really is until the PC says otherwise: turning it back on
+    // waits for a card, so the box does not claim "on" before that.
+    if (view) ws.enabled.checked = view.enabled;
+    change({ enabled: on });
   });
   ws.test.addEventListener("click", runTest);
 }

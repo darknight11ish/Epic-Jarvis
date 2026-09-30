@@ -3,6 +3,8 @@ package com.jarvis.client.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,17 +17,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.jarvis.client.LinkState
 import com.jarvis.client.data.FloatingAvatarMode
 import com.jarvis.client.data.QuickTiles
 import com.jarvis.client.data.TileAction
+import com.jarvis.client.ui.SettingsJump
 import com.jarvis.client.ui.parts.Gap
 import com.jarvis.client.ui.parts.Plate
+import com.jarvis.client.ui.parts.Quiet
 import com.jarvis.client.ui.parts.Secondary
 import com.jarvis.client.ui.parts.Section
 import com.jarvis.client.ui.theme.LocalChrome
+import kotlinx.coroutines.launch
 
 /**
  * "Settings" - the ease-of-use audit's row 16 (`docs/EASE-OF-USE-AUDIT-2026-09-27.md`):
@@ -74,26 +80,36 @@ import com.jarvis.client.ui.theme.LocalChrome
  * below rather than hand-adjusting the old numbers.
  */
 private val SETTINGS_ITEM_INDEX: Map<String, Int> = mapOf(
-    "voice" to 0,
-    "security" to 1,
-    "appearance-card" to 2,
+    // Item 0 is the jump list ([SettingsJump]), added 2026-09-30.
+    "voice" to 1,
+    "security" to 2,
+    "appearance-card" to 3,
     // "Animal options" lives inside Appearance on the phone (2026-09-28):
     // the Appearance row, whose button opens it.
-    "animal-options" to 2,
-    "manner" to 4,
-    "web-search" to 5,
-    "asks-first" to 6,
-    "reach" to 7,
-    "email-sending" to 8,
-    "folders" to 9,
-    "backup" to 10,
-    "watch-notify" to 11,
-    "phone-notify" to 12,
-    "screen-look" to 13,
-    "browser-engine" to 14,
-    "devices" to 15,
-    "quick-tiles" to 16,
+    "animal-options" to 3,
+    "floating-avatar" to 4,
+    "manner" to 5,
+    "web-search" to 6,
+    "asks-first" to 7,
+    "reach" to 8,
+    "email-sending" to 9,
+    "folders" to 10,
+    "backup" to 11,
+    "watch-notify" to 12,
+    "phone-notify" to 13,
+    "screen-look" to 14,
+    "browser-engine" to 15,
+    "devices" to 16,
+    "quick-tiles" to 17,
 )
+
+/**
+ * The jump list's own keys are the screen's item keys, except that the
+ * Appearance row is "appearance" on the screen and "appearance-card" in the
+ * map above (the desktop's id for the same card).
+ */
+private fun jumpIndex(key: String): Int? =
+    SETTINGS_ITEM_INDEX[if (key == "appearance") "appearance-card" else key]
 
 /**
  * The Voice section's line about Android 17's assistant volume slider. Said
@@ -175,8 +191,21 @@ fun SettingsScreen(
      * itself never changed.
      */
     onSectionConsumed: () -> Unit = {},
+    /**
+     * The "hey Jarvis" switches (turn it on or off, Listen on this phone,
+     * interrupting, "One moment", the "I heard you" sound), drawn under Voice.
+     * They moved here from Platform checks (settings audit 2026-09-30) and need
+     * a desktop, so this is null until one is paired.
+     */
+    voiceSwitches: (@Composable () -> Unit)? = null,
+    /**
+     * Opens the Security screen at its "Looking at your screen" switch, from
+     * Picture mode (which also needs it). Null hides the button.
+     */
+    onOpenLookSwitch: (() -> Unit)? = null,
 ) {
     val chrome = LocalChrome.current
+    val jumpScope = rememberCoroutineScope()
     // The same gate every other write on this screen already uses
     // (Manner/WebSearch/AsksFirst/WatchNotify all take it) - rule 4.
     val canAct = link == LinkState.CONNECTED && !stale
@@ -198,6 +227,12 @@ fun SettingsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            item(key = "jump-list") {
+                SettingsJumpList { key ->
+                    jumpIndex(key)?.let { i -> jumpScope.launch { listState.animateScrollToItem(i) } }
+                }
+            }
+
             item(key = "voice") {
                 Section("Voice") {
                     Plate {
@@ -242,6 +277,12 @@ fun SettingsScreen(
                             style = MaterialTheme.typography.labelSmall,
                             color = chrome.textLo,
                         )
+                    }
+                    // "Hey Jarvis" and how this phone listens: moved here from
+                    // Platform checks, next to the other voice settings.
+                    voiceSwitches?.let {
+                        Gap(12)
+                        it()
                     }
                 }
             }
@@ -314,7 +355,9 @@ fun SettingsScreen(
 
             // Picture mode for "Look at this" and "Watch with me" (the owner's
             // decision of 2026-09-29): a slow picture model on the PC's processor.
-            item(key = "screen-look") { ScreenPictureSection(canAct = canAct) }
+            item(key = "screen-look") {
+                ScreenPictureSection(canAct = canAct, onOpenLookSwitch = onOpenLookSwitch)
+            }
 
             // The headless browser, Obscura (the owner's decision of 2026-09-29):
             // Jarvis may choose a browser with no window for plain reading.
@@ -345,5 +388,30 @@ fun SettingsScreen(
 
             item(key = "tail") { Gap(24) }
         }
+    }
+}
+
+/**
+ * "Jump to:" - one small button per section, wrapped over as many lines as it
+ * needs, like the desktop's list. A tap scrolls the screen to that section
+ * ([SettingsJump.ENTRIES]); it changes nothing.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SettingsJumpList(onJump: (String) -> Unit) {
+    val chrome = LocalChrome.current
+    Section(SettingsJump.TITLE) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            SettingsJump.ENTRIES.forEach { e ->
+                Quiet(e.label, onClick = { onJump(e.key) })
+            }
+        }
+        Text(
+            "Chat history, saved facts and background learning are in Brain, not here.",
+            style = MaterialTheme.typography.labelSmall,
+            color = chrome.textLo,
+        )
     }
 }

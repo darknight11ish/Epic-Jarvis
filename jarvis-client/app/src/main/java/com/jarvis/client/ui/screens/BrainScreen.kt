@@ -2004,10 +2004,12 @@ private fun SettingsEntrySection(onOpen: () -> Unit) {
     Section("Settings") {
         Plate {
             Text(
-                "How Jarvis talks, web search, what asks first, what Jarvis can reach, " +
-                    "sending email, folders it may look in, the smartwatch setting - and, " +
-                    "with voice, security and appearance, everything else that changes how " +
-                    "Jarvis behaves or looks.",
+                "Voice (including \"hey Jarvis\" and how this phone listens), security, " +
+                    "appearance, how Jarvis talks, web search, what asks first, what Jarvis " +
+                    "can reach, sending email, folders it may look in, backups, phone and " +
+                    "smartwatch notifications, picture mode, the browser, your devices and " +
+                    "the Quick Settings tiles. A \"Jump to\" list at the top of Settings " +
+                    "takes you to any of them.",
                 style = MaterialTheme.typography.bodySmall,
                 color = chrome.textMid,
             )

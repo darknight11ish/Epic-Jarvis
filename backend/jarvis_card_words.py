@@ -80,6 +80,7 @@ TITLES = {
     "support_chat": "chat with a company's customer support for you",
     "support_offer": "accept an offer from customer support in your name",
     "stop_asking_before_every_web_search": "stop asking before every web search",
+    "web_search_enable": "turn web search back on",
     # --- notes
     "read_joplin_note": "read a note in Joplin",
     "create_joplin_note": "add a note in Joplin",

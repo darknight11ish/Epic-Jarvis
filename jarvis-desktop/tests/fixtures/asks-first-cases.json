@@ -358,6 +358,15 @@
        "title": "Search the web"
       },
       {
+       "action": "web_search_enable",
+       "fixed": false,
+       "id": "web_search_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn web search back on"
+      },
+      {
        "action": "web_research",
        "fixed": false,
        "id": "web_research",
@@ -1352,6 +1361,15 @@
        "title": "Search the web"
       },
       {
+       "action": "web_search_enable",
+       "fixed": false,
+       "id": "web_search_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn web search back on"
+      },
+      {
        "action": "web_research",
        "fixed": false,
        "id": "web_research",
@@ -2343,6 +2361,15 @@
        "title": "Search the web"
       },
       {
+       "action": "web_search_enable",
+       "fixed": false,
+       "id": "web_search_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn web search back on"
+      },
+      {
        "action": "web_research",
        "fixed": false,
        "id": "web_research",
@@ -3327,6 +3354,15 @@
        "title": "Search the web"
       },
       {
+       "action": "web_search_enable",
+       "fixed": false,
+       "id": "web_search_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn web search back on"
+      },
+      {
        "action": "web_research",
        "fixed": false,
        "id": "web_research",
@@ -4309,6 +4345,15 @@
        "says": "Asks only when something private could slip in",
        "tier": "ask",
        "title": "Search the web"
+      },
+      {
+       "action": "web_search_enable",
+       "fixed": false,
+       "id": "web_search_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn web search back on"
       },
       {
        "action": "web_research",
@@ -5307,6 +5352,15 @@
        "title": "Search the web"
       },
       {
+       "action": "web_search_enable",
+       "fixed": false,
+       "id": "web_search_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn web search back on"
+      },
+      {
        "action": "web_research",
        "fixed": false,
        "id": "web_research",
@@ -6296,6 +6350,15 @@
        "says": "Asks only when something private could slip in",
        "tier": "ask",
        "title": "Search the web"
+      },
+      {
+       "action": "web_search_enable",
+       "fixed": false,
+       "id": "web_search_enable",
+       "note": "Always asks. This cannot be changed from an app.",
+       "says": "Asks you first, every time",
+       "tier": "ask",
+       "title": "Turn web search back on"
       },
       {
        "action": "web_research",
